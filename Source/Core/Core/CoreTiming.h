@@ -164,7 +164,7 @@ public:
   bool GetVISkip() const;                           // Used By VideoInterface
 
   float GetOverclock() const;
-  
+
   bool UseSyncOnSkipIdle() const;
 
 private:
@@ -184,7 +184,10 @@ private:
   std::vector<Event> m_event_queue;
   u64 m_event_fifo_id = 0;
   std::mutex m_ts_write_lock;
-  Common::SPSCQueue<Event, false> m_ts_queue;
+
+  // Event objects created from other threads.
+  // The time value of each Event here is a cycles_into_future value.
+  Common::SPSCQueue<Event> m_ts_queue;
 
   float m_last_oc_factor = 0.0f;
 
