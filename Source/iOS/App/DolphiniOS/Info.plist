@@ -20,6 +20,10 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>me.oatmealdome.dolphinios.generic-software</string>
+				<string>public.iso-image</string>
+				<string>me.oatmealdome.dolphinios.rvz-image</string>
+				<string>me.oatmealdome.dolphinios.dol-executable</string>
+				<string>me.oatmealdome.dolphinios.elf-executable</string>
 			</array>
 		</dict>
 		<dict>
@@ -117,12 +121,89 @@
 	</dict>
 	<key>UIFileSharingEnabled</key>
 	<true/>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>ISO Disk Image</string>
+			<key>UTTypeIdentifier</key>
+			<string>public.iso-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>iso</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+				<string>public.compressed-archive</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>RVZ Compressed Disk Image</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.rvz-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>rvz</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.executable</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>GameCube/Wii Executable</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.dol-executable</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>dol</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.executable</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>ELF Executable</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.elf-executable</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>elf</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
+				<string>public.archive</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>GameCube / Wii Software</string>
@@ -146,6 +227,7 @@
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
+				<string>public.archive</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>GameCube Software</string>
@@ -167,6 +249,7 @@
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
+				<string>public.archive</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Wii Software</string>
