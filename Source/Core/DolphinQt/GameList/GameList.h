@@ -1,6 +1,5 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -10,6 +9,7 @@
 
 #include "DolphinQt/GameList/GameListModel.h"
 
+class QAbstractItemView;
 class QLabel;
 class QListView;
 class QSortFilterProxyModel;
@@ -51,9 +51,14 @@ public:
 
 signals:
   void GameSelected();
+  void OnStartWithRiivolution(const UICommon::GameFile& game);
   void NetPlayHost(const UICommon::GameFile& game);
   void SelectionChanged(std::shared_ptr<const UICommon::GameFile> game_file);
   void OpenGeneralSettings();
+  void OpenGraphicsSettings();
+#ifdef USE_RETRO_ACHIEVEMENTS
+  void OpenAchievementSettings();
+#endif  // USE_RETRO_ACHIEVEMENTS
 
 private:
   void ShowHeaderContextMenu(const QPoint& pos);
@@ -63,6 +68,7 @@ private:
   void OpenWiiSaveFolder();
   void OpenGCSaveFolder();
   void OpenWiki();
+  void StartWithRiivolution();
   void SetDefaultISO();
   void DeleteFile();
 #ifdef _WIN32
@@ -88,6 +94,8 @@ private:
   void MakeEmptyView();
   // We only have two views, just use a bool to distinguish.
   void SetPreferredView(bool list);
+  QAbstractItemView* GetActiveView() const;
+  QSortFilterProxyModel* GetActiveProxyModel() const;
   void ConsiderViewChange();
   void UpdateFont();
 

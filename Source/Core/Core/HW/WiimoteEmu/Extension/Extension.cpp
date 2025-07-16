@@ -1,18 +1,15 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/WiimoteEmu/Extension/Extension.h"
 
-#include <algorithm>
-#include <array>
 #include <cstring>
 
 #include "Common/CommonTypes.h"
-#include "Common/Inline.h"
-#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 
-#include "Common/Logging/Log.h"
+#include "Core/HW/Wiimote.h"
+#include "Core/HW/WiimoteEmu/Extension/DesiredExtensionState.h"
+#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 
 namespace WiimoteEmu
 {
@@ -35,6 +32,11 @@ std::string Extension::GetDisplayName() const
   return m_display_name;
 }
 
+InputConfig* Extension::GetConfig() const
+{
+  return ::Wiimote::GetConfig();
+}
+
 None::None() : Extension("None")
 {
 }
@@ -44,7 +46,12 @@ bool None::ReadDeviceDetectPin() const
   return false;
 }
 
-void None::Update()
+void None::BuildDesiredExtensionState(DesiredExtensionState* target_state)
+{
+  target_state->data.emplace<std::monostate>();
+}
+
+void None::Update(const DesiredExtensionState& target_state)
 {
   // Nothing needed.
 }
@@ -79,11 +86,9 @@ int EncryptedExtension::BusRead(u8 slave_addr, u8 addr, int count, u8* data_out)
   if (I2C_ADDR != slave_addr)
     return 0;
 
-  if (0x00 == addr)
+  if (offsetof(Register, controller_data) == addr)
   {
     // This is where real hardware would update controller data
-    // We do it in Update() for TAS determinism
-    // TAS code fails to sync data reads and such..
   }
 
   auto const result = RawRead(&m_reg, addr, count, data_out);
@@ -137,7 +142,7 @@ void EncryptedExtension::DoState(PointerWrap& p)
 {
   p.Do(m_reg);
 
-  if (p.GetMode() == PointerWrap::MODE_READ)
+  if (p.IsReadMode())
   {
     // No need to sync the key when we can just regenerate it.
     m_is_key_dirty = true;

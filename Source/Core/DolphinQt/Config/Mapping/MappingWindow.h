@@ -1,14 +1,10 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <QDialog>
 #include <QString>
-#include <memory>
-
-#include "InputCommon/ControllerInterface/CoreDevice.h"
 
 namespace ControllerEmu
 {
@@ -16,6 +12,8 @@ class EmulatedController;
 }
 
 class InputConfig;
+class MappingButton;
+
 class QComboBox;
 class QDialogButtonBox;
 class QEvent;
@@ -24,6 +22,7 @@ class QGroupBox;
 class QVBoxLayout;
 class QPushButton;
 class QTabWidget;
+class QToolButton;
 class QWidget;
 
 class MappingWindow final : public QDialog
@@ -35,6 +34,7 @@ public:
     // GameCube
     MAPPING_GC_BONGOS,
     MAPPING_GC_DANCEMAT,
+    MAPPING_GC_GBA,
     MAPPING_GC_KEYBOARD,
     MAPPING_GCPAD,
     MAPPING_GC_STEERINGWHEEL,
@@ -51,15 +51,22 @@ public:
 
   int GetPort() const;
   ControllerEmu::EmulatedController* GetController() const;
-  bool IsMappingAllDevices() const;
+  bool IsCreateOtherDeviceMappingsEnabled() const;
+  bool IsWaitForAlternateMappingsEnabled() const;
+  bool IsIterativeMappingEnabled() const;
   void ShowExtensionMotionTabs(bool show);
+  void ActivateExtensionTab();
 
 signals:
   // Emitted when config has changed so widgets can update to reflect the change.
   void ConfigChanged();
-  // Emitted at 30hz for real-time indicators to be updated.
+  // Emitted at INDICATOR_UPDATE_FREQ Hz for real-time indicators to be updated.
   void Update();
   void Save();
+
+  void UnQueueInputDetection(MappingButton*);
+  void QueueInputDetection(MappingButton*);
+  void CancelMapping();
 
 private:
   void SetMappingType(Type type);
@@ -81,11 +88,11 @@ private:
   void UpdateProfileIndex();
   void UpdateProfileButtonState();
   void PopulateProfileSelection();
+  void UpdateDeviceList();
 
   void OnDefaultFieldsPressed();
   void OnClearFieldsPressed();
   void OnSelectDevice(int index);
-  void OnGlobalDevicesChanged();
 
   ControllerEmu::EmulatedController* m_controller = nullptr;
 
@@ -98,7 +105,9 @@ private:
   QGroupBox* m_devices_box;
   QHBoxLayout* m_devices_layout;
   QComboBox* m_devices_combo;
-  QPushButton* m_devices_refresh;
+  QAction* m_other_device_mappings;
+  QAction* m_wait_for_alternate_mappings;
+  QAction* m_iterative_mapping;
 
   // Profiles
   QGroupBox* m_profiles_box;

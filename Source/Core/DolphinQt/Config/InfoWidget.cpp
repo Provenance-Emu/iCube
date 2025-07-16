@@ -1,11 +1,11 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "DolphinQt/Config/InfoWidget.h"
 
 #include <QComboBox>
 #include <QCryptographicHash>
 #include <QDir>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLabel>
@@ -18,8 +18,9 @@
 #include "DiscIO/Blob.h"
 #include "DiscIO/Enums.h"
 #include "DiscIO/Volume.h"
+#include "DiscIO/WiiSaveBanner.h"
 
-#include "DolphinQt/Config/InfoWidget.h"
+#include "DolphinQt/QtUtils/DolphinFileDialog.h"
 #include "DolphinQt/QtUtils/ImageConverter.h"
 
 #include "UICommon/UICommon.h"
@@ -179,7 +180,9 @@ QWidget* InfoWidget::CreateBannerGraphic(const QPixmap& image)
   QHBoxLayout* layout = new QHBoxLayout();
 
   QLabel* banner = new QLabel();
-  banner->setPixmap(image);
+  banner->setPixmap(image.scaled(image.size().boundedTo(
+      QSize{DiscIO::WiiSaveBanner::BANNER_WIDTH, DiscIO::WiiSaveBanner::BANNER_HEIGHT})));
+
   QPushButton* save = new QPushButton(tr("Save as..."));
   connect(save, &QPushButton::clicked, this, &InfoWidget::SaveBanner);
 
@@ -191,8 +194,8 @@ QWidget* InfoWidget::CreateBannerGraphic(const QPixmap& image)
 
 void InfoWidget::SaveBanner()
 {
-  QString path = QFileDialog::getSaveFileName(this, tr("Select a File"), QDir::currentPath(),
-                                              tr("PNG image file (*.png);; All Files (*)"));
+  QString path = DolphinFileDialog::getSaveFileName(this, tr("Select a File"), QDir::currentPath(),
+                                                    tr("PNG image file (*.png);; All Files (*)"));
   ToQPixmap(m_game.GetBannerImage()).save(path, "PNG");
 }
 
@@ -225,8 +228,7 @@ void InfoWidget::CreateLanguageSelector()
   if (m_language_selector->count() == 1)
     m_language_selector->setDisabled(true);
 
-  connect(m_language_selector, qOverload<int>(&QComboBox::currentIndexChanged), this,
-          &InfoWidget::ChangeLanguage);
+  connect(m_language_selector, &QComboBox::currentIndexChanged, this, &InfoWidget::ChangeLanguage);
 }
 
 void InfoWidget::ChangeLanguage()

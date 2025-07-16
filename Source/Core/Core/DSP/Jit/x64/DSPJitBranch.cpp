@@ -1,13 +1,13 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Core/DSP/Jit/x64/DSPEmitter.h"
 
 #include "Common/CommonTypes.h"
 
 #include "Core/DSP/DSPAnalyzer.h"
 #include "Core/DSP/DSPCore.h"
 #include "Core/DSP/DSPTables.h"
-#include "Core/DSP/Jit/x64/DSPEmitter.h"
 
 using namespace Gen;
 
@@ -55,24 +55,43 @@ void DSPEmitter::ReJitConditional(const UDSPInstruction opc,
     break;
   case 0xa:  // ?
   case 0xb:  // ?
+    // We want to test this expression, which corresponds to xB:
+    // (!(IsSRFlagSet(SR_OVER_S32) || IsSRFlagSet(SR_TOP2BITS))) || IsSRFlagSet(SR_ARITH_ZERO)
+    // The xB expression is used due to even instructions (i.e. xA) looking for the expression to
+    // evaluate to false, while odd ones look for it to be true.
+
+    // Since SR_OVER_S32 is bit 4 (0x10) and SR_TOP2BITS is bit 5 (0x20),
+    // set EDX to 2*EAX, so that SR_OVER_S32 is in bit 5 of EDX.
     LEA(16, EDX, MRegSum(EAX, EAX));
-    OR(16, R(EAX), R(EDX));
-    SHL(16, R(EDX), Imm8(3));
-    NOT(16, R(EAX));
-    OR(16, R(EAX), R(EDX));
-    TEST(16, R(EAX), Imm16(0x20));
+    // Now OR them together, so bit 5 of EDX is
+    // (IsSRFlagSet(SR_OVER_S32) || IsSRFlagSet(SR_TOP2BITS))
+    OR(16, R(EDX), R(EAX));
+    // EDX bit 5 is !(IsSRFlagSet(SR_OVER_S32) || IsSRFlagSet(SR_TOP2BITS))
+    NOT(16, R(EDX));
+    // SR_ARITH_ZERO is bit 2 (0x04).  We want that in bit 5, so shift left by 3.
+    SHL(16, R(EAX), Imm8(3));
+    // Bit 5 of EAX is IsSRFlagSet(SR_OVER_S32), so or-ing EDX with EAX gives our target expression.
+    OR(16, R(EDX), R(EAX));
+    // Test bit 5
+    TEST(16, R(EDX), Imm16(0x20));
     break;
   case 0xc:  // LNZ  - Logic Not Zero
   case 0xd:  // LZ - Logic Zero
     TEST(16, R(EAX), Imm16(SR_LOGIC_ZERO));
     break;
-  case 0xe:  // 0 - Overflow
+  case 0xe:  // O - Overflow
     TEST(16, R(EAX), Imm16(SR_OVERFLOW));
     break;
   }
   DSPJitRegCache c1(m_gpr);
-  FixupBranch skip_code =
-      cond == 0xe ? J_CC(CC_E, true) : J_CC((CCFlags)(CC_NE - (cond & 1)), true);
+  CCFlags flag;
+  if (cond == 0xe)  // Overflow, special case as there is no inverse case
+    flag = CC_Z;
+  else if ((cond & 1) == 0)  // Even conditions run if the bit is zero, so jump if it IS NOT zero
+    flag = CC_NZ;
+  else  // Odd conditions run if the bit IS NOT zero, so jump if it IS zero
+    flag = CC_Z;
+  FixupBranch skip_code = J_CC(flag, Jump::Near);
   (this->*conditional_fn)(opc);
   m_gpr.FlushRegs(c1);
   SetJumpTarget(skip_code);
@@ -90,7 +109,7 @@ void DSPEmitter::WriteBranchExit()
   {
     MOV(16, R(EAX), Imm16(m_block_size[m_start_address]));
   }
-  JMP(m_return_dispatcher, true);
+  JMP(m_return_dispatcher, Jump::Near);
   m_gpr.LoadRegs(false);
   m_gpr.FlushRegs(c, false);
 }
@@ -111,7 +130,7 @@ void DSPEmitter::WriteBlockLink(u16 dest)
 
       SUB(16, R(ECX), Imm16(m_block_size[m_start_address]));
       MOV(16, MatR(RAX), R(ECX));
-      JMP(m_block_links[dest], true);
+      JMP(m_block_links[dest], Jump::Near);
       SetJumpTarget(notEnoughCycles);
     }
     else
@@ -157,9 +176,10 @@ void DSPEmitter::r_jmprcc(const UDSPInstruction opc)
   WriteBranchExit();
 }
 // Generic jmpr implementation
-// JMPcc $R
+// JRcc $R
 // 0001 0111 rrr0 cccc
-// Jump to address; set program counter to a value from register $R.
+// Jump to address if condition cc has been met. Set program counter to
+// a value from register $R.
 // NOTE: Cannot use FallBackToInterpreter(opc) here because of the need to write branch exit
 void DSPEmitter::jmprcc(const UDSPInstruction opc)
 {
@@ -255,12 +275,7 @@ void DSPEmitter::ret(const UDSPInstruction opc)
   ReJitConditional(opc, &DSPEmitter::r_ret);
 }
 
-// RTI
-// 0000 0010 1111 1111
-// Return from exception. Pops stored status register $sr from data stack
-// $st1 and program counter PC from call stack $st0 and sets $pc to this
-// location.
-void DSPEmitter::rti(const UDSPInstruction opc)
+void DSPEmitter::r_rti(const UDSPInstruction opc)
 {
   //	g_dsp.r[DSP_REG_SR] = dsp_reg_load_stack(StackRegister::Data);
   dsp_reg_load_stack(StackRegister::Data);
@@ -268,14 +283,28 @@ void DSPEmitter::rti(const UDSPInstruction opc)
   //	g_dsp.pc = dsp_reg_load_stack(StackRegister::Call);
   dsp_reg_load_stack(StackRegister::Call);
   MOV(16, M_SDSP_pc(), R(DX));
+  WriteBranchExit();
+}
+
+// RTIcc
+// 0000 0010 1111 1111
+// Return from exception. Pops stored status register $sr from data stack
+// $st1 and program counter PC from call stack $st0 and sets $pc to this
+// location.
+// This instruction has a conditional form, but it is not used by any official ucode.
+// NOTE: Cannot use FallBackToInterpreter(opc) here because of the need to write branch exit
+void DSPEmitter::rti(const UDSPInstruction opc)
+{
+  MOV(16, M_SDSP_pc(), Imm16(m_compile_pc + 1));
+  ReJitConditional(opc, &DSPEmitter::r_rti);
 }
 
 // HALT
-// 0000 0000 0020 0001
+// 0000 0000 0010 0001
 // Stops execution of DSP code. Sets bit DSP_CR_HALT in register DREG_CR.
 void DSPEmitter::halt(const UDSPInstruction)
 {
-  OR(16, M_SDSP_cr(), Imm16(CR_HALT));
+  OR(16, M_SDSP_control_reg(), Imm16(CR_HALT));
   //	g_dsp.pc = dsp_reg_load_stack(StackRegister::Call);
   dsp_reg_load_stack(StackRegister::Call);
   MOV(16, M_SDSP_pc(), R(DX));
@@ -293,17 +322,17 @@ void DSPEmitter::HandleLoop()
   MOVZX(32, 16, ECX, M_SDSP_r_st(3));
 
   TEST(32, R(RCX), R(RCX));
-  FixupBranch rLoopCntG = J_CC(CC_LE, true);
+  FixupBranch rLoopCntG = J_CC(CC_E, Jump::Near);
   CMP(16, R(RAX), Imm16(m_compile_pc - 1));
-  FixupBranch rLoopAddrG = J_CC(CC_NE, true);
+  FixupBranch rLoopAddrG = J_CC(CC_NE, Jump::Near);
 
   SUB(16, M_SDSP_r_st(3), Imm16(1));
   CMP(16, M_SDSP_r_st(3), Imm16(0));
 
-  FixupBranch loadStack = J_CC(CC_LE, true);
+  FixupBranch loadStack = J_CC(CC_E, Jump::Near);
   MOVZX(32, 16, ECX, M_SDSP_r_st(0));
   MOV(16, M_SDSP_pc(), R(RCX));
-  FixupBranch loopUpdated = J(true);
+  FixupBranch loopUpdated = J(Jump::Near);
 
   SetJumpTarget(loadStack);
   DSPJitRegCache c(m_gpr);
@@ -329,13 +358,12 @@ void DSPEmitter::loop(const UDSPInstruction opc)
 {
   u16 reg = opc & 0x1f;
   //	u16 cnt = g_dsp.r[reg];
-  // todo: check if we can use normal variant here
-  dsp_op_read_reg_dont_saturate(reg, RDX, RegisterExtension::Zero);
+  dsp_op_read_reg(reg, RDX, RegisterExtension::Zero);
   u16 loop_pc = m_compile_pc + 1;
 
   TEST(16, R(EDX), R(EDX));
   DSPJitRegCache c(m_gpr);
-  FixupBranch cnt = J_CC(CC_Z, true);
+  FixupBranch cnt = J_CC(CC_Z, Jump::Near);
   dsp_reg_store_stack(StackRegister::LoopCounter);
   MOV(16, R(RDX), Imm16(m_compile_pc + 1));
   dsp_reg_store_stack(StackRegister::Call);
@@ -343,7 +371,7 @@ void DSPEmitter::loop(const UDSPInstruction opc)
   dsp_reg_store_stack(StackRegister::LoopAddress);
   m_gpr.FlushRegs(c);
   MOV(16, M_SDSP_pc(), Imm16(m_compile_pc + 1));
-  FixupBranch exit = J(true);
+  FixupBranch exit = J(Jump::Near);
 
   SetJumpTarget(cnt);
   // dsp_skip_inst();
@@ -400,13 +428,12 @@ void DSPEmitter::bloop(const UDSPInstruction opc)
 {
   const u16 reg = opc & 0x1f;
   //	u16 cnt = g_dsp.r[reg];
-  // todo: check if we can use normal variant here
-  dsp_op_read_reg_dont_saturate(reg, RDX, RegisterExtension::Zero);
+  dsp_op_read_reg(reg, RDX, RegisterExtension::Zero);
   const u16 loop_pc = m_dsp_core.DSPState().ReadIMEM(m_compile_pc + 1);
 
   TEST(16, R(EDX), R(EDX));
   DSPJitRegCache c(m_gpr);
-  FixupBranch cnt = J_CC(CC_Z, true);
+  FixupBranch cnt = J_CC(CC_Z, Jump::Near);
   dsp_reg_store_stack(StackRegister::LoopCounter);
   MOV(16, R(RDX), Imm16(m_compile_pc + 2));
   dsp_reg_store_stack(StackRegister::Call);
@@ -414,7 +441,7 @@ void DSPEmitter::bloop(const UDSPInstruction opc)
   dsp_reg_store_stack(StackRegister::LoopAddress);
   MOV(16, M_SDSP_pc(), Imm16(m_compile_pc + 2));
   m_gpr.FlushRegs(c, true);
-  FixupBranch exit = J(true);
+  FixupBranch exit = J(Jump::Near);
 
   SetJumpTarget(cnt);
   // g_dsp.pc = loop_pc;

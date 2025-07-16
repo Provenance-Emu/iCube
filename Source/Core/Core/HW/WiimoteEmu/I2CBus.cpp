@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/WiimoteEmu/I2CBus.h"
 
@@ -15,7 +14,7 @@ void I2CBus::AddSlave(I2CSlave* slave)
 
 void I2CBus::RemoveSlave(I2CSlave* slave)
 {
-  m_slaves.erase(std::remove(m_slaves.begin(), m_slaves.end(), slave), m_slaves.end());
+  std::erase(m_slaves, slave);
 }
 
 void I2CBus::Reset()

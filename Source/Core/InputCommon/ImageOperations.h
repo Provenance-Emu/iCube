@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -22,7 +21,6 @@ struct Pixel
   u8 a = 0;
 
   bool operator==(const Pixel& o) const { return r == o.r && g == o.g && b == o.b && a == o.a; }
-  bool operator!=(const Pixel& o) const { return !(o == *this); }
 };
 
 using Point = Common::TVec2<u32>;

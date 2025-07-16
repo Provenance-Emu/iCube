@@ -1,6 +1,5 @@
-// Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// Copyright 2008 Dolphin Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <AudioUnit/AudioUnit.h>
 
@@ -37,14 +36,14 @@ bool CoreAudioSound::Init()
   component = AudioComponentFindNext(nullptr, &desc);
   if (component == nullptr)
   {
-    ERROR_LOG(AUDIO, "error finding audio component");
+    ERROR_LOG_FMT(AUDIO, "error finding audio component");
     return false;
   }
 
   err = AudioComponentInstanceNew(component, &audio_unit);
   if (err != noErr)
   {
-    ERROR_LOG(AUDIO, "error opening audio component");
+    ERROR_LOG_FMT(AUDIO, "error opening audio component");
     return false;
   }
 
@@ -53,7 +52,7 @@ bool CoreAudioSound::Init()
                              &format, sizeof(AudioStreamBasicDescription));
   if (err != noErr)
   {
-    ERROR_LOG(AUDIO, "error setting audio format");
+    ERROR_LOG_FMT(AUDIO, "error setting audio format");
     return false;
   }
 
@@ -63,19 +62,19 @@ bool CoreAudioSound::Init()
                              kAudioUnitScope_Input, 0, &callback_struct, sizeof callback_struct);
   if (err != noErr)
   {
-    ERROR_LOG(AUDIO, "error setting audio callback");
+    ERROR_LOG_FMT(AUDIO, "error setting audio callback");
     return false;
   }
 
   err = AudioUnitSetParameter(audio_unit, kHALOutputParam_Volume, kAudioUnitScope_Output, 0,
                               m_volume / 100., 0);
   if (err != noErr)
-    ERROR_LOG(AUDIO, "error setting volume");
+    ERROR_LOG_FMT(AUDIO, "error setting volume");
 
   err = AudioUnitInitialize(audio_unit);
   if (err != noErr)
   {
-    ERROR_LOG(AUDIO, "error initializing audiounit");
+    ERROR_LOG_FMT(AUDIO, "error initializing audiounit");
     return false;
   }
 
@@ -90,7 +89,7 @@ bool CoreAudioSound::SetRunning(bool running)
     err = AudioOutputUnitStart(audio_unit);
     if (err != noErr)
     {
-      ERROR_LOG(AUDIO, "error starting audiounit");
+      ERROR_LOG_FMT(AUDIO, "error starting audiounit");
       return false;
     }
   }
@@ -98,7 +97,7 @@ bool CoreAudioSound::SetRunning(bool running)
   {
     err = AudioOutputUnitStop(audio_unit);
     if (err != noErr)
-      ERROR_LOG(AUDIO, "error stopping audiounit");
+      ERROR_LOG_FMT(AUDIO, "error stopping audiounit");
   }
   return true;
 }
@@ -111,13 +110,5 @@ void CoreAudioSound::SetVolume(int volume)
   err = AudioUnitSetParameter(audio_unit, kHALOutputParam_Volume, kAudioUnitScope_Output, 0,
                               volume / 100., 0);
   if (err != noErr)
-    ERROR_LOG(AUDIO, "error setting volume");
-}
-
-void CoreAudioSound::SoundLoop()
-{
-}
-
-void CoreAudioSound::Update()
-{
+    ERROR_LOG_FMT(AUDIO, "error setting volume");
 }

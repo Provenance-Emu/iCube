@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "VideoBackends/Software/SWVertexLoader.h"
 
@@ -11,13 +10,15 @@
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 
-#include "VideoBackends/Software/DebugUtil.h"
+#include "Core/System.h"
+
 #include "VideoBackends/Software/NativeVertexFormat.h"
 #include "VideoBackends/Software/Rasterizer.h"
 #include "VideoBackends/Software/SWRenderer.h"
 #include "VideoBackends/Software/Tev.h"
 #include "VideoBackends/Software/TransformUnit.h"
 
+#include "VideoCommon/BoundingBox.h"
 #include "VideoCommon/CPMemory.h"
 #include "VideoCommon/DataReader.h"
 #include "VideoCommon/IndexGenerator.h"
@@ -26,6 +27,7 @@
 #include "VideoCommon/Statistics.h"
 #include "VideoCommon/VertexLoaderBase.h"
 #include "VideoCommon/VertexLoaderManager.h"
+#include "VideoCommon/VertexShaderManager.h"
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/XFMemory.h"
 
@@ -33,37 +35,39 @@ SWVertexLoader::SWVertexLoader() = default;
 
 SWVertexLoader::~SWVertexLoader() = default;
 
+DataReader SWVertexLoader::PrepareForAdditionalData(OpcodeDecoder::Primitive primitive, u32 count,
+                                                    u32 stride, bool cullall)
+{
+  // The software renderer needs cullall to be false for zfreeze to work
+  return VertexManagerBase::PrepareForAdditionalData(primitive, count, stride, false);
+}
+
 void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_vertex)
 {
-  DebugUtil::OnObjectBegin();
-
-  u8 primitiveType = 0;
+  using OpcodeDecoder::Primitive;
+  Primitive primitive_type = Primitive::GX_DRAW_QUADS;
   switch (m_current_primitive_type)
   {
   case PrimitiveType::Points:
-    primitiveType = OpcodeDecoder::GX_DRAW_POINTS;
+    primitive_type = Primitive::GX_DRAW_POINTS;
     break;
   case PrimitiveType::Lines:
-    primitiveType = OpcodeDecoder::GX_DRAW_LINES;
+    primitive_type = Primitive::GX_DRAW_LINES;
     break;
   case PrimitiveType::Triangles:
-    primitiveType = OpcodeDecoder::GX_DRAW_TRIANGLES;
+    primitive_type = Primitive::GX_DRAW_TRIANGLES;
     break;
   case PrimitiveType::TriangleStrip:
-    primitiveType = OpcodeDecoder::GX_DRAW_TRIANGLE_STRIP;
+    primitive_type = Primitive::GX_DRAW_TRIANGLE_STRIP;
     break;
   }
 
-  m_setup_unit.Init(primitiveType);
+  // Flush bounding box here because software overrides the base function
+  if (g_bounding_box->IsEnabled())
+    g_bounding_box->Flush();
 
-  // set all states with are stored within video sw
-  for (int i = 0; i < 4; i++)
-  {
-    Rasterizer::SetTevReg(i, Tev::RED_C, PixelShaderManager::constants.kcolors[i][0]);
-    Rasterizer::SetTevReg(i, Tev::GRN_C, PixelShaderManager::constants.kcolors[i][1]);
-    Rasterizer::SetTevReg(i, Tev::BLU_C, PixelShaderManager::constants.kcolors[i][2]);
-    Rasterizer::SetTevReg(i, Tev::ALP_C, PixelShaderManager::constants.kcolors[i][3]);
-  }
+  m_setup_unit.Init(primitive_type);
+  Rasterizer::SetTevKonstColors();
 
   for (u32 i = 0; i < m_index_generator.GetIndexLen(); i++)
   {
@@ -71,46 +75,27 @@ void SWVertexLoader::DrawCurrentBatch(u32 base_index, u32 num_indices, u32 base_
     memset(static_cast<void*>(&m_vertex), 0, sizeof(m_vertex));
 
     // parse the videocommon format to our own struct format (m_vertex)
-    SetFormat(g_main_cp_state.last_id, primitiveType);
+    SetFormat();
     ParseVertex(VertexLoaderManager::GetCurrentVertexFormat()->GetVertexDeclaration(), index);
 
     // transform this vertex so that it can be used for rasterization (outVertex)
     OutputVertexData* outVertex = m_setup_unit.GetVertex();
     TransformUnit::TransformPosition(&m_vertex, outVertex);
-    outVertex->normal = {};
-    if (VertexLoaderManager::g_current_components & VB_HAS_NRM0)
-    {
-      TransformUnit::TransformNormal(
-          &m_vertex, (VertexLoaderManager::g_current_components & VB_HAS_NRM2) != 0, outVertex);
-    }
+    TransformUnit::TransformNormal(&m_vertex, outVertex);
     TransformUnit::TransformColor(&m_vertex, outVertex);
     TransformUnit::TransformTexCoord(&m_vertex, outVertex);
 
     // assemble and rasterize the primitive
     m_setup_unit.SetupVertex();
 
-    INCSTAT(g_stats.this_frame.num_vertices_loaded)
+    INCSTAT(g_stats.this_frame.num_vertices_loaded);
   }
 
-  DebugUtil::OnObjectEnd();
+  INCSTAT(g_stats.this_frame.num_drawn_objects);
 }
 
-void SWVertexLoader::SetFormat(u8 attributeIndex, u8 primitiveType)
+void SWVertexLoader::SetFormat()
 {
-  // matrix index from xf regs or cp memory?
-  if (xfmem.MatrixIndexA.PosNormalMtxIdx != g_main_cp_state.matrix_index_a.PosNormalMtxIdx ||
-      xfmem.MatrixIndexA.Tex0MtxIdx != g_main_cp_state.matrix_index_a.Tex0MtxIdx ||
-      xfmem.MatrixIndexA.Tex1MtxIdx != g_main_cp_state.matrix_index_a.Tex1MtxIdx ||
-      xfmem.MatrixIndexA.Tex2MtxIdx != g_main_cp_state.matrix_index_a.Tex2MtxIdx ||
-      xfmem.MatrixIndexA.Tex3MtxIdx != g_main_cp_state.matrix_index_a.Tex3MtxIdx ||
-      xfmem.MatrixIndexB.Tex4MtxIdx != g_main_cp_state.matrix_index_b.Tex4MtxIdx ||
-      xfmem.MatrixIndexB.Tex5MtxIdx != g_main_cp_state.matrix_index_b.Tex5MtxIdx ||
-      xfmem.MatrixIndexB.Tex6MtxIdx != g_main_cp_state.matrix_index_b.Tex6MtxIdx ||
-      xfmem.MatrixIndexB.Tex7MtxIdx != g_main_cp_state.matrix_index_b.Tex7MtxIdx)
-  {
-    ERROR_LOG_FMT(VIDEO, "Matrix indices don't match");
-  }
-
   m_vertex.posMtx = xfmem.MatrixIndexA.PosNormalMtxIdx;
   m_vertex.texMtx[0] = xfmem.MatrixIndexA.Tex0MtxIdx;
   m_vertex.texMtx[1] = xfmem.MatrixIndexA.Tex1MtxIdx;
@@ -141,7 +126,7 @@ static void ReadVertexAttribute(T* dst, DataReader src, const AttributeFormat& f
   if (format.enable)
   {
     src.Skip(format.offset);
-    src.Skip(base_component * (1 << (format.type >> 1)));
+    src.Skip(base_component * GetElementSize(format.type));
 
     int i;
     for (i = 0; i < std::min(format.components - base_component, components); i++)
@@ -149,24 +134,27 @@ static void ReadVertexAttribute(T* dst, DataReader src, const AttributeFormat& f
       int i_dst = reverse ? components - i - 1 : i;
       switch (format.type)
       {
-      case VAR_UNSIGNED_BYTE:
+      case ComponentFormat::UByte:
         dst[i_dst] = ReadNormalized<T, u8>(src.Read<u8, swap>());
         break;
-      case VAR_BYTE:
+      case ComponentFormat::Byte:
         dst[i_dst] = ReadNormalized<T, s8>(src.Read<s8, swap>());
         break;
-      case VAR_UNSIGNED_SHORT:
+      case ComponentFormat::UShort:
         dst[i_dst] = ReadNormalized<T, u16>(src.Read<u16, swap>());
         break;
-      case VAR_SHORT:
+      case ComponentFormat::Short:
         dst[i_dst] = ReadNormalized<T, s16>(src.Read<s16, swap>());
         break;
-      case VAR_FLOAT:
+      case ComponentFormat::Float:
+      case ComponentFormat::InvalidFloat5:
+      case ComponentFormat::InvalidFloat6:
+      case ComponentFormat::InvalidFloat7:
         dst[i_dst] = ReadNormalized<T, float>(src.Read<float, swap>());
         break;
       }
 
-      ASSERT_MSG(VIDEO, !format.integer || format.type != VAR_FLOAT,
+      ASSERT_MSG(VIDEO, !format.integer || (format.type < ComponentFormat::Float),
                  "only non-float values are allowed to be streamed as integer");
     }
     for (; i < components; i++)
@@ -180,14 +168,11 @@ static void ReadVertexAttribute(T* dst, DataReader src, const AttributeFormat& f
 static void ParseColorAttributes(InputVertexData* dst, DataReader& src,
                                  const PortableVertexDeclaration& vdec)
 {
-  const auto set_default_color = [](u8* color, int i) {
-    // The default alpha channel seems to depend on the number of components in the vertex format.
-    const auto& g0 = g_main_cp_state.vtx_attr[g_main_cp_state.last_id].g0;
-    const auto color_elements = i == 0 ? g0.Color0Elements.Value() : g0.Color1Elements.Value();
-    color[0] = color_elements == ColorComponentCount::RGB ? 255 : 0;
-    color[1] = 255;
-    color[2] = 255;
-    color[3] = 255;
+  const auto set_default_color = [](std::array<u8, 4>& color) {
+    color[Tev::ALP_C] = g_ActiveConfig.iMissingColorValue & 0xFF;
+    color[Tev::BLU_C] = (g_ActiveConfig.iMissingColorValue >> 8) & 0xFF;
+    color[Tev::GRN_C] = (g_ActiveConfig.iMissingColorValue >> 16) & 0xFF;
+    color[Tev::RED_C] = (g_ActiveConfig.iMissingColorValue >> 24) & 0xFF;
   };
 
   if (vdec.colors[0].enable)
@@ -197,7 +182,7 @@ static void ParseColorAttributes(InputVertexData* dst, DataReader& src,
     if (vdec.colors[1].enable)
       ReadVertexAttribute<u8>(dst->color[1].data(), src, vdec.colors[1], 0, 4, true);
     else
-      set_default_color(dst->color[1].data(), 1);
+      set_default_color(dst->color[1]);
   }
   else
   {
@@ -205,8 +190,8 @@ static void ParseColorAttributes(InputVertexData* dst, DataReader& src,
     if (vdec.colors[1].enable)
       ReadVertexAttribute<u8>(dst->color[0].data(), src, vdec.colors[1], 0, 4, true);
     else
-      set_default_color(dst->color[0].data(), 0);
-    set_default_color(dst->color[1].data(), 1);
+      set_default_color(dst->color[0]);
+    set_default_color(dst->color[1]);
   }
 }
 
@@ -221,6 +206,30 @@ void SWVertexLoader::ParseVertex(const PortableVertexDeclaration& vdec, int inde
   for (std::size_t i = 0; i < m_vertex.normal.size(); i++)
   {
     ReadVertexAttribute<float>(&m_vertex.normal[i][0], src, vdec.normals[i], 0, 3, false);
+  }
+  if (!vdec.normals[0].enable)
+  {
+    auto& system = Core::System::GetInstance();
+    auto& vertex_shader_manager = system.GetVertexShaderManager();
+    m_vertex.normal[0][0] = vertex_shader_manager.constants.cached_normal[0];
+    m_vertex.normal[0][1] = vertex_shader_manager.constants.cached_normal[1];
+    m_vertex.normal[0][2] = vertex_shader_manager.constants.cached_normal[2];
+  }
+  if (!vdec.normals[1].enable)
+  {
+    auto& system = Core::System::GetInstance();
+    auto& vertex_shader_manager = system.GetVertexShaderManager();
+    m_vertex.normal[1][0] = vertex_shader_manager.constants.cached_tangent[0];
+    m_vertex.normal[1][1] = vertex_shader_manager.constants.cached_tangent[1];
+    m_vertex.normal[1][2] = vertex_shader_manager.constants.cached_tangent[2];
+  }
+  if (!vdec.normals[2].enable)
+  {
+    auto& system = Core::System::GetInstance();
+    auto& vertex_shader_manager = system.GetVertexShaderManager();
+    m_vertex.normal[2][0] = vertex_shader_manager.constants.cached_binormal[0];
+    m_vertex.normal[2][1] = vertex_shader_manager.constants.cached_binormal[1];
+    m_vertex.normal[2][2] = vertex_shader_manager.constants.cached_binormal[2];
   }
 
   ParseColorAttributes(&m_vertex, src, vdec);

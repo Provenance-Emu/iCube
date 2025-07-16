@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -13,8 +12,6 @@
 #include "Common/CommonTypes.h"
 #include "Common/EnumFormatter.h"
 #include "VideoCommon/CPMemory.h"
-
-class DataReader;
 
 constexpr size_t NUM_XF_COLOR_CHANNELS = 2;
 
@@ -29,7 +26,7 @@ enum class TexSize : u32
 template <>
 struct fmt::formatter<TexSize> : EnumFormatter<TexSize::STQ>
 {
-  formatter() : EnumFormatter({"ST (2x4 matrix)", "STQ (3x4 matrix)"}) {}
+  constexpr formatter() : EnumFormatter({"ST (2x4 matrix)", "STQ (3x4 matrix)"}) {}
 };
 
 // Input form
@@ -41,19 +38,28 @@ enum class TexInputForm : u32
 template <>
 struct fmt::formatter<TexInputForm> : EnumFormatter<TexInputForm::ABC1>
 {
-  formatter() : EnumFormatter({"AB11", "ABC1"}) {}
+  constexpr formatter() : EnumFormatter({"AB11", "ABC1"}) {}
 };
 
 enum class NormalCount : u32
 {
   None = 0,
-  Normals = 1,
-  NormalsBinormals = 2
+  Normal = 1,
+  NormalTangentBinormal = 2,
+  // Hardware testing indicates that this beahves the same as NormalTangentBinormal.
+  // Call of Duty: Black Ops uses this in some cases; see https://bugs.dolphin-emu.org/issues/13070
+  Invalid = 3,
 };
 template <>
-struct fmt::formatter<NormalCount> : EnumFormatter<NormalCount::NormalsBinormals>
+struct fmt::formatter<NormalCount> : EnumFormatter<NormalCount::Invalid>
 {
-  formatter() : EnumFormatter({"None", "Normals only", "Normals and binormals"}) {}
+  static constexpr array_type names = {
+      "None",
+      "Normal only",
+      "Normal, tangent, and binormal",
+      "Invalid (Normal, tangent, and binormal)",
+  };
+  constexpr formatter() : EnumFormatter(names) {}
 };
 
 // Texture generation type
@@ -73,7 +79,7 @@ struct fmt::formatter<TexGenType> : EnumFormatter<TexGenType::Color1>
       "Color channel 0",
       "Color channel 1",
   };
-  formatter() : EnumFormatter(names) {}
+  constexpr formatter() : EnumFormatter(names) {}
 };
 
 // Source row
@@ -111,7 +117,7 @@ struct fmt::formatter<SourceRow> : EnumFormatter<SourceRow::Tex7>
       "Tex 6",
       "Tex 7",
   };
-  formatter() : EnumFormatter(names) {}
+  constexpr formatter() : EnumFormatter(names) {}
 };
 
 enum class MatSource : u32
@@ -122,7 +128,7 @@ enum class MatSource : u32
 template <>
 struct fmt::formatter<MatSource> : EnumFormatter<MatSource::Vertex>
 {
-  formatter() : EnumFormatter({"Material color register", "Vertex color"}) {}
+  constexpr formatter() : EnumFormatter({"Material color register", "Vertex color"}) {}
 };
 
 enum class AmbSource : u32
@@ -133,7 +139,7 @@ enum class AmbSource : u32
 template <>
 struct fmt::formatter<AmbSource> : EnumFormatter<AmbSource::Vertex>
 {
-  formatter() : EnumFormatter({"Ambient color register", "Vertex color"}) {}
+  constexpr formatter() : EnumFormatter({"Ambient color register", "Vertex color"}) {}
 };
 
 // Light diffuse attenuation function
@@ -146,7 +152,7 @@ enum class DiffuseFunc : u32
 template <>
 struct fmt::formatter<DiffuseFunc> : EnumFormatter<DiffuseFunc::Clamp>
 {
-  formatter() : EnumFormatter({"None", "Sign", "Clamp"}) {}
+  constexpr formatter() : EnumFormatter({"None", "Sign", "Clamp"}) {}
 };
 
 // Light attenuation function
@@ -166,7 +172,7 @@ struct fmt::formatter<AttenuationFunc> : EnumFormatter<AttenuationFunc::Spot>
       "Directional light attenuation",
       "Spot light attenuation",
   };
-  formatter() : EnumFormatter(names) {}
+  constexpr formatter() : EnumFormatter(names) {}
 };
 
 // Projection type
@@ -178,7 +184,7 @@ enum class ProjectionType : u32
 template <>
 struct fmt::formatter<ProjectionType> : EnumFormatter<ProjectionType::Orthographic>
 {
-  formatter() : EnumFormatter({"Perspective", "Orthographic"}) {}
+  constexpr formatter() : EnumFormatter({"Perspective", "Orthographic"}) {}
 };
 
 // Registers and register ranges
@@ -257,13 +263,14 @@ struct fmt::formatter<LitChannel>
 {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const LitChannel& chan, FormatContext& ctx)
+  auto format(const LitChannel& chan, FormatContext& ctx) const
   {
-    return format_to(ctx.out(),
-                     "Material source: {0}\nEnable lighting: {1}\nLight mask: {2:x} ({2:08b})\n"
-                     "Ambient source: {3}\nDiffuse function: {4}\nAttenuation function: {5}",
-                     chan.matsource, chan.enablelighting ? "Yes" : "No", chan.GetFullLightMask(),
-                     chan.ambsource, chan.diffusefunc, chan.attnfunc);
+    return fmt::format_to(
+        ctx.out(),
+        "Material source: {0}\nEnable lighting: {1}\nLight mask: {2:x} ({2:08b})\n"
+        "Ambient source: {3}\nDiffuse function: {4}\nAttenuation function: {5}",
+        chan.matsource, chan.enablelighting ? "Yes" : "No", chan.GetFullLightMask(), chan.ambsource,
+        chan.diffusefunc, chan.attnfunc);
   }
 };
 
@@ -279,15 +286,15 @@ struct fmt::formatter<ClipDisable>
 {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const ClipDisable& cd, FormatContext& ctx)
+  auto format(const ClipDisable& cd, FormatContext& ctx) const
   {
-    return format_to(ctx.out(),
-                     "Disable clipping detection: {}\n"
-                     "Disable trivial rejection: {}\n"
-                     "Disable cpoly clipping acceleration: {}",
-                     cd.disable_clipping_detection ? "Yes" : "No",
-                     cd.disable_trivial_rejection ? "Yes" : "No",
-                     cd.disable_cpoly_clipping_acceleration ? "Yes" : "No");
+    return fmt::format_to(ctx.out(),
+                          "Disable clipping detection: {}\n"
+                          "Disable trivial rejection: {}\n"
+                          "Disable cpoly clipping acceleration: {}",
+                          cd.disable_clipping_detection ? "Yes" : "No",
+                          cd.disable_trivial_rejection ? "Yes" : "No",
+                          cd.disable_cpoly_clipping_acceleration ? "Yes" : "No");
   }
 };
 
@@ -303,10 +310,10 @@ struct fmt::formatter<INVTXSPEC>
 {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const INVTXSPEC& spec, FormatContext& ctx)
+  auto format(const INVTXSPEC& spec, FormatContext& ctx) const
   {
-    return format_to(ctx.out(), "Num colors: {}\nNum normals: {}\nNum textures: {}", spec.numcolors,
-                     spec.numnormals, spec.numtextures);
+    return fmt::format_to(ctx.out(), "Num colors: {}\nNum normals: {}\nNum textures: {}",
+                          spec.numcolors, spec.numnormals, spec.numtextures);
   }
 };
 
@@ -327,13 +334,13 @@ struct fmt::formatter<TexMtxInfo>
 {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const TexMtxInfo& i, FormatContext& ctx)
+  auto format(const TexMtxInfo& i, FormatContext& ctx) const
   {
-    return format_to(ctx.out(),
-                     "Projection: {}\nInput form: {}\nTex gen type: {}\n"
-                     "Source row: {}\nEmboss source shift: {}\nEmboss light shift: {}",
-                     i.projection, i.inputform, i.texgentype, i.sourcerow, i.embosssourceshift,
-                     i.embosslightshift);
+    return fmt::format_to(ctx.out(),
+                          "Projection: {}\nInput form: {}\nTex gen type: {}\n"
+                          "Source row: {}\nEmboss source shift: {}\nEmboss light shift: {}",
+                          i.projection, i.inputform, i.texgentype, i.sourcerow, i.embosssourceshift,
+                          i.embosslightshift);
   }
 };
 
@@ -350,10 +357,10 @@ struct fmt::formatter<PostMtxInfo>
 {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const PostMtxInfo& i, FormatContext& ctx)
+  auto format(const PostMtxInfo& i, FormatContext& ctx) const
   {
-    return format_to(ctx.out(), "Index: {}\nNormalize before send operation: {}", i.index,
-                     i.normalize ? "Yes" : "No");
+    return fmt::format_to(ctx.out(), "Index: {}\nNormalize before send operation: {}", i.index,
+                          i.normalize ? "Yes" : "No");
   }
 };
 
@@ -416,25 +423,25 @@ struct Projection
   ProjectionType type;
 };
 
-struct XFMemory
+struct alignas(16) XFMemory
 {
-  float posMatrices[256];    // 0x0000 - 0x00ff
-  u32 unk0[768];             // 0x0100 - 0x03ff
-  float normalMatrices[96];  // 0x0400 - 0x045f
-  u32 unk1[160];             // 0x0460 - 0x04ff
-  float postMatrices[256];   // 0x0500 - 0x05ff
-  Light lights[8];           // 0x0600 - 0x067f
-  u32 unk2[2432];            // 0x0680 - 0x0fff
-  u32 error;                 // 0x1000
-  u32 diag;                  // 0x1001
-  u32 state0;                // 0x1002
-  u32 state1;                // 0x1003
-  u32 xfClock;               // 0x1004
-  ClipDisable clipDisable;   // 0x1005
-  u32 perf0;                 // 0x1006
-  u32 perf1;                 // 0x1007
-  INVTXSPEC hostinfo;        // 0x1008 number of textures,colors,normals from vertex input
-  NumColorChannel numChan;   // 0x1009
+  float posMatrices[256];                   // 0x0000 - 0x00ff
+  u32 unk0[768];                            // 0x0100 - 0x03ff
+  float normalMatrices[96];                 // 0x0400 - 0x045f
+  u32 unk1[160];                            // 0x0460 - 0x04ff
+  float postMatrices[256];                  // 0x0500 - 0x05ff
+  Light lights[8];                          // 0x0600 - 0x067f
+  u32 unk2[2432];                           // 0x0680 - 0x0fff
+  u32 error;                                // 0x1000
+  u32 diag;                                 // 0x1001
+  u32 state0;                               // 0x1002
+  u32 state1;                               // 0x1003
+  u32 xfClock;                              // 0x1004
+  ClipDisable clipDisable;                  // 0x1005
+  u32 perf0;                                // 0x1006
+  u32 perf1;                                // 0x1007
+  INVTXSPEC invtxspec;                      // 0x1008
+  NumColorChannel numChan;                  // 0x1009
   u32 ambColor[NUM_XF_COLOR_CHANNELS];      // 0x100a, 0x100b
   u32 matColor[NUM_XF_COLOR_CHANNELS];      // 0x100c, 0x100d
   LitChannel color[NUM_XF_COLOR_CHANNELS];  // 0x100e, 0x100f
@@ -455,10 +462,10 @@ struct XFMemory
   u32 unk9[8];                              // 0x1048 - 0x104f
   PostMtxInfo postMtxInfo[8];               // 0x1050 - 0x1057
 };
-static_assert(sizeof(XFMemory) == sizeof(u32) * 0x1058);
+static_assert(sizeof(XFMemory) == sizeof(u32) * XFMEM_REGISTERS_END);
 
 extern XFMemory xfmem;
 
-void LoadXFReg(u32 transferSize, u32 address, DataReader src);
-void LoadIndexedXF(u32 val, int array);
-void PreprocessIndexedXF(u32 val, int refarray);
+void LoadXFReg(u16 base_address, u8 transfer_size, const u8* data);
+void LoadIndexedXF(CPArray array, u32 index, u16 address, u8 size);
+void PreprocessIndexedXF(CPArray array, u32 index, u16 address, u8 size);

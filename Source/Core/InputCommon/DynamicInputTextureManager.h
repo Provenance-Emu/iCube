@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -21,7 +20,8 @@ public:
   DynamicInputTextureManager();
   ~DynamicInputTextureManager();
   void Load();
-  void GenerateTextures(const IniFile& file, const std::vector<std::string>& controller_names);
+  void GenerateTextures(const Common::IniFile& file,
+                        const std::vector<std::string>& controller_names);
 
 private:
   std::vector<DynamicInputTextures::Configuration> m_configuration;

@@ -1,6 +1,5 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/IOS/USB/LibusbDevice.h"
 
@@ -22,10 +21,11 @@
 #include "Core/HW/Memmap.h"
 #include "Core/IOS/Device.h"
 #include "Core/IOS/IOS.h"
+#include "Core/System.h"
 
 namespace IOS::HLE::USB
 {
-LibusbDevice::LibusbDevice(Kernel& ios, libusb_device* device,
+LibusbDevice::LibusbDevice(EmulationKernel& ios, libusb_device* device,
                            const libusb_device_descriptor& descriptor)
     : m_ios(ios), m_device(device)
 {
@@ -37,7 +37,15 @@ LibusbDevice::LibusbDevice(Kernel& ios, libusb_device* device,
           static_cast<u64>(libusb_get_device_address(device)));
 
   for (u8 i = 0; i < descriptor.bNumConfigurations; ++i)
-    m_config_descriptors.emplace_back(LibusbUtils::MakeConfigDescriptor(m_device, i));
+  {
+    auto [ret, config_descriptor] = LibusbUtils::MakeConfigDescriptor(m_device, i);
+    if (ret != LIBUSB_SUCCESS || !config_descriptor)
+    {
+      WARN_LOG_FMT(IOS_USB, "Failed to make config descriptor {} for {:04x}:{:04x}: {}", i, m_vid,
+                   m_pid, LibusbUtils::ErrorWrap(ret));
+    }
+    m_config_descriptors.emplace_back(std::move(config_descriptor));
+  }
 }
 
 LibusbDevice::~LibusbDevice()
@@ -134,15 +142,15 @@ bool LibusbDevice::Attach()
   {
     NOTICE_LOG_FMT(IOS_USB, "[{:04x}:{:04x}] Opening device", m_vid, m_pid);
     const int ret = libusb_open(m_device, &m_handle);
-    if (ret != 0)
+    if (ret != LIBUSB_SUCCESS)
     {
       ERROR_LOG_FMT(IOS_USB, "[{:04x}:{:04x}] Failed to open: {}", m_vid, m_pid,
-                    libusb_error_name(ret));
+                    LibusbUtils::ErrorWrap(ret));
       m_handle = nullptr;
       return false;
     }
   }
-  if (ClaimAllInterfaces(DEFAULT_CONFIG_NUM) < 0)
+  if (ClaimAllInterfaces(DEFAULT_CONFIG_NUM) < LIBUSB_SUCCESS)
     return false;
   m_device_attached = true;
   return true;
@@ -154,7 +162,7 @@ bool LibusbDevice::AttachAndChangeInterface(const u8 interface)
     return false;
 
   if (interface != m_active_interface)
-    return ChangeInterface(interface) == 0;
+    return ChangeInterface(interface) == LIBUSB_SUCCESS;
 
   return true;
 }
@@ -175,7 +183,7 @@ int LibusbDevice::ChangeInterface(const u8 interface)
   INFO_LOG_FMT(IOS_USB, "[{:04x}:{:04x} {}] Changing interface to {}", m_vid, m_pid,
                m_active_interface, interface);
   m_active_interface = interface;
-  return 0;
+  return LIBUSB_SUCCESS;
 }
 
 int LibusbDevice::SetAltSetting(const u8 alt_setting)
@@ -209,15 +217,15 @@ int LibusbDevice::SubmitTransfer(std::unique_ptr<CtrlMessage> cmd)
     if (static_cast<u8>(cmd->index) != m_active_interface)
     {
       const int ret = ChangeInterface(static_cast<u8>(cmd->index));
-      if (ret < 0)
+      if (ret < LIBUSB_SUCCESS)
       {
         ERROR_LOG_FMT(IOS_USB, "[{:04x}:{:04x} {}] Failed to change interface to {}: {}", m_vid,
-                      m_pid, m_active_interface, cmd->index, libusb_error_name(ret));
+                      m_pid, m_active_interface, cmd->index, LibusbUtils::ErrorWrap(ret));
         return ret;
       }
     }
     const int ret = SetAltSetting(static_cast<u8>(cmd->value));
-    if (ret == 0)
+    if (ret == LIBUSB_SUCCESS)
       m_ios.EnqueueIPCReply(cmd->ios_request, cmd->length);
     return ret;
   }
@@ -227,7 +235,7 @@ int LibusbDevice::SubmitTransfer(std::unique_ptr<CtrlMessage> cmd)
                  m_vid, m_pid, m_active_interface, cmd->index, cmd->value);
     ReleaseAllInterfacesForCurrentConfig();
     const int ret = libusb_set_configuration(m_handle, cmd->value);
-    if (ret == 0)
+    if (ret == LIBUSB_SUCCESS)
     {
       ClaimAllInterfaces(cmd->value);
       m_ios.EnqueueIPCReply(cmd->ios_request, cmd->length);
@@ -240,7 +248,11 @@ int LibusbDevice::SubmitTransfer(std::unique_ptr<CtrlMessage> cmd)
   auto buffer = std::make_unique<u8[]>(size);
   libusb_fill_control_setup(buffer.get(), cmd->request_type, cmd->request, cmd->value, cmd->index,
                             cmd->length);
-  Memory::CopyFromEmu(buffer.get() + LIBUSB_CONTROL_SETUP_SIZE, cmd->data_address, cmd->length);
+
+  auto& system = m_ios.GetSystem();
+  auto& memory = system.GetMemory();
+  memory.CopyFromEmu(buffer.get() + LIBUSB_CONTROL_SETUP_SIZE, cmd->data_address, cmd->length);
+
   libusb_transfer* transfer = libusb_alloc_transfer(0);
   transfer->flags |= LIBUSB_TRANSFER_FREE_TRANSFER;
   libusb_fill_control_transfer(transfer, m_handle, buffer.release(), CtrlTransferCallback, this, 0);
@@ -369,7 +381,7 @@ void LibusbDevice::TransferEndpoint::HandleTransfer(libusb_transfer* transfer,
   const std::unique_ptr<u8[]> buffer(transfer->buffer);
   const auto& cmd = *iterator->second.get();
   const auto* device = static_cast<LibusbDevice*>(transfer->user_data);
-  s32 return_value = 0;
+  s32 return_value = LIBUSB_SUCCESS;
   switch (transfer->status)
   {
   case LIBUSB_TRANSFER_COMPLETED:
@@ -418,7 +430,7 @@ static int DoForEachInterface(const Configs& configs, u8 config_num, Function ac
   for (u8 i = 0; i < configs[config_num]->bNumInterfaces; ++i)
   {
     ret = action(i);
-    if (ret < 0)
+    if (ret < LIBUSB_SUCCESS)
       break;
   }
   return ret;
@@ -427,16 +439,21 @@ static int DoForEachInterface(const Configs& configs, u8 config_num, Function ac
 int LibusbDevice::ClaimAllInterfaces(u8 config_num) const
 {
   const int ret = DoForEachInterface(m_config_descriptors, config_num, [this](u8 i) {
+  // On macos detaching would fail without root or entitlement.
+  // We assume user is using GCAdapterDriver and therefore don't want to detach anything
+#if !defined(__APPLE__)
     const int ret2 = libusb_detach_kernel_driver(m_handle, i);
-    if (ret2 < 0 && ret2 != LIBUSB_ERROR_NOT_FOUND && ret2 != LIBUSB_ERROR_NOT_SUPPORTED)
+    if (ret2 < LIBUSB_SUCCESS && ret2 != LIBUSB_ERROR_NOT_FOUND &&
+        ret2 != LIBUSB_ERROR_NOT_SUPPORTED)
     {
       ERROR_LOG_FMT(IOS_USB, "[{:04x}:{:04x}] Failed to detach kernel driver: {}", m_vid, m_pid,
-                    libusb_error_name(ret2));
+                    LibusbUtils::ErrorWrap(ret2));
       return ret2;
     }
+#endif
     return libusb_claim_interface(m_handle, i);
   });
-  if (ret < 0)
+  if (ret < LIBUSB_SUCCESS)
   {
     ERROR_LOG_FMT(IOS_USB, "[{:04x}:{:04x}] Failed to claim all interfaces (configuration {})",
                   m_vid, m_pid, config_num);
@@ -449,7 +466,7 @@ int LibusbDevice::ReleaseAllInterfaces(u8 config_num) const
   const int ret = DoForEachInterface(m_config_descriptors, config_num, [this](u8 i) {
     return libusb_release_interface(m_handle, i);
   });
-  if (ret < 0 && ret != LIBUSB_ERROR_NO_DEVICE && ret != LIBUSB_ERROR_NOT_FOUND)
+  if (ret < LIBUSB_SUCCESS && ret != LIBUSB_ERROR_NO_DEVICE && ret != LIBUSB_ERROR_NOT_FOUND)
   {
     ERROR_LOG_FMT(IOS_USB, "[{:04x}:{:04x}] Failed to release all interfaces (configuration {})",
                   m_vid, m_pid, config_num);
@@ -461,7 +478,7 @@ int LibusbDevice::ReleaseAllInterfacesForCurrentConfig() const
 {
   int config_num;
   const int get_config_ret = libusb_get_configuration(m_handle, &config_num);
-  if (get_config_ret < 0)
+  if (get_config_ret < LIBUSB_SUCCESS)
     return get_config_ret;
   return ReleaseAllInterfaces(config_num);
 }

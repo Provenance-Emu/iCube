@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project>
   <Import Project="..\VSProps\Base.Macros.props" />
   <Import Project="$(VSPropsDir)Base.Targets.props" />
   <PropertyGroup Label="Globals">
@@ -12,21 +12,15 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="$(VSPropsDir)Base.props" />
+    <Import Project="$(VSPropsDir)Base.Dolphin.props" />
     <Import Project="$(VSPropsDir)PCHUse.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <ItemDefinitionGroup>
     <Link>
-      <AdditionalDependencies>winmm.lib;Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <None Include="Testdata\dsp_test.bin" />
-    <None Include="Testdata\dsp_test.S" />
-    <None Include="Testdata\hermes.bin" />
-    <None Include="Testdata\hermes.s" />
-  </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DSPTool.cpp" />
     <ClCompile Include="StubHost.cpp" />
@@ -39,6 +33,7 @@
       <Project>{D79392F7-06D6-4B4B-A39F-4D587C215D3A}</Project>
     </ProjectReference>
   </ItemGroup>
+  <Import Project="$(ExternalsDir)fmt\exports.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

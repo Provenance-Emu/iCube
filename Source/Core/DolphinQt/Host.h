@@ -1,6 +1,5 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -25,21 +24,26 @@ public:
   bool GetRenderFocus();
   bool GetRenderFullFocus();
   bool GetRenderFullscreen();
+  bool GetGBAFocus();
+  bool GetTASInputFocus() const;
 
   void SetMainWindowHandle(void* handle);
   void SetRenderHandle(void* handle);
   void SetRenderFocus(bool focus);
   void SetRenderFullFocus(bool focus);
   void SetRenderFullscreen(bool fullscreen);
+  void SetTASInputFocus(bool focus);
   void ResizeSurface(int new_width, int new_height);
-  void RequestNotifyMapLoaded();
 
 signals:
   void RequestTitle(const QString& title);
   void RequestStop();
   void RequestRenderSize(int w, int h);
   void UpdateDisasmDialog();
-  void NotifyMapLoaded();
+  void JitCacheInvalidation();
+  void JitProfileDataWiped();
+  void PPCSymbolsChanged();
+  void PPCBreakpointsChanged();
 
 private:
   Host();
@@ -50,4 +54,5 @@ private:
   std::atomic<bool> m_render_focus{false};
   std::atomic<bool> m_render_full_focus{false};
   std::atomic<bool> m_render_fullscreen{false};
+  std::atomic<bool> m_tas_input_focus{false};
 };

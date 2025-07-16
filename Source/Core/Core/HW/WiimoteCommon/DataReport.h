@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -40,6 +39,7 @@ public:
   virtual const u8* GetIRDataPtr() const = 0;
   virtual u32 GetIRDataSize() const = 0;
   virtual u32 GetIRDataFormatOffset() const = 0;
+  virtual IRReportFormat GetIRReportFormat() const = 0;
 
   virtual u8* GetExtDataPtr() = 0;
   virtual const u8* GetExtDataPtr() const = 0;
@@ -50,7 +50,7 @@ public:
 
   virtual u32 GetDataSize() const = 0;
 
-  u8* data_ptr;
+  u8* data_ptr = nullptr;
 };
 
 std::unique_ptr<DataReportManipulator> MakeDataReportManipulator(InputReportID rpt_id,
@@ -77,6 +77,7 @@ public:
   u32 GetExtDataSize() const;
 
   u32 GetIRDataFormatOffset() const;
+  IRReportFormat GetIRReportFormat() const;
 
   void GetCoreData(CoreData*) const;
   void GetAccelData(AccelData*) const;

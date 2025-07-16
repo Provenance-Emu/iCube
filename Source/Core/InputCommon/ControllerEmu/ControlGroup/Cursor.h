@@ -1,6 +1,5 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -30,6 +29,7 @@ public:
 
   // Modifies the state
   StateData GetState(bool adjusted);
+  StateData GetState(bool adjusted, const ControllerEmu::InputOverrideFunction& override_func);
 
   // Yaw movement in radians.
   ControlState GetTotalYaw() const;
@@ -40,7 +40,11 @@ public:
   // Vertical offset in meters.
   ControlState GetVerticalOffset() const;
 
+  void SetRelativeInput(bool enabled);
+
 private:
+  Cursor::StateData UpdateState(Cursor::ReshapeData input);
+
   // This is used to reduce the cursor speed for relative input
   // to something that makes sense with the default range.
   static constexpr double STEP_PER_SEC = 0.01 * 200;

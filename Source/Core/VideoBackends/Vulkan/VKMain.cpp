@@ -1,6 +1,7 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "VideoBackends/Vulkan/VideoBackend.h"
 
 #include <vector>
 
@@ -11,11 +12,11 @@
 #include "VideoBackends/Vulkan/Constants.h"
 #include "VideoBackends/Vulkan/ObjectCache.h"
 #include "VideoBackends/Vulkan/StateTracker.h"
+#include "VideoBackends/Vulkan/VKBoundingBox.h"
+#include "VideoBackends/Vulkan/VKGfx.h"
 #include "VideoBackends/Vulkan/VKPerfQuery.h"
-#include "VideoBackends/Vulkan/VKRenderer.h"
 #include "VideoBackends/Vulkan/VKSwapChain.h"
 #include "VideoBackends/Vulkan/VKVertexManager.h"
-#include "VideoBackends/Vulkan/VideoBackend.h"
 #include "VideoBackends/Vulkan/VulkanContext.h"
 
 #include "VideoCommon/FramebufferManager.h"
@@ -29,14 +30,15 @@
 
 namespace Vulkan
 {
-void VideoBackend::InitBackendInfo()
+void VideoBackend::InitBackendInfo(const WindowSystemInfo& wsi)
 {
   VulkanContext::PopulateBackendInfo(&g_Config);
 
   if (LoadVulkanLibrary())
   {
-    VkInstance temp_instance =
-        VulkanContext::CreateVulkanInstance(WindowSystemType::Headless, false, false);
+    u32 vk_api_version = 0;
+    VkInstance temp_instance = VulkanContext::CreateVulkanInstance(WindowSystemType::Headless,
+                                                                   false, false, &vk_api_version);
     if (temp_instance)
     {
       if (LoadVulkanInstanceFunctions(temp_instance))
@@ -52,11 +54,8 @@ void VideoBackend::InitBackendInfo()
             device_index = 0;
 
           VkPhysicalDevice gpu = gpu_list[device_index];
-          VkPhysicalDeviceProperties properties;
-          vkGetPhysicalDeviceProperties(gpu, &properties);
-          VkPhysicalDeviceFeatures features;
-          vkGetPhysicalDeviceFeatures(gpu, &features);
-          VulkanContext::PopulateBackendInfoFeatures(&g_Config, gpu, properties, features);
+          VulkanContext::PhysicalDeviceInfo properties(gpu);
+          VulkanContext::PopulateBackendInfoFeatures(&g_Config, gpu, properties);
           VulkanContext::PopulateBackendInfoMultisampleModes(&g_Config, gpu, properties);
         }
       }
@@ -79,17 +78,17 @@ void VideoBackend::InitBackendInfo()
 // Helper method to check whether the Host GPU logging category is enabled.
 static bool IsHostGPULoggingEnabled()
 {
-  return Common::Log::LogManager::GetInstance()->IsEnabled(Common::Log::HOST_GPU,
-                                                           Common::Log::LERROR);
+  return Common::Log::LogManager::GetInstance()->IsEnabled(Common::Log::LogType::HOST_GPU,
+                                                           Common::Log::LogLevel::LERROR);
 }
 
-// Helper method to determine whether to enable the debug report extension.
-static bool ShouldEnableDebugReports(bool enable_validation_layers)
+// Helper method to determine whether to enable the debug utils extension.
+static bool ShouldEnableDebugUtils(bool enable_validation_layers)
 {
-  // Enable debug reports if the Host GPU log option is checked, or validation layers are enabled.
+  // Enable debug utils if the Host GPU log option is checked, or validation layers are enabled.
   // The only issue here is that if Host GPU is not checked when the instance is created, the debug
   // report extension will not be enabled, requiring the game to be restarted before any reports
-  // will be logged. Otherwise, we'd have to enable debug reports on every instance, when most
+  // will be logged. Otherwise, we'd have to enable debug utils on every instance, when most
   // users will never check the Host GPU logging category.
   return enable_validation_layers || IsHostGPULoggingEnabled();
 }
@@ -113,9 +112,10 @@ bool VideoBackend::Initialize(const WindowSystemInfo& wsi)
   // Create Vulkan instance, needed before we can create a surface, or enumerate devices.
   // We use this instance to fill in backend info, then re-use it for the actual device.
   bool enable_surface = wsi.type != WindowSystemType::Headless;
-  bool enable_debug_reports = ShouldEnableDebugReports(enable_validation_layer);
-  VkInstance instance =
-      VulkanContext::CreateVulkanInstance(wsi.type, enable_debug_reports, enable_validation_layer);
+  bool enable_debug_utils = ShouldEnableDebugUtils(enable_validation_layer);
+  u32 vk_api_version = 0;
+  VkInstance instance = VulkanContext::CreateVulkanInstance(
+      wsi.type, enable_debug_utils, enable_validation_layer, &vk_api_version);
   if (instance == VK_NULL_HANDLE)
   {
     PanicAlertFmt("Failed to create Vulkan instance.");
@@ -171,8 +171,9 @@ bool VideoBackend::Initialize(const WindowSystemInfo& wsi)
   }
 
   // Now we can create the Vulkan device. VulkanContext takes ownership of the instance and surface.
-  g_vulkan_context = VulkanContext::Create(instance, gpu_list[selected_adapter_index], surface,
-                                           enable_debug_reports, enable_validation_layer);
+  g_vulkan_context =
+      VulkanContext::Create(instance, gpu_list[selected_adapter_index], surface, enable_debug_utils,
+                            enable_validation_layer, vk_api_version);
   if (!g_vulkan_context)
   {
     PanicAlertFmt("Failed to create Vulkan device");
@@ -183,15 +184,13 @@ bool VideoBackend::Initialize(const WindowSystemInfo& wsi)
   // Since VulkanContext maintains a copy of the device features and properties, we can use this
   // to initialize the backend information, so that we don't need to enumerate everything again.
   VulkanContext::PopulateBackendInfoFeatures(&g_Config, g_vulkan_context->GetPhysicalDevice(),
-                                             g_vulkan_context->GetDeviceProperties(),
-                                             g_vulkan_context->GetDeviceFeatures());
+                                             g_vulkan_context->GetDeviceInfo());
   VulkanContext::PopulateBackendInfoMultisampleModes(
-      &g_Config, g_vulkan_context->GetPhysicalDevice(), g_vulkan_context->GetDeviceProperties());
+      &g_Config, g_vulkan_context->GetPhysicalDevice(), g_vulkan_context->GetDeviceInfo());
   g_Config.backend_info.bSupportsExclusiveFullscreen =
       enable_surface && g_vulkan_context->SupportsExclusiveFullscreen(wsi, surface);
 
-  // With the backend information populated, we can now initialize videocommon.
-  InitializeShared();
+  UpdateActiveConfig();
 
   // Create command buffers. We do this separately because the other classes depend on it.
   g_command_buffer_mgr = std::make_unique<CommandBufferManager>(g_Config.bBackendMultithreading);
@@ -231,25 +230,13 @@ bool VideoBackend::Initialize(const WindowSystemInfo& wsi)
     return false;
   }
 
-  // Create main wrapper instances.
-  g_renderer = std::make_unique<Renderer>(std::move(swap_chain), wsi.render_surface_scale);
-  g_vertex_manager = std::make_unique<VertexManager>();
-  g_shader_cache = std::make_unique<VideoCommon::ShaderCache>();
-  g_framebuffer_manager = std::make_unique<FramebufferManager>();
-  g_texture_cache = std::make_unique<TextureCacheBase>();
-  g_perf_query = std::make_unique<PerfQuery>();
+  auto gfx = std::make_unique<VKGfx>(std::move(swap_chain), wsi.render_surface_scale);
+  auto vertex_manager = std::make_unique<VertexManager>();
+  auto perf_query = std::make_unique<PerfQuery>();
+  auto bounding_box = std::make_unique<VKBoundingBox>();
 
-  if (!g_vertex_manager->Initialize() || !g_shader_cache->Initialize() ||
-      !g_renderer->Initialize() || !g_framebuffer_manager->Initialize() ||
-      !g_texture_cache->Initialize() || !PerfQuery::GetInstance()->Initialize())
-  {
-    PanicAlertFmt("Failed to initialize renderer classes");
-    Shutdown();
-    return false;
-  }
-
-  g_shader_cache->InitializeShaderCache();
-  return true;
+  return InitializeShared(std::move(gfx), std::move(vertex_manager), std::move(perf_query),
+                          std::move(bounding_box));
 }
 
 void VideoBackend::Shutdown()
@@ -257,61 +244,25 @@ void VideoBackend::Shutdown()
   if (g_vulkan_context)
     vkDeviceWaitIdle(g_vulkan_context->GetDevice());
 
-  if (g_shader_cache)
-    g_shader_cache->Shutdown();
-
   if (g_object_cache)
     g_object_cache->Shutdown();
 
-  if (g_renderer)
-    g_renderer->Shutdown();
+  ShutdownShared();
 
-  g_perf_query.reset();
-  g_texture_cache.reset();
-  g_framebuffer_manager.reset();
-  g_shader_cache.reset();
-  g_vertex_manager.reset();
-  g_renderer.reset();
   g_object_cache.reset();
   StateTracker::DestroyInstance();
   g_command_buffer_mgr.reset();
   g_vulkan_context.reset();
-  ShutdownShared();
   UnloadVulkanLibrary();
 }
-
-#if defined(VK_USE_PLATFORM_METAL_EXT)
-static bool IsRunningOnMojaveOrHigher()
-{
-  // id processInfo = [NSProcessInfo processInfo]
-  id processInfo = reinterpret_cast<id (*)(Class, SEL)>(objc_msgSend)(
-      objc_getClass("NSProcessInfo"), sel_getUid("processInfo"));
-  if (!processInfo)
-    return false;
-
-  struct OSVersion  // NSOperatingSystemVersion
-  {
-    size_t major_version;  // NSInteger majorVersion
-    size_t minor_version;  // NSInteger minorVersion
-    size_t patch_version;  // NSInteger patchVersion
-  };
-
-  // const bool meets_requirement = [processInfo isOperatingSystemAtLeastVersion:required_version];
-  constexpr OSVersion required_version = {10, 14, 0};
-  const bool meets_requirement = reinterpret_cast<bool (*)(id, SEL, OSVersion)>(objc_msgSend)(
-      processInfo, sel_getUid("isOperatingSystemAtLeastVersion:"), required_version);
-  return meets_requirement;
-}
-#endif
 
 void VideoBackend::PrepareWindow(WindowSystemInfo& wsi)
 {
 #if defined(VK_USE_PLATFORM_METAL_EXT)
-  if (wsi.type == WindowSystemType::IPhoneOS)
-  {
+  // We only need to manually create the CAMetalLayer on macOS.
+  if (wsi.type != WindowSystemType::MacOS)
     return;
-  }
-  
+
   // This is kinda messy, but it avoids having to write Objective C++ just to create a metal layer.
   id view = reinterpret_cast<id>(wsi.render_surface);
   Class clsCAMetalLayer = objc_getClass("CAMetalLayer");
@@ -350,17 +301,6 @@ void VideoBackend::PrepareWindow(WindowSystemInfo& wsi)
 
   // Store the layer pointer, that way MoltenVK doesn't call [NSView layer] outside the main thread.
   wsi.render_surface = layer;
-
-  // The Metal version included with MacOS 10.13 and below does not support several features we
-  // require. Furthermore, the drivers seem to choke on our shaders (mainly Intel). So, we warn
-  // the user that this is an unsupported configuration, but permit them to continue.
-  if (!IsRunningOnMojaveOrHigher())
-  {
-    PanicAlertFmtT(
-        "You are attempting to use the Vulkan (Metal) backend on an unsupported operating system. "
-        "For all functionality to be enabled, you must use macOS 10.14 (Mojave) or newer. Please "
-        "do not report any issues encountered unless they also occur on 10.14+.");
-  }
 #endif
 }
 }  // namespace Vulkan

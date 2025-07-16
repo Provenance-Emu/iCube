@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "VideoBackends/Software/TextureEncoder.h"
 
@@ -232,7 +231,7 @@ static void SetSpans(int sBlkSize, int tBlkSize, s32* tSpan, s32* sBlkSpan, s32*
   *tBlkSpan = ((640 * tBlkSize) - alignedWidth) *
               readStride;  // bytes to advance src pointer after each row of blocks
 
-  *writeStride = bpmem.copyMipMapStrideChannels * 32;
+  *writeStride = bpmem.copyDestStride << 5;
 }
 
 #define ENCODE_LOOP_BLOCKS                                                                         \

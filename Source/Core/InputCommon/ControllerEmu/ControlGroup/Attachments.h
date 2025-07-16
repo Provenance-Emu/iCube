@@ -1,6 +1,5 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -30,11 +29,12 @@ public:
   void SetSelectedAttachment(u32 val);
 
   NumericSetting<int>& GetSelectionSetting();
+  SubscribableSettingValue<int>& GetAttachmentSetting();
 
   const std::vector<std::unique_ptr<EmulatedController>>& GetAttachmentList() const;
 
 private:
-  SettingValue<int> m_selection_value;
+  SubscribableSettingValue<int> m_selection_value;
   // This is here and not added to the list of numeric_settings because it's serialized differently,
   // by string (to be independent from the enum), and visualized differently in the UI.
   // For the rest, it's treated similarly to other numeric_settings in the group.

@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/IOS/USB/Bluetooth/BTStub.h"
 
@@ -20,6 +19,6 @@ std::optional<IPCReply> BluetoothStubDevice::Open(const OpenRequest& request)
 void BluetoothStubDevice::DoState(PointerWrap& p)
 {
   Core::DisplayMessage("The current IPC_HLE_Device_usb is a stub. Aborting load.", 4000);
-  p.SetMode(PointerWrap::MODE_VERIFY);
+  p.SetVerifyMode();
 }
 }  // namespace IOS::HLE

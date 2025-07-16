@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/DSP/Interpreter/DSPInterpreter.h"
 
@@ -56,19 +55,8 @@ void Interpreter::mv(const UDSPInstruction opc)
 {
   const u8 sreg = (opc & 0x3) + DSP_REG_ACL0;
   const u8 dreg = ((opc >> 2) & 0x3);
-  auto& state = m_dsp_core.DSPState();
 
-  switch (sreg)
-  {
-  case DSP_REG_ACL0:
-  case DSP_REG_ACL1:
-    WriteToBackLog(0, dreg + DSP_REG_AXL0, state.r.ac[sreg - DSP_REG_ACL0].l);
-    break;
-  case DSP_REG_ACM0:
-  case DSP_REG_ACM1:
-    WriteToBackLog(0, dreg + DSP_REG_AXL0, OpReadRegisterAndSaturate(sreg - DSP_REG_ACM0));
-    break;
-  }
+  WriteToBackLog(0, dreg + DSP_REG_AXL0, OpReadRegister(sreg));
 }
 
 // S @$arD, $acS.S
@@ -81,17 +69,7 @@ void Interpreter::s(const UDSPInstruction opc)
   const u8 sreg = ((opc >> 3) & 0x3) + DSP_REG_ACL0;
   auto& state = m_dsp_core.DSPState();
 
-  switch (sreg)
-  {
-  case DSP_REG_ACL0:
-  case DSP_REG_ACL1:
-    state.WriteDMEM(state.r.ar[dreg], state.r.ac[sreg - DSP_REG_ACL0].l);
-    break;
-  case DSP_REG_ACM0:
-  case DSP_REG_ACM1:
-    state.WriteDMEM(state.r.ar[dreg], OpReadRegisterAndSaturate(sreg - DSP_REG_ACM0));
-    break;
-  }
+  state.WriteDMEM(state.r.ar[dreg], OpReadRegister(sreg));
   WriteToBackLog(0, dreg, IncrementAddressRegister(dreg));
 }
 
@@ -105,17 +83,7 @@ void Interpreter::sn(const UDSPInstruction opc)
   const u8 sreg = ((opc >> 3) & 0x3) + DSP_REG_ACL0;
   auto& state = m_dsp_core.DSPState();
 
-  switch (sreg)
-  {
-  case DSP_REG_ACL0:
-  case DSP_REG_ACL1:
-    state.WriteDMEM(state.r.ar[dreg], state.r.ac[sreg - DSP_REG_ACL0].l);
-    break;
-  case DSP_REG_ACM0:
-  case DSP_REG_ACM1:
-    state.WriteDMEM(state.r.ar[dreg], OpReadRegisterAndSaturate(sreg - DSP_REG_ACM0));
-    break;
-  }
+  state.WriteDMEM(state.r.ar[dreg], OpReadRegister(sreg));
   WriteToBackLog(0, dreg, IncreaseAddressRegister(dreg, static_cast<s16>(state.r.ix[dreg])));
 }
 
@@ -145,7 +113,7 @@ void Interpreter::l(const UDSPInstruction opc)
 }
 
 // LN $axD.D, @$arS
-// xxxx xxxx 01dd d0ss
+// xxxx xxxx 01dd d1ss
 // Load $axD.D/$acD.D with value from memory pointed by register $arS.
 // Add indexing register $ixS to register $arS.
 void Interpreter::ln(const UDSPInstruction opc)
@@ -169,18 +137,18 @@ void Interpreter::ln(const UDSPInstruction opc)
   }
 }
 
-// LS $axD.D, $acS.m108
+// LS $axD.D, $acS.m
 // xxxx xxxx 10dd 000s
 // Load register $axD.D with value from memory pointed by register
 // $ar0. Store value from register $acS.m to memory location pointed by
 // register $ar3. Increment both $ar0 and $ar3.
 void Interpreter::ls(const UDSPInstruction opc)
 {
-  const u8 sreg = opc & 0x1;
+  const u8 sreg = (opc & 0x1) + DSP_REG_ACM0;
   const u8 dreg = ((opc >> 4) & 0x3) + DSP_REG_AXL0;
   auto& state = m_dsp_core.DSPState();
 
-  state.WriteDMEM(state.r.ar[3], OpReadRegisterAndSaturate(sreg));
+  state.WriteDMEM(state.r.ar[3], OpReadRegister(sreg));
 
   WriteToBackLog(0, dreg, state.ReadDMEM(state.r.ar[0]));
   WriteToBackLog(1, DSP_REG_AR3, IncrementAddressRegister(DSP_REG_AR3));
@@ -195,11 +163,11 @@ void Interpreter::ls(const UDSPInstruction opc)
 // register $ar0 and increment $ar3.
 void Interpreter::lsn(const UDSPInstruction opc)
 {
-  const u8 sreg = opc & 0x1;
+  const u8 sreg = (opc & 0x1) + DSP_REG_ACM0;
   const u8 dreg = ((opc >> 4) & 0x3) + DSP_REG_AXL0;
   auto& state = m_dsp_core.DSPState();
 
-  state.WriteDMEM(state.r.ar[3], OpReadRegisterAndSaturate(sreg));
+  state.WriteDMEM(state.r.ar[3], OpReadRegister(sreg));
 
   WriteToBackLog(0, dreg, state.ReadDMEM(state.r.ar[0]));
   WriteToBackLog(1, DSP_REG_AR3, IncrementAddressRegister(DSP_REG_AR3));
@@ -215,11 +183,11 @@ void Interpreter::lsn(const UDSPInstruction opc)
 // register $ar3 and increment $ar0.
 void Interpreter::lsm(const UDSPInstruction opc)
 {
-  const u8 sreg = opc & 0x1;
+  const u8 sreg = (opc & 0x1) + DSP_REG_ACM0;
   const u8 dreg = ((opc >> 4) & 0x3) + DSP_REG_AXL0;
   auto& state = m_dsp_core.DSPState();
 
-  state.WriteDMEM(state.r.ar[3], OpReadRegisterAndSaturate(sreg));
+  state.WriteDMEM(state.r.ar[3], OpReadRegister(sreg));
 
   WriteToBackLog(0, dreg, state.ReadDMEM(state.r.ar[0]));
   WriteToBackLog(1, DSP_REG_AR3,
@@ -236,11 +204,11 @@ void Interpreter::lsm(const UDSPInstruction opc)
 // register $ar3.
 void Interpreter::lsnm(const UDSPInstruction opc)
 {
-  const u8 sreg = opc & 0x1;
+  const u8 sreg = (opc & 0x1) + DSP_REG_ACM0;
   const u8 dreg = ((opc >> 4) & 0x3) + DSP_REG_AXL0;
   auto& state = m_dsp_core.DSPState();
 
-  state.WriteDMEM(state.r.ar[3], OpReadRegisterAndSaturate(sreg));
+  state.WriteDMEM(state.r.ar[3], OpReadRegister(sreg));
 
   WriteToBackLog(0, dreg, state.ReadDMEM(state.r.ar[0]));
   WriteToBackLog(1, DSP_REG_AR3,
@@ -256,11 +224,11 @@ void Interpreter::lsnm(const UDSPInstruction opc)
 // $ar3. Increment both $ar0 and $ar3.
 void Interpreter::sl(const UDSPInstruction opc)
 {
-  const u8 sreg = opc & 0x1;
+  const u8 sreg = (opc & 0x1) + DSP_REG_ACM0;
   const u8 dreg = ((opc >> 4) & 0x3) + DSP_REG_AXL0;
   auto& state = m_dsp_core.DSPState();
 
-  state.WriteDMEM(state.r.ar[0], OpReadRegisterAndSaturate(sreg));
+  state.WriteDMEM(state.r.ar[0], OpReadRegister(sreg));
 
   WriteToBackLog(0, dreg, state.ReadDMEM(state.r.ar[3]));
   WriteToBackLog(1, DSP_REG_AR3, IncrementAddressRegister(DSP_REG_AR3));
@@ -275,11 +243,11 @@ void Interpreter::sl(const UDSPInstruction opc)
 // and increment $ar3.
 void Interpreter::sln(const UDSPInstruction opc)
 {
-  const u8 sreg = opc & 0x1;
+  const u8 sreg = (opc & 0x1) + DSP_REG_ACM0;
   const u8 dreg = ((opc >> 4) & 0x3) + DSP_REG_AXL0;
   auto& state = m_dsp_core.DSPState();
 
-  state.WriteDMEM(state.r.ar[0], OpReadRegisterAndSaturate(sreg));
+  state.WriteDMEM(state.r.ar[0], OpReadRegister(sreg));
 
   WriteToBackLog(0, dreg, state.ReadDMEM(state.r.ar[3]));
   WriteToBackLog(1, DSP_REG_AR3, IncrementAddressRegister(DSP_REG_AR3));
@@ -295,11 +263,11 @@ void Interpreter::sln(const UDSPInstruction opc)
 // and increment $ar0.
 void Interpreter::slm(const UDSPInstruction opc)
 {
-  const u8 sreg = opc & 0x1;
+  const u8 sreg = (opc & 0x1) + DSP_REG_ACM0;
   const u8 dreg = ((opc >> 4) & 0x3) + DSP_REG_AXL0;
   auto& state = m_dsp_core.DSPState();
 
-  state.WriteDMEM(state.r.ar[0], OpReadRegisterAndSaturate(sreg));
+  state.WriteDMEM(state.r.ar[0], OpReadRegister(sreg));
 
   WriteToBackLog(0, dreg, state.ReadDMEM(state.r.ar[3]));
   WriteToBackLog(1, DSP_REG_AR3,
@@ -315,11 +283,11 @@ void Interpreter::slm(const UDSPInstruction opc)
 // and add corresponding indexing register $ix3 to addressing register $ar3.
 void Interpreter::slnm(const UDSPInstruction opc)
 {
-  const u8 sreg = opc & 0x1;
+  const u8 sreg = (opc & 0x1) + DSP_REG_ACM0;
   const u8 dreg = ((opc >> 4) & 0x3) + DSP_REG_AXL0;
   auto& state = m_dsp_core.DSPState();
 
-  state.WriteDMEM(state.r.ar[0], OpReadRegisterAndSaturate(sreg));
+  state.WriteDMEM(state.r.ar[0], OpReadRegister(sreg));
 
   WriteToBackLog(0, dreg, state.ReadDMEM(state.r.ar[3]));
   WriteToBackLog(1, DSP_REG_AR3,
@@ -328,17 +296,17 @@ void Interpreter::slnm(const UDSPInstruction opc)
                  IncreaseAddressRegister(DSP_REG_AR0, static_cast<s16>(state.r.ix[0])));
 }
 
-// LD $ax0.d, $ax1.r, @$arS
+// LD $ax0.D, $ax1.R, @$arS
 // xxxx xxxx 11dr 00ss
-// example for "nx'ld $AX0.L, $AX1.L, @$AR3"
-// Loads the word pointed by AR0 to AX0.H, then loads the word pointed by AR3 to AX0.L.
-// Increments AR0 and AR3.
-// If AR0 and AR3 point into the same memory page (upper 6 bits of addr are the same -> games are
-// not doing that!)
-// then the value pointed by AR0 is loaded to BOTH AX0.H and AX0.L.
-// If AR0 points into an invalid memory page (ie 0x2000), then AX0.H keeps its old value. (not
+// Load register $ax0.D (either $ax0.l or $ax0.h) with value from memory pointed by register $arS.
+// Load register $ax1.R (either $ax1.l or $ax1.h) with value from memory pointed by register $ar3.
+// Increment both $arS and $ar3.
+// S cannot be 3, as that encodes LDAX.  Thus $arS and $ar3 are known to be distinct.
+// If $ar0 and $ar3 point into the same memory page (upper 6 bits of addr are the same -> games are
+// not doing that!) then the value pointed by $ar0 is loaded to BOTH $ax0.D and $ax1.R.
+// If $ar0 points into an invalid memory page (ie 0x2000), then $ax0.D keeps its old value. (not
 // implemented yet)
-// If AR3 points into an invalid memory page, then AX0.L gets the same value as AX0.H. (not
+// If $ar3 points into an invalid memory page, then $ax1.R gets the same value as $ax0.D. (not
 // implemented yet)
 void Interpreter::ld(const UDSPInstruction opc)
 {
@@ -361,6 +329,9 @@ void Interpreter::ld(const UDSPInstruction opc)
 
 // LDAX $axR, @$arS
 // xxxx xxxx 11sr 0011
+// Load register $axR.h with value from memory pointed by register $arS.
+// Load register $axR.l with value from memory pointed by register $ar3.
+// Increment both $arS and $ar3.
 void Interpreter::ldax(const UDSPInstruction opc)
 {
   const u8 sreg = (opc >> 5) & 0x1;
@@ -379,7 +350,7 @@ void Interpreter::ldax(const UDSPInstruction opc)
   WriteToBackLog(3, DSP_REG_AR3, IncrementAddressRegister(DSP_REG_AR3));
 }
 
-// LDN $ax0.d, $ax1.r, @$arS
+// LDN $ax0.D, $ax1.R, @$arS
 // xxxx xxxx 11dr 01ss
 void Interpreter::ldn(const UDSPInstruction opc)
 {
@@ -420,7 +391,7 @@ void Interpreter::ldaxn(const UDSPInstruction opc)
   WriteToBackLog(3, DSP_REG_AR3, IncrementAddressRegister(DSP_REG_AR3));
 }
 
-// LDM $ax0.d, $ax1.r, @$arS
+// LDM $ax0.D, $ax1.R, @$arS
 // xxxx xxxx 11dr 10ss
 void Interpreter::ldm(const UDSPInstruction opc)
 {
@@ -463,7 +434,7 @@ void Interpreter::ldaxm(const UDSPInstruction opc)
                  IncreaseAddressRegister(DSP_REG_AR3, static_cast<s16>(state.r.ix[3])));
 }
 
-// LDNM $ax0.d, $ax1.r, @$arS
+// LDNM $ax0.D, $ax1.R, @$arS
 // xxxx xxxx 11dr 11ss
 void Interpreter::ldnm(const UDSPInstruction opc)
 {

@@ -1,11 +1,31 @@
 add_library(videocommon
   AbstractFramebuffer.cpp
   AbstractFramebuffer.h
+  AbstractGfx.cpp
+  AbstractGfx.h
   AbstractShader.h
   AbstractStagingTexture.cpp
   AbstractStagingTexture.h
   AbstractTexture.cpp
   AbstractTexture.h
+  Assets/CustomAsset.cpp
+  Assets/CustomAsset.h
+  Assets/CustomAssetLibrary.cpp
+  Assets/CustomAssetLibrary.h
+  Assets/CustomAssetLoader.cpp
+  Assets/CustomAssetLoader.h
+  Assets/CustomTextureData.cpp
+  Assets/CustomTextureData.h
+  Assets/DirectFilesystemAssetLibrary.cpp
+  Assets/DirectFilesystemAssetLibrary.h
+  Assets/MaterialAsset.cpp
+  Assets/MaterialAsset.h
+  Assets/MeshAsset.cpp
+  Assets/MeshAsset.h
+  Assets/ShaderAsset.cpp
+  Assets/ShaderAsset.h
+  Assets/TextureAsset.cpp
+  Assets/TextureAsset.h
   AsyncRequests.cpp
   AsyncRequests.h
   AsyncShaderCompiler.cpp
@@ -21,27 +41,66 @@ add_library(videocommon
   CommandProcessor.cpp
   CommandProcessor.h
   ConstantManager.h
+  Constants.h
   CPMemory.cpp
   CPMemory.h
+  CPUCull.cpp
+  CPUCull.h
+  CPUCullImpl.h
   DriverDetails.cpp
   DriverDetails.h
   Fifo.cpp
   Fifo.h
-  FPSCounter.cpp
-  FPSCounter.h
   FramebufferManager.cpp
   FramebufferManager.h
   FramebufferShaderGen.cpp
   FramebufferShaderGen.h
+  FrameDumper.cpp
+  FrameDumper.h
+  FrameDumpFFMpeg.h
   FreeLookCamera.cpp
   FreeLookCamera.h
   GeometryShaderGen.cpp
   GeometryShaderGen.h
   GeometryShaderManager.cpp
   GeometryShaderManager.h
+  GraphicsModSystem/Config/GraphicsMod.cpp
+  GraphicsModSystem/Config/GraphicsMod.h
+  GraphicsModSystem/Config/GraphicsModAsset.cpp
+  GraphicsModSystem/Config/GraphicsModAsset.h
+  GraphicsModSystem/Config/GraphicsModFeature.cpp
+  GraphicsModSystem/Config/GraphicsModFeature.h
+  GraphicsModSystem/Config/GraphicsModGroup.cpp
+  GraphicsModSystem/Config/GraphicsModGroup.h
+  GraphicsModSystem/Config/GraphicsTarget.cpp
+  GraphicsModSystem/Config/GraphicsTarget.h
+  GraphicsModSystem/Config/GraphicsTargetGroup.cpp
+  GraphicsModSystem/Config/GraphicsTargetGroup.h
+  GraphicsModSystem/Constants.h
+  GraphicsModSystem/Runtime/Actions/CustomPipelineAction.cpp
+  GraphicsModSystem/Runtime/Actions/CustomPipelineAction.h
+  GraphicsModSystem/Runtime/Actions/MoveAction.cpp
+  GraphicsModSystem/Runtime/Actions/MoveAction.h
+  GraphicsModSystem/Runtime/Actions/PrintAction.cpp
+  GraphicsModSystem/Runtime/Actions/PrintAction.h
+  GraphicsModSystem/Runtime/Actions/ScaleAction.cpp
+  GraphicsModSystem/Runtime/Actions/ScaleAction.h
+  GraphicsModSystem/Runtime/Actions/SkipAction.cpp
+  GraphicsModSystem/Runtime/Actions/SkipAction.h
+  GraphicsModSystem/Runtime/CustomPipeline.cpp
+  GraphicsModSystem/Runtime/CustomPipeline.h
+  GraphicsModSystem/Runtime/CustomShaderCache.cpp
+  GraphicsModSystem/Runtime/CustomShaderCache.h
+  GraphicsModSystem/Runtime/FBInfo.cpp
+  GraphicsModSystem/Runtime/FBInfo.h
+  GraphicsModSystem/Runtime/GraphicsModAction.h
+  GraphicsModSystem/Runtime/GraphicsModActionData.h
+  GraphicsModSystem/Runtime/GraphicsModActionFactory.cpp
+  GraphicsModSystem/Runtime/GraphicsModActionFactory.h
+  GraphicsModSystem/Runtime/GraphicsModManager.cpp
+  GraphicsModSystem/Runtime/GraphicsModManager.h
   HiresTextures.cpp
   HiresTextures.h
-  HiresTextures_DDSLoader.cpp
   IndexGenerator.cpp
   IndexGenerator.h
   LightingShaderGen.cpp
@@ -54,10 +113,17 @@ add_library(videocommon
   NetPlayGolfUI.h
   OnScreenDisplay.cpp
   OnScreenDisplay.h
+  OnScreenUI.cpp
+  OnScreenUI.h
+  OnScreenUIKeyMap.h
   OpcodeDecoding.cpp
   OpcodeDecoding.h
   PerfQueryBase.cpp
   PerfQueryBase.h
+  PerformanceMetrics.cpp
+  PerformanceMetrics.h
+  PerformanceTracker.cpp
+  PerformanceTracker.h
   PixelEngine.cpp
   PixelEngine.h
   PixelShaderGen.cpp
@@ -66,15 +132,18 @@ add_library(videocommon
   PixelShaderManager.h
   PostProcessing.cpp
   PostProcessing.h
+  Present.cpp
+  Present.h
   RenderBase.cpp
   RenderBase.h
   RenderState.cpp
   RenderState.h
-  SamplerCommon.h
   ShaderCache.cpp
   ShaderCache.h
   ShaderGenCommon.cpp
   ShaderGenCommon.h
+  Spirv.cpp
+  Spirv.h
   Statistics.cpp
   Statistics.h
   TextureCacheBase.cpp
@@ -90,6 +159,10 @@ add_library(videocommon
   TextureDecoder_Util.h
   TextureInfo.cpp
   TextureInfo.h
+  TextureUtils.cpp
+  TextureUtils.h
+  TMEM.cpp
+  TMEM.h
   UberShaderCommon.cpp
   UberShaderCommon.h
   UberShaderPixel.cpp
@@ -119,13 +192,18 @@ add_library(videocommon
   VertexShaderManager.h
   VideoBackendBase.cpp
   VideoBackendBase.h
+  VideoEvents.h
   VideoCommon.h
   VideoConfig.cpp
   VideoConfig.h
   VideoState.cpp
   VideoState.h
+  Widescreen.cpp
+  Widescreen.h
   XFMemory.cpp
   XFMemory.h
+  XFStateManager.cpp
+  XFStateManager.h
   XFStructs.cpp
   XFStructs.h
 )
@@ -135,12 +213,15 @@ PUBLIC
   core
 PRIVATE
   fmt::fmt
-  png
-  xxhash
+  spng::spng
+  xxhash::xxhash
   imgui
+  implot
+  glslang
+  tinygltf
 )
 
-if(_M_X86)
+if(_M_X86_64)
   target_sources(videocommon PRIVATE
     TextureDecoder_x64.cpp
     VertexLoaderX64.cpp
@@ -160,13 +241,36 @@ endif()
 
 if(FFmpeg_FOUND)
   target_sources(videocommon PRIVATE
-    FrameDump.cpp
-    FrameDump.h
+    FrameDumpFFMpeg.cpp
   )
   target_link_libraries(videocommon PRIVATE
     FFmpeg::avcodec
     FFmpeg::avformat
     FFmpeg::avutil
+    FFmpeg::swresample
     FFmpeg::swscale
   )
+  if(APPLE)
+    target_link_libraries(videocommon PRIVATE
+      ${COREMEDIA_LIBRARY}
+      ${VIDEOTOOLBOX_LIBRARY}
+      ${COREVIDEO_LIBRARY}
+      ${AUDIOTOOLBOX_LIBRARY}
+    )
+  endif()
+endif()
+
+# Silence warnings on glslang by flagging it as a system include
+target_include_directories(videocommon
+SYSTEM PUBLIC
+  ${CMAKE_SOURCE_DIR}/Externals/glslang/glslang/Public
+SYSTEM PRIVATE
+  ${CMAKE_SOURCE_DIR}/Externals/glslang/StandAlone
+  ${CMAKE_SOURCE_DIR}/Externals/glslang/SPIRV
+  ${CMAKE_SOURCE_DIR}/Externals/glslang
+)
+
+if(MSVC)
+  # Add precompiled header
+  target_link_libraries(videocommon PRIVATE use_pch)
 endif()

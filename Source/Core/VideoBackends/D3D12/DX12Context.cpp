@@ -1,21 +1,22 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "VideoBackends/D3D12/DX12Context.h"
 
 #include <algorithm>
 #include <array>
-#include <dxgi1_2.h>
+#include <dxgi1_6.h>
 #include <queue>
 #include <vector>
 
 #include "Common/Assert.h"
 #include "Common/DynamicLibrary.h"
 #include "Common/StringUtil.h"
+
 #include "VideoBackends/D3D12/Common.h"
 #include "VideoBackends/D3D12/D3D12StreamBuffer.h"
 #include "VideoBackends/D3D12/DescriptorHeapManager.h"
+#include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/VideoConfig.h"
 
 namespace DX12
@@ -48,7 +49,10 @@ std::vector<u32> DXContext::GetAAModes(u32 adapter_index)
       return {};
 
     ComPtr<IDXGIAdapter> adapter;
-    temp_dxgi_factory->EnumAdapters(adapter_index, &adapter);
+    HRESULT hr = temp_dxgi_factory->EnumAdapters(adapter_index, &adapter);
+
+    if (!SUCCEEDED(hr))
+      return {};
 
     PFN_D3D12_CREATE_DEVICE d3d12_create_device;
     if (!temp_lib.Open("d3d12.dll") ||
@@ -57,17 +61,18 @@ std::vector<u32> DXContext::GetAAModes(u32 adapter_index)
       return {};
     }
 
-    HRESULT hr =
-        d3d12_create_device(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&temp_device));
+    hr = d3d12_create_device(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&temp_device));
     if (!SUCCEEDED(hr))
       return {};
   }
 
+  const DXGI_FORMAT target_format =
+      D3DCommon::GetDXGIFormatForAbstractFormat(FramebufferManager::GetEFBColorFormat(), false);
   std::vector<u32> aa_modes;
   for (u32 samples = 1; samples < D3D12_MAX_MULTISAMPLE_SAMPLE_COUNT; ++samples)
   {
     D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS multisample_quality_levels = {};
-    multisample_quality_levels.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    multisample_quality_levels.Format = target_format;
     multisample_quality_levels.SampleCount = samples;
 
     temp_device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
@@ -83,7 +88,8 @@ std::vector<u32> DXContext::GetAAModes(u32 adapter_index)
 
 bool DXContext::SupportsTextureFormat(DXGI_FORMAT format)
 {
-  constexpr u32 required = D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE;
+  constexpr u32 required = D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_TEXTURECUBE |
+                           D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE;
 
   D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {format};
   return SUCCEEDED(m_device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support,
@@ -152,7 +158,7 @@ bool DXContext::CreateDevice(u32 adapter_index, bool enable_debug_layer)
   HRESULT hr = m_dxgi_factory->EnumAdapters(adapter_index, &adapter);
   if (FAILED(hr))
   {
-    ERROR_LOG_FMT(VIDEO, "Adapter {} not found, using default", adapter_index);
+    ERROR_LOG_FMT(VIDEO, "Adapter {} not found, using default: {}", adapter_index, DX12HRWrap(hr));
     adapter = nullptr;
   }
 
@@ -166,14 +172,14 @@ bool DXContext::CreateDevice(u32 adapter_index, bool enable_debug_layer)
     }
     else
     {
-      ERROR_LOG_FMT(VIDEO, "Debug layer requested but not available.");
+      ERROR_LOG_FMT(VIDEO, "Debug layer requested but not available: {}", DX12HRWrap(hr));
       enable_debug_layer = false;
     }
   }
 
   // Create the actual device.
   hr = s_d3d12_create_device(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device));
-  CHECK(SUCCEEDED(hr), "Create D3D12 device");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create D3D12 device: {}", DX12HRWrap(hr));
   if (FAILED(hr))
     return false;
 
@@ -208,7 +214,7 @@ bool DXContext::CreateCommandQueue()
                                                D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
                                                D3D12_COMMAND_QUEUE_FLAG_NONE};
   HRESULT hr = m_device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&m_command_queue));
-  CHECK(SUCCEEDED(hr), "Create command queue");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create command queue: {}", DX12HRWrap(hr));
   return SUCCEEDED(hr);
 }
 
@@ -216,12 +222,12 @@ bool DXContext::CreateFence()
 {
   HRESULT hr =
       m_device->CreateFence(m_completed_fence_value, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
-  CHECK(SUCCEEDED(hr), "Create fence");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create fence: {}", DX12HRWrap(hr));
   if (FAILED(hr))
     return false;
 
   m_fence_event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-  CHECK(m_fence_event != NULL, "Create fence event");
+  ASSERT_MSG(VIDEO, m_fence_event != nullptr, "Failed to create fence event");
   if (!m_fence_event)
     return false;
 
@@ -259,6 +265,16 @@ bool DXContext::CreateDescriptorHeaps()
 
   m_device->CreateShaderResourceView(nullptr, &null_srv_desc, m_null_srv_descriptor.cpu_handle);
   return true;
+}
+
+static void SetRootParamConstant(D3D12_ROOT_PARAMETER* rp, u32 shader_reg, u32 num_values,
+                                 D3D12_SHADER_VISIBILITY visibility)
+{
+  rp->ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+  rp->Constants.Num32BitValues = num_values;
+  rp->Constants.ShaderRegister = shader_reg;
+  rp->Constants.RegisterSpace = 0;
+  rp->ShaderVisibility = visibility;
 }
 
 static void SetRootParamCBV(D3D12_ROOT_PARAMETER* rp, u32 shader_reg,
@@ -303,14 +319,15 @@ static bool BuildRootSignature(ID3D12Device* device, ID3D12RootSignature** sig_p
                                                 &root_signature_blob, &root_signature_error_blob);
   if (FAILED(hr))
   {
-    PanicAlertFmt("Failed to serialize root signature: {}",
-                  static_cast<const char*>(root_signature_error_blob->GetBufferPointer()));
+    PanicAlertFmt("Failed to serialize root signature: {}\n{}",
+                  static_cast<const char*>(root_signature_error_blob->GetBufferPointer()),
+                  DX12HRWrap(hr));
     return false;
   }
 
   hr = device->CreateRootSignature(0, root_signature_blob->GetBufferPointer(),
                                    root_signature_blob->GetBufferSize(), IID_PPV_ARGS(sig_ptr));
-  CHECK(SUCCEEDED(hr), "Create root signature");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create root signature: {}", DX12HRWrap(hr));
   return true;
 }
 
@@ -322,9 +339,9 @@ bool DXContext::CreateRootSignatures()
 bool DXContext::CreateGXRootSignature()
 {
   // GX:
-  //  - 3 constant buffers (bindings 0-2), 0/1 visible in PS, 1 visible in VS, 2 visible in GS.
-  //  - 8 textures (visible in PS).
-  //  - 8 samplers (visible in PS).
+  //  - 4 constant buffers (bindings 0-3), 0/1/2 visible in PS, 2 visible in VS, 1 visible in GS.
+  //  - VideoCommon::MAX_PIXEL_SHADER_SAMPLERS textures (visible in PS).
+  //  - VideoCommon::MAX_PIXEL_SHADER_SAMPLERS samplers (visible in PS).
   //  - 1 UAV (visible in PS).
 
   std::array<D3D12_ROOT_PARAMETER, NUM_ROOT_PARAMETERS> params;
@@ -333,14 +350,27 @@ bool DXContext::CreateGXRootSignature()
   SetRootParamCBV(&params[param_count], 0, D3D12_SHADER_VISIBILITY_PIXEL);
   param_count++;
   SetRootParamTable(&params[param_count], &ranges[param_count], D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0,
-                    8, D3D12_SHADER_VISIBILITY_PIXEL);
+                    VideoCommon::MAX_PIXEL_SHADER_SAMPLERS, D3D12_SHADER_VISIBILITY_PIXEL);
   param_count++;
   SetRootParamTable(&params[param_count], &ranges[param_count], D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,
-                    0, 8, D3D12_SHADER_VISIBILITY_PIXEL);
+                    0, VideoCommon::MAX_PIXEL_SHADER_SAMPLERS, D3D12_SHADER_VISIBILITY_PIXEL);
   param_count++;
   SetRootParamCBV(&params[param_count], 0, D3D12_SHADER_VISIBILITY_VERTEX);
   param_count++;
-  SetRootParamCBV(&params[param_count], 0, D3D12_SHADER_VISIBILITY_GEOMETRY);
+  SetRootParamCBV(&params[param_count], 1, D3D12_SHADER_VISIBILITY_VERTEX);
+  param_count++;
+  if (g_ActiveConfig.UseVSForLinePointExpand())
+    SetRootParamCBV(&params[param_count], 2, D3D12_SHADER_VISIBILITY_VERTEX);
+  else
+    SetRootParamCBV(&params[param_count], 0, D3D12_SHADER_VISIBILITY_GEOMETRY);
+  param_count++;
+  SetRootParamTable(&params[param_count], &ranges[param_count], D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3,
+                    1, D3D12_SHADER_VISIBILITY_VERTEX);
+  param_count++;
+  SetRootParamConstant(&params[param_count], 4, 1, D3D12_SHADER_VISIBILITY_VERTEX);
+  param_count++;
+
+  SetRootParamCBV(&params[param_count], 2, D3D12_SHADER_VISIBILITY_PIXEL);
   param_count++;
 
   // Since these must be contiguous, pixel lighting goes to bbox if not enabled.
@@ -417,21 +447,21 @@ bool DXContext::CreateCommandLists()
     CommandListResources& res = m_command_lists[i];
     HRESULT hr = m_device->CreateCommandAllocator(
         D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(res.command_allocator.GetAddressOf()));
-    CHECK(SUCCEEDED(hr), "Create command allocator");
+    ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create command allocator: {}", DX12HRWrap(hr));
     if (FAILED(hr))
       return false;
 
     hr = m_device->CreateCommandList(1, D3D12_COMMAND_LIST_TYPE_DIRECT, res.command_allocator.Get(),
                                      nullptr, IID_PPV_ARGS(res.command_list.GetAddressOf()));
+    ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create command list: {}", DX12HRWrap(hr));
     if (FAILED(hr))
     {
-      PanicAlertFmt("Failed to create command list.");
       return false;
     }
 
     // Close the command list, since the first thing we do is reset them.
     hr = res.command_list->Close();
-    CHECK(SUCCEEDED(hr), "Closing new command list failed");
+    ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Closing new command list failed: {}", DX12HRWrap(hr));
     if (FAILED(hr))
       return false;
 
@@ -473,14 +503,15 @@ void DXContext::ExecuteCommandList(bool wait_for_completion)
 
   // Close and queue command list.
   HRESULT hr = res.command_list->Close();
-  CHECK(SUCCEEDED(hr), "Close command list");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to close command list: {}", DX12HRWrap(hr));
   const std::array<ID3D12CommandList*, 1> execute_lists{res.command_list.Get()};
   m_command_queue->ExecuteCommandLists(static_cast<UINT>(execute_lists.size()),
                                        execute_lists.data());
 
   // Update fence when GPU has completed.
   hr = m_command_queue->Signal(m_fence.Get(), m_current_fence_value);
-  CHECK(SUCCEEDED(hr), "Signal fence");
+
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to signal fence: {}", DX12HRWrap(hr));
 
   MoveToNextCommandList();
   if (wait_for_completion)
@@ -533,7 +564,7 @@ void DXContext::WaitForFence(u64 fence)
   {
     // Fall back to event.
     HRESULT hr = m_fence->SetEventOnCompletion(fence, m_fence_event);
-    CHECK(SUCCEEDED(hr), "Set fence event on completion");
+    ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to set fence event on completion: {}", DX12HRWrap(hr));
     WaitForSingleObject(m_fence_event, INFINITE);
     m_completed_fence_value = m_fence->GetCompletedValue();
   }

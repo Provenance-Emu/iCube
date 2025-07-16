@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/DSPHLE/UCodes/ROM.h"
 
@@ -14,11 +13,13 @@
 #include "Common/CommonTypes.h"
 #include "Common/Hash.h"
 #include "Common/Logging/Log.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/DSP/DSPCodeUtil.h"
 #include "Core/HW/DSPHLE/DSPHLE.h"
 #include "Core/HW/DSPHLE/MailHandler.h"
 #include "Core/HW/DSPHLE/UCodes/UCodes.h"
+#include "Core/System.h"
 
 namespace DSP::HLE
 {
@@ -28,13 +29,8 @@ ROMUCode::ROMUCode(DSPHLE* dsphle, u32 crc)
   INFO_LOG_FMT(DSPHLE, "UCode_Rom - initialized");
 }
 
-ROMUCode::~ROMUCode()
-{
-}
-
 void ROMUCode::Initialize()
 {
-  m_mail_handler.Clear();
   m_mail_handler.PushMail(0x8071FEED);
 }
 
@@ -99,13 +95,14 @@ void ROMUCode::HandleMail(u32 mail)
 
 void ROMUCode::BootUCode()
 {
-  const u32 ector_crc =
-      Common::HashEctor(static_cast<u8*>(HLEMemory_Get_Pointer(m_current_ucode.m_ram_address)),
-                        m_current_ucode.m_length);
+  auto& memory = m_dsphle->GetSystem().GetMemory();
+  const u32 ector_crc = Common::HashEctor(
+      static_cast<u8*>(HLEMemory_Get_Pointer(memory, m_current_ucode.m_ram_address)),
+      m_current_ucode.m_length);
 
-  if (SConfig::GetInstance().m_DumpUCode)
+  if (Config::Get(Config::MAIN_DUMP_UCODE))
   {
-    DSP::DumpDSPCode(static_cast<u8*>(HLEMemory_Get_Pointer(m_current_ucode.m_ram_address)),
+    DSP::DumpDSPCode(static_cast<u8*>(HLEMemory_Get_Pointer(memory, m_current_ucode.m_ram_address)),
                      m_current_ucode.m_length, ector_crc);
   }
 

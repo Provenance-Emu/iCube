@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/ConfigLoaders/BaseConfigLoader.h"
 
@@ -20,6 +19,7 @@
 #include "Common/IniFile.h"
 #include "Common/Logging/Log.h"
 
+#include "Core/Config/MainSettings.h"
 #include "Core/Config/SYSCONFSettings.h"
 #include "Core/ConfigLoaders/IsSettingSaveable.h"
 #include "Core/ConfigManager.h"
@@ -27,12 +27,13 @@
 #include "Core/IOS/IOS.h"
 #include "Core/IOS/USB/Bluetooth/BTBase.h"
 #include "Core/SysConf.h"
+#include "Core/System.h"
 
 namespace ConfigLoaders
 {
 void SaveToSYSCONF(Config::LayerType layer, std::function<bool(const Config::Location&)> predicate)
 {
-  if (Core::IsRunning())
+  if (Core::IsRunning(Core::System::GetInstance()))
     return;
 
   IOS::HLE::Kernel ios;
@@ -69,17 +70,6 @@ void SaveToSYSCONF(Config::LayerType layer, std::function<bool(const Config::Loc
   }
 
   sysconf.SetData<u32>("IPL.CB", SysConf::Entry::Type::Long, 0);
-
-  // Disable WiiConnect24's standby mode. If it is enabled, it prevents us from receiving
-  // shutdown commands in the State Transition Manager (STM).
-  // TODO: remove this if and once Dolphin supports WC24 standby mode.
-  SysConf::Entry* idle_entry = sysconf.GetOrAddEntry("IPL.IDL", SysConf::Entry::Type::SmallArray);
-  if (idle_entry->bytes.empty())
-    idle_entry->bytes = std::vector<u8>(2);
-  else
-    idle_entry->bytes[0] = 0;
-  NOTICE_LOG_FMT(CORE, "Disabling WC24 'standby' (shutdown to idle) to avoid hanging on shutdown");
-
   IOS::HLE::RestoreBTInfoSection(&sysconf);
   sysconf.Save();
 }
@@ -91,9 +81,10 @@ const std::map<Config::System, int> system_to_ini = {
     {Config::System::GCKeyboard, F_GCKEYBOARDCONFIG_IDX},
     {Config::System::GFX, F_GFXCONFIG_IDX},
     {Config::System::Logger, F_LOGGERCONFIG_IDX},
-    {Config::System::Debugger, F_DEBUGGERCONFIG_IDX},
     {Config::System::DualShockUDPClient, F_DUALSHOCKUDPCLIENTCONFIG_IDX},
     {Config::System::FreeLook, F_FREELOOKCONFIG_IDX},
+    {Config::System::Achievements, F_RETROACHIEVEMENTSCONFIG_IDX},
+    // Config::System::Session should not be added to this list
 };
 
 // INI layer configuration loader
@@ -103,21 +94,31 @@ public:
   BaseConfigLayerLoader() : ConfigLayerLoader(Config::LayerType::Base) {}
   void Load(Config::Layer* layer) override
   {
+    // List of settings that under no circumstances should be loaded from the global config INI.
+    static const auto s_setting_disallowed = {
+        &Config::MAIN_MEMORY_CARD_SIZE.GetLocation(),
+    };
+
     LoadFromSYSCONF(layer);
     for (const auto& system : system_to_ini)
     {
-      IniFile ini;
+      Common::IniFile ini;
       ini.Load(File::GetUserPath(system.second));
-      const std::list<IniFile::Section>& system_sections = ini.GetSections();
+      const auto& system_sections = ini.GetSections();
 
       for (const auto& section : system_sections)
       {
         const std::string section_name = section.GetName();
-        const IniFile::Section::SectionMap& section_map = section.GetValues();
+        const auto& section_map = section.GetValues();
 
         for (const auto& value : section_map)
         {
           const Config::Location location{system.first, section_name, value.first};
+          const bool load_disallowed = std::ranges::any_of(
+              s_setting_disallowed, [&location](const auto* l) { return *l == location; });
+          if (load_disallowed)
+            continue;
+
           layer->Set(location, value.second);
         }
       }
@@ -128,7 +129,7 @@ public:
   {
     SaveToSYSCONF(layer->GetLayer());
 
-    std::map<Config::System, IniFile> inis;
+    std::map<Config::System, Common::IniFile> inis;
 
     for (const auto& system : system_to_ini)
     {
@@ -144,6 +145,12 @@ public:
       if (location.system == Config::System::SYSCONF)
         continue;
 
+      if (location.system == Config::System::Session)
+        continue;
+
+      if (location.system == Config::System::GameSettingsOnly)
+        continue;
+
       auto ini = inis.find(location.system);
       if (ini == inis.end())
       {
@@ -157,7 +164,7 @@ public:
 
       if (value)
       {
-        IniFile::Section* ini_section = ini->second.GetOrCreateSection(location.section);
+        auto* ini_section = ini->second.GetOrCreateSection(location.section);
         ini_section->Set(location.key, *value);
       }
       else
@@ -175,7 +182,7 @@ public:
 private:
   void LoadFromSYSCONF(Config::Layer* layer)
   {
-    if (Core::IsRunning())
+    if (Core::IsRunning(Core::System::GetInstance()))
       return;
 
     IOS::HLE::Kernel ios;

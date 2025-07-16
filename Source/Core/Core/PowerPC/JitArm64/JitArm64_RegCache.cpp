@@ -1,11 +1,9 @@
 // Copyright 2014 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/PowerPC/JitArm64/JitArm64_RegCache.h"
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <vector>
 
@@ -38,7 +36,7 @@ void Arm64RegCache::ResetRegisters(BitSet32 regs)
     OpArg& reg = m_guest_registers[i];
     ARM64Reg host_reg = reg.GetReg();
 
-    ASSERT_MSG(DYNAREC, host_reg == ARM64Reg::INVALID_REG,
+    ASSERT_MSG(DYNA_REC, host_reg == ARM64Reg::INVALID_REG,
                "Attempted to reset a loaded register (did you mean to flush it?)");
     reg.Flush();
   }
@@ -90,18 +88,18 @@ u32 Arm64RegCache::GetUnlockedRegisterCount() const
 
 void Arm64RegCache::LockRegister(ARM64Reg host_reg)
 {
-  auto reg = std::find(m_host_registers.begin(), m_host_registers.end(), host_reg);
+  auto reg = std::ranges::find(m_host_registers, host_reg, &HostReg::GetReg);
   ASSERT_MSG(DYNA_REC, reg != m_host_registers.end(),
-             "Don't try locking a register that isn't in the cache. Reg %d",
+             "Don't try locking a register that isn't in the cache. Reg {}",
              static_cast<int>(host_reg));
   reg->Lock();
 }
 
 void Arm64RegCache::UnlockRegister(ARM64Reg host_reg)
 {
-  auto reg = std::find(m_host_registers.begin(), m_host_registers.end(), host_reg);
+  auto reg = std::ranges::find(m_host_registers, host_reg, &HostReg::GetReg);
   ASSERT_MSG(DYNA_REC, reg != m_host_registers.end(),
-             "Don't try unlocking a register that isn't in the cache. Reg %d",
+             "Don't try unlocking a register that isn't in the cache. Reg {}",
              static_cast<int>(host_reg));
   reg->Unlock();
 }
@@ -124,13 +122,15 @@ void Arm64RegCache::FlushMostStaleRegister()
     }
   }
 
-  FlushRegister(most_stale_preg, false);
+  FlushRegister(most_stale_preg, FlushMode::All, ARM64Reg::INVALID_REG);
 }
 
 void Arm64RegCache::DiscardRegister(size_t preg)
 {
   OpArg& reg = m_guest_registers[preg];
   ARM64Reg host_reg = reg.GetReg();
+  if (!IsVector(host_reg))
+    host_reg = EncodeRegTo32(host_reg);
 
   reg.Discard();
   if (host_reg != ARM64Reg::INVALID_REG)
@@ -151,23 +151,9 @@ void Arm64GPRCache::Start(PPCAnalyst::BlockRegStats& stats)
 {
 }
 
-bool Arm64GPRCache::IsCalleeSaved(ARM64Reg reg) const
+bool Arm64GPRCache::IsCallerSaved(ARM64Reg reg) const
 {
-  static constexpr std::array<ARM64Reg, 11> callee_regs{{
-      ARM64Reg::X28,
-      ARM64Reg::X27,
-      ARM64Reg::X26,
-      ARM64Reg::X25,
-      ARM64Reg::X24,
-      ARM64Reg::X23,
-      ARM64Reg::X22,
-      ARM64Reg::X21,
-      ARM64Reg::X20,
-      ARM64Reg::X19,
-      ARM64Reg::INVALID_REG,
-  }};
-
-  return std::find(callee_regs.begin(), callee_regs.end(), EncodeRegTo64(reg)) != callee_regs.end();
+  return ARM64XEmitter::CALLER_SAVED_GPRS[DecodeReg(reg)];
 }
 
 const OpArg& Arm64GPRCache::GetGuestGPROpArg(size_t preg) const
@@ -198,7 +184,7 @@ Arm64GPRCache::GuestRegInfo Arm64GPRCache::GetGuestByIndex(size_t index)
   return GetGuestGPR(0);
 }
 
-void Arm64GPRCache::FlushRegister(size_t index, bool maintain_state)
+void Arm64GPRCache::FlushRegister(size_t index, FlushMode mode, ARM64Reg tmp_reg)
 {
   GuestRegInfo guest_reg = GetGuestByIndex(index);
   OpArg& reg = guest_reg.reg;
@@ -210,7 +196,7 @@ void Arm64GPRCache::FlushRegister(size_t index, bool maintain_state)
     if (reg.IsDirty())
       m_emit->STR(IndexType::Unsigned, host_reg, PPC_REG, u32(guest_reg.ppc_offset));
 
-    if (!maintain_state)
+    if (mode == FlushMode::All)
     {
       UnlockRegister(EncodeRegTo32(host_reg));
       reg.Flush();
@@ -218,79 +204,132 @@ void Arm64GPRCache::FlushRegister(size_t index, bool maintain_state)
   }
   else if (reg.GetType() == RegType::Immediate)
   {
-    if (!reg.GetImm())
+    if (reg.IsDirty())
     {
-      m_emit->STR(IndexType::Unsigned, bitsize == 64 ? ARM64Reg::ZR : ARM64Reg::WZR, PPC_REG,
-                  u32(guest_reg.ppc_offset));
+      if (!reg.GetImm())
+      {
+        m_emit->STR(IndexType::Unsigned, bitsize == 64 ? ARM64Reg::ZR : ARM64Reg::WZR, PPC_REG,
+                    u32(guest_reg.ppc_offset));
+      }
+      else
+      {
+        bool allocated_tmp_reg = false;
+        if (tmp_reg != ARM64Reg::INVALID_REG)
+        {
+          ASSERT(IsGPR(tmp_reg));
+        }
+        else
+        {
+          ASSERT_MSG(DYNA_REC, mode != FlushMode::MaintainState,
+                     "Flushing immediate while maintaining state requires temporary register");
+          tmp_reg = GetReg();
+          allocated_tmp_reg = true;
+        }
+
+        const ARM64Reg encoded_tmp_reg = bitsize != 64 ? tmp_reg : EncodeRegTo64(tmp_reg);
+
+        m_emit->MOVI2R(encoded_tmp_reg, reg.GetImm());
+        m_emit->STR(IndexType::Unsigned, encoded_tmp_reg, PPC_REG, u32(guest_reg.ppc_offset));
+
+        if (allocated_tmp_reg)
+          UnlockRegister(tmp_reg);
+      }
     }
-    else
-    {
-      ARM64Reg host_reg = bitsize != 64 ? GetReg() : EncodeRegTo64(GetReg());
 
-      m_emit->MOVI2R(host_reg, reg.GetImm());
-      m_emit->STR(IndexType::Unsigned, host_reg, PPC_REG, u32(guest_reg.ppc_offset));
-
-      UnlockRegister(EncodeRegTo32(host_reg));
-    }
-
-    if (!maintain_state)
+    if (mode == FlushMode::All)
       reg.Flush();
   }
 }
 
-void Arm64GPRCache::FlushRegisters(BitSet32 regs, bool maintain_state)
+void Arm64GPRCache::FlushRegisters(BitSet32 regs, FlushMode mode, ARM64Reg tmp_reg,
+                                   IgnoreDiscardedRegisters ignore_discarded_registers)
 {
-  for (size_t i = 0; i < GUEST_GPR_COUNT; ++i)
+  for (auto iter = regs.begin(); iter != regs.end(); ++iter)
   {
-    if (regs[i])
+    const int i = *iter;
+
+    ASSERT_MSG(DYNA_REC,
+               ignore_discarded_registers != IgnoreDiscardedRegisters::No ||
+                   m_guest_registers[GUEST_GPR_OFFSET + i].GetType() != RegType::Discarded,
+               "Attempted to flush discarded register");
+
+    if (i + 1 < int(GUEST_GPR_COUNT) && regs[i + 1])
     {
-      if (i + 1 < GUEST_GPR_COUNT && regs[i + 1])
+      // We've got two guest registers in a row to store
+      OpArg& reg1 = m_guest_registers[GUEST_GPR_OFFSET + i];
+      OpArg& reg2 = m_guest_registers[GUEST_GPR_OFFSET + i + 1];
+      const bool reg1_imm = reg1.GetType() == RegType::Immediate;
+      const bool reg2_imm = reg2.GetType() == RegType::Immediate;
+      const bool reg1_zero = reg1_imm && reg1.GetImm() == 0;
+      const bool reg2_zero = reg2_imm && reg2.GetImm() == 0;
+      const bool flush_all = mode == FlushMode::All;
+      if (reg1.IsDirty() && reg2.IsDirty() &&
+          (reg1.GetType() == RegType::Register || (reg1_imm && (reg1_zero || flush_all))) &&
+          (reg2.GetType() == RegType::Register || (reg2_imm && (reg2_zero || flush_all))))
       {
-        // We've got two guest registers in a row to store
-        OpArg& reg1 = m_guest_registers[i];
-        OpArg& reg2 = m_guest_registers[i + 1];
-        if (reg1.IsDirty() && reg2.IsDirty() && reg1.GetType() == RegType::Register &&
-            reg2.GetType() == RegType::Register)
+        const size_t ppc_offset = GetGuestByIndex(i).ppc_offset;
+        if (ppc_offset <= 252)
         {
-          const size_t ppc_offset = GetGuestByIndex(i).ppc_offset;
-          if (ppc_offset <= 252)
+          ARM64Reg RX1 = reg1_zero ? ARM64Reg::WZR : R(GetGuestByIndex(i));
+          ARM64Reg RX2 = reg2_zero ? ARM64Reg::WZR : R(GetGuestByIndex(i + 1));
+          m_emit->STP(IndexType::Signed, RX1, RX2, PPC_REG, u32(ppc_offset));
+          if (flush_all)
           {
-            ARM64Reg RX1 = R(GetGuestByIndex(i));
-            ARM64Reg RX2 = R(GetGuestByIndex(i + 1));
-            m_emit->STP(IndexType::Signed, RX1, RX2, PPC_REG, u32(ppc_offset));
-            if (!maintain_state)
-            {
+            if (!reg1_zero)
               UnlockRegister(EncodeRegTo32(RX1));
+            if (!reg2_zero)
               UnlockRegister(EncodeRegTo32(RX2));
-              reg1.Flush();
-              reg2.Flush();
-            }
-            ++i;
-            continue;
+            reg1.Flush();
+            reg2.Flush();
           }
+          ++iter;
+          continue;
         }
       }
-
-      FlushRegister(GUEST_GPR_OFFSET + i, maintain_state);
     }
+
+    FlushRegister(GUEST_GPR_OFFSET + i, mode, tmp_reg);
   }
 }
 
-void Arm64GPRCache::FlushCRRegisters(BitSet32 regs, bool maintain_state)
+void Arm64GPRCache::FlushCRRegisters(BitSet8 regs, FlushMode mode, ARM64Reg tmp_reg,
+                                     IgnoreDiscardedRegisters ignore_discarded_registers)
 {
-  for (size_t i = 0; i < GUEST_CR_COUNT; ++i)
+  for (int i : regs)
   {
-    if (regs[i])
-    {
-      FlushRegister(GUEST_CR_OFFSET + i, maintain_state);
-    }
+    ASSERT_MSG(DYNA_REC,
+               ignore_discarded_registers != IgnoreDiscardedRegisters::No ||
+                   m_guest_registers[GUEST_CR_OFFSET + i].GetType() != RegType::Discarded,
+               "Attempted to flush discarded register");
+
+    FlushRegister(GUEST_CR_OFFSET + i, mode, tmp_reg);
   }
 }
 
-void Arm64GPRCache::Flush(FlushMode mode, PPCAnalyst::CodeOp* op)
+void Arm64GPRCache::DiscardCRRegisters(BitSet8 regs)
 {
-  FlushRegisters(BitSet32(~0U), mode == FlushMode::MaintainState);
-  FlushCRRegisters(BitSet32(~0U), mode == FlushMode::MaintainState);
+  for (int i : regs)
+    DiscardRegister(GUEST_CR_OFFSET + i);
+}
+
+void Arm64GPRCache::ResetCRRegisters(BitSet8 regs)
+{
+  for (int i : regs)
+  {
+    OpArg& reg = m_guest_registers[GUEST_CR_OFFSET + i];
+    ARM64Reg host_reg = reg.GetReg();
+
+    ASSERT_MSG(DYNA_REC, host_reg == ARM64Reg::INVALID_REG,
+               "Attempted to reset a loaded register (did you mean to flush it?)");
+    reg.Flush();
+  }
+}
+
+void Arm64GPRCache::Flush(FlushMode mode, ARM64Reg tmp_reg,
+                          IgnoreDiscardedRegisters ignore_discarded_registers)
+{
+  FlushRegisters(BitSet32(0xFFFFFFFF), mode, tmp_reg, ignore_discarded_registers);
+  FlushCRRegisters(BitSet8(0xFF), mode, tmp_reg, ignore_discarded_registers);
 }
 
 ARM64Reg Arm64GPRCache::R(const GuestRegInfo& guest_reg)
@@ -310,7 +349,6 @@ ARM64Reg Arm64GPRCache::R(const GuestRegInfo& guest_reg)
     ARM64Reg host_reg = bitsize != 64 ? GetReg() : EncodeRegTo64(GetReg());
     m_emit->MOVI2R(host_reg, reg.GetImm());
     reg.Load(host_reg);
-    reg.SetDirty(true);
     return host_reg;
   }
   break;
@@ -337,39 +375,58 @@ ARM64Reg Arm64GPRCache::R(const GuestRegInfo& guest_reg)
   return ARM64Reg::INVALID_REG;
 }
 
-void Arm64GPRCache::SetImmediate(const GuestRegInfo& guest_reg, u32 imm)
+void Arm64GPRCache::SetImmediate(const GuestRegInfo& guest_reg, u32 imm, bool dirty)
 {
   OpArg& reg = guest_reg.reg;
   if (reg.GetType() == RegType::Register)
     UnlockRegister(EncodeRegTo32(reg.GetReg()));
   reg.LoadToImm(imm);
+  reg.SetDirty(dirty);
 }
 
-void Arm64GPRCache::BindToRegister(const GuestRegInfo& guest_reg, bool do_load)
+void Arm64GPRCache::BindToRegister(const GuestRegInfo& guest_reg, bool will_read, bool will_write)
 {
   OpArg& reg = guest_reg.reg;
   const size_t bitsize = guest_reg.bitsize;
 
   reg.ResetLastUsed();
-  reg.SetDirty(true);
 
   const RegType reg_type = reg.GetType();
   if (reg_type == RegType::NotLoaded || reg_type == RegType::Discarded)
   {
     const ARM64Reg host_reg = bitsize != 64 ? GetReg() : EncodeRegTo64(GetReg());
     reg.Load(host_reg);
-    if (do_load)
+    reg.SetDirty(will_write);
+    if (will_read)
     {
       ASSERT_MSG(DYNA_REC, reg_type != RegType::Discarded, "Attempted to load a discarded value");
       m_emit->LDR(IndexType::Unsigned, host_reg, PPC_REG, u32(guest_reg.ppc_offset));
     }
+  }
+  else if (reg_type == RegType::Immediate)
+  {
+    const ARM64Reg host_reg = bitsize != 64 ? GetReg() : EncodeRegTo64(GetReg());
+    if (will_read || !will_write)
+    {
+      // TODO: Emitting this instruction when (!will_read && !will_write) would be unnecessary if we
+      // had some way to indicate to Flush that the immediate value should be written to ppcState
+      // even though there is a host register allocated
+      m_emit->MOVI2R(host_reg, reg.GetImm());
+    }
+    reg.Load(host_reg);
+    if (will_write)
+      reg.SetDirty(true);
+  }
+  else if (will_write)
+  {
+    reg.SetDirty(true);
   }
 }
 
 void Arm64GPRCache::GetAllocationOrder()
 {
   // Callee saved registers first in hopes that we will keep everything stored there first
-  static constexpr std::array<ARM64Reg, 29> allocation_order{{
+  static constexpr auto allocation_order = {
       // Callee saved
       ARM64Reg::W27,
       ARM64Reg::W26,
@@ -401,7 +458,7 @@ void Arm64GPRCache::GetAllocationOrder()
       ARM64Reg::W1,
       ARM64Reg::W0,
       ARM64Reg::W30,
-  }};
+  };
 
   for (ARM64Reg reg : allocation_order)
     m_host_registers.push_back(HostReg(reg));
@@ -412,20 +469,31 @@ BitSet32 Arm64GPRCache::GetCallerSavedUsed() const
   BitSet32 registers(0);
   for (const auto& it : m_host_registers)
   {
-    if (it.IsLocked() && !IsCalleeSaved(it.GetReg()))
+    if (it.IsLocked() && IsCallerSaved(it.GetReg()))
       registers[DecodeReg(it.GetReg())] = true;
   }
   return registers;
 }
 
-void Arm64GPRCache::FlushByHost(ARM64Reg host_reg)
+BitSet32 Arm64GPRCache::GetDirtyGPRs() const
+{
+  BitSet32 registers(0);
+  for (size_t i = 0; i < GUEST_GPR_COUNT; ++i)
+  {
+    const OpArg& arg = m_guest_registers[GUEST_GPR_OFFSET + i];
+    registers[i] = arg.GetType() != RegType::NotLoaded && arg.IsDirty();
+  }
+  return registers;
+}
+
+void Arm64GPRCache::FlushByHost(ARM64Reg host_reg, ARM64Reg tmp_reg)
 {
   for (size_t i = 0; i < m_guest_registers.size(); ++i)
   {
     const OpArg& reg = m_guest_registers[i];
     if (reg.GetType() == RegType::Register && DecodeReg(reg.GetReg()) == DecodeReg(host_reg))
     {
-      FlushRegister(i, false);
+      FlushRegister(i, FlushMode::All, tmp_reg);
       return;
     }
   }
@@ -438,16 +506,21 @@ Arm64FPRCache::Arm64FPRCache() : Arm64RegCache(GUEST_FPR_COUNT)
 {
 }
 
-void Arm64FPRCache::Flush(FlushMode mode, PPCAnalyst::CodeOp* op)
+void Arm64FPRCache::Flush(FlushMode mode, ARM64Reg tmp_reg,
+                          IgnoreDiscardedRegisters ignore_discarded_registers)
 {
   for (size_t i = 0; i < m_guest_registers.size(); ++i)
   {
     const RegType reg_type = m_guest_registers[i].GetType();
 
-    if (reg_type != RegType::NotLoaded && reg_type != RegType::Discarded &&
-        reg_type != RegType::Immediate)
+    if (reg_type == RegType::Discarded)
     {
-      FlushRegister(i, mode == FlushMode::MaintainState);
+      ASSERT_MSG(DYNA_REC, ignore_discarded_registers != IgnoreDiscardedRegisters::No,
+                 "Attempted to flush discarded register");
+    }
+    else if (reg_type != RegType::NotLoaded && reg_type != RegType::Immediate)
+    {
+      FlushRegister(i, mode, tmp_reg);
     }
   }
 }
@@ -572,26 +645,15 @@ ARM64Reg Arm64FPRCache::R(size_t preg, RegType type)
   return ARM64Reg::INVALID_REG;
 }
 
-ARM64Reg Arm64FPRCache::RW(size_t preg, RegType type)
+ARM64Reg Arm64FPRCache::RW(size_t preg, RegType type, bool set_dirty)
 {
   OpArg& reg = m_guest_registers[preg];
-
-  bool was_dirty = reg.IsDirty();
 
   IncrementAllUsed();
   reg.ResetLastUsed();
 
-  reg.SetDirty(true);
-
-  // If not loaded at all, just alloc a new one.
-  if (reg.GetType() == RegType::NotLoaded || reg.GetType() == RegType::Discarded)
-  {
-    reg.Load(GetReg(), type);
-    return reg.GetReg();
-  }
-
   // Only the lower value will be overwritten, so we must be extra careful to store PSR1 if dirty.
-  if ((type == RegType::LowerPair || type == RegType::LowerPairSingle) && was_dirty)
+  if (reg.IsDirty() && (type == RegType::LowerPair || type == RegType::LowerPairSingle))
   {
     // We must *not* change host_reg as this register might still be in use. So it's fine to
     // store this register, but it's *not* fine to convert it to double. So for double conversion,
@@ -614,6 +676,7 @@ ARM64Reg Arm64FPRCache::RW(size_t preg, RegType type)
         m_jit->ConvertSingleToDoubleLower(preg, flush_reg, flush_reg, scratch_reg);
         m_float_emit->STR(64, IndexType::Unsigned, flush_reg, PPC_REG, u32(PPCSTATE_OFF_PS1(preg)));
         Unlock(scratch_reg);
+        reg.Load(host_reg, RegType::LowerPairSingle);
         break;
       }
       else
@@ -621,6 +684,7 @@ ARM64Reg Arm64FPRCache::RW(size_t preg, RegType type)
         m_jit->ConvertSingleToDoublePair(preg, flush_reg, host_reg, flush_reg);
         m_float_emit->STR(128, IndexType::Unsigned, flush_reg, PPC_REG,
                           u32(PPCSTATE_OFF_PS0(preg)));
+        reg.SetDirty(false);
       }
       break;
     case RegType::Register:
@@ -629,6 +693,7 @@ ARM64Reg Arm64FPRCache::RW(size_t preg, RegType type)
       // It would take longer to do an insert to a temporary and a 64bit store than to just do this.
       m_float_emit->STR(128, IndexType::Unsigned, flush_reg, PPC_REG,
                         static_cast<s32>(PPCSTATE_OFF_PS0(preg)));
+      reg.SetDirty(false);
       break;
     case RegType::DuplicatedSingle:
       flush_reg = GetReg();
@@ -638,6 +703,8 @@ ARM64Reg Arm64FPRCache::RW(size_t preg, RegType type)
       // Store PSR1 (which is equal to PSR0) in memory.
       m_float_emit->STR(64, IndexType::Unsigned, flush_reg, PPC_REG,
                         static_cast<s32>(PPCSTATE_OFF_PS1(preg)));
+      reg.Load(host_reg, reg.GetType() == RegType::DuplicatedSingle ? RegType::LowerPairSingle :
+                                                                      RegType::LowerPair);
       break;
     default:
       // All other types doesn't store anything in PSR1.
@@ -648,13 +715,24 @@ ARM64Reg Arm64FPRCache::RW(size_t preg, RegType type)
       Unlock(flush_reg);
   }
 
-  reg.Load(reg.GetReg(), type);
+  if (reg.GetType() == RegType::NotLoaded || reg.GetType() == RegType::Discarded)
+  {
+    // If not loaded at all, just alloc a new one.
+    reg.Load(GetReg(), type);
+    reg.SetDirty(set_dirty);
+  }
+  else if (set_dirty)
+  {
+    reg.Load(reg.GetReg(), type);
+    reg.SetDirty(true);
+  }
+
   return reg.GetReg();
 }
 
 void Arm64FPRCache::GetAllocationOrder()
 {
-  static constexpr std::array<ARM64Reg, 32> allocation_order{{
+  static constexpr auto allocation_order = {
       // Callee saved
       ARM64Reg::Q8,
       ARM64Reg::Q9,
@@ -690,13 +768,13 @@ void Arm64FPRCache::GetAllocationOrder()
       ARM64Reg::Q2,
       ARM64Reg::Q1,
       ARM64Reg::Q0,
-  }};
+  };
 
   for (ARM64Reg reg : allocation_order)
     m_host_registers.push_back(HostReg(reg));
 }
 
-void Arm64FPRCache::FlushByHost(ARM64Reg host_reg)
+void Arm64FPRCache::FlushByHost(ARM64Reg host_reg, ARM64Reg tmp_reg)
 {
   for (size_t i = 0; i < m_guest_registers.size(); ++i)
   {
@@ -706,38 +784,53 @@ void Arm64FPRCache::FlushByHost(ARM64Reg host_reg)
     if (reg_type != RegType::NotLoaded && reg_type != RegType::Discarded &&
         reg_type != RegType::Immediate && reg.GetReg() == host_reg)
     {
-      FlushRegister(i, false);
+      FlushRegister(i, FlushMode::All, tmp_reg);
       return;
     }
   }
 }
 
-bool Arm64FPRCache::IsCalleeSaved(ARM64Reg reg) const
+bool Arm64FPRCache::IsCallerSaved(ARM64Reg reg) const
 {
-  static constexpr std::array<ARM64Reg, 9> callee_regs{{
-      ARM64Reg::Q8,
-      ARM64Reg::Q9,
-      ARM64Reg::Q10,
-      ARM64Reg::Q11,
-      ARM64Reg::Q12,
-      ARM64Reg::Q13,
-      ARM64Reg::Q14,
-      ARM64Reg::Q15,
-      ARM64Reg::INVALID_REG,
-  }};
-
-  return std::find(callee_regs.begin(), callee_regs.end(), reg) != callee_regs.end();
+  return ARM64XEmitter::CALLER_SAVED_FPRS[DecodeReg(reg)];
 }
 
-void Arm64FPRCache::FlushRegister(size_t preg, bool maintain_state)
+bool Arm64FPRCache::IsTopHalfUsed(ARM64Reg reg) const
+{
+  for (const OpArg& r : m_guest_registers)
+  {
+    if (r.GetReg() != ARM64Reg::INVALID_REG && DecodeReg(r.GetReg()) == DecodeReg(reg))
+      return r.GetType() == RegType::Register;
+  }
+
+  return false;
+}
+
+void Arm64FPRCache::FlushRegister(size_t preg, FlushMode mode, ARM64Reg tmp_reg)
 {
   OpArg& reg = m_guest_registers[preg];
   const ARM64Reg host_reg = reg.GetReg();
   const bool dirty = reg.IsDirty();
   RegType type = reg.GetType();
 
-  // If FlushRegister calls GetReg with all registers locked, we can get infinite recursion
-  const ARM64Reg tmp_reg = GetUnlockedRegisterCount() > 0 ? GetReg() : ARM64Reg::INVALID_REG;
+  bool allocated_tmp_reg = false;
+  if (tmp_reg != ARM64Reg::INVALID_REG)
+  {
+    ASSERT(IsVector(tmp_reg));
+  }
+  else if (GetUnlockedRegisterCount() > 0)
+  {
+    // Calling GetReg here with 0 registers free could cause problems for two reasons:
+    //
+    // 1. When GetReg needs to flush, it calls this function, which can lead to infinite recursion
+    // 2. When GetReg needs to flush, it does not respect mode == FlushMode::MaintainState
+    //
+    // So if we have 0 registers free, just don't allocate a temporary register.
+    // The emitted code will still work but might be a little less efficient.
+
+    tmp_reg = GetReg();
+    allocated_tmp_reg = true;
+  }
 
   // If we're in single mode, just convert it back to a double.
   if (type == RegType::Single)
@@ -771,7 +864,7 @@ void Arm64FPRCache::FlushRegister(size_t preg, bool maintain_state)
                         static_cast<s32>(PPCSTATE_OFF_PS0(preg)));
     }
 
-    if (!maintain_state)
+    if (mode == FlushMode::All)
     {
       UnlockRegister(host_reg);
       reg.Flush();
@@ -795,21 +888,21 @@ void Arm64FPRCache::FlushRegister(size_t preg, bool maintain_state)
       }
     }
 
-    if (!maintain_state)
+    if (mode == FlushMode::All)
     {
       UnlockRegister(host_reg);
       reg.Flush();
     }
   }
 
-  if (tmp_reg != ARM64Reg::INVALID_REG)
+  if (allocated_tmp_reg)
     UnlockRegister(tmp_reg);
 }
 
-void Arm64FPRCache::FlushRegisters(BitSet32 regs, bool maintain_state)
+void Arm64FPRCache::FlushRegisters(BitSet32 regs, FlushMode mode, ARM64Reg tmp_reg)
 {
   for (int j : regs)
-    FlushRegister(j, maintain_state);
+    FlushRegister(j, mode, tmp_reg);
 }
 
 BitSet32 Arm64FPRCache::GetCallerSavedUsed() const
@@ -817,7 +910,7 @@ BitSet32 Arm64FPRCache::GetCallerSavedUsed() const
   BitSet32 registers(0);
   for (const auto& it : m_host_registers)
   {
-    if (it.IsLocked())
+    if (it.IsLocked() && (IsCallerSaved(it.GetReg()) || IsTopHalfUsed(it.GetReg())))
       registers[DecodeReg(it.GetReg())] = true;
   }
   return registers;

@@ -1,3 +1,6 @@
+// Copyright 2020 Dolphin Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #include "Core/HW/GCMemcard/GCMemcardUtils.h"
 
 #include <array>
@@ -24,7 +27,7 @@ constexpr u32 GCS_DENTRY_OFFSET = 0x110;
 
 bool HasSameIdentity(const DEntry& lhs, const DEntry& rhs)
 {
-  // The Gamecube BIOS identifies two files as being 'the same' (that is, disallows copying from one
+  // The GameCube BIOS identifies two files as being 'the same' (that is, disallows copying from one
   // card to another when both contain a file like it) when the full array of all of m_gamecode,
   // m_makercode, and m_filename match between them.
 
@@ -72,7 +75,7 @@ bool HasSameIdentity(const DEntry& lhs, const DEntry& rhs)
   return true;
 }
 
-bool HasDuplicateIdentity(const std::vector<Savefile>& savefiles)
+bool HasDuplicateIdentity(std::span<const Savefile> savefiles)
 {
   for (size_t i = 0; i < savefiles.size(); ++i)
   {
@@ -335,7 +338,7 @@ std::string GetDefaultExtension(SavefileFormat format)
   }
 }
 
-std::vector<Savefile> GetSavefiles(const GCMemcard& card, const std::vector<u8>& file_indices)
+std::vector<Savefile> GetSavefiles(const GCMemcard& card, std::span<const u8> file_indices)
 {
   std::vector<Savefile> files;
   files.reserve(file_indices.size());
@@ -349,7 +352,7 @@ std::vector<Savefile> GetSavefiles(const GCMemcard& card, const std::vector<u8>&
   return files;
 }
 
-size_t GetBlockCount(const std::vector<Savefile>& savefiles)
+size_t GetBlockCount(std::span<const Savefile> savefiles)
 {
   size_t block_count = 0;
   for (const Savefile& savefile : savefiles)

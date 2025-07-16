@@ -1,6 +1,5 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
 
@@ -34,6 +33,11 @@ void Attachments::SetSelectedAttachment(u32 val)
 NumericSetting<int>& Attachments::GetSelectionSetting()
 {
   return m_selection_setting;
+}
+
+SubscribableSettingValue<int>& Attachments::GetAttachmentSetting()
+{
+  return m_selection_value;
 }
 
 const std::vector<std::unique_ptr<EmulatedController>>& Attachments::GetAttachmentList() const

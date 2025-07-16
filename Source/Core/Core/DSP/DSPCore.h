@@ -1,7 +1,6 @@
 // Copyright 2008 Dolphin Emulator Project
 // Copyright 2004 Duddie & Tratax
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -123,15 +122,23 @@ enum : int
   DSP_REG_AXH1 = 0x1b,
 
   // Accumulator (global)
-  DSP_REG_ACC0 = 0x1c,
-  DSP_REG_ACC1 = 0x1d,
-
   DSP_REG_ACL0 = 0x1c,  // Low accumulator
   DSP_REG_ACL1 = 0x1d,
   DSP_REG_ACM0 = 0x1e,  // Mid accumulator
   DSP_REG_ACM1 = 0x1f,
   DSP_REG_ACH0 = 0x10,  // Sign extended 8 bit register 0
-  DSP_REG_ACH1 = 0x11   // Sign extended 8 bit register 1
+  DSP_REG_ACH1 = 0x11,  // Sign extended 8 bit register 1
+};
+
+enum : int
+{
+  // Magic values used by DSPTables.h
+  // These do not correspond to real registers like above, but instead combined versions of the
+  // registers.
+  DSP_REG_ACC0_FULL = 0x20,
+  DSP_REG_ACC1_FULL = 0x21,
+  DSP_REG_AX0_FULL = 0x22,
+  DSP_REG_AX1_FULL = 0x23,
 };
 
 // Hardware registers address
@@ -201,7 +208,7 @@ enum : u16
   SR_LOGIC_ZERO = 0x0040,
   SR_OVERFLOW_STICKY =
       0x0080,  // Set at the same time as 0x2 (under same conditions) - but not cleared the same
-  SR_100 = 0x0100,         // Unknown
+  SR_100 = 0x0100,         // Unknown, always reads back as 0
   SR_INT_ENABLE = 0x0200,  // Not 100% sure but duddie says so. This should replace the hack, if so.
   SR_400 = 0x0400,         // Unknown
   SR_EXT_INT_ENABLE = 0x0800,  // Appears in zelda - seems to disable external interrupts
@@ -272,7 +279,7 @@ struct DSP_Regs
     {
       u16 l;
       u16 m;
-      u16 h;
+      u32 h;  // 32 bits so that val is fully sign-extended (only 8 bits are actually used)
     };
   } ac[2];
 };
@@ -280,10 +287,10 @@ struct DSP_Regs
 struct DSPInitOptions
 {
   // DSP IROM blob, which is where the DSP boots from. Embedded into the DSP.
-  std::array<u16, DSP_IROM_SIZE> irom_contents;
+  std::array<u16, DSP_IROM_SIZE> irom_contents{};
 
   // DSP DROM blob, which contains resampling coefficients.
-  std::array<u16, DSP_COEF_SIZE> coef_contents;
+  std::array<u16, DSP_COEF_SIZE> coef_contents{};
 
   // Core used to emulate the DSP.
   // Default: JIT64.
@@ -412,11 +419,12 @@ struct SDSP
   DSP_Regs r{};
   u16 pc = 0;
 
-  // This is NOT the same cr as r.cr.
+  // This is NOT the same as r.cr.
   // This register is shared with the main emulation, see DSP.cpp
   // The engine has control over 0x0C07 of this reg.
   // Bits are defined in a struct in DSP.cpp.
-  u16 cr = 0;
+  u16 control_reg = 0;
+  u64 control_reg_init_code_clear_time = 0;
 
   u8 reg_stack_ptrs[4]{};
   u8 exceptions = 0;  // pending exceptions
@@ -569,9 +577,6 @@ public:
 
   Interpreter::Interpreter& GetInterpreter() { return *m_dsp_interpreter; }
   const Interpreter::Interpreter& GetInterpreter() const { return *m_dsp_interpreter; }
-
-  bool GetInitHax() const { return m_init_hax; }
-  void SetInitHax(bool value) { m_init_hax = value; }
 
 private:
   SDSP m_dsp;

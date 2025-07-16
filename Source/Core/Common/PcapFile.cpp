@@ -1,12 +1,12 @@
 // Copyright 2014 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Common/PcapFile.h"
 
 #include <chrono>
 
 #include "Common/CommonTypes.h"
 #include "Common/IOFile.h"
-#include "Common/PcapFile.h"
 
 namespace Common
 {
@@ -49,6 +49,7 @@ void PCAP::AddHeader(u32 link_type)
   m_fp->WriteBytes(&hdr, sizeof(hdr));
 }
 
+// Not thread-safe, concurrency between multiple calls to IOFile::WriteBytes.
 void PCAP::AddPacket(const u8* bytes, size_t size)
 {
   std::chrono::system_clock::time_point now(std::chrono::system_clock::now());

@@ -1,6 +1,5 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/NKitWarningDialog.h"
 
@@ -15,14 +14,17 @@
 
 #include "Common/Config/Config.h"
 #include "Core/Config/MainSettings.h"
+#include "DolphinQt/QtUtils/SetWindowDecorations.h"
 #include "DolphinQt/Resources.h"
 
 bool NKitWarningDialog::ShowUnlessDisabled(QWidget* parent)
 {
   if (Config::Get(Config::MAIN_SKIP_NKIT_WARNING))
     return true;
-  else
-    return NKitWarningDialog(parent).exec() == QDialog::Accepted;
+
+  NKitWarningDialog dialog(parent);
+  SetQWidgetWindowDecorations(&dialog);
+  return dialog.exec() == QDialog::Accepted;
 }
 
 NKitWarningDialog::NKitWarningDialog(QWidget* parent) : QDialog(parent)

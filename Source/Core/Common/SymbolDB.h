@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 // This file contains a generic symbol map implementation. For CPU-specific
 // magic, derive and extend.
@@ -15,6 +14,11 @@
 #include <vector>
 
 #include "Common/CommonTypes.h"
+
+namespace Core
+{
+class CPUThreadGuard;
+}
 
 namespace Common
 {
@@ -33,10 +37,14 @@ struct Symbol
     Data,
   };
 
+  Symbol() = default;
+  explicit Symbol(const std::string& symbol_name) { Rename(symbol_name); }
+
   void Rename(const std::string& symbol_name);
 
   std::string name;
   std::string function_name;   // stripped function name
+  std::string object_name;     // name of object/source file symbol belongs to
   std::vector<SCall> callers;  // addresses of functions that call this function
   std::vector<SCall> calls;    // addresses of functions that are called by this function
   u32 hash = 0;                // use for HLE function finding
@@ -69,7 +77,7 @@ public:
   virtual ~SymbolDB();
 
   virtual Symbol* GetSymbolFromAddr(u32 addr) { return nullptr; }
-  virtual Symbol* AddFunction(u32 start_addr) { return nullptr; }
+  virtual Symbol* AddFunction(const Core::CPUThreadGuard& guard, u32 start_addr) { return nullptr; }
   void AddCompleteSymbol(const Symbol& symbol);
 
   Symbol* GetSymbolFromName(std::string_view name);

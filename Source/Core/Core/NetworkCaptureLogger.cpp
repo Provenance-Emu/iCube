@@ -1,6 +1,5 @@
 // Copyright 2021 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/NetworkCaptureLogger.h"
 
@@ -16,6 +15,7 @@
 #include "Common/IOFile.h"
 #include "Common/Network.h"
 #include "Common/PcapFile.h"
+#include "Common/ScopeGuard.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 
@@ -43,6 +43,10 @@ void DummyNetworkCaptureLogger::LogRead(const void* data, std::size_t length, s3
 
 void DummyNetworkCaptureLogger::LogWrite(const void* data, std::size_t length, s32 socket,
                                          sockaddr* to)
+{
+}
+
+void DummyNetworkCaptureLogger::LogBBA(const void* data, std::size_t length)
 {
 }
 
@@ -79,8 +83,8 @@ PCAPSSLCaptureLogger::PCAPSSLCaptureLogger()
   const std::string filepath =
       fmt::format("{}{} {:%Y-%m-%d %Hh%Mm%Ss}.pcap", File::GetUserPath(D_DUMPSSL_IDX),
                   SConfig::GetInstance().GetGameID(), fmt::localtime(std::time(nullptr)));
-  m_file = std::make_unique<Common::PCAP>(new File::IOFile(filepath, "wb"),
-                                          Common::PCAP::LinkType::Ethernet);
+  m_file = std::make_unique<Common::PCAP>(
+      new File::IOFile(filepath, "wb", File::SharedAccess::Read), Common::PCAP::LinkType::Ethernet);
 }
 
 PCAPSSLCaptureLogger::~PCAPSSLCaptureLogger() = default;
@@ -89,24 +93,6 @@ void PCAPSSLCaptureLogger::OnNewSocket(s32 socket)
 {
   m_read_sequence_number[socket] = 0;
   m_write_sequence_number[socket] = 0;
-}
-
-PCAPSSLCaptureLogger::ErrorState PCAPSSLCaptureLogger::SaveState() const
-{
-  return {
-      errno,
-#ifdef _WIN32
-      WSAGetLastError(),
-#endif
-  };
-}
-
-void PCAPSSLCaptureLogger::RestoreState(const PCAPSSLCaptureLogger::ErrorState& state) const
-{
-  errno = state.error;
-#ifdef _WIN32
-  WSASetLastError(state.wsa_error);
-#endif
 }
 
 void PCAPSSLCaptureLogger::LogSSLRead(const void* data, std::size_t length, s32 socket)
@@ -133,10 +119,21 @@ void PCAPSSLCaptureLogger::LogWrite(const void* data, std::size_t length, s32 so
   Log(LogType::Write, data, length, socket, to);
 }
 
+void PCAPSSLCaptureLogger::LogBBA(const void* data, std::size_t length)
+{
+  if (!Config::Get(Config::MAIN_NETWORK_DUMP_BBA))
+    return;
+
+  // Concurrency between CEXIETHERNET's RecvHandlePacket and SendFromDirectFIFO
+  const std::lock_guard lock(m_io_mutex);
+  m_file->AddPacket(static_cast<const u8*>(data), length);
+}
+
 void PCAPSSLCaptureLogger::Log(LogType log_type, const void* data, std::size_t length, s32 socket,
                                sockaddr* other)
 {
-  const auto state = SaveState();
+  const auto state = Common::SaveNetworkErrorState();
+  Common::ScopeGuard guard([&state] { Common::RestoreNetworkErrorState(state); });
   sockaddr_in sock;
   sockaddr_in peer;
   sockaddr_in* from;
@@ -145,16 +142,10 @@ void PCAPSSLCaptureLogger::Log(LogType log_type, const void* data, std::size_t l
   socklen_t peer_len = sizeof(sock);
 
   if (getsockname(socket, reinterpret_cast<sockaddr*>(&sock), &sock_len) != 0)
-  {
-    RestoreState(state);
     return;
-  }
 
   if (other == nullptr && getpeername(socket, reinterpret_cast<sockaddr*>(&peer), &peer_len) != 0)
-  {
-    RestoreState(state);
     return;
-  }
 
   if (log_type == LogType::Read)
   {
@@ -169,7 +160,6 @@ void PCAPSSLCaptureLogger::Log(LogType log_type, const void* data, std::size_t l
 
   LogIPv4(log_type, reinterpret_cast<const u8*>(data), static_cast<u16>(length), socket, *from,
           *to);
-  RestoreState(state);
 }
 
 void PCAPSSLCaptureLogger::LogIPv4(LogType log_type, const u8* data, u16 length, s32 socket,
@@ -192,7 +182,7 @@ void PCAPSSLCaptureLogger::LogIPv4(LogType log_type, const u8* data, u16 length,
   };
 
   Common::EthernetHeader ethernet_header(0x800);
-  auto mac = Common::StringToMacAddress(SConfig::GetInstance().m_WirelessMac);
+  auto mac = Common::StringToMacAddress(Config::Get(Config::MAIN_WIRELESS_MAC));
   if (mac)
   {
     auto& mac_address =

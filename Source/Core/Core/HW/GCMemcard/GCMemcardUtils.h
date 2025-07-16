@@ -1,11 +1,13 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
+#include <cstddef>
+#include <span>
 #include <string>
 #include <variant>
+#include <vector>
 
 #include "Core/HW/GCMemcard/GCMemcard.h"
 
@@ -14,7 +16,7 @@ namespace Memcard
 bool HasSameIdentity(const DEntry& lhs, const DEntry& rhs);
 
 // Check if any two given savefiles have the same identity.
-bool HasDuplicateIdentity(const std::vector<Savefile>& savefiles);
+bool HasDuplicateIdentity(std::span<const Savefile> savefiles);
 
 enum class ReadSavefileErrorCode
 {
@@ -23,8 +25,8 @@ enum class ReadSavefileErrorCode
   DataCorrupted,
 };
 
-// Reads a Gamecube memory card savefile from a file.
-// Supported formats are GCI, GCS (Gameshark), and SAV (MaxDrive).
+// Reads a GameCube memory card savefile from a file.
+// Supported formats are GCI, GCS (GameShark), and SAV (MaxDrive).
 std::variant<ReadSavefileErrorCode, Savefile> ReadSavefile(const std::string& filename);
 
 enum class SavefileFormat
@@ -34,7 +36,7 @@ enum class SavefileFormat
   SAV,
 };
 
-// Writes a Gamecube memory card savefile to a file.
+// Writes a GameCube memory card savefile to a file.
 bool WriteSavefile(const std::string& filename, const Savefile& savefile, SavefileFormat format);
 
 // Generates a filename (without extension) for the given directory entry.
@@ -44,8 +46,8 @@ std::string GenerateFilename(const DEntry& entry);
 std::string GetDefaultExtension(SavefileFormat format);
 
 // Reads multiple savefiles from a card. Returns empty vector if even a single file can't be read.
-std::vector<Savefile> GetSavefiles(const GCMemcard& card, const std::vector<u8>& file_indices);
+std::vector<Savefile> GetSavefiles(const GCMemcard& card, std::span<const u8> file_indices);
 
 // Gets the total amount of blocks the given saves use.
-size_t GetBlockCount(const std::vector<Savefile>& savefiles);
+size_t GetBlockCount(std::span<const Savefile> savefiles);
 }  // namespace Memcard

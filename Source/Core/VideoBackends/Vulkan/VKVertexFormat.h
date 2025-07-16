@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -8,6 +7,8 @@
 
 #include "VideoBackends/Vulkan/Constants.h"
 #include "VideoCommon/NativeVertexFormat.h"
+
+enum class ShaderAttrib : u32;
 
 namespace Vulkan
 {
@@ -24,7 +25,7 @@ public:
   void SetupInputState();
 
 private:
-  void AddAttribute(uint32_t location, uint32_t binding, VkFormat format, uint32_t offset);
+  void AddAttribute(ShaderAttrib location, uint32_t binding, VkFormat format, uint32_t offset);
 
   VkVertexInputBindingDescription m_binding_description = {};
 

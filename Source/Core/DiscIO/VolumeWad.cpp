@@ -1,6 +1,7 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "DiscIO/VolumeWad.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -12,12 +13,11 @@
 #include <utility>
 #include <vector>
 
-#include <mbedtls/aes.h>
-#include <mbedtls/sha1.h>
-
 #include "Common/Align.h"
 #include "Common/Assert.h"
 #include "Common/CommonTypes.h"
+#include "Common/Crypto/AES.h"
+#include "Common/Crypto/SHA1.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 #include "Common/StringUtil.h"
@@ -25,7 +25,6 @@
 #include "DiscIO/Blob.h"
 #include "DiscIO/Enums.h"
 #include "DiscIO/Volume.h"
-#include "DiscIO/VolumeWad.h"
 #include "DiscIO/WiiSaveBanner.h"
 
 namespace DiscIO
@@ -159,30 +158,16 @@ bool VolumeWAD::CheckContentIntegrity(const IOS::ES::Content& content,
   if (encrypted_data.size() != Common::AlignUp(content.size, 0x40))
     return false;
 
-  mbedtls_aes_context context;
-  const std::array<u8, 16> key = ticket.GetTitleKey();
-  mbedtls_aes_setkey_dec(&context, key.data(), 128);
+  auto context = Common::AES::CreateContextDecrypt(ticket.GetTitleKey().data());
 
   std::array<u8, 16> iv{};
   iv[0] = static_cast<u8>(content.index >> 8);
   iv[1] = static_cast<u8>(content.index & 0xFF);
 
   std::vector<u8> decrypted_data(encrypted_data.size());
-  mbedtls_aes_crypt_cbc(&context, MBEDTLS_AES_DECRYPT, decrypted_data.size(), iv.data(),
-                        encrypted_data.data(), decrypted_data.data());
+  context->Crypt(iv.data(), encrypted_data.data(), decrypted_data.data(), decrypted_data.size());
 
-  std::array<u8, 20> sha1;
-  mbedtls_sha1_ret(decrypted_data.data(), content.size, sha1.data());
-  return sha1 == content.sha1;
-}
-
-bool VolumeWAD::CheckContentIntegrity(const IOS::ES::Content& content, u64 content_offset,
-                                      const IOS::ES::TicketReader& ticket) const
-{
-  std::vector<u8> encrypted_data(Common::AlignUp(content.size, 0x40));
-  if (!m_reader->Read(content_offset, encrypted_data.size(), encrypted_data.data()))
-    return false;
-  return CheckContentIntegrity(content, encrypted_data, ticket);
+  return Common::SHA1::CalculateDigest(decrypted_data.data(), content.size) == content.sha1;
 }
 
 IOS::ES::TicketReader VolumeWAD::GetTicketWithFixedCommonKey() const
@@ -191,7 +176,7 @@ IOS::ES::TicketReader VolumeWAD::GetTicketWithFixedCommonKey() const
     return m_ticket;
 
   const std::vector<u8> sig = m_ticket.GetSignatureData();
-  if (!std::all_of(sig.cbegin(), sig.cend(), [](u8 a) { return a == 0; }))
+  if (!std::ranges::all_of(sig, [](u8 a) { return a == 0; }))
   {
     // This does not look like a typical "invalid common key index" ticket, so let's assume
     // the index is correct. This saves some time when reading properly signed titles.
@@ -262,7 +247,7 @@ std::string VolumeWAD::GetMakerID(const Partition& partition) const
     return "00";
 
   // Some weird channels use 0x0000 in place of the MakerID, so we need a check here
-  if (!IsPrintableCharacter(temp[0]) || !IsPrintableCharacter(temp[1]))
+  if (!Common::IsPrintableCharacter(temp[0]) || !Common::IsPrintableCharacter(temp[1]))
     return "00";
 
   return DecodeString(temp);
@@ -324,14 +309,14 @@ BlobType VolumeWAD::GetBlobType() const
   return m_reader->GetBlobType();
 }
 
-u64 VolumeWAD::GetSize() const
+u64 VolumeWAD::GetDataSize() const
 {
   return m_reader->GetDataSize();
 }
 
-bool VolumeWAD::IsSizeAccurate() const
+DataSizeType VolumeWAD::GetDataSizeType() const
 {
-  return m_reader->IsDataSizeAccurate();
+  return m_reader->GetDataSizeType();
 }
 
 u64 VolumeWAD::GetRawSize() const
@@ -349,17 +334,13 @@ std::array<u8, 20> VolumeWAD::GetSyncHash() const
   // We can skip hashing the contents since the TMD contains hashes of the contents.
   // We specifically don't hash the ticket, since its console ID can differ without any problems.
 
-  mbedtls_sha1_context context;
-  mbedtls_sha1_init(&context);
-  mbedtls_sha1_starts_ret(&context);
+  auto context = Common::SHA1::CreateContext();
 
-  AddTMDToSyncHash(&context, PARTITION_NONE);
+  AddTMDToSyncHash(context.get(), PARTITION_NONE);
 
-  ReadAndAddToSyncHash(&context, m_opening_bnr_offset, m_opening_bnr_size, PARTITION_NONE);
+  ReadAndAddToSyncHash(context.get(), m_opening_bnr_offset, m_opening_bnr_size, PARTITION_NONE);
 
-  std::array<u8, 20> hash;
-  mbedtls_sha1_finish_ret(&context, hash.data());
-  return hash;
+  return context->Finish();
 }
 
 }  // namespace DiscIO

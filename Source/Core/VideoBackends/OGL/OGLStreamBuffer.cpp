@@ -1,6 +1,5 @@
 // Copyright 2013 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "VideoBackends/OGL/OGLStreamBuffer.h"
 
@@ -9,7 +8,7 @@
 #include "Common/MathUtil.h"
 #include "Common/MemoryUtil.h"
 
-#include "VideoBackends/OGL/OGLRender.h"
+#include "VideoBackends/OGL/OGLConfig.h"
 
 #include "VideoCommon/DriverDetails.h"
 #include "VideoCommon/OnScreenDisplay.h"
@@ -26,7 +25,7 @@ static u32 GenBuffer()
 
 StreamBuffer::StreamBuffer(u32 type, u32 size)
     : m_buffer(GenBuffer()), m_buffertype(type), m_size(MathUtil::NextPowerOf2(size)),
-      m_bit_per_slot(IntLog2(MathUtil::NextPowerOf2(size) / SYNC_POINTS))
+      m_bit_per_slot(MathUtil::IntLog2(MathUtil::NextPowerOf2(size) / SYNC_POINTS))
 {
   m_iterator = 0;
   m_used_iterator = 0;

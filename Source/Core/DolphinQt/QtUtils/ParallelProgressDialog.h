@@ -1,3 +1,6 @@
+// Copyright 2020 Dolphin Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #pragma once
 
 #include <utility>
@@ -13,6 +16,11 @@ class ParallelProgressDialog final : public QObject
   Q_OBJECT
 
 public:
+  ParallelProgressDialog(const ParallelProgressDialog&) = delete;
+  ParallelProgressDialog& operator=(const ParallelProgressDialog&) = delete;
+  ParallelProgressDialog(ParallelProgressDialog&&) = delete;
+  ParallelProgressDialog& operator=(ParallelProgressDialog&&) = delete;
+
   // Only use this from the main thread
   template <typename... Args>
   ParallelProgressDialog(Args&&... args) : m_dialog{std::forward<Args>(args)...}
@@ -37,7 +45,7 @@ public:
   void SetValue(int progress) { emit SetValueSignal(progress); }
 
   // Can be called from any thread
-  bool WasCanceled() { return m_was_cancelled.IsSet(); }
+  bool WasCanceled() const { return m_was_cancelled.IsSet(); }
 
 signals:
   void CancelSignal();
@@ -118,6 +126,6 @@ private:
 
   QProgressDialog m_dialog;
   Common::Flag m_was_cancelled;
-  int m_last_received_progress;
+  int m_last_received_progress = 0;
   bool m_is_setting_value = false;
 };

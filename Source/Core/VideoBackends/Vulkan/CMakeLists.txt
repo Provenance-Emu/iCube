@@ -17,8 +17,8 @@ add_library(videovulkan
   VKPerfQuery.h
   VKPipeline.cpp
   VKPipeline.h
-  VKRenderer.cpp
-  VKRenderer.h
+  VKGfx.cpp
+  VKGfx.h
   VKShader.cpp
   VKShader.h
   VKStreamBuffer.cpp
@@ -45,20 +45,25 @@ PUBLIC
 PRIVATE
   # Link against glslang, the other necessary libraries are referenced by the executable.
   glslang
-  xxhash
+  xxhash::xxhash
 )
+
+if (ANDROID AND _M_ARM_64)
+  target_link_libraries(videovulkan
+  PRIVATE
+      adrenotools
+  )
+endif()
 
 # Only include the Vulkan headers when building the Vulkan backend
 target_include_directories(videovulkan
 PRIVATE
-  ${CMAKE_SOURCE_DIR}/Externals/Vulkan/Include
+  ${CMAKE_SOURCE_DIR}/Externals/Vulkan-Headers/include
+  ${CMAKE_SOURCE_DIR}/Externals/VulkanMemoryAllocator/include
+  ${CMAKE_SOURCE_DIR}/Externals/libadrenotools/include
 )
 
-# Silence warnings on glslang by flagging it as a system include
-target_include_directories(videovulkan
-SYSTEM PRIVATE
-  ${CMAKE_SOURCE_DIR}/Externals/glslang/StandAlone
-  ${CMAKE_SOURCE_DIR}/Externals/glslang/glslang/Public
-  ${CMAKE_SOURCE_DIR}/Externals/glslang/SPIRV
-  ${CMAKE_SOURCE_DIR}/Externals/glslang
-)
+if(MSVC)
+  # Add precompiled header
+  target_link_libraries(videovulkan PRIVATE use_pch)
+endif()

@@ -1,16 +1,18 @@
 // Copyright 2021 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "Common/CPUDetect.h"
-#include "Common/CommonTypes.h"
 #include "Common/FPURoundMode.h"
-#include "Common/Logging/Log.h"
 
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
+#include "Common/CPUDetect.h"
+#include "Common/CommonTypes.h"
+#include "Common/Logging/Log.h"
+
+namespace Common::FPU
+{
 static u64 GetFPCR()
 {
 #ifdef _MSC_VER
@@ -31,21 +33,10 @@ static void SetFPCR(u64 fpcr)
 #endif
 }
 
-namespace FPURoundMode
-{
 static const u64 default_fpcr = GetFPCR();
 static u64 saved_fpcr = default_fpcr;
 
-void SetRoundMode(int mode)
-{
-  // We don't need to do anything here since SetSIMDMode is always called after calling this
-}
-
-void SetPrecisionMode(PrecisionMode mode)
-{
-}
-
-void SetSIMDMode(int rounding_mode, bool non_ieee_mode)
+void SetSIMDMode(RoundMode rounding_mode, bool non_ieee_mode)
 {
   // When AH is disabled, FZ controls flush-to-zero for both inputs and outputs. When AH is enabled,
   // FZ controls flush-to-zero for outputs, and FIZ controls flush-to-zero for inputs.
@@ -96,4 +87,4 @@ void LoadDefaultSIMDState()
   SetFPCR(default_fpcr);
 }
 
-}  // namespace FPURoundMode
+}  // namespace Common::FPU

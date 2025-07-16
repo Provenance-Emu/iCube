@@ -1,12 +1,12 @@
 // Copyright 2013 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Common/GL/GLExtensions/GLExtensions.h"
 
 #include <sstream>
 #include <unordered_map>
 
 #include "Common/GL/GLContext.h"
-#include "Common/GL/GLExtensions/GLExtensions.h"
 #include "Common/Logging/Log.h"
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -1674,7 +1674,7 @@ const GLFunc gl_function_array[] = {
     GLFUNC_REQUIRES(glDrawArraysInstancedBaseInstance, "VERSION_4_2"),
     GLFUNC_REQUIRES(glDrawElementsInstancedBaseInstance, "VERSION_4_2"),
     GLFUNC_REQUIRES(glDrawElementsInstancedBaseVertexBaseInstance, "VERSION_4_2"),
-    GLFUNC_REQUIRES(glGetInternalformativ, "VERSION_4_2"),
+    GLFUNC_REQUIRES(glGetInternalformativ, "VERSION_4_2 |VERSION_GLES_3"),
     GLFUNC_REQUIRES(glGetActiveAtomicCounterBufferiv, "VERSION_4_2"),
     GLFUNC_REQUIRES(glBindImageTexture, "VERSION_4_2"),
     GLFUNC_REQUIRES(glMemoryBarrier, "VERSION_4_2"),

@@ -1,6 +1,5 @@
 // Copyright 2018 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
 #include <array>
@@ -42,7 +41,7 @@ protected:
     m_fs.reset();
     File::DeleteDirRecursively(m_profile_path);
   }
-  void SetUp()
+  void SetUp() override
   {
     if (UserDirectoryCreationFailed())
     {
@@ -94,7 +93,7 @@ TEST(FileSystem, PathSplitting)
 
 TEST_F(FileSystemTest, EssentialDirectories)
 {
-  for (const std::string& path :
+  for (const std::string path :
        {"/sys", "/ticket", "/title", "/shared1", "/shared2", "/tmp", "/import", "/meta"})
   {
     EXPECT_TRUE(m_fs->ReadDirectory(Uid{0}, Gid{0}, path).Succeeded()) << path;
@@ -122,7 +121,7 @@ TEST_F(FileSystemTest, CreateFile)
 
   const Result<std::vector<std::string>> tmp_files = m_fs->ReadDirectory(Uid{0}, Gid{0}, "/tmp");
   ASSERT_TRUE(tmp_files.Succeeded());
-  EXPECT_EQ(std::count(tmp_files->begin(), tmp_files->end(), "f"), 1u);
+  EXPECT_EQ(std::ranges::count(*tmp_files, "f"), 1u);
 
   // Test invalid paths
   // Unprintable characters
@@ -270,8 +269,7 @@ TEST_F(FileSystemTest, GetDirectoryStats)
     file->Write(std::vector<u8>(20).data(), 20);
   }
   // The file should now take up one cluster.
-  // TODO: uncomment after the FS code is fixed.
-  // check_stats(1u, 2u);
+  check_stats(1u, 2u);
 }
 
 // Files need to be explicitly created using CreateFile or CreateDirectory.
@@ -458,7 +456,7 @@ TEST_F(FileSystemTest, CreateFullPath)
   ASSERT_EQ(m_fs->CreateFullPath(Uid{0}, Gid{0}, "/tmp/a/b/c/d", 0, modes), ResultCode::Success);
 
   // Parent directories should be created by CreateFullPath.
-  for (const std::string& path : {"/tmp", "/tmp/a", "/tmp/a/b", "/tmp/a/b/c"})
+  for (const std::string path : {"/tmp", "/tmp/a", "/tmp/a/b", "/tmp/a/b/c"})
     EXPECT_TRUE(m_fs->ReadDirectory(Uid{0}, Gid{0}, path).Succeeded());
 
   // If parent directories already exist, the call should still succeed.

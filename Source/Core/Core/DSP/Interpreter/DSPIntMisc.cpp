@@ -1,13 +1,13 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 //
 // Additional copyrights go to Duddie and Tratax (c) 2004
+
+#include "Core/DSP/Interpreter/DSPInterpreter.h"
 
 #include "Core/DSP/DSPCore.h"
 #include "Core/DSP/DSPTables.h"
 #include "Core/DSP/Interpreter/DSPIntUtil.h"
-#include "Core/DSP/Interpreter/DSPInterpreter.h"
 
 namespace DSP::Interpreter
 {
@@ -19,10 +19,7 @@ void Interpreter::mrr(const UDSPInstruction opc)
   const u8 sreg = opc & 0x1f;
   const u8 dreg = (opc >> 5) & 0x1f;
 
-  if (sreg >= DSP_REG_ACM0)
-    OpWriteRegister(dreg, OpReadRegisterAndSaturate(sreg - DSP_REG_ACM0));
-  else
-    OpWriteRegister(dreg, OpReadRegister(sreg));
+  OpWriteRegister(dreg, OpReadRegister(sreg));
 
   ConditionalExtendAccum(dreg);
 }
@@ -123,8 +120,8 @@ void Interpreter::addarn(const UDSPInstruction opc)
 
 // SBCLR #I
 // 0001 0010 aaaa aiii
-// bit of status register $sr. Bit number is calculated by adding 6 to
-// immediate value I.
+// Clear bit of status register $sr. Bit number is calculated by adding 6 to immediate value I;
+// thus, bits 6 through 13 (LZ through AM) can be cleared with this instruction.
 void Interpreter::sbclr(const UDSPInstruction opc)
 {
   auto& state = m_dsp_core.DSPState();
@@ -135,8 +132,8 @@ void Interpreter::sbclr(const UDSPInstruction opc)
 
 // SBSET #I
 // 0001 0011 aaaa aiii
-// Set bit of status register $sr. Bit number is calculated by adding 6 to
-// immediate value I.
+// Set bit of status register $sr. Bit number is calculated by adding 6 to immediate value I;
+// thus, bits 6 through 13 (LZ through AM) can be set with this instruction.
 void Interpreter::sbset(const UDSPInstruction opc)
 {
   auto& state = m_dsp_core.DSPState();

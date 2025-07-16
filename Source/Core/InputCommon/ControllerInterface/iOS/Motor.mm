@@ -2,126 +2,112 @@
 // Licensed under GPLv2+
 // Refer to the license.txt file included.
 
+#include <CoreHaptics/CoreHaptics.h>
 #include <Foundation/Foundation.h>
-
-#include <sstream>
 
 #include "Common/Logging/Log.h"
 
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "InputCommon/ControllerInterface/iOS/Motor.h"
 
-#define LOG_NSERROR(x, y) ERROR_LOG(SERIALINTERFACE, x, [[y localizedDescription] UTF8String])
+#define MOTOR_ERROR_LOG(x, y) ERROR_LOG_FMT(CONTROLLERINTERFACE, x, [[y localizedDescription] UTF8String])
 
 namespace ciface::iOS
 {
-Motor::Motor(const std::string name) API_AVAILABLE(ios(13.0)) : m_name(name)
+Motor::Motor(CHHapticEngine* engine, const std::string name) : m_haptic_engine(engine), m_name(std::move(name))
 {
-  if (![[CHHapticEngine capabilitiesForHardware] supportsHaptics])
+  std::lock_guard<std::mutex> guard(m_lock);
+
+  if (!StartEngine())
   {
     return;
   }
 
-  if (![[NSUserDefaults standardUserDefaults] boolForKey:@"rumble_enabled"])
+  m_haptic_engine.resetHandler = ^{
+    std::lock_guard<std::mutex> reset_guard(m_lock);
+
+    m_player_created = false;
+
+    m_haptic_player = nil;
+
+    StartEngine();
+  };
+
+  m_haptic_engine.stoppedHandler = ^(CHHapticEngineStoppedReason reason) {
+    std::lock_guard<std::mutex> stopped_guard(m_lock);
+
+    switch (reason)
+    {
+    case CHHapticEngineStoppedReasonAudioSessionInterrupt:
+    case CHHapticEngineStoppedReasonApplicationSuspended:
+    case CHHapticEngineStoppedReasonSystemError:
+      m_player_needs_restart = true;
+
+      break;
+    default:
+      ERROR_LOG_FMT(CONTROLLERINTERFACE, "Motor received unexpected stopped reason: {}", (NSInteger)reason);
+
+      // This error is probably unrecoverable.
+      m_player_created = false;
+
+      break;
+    }
+  };
+}
+
+Motor::~Motor()
+{
+  std::lock_guard<std::mutex> guard(m_lock);
+
+  if (m_player_created)
   {
-    return;
+    [m_haptic_engine stopWithCompletionHandler:nil];
+  }
+}
+
+bool Motor::StartEngine()
+{
+  NSError* error;
+  
+  if (![m_haptic_engine startAndReturnError:&error])
+  {
+    MOTOR_ERROR_LOG("Motor failed to start CHHapticEngine: {}", error);
+
+    return false;
   }
   
-  NSError* error;
-  this->m_haptic_engine = [[CHHapticEngine alloc] initAndReturnError:&error];
-
-  if (error)
-  {
-    LOG_NSERROR("Failed to create a CHHapticEngine: %s", error);
-    this->m_haptic_engine = nil;
-
-    return;
-  }
-
-  [this->m_haptic_engine startAndReturnError:&error];
-
-  if (error)
-  {
-    LOG_NSERROR("Failed to start the CHHapticEngine: %s", error);
-    this->m_haptic_engine = nil;
-
-    return;
-  }
-
-  CreatePlayer();
-}
-
-Motor::Motor(const std::string name, CHHapticEngine* engine) API_AVAILABLE(ios(13.0)) : m_name(name)
-{
-  this->m_haptic_engine = engine;
-
-  CreatePlayer();
-}
-
-Motor::~Motor() API_AVAILABLE(ios(13.0))
-{
-  if (this->m_notification_token)
-  {
-    [[NSNotificationCenter defaultCenter] removeObserver:this->m_notification_token];
-  }
-
-  if (this->m_haptic_player)
-  {
-    NSError* error;
-    [this->m_haptic_player stopAtTime:CHHapticTimeImmediate error:&error];
-
-    if (error)
-    {
-      LOG_NSERROR("Failed to stop haptics on Motor destruction: %s", error);
-    }
-  }
-
-  this->m_haptic_engine = nil;
-  this->m_haptic_player = nil;
-  this->m_notification_token = nil;
-}
-
-void Motor::CreatePlayer() API_AVAILABLE(ios(13.0))
-{ 
   CHHapticEventParameter* intensity_param = [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:1.0f];
 
-  CHHapticEvent* event = [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticContinuous parameters:@[
-    intensity_param
-  ] relativeTime:0.0f duration:1.0f];
+  CHHapticEvent* event = [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticContinuous 
+                                                       parameters:@[intensity_param]
+                                                     relativeTime:0.0f
+                                                         duration:1.0f];
   
-  NSError* error;
-  CHHapticPattern* pattern = [[CHHapticPattern alloc] initWithEvents:@[ event ] parameters:@[ ] error:&error];
+  CHHapticPattern* pattern = [[CHHapticPattern alloc] initWithEvents:@[event] parameters:@[] error:&error];
 
-  if (error)
+  if (error != nil)
   {
-    LOG_NSERROR("Failed to create CHHapticPattern: %s", error);
+    MOTOR_ERROR_LOG("Motor failed to create CHHapticPattern: {}", error);
 
-    return;
+    return false;
+  }
+  
+  m_haptic_player = [m_haptic_engine createAdvancedPlayerWithPattern:pattern error:&error];
+
+  if (error != nil)
+  {
+    MOTOR_ERROR_LOG("Motor failed to create CHHapticAdvancedPatternPlayer: {}", error);
+
+    return false;
   }
 
-  this->m_haptic_player = [this->m_haptic_engine createAdvancedPlayerWithPattern:pattern error:&error];
+  [m_haptic_player setLoopEnabled:true];
+  [m_haptic_player setLoopEnd:0.0f];
 
-  if (error)
-  {
-    LOG_NSERROR("Failed to create CHHapticAdvancedPatternPlayer: %s", error);
-    this->m_haptic_player = nil;
+  m_player_created = true;
+  m_player_needs_restart = false;
 
-    return;
-  }
-
-  [this->m_haptic_player setLoopEnabled:true];
-  [this->m_haptic_player setLoopEnd:0.0f];
-
-  this->m_notification_token = [[NSNotificationCenter defaultCenter] addObserverForName:@"me.oatmealdome.DolphiniOS.emulation_stop" object:nil queue:nil usingBlock:^(NSNotification*)
-  {
-    NSError* inner_error;
-    [this->m_haptic_player stopAtTime:CHHapticTimeImmediate error:&inner_error];
-
-    if (inner_error)
-    {
-      LOG_NSERROR("Failed to stop stop haptics on emulation stop: %s", inner_error);
-    }
-  }];
+  return true;
 }
 
 std::string Motor::GetName() const
@@ -131,31 +117,38 @@ std::string Motor::GetName() const
 
 void Motor::SetState(ControlState state)
 {
-  if (!this->m_haptic_player)
+  std::lock_guard<std::mutex> guard(m_lock);
+
+  if (!m_player_created || state == m_last_state)
   {
     return;
   }
 
-  if (state == m_last_state)
+  if (m_player_needs_restart)
   {
-    return;
+    if (!StartEngine())
+    {
+      return;
+    }
   }
-
+  
+  bool result;
   NSError* error;
+  
   if (state > 0)
   {
-    [this->m_haptic_player startAtTime:CHHapticTimeImmediate error:&error];
+    result = [m_haptic_player startAtTime:CHHapticTimeImmediate error:&error];
   }
   else
   {
-    [this->m_haptic_player stopAtTime:CHHapticTimeImmediate error:&error];
+    result = [m_haptic_player stopAtTime:CHHapticTimeImmediate error:&error];
   }
 
-  if (error)
+  if (!result)
   {
-    LOG_NSERROR("Failed to start/stop haptics: %s", error);
+    MOTOR_ERROR_LOG("Motor failed to start/stop haptics: {}", error);
   }
 
   m_last_state = state;
 }
-} // namespace ciface::Android
+} // namespace ciface::iOS

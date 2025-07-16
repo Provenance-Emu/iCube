@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 // PRELIMINARY - seems to fully work with libogc, writing has yet to be tested
 
@@ -11,6 +10,7 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/IOFile.h"
+#include "Core/CPUThreadConfigCallback.h"
 #include "Core/IOS/Device.h"
 #include "Core/IOS/IOS.h"
 
@@ -19,10 +19,11 @@ class PointerWrap;
 namespace IOS::HLE
 {
 // The front SD slot
-class SDIOSlot0Device : public Device
+class SDIOSlot0Device : public EmulationDevice
 {
 public:
-  SDIOSlot0Device(Kernel& ios, const std::string& device_name);
+  SDIOSlot0Device(EmulationKernel& ios, const std::string& device_name);
+  ~SDIOSlot0Device() override;
 
   void DoState(PointerWrap& p) override;
 
@@ -30,8 +31,6 @@ public:
   std::optional<IPCReply> Close(u32 fd) override;
   std::optional<IPCReply> IOCtl(const IOCtlRequest& request) override;
   std::optional<IPCReply> IOCtlV(const IOCtlVRequest& request) override;
-
-  void EventNotify();
 
 private:
   // SD Host Controller Registers
@@ -125,6 +124,10 @@ private:
     Request request;
   };
 
+  void RefreshConfig();
+
+  void EventNotify();
+
   IPCReply WriteHCRegister(const IOCtlRequest& request);
   IPCReply ReadHCRegister(const IOCtlRequest& request);
   IPCReply ResetCard(const IOCtlRequest& request);
@@ -160,8 +163,11 @@ private:
   u32 m_block_length = 0;
   u32 m_bus_width = 0;
 
-  std::array<u32, 0x200 / sizeof(u32)> m_registers;
+  std::array<u32, 0x200 / sizeof(u32)> m_registers{};
 
   File::IOFile m_card;
+
+  CPUThreadConfigCallback::ConfigChangedCallbackID m_config_callback_id;
+  bool m_sd_card_inserted = false;
 };
 }  // namespace IOS::HLE

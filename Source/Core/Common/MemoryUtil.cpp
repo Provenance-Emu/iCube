@@ -1,6 +1,7 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Common/MemoryUtil.h"
 
 #include <cstddef>
 #include <cstdlib>
@@ -9,7 +10,6 @@
 #include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
-#include "Common/MemoryUtil.h"
 #include "Common/MsgHandler.h"
 
 #ifdef _WIN32
@@ -22,9 +22,6 @@
 #include <sys/types.h>
 #if defined __APPLE__ || defined __FreeBSD__ || defined __OpenBSD__ || defined __NetBSD__
 #include <sys/sysctl.h>
-#ifdef _BULLETPROOF_JIT
-#include <mach/mach.h>
-#endif
 #elif defined __HAIKU__
 #include <OS.h>
 #else
@@ -32,10 +29,18 @@
 #endif
 #endif
 
+#ifdef IPHONEOS
+#include "Common/JITMemoryTracker.h"
+#endif
+
 namespace Common
 {
 // This is purposely not a full wrapper for virtualalloc/mmap, but it
 // provides exactly the primitive operations that Dolphin needs.
+
+#ifdef IPHONEOS
+static JITMemoryTracker g_jit_memory_tracker;
+#endif
 
 void* AllocateExecutableMemory(size_t size)
 {
@@ -44,28 +49,30 @@ void* AllocateExecutableMemory(size_t size)
 #else
   int map_flags = MAP_ANON | MAP_PRIVATE;
 #if defined(__APPLE__) && !defined(IPHONEOS)
-  // This check is in place to prepare for x86_64 MAP_JIT support. While MAP_JIT did exist
-  // prior to 10.14, it had restrictions on the number of JIT allocations that were removed
-  // in 10.14.
-  if (__builtin_available(macOS 10.14, *))
-    map_flags |= MAP_JIT;
-#endif
-  int prot_flags = PROT_READ | PROT_EXEC;
-
-#ifndef _BULLETPROOF_JIT
-  prot_flags |= PROT_WRITE;
+  map_flags |= MAP_JIT;
 #endif
 
-  void* ptr = mmap(nullptr, size, prot_flags, map_flags, -1, 0);
+  int map_prot = PROT_READ | PROT_EXEC;
+#ifndef IPHONEOS
+  // The default protection is r-x on non-iOS platforms.
+  map_prot |= PROT_WRITE;
+#endif
+
+  void* ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
   if (ptr == MAP_FAILED)
     ptr = nullptr;
 #endif
 
   if (ptr == nullptr)
-    PanicAlertFmt("Failed to allocate executable memory");
+    PanicAlertFmt("Failed to allocate executable memory: {}", LastStrerrorString());
+
+#ifdef IPHONEOS
+  g_jit_memory_tracker.RegisterJITRegion(ptr, size);
+#endif
 
   return ptr;
 }
+#ifndef IPHONEOS
 // This function is used to provide a counter for the JITPageWrite*Execute*
 // functions to enable nesting. The static variable is wrapped in a a function
 // to allow those functions to be called inside of the constructor of a static
@@ -107,15 +114,13 @@ static int& JITPageWriteNestCounter()
 // Allows a thread to write to executable memory, but not execute the data.
 void JITPageWriteEnableExecuteDisable()
 {
-#if defined(_M_ARM_64) && defined(__APPLE__)
+#if defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS)
   if (JITPageWriteNestCounter() == 0)
   {
-#ifdef MACOS
     if (__builtin_available(macOS 11.0, *))
     {
       pthread_jit_write_protect_np(0);
     }
-#endif
   }
 #endif
   JITPageWriteNestCounter()++;
@@ -131,44 +136,25 @@ void JITPageWriteDisableExecuteEnable()
   if (JITPageWriteNestCounter() < 0)
     PanicAlertFmt("JITPageWriteNestCounter() underflowed");
 
-#if defined(_M_ARM_64) && defined(__APPLE__)
+#if defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS)
   if (JITPageWriteNestCounter() == 0)
   {
-#ifdef MACOS
     if (__builtin_available(macOS 11.0, *))
     {
       pthread_jit_write_protect_np(1);
     }
-#endif
   }
 #endif
 }
-
-#ifdef _BULLETPROOF_JIT
-void* RemapExecutableRegion(void* region, size_t size)
+#else
+void JITPageWriteEnableExecuteDisable(void* ptr)
 {
-  vm_address_t new_region;
-  vm_address_t target = reinterpret_cast<vm_address_t>(region);
-  vm_prot_t cur_protection = 0;
-  vm_prot_t max_protection = 0;
+  g_jit_memory_tracker.JITRegionWriteEnableExecuteDisable(ptr);
+}
 
-  kern_return_t retval =
-      vm_remap(mach_task_self(), &new_region, size, 0, true, mach_task_self(), target, false,
-               &cur_protection, &max_protection, VM_INHERIT_DEFAULT);
-  if (retval != KERN_SUCCESS)
-  {
-    PanicAlert("vm_remap failed for RemapExecutableRegion (0x%x)", retval);
-    return nullptr;
-  }
-
-  void* ptr = reinterpret_cast<void*>(new_region);
-
-  if (mprotect(ptr, size, PROT_READ | PROT_WRITE) != 0)
-  {
-    PanicAlertFmt("RemapExecutableRegion failed!\nmprotect: {}", LastStrerrorString());
-  }
-
-  return ptr;
+void JITPageWriteDisableExecuteEnable(void* ptr)
+{
+  g_jit_memory_tracker.JITRegionWriteDisableExecuteEnable(ptr);
 }
 #endif
 
@@ -205,18 +191,29 @@ void* AllocateAlignedMemory(size_t size, size_t alignment)
   return ptr;
 }
 
-void FreeMemoryPages(void* ptr, size_t size)
+bool FreeMemoryPages(void* ptr, size_t size)
 {
   if (ptr)
   {
 #ifdef _WIN32
     if (!VirtualFree(ptr, 0, MEM_RELEASE))
+    {
       PanicAlertFmt("FreeMemoryPages failed!\nVirtualFree: {}", GetLastErrorString());
+      return false;
+    }
 #else
     if (munmap(ptr, size) != 0)
+    {
       PanicAlertFmt("FreeMemoryPages failed!\nmunmap: {}", LastStrerrorString());
+      return false;
+    }
+#endif
+
+#ifdef IPHONEOS
+    g_jit_memory_tracker.UnregisterJITRegion(ptr);
 #endif
   }
+  return true;
 }
 
 void FreeAlignedMemory(void* ptr)
@@ -231,40 +228,57 @@ void FreeAlignedMemory(void* ptr)
   }
 }
 
-void ReadProtectMemory(void* ptr, size_t size)
+bool ReadProtectMemory(void* ptr, size_t size)
 {
 #ifdef _WIN32
   DWORD oldValue;
   if (!VirtualProtect(ptr, size, PAGE_NOACCESS, &oldValue))
+  {
     PanicAlertFmt("ReadProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
+    return false;
+  }
 #else
   if (mprotect(ptr, size, PROT_NONE) != 0)
+  {
     PanicAlertFmt("ReadProtectMemory failed!\nmprotect: {}", LastStrerrorString());
+    return false;
+  }
 #endif
+  return true;
 }
 
-void WriteProtectMemory(void* ptr, size_t size, bool allowExecute)
+bool WriteProtectMemory(void* ptr, size_t size, bool allowExecute)
 {
 #ifdef _WIN32
   DWORD oldValue;
   if (!VirtualProtect(ptr, size, allowExecute ? PAGE_EXECUTE_READ : PAGE_READONLY, &oldValue))
+  {
     PanicAlertFmt("WriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
-#elif !(defined(_M_ARM_64) && defined(__APPLE__))
+    return false;
+  }
+#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
   // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
   // that were marked executable, instead it uses the protections offered by MAP_JIT
   // for write protection.
   if (mprotect(ptr, size, allowExecute ? (PROT_READ | PROT_EXEC) : PROT_READ) != 0)
+  {
     PanicAlertFmt("WriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
+    return false;
+  }
 #endif
+  return true;
 }
 
-void UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute)
+bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute)
 {
 #ifdef _WIN32
   DWORD oldValue;
   if (!VirtualProtect(ptr, size, allowExecute ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE, &oldValue))
+  {
     PanicAlertFmt("UnWriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
-#elif !(defined(_M_ARM_64) && defined(__APPLE__))
+    return false;
+  }
+#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
   // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
   // that were marked executable, instead it uses the protections offered by MAP_JIT
   // for write protection.
@@ -272,8 +286,10 @@ void UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute)
                allowExecute ? (PROT_READ | PROT_WRITE | PROT_EXEC) : PROT_WRITE | PROT_READ) != 0)
   {
     PanicAlertFmt("UnWriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
+    return false;
   }
 #endif
+  return true;
 }
 
 size_t MemPhysical()
@@ -295,7 +311,7 @@ size_t MemPhysical()
   mib[1] = HW_PHYSMEM64;
 #endif
   size_t length = sizeof(size_t);
-  sysctl(mib, 2, &physical_memory, &length, NULL, 0);
+  sysctl(mib, 2, &physical_memory, &length, nullptr, 0);
   return physical_memory;
 #elif defined __HAIKU__
   system_info sysinfo;

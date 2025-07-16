@@ -1,6 +1,5 @@
 // Copyright 2021 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Config/CommonControllersWidget.h"
 
@@ -9,16 +8,23 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-#include "Core/ConfigManager.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
 
 #include "DolphinQt/Config/ControllerInterface/ControllerInterfaceWindow.h"
+#include "DolphinQt/QtUtils/NonDefaultQPushButton.h"
+#include "DolphinQt/QtUtils/SetWindowDecorations.h"
+#include "DolphinQt/QtUtils/SignalBlocking.h"
+#include "DolphinQt/Settings.h"
 
 CommonControllersWidget::CommonControllersWidget(QWidget* parent) : QWidget(parent)
 {
   CreateLayout();
   LoadSettings();
   ConnectWidgets();
+
+  connect(&Settings::Instance(), &Settings::ConfigChanged, this,
+          &CommonControllersWidget::LoadSettings);
 }
 
 void CommonControllersWidget::CreateLayout()
@@ -27,7 +33,8 @@ void CommonControllersWidget::CreateLayout()
   m_common_box = new QGroupBox(tr("Common"));
   m_common_layout = new QVBoxLayout();
   m_common_bg_input = new QCheckBox(tr("Background Input"));
-  m_common_configure_controller_interface = new QPushButton(tr("Alternate Input Sources"));
+  m_common_configure_controller_interface =
+      new NonDefaultQPushButton(tr("Alternate Input Sources"));
 
   m_common_layout->addWidget(m_common_bg_input);
   m_common_layout->addWidget(m_common_configure_controller_interface);
@@ -35,7 +42,7 @@ void CommonControllersWidget::CreateLayout()
   m_common_box->setLayout(m_common_layout);
 
   auto* layout = new QVBoxLayout;
-  layout->setMargin(0);
+  layout->setContentsMargins(0, 0, 0, 0);
   layout->setAlignment(Qt::AlignTop);
   layout->addWidget(m_common_box);
   setLayout(layout);
@@ -53,16 +60,17 @@ void CommonControllersWidget::OnControllerInterfaceConfigure()
   ControllerInterfaceWindow* window = new ControllerInterfaceWindow(this);
   window->setAttribute(Qt::WA_DeleteOnClose, true);
   window->setWindowModality(Qt::WindowModality::WindowModal);
+  SetQWidgetWindowDecorations(window);
   window->show();
 }
 
 void CommonControllersWidget::LoadSettings()
 {
-  m_common_bg_input->setChecked(SConfig::GetInstance().m_BackgroundInput);
+  SignalBlocking(m_common_bg_input)->setChecked(Config::Get(Config::MAIN_INPUT_BACKGROUND_INPUT));
 }
 
 void CommonControllersWidget::SaveSettings()
 {
-  SConfig::GetInstance().m_BackgroundInput = m_common_bg_input->isChecked();
-  SConfig::GetInstance().SaveSettings();
+  Config::SetBaseOrCurrent(Config::MAIN_INPUT_BACKGROUND_INPUT, m_common_bg_input->isChecked());
+  Config::Save();
 }

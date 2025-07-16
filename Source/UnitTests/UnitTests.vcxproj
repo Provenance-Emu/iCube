@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project>
   <Import Project="..\VSProps\Base.Macros.props" />
   <Import Project="$(VSPropsDir)Base.Targets.props" />
   <PropertyGroup Label="Globals">
@@ -12,22 +12,16 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="$(VSPropsDir)Base.props" />
+    <Import Project="$(VSPropsDir)Base.Dolphin.props" />
     <Import Project="$(VSPropsDir)PCHUse.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <ItemDefinitionGroup>
     <!--This project also compiles gtest-->
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ExternalsDir)gtest\include;$(ExternalsDir)gtest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ExternalsDir)gtest\googletest\include;$(ExternalsDir)gtest\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <!--
-        The following libs are needed since we pull in pretty much the entire
-        dolphin codebase.
-        -->
-      <AdditionalDependencies>avrt.lib;iphlpapi.lib;winmm.lib;setupapi.lib;rpcrt4.lib;comctl32.lib;Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Platform)'=='x64'">opengl32.lib;avcodec.lib;avformat.lib;avutil.lib;swresample.lib;swscale.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories Condition="'$(Platform)'=='x64'">$(ExternalsDir)ffmpeg\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
     </Link>
   </ItemDefinitionGroup>
@@ -35,14 +29,15 @@
     <ClInclude Include="Core\DSP\DSPTestBinary.h" />
     <ClInclude Include="Core\DSP\DSPTestText.h" />
     <ClInclude Include="Core\DSP\HermesBinary.h" />
+    <ClInclude Include="Core\DSP\HermesText.h" />
     <ClInclude Include="Core\IOS\ES\TestBinaryData.h" />
     <ClInclude Include="Core\PowerPC\TestValues.h" />
   </ItemGroup>
   <ItemGroup>
     <!--gtest is rather small, so just include it into the build here-->
-    <ClCompile Include="$(ExternalsDir)gtest\src\gtest-all.cc" />
-    <ClCompile Include="$(ExternalsDir)gtest\src\gtest_main.cc" />
+    <ClCompile Include="$(ExternalsDir)gtest\googletest\src\gtest-all.cc" />
     <!--Lump all of the tests (and supporting code) into one binary-->
+    <ClCompile Include="UnitTestsMain.cpp" />
     <ClCompile Include="Common\BitFieldTest.cpp" />
     <ClCompile Include="Common\BitSetTest.cpp" />
     <ClCompile Include="Common\BitUtilsTest.cpp" />
@@ -50,6 +45,7 @@
     <ClCompile Include="Common\BusyLoopTest.cpp" />
     <ClCompile Include="Common\CommonFuncsTest.cpp" />
     <ClCompile Include="Common\Crypto\EcTest.cpp" />
+    <ClCompile Include="Common\Crypto\SHA1Test.cpp" />
     <ClCompile Include="Common\EnumFormatterTest.cpp" />
     <ClCompile Include="Common\EventTest.cpp" />
     <ClCompile Include="Common\FileUtilTest.cpp" />
@@ -58,6 +54,7 @@
     <ClCompile Include="Common\FloatUtilsTest.cpp" />
     <ClCompile Include="Common\MathUtilTest.cpp" />
     <ClCompile Include="Common\NandPathsTest.cpp" />
+    <ClCompile Include="Common\SettingsHandlerTest.cpp" />
     <ClCompile Include="Common\SPSCQueueTest.cpp" />
     <ClCompile Include="Common\StringUtilTest.cpp" />
     <ClCompile Include="Common\SwapTest.cpp" />
@@ -67,10 +64,13 @@
     <ClCompile Include="Core\DSP\DSPTestBinary.cpp" />
     <ClCompile Include="Core\DSP\DSPTestText.cpp" />
     <ClCompile Include="Core\DSP\HermesBinary.cpp" />
+    <ClCompile Include="Core\DSP\HermesText.cpp" />
     <ClCompile Include="Core\IOS\ES\FormatsTest.cpp" />
     <ClCompile Include="Core\IOS\FS\FileSystemTest.cpp" />
+    <ClCompile Include="Core\IOS\USB\SkylandersTest.cpp" />
     <ClCompile Include="Core\MMIOTest.cpp" />
     <ClCompile Include="Core\PageFaultTest.cpp" />
+    <ClCompile Include="Core\PatchAllowlistTest.cpp" />
     <ClCompile Include="Core\PowerPC\DivUtilsTest.cpp" />
     <ClCompile Include="VideoCommon\VertexLoaderTest.cpp" />
     <ClCompile Include="StubHost.cpp" />
@@ -82,6 +82,7 @@
     <ClCompile Include="Core\PowerPC\Jit64Common\Frsqrte.cpp" />
   </ItemGroup>
   <ItemGroup Condition="'$(Platform)'=='ARM64'">
+    <ClCompile Include="Common\Arm64EmitterTest.cpp" />
     <ClCompile Include="Core\PowerPC\JitArm64\ConvertSingleDouble.cpp" />
     <ClCompile Include="Core\PowerPC\JitArm64\FPRF.cpp" />
     <ClCompile Include="Core\PowerPC\JitArm64\Fres.cpp" />
@@ -99,11 +100,21 @@
       <Project>{0e033be3-2e08-428e-9ae9-bc673efa12b5}</Project>
     </ProjectReference>
   </ItemGroup>
-  <Import Project="$(ExternalsDir)ExternalsReferenceAll.props" />
+  <Import Project="$(ExternalsDir)Bochs_disasm\exports.props" />
+  <Import Project="$(ExternalsDir)fmt\exports.props" />
+  <Import Project="$(ExternalsDir)picojson\exports.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
-  <Target Name="ExecUnitTests" AfterTargets="AfterBuild;CopyDeps" Condition="'$(RunUnitTests)'=='true'">
+  <ItemGroup>
+    <DataSysFiles Include="$(DolphinRootDir)Data\**\Sys\**\*.*" />
+  </ItemGroup>
+  <Target Name="AfterBuild">
+    <Message Text="Copying Data directory..." Importance="High" />
+    <RemoveDir Directories="$(TargetDir)Sys" />
+    <Copy SourceFiles="@(DataSysFiles)" DestinationFolder="$(TargetDir)%(RecursiveDir)" SkipUnchangedFiles="True" />
+  </Target>
+  <Target Name="ExecUnitTests" AfterTargets="AfterBuild" Condition="'$(RunUnitTests)'=='true'">
     <!--This is only executed via msbuild, VS test runner automatically does this-->
     <Exec Command="$(TargetPath)" />
   </Target>

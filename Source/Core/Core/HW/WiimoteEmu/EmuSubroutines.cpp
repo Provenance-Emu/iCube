@@ -1,24 +1,22 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 
 #include <cmath>
-#include <fstream>
 #include <iterator>
 
 #include "Common/BitUtils.h"
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
-#include "Common/FileUtil.h"
+#include "Common/EnumUtils.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 #include "Common/Swap.h"
+
 #include "Core/Core.h"
-#include "Core/DolphinAnalytics.h"
+#include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteCommon/WiimoteHid.h"
-#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
-#include "Core/HW/WiimoteReal/WiimoteReal.h"
-#include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
 
 namespace WiimoteEmu
 {
@@ -29,7 +27,7 @@ void Wiimote::HandleReportMode(const OutputReportMode& dr)
   if (!DataReportBuilder::IsValidMode(dr.mode))
   {
     // A real wiimote ignores the entire message if the mode is invalid.
-    WARN_LOG_FMT(WIIMOTE, "Game requested invalid report mode: {:#04x}", dr.mode);
+    WARN_LOG_FMT(WIIMOTE, "Game requested invalid report mode: {:#04x}", static_cast<u8>(dr.mode));
     return;
   }
 
@@ -50,11 +48,12 @@ void Wiimote::InvokeHandler(H&& handler, const WiimoteCommon::OutputReportGeneri
 {
   if (size < sizeof(T))
   {
-    ERROR_LOG_FMT(WIIMOTE, "InvokeHandler: report: {:#04x} invalid size: {}", rpt.rpt_id, size);
+    ERROR_LOG_FMT(WIIMOTE, "InvokeHandler: report: {:#04x} invalid size: {}",
+                  static_cast<u8>(rpt.rpt_id), size);
     return;
   }
 
-  (this->*handler)(Common::BitCastPtr<T>(rpt.data));
+  (this->*handler)(Common::BitCastPtr<T>(&rpt.data[0]));
 }
 
 void Wiimote::EventLinked()
@@ -124,7 +123,7 @@ void Wiimote::InterruptDataOutput(const u8* data, u32 size)
     InvokeHandler<OutputReportEnableFeature>(&Wiimote::HandleIRLogicEnable2, rpt, rpt_size);
     break;
   default:
-    PanicAlertFmt("HidOutputReport: Unknown report ID {:#04x}", rpt.rpt_id);
+    PanicAlertFmt("HidOutputReport: Unknown report ID {:#04x}", static_cast<u8>(rpt.rpt_id));
     break;
   }
 }
@@ -141,7 +140,8 @@ void Wiimote::SendAck(OutputReportID rpt_id, ErrorCode error_code)
   InterruptDataInputCallback(rpt.GetData(), rpt.GetSize());
 }
 
-void Wiimote::HandleExtensionSwap()
+void Wiimote::HandleExtensionSwap(ExtensionNumber desired_extension_number,
+                                  bool desired_motion_plus)
 {
   if (WIIMOTE_BALANCE_BOARD == m_index)
   {
@@ -150,15 +150,13 @@ void Wiimote::HandleExtensionSwap()
     return;
   }
 
-  ExtensionNumber desired_extension_number =
-      static_cast<ExtensionNumber>(m_attachments->GetSelectedAttachment());
-
-  const bool desired_motion_plus = m_motion_plus_setting.GetValue();
-
   // FYI: AttachExtension also connects devices to the i2c bus
 
   if (m_is_motion_plus_attached && !desired_motion_plus)
   {
+    INFO_LOG_FMT(WIIMOTE, "Detaching Motion Plus (Wiimote {} in slot {})", m_index,
+                 m_bt_device_index);
+
     // M+ is attached and it's not wanted, so remove it.
     m_extension_port.AttachExtension(GetNoneExtension());
     m_is_motion_plus_attached = false;
@@ -183,6 +181,9 @@ void Wiimote::HandleExtensionSwap()
     }
     else
     {
+      INFO_LOG_FMT(WIIMOTE, "Attaching Motion Plus (Wiimote {} in slot {})", m_index,
+                   m_bt_device_index);
+
       // No extension attached so attach M+.
       m_is_motion_plus_attached = true;
       m_extension_port.AttachExtension(&m_motion_plus);
@@ -197,12 +198,18 @@ void Wiimote::HandleExtensionSwap()
     // A different extension is wanted (either by user or by the M+ logic above)
     if (GetActiveExtensionNumber() != ExtensionNumber::NONE)
     {
+      INFO_LOG_FMT(WIIMOTE, "Detaching Extension (Wiimote {} in slot {})", m_index,
+                   m_bt_device_index);
+
       // First we must detach the current extension.
       // The next call will change to the new extension if needed.
       m_active_extension = ExtensionNumber::NONE;
     }
     else
     {
+      INFO_LOG_FMT(WIIMOTE, "Switching to Extension {} (Wiimote {} in slot {})",
+                   Common::ToUnderlying(desired_extension_number), m_index, m_bt_device_index);
+
       m_active_extension = desired_extension_number;
     }
 
@@ -411,8 +418,9 @@ void Wiimote::HandleReadData(const OutputReportReadData& rd)
   // A zero size request is just ignored, like on the real wiimote.
   m_read_request.size = Common::swap16(rd.size);
 
-  DEBUG_LOG_FMT(WIIMOTE, "Wiimote::ReadData: {} @ {:#04x} @ {:#04x} ({})", m_read_request.space,
-                m_read_request.slave_address, m_read_request.address, m_read_request.size);
+  DEBUG_LOG_FMT(WIIMOTE, "Wiimote::ReadData: {} @ {:#04x} @ {:#04x} ({})",
+                static_cast<u8>(m_read_request.space), m_read_request.slave_address,
+                m_read_request.address, m_read_request.size);
 
   // Send up to one read-data-reply.
   // If more data needs to be sent it will happen on the next "Update()"
@@ -441,7 +449,7 @@ bool Wiimote::ProcessReadDataRequest()
   reply.address = Common::swap16(m_read_request.address);
 
   // Pre-fill with zeros in case of read-error or read < 16-bytes:
-  std::fill(std::begin(reply.data), std::end(reply.data), 0x00);
+  std::ranges::fill(reply.data, 0x00);
 
   ErrorCode error_code = ErrorCode::Success;
 
@@ -478,19 +486,6 @@ bool Wiimote::ProcessReadDataRequest()
       error_code = ErrorCode::InvalidAddress;
       break;
     }
-
-    // It is possible to bypass data reporting and directly read extension input.
-    // While I am not aware of any games that actually do this,
-    // our NetPlay and TAS methods are completely unprepared for it.
-    const bool is_reading_ext = EncryptedExtension::I2C_ADDR == m_read_request.slave_address &&
-                                m_read_request.address < EncryptedExtension::CONTROLLER_DATA_BYTES;
-    const bool is_reading_ir =
-        CameraLogic::I2C_ADDR == m_read_request.slave_address &&
-        m_read_request.address < CameraLogic::REPORT_DATA_OFFSET + CameraLogic::CAMERA_DATA_BYTES &&
-        m_read_request.address + m_read_request.size > CameraLogic::REPORT_DATA_OFFSET;
-
-    if (is_reading_ext || is_reading_ir)
-      DolphinAnalytics::Instance().ReportGameQuirk(GameQuirk::DIRECTLY_READS_WIIMOTE_INPUT);
 
     // Top byte of address is ignored on the bus, but it IS maintained in the read-reply.
     auto const bytes_read = m_i2c_bus.BusRead(
@@ -557,7 +552,7 @@ void Wiimote::DoState(PointerWrap& p)
   m_speaker_logic.DoState(p);
   m_camera_logic.DoState(p);
 
-  if (p.GetMode() == PointerWrap::MODE_READ)
+  if (p.IsReadMode())
     m_camera_logic.SetEnabled(m_status.ir);
 
   p.Do(m_is_motion_plus_attached);
@@ -589,6 +584,11 @@ void Wiimote::DoState(PointerWrap& p)
 ExtensionNumber Wiimote::GetActiveExtensionNumber() const
 {
   return m_active_extension;
+}
+
+ControllerEmu::SubscribableSettingValue<bool>& Wiimote::GetMotionPlusSetting()
+{
+  return m_motion_plus_setting;
 }
 
 }  // namespace WiimoteEmu

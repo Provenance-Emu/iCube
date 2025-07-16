@@ -1,8 +1,9 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Host.h"
+
+#include <functional>
 
 #include <QAbstractEventDispatcher>
 #include <QApplication>
@@ -24,7 +25,11 @@
 #include "Core/NetPlayProto.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/State.h"
+#include "Core/System.h"
 
+#ifdef HAS_LIBMGBA
+#include "DolphinQt/GBAWidget.h"
+#endif
 #include "DolphinQt/QtUtils/QueueOnObject.h"
 #include "DolphinQt/Settings.h"
 
@@ -32,7 +37,9 @@
 
 #include "UICommon/DiscordPresence.h"
 
-#include "VideoCommon/RenderBase.h"
+#include "VideoCommon/AbstractGfx.h"
+#include "VideoCommon/Fifo.h"
+#include "VideoCommon/Present.h"
 #include "VideoCommon/VideoConfig.h"
 
 Host::Host()
@@ -59,11 +66,10 @@ void Host::SetRenderHandle(void* handle)
     return;
 
   m_render_handle = handle;
-  if (g_renderer)
+  if (g_presenter)
   {
-    g_renderer->ChangeSurface(handle);
-    if (g_controller_interface.IsInit())
-      g_controller_interface.ChangeWindow(handle);
+    g_presenter->ChangeSurface(handle);
+    g_controller_interface.ChangeWindow(handle);
   }
 }
 
@@ -72,12 +78,52 @@ void Host::SetMainWindowHandle(void* handle)
   m_main_window_handle = handle;
 }
 
+static void RunWithGPUThreadInactive(std::function<void()> f)
+{
+  // Potentially any thread which shows panic alerts can be blocked on this returning.
+  // This means that, in order to avoid deadlocks, we need to be careful with how we
+  // synchronize with other threads. Note that the panic alert handler temporarily declares
+  // us as the CPU and/or GPU thread if the panic alert was requested by that thread.
+
+  // TODO: What about the unlikely case where the GPU thread calls the panic alert handler
+  // while the panic alert handler is processing a panic alert from the CPU thread?
+
+  if (Core::IsGPUThread())
+  {
+    // If we are the GPU thread, we can't call Core::PauseAndLock without getting a deadlock,
+    // since it would try to pause the GPU thread while that thread is waiting for us.
+    // However, since we know that the GPU thread is inactive, we can just run f directly.
+
+    f();
+  }
+  else if (Core::IsCPUThread())
+  {
+    // If we are the CPU thread in dual core mode, we can't call Core::PauseAndLock, for the
+    // same reason as above. Instead, we use Fifo::PauseAndLock to pause the GPU thread only.
+    // (Note that this case cannot be reached in single core mode, because in single core mode,
+    // the CPU and GPU threads are the same thread, and we already checked for the GPU thread.)
+
+    auto& system = Core::System::GetInstance();
+    const bool was_running = Core::GetState(system) == Core::State::Running;
+    auto& fifo = system.GetFifo();
+    fifo.PauseAndLock(true, was_running);
+    f();
+    fifo.PauseAndLock(false, was_running);
+  }
+  else
+  {
+    // If we reach here, we can call Core::PauseAndLock (which we do using a CPUThreadGuard).
+    const Core::CPUThreadGuard guard(Core::System::GetInstance());
+    f();
+  }
+}
+
 bool Host::GetRenderFocus()
 {
 #ifdef _WIN32
   // Unfortunately Qt calls SetRenderFocus() with a slight delay compared to what we actually need
   // to avoid inputs that cause a focus loss to be processed by the emulation
-  if (m_render_to_main)
+  if (m_render_to_main && !m_render_fullscreen)
     return GetForegroundWindow() == (HWND)m_main_window_handle.load();
   return GetForegroundWindow() == (HWND)m_render_handle.load();
 #else
@@ -93,16 +139,32 @@ bool Host::GetRenderFullFocus()
 void Host::SetRenderFocus(bool focus)
 {
   m_render_focus = focus;
-  if (g_renderer && m_render_fullscreen && g_ActiveConfig.ExclusiveFullscreenEnabled())
-    Core::RunAsCPUThread([focus] {
+  if (g_gfx && m_render_fullscreen && g_ActiveConfig.ExclusiveFullscreenEnabled())
+  {
+    RunWithGPUThreadInactive([focus] {
       if (!Config::Get(Config::MAIN_RENDER_TO_MAIN))
-        g_renderer->SetFullscreen(focus);
+        g_gfx->SetFullscreen(focus);
     });
+  }
 }
 
 void Host::SetRenderFullFocus(bool focus)
 {
   m_render_full_focus = focus;
+}
+
+bool Host::GetGBAFocus()
+{
+#ifdef HAS_LIBMGBA
+  return qobject_cast<GBAWidget*>(QApplication::activeWindow()) != nullptr;
+#else
+  return false;
+#endif
+}
+
+bool Host::GetTASInputFocus() const
+{
+  return m_tas_input_focus;
 }
 
 bool Host::GetRenderFullscreen()
@@ -114,15 +176,21 @@ void Host::SetRenderFullscreen(bool fullscreen)
 {
   m_render_fullscreen = fullscreen;
 
-  if (g_renderer && g_renderer->IsFullscreen() != fullscreen &&
-      g_ActiveConfig.ExclusiveFullscreenEnabled())
-    Core::RunAsCPUThread([fullscreen] { g_renderer->SetFullscreen(fullscreen); });
+  if (g_gfx && g_gfx->IsFullscreen() != fullscreen && g_ActiveConfig.ExclusiveFullscreenEnabled())
+  {
+    RunWithGPUThreadInactive([fullscreen] { g_gfx->SetFullscreen(fullscreen); });
+  }
+}
+
+void Host::SetTASInputFocus(const bool focus)
+{
+  m_tas_input_focus = focus;
 }
 
 void Host::ResizeSurface(int new_width, int new_height)
 {
-  if (g_renderer)
-    g_renderer->ResizeSurface();
+  if (g_presenter)
+    g_presenter->ResizeSurface();
 }
 
 std::vector<std::string> Host_GetPreferredLocales()
@@ -157,7 +225,7 @@ void Host_UpdateTitle(const std::string& title)
 
 bool Host_RendererHasFocus()
 {
-  return Host::GetInstance()->GetRenderFocus();
+  return Host::GetInstance()->GetRenderFocus() || Host::GetInstance()->GetGBAFocus();
 }
 
 bool Host_RendererHasFullFocus()
@@ -170,6 +238,11 @@ bool Host_RendererIsFullscreen()
   return Host::GetInstance()->GetRenderFullscreen();
 }
 
+bool Host_TASInputHasFocus()
+{
+  return Host::GetInstance()->GetTASInputFocus();
+}
+
 void Host_YieldToUI()
 {
   qApp->processEvents(QEventLoop::ExcludeUserInputEvents);
@@ -177,17 +250,31 @@ void Host_YieldToUI()
 
 void Host_UpdateDisasmDialog()
 {
+  if (Settings::Instance().GetIsContinuouslyFrameStepping())
+    return;
+
   QueueOnObject(QApplication::instance(), [] { emit Host::GetInstance()->UpdateDisasmDialog(); });
 }
 
-void Host::RequestNotifyMapLoaded()
+void Host_JitCacheInvalidation()
 {
-  QueueOnObject(QApplication::instance(), [this] { emit NotifyMapLoaded(); });
+  QueueOnObject(QApplication::instance(), [] { emit Host::GetInstance()->JitCacheInvalidation(); });
 }
 
-void Host_NotifyMapLoaded()
+void Host_JitProfileDataWiped()
 {
-  Host::GetInstance()->RequestNotifyMapLoaded();
+  QueueOnObject(QApplication::instance(), [] { emit Host::GetInstance()->JitProfileDataWiped(); });
+}
+
+void Host_PPCSymbolsChanged()
+{
+  QueueOnObject(QApplication::instance(), [] { emit Host::GetInstance()->PPCSymbolsChanged(); });
+}
+
+void Host_PPCBreakpointsChanged()
+{
+  QueueOnObject(QApplication::instance(),
+                [] { emit Host::GetInstance()->PPCBreakpointsChanged(); });
 }
 
 // We ignore these, and their purpose should be questioned individually.
@@ -200,10 +287,6 @@ void Host_UpdateMainFrame()
 void Host_RequestRenderWindowSize(int w, int h)
 {
   emit Host::GetInstance()->RequestRenderSize(w, h);
-}
-
-void Host_TargetRectangleWasUpdated()
-{
 }
 
 bool Host_UIBlocksControllerState()
@@ -223,3 +306,34 @@ void Host_TitleChanged()
     Discord::UpdateDiscordPresence();
 #endif
 }
+
+void Host_UpdateDiscordClientID(const std::string& client_id)
+{
+#ifdef USE_DISCORD_PRESENCE
+  Discord::UpdateClientID(client_id);
+#endif
+}
+
+bool Host_UpdateDiscordPresenceRaw(const std::string& details, const std::string& state,
+                                   const std::string& large_image_key,
+                                   const std::string& large_image_text,
+                                   const std::string& small_image_key,
+                                   const std::string& small_image_text,
+                                   const int64_t start_timestamp, const int64_t end_timestamp,
+                                   const int party_size, const int party_max)
+{
+#ifdef USE_DISCORD_PRESENCE
+  return Discord::UpdateDiscordPresenceRaw(details, state, large_image_key, large_image_text,
+                                           small_image_key, small_image_text, start_timestamp,
+                                           end_timestamp, party_size, party_max);
+#else
+  return false;
+#endif
+}
+
+#ifndef HAS_LIBMGBA
+std::unique_ptr<GBAHostInterface> Host_CreateGBAHost(std::weak_ptr<HW::GBA::Core> core)
+{
+  return nullptr;
+}
+#endif

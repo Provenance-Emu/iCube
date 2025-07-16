@@ -1,4 +1,4 @@
-// This file is public domain, in case it's useful to anyone. -comex
+// SPDX-License-Identifier: CC0-1.0
 
 #pragma once
 
@@ -6,6 +6,8 @@
 #include <cstddef>
 #include "Common/CommonTypes.h"
 
+namespace Common
+{
 constexpr size_t NETPLAY_CODE_SIZE = 8;
 using TraversalHostId = std::array<char, NETPLAY_CODE_SIZE>;
 using TraversalRequestId = u64;
@@ -29,6 +31,10 @@ enum class TraversalPacketType : u8
   ConnectReady = 6,
   // [s->c] Alternately, the server might not have heard of this host.
   ConnectFailed = 7,
+  // [c->s] Perform a traveral test. This will send two acks:
+  // one via the server's alt port, and one to the address corresponding to
+  // the given host ID.
+  TestPlease = 8,
 };
 
 constexpr u8 TraversalProtoVersion = 0;
@@ -69,7 +75,7 @@ struct TraversalPacket
     {
       u8 ok;
       TraversalHostId yourHostId;
-      TraversalInetAddress yourAddress;  // currently unused
+      TraversalInetAddress yourAddress;
     } helloFromServer;
     struct
     {
@@ -89,6 +95,11 @@ struct TraversalPacket
       TraversalRequestId requestId;
       TraversalConnectFailedReason reason;
     } connectFailed;
+    struct
+    {
+      TraversalHostId hostId;
+    } testPlease;
   };
 };
 #pragma pack(pop)
+}  // namespace Common

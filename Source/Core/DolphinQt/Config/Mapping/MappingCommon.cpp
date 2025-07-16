@@ -1,215 +1,201 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Config/Mapping/MappingCommon.h"
 
-#include <tuple>
-#include <vector>
+#include <deque>
+#include <memory>
 
-#include <QApplication>
-#include <QPushButton>
-#include <QRegularExpression>
-#include <QString>
 #include <QTimer>
 
+#include "DolphinQt/Config/Mapping/MappingButton.h"
+#include "DolphinQt/Config/Mapping/MappingWindow.h"
 #include "DolphinQt/QtUtils/BlockUserInputFilter.h"
-#include "InputCommon/ControlReference/ControlReference.h"
 
-#include "Common/Thread.h"
+#include "InputCommon/ControlReference/ControlReference.h"
+#include "InputCommon/ControllerEmu/ControllerEmu.h"
+#include "InputCommon/ControllerInterface/ControllerInterface.h"
+#include "InputCommon/ControllerInterface/MappingCommon.h"
 
 namespace MappingCommon
 {
 constexpr auto INPUT_DETECT_INITIAL_TIME = std::chrono::seconds(3);
-constexpr auto INPUT_DETECT_CONFIRMATION_TIME = std::chrono::milliseconds(0);
+constexpr auto INPUT_DETECT_CONFIRMATION_TIME = std::chrono::milliseconds(750);
 constexpr auto INPUT_DETECT_MAXIMUM_TIME = std::chrono::seconds(5);
+// Ignore the mouse-click when queuing more buttons with "alternate mappings" enabled.
+constexpr auto INPUT_DETECT_ENDING_IGNORE_TIME = std::chrono::milliseconds(50);
 
-constexpr auto OUTPUT_TEST_TIME = std::chrono::seconds(2);
-
-// Pressing inputs at the same time will result in the & operator vs a hotkey expression.
-constexpr auto HOTKEY_VS_CONJUNCION_THRESHOLD = std::chrono::milliseconds(50);
-
-// Some devices (e.g. DS4) provide an analog and digital input for the trigger.
-// We prefer just the analog input for simultaneous digital+analog input detections.
-constexpr auto SPURIOUS_TRIGGER_COMBO_THRESHOLD = std::chrono::milliseconds(150);
-
-QString GetExpressionForControl(const QString& control_name,
-                                const ciface::Core::DeviceQualifier& control_device,
-                                const ciface::Core::DeviceQualifier& default_device, Quote quote)
+bool ContainsAnalogInput(const ciface::Core::InputDetector::Results& results)
 {
-  QString expr;
+  return std::ranges::any_of(results, [](auto& detection) { return detection.smoothness > 1; });
+}
 
-  // non-default device
-  if (control_device != default_device)
+class MappingProcessor : public QWidget
+{
+public:
+  MappingProcessor(MappingWindow* parent) : QWidget{parent}, m_parent{parent}
   {
-    expr += QString::fromStdString(control_device.ToString());
-    expr += QLatin1Char{':'};
+    using MW = MappingWindow;
+    using MP = MappingProcessor;
+
+    connect(parent, &MW::Update, this, &MP::ProcessMappingButtons);
+    connect(parent, &MW::ConfigChanged, this, &MP::CancelMapping);
+
+    connect(parent, &MW::UnQueueInputDetection, this, &MP::UnQueueInputDetection);
+    connect(parent, &MW::QueueInputDetection, this, &MP::QueueInputDetection);
+    connect(parent, &MW::CancelMapping, this, &MP::CancelMapping);
+
+    m_input_detection_start_timer = new QTimer(this);
+    m_input_detection_start_timer->setSingleShot(true);
+    connect(m_input_detection_start_timer, &QTimer::timeout, this, &MP::StartInputDetection);
   }
 
-  // append the control name
-  expr += control_name;
-
-  if (quote == Quote::On)
+  void StartInputDetection()
   {
-    // If our expression contains any non-alpha characters
-    // we should quote it
-    const QRegularExpression reg(QStringLiteral("[^a-zA-Z]"));
-    if (reg.match(expr).hasMatch())
-      expr = QStringLiteral("`%1`").arg(expr);
+    const auto& default_device = m_parent->GetController()->GetDefaultDevice();
+    auto& button = m_clicked_mapping_buttons.front();
+
+    // Focus just makes it more clear which button is currently being mapped.
+    button->setFocus();
+    button->setText(tr("[ Press Now ]"));
+    QtUtils::InstallKeyboardBlocker(button, button, &MappingButton::ConfigChanged);
+
+    std::vector device_strings{default_device.ToString()};
+    if (m_parent->IsCreateOtherDeviceMappingsEnabled())
+      device_strings = g_controller_interface.GetAllDeviceStrings();
+
+    m_input_detector = std::make_unique<ciface::Core::InputDetector>();
+    const auto lock = m_parent->GetController()->GetStateLock();
+    m_input_detector->Start(g_controller_interface, device_strings);
   }
 
-  return expr;
-}
-
-QString DetectExpression(QPushButton* button, ciface::Core::DeviceContainer& device_container,
-                         const std::vector<std::string>& device_strings,
-                         const ciface::Core::DeviceQualifier& default_device, Quote quote)
-{
-  const auto filter = new BlockUserInputFilter(button);
-
-  button->installEventFilter(filter);
-  button->grabKeyboard();
-  button->grabMouse();
-
-  const auto old_text = button->text();
-  button->setText(QStringLiteral("..."));
-
-  // The button text won't be updated if we don't process events here
-  QApplication::processEvents();
-
-  // Avoid that the button press itself is registered as an event
-  Common::SleepCurrentThread(50);
-
-  auto detections =
-      device_container.DetectInput(device_strings, INPUT_DETECT_INITIAL_TIME,
-                                   INPUT_DETECT_CONFIRMATION_TIME, INPUT_DETECT_MAXIMUM_TIME);
-
-  RemoveSpuriousTriggerCombinations(&detections);
-
-  const auto timer = new QTimer(button);
-
-  timer->setSingleShot(true);
-
-  button->connect(timer, &QTimer::timeout, [button, filter] {
-    button->releaseMouse();
-    button->releaseKeyboard();
-    button->removeEventFilter(filter);
-  });
-
-  // Prevent mappings of "space", "return", or mouse clicks from re-activating detection.
-  timer->start(500);
-
-  button->setText(old_text);
-
-  return BuildExpression(detections, default_device, quote);
-}
-
-void TestOutput(QPushButton* button, OutputReference* reference)
-{
-  const auto old_text = button->text();
-  button->setText(QStringLiteral("..."));
-
-  // The button text won't be updated if we don't process events here
-  QApplication::processEvents();
-
-  reference->State(1.0);
-  std::this_thread::sleep_for(OUTPUT_TEST_TIME);
-  reference->State(0.0);
-
-  button->setText(old_text);
-}
-
-void RemoveSpuriousTriggerCombinations(
-    std::vector<ciface::Core::DeviceContainer::InputDetection>* detections)
-{
-  const auto is_spurious = [&](auto& detection) {
-    return std::any_of(detections->begin(), detections->end(), [&](auto& d) {
-      // This is a suprious digital detection if a "smooth" (analog) detection is temporally near.
-      return &d != &detection && d.smoothness > 1 &&
-             abs(d.press_time - detection.press_time) < SPURIOUS_TRIGGER_COMBO_THRESHOLD;
-    });
-  };
-
-  detections->erase(std::remove_if(detections->begin(), detections->end(), is_spurious),
-                    detections->end());
-}
-
-QString
-BuildExpression(const std::vector<ciface::Core::DeviceContainer::InputDetection>& detections,
-                const ciface::Core::DeviceQualifier& default_device, Quote quote)
-{
-  std::vector<const ciface::Core::DeviceContainer::InputDetection*> pressed_inputs;
-
-  QStringList alternations;
-
-  const auto get_control_expression = [&](auto& detection) {
-    // Return the parent-most name if there is one for better hotkey strings.
-    // Detection of L/R_Ctrl will be changed to just Ctrl.
-    // Users can manually map L_Ctrl if they so desire.
-    const auto input = (quote == Quote::On) ?
-                           detection.device->GetParentMostInput(detection.input) :
-                           detection.input;
-
-    ciface::Core::DeviceQualifier device_qualifier;
-    device_qualifier.FromDevice(detection.device.get());
-
-    return MappingCommon::GetExpressionForControl(QString::fromStdString(input->GetName()),
-                                                  device_qualifier, default_device, quote);
-  };
-
-  bool new_alternation = false;
-
-  const auto handle_press = [&](auto& detection) {
-    pressed_inputs.emplace_back(&detection);
-    new_alternation = true;
-  };
-
-  const auto handle_release = [&]() {
-    if (!new_alternation)
+  void ProcessMappingButtons()
+  {
+    if (!m_input_detector)
       return;
 
-    new_alternation = false;
+    const auto confirmation_time =
+        INPUT_DETECT_CONFIRMATION_TIME * (m_parent->IsWaitForAlternateMappingsEnabled() ? 1 : 0);
 
-    QStringList alternation;
-    for (auto* input : pressed_inputs)
-      alternation.push_back(get_control_expression(*input));
+    m_input_detector->Update(INPUT_DETECT_INITIAL_TIME, confirmation_time,
+                             INPUT_DETECT_MAXIMUM_TIME);
 
-    const bool is_hotkey = pressed_inputs.size() >= 2 &&
-                           (pressed_inputs[1]->press_time - pressed_inputs[0]->press_time) >
-                               HOTKEY_VS_CONJUNCION_THRESHOLD;
+    if (!m_input_detector->IsComplete())
+      return;
 
-    if (is_hotkey)
+    auto* const button = m_clicked_mapping_buttons.front();
+
+    auto results = m_input_detector->TakeResults();
+    if (!FinalizeMapping(&results))
     {
-      alternations.push_back(QStringLiteral("@(%1)").arg(alternation.join(QLatin1Char('+'))));
+      // No inputs detected. Cancel this and any other queued mappings.
+      CancelMapping();
     }
-    else
+    else if (m_parent->IsIterativeMappingEnabled() && m_clicked_mapping_buttons.empty())
     {
-      alternation.sort();
-      alternations.push_back(alternation.join(QLatin1Char('&')));
-    }
-  };
+      button->QueueNextButtonMapping();
 
-  for (auto& detection : detections)
-  {
-    // Remove since released inputs.
-    for (auto it = pressed_inputs.begin(); it != pressed_inputs.end();)
-    {
-      if (!((*it)->release_time > detection.press_time))
+      if (m_clicked_mapping_buttons.empty())
+        return;
+
+      // Skip "Modifier" mappings when using analog inputs.
+      auto* next_button = m_clicked_mapping_buttons.front();
+      if (next_button->GetControlType() == MappingButton::ControlType::ModifierInput &&
+          ContainsAnalogInput(results))
       {
-        handle_release();
-        it = pressed_inputs.erase(it);
+        // Clear "Modifier" mapping and queue the next button.
+        SetButtonExpression(next_button, "");
+        UnQueueInputDetection(next_button);
+        next_button->QueueNextButtonMapping();
       }
-      else
-        ++it;
     }
-
-    handle_press(detection);
   }
 
-  handle_release();
+  bool FinalizeMapping(ciface::Core::InputDetector::Results* detections_ptr)
+  {
+    auto& detections = *detections_ptr;
+    if (!ciface::MappingCommon::ContainsCompleteDetection(detections))
+      return false;
 
-  alternations.removeDuplicates();
-  return alternations.join(QLatin1Char('|'));
+    ciface::MappingCommon::RemoveSpuriousTriggerCombinations(&detections);
+
+    const auto& default_device = m_parent->GetController()->GetDefaultDevice();
+    auto& button = m_clicked_mapping_buttons.front();
+    SetButtonExpression(
+        button, BuildExpression(detections, default_device, ciface::MappingCommon::Quote::On));
+
+    UnQueueInputDetection(button);
+    return true;
+  }
+
+  void SetButtonExpression(MappingButton* button, const std::string& expression)
+  {
+    auto* const control_reference = button->GetControlReference();
+    control_reference->SetExpression(expression);
+    m_parent->Save();
+    m_parent->GetController()->UpdateSingleControlReference(g_controller_interface,
+                                                            control_reference);
+  }
+
+  void UpdateInputDetectionStartTimer()
+  {
+    m_input_detector.reset();
+
+    if (m_clicked_mapping_buttons.empty())
+      m_input_detection_start_timer->stop();
+    else
+      m_input_detection_start_timer->start(INPUT_DETECT_INITIAL_DELAY);
+  }
+
+  bool UnQueueInputDetection(MappingButton* button)
+  {
+    button->ConfigChanged();
+    if (!std::erase(m_clicked_mapping_buttons, button))
+      return false;
+    UpdateInputDetectionStartTimer();
+    return true;
+  }
+
+  void QueueInputDetection(MappingButton* button)
+  {
+    // Just UnQueue if already queued.
+    if (UnQueueInputDetection(button))
+      return;
+
+    button->setText(QStringLiteral("[ ... ]"));
+    m_clicked_mapping_buttons.push_back(button);
+
+    if (m_input_detector)
+    {
+      // Ignore the mouse-click that queued this new detection and finalize the current mapping.
+      auto results = m_input_detector->TakeResults();
+      ciface::MappingCommon::RemoveDetectionsAfterTimePoint(
+          &results, ciface::Core::DeviceContainer::Clock::now() - INPUT_DETECT_ENDING_IGNORE_TIME);
+      FinalizeMapping(&results);
+    }
+    UpdateInputDetectionStartTimer();
+  }
+
+  void CancelMapping()
+  {
+    // Signal buttons to take on their proper input expression text.
+    for (auto* button : m_clicked_mapping_buttons)
+      button->ConfigChanged();
+
+    m_clicked_mapping_buttons = {};
+    UpdateInputDetectionStartTimer();
+  }
+
+private:
+  std::deque<MappingButton*> m_clicked_mapping_buttons;
+  std::unique_ptr<ciface::Core::InputDetector> m_input_detector;
+  QTimer* m_input_detection_start_timer;
+  MappingWindow* const m_parent;
+};
+
+void CreateMappingProcessor(MappingWindow* window)
+{
+  new MappingProcessor{window};
 }
 
 }  // namespace MappingCommon

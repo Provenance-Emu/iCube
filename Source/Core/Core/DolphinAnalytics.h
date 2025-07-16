@@ -1,11 +1,9 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <array>
-#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -22,13 +20,6 @@
 
 enum class GameQuirk
 {
-  // Sometimes code run from ICache is different from its mirror in RAM.
-  ICACHE_MATTERS = 0,
-
-  // The Wii remote hardware makes it possible to bypass normal data reporting and directly
-  // "read" extension or IR data. This would break our current TAS/NetPlay implementation.
-  DIRECTLY_READS_WIIMOTE_INPUT,
-
   // Several Wii DI commands that are rarely/never used and not implemented by Dolphin
   USES_DVD_LOW_STOP_LASER,
   USES_DVD_LOW_OFFSET,
@@ -73,6 +64,42 @@ enum class GameQuirk
   // Track them separately.
   USES_CP_PERF_COMMAND,
 
+  // We don't implement all AX features yet.
+  USES_UNIMPLEMENTED_AX_COMMAND,
+  USES_AX_INITIAL_TIME_DELAY,
+  USES_AX_WIIMOTE_LOWPASS,
+  USES_AX_WIIMOTE_BIQUAD,
+
+  // We don't implement XFMEM_CLIPDISABLE yet.
+  SETS_XF_CLIPDISABLE_BIT_0,
+  SETS_XF_CLIPDISABLE_BIT_1,
+  SETS_XF_CLIPDISABLE_BIT_2,
+
+  // Similar to the XF-BP mismatch, CP and XF might be configured with different vertex formats.
+  // Real hardware seems to hang in this case, so games probably don't do this, but it would
+  // be good to know if anything does it.
+  MISMATCHED_GPU_COLORS_BETWEEN_CP_AND_XF,
+  MISMATCHED_GPU_NORMALS_BETWEEN_CP_AND_XF,
+  MISMATCHED_GPU_TEX_COORDS_BETWEEN_CP_AND_XF,
+  // Both CP and XF have normally-identical matrix index information.  We currently always
+  // use the CP one in the hardware renderers and the XF one in the software renderer,
+  // but testing is needed to find out which of these is actually used for what.
+  MISMATCHED_GPU_MATRIX_INDICES_BETWEEN_CP_AND_XF,
+
+  // Only a few games use the Bounding Box feature. Note that every game initializes the bounding
+  // box registers (using BPMEM_CLEARBBOX1/BPMEM_CLEARBBOX2) on startup, as part of the SDK, but
+  // only a few read them (from PE_BBOX_LEFT etc.)
+  READS_BOUNDING_BOX,
+
+  // A few games use invalid vertex component formats, but the two known cases (Fifa Street and
+  // Def Jam: Fight for New York, see https://bugs.dolphin-emu.org/issues/12719) only use invalid
+  // normal formats and lighting is disabled in those cases, so it doesn't end up mattering.
+  // It's possible other games use invalid formats, possibly on other vertex components.
+  INVALID_POSITION_COMPONENT_FORMAT,
+  INVALID_NORMAL_COMPONENT_FORMAT,
+  INVALID_TEXTURE_COORDINATE_COMPONENT_FORMAT,
+  INVALID_COLOR_COMPONENT_FORMAT,
+
   COUNT,
 };
 
@@ -103,6 +130,9 @@ public:
   // Generates a report for a special condition being hit by a game. This is automatically throttled
   // to once per game run.
   void ReportGameQuirk(GameQuirk quirk);
+
+  // Get the base builder for building a report
+  const Common::AnalyticsReportBuilder& BaseBuilder() const { return m_base_builder; }
 
   struct PerformanceSample
   {

@@ -1,19 +1,22 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
 #include "Common/CommonTypes.h"
 #include "Common/IniFile.h"
 #include "InputCommon/ControllerEmu/Control/Control.h"
+#include "InputCommon/ControllerInterface/CoreDevice.h"
 
 namespace ControllerEmu
 {
@@ -27,6 +30,9 @@ class NumericSetting;
 
 template <typename T>
 class SettingValue;
+
+using InputOverrideFunction = std::function<std::optional<ControlState>(
+    const std::string_view group_name, const std::string_view control_name, ControlState state)>;
 
 enum class GroupType
 {
@@ -43,7 +49,8 @@ enum class GroupType
   Shake,
   IMUAccelerometer,
   IMUGyroscope,
-  IMUCursor
+  IMUCursor,
+  IRPassthrough,
 };
 
 class ControlGroup
@@ -62,9 +69,9 @@ public:
                DefaultValue default_value = DefaultValue::AlwaysEnabled);
   virtual ~ControlGroup();
 
-  virtual void LoadConfig(IniFile::Section* sec, const std::string& defdev = "",
+  virtual void LoadConfig(Common::IniFile::Section* sec, const std::string& defdev = "",
                           const std::string& base = "");
-  virtual void SaveConfig(IniFile::Section* sec, const std::string& defdev = "",
+  virtual void SaveConfig(Common::IniFile::Section* sec, const std::string& defdev = "",
                           const std::string& base = "");
 
   void SetControlExpression(int index, const std::string& expression);

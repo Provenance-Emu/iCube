@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/DSPHLE/UCodes/UCodes.h"
 
@@ -17,9 +16,12 @@
 #include "Common/Hash.h"
 #include "Common/Logging/Log.h"
 #include "Common/Swap.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/DSP/DSPCodeUtil.h"
 #include "Core/HW/DSPHLE/DSPHLE.h"
+#include "Core/HW/DSPHLE/UCodes/AESnd.h"
+#include "Core/HW/DSPHLE/UCodes/ASnd.h"
 #include "Core/HW/DSPHLE/UCodes/AX.h"
 #include "Core/HW/DSPHLE/UCodes/AXWii.h"
 #include "Core/HW/DSPHLE/UCodes/CARD.h"
@@ -28,6 +30,7 @@
 #include "Core/HW/DSPHLE/UCodes/ROM.h"
 #include "Core/HW/DSPHLE/UCodes/Zelda.h"
 #include "Core/HW/Memmap.h"
+#include "Core/System.h"
 
 namespace DSP::HLE
 {
@@ -36,88 +39,88 @@ constexpr bool ExramRead(u32 address)
   return (address & 0x10000000) != 0;
 }
 
-u8 HLEMemory_Read_U8(u32 address)
+u8 HLEMemory_Read_U8(Memory::MemoryManager& memory, u32 address)
 {
   if (ExramRead(address))
-    return Memory::m_pEXRAM[address & Memory::GetExRamMask()];
+    return memory.GetEXRAM()[address & memory.GetExRamMask()];
 
-  return Memory::m_pRAM[address & Memory::GetRamMask()];
+  return memory.GetRAM()[address & memory.GetRamMask()];
 }
 
-void HLEMemory_Write_U8(u32 address, u8 value)
+void HLEMemory_Write_U8(Memory::MemoryManager& memory, u32 address, u8 value)
 {
   if (ExramRead(address))
-    Memory::m_pEXRAM[address & Memory::GetExRamMask()] = value;
+    memory.GetEXRAM()[address & memory.GetExRamMask()] = value;
   else
-    Memory::m_pRAM[address & Memory::GetRamMask()] = value;
+    memory.GetRAM()[address & memory.GetRamMask()] = value;
 }
 
-u16 HLEMemory_Read_U16LE(u32 address)
+u16 HLEMemory_Read_U16LE(Memory::MemoryManager& memory, u32 address)
 {
   u16 value;
 
   if (ExramRead(address))
-    std::memcpy(&value, &Memory::m_pEXRAM[address & Memory::GetExRamMask()], sizeof(u16));
+    std::memcpy(&value, &memory.GetEXRAM()[address & memory.GetExRamMask()], sizeof(u16));
   else
-    std::memcpy(&value, &Memory::m_pRAM[address & Memory::GetRamMask()], sizeof(u16));
+    std::memcpy(&value, &memory.GetRAM()[address & memory.GetRamMask()], sizeof(u16));
 
   return value;
 }
 
-u16 HLEMemory_Read_U16(u32 address)
+u16 HLEMemory_Read_U16(Memory::MemoryManager& memory, u32 address)
 {
-  return Common::swap16(HLEMemory_Read_U16LE(address));
+  return Common::swap16(HLEMemory_Read_U16LE(memory, address));
 }
 
-void HLEMemory_Write_U16LE(u32 address, u16 value)
+void HLEMemory_Write_U16LE(Memory::MemoryManager& memory, u32 address, u16 value)
 {
   if (ExramRead(address))
-    std::memcpy(&Memory::m_pEXRAM[address & Memory::GetExRamMask()], &value, sizeof(u16));
+    std::memcpy(&memory.GetEXRAM()[address & memory.GetExRamMask()], &value, sizeof(u16));
   else
-    std::memcpy(&Memory::m_pRAM[address & Memory::GetRamMask()], &value, sizeof(u16));
+    std::memcpy(&memory.GetRAM()[address & memory.GetRamMask()], &value, sizeof(u16));
 }
 
-void HLEMemory_Write_U16(u32 address, u16 value)
+void HLEMemory_Write_U16(Memory::MemoryManager& memory, u32 address, u16 value)
 {
-  HLEMemory_Write_U16LE(address, Common::swap16(value));
+  HLEMemory_Write_U16LE(memory, address, Common::swap16(value));
 }
 
-u32 HLEMemory_Read_U32LE(u32 address)
+u32 HLEMemory_Read_U32LE(Memory::MemoryManager& memory, u32 address)
 {
   u32 value;
 
   if (ExramRead(address))
-    std::memcpy(&value, &Memory::m_pEXRAM[address & Memory::GetExRamMask()], sizeof(u32));
+    std::memcpy(&value, &memory.GetEXRAM()[address & memory.GetExRamMask()], sizeof(u32));
   else
-    std::memcpy(&value, &Memory::m_pRAM[address & Memory::GetRamMask()], sizeof(u32));
+    std::memcpy(&value, &memory.GetRAM()[address & memory.GetRamMask()], sizeof(u32));
 
   return value;
 }
 
-u32 HLEMemory_Read_U32(u32 address)
+u32 HLEMemory_Read_U32(Memory::MemoryManager& memory, u32 address)
 {
-  return Common::swap32(HLEMemory_Read_U32LE(address));
+  return Common::swap32(HLEMemory_Read_U32LE(memory, address));
 }
 
-void HLEMemory_Write_U32LE(u32 address, u32 value)
+void HLEMemory_Write_U32LE(Memory::MemoryManager& memory, u32 address, u32 value)
 {
   if (ExramRead(address))
-    std::memcpy(&Memory::m_pEXRAM[address & Memory::GetExRamMask()], &value, sizeof(u32));
+    std::memcpy(&memory.GetEXRAM()[address & memory.GetExRamMask()], &value, sizeof(u32));
   else
-    std::memcpy(&Memory::m_pRAM[address & Memory::GetRamMask()], &value, sizeof(u32));
+    std::memcpy(&memory.GetRAM()[address & memory.GetRamMask()], &value, sizeof(u32));
 }
 
-void HLEMemory_Write_U32(u32 address, u32 value)
+void HLEMemory_Write_U32(Memory::MemoryManager& memory, u32 address, u32 value)
 {
-  HLEMemory_Write_U32LE(address, Common::swap32(value));
+  HLEMemory_Write_U32LE(memory, address, Common::swap32(value));
 }
 
-void* HLEMemory_Get_Pointer(u32 address)
+void* HLEMemory_Get_Pointer(Memory::MemoryManager& memory, u32 address)
 {
   if (ExramRead(address))
-    return &Memory::m_pEXRAM[address & Memory::GetExRamMask()];
+    return &memory.GetEXRAM()[address & memory.GetExRamMask()];
 
-  return &Memory::m_pRAM[address & Memory::GetRamMask()];
+  return &memory.GetRAM()[address & memory.GetRamMask()];
 }
 
 UCodeInterface::UCodeInterface(DSPHLE* dsphle, u32 crc)
@@ -180,14 +183,16 @@ void UCodeInterface::PrepareBootUCode(u32 mail)
     m_needs_resume_mail = true;
     m_upload_setup_in_progress = false;
 
-    const u32 ector_crc =
-        Common::HashEctor(static_cast<u8*>(HLEMemory_Get_Pointer(m_next_ucode.iram_mram_addr)),
-                          m_next_ucode.iram_size);
+    auto& memory = m_dsphle->GetSystem().GetMemory();
+    const u32 ector_crc = Common::HashEctor(
+        static_cast<u8*>(HLEMemory_Get_Pointer(memory, m_next_ucode.iram_mram_addr)),
+        m_next_ucode.iram_size);
 
-    if (SConfig::GetInstance().m_DumpUCode)
+    if (Config::Get(Config::MAIN_DUMP_UCODE))
     {
-      DSP::DumpDSPCode(Memory::GetPointer(m_next_ucode.iram_mram_addr), m_next_ucode.iram_size,
-                       ector_crc);
+      const u8* pointer =
+          memory.GetPointerForRange(m_next_ucode.iram_mram_addr, m_next_ucode.iram_size);
+      DSP::DumpDSPCode(pointer, m_next_ucode.iram_size, ector_crc);
     }
 
     DEBUG_LOG_FMT(DSPHLE, "PrepareBootUCode {:#010x}", ector_crc);
@@ -261,6 +266,7 @@ std::unique_ptr<UCodeInterface> UCodeFactory(u32 crc, DSPHLE* dsphle, bool wii)
   case 0x6ba3b3ea:  // GC IPL - PAL
   case 0x24b22038:  // GC IPL - NTSC
   case 0x2fcdf1ec:  // Zelda FSA - US
+  case 0xdf059f68:  // Pikmin 1 GC - US Demo
   case 0x4be6a5cb:  // Pikmin 1 GC - US
   case 0x267fd05a:  // Pikmin 1 GC - PAL
   case 0x42f64ac4:  // Luigi's Mansion - US
@@ -276,9 +282,32 @@ std::unique_ptr<UCodeInterface> UCodeFactory(u32 crc, DSPHLE* dsphle, bool wii)
   case 0xfa450138:  // Wii Sports - PAL
   case 0xadbc06bd:  // Elebits
   case 0x4cc52064:  // Bleach: Versus Crusade
-  case 0xd9c4bf34:  // WiiMenu
+  case 0xd9c4bf34:  // Wii System Menu 1.0
+  case 0x7699af32:  // Wii Startup Menu
     INFO_LOG_FMT(DSPHLE, "CRC {:08x}: Wii - AXWii chosen", crc);
     return std::make_unique<AXWiiUCode>(dsphle, crc);
+
+  case ASndUCode::HASH_2008:
+  case ASndUCode::HASH_2009:
+  case ASndUCode::HASH_2011:
+  case ASndUCode::HASH_2020:
+  case ASndUCode::HASH_2020_PAD:
+  case ASndUCode::HASH_DESERT_BUS_2011:
+  case ASndUCode::HASH_DESERT_BUS_2012:
+  case ASndUCode::HASH_2024:
+  case ASndUCode::HASH_2024_PAD:
+    INFO_LOG_FMT(DSPHLE, "CRC {:08x}: ASnd chosen (Homebrew)", crc);
+    return std::make_unique<ASndUCode>(dsphle, crc);
+
+  case AESndUCode::HASH_2010:
+  case AESndUCode::HASH_2012:
+  case AESndUCode::HASH_EDUKE32:
+  case AESndUCode::HASH_2020:
+  case AESndUCode::HASH_2020_PAD:
+  case AESndUCode::HASH_2022_PAD:
+  case AESndUCode::HASH_2023:
+    INFO_LOG_FMT(DSPHLE, "CRC {:08x}: AESnd chosen (Homebrew)", crc);
+    return std::make_unique<AESndUCode>(dsphle, crc);
 
   default:
     if (wii)

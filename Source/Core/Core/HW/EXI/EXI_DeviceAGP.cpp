@@ -1,6 +1,5 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/EXI/EXI_DeviceAGP.h"
 
@@ -9,18 +8,21 @@
 #include <string>
 #include <vector>
 
+#include "Common/Assert.h"
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
 #include "Common/IOFile.h"
 #include "Common/Logging/Log.h"
 #include "Common/StringUtil.h"
-#include "Core/ConfigManager.h"
+#include "Core/Config/MainSettings.h"
+#include "Core/HW/EXI/EXI.h"
 
 namespace ExpansionInterface
 {
-CEXIAgp::CEXIAgp(int index)
+CEXIAgp::CEXIAgp(Core::System& system, Slot slot) : IEXIDevice(system)
 {
-  m_slot = index;
+  ASSERT(IsMemcardSlot(slot));
+  m_slot = slot;
 
   // Create the ROM
   m_rom_size = 0;
@@ -36,9 +38,7 @@ CEXIAgp::~CEXIAgp()
   std::string filename;
   std::string ext;
   std::string gbapath;
-  SplitPath(m_slot == 0 ? SConfig::GetInstance().m_strGbaCartA :
-                          SConfig::GetInstance().m_strGbaCartB,
-            &path, &filename, &ext);
+  SplitPath(Config::Get(Config::GetInfoForAGPCartPath(m_slot)), &path, &filename, &ext);
   gbapath = path + filename;
 
   SaveFileFromEEPROM(gbapath + ".sav");
@@ -76,9 +76,7 @@ void CEXIAgp::LoadRom()
   std::string path;
   std::string filename;
   std::string ext;
-  SplitPath(m_slot == 0 ? SConfig::GetInstance().m_strGbaCartA :
-                          SConfig::GetInstance().m_strGbaCartB,
-            &path, &filename, &ext);
+  SplitPath(Config::Get(Config::GetInfoForAGPCartPath(m_slot)), &path, &filename, &ext);
   const std::string gbapath = path + filename;
   LoadFileToROM(gbapath + ext);
   INFO_LOG_FMT(EXPANSIONINTERFACE, "Loaded GBA rom: {} card: {}", gbapath, m_slot);
@@ -346,10 +344,10 @@ void CEXIAgp::ImmWrite(u32 _uData, u32 _uSize)
   case 0xAE010000:
   case 0xAE090000:                  // start DMA
     m_eeprom_write_status = false;  // ToDo: Verify with hardware which commands disable EEPROM CS
-  // Fall-through intentional
+    [[fallthrough]];
   case 0xAE0A0000:  // end DMA
     m_eeprom_pos = 0;
-  // Fall-through intentional
+    [[fallthrough]];
   default:
     m_current_cmd = _uData;
     m_return_pos = 0;

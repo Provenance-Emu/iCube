@@ -1,6 +1,5 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/Config/DefaultLocale.h"
 
@@ -18,6 +17,7 @@
 
 #include "Common/Assert.h"
 #include "Common/CommonTypes.h"
+#include "Common/Contains.h"
 #include "Common/StringUtil.h"
 #include "Core/Host.h"
 #include "DiscIO/Enums.h"
@@ -39,17 +39,13 @@ static std::optional<DiscIO::Language> TryParseLanguage(const std::string& local
   // Special handling of Chinese due to its two writing systems
   if (split_locale[0] == "zh")
   {
-    const auto locale_contains = [&split_locale](std::string_view str) {
-      return std::find(split_locale.cbegin(), split_locale.cend(), str) != split_locale.cend();
-    };
-
-    if (locale_contains("Hans"))
+    if (Common::Contains(split_locale, "Hans"))
       return DiscIO::Language::SimplifiedChinese;
-    if (locale_contains("Hant"))
+    if (Common::Contains(split_locale, "Hant"))
       return DiscIO::Language::TraditionalChinese;
 
     // Mainland China and Singapore use simplified characters
-    if (locale_contains("CN") || locale_contains("SG"))
+    if (Common::Contains(split_locale, "CN") || Common::Contains(split_locale, "SG"))
       return DiscIO::Language::SimplifiedChinese;
     else
       return DiscIO::Language::TraditionalChinese;
@@ -60,7 +56,7 @@ static std::optional<DiscIO::Language> TryParseLanguage(const std::string& local
       "ja", "en", "de", "fr", "es", "it", "nl", "zh", "zh", "ko",
   };
 
-  const auto it = std::find(LANGUAGES.cbegin(), LANGUAGES.cend(), split_locale[0]);
+  const auto it = std::ranges::find(LANGUAGES, split_locale[0]);
   if (it == LANGUAGES.cend())
     return std::nullopt;
 
@@ -80,11 +76,9 @@ static DiscIO::Language ComputeDefaultLanguage()
 
 static std::optional<std::string> TryParseCountryCode(const std::string& locale)
 {
-  const auto is_upper = [](char c) { return std::isupper(c, std::locale::classic()); };
-
   for (const std::string& part : SplitString(locale, '-'))
   {
-    if (part.size() == 2 && is_upper(part[0]) && is_upper(part[1]))
+    if (part.size() == 2 && Common::IsUpper(part[0]) && Common::IsUpper(part[1]))
       return part;
   }
 
@@ -143,7 +137,7 @@ static std::optional<u8> ComputeDefaultCountry()
   if (country == "BQ" || country == "CW" || country == "SX")
     country = "AN";
 
-  const auto it = std::find(COUNTRIES.cbegin(), COUNTRIES.cend(), country);
+  const auto it = std::ranges::find(COUNTRIES, country);
   if (it == COUNTRIES.cend())
     return std::nullopt;
 

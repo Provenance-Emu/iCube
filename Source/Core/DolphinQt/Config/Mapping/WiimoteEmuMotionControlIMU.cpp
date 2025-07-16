@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Config/Mapping/WiimoteEmuMotionControlIMU.h"
 
@@ -16,6 +15,7 @@
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 
 #include "DolphinQt/Config/ControllerInterface/ControllerInterfaceWindow.h"
+#include "DolphinQt/QtUtils/SetWindowDecorations.h"
 
 #include "InputCommon/InputConfig.h"
 
@@ -41,12 +41,15 @@ void WiimoteEmuMotionControlIMU::CreateMainLayout()
     ControllerInterfaceWindow* window = new ControllerInterfaceWindow(this);
     window->setAttribute(Qt::WA_DeleteOnClose, true);
     window->setWindowModality(Qt::WindowModality::WindowModal);
+    SetQWidgetWindowDecorations(window);
     window->show();
   });
 
   auto* groups_layout = new QHBoxLayout();
   groups_layout->addWidget(
       CreateGroupBox(Wiimote::GetWiimoteGroup(GetPort(), WiimoteEmu::WiimoteGroup::IMUPoint)));
+  groups_layout->addWidget(
+      CreateGroupBox(Wiimote::GetWiimoteGroup(GetPort(), WiimoteEmu::WiimoteGroup::IRPassthrough)));
   groups_layout->addWidget(CreateGroupBox(
       Wiimote::GetWiimoteGroup(GetPort(), WiimoteEmu::WiimoteGroup::IMUAccelerometer)));
   groups_layout->addWidget(

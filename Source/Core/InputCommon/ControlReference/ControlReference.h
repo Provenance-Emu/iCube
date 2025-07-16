@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -9,6 +8,12 @@
 
 #include "InputCommon/ControlReference/ExpressionParser.h"
 #include "InputCommon/ControllerInterface/CoreDevice.h"
+
+namespace ControllerEmu
+{
+template <typename T>
+T ControlStateCast(ControlState value);
+}
 
 // ControlReference
 //
@@ -32,7 +37,10 @@ public:
   virtual bool IsInput() const = 0;
 
   template <typename T>
-  T GetState();
+  T GetState()
+  {
+    return ControllerEmu::ControlStateCast<T>(State());
+  }
 
   int BoundCount() const;
   ciface::ExpressionParser::ParseStatus GetParseStatus() const;
@@ -42,33 +50,37 @@ public:
   // Returns a human-readable error description when the given expression is invalid.
   std::optional<std::string> SetExpression(std::string expr);
 
-  ControlState range;
+  ControlState range = 1;
 
 protected:
   ControlReference();
   std::string m_expression;
   std::unique_ptr<ciface::ExpressionParser::Expression> m_parsed_expression;
-  ciface::ExpressionParser::ParseStatus m_parse_status;
+  ciface::ExpressionParser::ParseStatus m_parse_status =
+      ciface::ExpressionParser::ParseStatus::EmptyExpression;
 };
 
+namespace ControllerEmu
+{
 template <>
-inline bool ControlReference::GetState<bool>()
+inline bool ControlStateCast<bool>(ControlState value)
 {
   // Round to nearest of 0 or 1.
-  return std::lround(State()) > 0;
+  return std::lround(value) > 0;
 }
 
 template <>
-inline int ControlReference::GetState<int>()
+inline int ControlStateCast<int>(ControlState value)
 {
-  return std::lround(State());
+  return std::lround(value);
 }
 
 template <>
-inline ControlState ControlReference::GetState<ControlState>()
+inline ControlState ControlStateCast<ControlState>(ControlState value)
 {
-  return State();
+  return value;
 }
+}  // namespace ControllerEmu
 
 //
 // InputReference

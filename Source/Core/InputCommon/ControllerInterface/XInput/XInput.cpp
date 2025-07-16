@@ -1,6 +1,5 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "InputCommon/ControllerInterface/XInput/XInput.h"
 
@@ -265,7 +264,7 @@ std::string Device::GetSource() const
   return "XInput";
 }
 
-void Device::UpdateInput()
+Core::DeviceRemoval Device::UpdateInput()
 {
   PXInputGetState(m_index, &m_state_in);
 
@@ -287,6 +286,8 @@ void Device::UpdateInput()
       break;
     }
   }
+
+  return Core::DeviceRemoval::Keep;
 }
 
 void Device::UpdateMotors()

@@ -11,3 +11,4 @@ add_library(ed25519
   sc.c
   sha512.c
   verify.c)
+dolphin_disable_warnings(ed25519)

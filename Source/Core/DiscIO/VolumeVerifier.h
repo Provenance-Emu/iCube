@@ -1,19 +1,19 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <future>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include <mbedtls/md5.h>
-#include <mbedtls/sha1.h>
 
 #include "Common/CommonTypes.h"
+#include "Common/Crypto/SHA1.h"
 #include "Core/IOS/ES/Formats.h"
 #include "DiscIO/DiscScrubber.h"
 #include "DiscIO/Volume.h"
@@ -79,7 +79,7 @@ private:
 
   struct PotentialMatch
   {
-    u64 size;
+    u64 size = 0;
     Hashes<std::vector<u8>> hashes;
   };
 
@@ -88,9 +88,9 @@ private:
   std::vector<PotentialMatch> ScanDatfile(const std::vector<u8>& data, const std::string& system);
 
   std::string m_game_id;
-  u16 m_revision;
-  u8 m_disc_number;
-  u64 m_size;
+  u16 m_revision = 0;
+  u8 m_disc_number = 0;
+  u64 m_size = 0;
 
   std::future<std::vector<PotentialMatch>> m_future;
   Result m_result;
@@ -127,6 +127,7 @@ public:
   VolumeVerifier(const Volume& volume, bool redump_verification, Hashes<bool> hashes_to_calculate);
   ~VolumeVerifier();
 
+  static Hashes<bool> GetDefaultHashesToCalculate();
   void Start();
   void Process();
   u64 GetBytesProcessed() const;
@@ -173,9 +174,9 @@ private:
 
   Hashes<bool> m_hashes_to_calculate{};
   bool m_calculating_any_hash = false;
-  unsigned long m_crc32_context = 0;
-  mbedtls_md5_context m_md5_context;
-  mbedtls_sha1_context m_sha1_context;
+  u32 m_crc32_context = 0;
+  mbedtls_md5_context m_md5_context{};
+  std::unique_ptr<Common::SHA1::Context> m_sha1_context;
 
   u64 m_excess_bytes = 0;
   std::vector<u8> m_data;
@@ -201,6 +202,7 @@ private:
   bool m_done = false;
   u64 m_progress = 0;
   u64 m_max_progress = 0;
+  DataSizeType m_data_size_type;
 };
 
 }  // namespace DiscIO

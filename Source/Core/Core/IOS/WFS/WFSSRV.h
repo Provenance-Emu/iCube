@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -29,10 +28,10 @@ enum
   WFS_FILE_IS_OPENED = -10032,  // Cannot perform operation on an opened file.
 };
 
-class WFSSRVDevice : public Device
+class WFSSRVDevice : public EmulationDevice
 {
 public:
-  WFSSRVDevice(Kernel& ios, const std::string& device_name);
+  WFSSRVDevice(EmulationKernel& ios, const std::string& device_name);
 
   std::optional<IPCReply> IOCtl(const IOCtlRequest& request) override;
 
@@ -85,10 +84,10 @@ private:
 
   struct FileDescriptor
   {
-    bool in_use;
+    bool in_use = false;
     std::string path;
-    int mode;
-    size_t position;
+    int mode = 0;
+    size_t position = 0;
     File::IOFile file;
 
     bool Open();

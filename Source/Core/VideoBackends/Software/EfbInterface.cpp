@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "VideoBackends/Software/EfbInterface.h"
 
@@ -88,7 +87,7 @@ static void SetPixelColorOnly(u32 offset, u8* rgb)
   break;
   case PixelFormat::RGB565_Z16:
   {
-    INFO_LOG_FMT(VIDEO, "RGB565_Z16 is not supported correctly yet");
+    // TODO: RGB565_Z16 is not supported correctly yet
     u32 src = *(u32*)rgb;
     u32* dst = (u32*)&efb[offset];
     u32 val = *dst & 0xff000000;
@@ -130,7 +129,7 @@ static void SetPixelAlphaColor(u32 offset, u8* color)
   break;
   case PixelFormat::RGB565_Z16:
   {
-    INFO_LOG_FMT(VIDEO, "RGB565_Z16 is not supported correctly yet");
+    // TODO: RGB565_Z16 is not supported correctly yet
     u32 src = *(u32*)color;
     u32* dst = (u32*)&efb[offset];
     u32 val = *dst & 0xff000000;
@@ -162,7 +161,7 @@ static u32 GetPixelColor(u32 offset)
            Convert6To8((src >> 18) & 0x3f) << 24;   // Red
 
   case PixelFormat::RGB565_Z16:
-    INFO_LOG_FMT(VIDEO, "RGB565_Z16 is not supported correctly yet");
+    // TODO: RGB565_Z16 is not supported correctly yet
     return 0xff | ((src & 0x00ffffff) << 8);
 
   default:
@@ -187,7 +186,7 @@ static void SetPixelDepth(u32 offset, u32 depth)
   break;
   case PixelFormat::RGB565_Z16:
   {
-    INFO_LOG_FMT(VIDEO, "RGB565_Z16 is not supported correctly yet");
+    // TODO: RGB565_Z16 is not supported correctly yet
     u32* dst = (u32*)&efb[offset];
     u32 val = *dst & 0xff000000;
     val |= depth & 0x00ffffff;
@@ -215,7 +214,7 @@ static u32 GetPixelDepth(u32 offset)
   break;
   case PixelFormat::RGB565_Z16:
   {
-    INFO_LOG_FMT(VIDEO, "RGB565_Z16 is not supported correctly yet");
+    // TODO: RGB565_Z16 is not supported correctly yet
     depth = (*(u32*)&efb[offset]) & 0x00ffffff;
   }
   break;
@@ -536,9 +535,14 @@ static yuv444 ConvertColorToYUV(u32 color)
 
   // GameCube/Wii uses the BT.601 standard algorithm for converting to YCbCr; see
   // http://www.equasys.de/colorconversion.html#YCbCr-RGBColorFormatConversion
-  return {static_cast<u8>(0.257f * red + 0.504f * green + 0.098f * blue),
-          static_cast<s8>(-0.148f * red + -0.291f * green + 0.439f * blue),
-          static_cast<s8>(0.439f * red + -0.368f * green + -0.071f * blue)};
+  // These numbers were determined by hardware testing
+  const u16 y = +66 * red + 129 * green + +25 * blue;
+  const s16 u = -38 * red + -74 * green + 112 * blue;
+  const s16 v = 112 * red + -94 * green + -18 * blue;
+  const u8 y_round = static_cast<u8>((y >> 8) + ((y >> 7) & 1));
+  const s8 u_round = static_cast<s8>((u >> 8) + ((u >> 7) & 1));
+  const s8 v_round = static_cast<s8>((v >> 8) + ((v >> 7) & 1));
+  return {y_round, u_round, v_round};
 }
 
 u32 GetDepth(u16 x, u16 y)
@@ -594,8 +598,8 @@ void EncodeXFB(u8* xfb_in_ram, u32 memory_stride, const MathUtil::Rectangle<int>
     //         In our implementation, the garbage just so happens to be the top or bottom row.
     //         Statistically, that could happen.
     const u16 y_prev = static_cast<u16>(std::max(clamp_top ? source_rect.top : 0, y - 1));
-    const u16 y_next =
-        static_cast<u16>(std::min<int>(clamp_bottom ? source_rect.bottom : EFB_HEIGHT, y + 1));
+    const u16 y_next = static_cast<u16>(
+        std::min<int>((clamp_bottom ? source_rect.bottom : EFB_HEIGHT) - 1, y + 1));
 
     // Get a scanline of YUV pixels in 4:4:4 format
     for (int i = 1, x = left; x < right; i++, x++)

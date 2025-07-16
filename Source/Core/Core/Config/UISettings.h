@@ -1,6 +1,5 @@
 // Copyright 2018 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -20,5 +19,6 @@ extern const Info<bool> MAIN_USE_DISCORD_PRESENCE;
 extern const Info<bool> MAIN_USE_GAME_COVERS;
 extern const Info<bool> MAIN_FOCUSED_HOTKEYS;
 extern const Info<bool> MAIN_RECURSIVE_ISO_PATHS;
+extern const Info<std::string> MAIN_CURRENT_STATE_PATH;
 
 }  // namespace Config

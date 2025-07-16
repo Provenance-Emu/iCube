@@ -1,12 +1,13 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/NetPlay/ChunkedProgressDialog.h"
 
 #include <algorithm>
 #include <cmath>
 #include <functional>
+
+#include <fmt/format.h>
 
 #include <QDialogButtonBox>
 #include <QGroupBox>
@@ -15,8 +16,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-#include "Common/StringUtil.h"
-
+#include "Common/Contains.h"
 #include "Core/NetPlayClient.h"
 #include "Core/NetPlayServer.h"
 
@@ -109,7 +109,7 @@ void ChunkedProgressDialog::show(const QString& title, const u64 data_size,
 
   for (const auto* player : client->GetPlayers())
   {
-    if (std::find(players.begin(), players.end(), player->pid) == players.end())
+    if (!Common::Contains(players, player->pid))
       continue;
 
     m_progress_bars[player->pid] = new QProgressBar;
@@ -126,7 +126,7 @@ void ChunkedProgressDialog::SetProgress(const int pid, const u64 progress)
 {
   QString player_name = GetPlayerNameFromPID(pid);
 
-  if (!m_status_labels.count(pid))
+  if (!m_status_labels.contains(pid))
     return;
 
   const float acquired = progress / 1024.0f / 1024.0f;
@@ -135,8 +135,8 @@ void ChunkedProgressDialog::SetProgress(const int pid, const u64 progress)
 
   m_status_labels[pid]->setText(tr("%1[%2]: %3/%4 MiB")
                                     .arg(player_name, QString::number(pid),
-                                         QString::fromStdString(StringFromFormat("%.2f", acquired)),
-                                         QString::fromStdString(StringFromFormat("%.2f", total))));
+                                         QString::fromStdString(fmt::format("{:.2f}", acquired)),
+                                         QString::fromStdString(fmt::format("{:.2f}", total))));
   m_progress_bars[pid]->setValue(prog);
 }
 

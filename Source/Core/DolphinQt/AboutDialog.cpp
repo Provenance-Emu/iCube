@@ -1,6 +1,7 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "DolphinQt/AboutDialog.h"
 
 #include <QLabel>
 #include <QTextEdit>
@@ -9,13 +10,22 @@
 
 #include "Common/Version.h"
 
-#include "DolphinQt/AboutDialog.h"
 #include "DolphinQt/Resources.h"
 
 AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent)
 {
   setWindowTitle(tr("About Dolphin"));
   setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
+
+  QString branch_str = QString::fromStdString(Common::GetScmBranchStr());
+  const int commits_ahead = Common::GetScmCommitsAheadMaster();
+  if (commits_ahead > 0)
+  {
+    branch_str = tr("%1 (%2)").arg(
+        branch_str,
+        // i18n: A positive number of version control commits made compared to some named branch
+        tr("%1 commit(s) ahead of %2").arg(commits_ahead).arg(QStringLiteral("master")));
+  }
 
   const QString text =
       QStringLiteral(R"(
@@ -42,17 +52,17 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent)
 </p>
 
 <p>
-<a href='https://github.com/dolphin-emu/dolphin/blob/master/license.txt'>%LICENSE%</a> |
+<a href='https://github.com/dolphin-emu/dolphin/blob/master/COPYING'>%LICENSE%</a> |
 <a href='https://github.com/dolphin-emu/dolphin/graphs/contributors'>%AUTHORS%</a> |
 <a href='https://forums.dolphin-emu.org/'>%SUPPORT%</a>
 )")
           .replace(QStringLiteral("%VERSION_STRING%"),
-                   QString::fromUtf8(Common::scm_desc_str.c_str()))
+                   QString::fromUtf8(Common::GetScmDescStr().c_str()))
           .replace(QStringLiteral("%BRANCH%"),
                    // i18n: "Branch" means the version control term, not a literal tree branch.
-                   tr("Branch: %1").arg(QString::fromUtf8(Common::scm_branch_str.c_str())))
+                   tr("Branch: %1").arg(branch_str))
           .replace(QStringLiteral("%REVISION%"),
-                   tr("Revision: %1").arg(QString::fromUtf8(Common::scm_rev_git_str.c_str())))
+                   tr("Revision: %1").arg(QString::fromUtf8(Common::GetScmRevGitStr().c_str())))
           .replace(QStringLiteral("%QT_VERSION%"),
                    tr("Using Qt %1").arg(QStringLiteral(QT_VERSION_STR)))
           .replace(QStringLiteral("%CHECK_FOR_UPDATES%"), tr("Check for updates"))
@@ -79,17 +89,18 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent)
               // in your translation, please use the type of curly quotes that's appropriate for
               // your language. If you aren't sure which type is appropriate, see
               // https://en.wikipedia.org/wiki/Quotation_mark#Specific_language_features
-              tr("\u00A9 2003-2015+ Dolphin Team. \u201cGameCube\u201d and \u201cWii\u201d are "
+              tr("\u00A9 2003-2024+ Dolphin Team. \u201cGameCube\u201d and \u201cWii\u201d are "
                  "trademarks of Nintendo. Dolphin is not affiliated with Nintendo in any way.")));
 
   QLabel* logo = new QLabel();
-  logo->setPixmap(Resources::GetMisc(Resources::MiscID::LogoLarge));
+  logo->setPixmap(Resources::GetAppIcon().pixmap(200, 200));
   logo->setContentsMargins(30, 0, 30, 0);
 
   QVBoxLayout* main_layout = new QVBoxLayout;
   QHBoxLayout* h_layout = new QHBoxLayout;
 
   setLayout(main_layout);
+  main_layout->setSizeConstraint(QLayout::SetFixedSize);
   main_layout->addLayout(h_layout);
   main_layout->addWidget(copyright);
   copyright->setAlignment(Qt::AlignCenter);

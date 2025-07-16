@@ -1,6 +1,7 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "InputCommon/InputConfig.h"
 
 #include <vector>
 
@@ -16,60 +17,43 @@
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerEmu/Setting/NumericSetting.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
-#include "InputCommon/InputConfig.h"
 #include "InputCommon/InputProfile.h"
 
 InputConfig::InputConfig(const std::string& ini_name, const std::string& gui_name,
-                         const std::string& profile_name)
-    : m_ini_name(ini_name), m_gui_name(gui_name), m_profile_name(profile_name)
+                         const std::string& profile_directory_name, const std::string& profile_key)
+    : m_ini_name(ini_name), m_gui_name(gui_name), m_profile_directory_name(profile_directory_name),
+      m_profile_key(profile_key)
 {
 }
 
 InputConfig::~InputConfig() = default;
 
-bool InputConfig::LoadConfig(bool isGC)
+bool InputConfig::LoadConfig()
 {
-  IniFile inifile;
+  Common::IniFile inifile;
   bool useProfile[MAX_BBMOTES] = {false, false, false, false, false};
   static constexpr std::array<std::string_view, MAX_BBMOTES> num = {"1", "2", "3", "4", "BB"};
   std::string profile[MAX_BBMOTES];
-  std::string path;
-
-#if defined(ANDROID)
-  bool use_ir_config = false;
-  std::string ir_values[3];
-#endif
 
   m_dynamic_input_tex_config_manager.Load();
 
   if (SConfig::GetInstance().GetGameID() != "00000000")
   {
-    std::string type;
-    if (isGC)
-    {
-      type = "Pad";
-      path = "Profiles/GCPad/";
-    }
-    else
-    {
-      type = "Wiimote";
-      path = "Profiles/Wiimote/";
-    }
+    const std::string profile_directory = GetUserProfileDirectoryPath();
 
-    IniFile game_ini = SConfig::GetInstance().LoadGameIni();
-    IniFile::Section* control_section = game_ini.GetOrCreateSection("Controls");
+    Common::IniFile game_ini = SConfig::GetInstance().LoadGameIni();
+    auto* control_section = game_ini.GetOrCreateSection("Controls");
 
     for (int i = 0; i < 4; i++)
     {
-      const auto profile_name = fmt::format("{}Profile{}", type, num[i]);
+      const auto profile_name = fmt::format("{}Profile{}", GetProfileKey(), num[i]);
 
       if (control_section->Exists(profile_name))
       {
         std::string profile_setting;
         if (control_section->Get(profile_name, &profile_setting))
         {
-          auto profiles = InputProfile::GetProfilesFromSetting(
-              profile_setting, File::GetUserPath(D_CONFIG_IDX) + path);
+          auto profiles = InputProfile::GetProfilesFromSetting(profile_setting, profile_directory);
 
           if (profiles.empty())
           {
@@ -84,18 +68,6 @@ bool InputConfig::LoadConfig(bool isGC)
         }
       }
     }
-#if defined(ANDROID)
-    // For use on android touchscreen IR pointer
-    // Check for IR values
-    if (control_section->Exists("IRTotalYaw") && control_section->Exists("IRTotalPitch") &&
-        control_section->Exists("IRVerticalOffset"))
-    {
-      use_ir_config = true;
-      control_section->Get("IRTotalYaw", &ir_values[0]);
-      control_section->Get("IRTotalPitch", &ir_values[1]);
-      control_section->Get("IRVerticalOffset", &ir_values[2]);
-    }
-#endif
   }
 
   if (inifile.Load(File::GetUserPath(D_CONFIG_IDX) + m_ini_name + ".ini") &&
@@ -106,7 +78,7 @@ bool InputConfig::LoadConfig(bool isGC)
     std::vector<std::string> controller_names;
     for (auto& controller : m_controllers)
     {
-      IniFile::Section config;
+      Common::IniFile::Section config;
       // Load settings from ini
       if (useProfile[n])
       {
@@ -123,15 +95,6 @@ bool InputConfig::LoadConfig(bool isGC)
       {
         config = *inifile.GetOrCreateSection(controller->GetName());
       }
-#if defined(ANDROID)
-      // Only set for wii pads
-      if (!isGC && use_ir_config)
-      {
-        config.Set("IR/Total Yaw", ir_values[0]);
-        config.Set("IR/Total Pitch", ir_values[1]);
-        config.Set("IR/Vertical Offset", ir_values[2]);
-      }
-#endif
       controller->LoadConfig(&config);
       controller->UpdateReferences(g_controller_interface);
       controller_names.push_back(controller->GetName());
@@ -145,8 +108,19 @@ bool InputConfig::LoadConfig(bool isGC)
   }
   else
   {
-    m_controllers[0]->LoadDefaults(g_controller_interface);
-    m_controllers[0]->UpdateReferences(g_controller_interface);
+    // Only load the default profile for the first controller and clear the others,
+    // otherwise they would all share the same mappings on the same (default) device
+    if (m_controllers.size() > 0)
+    {
+      m_controllers[0]->LoadDefaults(g_controller_interface);
+      m_controllers[0]->UpdateReferences(g_controller_interface);
+    }
+    for (size_t i = 1; i < m_controllers.size(); ++i)
+    {
+      // Calling the base version just clears all settings without overwriting them with a default
+      m_controllers[i]->EmulatedController::LoadDefaults(g_controller_interface);
+      m_controllers[i]->UpdateReferences(g_controller_interface);
+    }
     return false;
   }
 }
@@ -155,7 +129,7 @@ void InputConfig::SaveConfig()
 {
   std::string ini_filename = File::GetUserPath(D_CONFIG_IDX) + m_ini_name + ".ini";
 
-  IniFile inifile;
+  Common::IniFile inifile;
   inifile.Load(ini_filename);
 
   std::vector<std::string> controller_names;
@@ -185,6 +159,16 @@ bool InputConfig::ControllersNeedToBeCreated() const
   return m_controllers.empty();
 }
 
+std::string InputConfig::GetUserProfileDirectoryPath() const
+{
+  return fmt::format("{}Profiles/{}/", File::GetUserPath(D_CONFIG_IDX), GetProfileDirectoryName());
+}
+
+std::string InputConfig::GetSysProfileDirectoryPath() const
+{
+  return fmt::format("{}Profiles/{}/", File::GetSysDirectory(), GetProfileDirectoryName());
+}
+
 int InputConfig::GetControllerCount() const
 {
   return static_cast<int>(m_controllers.size());
@@ -212,16 +196,19 @@ bool InputConfig::IsControllerControlledByGamepadDevice(int index) const
 
   const auto& controller = m_controllers.at(index).get()->GetDefaultDevice();
 
+  // By default on Android, no device is selected
+  if (controller.source == "")
+    return false;
+
   // Filter out anything which obviously not a gamepad
   return !((controller.source == "Quartz")      // OSX Quartz Keyboard/Mouse
            || (controller.source == "XInput2")  // Linux and BSD Keyboard/Mouse
-           || (controller.source == "Android" &&
-               controller.name == "Touchscreen")  // Android Touchscreen
+           || (controller.source == "Android" && controller.cid <= 0)  // Android non-gamepad device
            || (controller.source == "DInput" &&
                controller.name == "Keyboard Mouse"));  // Windows Keyboard/Mouse
 }
 
-void InputConfig::GenerateControllerTextures(const IniFile& file)
+void InputConfig::GenerateControllerTextures(const Common::IniFile& file)
 {
   std::vector<std::string> controller_names;
   for (auto& controller : m_controllers)

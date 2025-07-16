@@ -1,14 +1,13 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
-#include <cinttypes>
+#include "Common/x64Emitter.h"
+
 #include <cstring>
 
 #include "Common/CPUDetect.h"
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
-#include "Common/x64Emitter.h"
 #include "Common/x64Reg.h"
 
 namespace Gen
@@ -106,26 +105,6 @@ void XEmitter::SetCodePtr(u8* ptr, u8* end, bool write_failed)
   code = ptr;
   m_code_end = end;
   m_write_failed = write_failed;
-}
-
-const u8* XEmitter::GetCodePtr() const
-{
-  return code;
-}
-
-u8* XEmitter::GetWritableCodePtr()
-{
-  return code;
-}
-
-const u8* XEmitter::GetCodeEnd() const
-{
-  return m_code_end;
-}
-
-u8* XEmitter::GetWritableCodeEnd()
-{
-  return m_code_end;
 }
 
 void XEmitter::Write8(u8 value)
@@ -310,7 +289,7 @@ void OpArg::WriteRest(XEmitter* emit, int extraBytes, X64Reg _operandReg,
     s64 distance = (s64)offset - (s64)ripAddr;
     ASSERT_MSG(DYNA_REC,
                (distance < 0x80000000LL && distance >= -0x80000000LL) || !warn_64bit_offset,
-               "WriteRest: op out of range (0x%" PRIx64 " uses 0x%" PRIx64 ")", ripAddr, offset);
+               "WriteRest: op out of range ({:#x} uses {:#x})", ripAddr, offset);
     s32 offs = (s32)distance;
     emit->Write32((u32)offs);
     return;
@@ -433,14 +412,14 @@ void XEmitter::Rex(int w, int r, int x, int b)
     Write8(rx);
 }
 
-void XEmitter::JMP(const u8* addr, bool force5Bytes)
+void XEmitter::JMP(const u8* addr, const Jump jump)
 {
   u64 fn = (u64)addr;
-  if (!force5Bytes)
+  if (jump == Jump::Short)
   {
     s64 distance = (s64)(fn - ((u64)code + 2));
     ASSERT_MSG(DYNA_REC, distance >= -0x80 && distance < 0x80,
-               "Jump target too far away, needs force5Bytes = true");
+               "Jump::Short target too far away ({}), needs Jump::Near", distance);
     // 8 bits will do
     Write8(0xEB);
     Write8((u8)(s8)distance);
@@ -450,7 +429,7 @@ void XEmitter::JMP(const u8* addr, bool force5Bytes)
     s64 distance = (s64)(fn - ((u64)code + 5));
 
     ASSERT_MSG(DYNA_REC, distance >= -0x80000000LL && distance < 0x80000000LL,
-               "Jump target too far away, needs indirect register");
+               "Jump::Near target too far away ({}), needs indirect register", distance);
     Write8(0xE9);
     Write32((u32)(s32)distance);
   }
@@ -489,7 +468,7 @@ void XEmitter::CALL(const void* fnptr)
 {
   u64 distance = u64(fnptr) - (u64(code) + 5);
   ASSERT_MSG(DYNA_REC, distance < 0x0000000080000000ULL || distance >= 0xFFFFFFFF80000000ULL,
-             "CALL out of range (%p calls %p)", code, fnptr);
+             "CALL out of range ({} calls {})", fmt::ptr(code), fmt::ptr(fnptr));
   Write8(0xE8);
   Write32(u32(distance));
 }
@@ -511,12 +490,13 @@ FixupBranch XEmitter::CALL()
   return branch;
 }
 
-FixupBranch XEmitter::J(bool force5bytes)
+FixupBranch XEmitter::J(const Jump jump)
 {
   FixupBranch branch;
-  branch.type = force5bytes ? FixupBranch::Type::Branch32Bit : FixupBranch::Type::Branch8Bit;
-  branch.ptr = code + (force5bytes ? 5 : 2);
-  if (!force5bytes)
+  const bool is_near_jump = jump == Jump::Near;
+  branch.type = is_near_jump ? FixupBranch::Type::Branch32Bit : FixupBranch::Type::Branch8Bit;
+  branch.ptr = code + (is_near_jump ? 5 : 2);
+  if (!is_near_jump)
   {
     // 8 bits will do
     Write8(0xEB);
@@ -537,12 +517,13 @@ FixupBranch XEmitter::J(bool force5bytes)
   return branch;
 }
 
-FixupBranch XEmitter::J_CC(CCFlags conditionCode, bool force5bytes)
+FixupBranch XEmitter::J_CC(CCFlags conditionCode, const Jump jump)
 {
   FixupBranch branch;
-  branch.type = force5bytes ? FixupBranch::Type::Branch32Bit : FixupBranch::Type::Branch8Bit;
-  branch.ptr = code + (force5bytes ? 6 : 2);
-  if (!force5bytes)
+  const bool is_near_jump = jump == Jump::Near;
+  branch.type = is_near_jump ? FixupBranch::Type::Branch32Bit : FixupBranch::Type::Branch8Bit;
+  branch.ptr = code + (is_near_jump ? 6 : 2);
+  if (!is_near_jump)
   {
     // 8 bits will do
     Write8(0x70 + conditionCode);
@@ -572,7 +553,7 @@ void XEmitter::J_CC(CCFlags conditionCode, const u8* addr)
   {
     distance = (s64)(fn - ((u64)code + 6));
     ASSERT_MSG(DYNA_REC, distance >= -0x80000000LL && distance < 0x80000000LL,
-               "Jump target too far away, needs indirect register");
+               "Jump target too far away ({}), needs indirect register", distance);
     Write8(0x0F);
     Write8(0x80 + conditionCode);
     Write32((u32)(s32)distance);
@@ -593,14 +574,14 @@ void XEmitter::SetJumpTarget(const FixupBranch& branch)
   {
     s64 distance = (s64)(code - branch.ptr);
     ASSERT_MSG(DYNA_REC, distance >= -0x80 && distance < 0x80,
-               "Jump target too far away, needs force5Bytes = true");
+               "Jump::Short target too far away ({}), needs Jump::Near", distance);
     branch.ptr[-1] = (u8)(s8)distance;
   }
   else if (branch.type == FixupBranch::Type::Branch32Bit)
   {
     s64 distance = (s64)(code - branch.ptr);
     ASSERT_MSG(DYNA_REC, distance >= -0x80000000LL && distance < 0x80000000LL,
-               "Jump target too far away, needs indirect register");
+               "Jump::Near target too far away ({}), needs indirect register", distance);
 
     s32 valid_distance = static_cast<s32>(distance);
     std::memcpy(&branch.ptr[-4], &valid_distance, sizeof(s32));
@@ -919,7 +900,7 @@ void XEmitter::UD2()
 void XEmitter::PREFETCH(PrefetchLevel level, OpArg arg)
 {
   ASSERT_MSG(DYNA_REC, !arg.IsImm(), "PREFETCH - Imm argument");
-  arg.operandReg = (u8)level;
+  arg.operandReg = static_cast<u8>(level);
   arg.WriteREX(this, 0, 0);
   Write8(0x0F);
   Write8(0x18);
@@ -1535,7 +1516,7 @@ void OpArg::WriteNormalOp(XEmitter* emit, bool toRM, NormalOp op, const OpArg& o
     }
     else
     {
-      ASSERT_MSG(DYNA_REC, 0, "WriteNormalOp - Unhandled case %d %d", operand.scale, bits);
+      ASSERT_MSG(DYNA_REC, 0, "WriteNormalOp - Unhandled case {} {}", operand.scale, bits);
     }
 
     // pass extension in REG of ModRM
@@ -3397,56 +3378,6 @@ void XEmitter::FSOverride()
 void XEmitter::GSOverride()
 {
   Write8(0x65);
-}
-
-void XEmitter::FWAIT()
-{
-  Write8(0x9B);
-}
-
-// TODO: make this more generic
-void XEmitter::WriteFloatLoadStore(int bits, FloatOp op, FloatOp op_80b, const OpArg& arg)
-{
-  int mf = 0;
-  ASSERT_MSG(DYNA_REC, !(bits == 80 && op_80b == FloatOp::Invalid),
-             "WriteFloatLoadStore: 80 bits not supported for this instruction");
-  switch (bits)
-  {
-  case 32:
-    mf = 0;
-    break;
-  case 64:
-    mf = 4;
-    break;
-  case 80:
-    mf = 2;
-    break;
-  default:
-    ASSERT_MSG(DYNA_REC, 0, "WriteFloatLoadStore: invalid bits (should be 32/64/80)");
-  }
-  Write8(0xd9 | mf);
-  // x87 instructions use the reg field of the ModR/M byte as opcode:
-  if (bits == 80)
-    op = op_80b;
-  arg.WriteRest(this, 0, static_cast<X64Reg>(op));
-}
-
-void XEmitter::FLD(int bits, const OpArg& src)
-{
-  WriteFloatLoadStore(bits, FloatOp::LD, FloatOp::LD80, src);
-}
-void XEmitter::FST(int bits, const OpArg& dest)
-{
-  WriteFloatLoadStore(bits, FloatOp::ST, FloatOp::Invalid, dest);
-}
-void XEmitter::FSTP(int bits, const OpArg& dest)
-{
-  WriteFloatLoadStore(bits, FloatOp::STP, FloatOp::STP80, dest);
-}
-void XEmitter::FNSTSW_AX()
-{
-  Write8(0xDF);
-  Write8(0xE0);
 }
 
 void XEmitter::RDTSC()

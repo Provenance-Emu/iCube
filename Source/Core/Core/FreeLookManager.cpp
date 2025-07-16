@@ -1,16 +1,22 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/FreeLookManager.h"
+
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include "Common/Common.h"
 #include "Common/CommonTypes.h"
 #include "Common/Config/Config.h"
+#include "Common/ScopeGuard.h"
 
+#include "Core/Config/FreeLookSettings.h"
 #include "Core/ConfigManager.h"
+#include "Core/Core.h"
 #include "Core/FreeLookConfig.h"
 
+#include "InputCommon/ControlReference/ControlReference.h"
 #include "InputCommon/ControllerEmu/ControlGroup/Buttons.h"
 #include "InputCommon/ControllerEmu/ControlGroup/IMUGyroscope.h"
 #include "InputCommon/InputConfig.h"
@@ -78,31 +84,33 @@ enum GyroButtons
 
 FreeLookController::FreeLookController(const unsigned int index) : m_index(index)
 {
+  using Translatability = ControllerEmu::Translatability;
+
   groups.emplace_back(m_move_buttons = new ControllerEmu::Buttons(_trans("Move")));
 
-  m_move_buttons->AddInput(ControllerEmu::Translate, _trans("Up"));
-  m_move_buttons->AddInput(ControllerEmu::Translate, _trans("Down"));
-  m_move_buttons->AddInput(ControllerEmu::Translate, _trans("Left"));
-  m_move_buttons->AddInput(ControllerEmu::Translate, _trans("Right"));
-  m_move_buttons->AddInput(ControllerEmu::Translate, _trans("Forward"));
-  m_move_buttons->AddInput(ControllerEmu::Translate, _trans("Backward"));
+  m_move_buttons->AddInput(Translatability::Translate, _trans("Up"));
+  m_move_buttons->AddInput(Translatability::Translate, _trans("Down"));
+  m_move_buttons->AddInput(Translatability::Translate, _trans("Left"));
+  m_move_buttons->AddInput(Translatability::Translate, _trans("Right"));
+  m_move_buttons->AddInput(Translatability::Translate, _trans("Forward"));
+  m_move_buttons->AddInput(Translatability::Translate, _trans("Backward"));
 
   groups.emplace_back(m_speed_buttons = new ControllerEmu::Buttons(_trans("Speed")));
 
-  m_speed_buttons->AddInput(ControllerEmu::Translate, _trans("Decrease"));
-  m_speed_buttons->AddInput(ControllerEmu::Translate, _trans("Increase"));
-  m_speed_buttons->AddInput(ControllerEmu::Translate, _trans("Reset"));
+  m_speed_buttons->AddInput(Translatability::Translate, _trans("Decrease"));
+  m_speed_buttons->AddInput(Translatability::Translate, _trans("Increase"));
+  m_speed_buttons->AddInput(Translatability::Translate, _trans("Reset"));
 
   groups.emplace_back(m_other_buttons = new ControllerEmu::Buttons(_trans("Other")));
 
-  m_other_buttons->AddInput(ControllerEmu::Translate, _trans("Reset View"));
+  m_other_buttons->AddInput(Translatability::Translate, _trans("Reset View"));
 
   groups.emplace_back(m_fov_buttons = new ControllerEmu::Buttons(_trans("Field of View")));
 
-  m_fov_buttons->AddInput(ControllerEmu::Translate, _trans("Increase X"));
-  m_fov_buttons->AddInput(ControllerEmu::Translate, _trans("Decrease X"));
-  m_fov_buttons->AddInput(ControllerEmu::Translate, _trans("Increase Y"));
-  m_fov_buttons->AddInput(ControllerEmu::Translate, _trans("Decrease Y"));
+  m_fov_buttons->AddInput(Translatability::Translate, _trans("Increase X"));
+  m_fov_buttons->AddInput(Translatability::Translate, _trans("Decrease X"));
+  m_fov_buttons->AddInput(Translatability::Translate, _trans("Increase Y"));
+  m_fov_buttons->AddInput(Translatability::Translate, _trans("Decrease Y"));
 
   groups.emplace_back(m_rotation_gyro = new ControllerEmu::IMUGyroscope(
                           _trans("Incremental Rotation"), _trans("Incremental Rotation")));
@@ -113,12 +121,18 @@ std::string FreeLookController::GetName() const
   return std::string("FreeLook") + char('1' + m_index);
 }
 
+InputConfig* FreeLookController::GetConfig() const
+{
+  return FreeLook::GetInputConfig();
+}
+
 void FreeLookController::LoadDefaults(const ControllerInterface& ciface)
 {
   EmulatedController::LoadDefaults(ciface);
 
+#ifndef ANDROID
   auto hotkey_string = [](std::vector<std::string> inputs) {
-    return "@(" + JoinStrings(inputs, "+") + ')';
+    return fmt::format("@({})", fmt::join(inputs, "+"));
   };
 
   m_move_buttons->SetControlExpression(MoveButtons::Up, hotkey_string({"Shift", "E"}));
@@ -143,11 +157,17 @@ void FreeLookController::LoadDefaults(const ControllerInterface& ciface)
   m_fov_buttons->SetControlExpression(FieldOfViewButtons::DecreaseY,
                                       hotkey_string({"Shift", "`Axis Z-`"}));
 
+  // Left Click
 #if defined HAVE_X11 && HAVE_X11
   m_rotation_gyro->SetControlExpression(GyroButtons::PitchUp,
                                         "if(`Click 3`,`RelativeMouse Y-` * 0.10, 0)");
   m_rotation_gyro->SetControlExpression(GyroButtons::PitchDown,
                                         "if(`Click 3`,`RelativeMouse Y+` * 0.10, 0)");
+#elif defined(__APPLE__)
+  m_rotation_gyro->SetControlExpression(GyroButtons::PitchUp,
+                                        "if(`Left Click`,`RelativeMouse Y-` * 0.10, 0)");
+  m_rotation_gyro->SetControlExpression(GyroButtons::PitchDown,
+                                        "if(`Left Click`,`RelativeMouse Y+` * 0.10, 0)");
 #else
   m_rotation_gyro->SetControlExpression(GyroButtons::PitchUp,
                                         "if(`Click 1`,`RelativeMouse Y-` * 0.10, 0)");
@@ -155,21 +175,36 @@ void FreeLookController::LoadDefaults(const ControllerInterface& ciface)
                                         "if(`Click 1`,`RelativeMouse Y+` * 0.10, 0)");
 #endif
 
+  // Middle Click
+#ifdef __APPLE__
+  m_rotation_gyro->SetControlExpression(GyroButtons::RollLeft,
+                                        "if(`Middle Click`,`RelativeMouse X-` * 0.10, 0)");
+  m_rotation_gyro->SetControlExpression(GyroButtons::RollRight,
+                                        "if(`Middle Click`,`RelativeMouse X+` * 0.10, 0)");
+#else
   m_rotation_gyro->SetControlExpression(GyroButtons::RollLeft,
                                         "if(`Click 2`,`RelativeMouse X-` * 0.10, 0)");
   m_rotation_gyro->SetControlExpression(GyroButtons::RollRight,
                                         "if(`Click 2`,`RelativeMouse X+` * 0.10, 0)");
+#endif
 
+  // Right Click
 #if defined HAVE_X11 && HAVE_X11
   m_rotation_gyro->SetControlExpression(GyroButtons::YawLeft,
                                         "if(`Click 3`,`RelativeMouse X-` * 0.10, 0)");
   m_rotation_gyro->SetControlExpression(GyroButtons::YawRight,
                                         "if(`Click 3`,`RelativeMouse X+` * 0.10, 0)");
+#elif defined(__APPLE__)
+  m_rotation_gyro->SetControlExpression(GyroButtons::YawLeft,
+                                        "if(`Right Click`,`RelativeMouse X-` * 0.10, 0)");
+  m_rotation_gyro->SetControlExpression(GyroButtons::YawRight,
+                                        "if(`Right Click`,`RelativeMouse X+` * 0.10, 0)");
 #else
   m_rotation_gyro->SetControlExpression(GyroButtons::YawLeft,
                                         "if(`Click 1`,`RelativeMouse X-` * 0.10, 0)");
   m_rotation_gyro->SetControlExpression(GyroButtons::YawRight,
                                         "if(`Click 1`,`RelativeMouse X+` * 0.10, 0)");
+#endif
 #endif
 }
 
@@ -197,7 +232,21 @@ void FreeLookController::Update()
   if (!g_freelook_camera.IsActive())
     return;
 
+  auto* camera_controller = g_freelook_camera.GetController();
+  if (camera_controller->SupportsInput())
+  {
+    UpdateInput(static_cast<CameraControllerInput*>(camera_controller));
+  }
+}
+
+void FreeLookController::UpdateInput(CameraControllerInput* camera_controller)
+{
   const auto lock = GetStateLock();
+  // Preserve the old controller gate state
+  const auto old_gate = ControlReference::GetInputGate();
+  Common::ScopeGuard gate_guard{[old_gate] { ControlReference::SetInputGate(old_gate); }};
+  // Switch to the free look focus gate
+  Core::UpdateInputGate(!Config::Get(Config::FREE_LOOK_BACKGROUND_INPUT));
 
   float dt = 1.0;
   if (m_last_free_look_rotate_time)
@@ -220,53 +269,54 @@ void FreeLookController::Update()
   const auto gyro_motion_quat =
       Common::Quaternion::RotateXYZ(gyro_motion_rad_velocity_converted * dt);
 
-  g_freelook_camera.Rotate(gyro_motion_quat);
+  camera_controller->Rotate(gyro_motion_quat);
   if (m_move_buttons->controls[MoveButtons::Up]->GetState<bool>())
-    g_freelook_camera.MoveVertical(-g_freelook_camera.GetSpeed() * dt);
+    camera_controller->MoveVertical(-camera_controller->GetSpeed() * dt);
 
   if (m_move_buttons->controls[MoveButtons::Down]->GetState<bool>())
-    g_freelook_camera.MoveVertical(g_freelook_camera.GetSpeed() * dt);
+    camera_controller->MoveVertical(camera_controller->GetSpeed() * dt);
 
   if (m_move_buttons->controls[MoveButtons::Left]->GetState<bool>())
-    g_freelook_camera.MoveHorizontal(g_freelook_camera.GetSpeed() * dt);
+    camera_controller->MoveHorizontal(camera_controller->GetSpeed() * dt);
 
   if (m_move_buttons->controls[MoveButtons::Right]->GetState<bool>())
-    g_freelook_camera.MoveHorizontal(-g_freelook_camera.GetSpeed() * dt);
+    camera_controller->MoveHorizontal(-camera_controller->GetSpeed() * dt);
 
   if (m_move_buttons->controls[MoveButtons::Forward]->GetState<bool>())
-    g_freelook_camera.MoveForward(g_freelook_camera.GetSpeed() * dt);
+    camera_controller->MoveForward(camera_controller->GetSpeed() * dt);
 
   if (m_move_buttons->controls[MoveButtons::Backward]->GetState<bool>())
-    g_freelook_camera.MoveForward(-g_freelook_camera.GetSpeed() * dt);
+    camera_controller->MoveForward(-camera_controller->GetSpeed() * dt);
 
   if (m_fov_buttons->controls[FieldOfViewButtons::IncreaseX]->GetState<bool>())
-    g_freelook_camera.IncreaseFovX(g_freelook_camera.GetFovStepSize() * dt);
+    camera_controller->IncreaseFovX(camera_controller->GetFovStepSize() * dt);
 
   if (m_fov_buttons->controls[FieldOfViewButtons::DecreaseX]->GetState<bool>())
-    g_freelook_camera.IncreaseFovX(-1.0f * g_freelook_camera.GetFovStepSize() * dt);
+    camera_controller->IncreaseFovX(-1.0f * camera_controller->GetFovStepSize() * dt);
 
   if (m_fov_buttons->controls[FieldOfViewButtons::IncreaseY]->GetState<bool>())
-    g_freelook_camera.IncreaseFovY(g_freelook_camera.GetFovStepSize() * dt);
+    camera_controller->IncreaseFovY(camera_controller->GetFovStepSize() * dt);
 
   if (m_fov_buttons->controls[FieldOfViewButtons::DecreaseY]->GetState<bool>())
-    g_freelook_camera.IncreaseFovY(-1.0f * g_freelook_camera.GetFovStepSize() * dt);
+    camera_controller->IncreaseFovY(-1.0f * camera_controller->GetFovStepSize() * dt);
 
   if (m_speed_buttons->controls[SpeedButtons::Decrease]->GetState<bool>())
-    g_freelook_camera.ModifySpeed(g_freelook_camera.GetSpeed() * -0.9 * dt);
+    camera_controller->ModifySpeed(camera_controller->GetSpeed() * -0.9 * dt);
 
   if (m_speed_buttons->controls[SpeedButtons::Increase]->GetState<bool>())
-    g_freelook_camera.ModifySpeed(g_freelook_camera.GetSpeed() * 1.1 * dt);
+    camera_controller->ModifySpeed(camera_controller->GetSpeed() * 1.1 * dt);
 
   if (m_speed_buttons->controls[SpeedButtons::Reset]->GetState<bool>())
-    g_freelook_camera.ResetSpeed();
+    camera_controller->ResetSpeed();
 
   if (m_other_buttons->controls[OtherButtons::ResetView]->GetState<bool>())
-    g_freelook_camera.Reset();
+    camera_controller->Reset();
 }
 
 namespace FreeLook
 {
-static InputConfig s_config("FreeLookController", _trans("FreeLook"), "FreeLookController");
+static InputConfig s_config("FreeLookController", _trans("FreeLook"), "FreeLookController",
+                            "FreeLookController");
 InputConfig* GetInputConfig()
 {
   return &s_config;
@@ -290,12 +340,12 @@ void Initialize()
 
   FreeLook::GetConfig().Refresh();
 
-  s_config.LoadConfig(true);
+  s_config.LoadConfig();
 }
 
 void LoadInputConfig()
 {
-  s_config.LoadConfig(true);
+  s_config.LoadConfig();
 }
 
 bool IsInitialized()

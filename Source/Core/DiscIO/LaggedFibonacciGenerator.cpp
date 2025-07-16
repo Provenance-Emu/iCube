@@ -1,4 +1,4 @@
-// This file is under the public domain.
+// SPDX-License-Identifier: CC0-1.0
 
 #include "DiscIO/LaggedFibonacciGenerator.h"
 
@@ -78,8 +78,8 @@ bool LaggedFibonacciGenerator::GetSeed(const u32* data, size_t size, size_t data
   const size_t data_offset_mod_k = data_offset % LFG_K;
   const size_t data_offset_div_k = data_offset / LFG_K;
 
-  std::copy(data, data + LFG_K - data_offset_mod_k, lfg->m_buffer.data() + data_offset_mod_k);
-  std::copy(data + LFG_K - data_offset_mod_k, data + LFG_K, lfg->m_buffer.data());
+  std::copy_n(data, LFG_K - data_offset_mod_k, lfg->m_buffer.data() + data_offset_mod_k);
+  std::copy_n(data + LFG_K - data_offset_mod_k, data_offset_mod_k, lfg->m_buffer.data());
 
   lfg->Backward(0, data_offset_mod_k);
 

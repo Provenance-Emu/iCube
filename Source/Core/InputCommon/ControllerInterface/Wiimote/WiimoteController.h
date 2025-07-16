@@ -1,10 +1,10 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <vector>
@@ -33,8 +33,9 @@ public:
 
   std::string GetName() const override;
   std::string GetSource() const override;
+  int GetSortPriority() const override;
 
-  void UpdateInput() override;
+  Core::DeviceRemoval UpdateInput() override;
 
 private:
   using Clock = std::chrono::steady_clock;
@@ -125,7 +126,7 @@ private:
   {
     static u32 GetDesiredIRSensitivity();
 
-    void ProcessData(const std::array<WiimoteEmu::IRBasic, 2>&);
+    void ProcessData(const DataReportManipulator& manipulator);
     bool IsFullyConfigured() const;
 
     u32 current_sensitivity = u32(-1);
@@ -138,6 +139,9 @@ private:
     float distance = 0;
 
     bool is_hidden = true;
+
+    std::array<Common::Vec2, 4> raw_ir_object_position;
+    std::array<float, 4> raw_ir_object_size;
   };
 
   class ReportHandler
@@ -261,7 +265,7 @@ private:
   bool m_rumble = false;
 
   // For pulse of rumble motor to simulate multiple levels.
-  ControlState m_rumble_level = 0;
+  std::atomic<ControlState> m_rumble_level;
   Clock::time_point m_last_rumble_change = Clock::now();
 
   // Assume mode is disabled so one gets set.

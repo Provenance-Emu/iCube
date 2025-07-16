@@ -1,6 +1,5 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -13,10 +12,10 @@
 namespace IOS::HLE
 {
 // Interface for reading and changing network configuration (probably some other stuff as well)
-class NetNCDManageDevice : public Device
+class NetNCDManageDevice : public EmulationDevice
 {
 public:
-  NetNCDManageDevice(Kernel& ios, const std::string& device_name);
+  NetNCDManageDevice(EmulationKernel& ios, const std::string& device_name);
 
   std::optional<IPCReply> IOCtlV(const IOCtlVRequest& request) override;
 

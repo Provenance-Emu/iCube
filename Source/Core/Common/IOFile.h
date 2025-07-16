@@ -1,9 +1,9 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdio>
 #include <string>
@@ -13,6 +13,19 @@
 
 namespace File
 {
+enum class SeekOrigin
+{
+  Begin,
+  Current,
+  End,
+};
+
+enum class SharedAccess
+{
+  Default,
+  Read,
+};
+
 // simple wrapper for cstdlib file functions to
 // hopefully will make error checking easier
 // and make forgetting an fclose() harder
@@ -21,7 +34,8 @@ class IOFile
 public:
   IOFile();
   IOFile(std::FILE* file);
-  IOFile(const std::string& filename, const char openmode[]);
+  IOFile(const std::string& filename, const char openmode[],
+         SharedAccess sh = SharedAccess::Default);
 
   ~IOFile();
 
@@ -33,8 +47,11 @@ public:
 
   void Swap(IOFile& other) noexcept;
 
-  bool Open(const std::string& filename, const char openmode[]);
+  bool Open(const std::string& filename, const char openmode[],
+            SharedAccess sh = SharedAccess::Default);
   bool Close();
+
+  IOFile Duplicate(const char openmode[]) const;
 
   template <typename T>
   bool ReadArray(T* elements, size_t count, size_t* num_read = nullptr)
@@ -58,6 +75,18 @@ public:
     return m_good;
   }
 
+  template <typename T, std::size_t N>
+  bool ReadArray(std::array<T, N>* elements, size_t* num_read = nullptr)
+  {
+    return ReadArray(elements->data(), elements->size(), num_read);
+  }
+
+  template <typename T, std::size_t N>
+  bool WriteArray(const std::array<T, N>& elements)
+  {
+    return WriteArray(elements.data(), elements.size());
+  }
+
   bool ReadBytes(void* data, size_t length)
   {
     return ReadArray(reinterpret_cast<char*>(data), length);
@@ -77,17 +106,18 @@ public:
   std::FILE* GetHandle() { return m_file; }
   void SetHandle(std::FILE* file);
 
-  bool Seek(s64 off, int origin);
+  bool Seek(s64 offset, SeekOrigin origin);
   u64 Tell() const;
   u64 GetSize() const;
   bool Resize(u64 size);
   bool Flush();
 
   // clear error state
-  void Clear()
+  void ClearError()
   {
     m_good = true;
-    std::clearerr(m_file);
+    if (IsOpen())
+      std::clearerr(m_file);
   }
 
 private:

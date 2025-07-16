@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/SI/SI_DeviceGCController.h"
 
@@ -11,20 +10,24 @@
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 #include "Common/Swap.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/CoreTiming.h"
 #include "Core/HW/GCPad.h"
 #include "Core/HW/ProcessorInterface.h"
+#include "Core/HW/SI/SI.h"
 #include "Core/HW/SI/SI_Device.h"
 #include "Core/HW/SystemTimers.h"
 #include "Core/Movie.h"
 #include "Core/NetPlayProto.h"
+#include "Core/System.h"
 #include "InputCommon/GCPadStatus.h"
 
 namespace SerialInterface
 {
 // --- standard GameCube controller ---
-CSIDevice_GCController::CSIDevice_GCController(SIDevices device, int device_number)
-    : ISIDevice(device, device_number)
+CSIDevice_GCController::CSIDevice_GCController(Core::System& system, SIDevices device,
+                                               int device_number)
+    : ISIDevice(system, device, device_number)
 {
   // Here we set origin to perfectly centered values.
   // This purposely differs from real hardware which sets origin to current input state.
@@ -46,20 +49,20 @@ int CSIDevice_GCController::RunBuffer(u8* buffer, int request_length)
     return -1;
 
   // Read the command
-  EBufferCommands command = static_cast<EBufferCommands>(buffer[0]);
+  const auto command = static_cast<EBufferCommands>(buffer[0]);
 
   // Handle it
   switch (command)
   {
-  case CMD_RESET:
-  case CMD_ID:
+  case EBufferCommands::CMD_STATUS:
+  case EBufferCommands::CMD_RESET:
   {
     u32 id = Common::swap32(SI_GC_CONTROLLER);
     std::memcpy(buffer, &id, sizeof(id));
     return sizeof(id);
   }
 
-  case CMD_DIRECT:
+  case EBufferCommands::CMD_DIRECT:
   {
     INFO_LOG_FMT(SERIALINTERFACE, "PAD - Direct (Request length: {})", request_length);
     u32 high, low;
@@ -72,7 +75,7 @@ int CSIDevice_GCController::RunBuffer(u8* buffer, int request_length)
     return sizeof(high) + sizeof(low);
   }
 
-  case CMD_ORIGIN:
+  case EBufferCommands::CMD_ORIGIN:
   {
     INFO_LOG_FMT(SERIALINTERFACE, "PAD - Get Origin");
 
@@ -85,7 +88,7 @@ int CSIDevice_GCController::RunBuffer(u8* buffer, int request_length)
   }
 
   // Recalibrate (FiRES: i am not 100 percent sure about this)
-  case CMD_RECALIBRATE:
+  case EBufferCommands::CMD_RECALIBRATE:
   {
     INFO_LOG_FMT(SERIALINTERFACE, "PAD - Recalibrate");
 
@@ -97,11 +100,19 @@ int CSIDevice_GCController::RunBuffer(u8* buffer, int request_length)
     return sizeof(SOrigin);
   }
 
+  // GameID packet, no response needed, nothing to do
+  // On real hardware, this is used to configure the BlueRetro controler
+  // adapter, while licensed accessories ignore this command.
+  case EBufferCommands::CMD_SET_GAME_ID:
+  {
+    return 0;
+  }
+
   // DEFAULT
   default:
   {
-    ERROR_LOG_FMT(SERIALINTERFACE, "Unknown SI command     ({:#x})", command);
-    PanicAlertFmt("SI: Unknown command ({:#x})", command);
+    ERROR_LOG_FMT(SERIALINTERFACE, "Unknown SI command     ({:#x})", static_cast<u8>(command));
+    PanicAlertFmt("SI: Unknown command ({:#x})", static_cast<u8>(command));
   }
   break;
   }
@@ -109,27 +120,26 @@ int CSIDevice_GCController::RunBuffer(u8* buffer, int request_length)
   return 0;
 }
 
-void CSIDevice_GCController::HandleMoviePadStatus(GCPadStatus* pad_status)
+void CSIDevice_GCController::HandleMoviePadStatus(Movie::MovieManager& movie, int device_number,
+                                                  GCPadStatus* pad_status)
 {
-  Movie::CallGCInputManip(pad_status, m_device_number);
-
-  Movie::SetPolledDevice();
-  if (NetPlay_GetInput(m_device_number, pad_status))
+  movie.SetPolledDevice();
+  if (NetPlay_GetInput(device_number, pad_status))
   {
   }
-  else if (Movie::IsPlayingInput())
+  else if (movie.IsPlayingInput())
   {
-    Movie::PlayController(pad_status, m_device_number);
-    Movie::InputUpdate();
+    movie.PlayController(pad_status, device_number);
+    movie.InputUpdate();
   }
-  else if (Movie::IsRecordingInput())
+  else if (movie.IsRecordingInput())
   {
-    Movie::RecordInput(pad_status, m_device_number);
-    Movie::InputUpdate();
+    movie.RecordInput(pad_status, device_number);
+    movie.InputUpdate();
   }
   else
   {
-    Movie::CheckPadStatus(pad_status, m_device_number);
+    movie.CheckPadStatus(pad_status, device_number);
   }
 }
 
@@ -144,7 +154,7 @@ GCPadStatus CSIDevice_GCController::GetPadStatus()
     pad_status = Pad::GetStatus(m_device_number);
   }
 
-  HandleMoviePadStatus(&pad_status);
+  HandleMoviePadStatus(m_system.GetMovie(), m_device_number, &pad_status);
 
   // Our GCAdapter code sets PAD_GET_ORIGIN when a new device has been connected.
   // Watch for this to calibrate real controllers on connection.
@@ -160,15 +170,12 @@ GCPadStatus CSIDevice_GCController::GetPadStatus()
 // [00?SYXBA] [1LRZUDRL] [x] [y] [cx] [cy] [l] [r]
 //  |\_ ERR_LATCH (error latched - check SISR)
 //  |_ ERR_STATUS (error on last GetData or SendCmd?)
-bool CSIDevice_GCController::GetData(u32& hi, u32& low)
+DataResponse CSIDevice_GCController::GetData(u32& hi, u32& low)
 {
   GCPadStatus pad_status = GetPadStatus();
 
   if (!pad_status.isConnected)
-  {
-    hi = 0x80000000;
-    return true;
-  }
+    return DataResponse::ErrorNoResponse;
 
   if (HandleButtonCombos(pad_status) == COMBO_ORIGIN)
     pad_status.button |= PAD_GET_ORIGIN;
@@ -220,7 +227,7 @@ bool CSIDevice_GCController::GetData(u32& hi, u32& low)
     low |= pad_status.substickX << 24;  // All 8 bits
   }
 
-  return true;
+  return DataResponse::Success;
 }
 
 u32 CSIDevice_GCController::MapPadStatus(const GCPadStatus& pad_status)
@@ -249,18 +256,19 @@ CSIDevice_GCController::HandleButtonCombos(const GCPadStatus& pad_status)
   {
     m_last_button_combo = temp_combo;
     if (m_last_button_combo != COMBO_NONE)
-      m_timer_button_combo_start = CoreTiming::GetTicks();
+      m_timer_button_combo_start = m_system.GetCoreTiming().GetTicks();
   }
 
   if (m_last_button_combo != COMBO_NONE)
   {
-    const u64 current_time = CoreTiming::GetTicks();
-    if (u32(current_time - m_timer_button_combo_start) > SystemTimers::GetTicksPerSecond() * 3)
+    const u64 current_time = m_system.GetCoreTiming().GetTicks();
+    const u32 ticks_per_second = m_system.GetSystemTimers().GetTicksPerSecond();
+    if (u32(current_time - m_timer_button_combo_start) > ticks_per_second * 3)
     {
       if (m_last_button_combo == COMBO_RESET)
       {
         INFO_LOG_FMT(SERIALINTERFACE, "PAD - COMBO_RESET");
-        ProcessorInterface::ResetButton_Tap();
+        m_system.GetProcessorInterface().ResetButton_Tap();
       }
       else if (m_last_button_combo == COMBO_ORIGIN)
       {
@@ -291,13 +299,7 @@ void CSIDevice_GCController::SendCommand(u32 command, u8 poll)
 {
   UCommand controller_command(command);
 
-  switch (controller_command.command)
-  {
-  // Costis sent it in some demos :)
-  case 0x00:
-    break;
-
-  case CMD_WRITE:
+  if (static_cast<EDirectCommands>(controller_command.command) == EDirectCommands::CMD_WRITE)
   {
     const u32 type = controller_command.parameter1;  // 0 = stop, 1 = rumble, 2 = stop hard
 
@@ -306,10 +308,11 @@ void CSIDevice_GCController::SendCommand(u32 command, u8 poll)
 
     if (pad_num < 4)
     {
+      const SIDevices device = m_system.GetSerialInterface().GetDeviceType(pad_num);
       if (type == 1)
-        CSIDevice_GCController::Rumble(pad_num, 1.0);
+        CSIDevice_GCController::Rumble(pad_num, 1.0, device);
       else
-        CSIDevice_GCController::Rumble(pad_num, 0.0);
+        CSIDevice_GCController::Rumble(pad_num, 0.0, device);
     }
 
     if (poll == 0)
@@ -318,14 +321,11 @@ void CSIDevice_GCController::SendCommand(u32 command, u8 poll)
       INFO_LOG_FMT(SERIALINTERFACE, "PAD {} set to mode {}", m_device_number, m_mode);
     }
   }
-  break;
-
-  default:
+  else if (controller_command.command != 0x00)
   {
+    // Costis sent 0x00 in some demos :)
     ERROR_LOG_FMT(SERIALINTERFACE, "Unknown direct command     ({:#x})", command);
     PanicAlertFmt("SI: Unknown direct command");
-  }
-  break;
   }
 }
 
@@ -338,12 +338,12 @@ void CSIDevice_GCController::DoState(PointerWrap& p)
   p.Do(m_last_button_combo);
 }
 
-CSIDevice_TaruKonga::CSIDevice_TaruKonga(SIDevices device, int device_number)
-    : CSIDevice_GCController(device, device_number)
+CSIDevice_TaruKonga::CSIDevice_TaruKonga(Core::System& system, SIDevices device, int device_number)
+    : CSIDevice_GCController(system, device, device_number)
 {
 }
 
-bool CSIDevice_TaruKonga::GetData(u32& hi, u32& low)
+DataResponse CSIDevice_TaruKonga::GetData(u32& hi, u32& low)
 {
   CSIDevice_GCController::GetData(hi, low);
 
@@ -351,7 +351,7 @@ bool CSIDevice_TaruKonga::GetData(u32& hi, u32& low)
   // and all buttons except: A, B, X, Y, Start, R
   hi &= HI_BUTTON_MASK;
 
-  return true;
+  return DataResponse::Success;
 }
 
 }  // namespace SerialInterface

@@ -1,6 +1,7 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Core/HW/WiimoteReal/IOhidapi.h"
 
 #include <algorithm>
 
@@ -8,7 +9,6 @@
 #include "Common/Logging/Log.h"
 #include "Common/StringUtil.h"
 #include "Core/HW/WiimoteCommon/WiimoteHid.h"
-#include "Core/HW/WiimoteReal/IOhidapi.h"
 
 using namespace WiimoteCommon;
 using namespace WiimoteReal;
@@ -41,6 +41,13 @@ namespace WiimoteReal
 {
 WiimoteScannerHidapi::WiimoteScannerHidapi()
 {
+#ifdef __OpenBSD__
+  // OpenBSD renamed libhidapi's hidapi_init function because the system has its own USB library
+  // which contains a symbol with the same name. See:
+  // https://cvsweb.openbsd.org/ports/comms/libhidapi/patches/patch-hidapi_hidapi_h?rev=1.3&content-type=text/x-cvsweb-markup
+  // https://man.openbsd.org/usbhid.3
+#define hid_init hidapi_hid_init
+#endif
   int ret = hid_init();
   ASSERT_MSG(WIIMOTE, ret == 0, "Couldn't initialise hidapi.");
 }

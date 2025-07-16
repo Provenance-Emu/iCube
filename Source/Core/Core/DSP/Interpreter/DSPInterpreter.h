@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -33,8 +32,8 @@ public:
   int RunCycles(int cycles);
   int RunCyclesDebug(int cycles);
 
-  void WriteCR(u16 val);
-  u16 ReadCR();
+  void WriteControlRegister(u16 val);
+  u16 ReadControlRegister();
 
   void SetSRFlag(u16 flag);
   bool IsSRFlagSet(u16 flag) const;
@@ -71,7 +70,7 @@ public:
   void clrl(UDSPInstruction opc);
   void clrp(UDSPInstruction opc);
   void cmp(UDSPInstruction opc);
-  void cmpar(UDSPInstruction opc);
+  void cmpaxh(UDSPInstruction opc);
   void cmpi(UDSPInstruction opc);
   void cmpis(UDSPInstruction opc);
   void dar(UDSPInstruction opc);
@@ -150,6 +149,7 @@ public:
   void srri(UDSPInstruction opc);
   void srrn(UDSPInstruction opc);
   void srs(UDSPInstruction opc);
+  void srsh(UDSPInstruction opc);
   void sub(UDSPInstruction opc);
   void subarn(UDSPInstruction opc);
   void subax(UDSPInstruction opc);
@@ -225,19 +225,15 @@ private:
 
   void UpdateSR16(s16 value, bool carry = false, bool overflow = false, bool over_s32 = false);
   void UpdateSR64(s64 value, bool carry = false, bool overflow = false);
+  void UpdateSR64Add(s64 val1, s64 val2, s64 result);
+  void UpdateSR64Sub(s64 val1, s64 val2, s64 result);
   void UpdateSRLogicZero(bool value);
 
   u16 OpReadRegister(int reg_);
-  u16 OpReadRegisterAndSaturate(int reg) const;
   void OpWriteRegister(int reg_, u16 val);
 
   void ConditionalExtendAccum(int reg);
 
-  // The ext ops are calculated in parallel with the actual op. That means that
-  // both the main op and the ext op see the same register state as input. The
-  // output is simple as long as the main and ext ops don't change the same
-  // register. If they do the output is the bitwise OR of the result of both the
-  // main and ext ops.
   void WriteToBackLog(int i, int idx, u16 value);
   void ZeroWriteBackLog();
   void ZeroWriteBackLogPreserveAcc(u8 acc);

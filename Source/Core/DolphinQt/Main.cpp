@@ -1,13 +1,16 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #ifdef _WIN32
+#include <cstdio>
 #include <string>
 #include <vector>
 
 #include <Windows.h>
-#include <cstdio>
+#endif
+
+#ifdef __linux__
+#include <cstdlib>
 #endif
 
 #include <OptionParser.h>
@@ -25,11 +28,13 @@
 #include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
 #include "Core/DolphinAnalytics.h"
+#include "Core/System.h"
 
 #include "DolphinQt/Host.h"
 #include "DolphinQt/MainWindow.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
 #include "DolphinQt/QtUtils/RunOnObject.h"
+#include "DolphinQt/QtUtils/SetWindowDecorations.h"
 #include "DolphinQt/Resources.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/Translation.h"
@@ -42,21 +47,26 @@ static bool QtMsgAlertHandler(const char* caption, const char* text, bool yes_no
                               Common::MsgType style)
 {
   const bool called_from_cpu_thread = Core::IsCPUThread();
+  const bool called_from_gpu_thread = Core::IsGPUThread();
 
   std::optional<bool> r = RunOnObject(QApplication::instance(), [&] {
-    Common::ScopeGuard scope_guard(&Core::UndeclareAsCPUThread);
+    // If we were called from the CPU/GPU thread, set us as the CPU/GPU thread.
+    // This information is used in order to avoid deadlocks when calling e.g.
+    // Host::SetRenderFocus or Core::CPUThreadGuard. (Host::SetRenderFocus
+    // can get called automatically when a dialog steals the focus.)
+
+    Common::ScopeGuard cpu_scope_guard(&Core::UndeclareAsCPUThread);
+    Common::ScopeGuard gpu_scope_guard(&Core::UndeclareAsGPUThread);
+
+    if (!called_from_cpu_thread)
+      cpu_scope_guard.Dismiss();
+    if (!called_from_gpu_thread)
+      gpu_scope_guard.Dismiss();
+
     if (called_from_cpu_thread)
-    {
-      // Temporarily declare this as the CPU thread to avoid getting a deadlock if any DolphinQt
-      // code calls RunAsCPUThread while the CPU thread is blocked on this function returning.
-      // Notably, if the panic alert steals focus from RenderWidget, Host::SetRenderFocus gets
-      // called, which can attempt to use RunAsCPUThread to get us out of exclusive fullscreen.
       Core::DeclareAsCPUThread();
-    }
-    else
-    {
-      scope_guard.Dismiss();
-    }
+    if (called_from_gpu_thread)
+      Core::DeclareAsGPUThread();
 
     ModalMessageBox message_box(QApplication::activeWindow(), Qt::ApplicationModal);
     message_box.setWindowTitle(QString::fromUtf8(caption));
@@ -82,13 +92,14 @@ static bool QtMsgAlertHandler(const char* caption, const char* text, bool yes_no
       return QMessageBox::NoIcon;
     }());
 
+    SetQWidgetWindowDecorations(&message_box);
     const int button = message_box.exec();
     if (button == QMessageBox::Yes)
       return true;
 
     if (button == QMessageBox::Ignore)
     {
-      Common::SetEnableAlert(false);
+      Config::SetCurrent(Config::MAIN_USE_PANIC_HANDLERS, false);
       return true;
     }
 
@@ -99,18 +110,13 @@ static bool QtMsgAlertHandler(const char* caption, const char* text, bool yes_no
   return false;
 }
 
-#ifndef _WIN32
+#ifdef _WIN32
+#define main app_main
+#endif
+
 int main(int argc, char* argv[])
 {
-#else
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
-{
-  std::vector<std::string> utf8_args = CommandLineToUtf8Argv(GetCommandLineW());
-  const int utf8_argc = static_cast<int>(utf8_args.size());
-  std::vector<char*> utf8_argv(utf8_args.size());
-  for (size_t i = 0; i < utf8_args.size(); ++i)
-    utf8_argv[i] = utf8_args[i].data();
-
+#ifdef _WIN32
   const bool console_attached = AttachConsole(ATTACH_PARENT_PROCESS) != FALSE;
   HANDLE stdout_handle = ::GetStdHandle(STD_OUTPUT_HANDLE);
   if (console_attached && stdout_handle)
@@ -119,6 +125,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     freopen("CONOUT$", "w", stderr);
   }
 #endif
+
+  Core::DeclareAsHostThread();
 
 #ifdef __APPLE__
   // On macOS, a command line option matching the format "-psn_X_XXXXXX" is passed when
@@ -132,35 +140,26 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
   }
 #endif
 
-  auto parser = CommandLineParse::CreateParser(CommandLineParse::ParserOptions::IncludeGUIOptions);
-  const optparse::Values& options =
-#ifdef _WIN32
-      CommandLineParse::ParseArguments(parser.get(), utf8_argc, utf8_argv.data());
-#else
-      CommandLineParse::ParseArguments(parser.get(), argc, argv);
+#ifdef __linux__
+  // Qt 6.3+ has a bug which causes mouse inputs to not be registered in our XInput2 code.
+  // If we define QT_XCB_NO_XI2, Qt's xcb platform plugin no longer initializes its XInput
+  // code, which makes mouse inputs work again.
+  // For more information: https://bugs.dolphin-emu.org/issues/12913
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 3, 0))
+  setenv("QT_XCB_NO_XI2", "1", true);
 #endif
-  const std::vector<std::string> args = parser->args();
+#endif
 
-  QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-  QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
   QCoreApplication::setOrganizationName(QStringLiteral("Dolphin Emulator"));
   QCoreApplication::setOrganizationDomain(QStringLiteral("dolphin-emu.org"));
   QCoreApplication::setApplicationName(QStringLiteral("dolphin-emu"));
 
-#ifdef _WIN32
-  QApplication app(__argc, __argv);
-#else
+  // QApplication will parse arguments and remove any it recognizes as targeting Qt
   QApplication app(argc, argv);
-#endif
 
-#ifdef _WIN32
-  // On Windows, Qt 5's default system font (MS Shell Dlg 2) is outdated.
-  // Interestingly, the QMenu font is correct and comes from lfMenuFont
-  // (Segoe UI on English computers).
-  // So use it for the entire application.
-  // This code will become unnecessary and obsolete once we switch to Qt 6.
-  QApplication::setFont(QApplication::font("QMenu"));
-#endif
+  auto parser = CommandLineParse::CreateParser(CommandLineParse::ParserOptions::IncludeGUIOptions);
+  const optparse::Values& options = CommandLineParse::ParseArguments(parser.get(), argc, argv);
+  const std::vector<std::string> args = parser->args();
 
 #ifdef _WIN32
   FreeConsole();
@@ -181,7 +180,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
   // Whenever the event loop is about to go to sleep, dispatch the jobs
   // queued in the Core first.
   QObject::connect(QAbstractEventDispatcher::instance(), &QAbstractEventDispatcher::aboutToBlock,
-                   &app, &Core::HostDispatchJobs);
+                   &app, [] { Core::HostDispatchJobs(Core::System::GetInstance()); });
 
   std::optional<std::string> save_state_path;
   if (options.is_set("save_state"))
@@ -196,7 +195,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     const std::list<std::string> paths_list = options.all("exec");
     const std::vector<std::string> paths{std::make_move_iterator(std::begin(paths_list)),
                                          std::make_move_iterator(std::end(paths_list))};
-    boot = BootParameters::GenerateFromFile(paths, save_state_path);
+    boot = BootParameters::GenerateFromFile(
+        paths, BootSessionData(save_state_path, DeleteSavestateAfterBoot::No));
     game_specified = true;
   }
   else if (options.is_set("nand_title"))
@@ -215,7 +215,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
   }
   else if (!args.empty())
   {
-    boot = BootParameters::GenerateFromFile(args.front(), save_state_path);
+    boot = BootParameters::GenerateFromFile(
+        args.front(), BootSessionData(save_state_path, DeleteSavestateAfterBoot::No));
     game_specified = true;
   }
 
@@ -245,11 +246,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
   {
     DolphinAnalytics::Instance().ReportDolphinStart("qt");
 
-    MainWindow win{std::move(boot), static_cast<const char*>(options.get("movie"))};
-    Settings::Instance().SetCurrentUserStyle(Settings::Instance().GetCurrentUserStyle());
-    if (options.is_set("debugger"))
-      Settings::Instance().SetDebugModeEnabled(true);
-    win.Show();
+    Settings::Instance().InitDefaultPalette();
+    Settings::Instance().ApplyStyle();
+
+    MainWindow win{Core::System::GetInstance(), std::move(boot),
+                   static_cast<const char*>(options.get("movie"))};
 
 #if defined(USE_ANALYTICS) && USE_ANALYTICS
     if (!Config::Get(Config::MAIN_ANALYTICS_PERMISSION_ASKED))
@@ -272,6 +273,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                       "This authorization can be revoked at any time through Dolphin's "
                       "settings."));
 
+      SetQWidgetWindowDecorations(&analytics_prompt);
       const int answer = analytics_prompt.exec();
 
       Config::SetBase(Config::MAIN_ANALYTICS_PERMISSION_ASKED, true);
@@ -283,16 +285,32 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     if (!Settings::Instance().IsBatchModeEnabled())
     {
-      auto* updater = new Updater(&win);
+      auto* updater = new Updater(&win, Config::Get(Config::MAIN_AUTOUPDATE_UPDATE_TRACK),
+                                  Config::Get(Config::MAIN_AUTOUPDATE_HASH_OVERRIDE));
       updater->start();
     }
 
     retval = app.exec();
   }
 
-  Core::Shutdown();
+  Core::Shutdown(Core::System::GetInstance());
   UICommon::Shutdown();
   Host::GetInstance()->deleteLater();
 
   return retval;
 }
+
+#ifdef _WIN32
+int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
+{
+  std::vector<std::string> args = Common::CommandLineToUtf8Argv(GetCommandLineW());
+  const int argc = static_cast<int>(args.size());
+  std::vector<char*> argv(args.size());
+  for (size_t i = 0; i < args.size(); ++i)
+    argv[i] = args[i].data();
+
+  return main(argc, argv.data());
+}
+
+#undef main
+#endif

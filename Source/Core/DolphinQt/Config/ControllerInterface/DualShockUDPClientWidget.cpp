@@ -1,6 +1,5 @@
-// Copyright 2019 Dolphin Emulator Project5~5~5~
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// Copyright 2019 Dolphin Emulator Project
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Config/ControllerInterface/DualShockUDPClientWidget.h"
 
@@ -14,6 +13,8 @@
 
 #include "Common/Config/Config.h"
 #include "DolphinQt/Config/ControllerInterface/DualShockUDPClientAddServerDialog.h"
+#include "DolphinQt/QtUtils/NonDefaultQPushButton.h"
+#include "DolphinQt/QtUtils/SetWindowDecorations.h"
 #include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
 
 DualShockUDPClientWidget::DualShockUDPClientWidget()
@@ -33,10 +34,10 @@ void DualShockUDPClientWidget::CreateWidgets()
   m_server_list = new QListWidget();
   main_layout->addWidget(m_server_list);
 
-  m_add_server = new QPushButton(tr("Add..."));
+  m_add_server = new NonDefaultQPushButton(tr("Add..."));
   m_add_server->setEnabled(m_servers_enabled->isChecked());
 
-  m_remove_server = new QPushButton(tr("Remove"));
+  m_remove_server = new NonDefaultQPushButton(tr("Remove"));
   m_remove_server->setEnabled(m_servers_enabled->isChecked());
 
   QHBoxLayout* hlayout = new QHBoxLayout;
@@ -111,6 +112,7 @@ void DualShockUDPClientWidget::OnServerAdded()
   DualShockUDPClientAddServerDialog add_server_dialog(this);
   connect(&add_server_dialog, &DualShockUDPClientAddServerDialog::accepted, this,
           &DualShockUDPClientWidget::RefreshServerList);
+  SetQWidgetWindowDecorations(&add_server_dialog);
   add_server_dialog.exec();
 }
 

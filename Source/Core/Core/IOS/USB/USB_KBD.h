@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -15,10 +14,10 @@
 
 namespace IOS::HLE
 {
-class USB_KBD : public Device
+class USB_KBD : public EmulationDevice
 {
 public:
-  USB_KBD(Kernel& ios, const std::string& device_name);
+  USB_KBD(EmulationKernel& ios, const std::string& device_name);
 
   std::optional<IPCReply> Open(const OpenRequest& request) override;
   std::optional<IPCReply> Write(const ReadWriteRequest& request) override;

@@ -1,0 +1,305 @@
+/* Class = "UILabel"; text = "Specialized (Default)"; ObjectID = "175-Zc-acl"; */
+"175-Zc-acl.text" = "Specialized (既定)";
+
+/* Class = "UILabel"; text = "Hybrid Ubershaders"; ObjectID = "1ah-WU-oPm"; */
+"1ah-WU-oPm.text" = "Uber (統合) シェーダーを一部使用する";
+
+/* Class = "UINavigationItem"; title = "Enhancements"; ObjectID = "2MC-w7-N8M"; */
+"2MC-w7-N8M.title" = "画質向上の設定";
+
+/* Class = "UITableViewController"; title = "Graphics"; ObjectID = "3ou-aq-3cy"; */
+"3ou-aq-3cy.title" = "ビデオ";
+
+/* Class = "UILabel"; text = "Widescreen Hack"; ObjectID = "3uR-he-9oQ"; */
+"3uR-he-9oQ.text" = "疑似ワイドスクリーン化";
+
+/* Class = "UITableViewSection"; headerTitle = "Debugging"; ObjectID = "4Z6-T6-OQZ"; */
+"4Z6-T6-OQZ.headerTitle" = "デバッグ用";
+
+/* Class = "UILabel"; text = "Accuracy"; ObjectID = "4ka-N8-VJa"; */
+"4ka-N8-VJa.text" = "精度";
+
+/* Class = "UINavigationItem"; title = "Backend"; ObjectID = "5t3-Iy-oU4"; */
+"5t3-Iy-oU4.title" = "ビデオAPI";
+
+/* Class = "UILabel"; text = "Enable Graphics Mods"; ObjectID = "5xw-6d-ViV"; */
+"5xw-6d-ViV.text" = "グラフィック MOD を有効にする";
+
+/* Class = "UILabel"; text = "Stretch to Window"; ObjectID = "62w-is-knA"; */
+"62w-is-knA.text" = "ウィンドウに合わせる";
+
+/* Class = "UILabel"; text = "Show Statistics"; ObjectID = "8HC-kf-ec3"; */
+"8HC-kf-ec3.text" = "統計情報を表示";
+
+/* Class = "UILabel"; text = "Skip Presenting Duplicate Frames"; ObjectID = "8zt-QK-sIm"; */
+"8zt-QK-sIm.text" = "重複フレームの表示をスキップする";
+
+/* Class = "UITableViewSection"; headerTitle = "Experimental"; ObjectID = "AkE-Pg-Gcm"; */
+"AkE-Pg-Gcm.headerTitle" = "実験的";
+
+/* Class = "UILabel"; text = "Force 4:3"; ObjectID = "Ap2-15-1wO"; */
+"Ap2-15-1wO.text" = "強制的に 4:3 にする";
+
+/* Class = "UILabel"; text = "Default"; ObjectID = "Bgx-Al-0ab"; */
+"Bgx-Al-0ab.text" = "既定";
+
+/* Class = "UINavigationItem"; title = "Advanced"; ObjectID = "Cki-dS-34J"; */
+"Cki-dS-34J.title" = "高度な設定";
+
+/* Class = "UITableViewSection"; headerTitle = "Embedded Frame Buffer (EFB)"; ObjectID = "D4U-8E-AUb"; */
+"D4U-8E-AUb.headerTitle" = "Embedded Frame Buffer (内蔵フレームバッファ)";
+
+/* Class = "UILabel"; text = "General"; ObjectID = "Drd-Xo-R0y"; */
+"Drd-Xo-R0y.text" = "一般";
+
+/* Class = "UITableViewSection"; headerTitle = "Texture Cache"; ObjectID = "EWU-iq-iov"; */
+"EWU-iq-iov.headerTitle" = "Texture Cache";
+
+/* Class = "UILabel"; text = "1x"; ObjectID = "Ek7-iH-Byj"; */
+"Ek7-iH-Byj.text" = "1x";
+
+/* Class = "UILabel"; text = "Force 24-Bit Color"; ObjectID = "GOv-Af-lVT"; */
+"GOv-Af-lVT.text" = "強制24bitカラー化";
+
+/* Class = "UILabel"; text = "Enable API Validation Layers"; ObjectID = "Gox-HX-QPR"; */
+"Gox-HX-QPR.text" = "Enable API Validation Layers";
+
+/* Class = "UILabel"; text = "Load Custom Textures"; ObjectID = "HjZ-jk-3AV"; */
+"HjZ-jk-3AV.text" = "カスタムテクスチャを読み込む";
+
+/* Class = "UINavigationItem"; title = "Mode"; ObjectID = "Hs4-Zz-Akc"; */
+"Hs4-Zz-Akc.title" = "Mode";
+
+/* Class = "UILabel"; text = "Compile Shaders Before Starting"; ObjectID = "I9I-Kb-dHX"; */
+"I9I-Kb-dHX.text" = "ゲーム開始前にシェーダをコンパイルする";
+
+/* Class = "UILabel"; text = "Disable Copy Filter"; ObjectID = "IAv-Sg-WC9"; */
+"IAv-Sg-WC9.text" = "Disable Copy Filter";
+
+/* Class = "UILabel"; text = "Crop"; ObjectID = "IPn-me-zdc"; */
+"IPn-me-zdc.text" = "クロッピング";
+
+/* Class = "UILabel"; text = "Fast Depth Calculation"; ObjectID = "JR2-8x-N5Q"; */
+"JR2-8x-N5Q.text" = "深度の計算を高速に行う";
+
+/* Class = "UILabel"; text = "Skip Drawing"; ObjectID = "KKg-DO-e4A"; */
+"KKg-DO-e4A.text" = "Skip Drawing";
+
+/* Class = "UINavigationItem"; title = "Texture Filtering"; ObjectID = "Lbv-ea-nxa"; */
+"Lbv-ea-nxa.title" = "異方性フィルタリング";
+
+/* Class = "UILabel"; text = "Backend"; ObjectID = "MER-bC-y11"; */
+"MER-bC-y11.text" = "ビデオAPI";
+
+/* Class = "UILabel"; text = "Mode"; ObjectID = "N7K-iV-uV4"; */
+"N7K-iV-uV4.text" = "Mode";
+
+/* Class = "UILabel"; text = "Auto"; ObjectID = "NNC-VS-CIv"; */
+"NNC-VS-CIv.text" = "自動";
+
+/* Class = "UITableViewSection"; headerTitle = "Utility"; ObjectID = "NYe-Cu-GAn"; */
+"NYe-Cu-GAn.headerTitle" = "ユーティリティ";
+
+/* Class = "UILabel"; text = "GPU Texture Decoding"; ObjectID = "NhS-TO-UAT"; */
+"NhS-TO-UAT.text" = "GPU上でテクスチャをデコードする";
+
+/* Class = "UILabel"; text = "V-Sync"; ObjectID = "ObU-c2-Zq9"; */
+"ObU-c2-Zq9.text" = "垂直同期 (V-Sync)";
+
+/* Class = "UINavigationItem"; title = "Internal Resolution"; ObjectID = "QIU-Sb-PQP"; */
+"QIU-Sb-PQP.title" = "レンダリング解像度の変更";
+
+/* Class = "UILabel"; text = "Defer EFB Copies to RAM"; ObjectID = "Sxf-YO-1Uy"; */
+"Sxf-YO-1Uy.text" = "メモリへのコピーを遅延させる";
+
+/* Class = "UILabel"; text = "Backend"; ObjectID = "UlC-mb-fXU"; */
+"UlC-mb-fXU.text" = "ビデオAPI";
+
+/* Class = "UITableViewSection"; headerTitle = "Misc"; ObjectID = "VK6-g2-KCD"; */
+"VK6-g2-KCD.headerTitle" = "その他";
+
+/* Class = "UINavigationItem"; title = "General"; ObjectID = "VoE-VE-9iq"; */
+"VoE-VE-9iq.title" = "一般";
+
+/* Class = "UILabel"; text = "Texture Filtering"; ObjectID = "WGd-4C-CHI"; */
+"WGd-4C-CHI.text" = "異方性フィルタリング";
+
+/* Class = "UILabel"; text = "4x Anisotropic"; ObjectID = "WQo-G8-DJS"; */
+"WQo-G8-DJS.text" = "4x 異方性フィルタリング";
+
+/* Class = "UITableViewSection"; headerTitle = "Basic"; ObjectID = "Xcx-Mj-LD4"; */
+"Xcx-Mj-LD4.headerTitle" = "基本設定";
+
+/* Class = "UILabel"; text = "1x"; ObjectID = "Y2x-IN-jfQ"; */
+"Y2x-IN-jfQ.text" = "1x";
+
+/* Class = "UILabel"; text = "Disable EFB VRAM Copies"; ObjectID = "YsL-hE-fLj"; */
+"YsL-hE-fLj.text" = "Disable EFB VRAM Copies";
+
+/* Class = "UILabel"; text = "Prefetch Custom Textures"; ObjectID = "c56-Cq-b6x"; */
+"c56-Cq-b6x.text" = "カスタムテクスチャの事前読込";
+
+/* Class = "UITableViewSection"; headerTitle = "Shader Compilation"; ObjectID = "chL-Ax-236"; */
+"chL-Ax-236.headerTitle" = "シェーダコンパイルの設定";
+
+/* Class = "UILabel"; text = "Disable Bounding Box"; ObjectID = "cjU-ZN-1K2"; */
+"cjU-ZN-1K2.text" = "Bounding Box を無効にする";
+
+/* Class = "UILabel"; text = "Skip EFB Access from CPU"; ObjectID = "cxc-YQ-Nff"; */
+"cxc-YQ-Nff.text" = "CPUからのEFBアクセスをスキップする";
+
+/* Class = "UILabel"; text = "Ignore Format Changes"; ObjectID = "dM0-J0-hd7"; */
+"dM0-J0-hd7.text" = "フォーマットの変更を無視する";
+
+/* Class = "UINavigationItem"; title = "Graphics"; ObjectID = "eMP-IH-kss"; */
+"eMP-IH-kss.title" = "ビデオ";
+
+/* Class = "UILabel"; text = "Store XFB Copies to Texture Only"; ObjectID = "eXY-WV-bBn"; */
+"eXY-WV-bBn.text" = "Store XFB Copies to Texture Only";
+
+/* Class = "UILabel"; text = "Scaled EFB Copy"; ObjectID = "f1k-1J-gmX"; */
+"f1k-1J-gmX.text" = "Scaled EFB Copy";
+
+/* Class = "UILabel"; text = "Disable Fog"; ObjectID = "ftR-u6-tGZ"; */
+"ftR-u6-tGZ.text" = "フォグを無効にする";
+
+/* Class = "UILabel"; text = "16x Anisotropic"; ObjectID = "g26-bM-bcr"; */
+"g26-bM-bcr.text" = "16x 異方性フィルタリング";
+
+/* Class = "UILabel"; text = "Backend Multithreading"; ObjectID = "gP6-K5-P4M"; */
+"gP6-K5-P4M.text" = "バックエンドをマルチスレッド化";
+
+/* Class = "UILabel"; text = "Internal Resolution"; ObjectID = "h3N-SC-79Q"; */
+"h3N-SC-79Q.text" = "レンダリング解像度の変更";
+
+/* Class = "UILabel"; text = "Auto"; ObjectID = "hGO-sw-f9e"; */
+"hGO-sw-f9e.text" = "自動";
+
+/* Class = "UILabel"; text = "Advanced"; ObjectID = "hPT-zB-DoZ"; */
+"hPT-zB-DoZ.text" = "高度な設定";
+
+/* Class = "UILabel"; text = "Resolution"; ObjectID = "hcO-lQ-hLk"; */
+"hcO-lQ-hLk.text" = "Resolution";
+
+/* Class = "UILabel"; text = "Save Texture Cache to State"; ObjectID = "hhI-3P-VRo"; */
+"hhI-3P-VRo.text" = "Save Texture Cache to State";
+
+/* Class = "UITableViewSection"; headerTitle = "Enhancements"; ObjectID = "iNu-sf-Tdd"; */
+"iNu-sf-Tdd.headerTitle" = "画質向上の設定";
+
+/* Class = "UITableViewSection"; headerTitle = "External Frame Buffer (XFB)"; ObjectID = "kFd-4L-5lk"; */
+"kFd-4L-5lk.headerTitle" = "External Frame Buffer (外部フレームバッファ)";
+
+/* Class = "UINavigationItem"; title = "Aspect Ratio"; ObjectID = "l4u-GK-Pma"; */
+"l4u-GK-Pma.title" = "アスペクト比";
+
+/* Class = "UILabel"; text = "8x Anisotropic"; ObjectID = "njX-sh-ZHU"; */
+"njX-sh-ZHU.text" = "8x 異方性フィルタリング";
+
+/* Class = "UILabel"; text = "Vertex Rounding"; ObjectID = "oGF-Ui-ZvM"; */
+"oGF-Ui-ZvM.text" = "Vertex Rounding";
+
+/* Class = "UITableViewSection"; headerTitle = "Other"; ObjectID = "oKG-Mm-O4r"; */
+"oKG-Mm-O4r.headerTitle" = "その他";
+
+/* Class = "UILabel"; text = "Hacks"; ObjectID = "pJD-6T-p0a"; */
+"pJD-6T-p0a.text" = "高速化(Hacks)";
+
+/* Class = "UILabel"; text = "Defer EFB Cache Invalidation"; ObjectID = "pYd-WP-Oa2"; */
+"pYd-WP-Oa2.text" = "Defer EFB Cache Invalidation";
+
+/* Class = "UILabel"; text = "Force 16:9"; ObjectID = "phe-ec-lNZ"; */
+"phe-ec-lNZ.text" = "強制的に 16:9 にする";
+
+/* Class = "UILabel"; text = "Exclusive Ubershaders"; ObjectID = "q9O-ry-LJt"; */
+"q9O-ry-LJt.text" = "Uber (統合) シェーダーだけを使用する";
+
+/* Class = "UILabel"; text = "Enable Progressive Scan"; ObjectID = "qbT-3n-0kG"; */
+"qbT-3n-0kG.text" = "プログレッシブ表示を有効化";
+
+/* Class = "UILabel"; text = "Store EFB Copies to Texture Only"; ObjectID = "r5P-EE-Rhj"; */
+"r5P-EE-Rhj.text" = "Store EFB Copies to Texture Only";
+
+/* Class = "UILabel"; text = "Immediately Present XFB"; ObjectID = "syg-FA-sG4"; */
+"syg-FA-sG4.text" = "XFBを即時表示する";
+
+/* Class = "UINavigationItem"; title = "Hacks"; ObjectID = "ttO-2S-2Tq"; */
+"ttO-2S-2Tq.title" = "高速化(Hacks)";
+
+/* Class = "UILabel"; text = "Manual Texture Sampling"; ObjectID = "ulu-2y-LaL"; */
+"ulu-2y-LaL.text" = "手動テクスチャサンプリングを有効にする";
+
+/* Class = "UILabel"; text = "2x Anisotropic"; ObjectID = "une-Zp-EzM"; */
+"une-Zp-EzM.text" = "2x 異方性フィルタリング";
+
+/* Class = "UILabel"; text = "Aspect Ratio"; ObjectID = "vdK-23-Asj"; */
+"vdK-23-Asj.text" = "アスペクト比";
+
+/* Class = "UILabel"; text = "Arbitrary Mipmap Detection"; ObjectID = "wOe-Py-KNv"; */
+"wOe-Py-KNv.text" = "Arbitrary Mipmap Detection";
+
+/* Class = "UILabel"; text = "Backend"; ObjectID = "wXA-h3-1aI"; */
+"wXA-h3-1aI.text" = "ビデオAPI";
+
+/* Class = "UILabel"; text = "Enhancements"; ObjectID = "xVy-g6-vIt"; */
+"xVy-g6-vIt.text" = "画質向上の設定";
+
+/* Class = "UILabel"; text = "Per-Pixel Lighting"; ObjectID = "yuu-xG-FeT"; */
+"yuu-xG-FeT.text" = "ピクセル単位のライティングを有効にする";
+
+/* Class = "UILabel"; text = "Type"; ObjectID = "zwr-G9-cCf"; */
+"zwr-G9-cCf.text" = "形式";
+
+/* Class = "UILabel"; text = "VBI Skip"; ObjectID = "hup-by-p7x"; */
+"hup-by-p7x.text" = "垂直ブランキング割り込み (VBI) をスキップする";
+
+/* Class = "UILabel"; text = "Force Linear and 8x Anisotropic"; ObjectID = "2G3-K2-Hl0"; */
+"2G3-K2-Hl0.text" = "リニアを強制、8x 異方性フィルタリング";
+
+/* Class = "UILabel"; text = "Force Linear"; ObjectID = "FlS-dn-3Ph"; */
+"FlS-dn-3Ph.text" = "リニアを強制";
+
+/* Class = "UILabel"; text = "Force Linear and 16x Anisotropic"; ObjectID = "a2q-0S-sXo"; */
+"a2q-0S-sXo.text" = "リニアを強制、16x 異方性フィルタリング";
+
+/* Class = "UILabel"; text = "Force Linear and 4x Anisotropic"; ObjectID = "c0d-qJ-j7B"; */
+"c0d-qJ-j7B.text" = "リニアを強制、4x 異方性フィルタリング";
+
+/* Class = "UILabel"; text = "Force Linear and 2x Anisotropic"; ObjectID = "rfI-Ge-etd"; */
+"rfI-Ge-etd.text" = "リニアを強制、2x 異方性フィルタリング";
+
+/* Class = "UILabel"; text = "Force Nearest"; ObjectID = "xxt-8W-yZ6"; */
+"xxt-8W-yZ6.text" = "ニアレストを強制";
+
+/* Class = "UILabel"; text = "Show VBlank Times"; ObjectID = "0dw-zM-nws"; */
+"0dw-zM-nws.text" = "垂直ブランキング期間 (VBlank) 時間を表示";
+
+/* Class = "UILabel"; text = "Show Frame Times"; ObjectID = "2KQ-5k-eDW"; */
+"2KQ-5k-eDW.text" = "フレームタイムを表示する";
+
+/* Class = "UILabel"; text = "Show % Speed"; ObjectID = "9eD-LY-67y"; */
+"9eD-LY-67y.text" = "% 速度を表示する";
+
+/* Class = "UILabel"; text = "Show Speed Colors"; ObjectID = "A7d-yz-eTv"; */
+"A7d-yz-eTv.text" = "スピードカラーを表示";
+
+/* Class = "UILabel"; text = "Show VPS"; ObjectID = "HSb-pQ-ECU"; */
+"HSb-pQ-ECU.text" = "VPS を表示する";
+
+/* Class = "UILabel"; text = "Show FPS"; ObjectID = "NSE-NW-z5m"; */
+"NSE-NW-z5m.text" = "FPSを表示";
+
+/* Class = "UILabel"; text = "Show Performance Graphs"; ObjectID = "Voc-TK-o7H"; */
+"Voc-TK-o7H.text" = "パフォーマンスグラフを表示する";
+
+/* Class = "UITableViewSection"; headerTitle = "Performance Statistics"; ObjectID = "arp-cF-X8b"; */
+"arp-cF-X8b.headerTitle" = "パフォーマンスステータス";
+
+/* Class = "UILabel"; text = "Log Render Time to File"; ObjectID = "iod-j5-y6w"; */
+"iod-j5-y6w.text" = "レンダリング時間を記録";
+
+/* Class = "UILabel"; text = "Prefer VS for Point/Line Expansion"; ObjectID = "bwF-e9-QVL"; */
+"bwF-e9-QVL.text" = "点/線の展開時に頂点シェーダーを優先する";
+
+/* Class = "UILabel"; text = "Cull Vertices on the CPU"; ObjectID = "edj-Ox-q0H"; */
+"edj-Ox-q0H.text" = "CPUで頂点をカリングする";

@@ -1,10 +1,12 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DiscIO/DiscExtractor.h"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstring>
 #include <functional>
 #include <optional>
 #include <string>
@@ -138,7 +140,25 @@ bool ExportWiiUnencryptedHeader(const Volume& volume, const std::string& export_
   if (volume.GetVolumeType() != Platform::WiiDisc)
     return false;
 
-  return ExportData(volume, PARTITION_NONE, 0, 0x100, export_filename);
+  File::IOFile f(export_filename, "wb");
+  if (!f)
+    return false;
+
+  std::array<u8, WII_NONPARTITION_DISCHEADER_SIZE> buffer;
+
+  if (!volume.Read(WII_NONPARTITION_DISCHEADER_ADDRESS, buffer.size(), buffer.data(),
+                   PARTITION_NONE))
+  {
+    return false;
+  }
+  // NKitv1 unconditionally sets and unsets some flags when converting between Wii ISO and Wii NKit.
+  // This is because the NKit format decrypts the disc partitions and removes the h3 hash table.
+  // https://wiibrew.org/wiki/Wii_disc#Header
+  if (volume.IsNKit())
+    std::memset(buffer.data() + 0x60, 0, 2);
+  if (!f.WriteBytes(buffer.data(), buffer.size()))
+    return false;
+  return true;
 }
 
 bool ExportWiiRegionData(const Volume& volume, const std::string& export_filename)
@@ -146,7 +166,8 @@ bool ExportWiiRegionData(const Volume& volume, const std::string& export_filenam
   if (volume.GetVolumeType() != Platform::WiiDisc)
     return false;
 
-  return ExportData(volume, PARTITION_NONE, 0x4E000, 0x20, export_filename);
+  return ExportData(volume, PARTITION_NONE, WII_REGION_DATA_ADDRESS, WII_REGION_DATA_SIZE,
+                    export_filename);
 }
 
 bool ExportTicket(const Volume& volume, const Partition& partition,
@@ -155,7 +176,8 @@ bool ExportTicket(const Volume& volume, const Partition& partition,
   if (volume.GetVolumeType() != Platform::WiiDisc)
     return false;
 
-  return ExportData(volume, PARTITION_NONE, partition.offset, 0x2a4, export_filename);
+  return ExportData(volume, PARTITION_NONE, partition.offset + WII_PARTITION_TICKET_ADDRESS,
+                    WII_PARTITION_TICKET_SIZE, export_filename);
 }
 
 bool ExportTMD(const Volume& volume, const Partition& partition, const std::string& export_filename)
@@ -163,9 +185,10 @@ bool ExportTMD(const Volume& volume, const Partition& partition, const std::stri
   if (volume.GetVolumeType() != Platform::WiiDisc)
     return false;
 
-  const std::optional<u32> size = volume.ReadSwapped<u32>(partition.offset + 0x2a4, PARTITION_NONE);
-  const std::optional<u64> offset =
-      volume.ReadSwappedAndShifted(partition.offset + 0x2a8, PARTITION_NONE);
+  const std::optional<u32> size =
+      volume.ReadSwapped<u32>(partition.offset + WII_PARTITION_TMD_SIZE_ADDRESS, PARTITION_NONE);
+  const std::optional<u64> offset = volume.ReadSwappedAndShifted(
+      partition.offset + WII_PARTITION_TMD_OFFSET_ADDRESS, PARTITION_NONE);
   if (!size || !offset)
     return false;
 
@@ -178,9 +201,10 @@ bool ExportCertificateChain(const Volume& volume, const Partition& partition,
   if (volume.GetVolumeType() != Platform::WiiDisc)
     return false;
 
-  const std::optional<u32> size = volume.ReadSwapped<u32>(partition.offset + 0x2ac, PARTITION_NONE);
-  const std::optional<u64> offset =
-      volume.ReadSwappedAndShifted(partition.offset + 0x2b0, PARTITION_NONE);
+  const std::optional<u32> size = volume.ReadSwapped<u32>(
+      partition.offset + WII_PARTITION_CERT_CHAIN_SIZE_ADDRESS, PARTITION_NONE);
+  const std::optional<u64> offset = volume.ReadSwappedAndShifted(
+      partition.offset + WII_PARTITION_CERT_CHAIN_OFFSET_ADDRESS, PARTITION_NONE);
   if (!size || !offset)
     return false;
 
@@ -193,12 +217,13 @@ bool ExportH3Hashes(const Volume& volume, const Partition& partition,
   if (volume.GetVolumeType() != Platform::WiiDisc)
     return false;
 
-  const std::optional<u64> offset =
-      volume.ReadSwappedAndShifted(partition.offset + 0x2b4, PARTITION_NONE);
+  const std::optional<u64> offset = volume.ReadSwappedAndShifted(
+      partition.offset + WII_PARTITION_H3_OFFSET_ADDRESS, PARTITION_NONE);
   if (!offset)
     return false;
 
-  return ExportData(volume, PARTITION_NONE, partition.offset + *offset, 0x18000, export_filename);
+  return ExportData(volume, PARTITION_NONE, partition.offset + *offset, WII_PARTITION_H3_SIZE,
+                    export_filename);
 }
 
 bool ExportHeader(const Volume& volume, const Partition& partition,
@@ -207,7 +232,20 @@ bool ExportHeader(const Volume& volume, const Partition& partition,
   if (!IsDisc(volume.GetVolumeType()))
     return false;
 
-  return ExportData(volume, partition, 0, 0x440, export_filename);
+  File::IOFile f(export_filename, "wb");
+  if (!f)
+    return false;
+
+  std::array<u8, DISCHEADER_SIZE> buffer;
+
+  if (!volume.Read(DISCHEADER_ADDRESS, buffer.size(), buffer.data(), partition))
+    return false;
+  // Erase NKitv1 data
+  if (volume.IsNKit())
+    std::memset(buffer.data() + 0x200, 0, 0x1C);
+  if (!f.WriteBytes(buffer.data(), buffer.size()))
+    return false;
+  return true;
 }
 
 bool ExportBI2Data(const Volume& volume, const Partition& partition,
@@ -216,7 +254,7 @@ bool ExportBI2Data(const Volume& volume, const Partition& partition,
   if (!IsDisc(volume.GetVolumeType()))
     return false;
 
-  return ExportData(volume, partition, 0x440, 0x2000, export_filename);
+  return ExportData(volume, partition, BI2_ADDRESS, BI2_SIZE, export_filename);
 }
 
 bool ExportApploader(const Volume& volume, const Partition& partition,
@@ -229,7 +267,7 @@ bool ExportApploader(const Volume& volume, const Partition& partition,
   if (!apploader_size)
     return false;
 
-  return ExportData(volume, partition, 0x2440, *apploader_size, export_filename);
+  return ExportData(volume, partition, APPLOADER_ADDRESS, *apploader_size, export_filename);
 }
 
 bool ExportDOL(const Volume& volume, const Partition& partition, const std::string& export_filename)
@@ -281,7 +319,7 @@ bool ExportSystemData(const Volume& volume, const Partition& partition,
     success &= ExportTicket(volume, partition, export_folder + "/ticket.bin");
     success &= ExportTMD(volume, partition, export_folder + "/tmd.bin");
     success &= ExportCertificateChain(volume, partition, export_folder + "/cert.bin");
-    if (volume.IsEncryptedAndHashed())
+    if (volume.HasWiiHashes())
       success &= ExportH3Hashes(volume, partition, export_folder + "/h3.bin");
   }
 

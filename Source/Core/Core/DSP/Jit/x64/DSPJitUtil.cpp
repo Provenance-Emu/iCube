@@ -1,12 +1,11 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Core/DSP/Jit/x64/DSPEmitter.h"
 
 #include "Common/CommonTypes.h"
-
 #include "Common/Logging/Log.h"
 #include "Core/DSP/DSPCore.h"
-#include "Core/DSP/Jit/x64/DSPEmitter.h"
 
 using namespace Gen;
 
@@ -110,12 +109,6 @@ void DSPEmitter::dsp_op_write_reg(int reg, Gen::X64Reg host_sreg)
 {
   switch (reg & 0x1f)
   {
-  // 8-bit sign extended registers.
-  case DSP_REG_ACH0:
-  case DSP_REG_ACH1:
-    m_gpr.WriteReg(reg, R(host_sreg));
-    break;
-
   // Stack registers.
   case DSP_REG_ST0:
   case DSP_REG_ST1:
@@ -134,11 +127,6 @@ void DSPEmitter::dsp_op_write_reg_imm(int reg, u16 val)
 {
   switch (reg & 0x1f)
   {
-  // 8-bit sign extended registers. Should look at prod.h too...
-  case DSP_REG_ACH0:
-  case DSP_REG_ACH1:
-    m_gpr.WriteReg(reg, Imm16((u16)(s16)(s8)(u8)val));
-    break;
   // Stack registers.
   case DSP_REG_ST0:
   case DSP_REG_ST1:
@@ -163,7 +151,7 @@ void DSPEmitter::dsp_conditional_extend_accum(int reg)
     const OpArg sr_reg = m_gpr.GetReg(DSP_REG_SR);
     DSPJitRegCache c(m_gpr);
     TEST(16, sr_reg, Imm16(SR_40_MODE_BIT));
-    FixupBranch not_40bit = J_CC(CC_Z, true);
+    FixupBranch not_40bit = J_CC(CC_Z, Jump::Near);
     // if (g_dsp.r[DSP_REG_SR] & SR_40_MODE_BIT)
     //{
     // Sign extend into whole accum.
@@ -192,7 +180,7 @@ void DSPEmitter::dsp_conditional_extend_accum_imm(int reg, u16 val)
     const OpArg sr_reg = m_gpr.GetReg(DSP_REG_SR);
     DSPJitRegCache c(m_gpr);
     TEST(16, sr_reg, Imm16(SR_40_MODE_BIT));
-    FixupBranch not_40bit = J_CC(CC_Z, true);
+    FixupBranch not_40bit = J_CC(CC_Z, Jump::Near);
     // if (g_dsp.r[DSP_REG_SR] & SR_40_MODE_BIT)
     //{
     // Sign extend into whole accum.
@@ -205,35 +193,6 @@ void DSPEmitter::dsp_conditional_extend_accum_imm(int reg, u16 val)
     SetJumpTarget(not_40bit);
     m_gpr.PutReg(DSP_REG_SR, false);
   }
-  }
-}
-
-void DSPEmitter::dsp_op_read_reg_dont_saturate(int reg, Gen::X64Reg host_dreg,
-                                               RegisterExtension extend)
-{
-  switch (reg & 0x1f)
-  {
-  case DSP_REG_ST0:
-  case DSP_REG_ST1:
-  case DSP_REG_ST2:
-  case DSP_REG_ST3:
-    dsp_reg_load_stack(static_cast<StackRegister>(reg - DSP_REG_ST0), host_dreg);
-    switch (extend)
-    {
-    case RegisterExtension::Sign:
-      MOVSX(64, 16, host_dreg, R(host_dreg));
-      break;
-    case RegisterExtension::Zero:
-      MOVZX(64, 16, host_dreg, R(host_dreg));
-      break;
-    case RegisterExtension::None:
-    default:
-      break;
-    }
-    return;
-  default:
-    m_gpr.ReadReg(reg, host_dreg, extend);
-    return;
   }
 }
 
@@ -268,7 +227,7 @@ void DSPEmitter::dsp_op_read_reg(int reg, Gen::X64Reg host_dreg, RegisterExtensi
 
     DSPJitRegCache c(m_gpr);
     TEST(16, sr_reg, Imm16(SR_40_MODE_BIT));
-    FixupBranch not_40bit = J_CC(CC_Z, true);
+    FixupBranch not_40bit = J_CC(CC_Z, Jump::Near);
 
     MOVSX(64, 32, host_dreg, acc_reg);
     CMP(64, R(host_dreg), acc_reg);
@@ -532,7 +491,7 @@ void DSPEmitter::dmem_write(X64Reg value)
   MOV(64, R(ECX), ImmPtr(m_dsp_core.DSPState().dram));
   MOV(16, MComplex(ECX, EAX, SCALE_2, 0), R(value));
 
-  FixupBranch end = J(true);
+  FixupBranch end = J(Jump::Near);
   //	else if (saddr == 0xf)
   SetJumpTarget(ifx);
   DSPJitRegCache c(m_gpr);
@@ -607,7 +566,7 @@ void DSPEmitter::dmem_read(X64Reg address)
   MOV(64, R(ECX), ImmPtr(m_dsp_core.DSPState().dram));
   MOV(16, R(EAX), MComplex(ECX, address, SCALE_2, 0));
 
-  FixupBranch end = J(true);
+  FixupBranch end = J(Jump::Near);
   SetJumpTarget(dram);
   //	else if (saddr == 0x1)
   CMP(16, R(address), Imm16(0x1fff));
@@ -617,7 +576,7 @@ void DSPEmitter::dmem_read(X64Reg address)
   MOV(64, R(ECX), ImmPtr(m_dsp_core.DSPState().coef));
   MOV(16, R(EAX), MComplex(ECX, address, SCALE_2, 0));
 
-  FixupBranch end2 = J(true);
+  FixupBranch end2 = J(Jump::Near);
   SetJumpTarget(ifx);
   //	else if (saddr == 0xf)
   //		return gdsp_ifx_read(addr);
@@ -702,7 +661,15 @@ void DSPEmitter::set_long_prod()
   m_gpr.PutReg(DSP_REG_PROD_64, true);
 }
 
-// Returns s64 in RAX
+// s64 -> s40 in long_acc
+void DSPEmitter::dsp_convert_long_acc(Gen::X64Reg long_acc)
+{
+  // return ((long_acc << (64 - 40)) >> (64 - 40))
+  SHL(64, R(long_acc), Imm8(64 - 40));  // sign extend
+  SAR(64, R(long_acc), Imm8(64 - 40));
+}
+
+// Returns s64 in long_acc
 void DSPEmitter::round_long_acc(X64Reg long_acc)
 {
   // if (prod & 0x10000) prod = (prod + 0x8000) & ~0xffff;

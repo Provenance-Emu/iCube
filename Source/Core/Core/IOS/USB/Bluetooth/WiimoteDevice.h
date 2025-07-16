@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -14,6 +13,11 @@
 
 class PointerWrap;
 
+namespace WiimoteEmu
+{
+struct DesiredWiimoteState;
+}
+
 namespace IOS::HLE
 {
 class BluetoothEmuDevice;
@@ -25,7 +29,7 @@ public:
   using FeaturesType = std::array<u8, HCI_FEATURES_SIZE>;
   using LinkKeyType = std::array<u8, HCI_KEY_SIZE>;
 
-  WiimoteDevice(BluetoothEmuDevice* host, int number, bdaddr_t bd);
+  WiimoteDevice(BluetoothEmuDevice* host, bdaddr_t bd, unsigned int hid_source_number);
   ~WiimoteDevice();
 
   WiimoteDevice(const WiimoteDevice&) = delete;
@@ -39,7 +43,15 @@ public:
   void Update();
 
   // Called every ~200hz.
-  void UpdateInput();
+  enum class NextUpdateInputCall
+  {
+    None,
+    Activate,
+    Update
+  };
+  NextUpdateInputCall PrepareInput(WiimoteEmu::DesiredWiimoteState* wiimote_state);
+  void UpdateInput(NextUpdateInputCall next_call,
+                   const WiimoteEmu::DesiredWiimoteState& wiimote_state);
 
   void DoState(PointerWrap& p);
 
@@ -137,7 +149,7 @@ private:
   bool LinkChannel(u16 psm);
   u16 GenerateChannelID() const;
 
-  bool DoesChannelExist(u16 scid) const { return m_channels.count(scid) != 0; }
+  bool DoesChannelExist(u16 scid) const { return m_channels.contains(scid); }
   void SendCommandToACL(u8 ident, u8 code, u8 command_length, u8* command_data);
 
   void SignalChannel(u8* data, u32 size);

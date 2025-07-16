@@ -1,6 +1,7 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "DiscIO/Blob.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -9,19 +10,16 @@
 #include <string>
 #include <utility>
 
-#include "Common/CDUtils.h"
 #include "Common/CommonTypes.h"
 #include "Common/IOFile.h"
 #include "Common/MsgHandler.h"
 
-#include "DiscIO/Blob.h"
 #include "DiscIO/CISOBlob.h"
 #include "DiscIO/CompressedBlob.h"
 #include "DiscIO/DirectoryBlob.h"
-#ifndef IPHONEOS
-#include "DiscIO/DriveBlob.h"
-#endif
 #include "DiscIO/FileBlob.h"
+#include "DiscIO/NFSBlob.h"
+#include "DiscIO/SplitFileBlob.h"
 #include "DiscIO/TGCBlob.h"
 #include "DiscIO/WIABlob.h"
 #include "DiscIO/WbfsBlob.h"
@@ -52,6 +50,12 @@ std::string GetName(BlobType blob_type, bool translate)
     return "WIA";
   case BlobType::RVZ:
     return "RVZ";
+  case BlobType::MOD_DESCRIPTOR:
+    return translate_str("Mod");
+  case BlobType::NFS:
+    return "NFS";
+  case BlobType::SPLIT_PLAIN:
+    return translate_str("Multi-part ISO");
   default:
     return "";
   }
@@ -80,8 +84,8 @@ SectorReader::~SectorReader()
 
 const SectorReader::Cache* SectorReader::FindCacheLine(u64 block_num)
 {
-  auto itr = std::find_if(m_cache.begin(), m_cache.end(),
-                          [&](const Cache& entry) { return entry.Contains(block_num); });
+  auto itr =
+      std::ranges::find_if(m_cache, [&](const Cache& entry) { return entry.Contains(block_num); });
   if (itr == m_cache.end())
     return nullptr;
 
@@ -149,8 +153,7 @@ bool SectorReader::Read(u64 offset, u64 size, u8* out_ptr)
     u32 can_read = m_block_size * cache->num_blocks - read_offset;
     u32 was_read = static_cast<u32>(std::min<u64>(can_read, remain));
 
-    std::copy(cache->data.begin() + read_offset, cache->data.begin() + read_offset + was_read,
-              out_ptr);
+    std::copy_n(cache->data.begin() + read_offset, was_read, out_ptr);
 
     offset += was_read;
     out_ptr += was_read;
@@ -200,7 +203,7 @@ u32 SectorReader::ReadChunk(u8* buffer, u64 chunk_num)
     {
       if (!GetBlock(block_num + i, buffer))
       {
-        std::fill(buffer, buffer + (cnt_blocks - i) * m_block_size, 0u);
+        std::fill_n(buffer, (cnt_blocks - i) * m_block_size, 0u);
         return i;
       }
       buffer += m_block_size;
@@ -212,12 +215,6 @@ u32 SectorReader::ReadChunk(u8* buffer, u64 chunk_num)
 
 std::unique_ptr<BlobReader> CreateBlobReader(const std::string& filename)
 {
-  // You can't attach a CD drive to an iOS device.
-#ifndef IPHONEOS
-  if (Common::IsCDROMDevice(filename))
-    return DriveReader::Create(filename);
-#endif
-
   File::IOFile file(filename, "rb");
   u32 magic;
   if (!file.ReadArray(&magic, 1))
@@ -245,9 +242,13 @@ std::unique_ptr<BlobReader> CreateBlobReader(const std::string& filename)
     return WIAFileReader::Create(std::move(file), filename);
   case RVZ_MAGIC:
     return RVZFileReader::Create(std::move(file), filename);
+  case NFS_MAGIC:
+    return NFSFileReader::Create(std::move(file), filename);
   default:
     if (auto directory_blob = DirectoryBlobReader::Create(filename))
       return std::move(directory_blob);
+    if (auto split_blob = SplitPlainFileReader::Create(filename))
+      return std::move(split_blob);
 
     return PlainFileReader::Create(std::move(file));
   }

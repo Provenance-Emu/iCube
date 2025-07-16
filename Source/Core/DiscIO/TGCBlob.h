@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -43,14 +42,16 @@ public:
   static std::unique_ptr<TGCFileReader> Create(File::IOFile file);
 
   BlobType GetBlobType() const override { return BlobType::TGC; }
+  std::unique_ptr<BlobReader> CopyReader() const override;
 
   u64 GetRawSize() const override { return m_size; }
   u64 GetDataSize() const override;
-  bool IsDataSizeAccurate() const override { return true; }
+  DataSizeType GetDataSizeType() const override { return DataSizeType::Accurate; }
 
   u64 GetBlockSize() const override { return 0; }
   bool HasFastRandomAccessInBlock() const override { return true; }
   std::string GetCompressionMethod() const override { return {}; }
+  std::optional<int> GetCompressionLevel() const override { return std::nullopt; }
 
   bool Read(u64 offset, u64 nbytes, u8* out_ptr) override;
 

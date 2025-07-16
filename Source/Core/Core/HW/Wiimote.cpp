@@ -1,12 +1,15 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/Wiimote.h"
 
+#include <optional>
+
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
+#include "Common/Config/Config.h"
 
+#include "Core/Config/WiimoteSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
@@ -16,6 +19,7 @@
 #include "Core/IOS/USB/Bluetooth/WiimoteDevice.h"
 #include "Core/Movie.h"
 #include "Core/NetPlayClient.h"
+#include "Core/System.h"
 #include "Core/WiiUtils.h"
 
 #include "InputCommon/ControllerEmu/ControlGroup/ControlGroup.h"
@@ -24,16 +28,17 @@
 // Limit the amount of wiimote connect requests, when a button is pressed in disconnected state
 static std::array<u8, MAX_BBMOTES> s_last_connect_request_counter;
 
-namespace WiimoteCommon
+namespace
 {
 static std::array<std::atomic<WiimoteSource>, MAX_BBMOTES> s_wiimote_sources;
+static std::optional<Config::ConfigChangedCallbackID> s_config_callback_id = std::nullopt;
 
 WiimoteSource GetSource(unsigned int index)
 {
   return s_wiimote_sources[index];
 }
 
-void SetSource(unsigned int index, WiimoteSource source)
+void OnSourceChanged(unsigned int index, WiimoteSource source)
 {
   const WiimoteSource previous_source = s_wiimote_sources[index].exchange(source);
 
@@ -45,9 +50,20 @@ void SetSource(unsigned int index, WiimoteSource source)
 
   WiimoteReal::HandleWiimoteSourceChange(index);
 
-  Core::RunAsCPUThread([index] { UpdateSource(index); });
+  const Core::CPUThreadGuard guard(Core::System::GetInstance());
+  WiimoteCommon::UpdateSource(index);
 }
 
+void RefreshConfig()
+{
+  for (int i = 0; i < MAX_BBMOTES; ++i)
+    OnSourceChanged(i, Config::Get(Config::GetInfoForWiimoteSource(i)));
+}
+
+}  // namespace
+
+namespace WiimoteCommon
+{
 void UpdateSource(unsigned int index)
 {
   const auto bluetooth = WiiUtils::GetBluetoothEmuDevice();
@@ -82,7 +98,7 @@ HIDWiimote* GetHIDWiimoteSource(unsigned int index)
 
 namespace Wiimote
 {
-static InputConfig s_config(WIIMOTE_INI_NAME, _trans("Wii Remote"), "Wiimote");
+static InputConfig s_config(WIIMOTE_INI_NAME, _trans("Wii Remote"), "Wiimote", "Wiimote");
 
 InputConfig* GetConfig()
 {
@@ -138,6 +154,12 @@ ControllerEmu::ControlGroup* GetTaTaConGroup(int number, WiimoteEmu::TaTaConGrou
   return static_cast<WiimoteEmu::Wiimote*>(s_config.GetController(number))->GetTaTaConGroup(group);
 }
 
+ControllerEmu::ControlGroup* GetShinkansenGroup(int number, WiimoteEmu::ShinkansenGroup group)
+{
+  return static_cast<WiimoteEmu::Wiimote*>(s_config.GetController(number))
+      ->GetShinkansenGroup(group);
+}
+
 void Shutdown()
 {
   s_config.UnregisterHotplugCallback();
@@ -145,6 +167,12 @@ void Shutdown()
   s_config.ClearControllers();
 
   WiimoteReal::Stop();
+
+  if (s_config_callback_id)
+  {
+    Config::RemoveConfigChangedCallback(*s_config_callback_id);
+    s_config_callback_id = std::nullopt;
+  }
 }
 
 void Initialize(InitializeMode init_mode)
@@ -159,11 +187,16 @@ void Initialize(InitializeMode init_mode)
 
   LoadConfig();
 
+  if (!s_config_callback_id)
+    s_config_callback_id = Config::AddConfigChangedCallback(RefreshConfig);
+  RefreshConfig();
+
   WiimoteReal::Initialize(init_mode);
 
   // Reload Wiimotes with our settings
-  if (Movie::IsMovieActive())
-    Movie::ChangeWiiPads();
+  auto& movie = Core::System::GetInstance().GetMovie();
+  if (movie.IsMovieActive())
+    movie.ChangeWiiPads();
 }
 
 void ResetAllWiimotes()
@@ -174,7 +207,7 @@ void ResetAllWiimotes()
 
 void LoadConfig()
 {
-  s_config.LoadConfig(false);
+  s_config.LoadConfig();
   s_last_connect_request_counter.fill(0);
 }
 
@@ -192,7 +225,7 @@ void DoState(PointerWrap& p)
 {
   for (int i = 0; i < MAX_BBMOTES; ++i)
   {
-    const WiimoteSource source = WiimoteCommon::GetSource(i);
+    const WiimoteSource source = GetSource(i);
     auto state_wiimote_source = u8(source);
     p.Do(state_wiimote_source);
 
@@ -202,7 +235,7 @@ void DoState(PointerWrap& p)
       static_cast<WiimoteEmu::Wiimote*>(s_config.GetController(i))->DoState(p);
     }
 
-    if (p.GetMode() == PointerWrap::MODE_READ)
+    if (p.IsReadMode())
     {
       // If using a real wiimote or the save-state source does not match the current source,
       // then force a reconnection on load.

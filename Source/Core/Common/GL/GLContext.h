@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -10,7 +9,6 @@
 #include <utility>
 
 #include "Common/CommonTypes.h"
-#include "Common/GL/GLExtensions/gl_common.h"
 #include "Common/WindowSystemInfo.h"
 
 class GLContext
@@ -45,9 +43,6 @@ public:
   virtual void SwapInterval(int interval);
 
   virtual void* GetFuncAddress(const std::string& name);
-
-  // On most platforms, a default framebuffer is created automatically on 0.
-  virtual GLuint GetDefaultFramebuffer() { return 0; }
 
   // Creates an instance of GLContext specific to the platform we are running on.
   // If successful, the context is made current on the calling thread.

@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -16,8 +15,10 @@ void ProcessLine(OutputVertexData* v0, OutputVertexData* v1);
 
 void ProcessPoint(OutputVertexData* v);
 
-bool CullTest(const OutputVertexData* v0, const OutputVertexData* v1, const OutputVertexData* v2,
-              bool& backface);
+bool IsTriviallyRejected(const OutputVertexData* v0, const OutputVertexData* v1,
+                         const OutputVertexData* v2);
+
+bool IsBackface(const OutputVertexData* v0, const OutputVertexData* v1, const OutputVertexData* v2);
 
 void PerspectiveDivide(OutputVertexData* vertex);
 }  // namespace Clipper

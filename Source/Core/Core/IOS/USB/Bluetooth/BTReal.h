@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -24,6 +23,7 @@
 class PointerWrap;
 struct libusb_device;
 struct libusb_device_handle;
+struct libusb_device_descriptor;
 struct libusb_transfer;
 
 namespace IOS::HLE
@@ -43,7 +43,7 @@ using linkkey_t = std::array<u8, 16>;
 class BluetoothRealDevice final : public BluetoothBaseDevice
 {
 public:
-  BluetoothRealDevice(Kernel& ios, const std::string& device_name);
+  BluetoothRealDevice(EmulationKernel& ios, const std::string& device_name);
   ~BluetoothRealDevice() override;
 
   std::optional<IPCReply> Open(const OpenRequest& request) override;
@@ -63,8 +63,8 @@ private:
   // Arbitrarily chosen value that allows emulated software to send commands often enough
   // so that the sync button event is triggered at least every 200ms.
   // Ideally this should be equal to 0, so we don't trigger unnecessary libusb transfers.
-  static constexpr int TIMEOUT = 200;
-  static constexpr int SYNC_BUTTON_HOLD_MS_TO_RESET = 10000;
+  static constexpr u32 TIMEOUT = 200;
+  static constexpr u32 SYNC_BUTTON_HOLD_MS_TO_RESET = 10000;
 
   std::atomic<SyncButtonState> m_sync_button_state{SyncButtonState::Unpressed};
   Common::Timer m_sync_button_held_timer;
@@ -117,7 +117,7 @@ private:
   void LoadLinkKeys();
   void SaveLinkKeys();
 
-  bool OpenDevice(libusb_device* device);
+  bool OpenDevice(const libusb_device_descriptor& device_descriptor, libusb_device* device);
 };
 }  // namespace IOS::HLE
 

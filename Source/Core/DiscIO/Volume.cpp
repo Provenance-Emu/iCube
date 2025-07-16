@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DiscIO/Volume.h"
 
@@ -13,9 +12,8 @@
 #include <utility>
 #include <vector>
 
-#include <mbedtls/sha1.h>
-
 #include "Common/CommonTypes.h"
+#include "Common/Crypto/SHA1.h"
 #include "Common/StringUtil.h"
 
 #include "Core/IOS/ES/Formats.h"
@@ -34,21 +32,21 @@ const IOS::ES::TMDReader Volume::INVALID_TMD{};
 const std::vector<u8> Volume::INVALID_CERT_CHAIN{};
 
 template <typename T>
-static void AddToSyncHash(mbedtls_sha1_context* context, const T& data)
+static void AddToSyncHash(Common::SHA1::Context* context, const T& data)
 {
   static_assert(std::is_trivially_copyable_v<T>);
-  mbedtls_sha1_update_ret(context, reinterpret_cast<const u8*>(&data), sizeof(data));
+  context->Update(reinterpret_cast<const u8*>(&data), sizeof(data));
 }
 
-void Volume::ReadAndAddToSyncHash(mbedtls_sha1_context* context, u64 offset, u64 length,
+void Volume::ReadAndAddToSyncHash(Common::SHA1::Context* context, u64 offset, u64 length,
                                   const Partition& partition) const
 {
   std::vector<u8> buffer(length);
   if (Read(offset, length, buffer.data(), partition))
-    mbedtls_sha1_update_ret(context, buffer.data(), buffer.size());
+    context->Update(buffer);
 }
 
-void Volume::AddTMDToSyncHash(mbedtls_sha1_context* context, const Partition& partition) const
+void Volume::AddTMDToSyncHash(Common::SHA1::Context* context, const Partition& partition) const
 {
   // We want to hash some important parts of the TMD, but nothing that changes when fakesigning.
   // (Fakesigned WADs are very popular, and we don't want people with properly signed WADs to
@@ -86,8 +84,11 @@ std::map<Language, std::string> Volume::ReadWiiNames(const std::vector<char16_t>
   return names;
 }
 
-static std::unique_ptr<VolumeDisc> CreateDisc(std::unique_ptr<BlobReader>& reader)
+static std::unique_ptr<VolumeDisc> TryCreateDisc(std::unique_ptr<BlobReader>& reader)
 {
+  if (!reader)
+    return nullptr;
+
   if (reader->ReadSwapped<u32>(0x18) == WII_DISC_MAGIC)
     return std::make_unique<VolumeWii>(std::move(reader));
 
@@ -98,14 +99,21 @@ static std::unique_ptr<VolumeDisc> CreateDisc(std::unique_ptr<BlobReader>& reade
   return nullptr;
 }
 
-std::unique_ptr<VolumeDisc> CreateDisc(const std::string& path)
+std::unique_ptr<VolumeDisc> CreateDisc(std::unique_ptr<BlobReader> reader)
 {
-  std::unique_ptr<BlobReader> reader(CreateBlobReader(path));
-  return reader ? CreateDisc(reader) : nullptr;
+  return TryCreateDisc(reader);
 }
 
-static std::unique_ptr<VolumeWAD> CreateWAD(std::unique_ptr<BlobReader>& reader)
+std::unique_ptr<VolumeDisc> CreateDisc(const std::string& path)
 {
+  return CreateDisc(CreateBlobReader(path));
+}
+
+static std::unique_ptr<VolumeWAD> TryCreateWAD(std::unique_ptr<BlobReader>& reader)
+{
+  if (!reader)
+    return nullptr;
+
   // Check for WAD
   // 0x206962 for boot2 wads
   const std::optional<u32> wad_magic = reader->ReadSwapped<u32>(0x02);
@@ -116,27 +124,31 @@ static std::unique_ptr<VolumeWAD> CreateWAD(std::unique_ptr<BlobReader>& reader)
   return nullptr;
 }
 
-std::unique_ptr<VolumeWAD> CreateWAD(const std::string& path)
+std::unique_ptr<VolumeWAD> CreateWAD(std::unique_ptr<BlobReader> reader)
 {
-  std::unique_ptr<BlobReader> reader(CreateBlobReader(path));
-  return reader ? CreateWAD(reader) : nullptr;
+  return TryCreateWAD(reader);
 }
 
-std::unique_ptr<Volume> CreateVolume(const std::string& path)
+std::unique_ptr<VolumeWAD> CreateWAD(const std::string& path)
 {
-  std::unique_ptr<BlobReader> reader(CreateBlobReader(path));
-  if (reader == nullptr)
-    return nullptr;
+  return CreateWAD(CreateBlobReader(path));
+}
 
-  std::unique_ptr<VolumeDisc> disc = CreateDisc(reader);
+std::unique_ptr<Volume> CreateVolume(std::unique_ptr<BlobReader> reader)
+{
+  std::unique_ptr<VolumeDisc> disc = TryCreateDisc(reader);
   if (disc)
     return disc;
 
-  std::unique_ptr<VolumeWAD> wad = CreateWAD(reader);
+  std::unique_ptr<VolumeWAD> wad = TryCreateWAD(reader);
   if (wad)
     return wad;
 
   return nullptr;
 }
 
+std::unique_ptr<Volume> CreateVolume(const std::string& path)
+{
+  return CreateVolume(CreateBlobReader(path));
+}
 }  // namespace DiscIO

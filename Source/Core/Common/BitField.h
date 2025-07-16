@@ -1,6 +1,5 @@
 // Copyright 2014 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 // Copyright 2014 Tony Wasserka
 // All rights reserved.
@@ -150,6 +149,7 @@ public:
 
   constexpr T Value() const { return Value(std::is_signed<T>()); }
   constexpr operator T() const { return Value(); }
+  static constexpr bool IsSigned() { return std::is_signed<T>(); }
   static constexpr std::size_t StartBit() { return position; }
   static constexpr std::size_t NumBits() { return bits; }
 
@@ -193,7 +193,7 @@ struct fmt::formatter<BitField<position, bits, T, S>>
   fmt::formatter<T> m_formatter;
   constexpr auto parse(format_parse_context& ctx) { return m_formatter.parse(ctx); }
   template <typename FormatContext>
-  auto format(const BitField<position, bits, T, S>& bitfield, FormatContext& ctx)
+  auto format(const BitField<position, bits, T, S>& bitfield, FormatContext& ctx) const
   {
     return m_formatter.format(bitfield.Value(), ctx);
   }
@@ -245,6 +245,7 @@ public:
   BitFieldArray& operator=(const BitFieldArray&) = delete;
 
 public:
+  constexpr bool IsSigned() const { return std::is_signed<T>(); }
   constexpr std::size_t StartBit() const { return position; }
   constexpr std::size_t NumBits() const { return bits; }
   constexpr std::size_t Size() const { return size; }
@@ -311,7 +312,7 @@ class BitFieldArrayConstRef
   friend class BitFieldArrayConstIterator<position, bits, size, T, S>;
 
 public:
-  constexpr T Value() const { return m_array->Value(m_index); };
+  constexpr T Value() const { return m_array->Value(m_index); }
   constexpr operator T() const { return Value(); }
 
 private:
@@ -332,7 +333,7 @@ class BitFieldArrayRef
   friend class BitFieldArrayIterator<position, bits, size, T, S>;
 
 public:
-  constexpr T Value() const { return m_array->Value(m_index); };
+  constexpr T Value() const { return m_array->Value(m_index); }
   constexpr operator T() const { return Value(); }
   T operator=(const BitFieldArrayRef<position, bits, size, T, S>& value) const
   {
@@ -478,7 +479,7 @@ struct fmt::formatter<BitFieldArrayRef<position, bits, size, T, S>>
   fmt::formatter<T> m_formatter;
   constexpr auto parse(format_parse_context& ctx) { return m_formatter.parse(ctx); }
   template <typename FormatContext>
-  auto format(const BitFieldArrayRef<position, bits, size, T, S>& ref, FormatContext& ctx)
+  auto format(const BitFieldArrayRef<position, bits, size, T, S>& ref, FormatContext& ctx) const
   {
     return m_formatter.format(ref.Value(), ctx);
   }
@@ -490,7 +491,8 @@ struct fmt::formatter<BitFieldArrayConstRef<position, bits, size, T, S>>
   fmt::formatter<T> m_formatter;
   constexpr auto parse(format_parse_context& ctx) { return m_formatter.parse(ctx); }
   template <typename FormatContext>
-  auto format(const BitFieldArrayConstRef<position, bits, size, T, S>& ref, FormatContext& ctx)
+  auto format(const BitFieldArrayConstRef<position, bits, size, T, S>& ref,
+              FormatContext& ctx) const
   {
     return m_formatter.format(ref.Value(), ctx);
   }

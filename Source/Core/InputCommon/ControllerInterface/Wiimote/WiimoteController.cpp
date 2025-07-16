@@ -1,6 +1,5 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "InputCommon/ControllerInterface/Wiimote/WiimoteController.h"
 
@@ -82,14 +81,14 @@ using UndetectableSignedAnalogInput = SignedInput<false>;
 class Motor final : public Core::Device::Output
 {
 public:
-  Motor(ControlState* value) : m_value(*value) {}
+  Motor(std::atomic<ControlState>* value) : m_value(*value) {}
 
   std::string GetName() const override { return "Motor"; }
 
   void SetState(ControlState state) override { m_value = state; }
 
 private:
-  ControlState& m_value;
+  std::atomic<ControlState>& m_value;
 };
 
 template <typename T>
@@ -128,13 +127,17 @@ void ReleaseDevices(std::optional<u32> count)
 
   // Remove up to "count" remotes (or all of them if nullopt).
   // Real wiimotes will be added to the pool.
-  g_controller_interface.RemoveDevice([&](const Core::Device* device) {
-    if (device->GetSource() != SOURCE_NAME || count == removed_devices)
-      return false;
+  // Make sure to force the device removal immediately (as they are shared ptrs and
+  // they could be kept alive, preventing us from re-creating the device)
+  g_controller_interface.RemoveDevice(
+      [&](const Core::Device* device) {
+        if (device->GetSource() != SOURCE_NAME || count == removed_devices)
+          return false;
 
-    ++removed_devices;
-    return true;
-  });
+        ++removed_devices;
+        return true;
+      },
+      true);
 }
 
 Device::Device(std::unique_ptr<WiimoteReal::Wiimote> wiimote) : m_wiimote(std::move(wiimote))
@@ -197,6 +200,17 @@ Device::Device(std::unique_ptr<WiimoteReal::Wiimote> wiimote) : m_wiimote(std::m
   AddInput(new UndetectableAnalogInput<bool>(&m_ir_state.is_hidden, "IR Hidden", 1));
 
   AddInput(new UndetectableAnalogInput<float>(&m_ir_state.distance, "IR Distance", 1));
+
+  // Raw IR Objects.
+  for (std::size_t i = 0; i < 4; ++i)
+  {
+    AddInput(new UndetectableAnalogInput<float>(&m_ir_state.raw_ir_object_position[i].x,
+                                                fmt::format("IR Object {} X", i + 1), 1));
+    AddInput(new UndetectableAnalogInput<float>(&m_ir_state.raw_ir_object_position[i].y,
+                                                fmt::format("IR Object {} Y", i + 1), 1));
+    AddInput(new UndetectableAnalogInput<float>(&m_ir_state.raw_ir_object_size[i],
+                                                fmt::format("IR Object {} Size", i + 1), 1));
+  }
 
   // Raw gyroscope.
   static constexpr std::array<std::array<const char*, 2>, 3> gyro_names = {{
@@ -315,6 +329,12 @@ std::string Device::GetName() const
 std::string Device::GetSource() const
 {
   return SOURCE_NAME;
+}
+
+// Always add these at the end, given their hotplug nature
+int Device::GetSortPriority() const
+{
+  return -4;
 }
 
 void Device::RunTasks()
@@ -1169,8 +1189,7 @@ void Device::ProcessInputReport(WiimoteReal::Report& report)
   // Process IR data.
   if (manipulator->HasIR() && m_ir_state.IsFullyConfigured())
   {
-    m_ir_state.ProcessData(
-        Common::BitCastPtr<std::array<WiimoteEmu::IRBasic, 2>>(manipulator->GetIRDataPtr()));
+    m_ir_state.ProcessData(*manipulator);
   }
 
   // Process extension data.
@@ -1242,30 +1261,66 @@ void Device::UpdateOrientation()
       float(MathUtil::PI);
 }
 
-void Device::IRState::ProcessData(const std::array<WiimoteEmu::IRBasic, 2>& data)
+void Device::IRState::ProcessData(const DataReportManipulator& manipulator)
 {
   // A better implementation might extrapolate points when they fall out of camera view.
   // But just averaging visible points actually seems to work very well.
 
-  using IRObject = WiimoteEmu::IRBasic::IRObject;
+  using IRObject = WiimoteEmu::IRObject;
 
   MathUtil::RunningVariance<Common::Vec2> points;
 
   const auto camera_max = IRObject(WiimoteEmu::CameraLogic::CAMERA_RES_X - 1,
                                    WiimoteEmu::CameraLogic::CAMERA_RES_Y - 1);
 
-  const auto add_point = [&](IRObject point) {
+  const auto add_point = [&](IRObject point, u8 size, size_t idx) {
     // Non-visible points are 0xFF-filled.
     if (point.y > camera_max.y)
+    {
+      raw_ir_object_position[idx].x = 0.0f;
+      raw_ir_object_position[idx].y = 0.0f;
+      raw_ir_object_size[idx] = 0.0f;
       return;
+    }
+
+    raw_ir_object_position[idx].x = static_cast<float>(point.x) / camera_max.x;
+    raw_ir_object_position[idx].y = static_cast<float>(point.y) / camera_max.y;
+    raw_ir_object_size[idx] = static_cast<float>(size) / 15.0f;
 
     points.Push(Common::Vec2(point));
   };
 
-  for (auto& block : data)
+  size_t object_index = 0;
+  switch (manipulator.GetIRReportFormat())
   {
-    add_point(block.GetObject1());
-    add_point(block.GetObject2());
+  case IRReportFormat::Basic:
+  {
+    const std::array<WiimoteEmu::IRBasic, 2> data =
+        Common::BitCastPtr<std::array<WiimoteEmu::IRBasic, 2>>(manipulator.GetIRDataPtr());
+    for (const auto& block : data)
+    {
+      // size is not reported by IRBasic, just assume a typical size
+      add_point(block.GetObject1(), 2, object_index);
+      ++object_index;
+      add_point(block.GetObject2(), 2, object_index);
+      ++object_index;
+    }
+    break;
+  }
+  case IRReportFormat::Extended:
+  {
+    const std::array<WiimoteEmu::IRExtended, 4> data =
+        Common::BitCastPtr<std::array<WiimoteEmu::IRExtended, 4>>(manipulator.GetIRDataPtr());
+    for (const auto& object : data)
+    {
+      add_point(object.GetPosition(), object.size, object_index);
+      ++object_index;
+    }
+    break;
+  }
+  default:
+    // unsupported format
+    return;
   }
 
   is_hidden = !points.Count();
@@ -1367,7 +1422,8 @@ void Device::UpdateRumble()
 {
   static constexpr auto rumble_period = std::chrono::milliseconds(100);
 
-  const auto on_time = std::chrono::duration_cast<Clock::duration>(rumble_period * m_rumble_level);
+  const auto on_time =
+      std::chrono::duration_cast<Clock::duration>(rumble_period * m_rumble_level.load());
   const auto off_time = rumble_period - on_time;
 
   const auto now = Clock::now();
@@ -1385,14 +1441,10 @@ void Device::UpdateRumble()
   QueueReport(OutputReportRumble{});
 }
 
-void Device::UpdateInput()
+Core::DeviceRemoval Device::UpdateInput()
 {
   if (!m_wiimote->IsConnected())
-  {
-    g_controller_interface.RemoveDevice(
-        [this](const Core::Device* device) { return device == this; });
-    return;
-  }
+    return Core::DeviceRemoval::Remove;
 
   UpdateRumble();
   RunTasks();
@@ -1403,6 +1455,8 @@ void Device::UpdateInput()
     ProcessInputReport(report);
     RunTasks();
   }
+
+  return Core::DeviceRemoval::Keep;
 }
 
 void Device::MotionPlusState::ProcessData(const WiimoteEmu::MotionPlus::DataFormat& data)

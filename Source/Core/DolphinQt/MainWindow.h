@@ -1,6 +1,5 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -12,9 +11,14 @@
 #include <optional>
 #include <string>
 
+#include "Core/Boot/Boot.h"
+
+class QMenu;
 class QStackedWidget;
 class QString;
 
+class AchievementsWindow;
+class AssemblerWidget;
 class BreakpointWidget;
 struct BootParameters;
 class CheatsManager;
@@ -25,9 +29,11 @@ class DragEnterEvent;
 class FIFOPlayerWindow;
 class FreeLookWindow;
 class GameList;
+class GBATASInputWindow;
 class GCTASInputWindow;
 class GraphicsWindow;
 class HotkeyScheduler;
+class InfinityBaseWindow;
 class JITWidget;
 class LogConfigWidget;
 class LogWidget;
@@ -41,10 +47,17 @@ class RegisterWidget;
 class RenderWidget;
 class SearchBar;
 class SettingsWindow;
+class SkylanderPortalWindow;
 class ThreadWidget;
 class ToolBar;
 class WatchWidget;
 class WiiTASInputWindow;
+struct WindowSystemInfo;
+
+namespace Core
+{
+class System;
+}
 
 namespace DiscIO
 {
@@ -66,13 +79,14 @@ class MainWindow final : public QMainWindow
   Q_OBJECT
 
 public:
-  explicit MainWindow(std::unique_ptr<BootParameters> boot_parameters,
+  explicit MainWindow(Core::System& system, std::unique_ptr<BootParameters> boot_parameters,
                       const std::string& movie_path);
   ~MainWindow();
 
-  void Show();
+  WindowSystemInfo GetWindowSystemInfo() const;
 
   bool eventFilter(QObject* object, QEvent* event) override;
+  QMenu* createPopupMenu() override;
 
 signals:
   void ReadOnlyModeChanged(bool read_only);
@@ -101,6 +115,8 @@ private:
   void StateSaveUndo();
   void StateSaveOldest();
   void SetStateSlot(int slot);
+  void IncrementSelectedStateSlot();
+  void DecrementSelectedStateSlot();
   void BootWiiSystemMenu();
 
   void PerformOnlineUpdate(const std::string& region);
@@ -133,16 +149,16 @@ private:
   };
 
   void ScanForSecondDiscAndStartGame(const UICommon::GameFile& game,
-                                     const std::optional<std::string>& savestate_path = {});
+                                     std::unique_ptr<BootSessionData> boot_session_data = nullptr);
   void StartGame(const QString& path, ScanForSecondDisc scan,
-                 const std::optional<std::string>& savestate_path = {});
+                 std::unique_ptr<BootSessionData> boot_session_data = nullptr);
   void StartGame(const std::string& path, ScanForSecondDisc scan,
-                 const std::optional<std::string>& savestate_path = {});
+                 std::unique_ptr<BootSessionData> boot_session_data = nullptr);
   void StartGame(const std::vector<std::string>& paths,
-                 const std::optional<std::string>& savestate_path = {});
+                 std::unique_ptr<BootSessionData> boot_session_data = nullptr);
   void StartGame(std::unique_ptr<BootParameters>&& parameters);
   void ShowRenderWidget();
-  void HideRenderWidget(bool reinit = true);
+  void HideRenderWidget(bool reinit = true, bool is_exit = false);
 
   void ShowSettingsWindow();
   void ShowGeneralWindow();
@@ -155,9 +171,17 @@ private:
   void ShowNetPlaySetupDialog();
   void ShowNetPlayBrowser();
   void ShowFIFOPlayer();
+  void ShowSkylanderPortal();
+  void ShowInfinityBase();
   void ShowMemcardManager();
   void ShowResourcePackManager();
   void ShowCheatsManager();
+  void ShowRiivolutionBootWidget(const UICommon::GameFile& game);
+
+#ifdef USE_RETRO_ACHIEVEMENTS
+  void ShowAchievementsWindow();
+  void ShowAchievementSettings();
+#endif  // USE_RETRO_ACHIEVEMENTS
 
   void NetPlayInit();
   bool NetPlayJoin();
@@ -183,6 +207,8 @@ private:
   void ChangeDisc();
   void EjectDisc();
 
+  void OpenUserFolder();
+
   QStringList PromptFileNames();
 
   void UpdateScreenSaverInhibition();
@@ -191,6 +217,8 @@ private:
   void dragEnterEvent(QDragEnterEvent* event) override;
   void dropEvent(QDropEvent* event) override;
   QSize sizeHint() const override;
+
+  Core::System& m_system;
 
 #ifdef HAVE_XRANDR
   std::unique_ptr<X11Utils::XRRConfiguration> m_xrr_config;
@@ -208,13 +236,15 @@ private:
   bool m_exit_requested = false;
   bool m_fullscreen_requested = false;
   bool m_is_screensaver_inhibited = false;
-  int m_state_slot = 1;
+  u32 m_state_slot = 1;
   std::unique_ptr<BootParameters> m_pending_boot;
 
   ControllersWindow* m_controllers_window = nullptr;
   SettingsWindow* m_settings_window = nullptr;
   GraphicsWindow* m_graphics_window = nullptr;
   FIFOPlayerWindow* m_fifo_window = nullptr;
+  SkylanderPortalWindow* m_skylander_window = nullptr;
+  InfinityBaseWindow* m_infinity_window = nullptr;
   MappingWindow* m_hotkey_window = nullptr;
   FreeLookWindow* m_freelook_window = nullptr;
 
@@ -224,9 +254,15 @@ private:
   NetPlaySetupDialog* m_netplay_setup_dialog;
   static constexpr int num_gc_controllers = 4;
   std::array<GCTASInputWindow*, num_gc_controllers> m_gc_tas_input_windows{};
+  std::array<GBATASInputWindow*, num_gc_controllers> m_gba_tas_input_windows{};
   static constexpr int num_wii_controllers = 4;
   std::array<WiiTASInputWindow*, num_wii_controllers> m_wii_tas_input_windows{};
 
+#ifdef USE_RETRO_ACHIEVEMENTS
+  AchievementsWindow* m_achievements_window = nullptr;
+#endif  // USE_RETRO_ACHIEVEMENTS
+
+  AssemblerWidget* m_assembler_widget;
   BreakpointWidget* m_breakpoint_widget;
   CodeWidget* m_code_widget;
   JITWidget* m_jit_widget;

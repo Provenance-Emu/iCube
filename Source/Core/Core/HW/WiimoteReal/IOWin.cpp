@@ -1,6 +1,7 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Core/HW/WiimoteReal/IOWin.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -25,13 +26,13 @@
 #include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
 #include "Common/DynamicLibrary.h"
+#include "Common/HRWrap.h"
 #include "Common/Logging/Log.h"
 #include "Common/ScopeGuard.h"
 #include "Common/Thread.h"
+#include "Core/HW/WiimoteCommon/DataReport.h"
 #include "Core/HW/WiimoteCommon/WiimoteConstants.h"
 #include "Core/HW/WiimoteCommon/WiimoteReport.h"
-#include "Core/HW/WiimoteCommon/DataReport.h"
-#include "Core/HW/WiimoteReal/IOWin.h"
 
 // Create func_t function pointer type and declare a nullptr-initialized static variable of that
 // type named "pfunc".
@@ -196,8 +197,8 @@ void init_lib()
 
 namespace WiimoteReal
 {
-int IOWrite(HANDLE& dev_handle, OVERLAPPED& hid_overlap_write, enum WinWriteMethod& stack,
-            const u8* buf, size_t len, DWORD* written);
+int IOWrite(HANDLE& dev_handle, OVERLAPPED& hid_overlap_write, WinWriteMethod& stack, const u8* buf,
+            size_t len, DWORD* written);
 int IORead(HANDLE& dev_handle, OVERLAPPED& hid_overlap_read, u8* buf, int index);
 
 template <typename T>
@@ -247,7 +248,7 @@ int IOWritePerSetOutputReport(HANDLE& dev_handle, const u8* buf, size_t len, DWO
       // Some third-party adapters (DolphinBar) use this
       // error code to signal the absence of a Wiimote
       // linked to the HID device.
-      WARN_LOG_FMT(WIIMOTE, "IOWrite[WWM_SET_OUTPUT_REPORT]: Error: {:08x}", err);
+      WARN_LOG_FMT(WIIMOTE, "IOWrite[WWM_SET_OUTPUT_REPORT]: Error: {}", Common::HRWrap(err));
     }
   }
 
@@ -274,7 +275,7 @@ int IOWritePerWriteFile(HANDLE& dev_handle, OVERLAPPED& hid_overlap_write,
   // This is currently needed by the Toshiba Bluetooth Stack.
   if ((write_method == WWM_WRITE_FILE_LARGEST_REPORT_SIZE) && (MAX_PAYLOAD > len))
   {
-    std::copy(buf, buf + len, resized_buffer);
+    std::copy_n(buf, len, resized_buffer);
     std::fill(resized_buffer + len, resized_buffer + MAX_PAYLOAD, 0);
     write_buffer = resized_buffer + 1;
     bytes_to_write = MAX_PAYLOAD - 1;
@@ -297,7 +298,8 @@ int IOWritePerWriteFile(HANDLE& dev_handle, OVERLAPPED& hid_overlap_write,
       // Pending is no error!
       break;
     default:
-      WARN_LOG_FMT(WIIMOTE, "IOWrite[WWM_WRITE_FILE]: Error on WriteFile: {:08x}", error);
+      WARN_LOG_FMT(WIIMOTE, "IOWrite[WWM_WRITE_FILE]: Error on WriteFile: {}",
+                   Common::GetWin32ErrorString(error));
       CancelIo(dev_handle);
       return 0;
     }
@@ -495,17 +497,6 @@ WiimoteScannerWindows::WiimoteScannerWindows()
   init_lib();
 }
 
-WiimoteScannerWindows::~WiimoteScannerWindows()
-{
-// TODO: what do we want here?
-#if 0
-	ProcessWiimotes(false, [](HANDLE, BLUETOOTH_RADIO_INFO&, BLUETOOTH_DEVICE_INFO_STRUCT& btdi)
-	{
-		RemoveWiimote(btdi);
-	});
-#endif
-}
-
 void WiimoteScannerWindows::Update()
 {
   if (!s_loaded_ok)
@@ -635,39 +626,6 @@ bool WiimoteWindows::ConnectInternal()
     return false;
   }
 
-#if 0
-	TCHAR name[128] = {};
-	pHidD_GetProductString(dev_handle, name, 128);
-
-	if (!IsValidBluetoothName(TStrToUTF8(name)))
-	{
-		CloseHandle(dev_handle);
-		dev_handle = 0;
-		return false;
-	}
-#endif
-
-#if 0
-	HIDD_ATTRIBUTES attr;
-	attr.Size = sizeof(attr);
-	if (!pHidD_GetAttributes(dev_handle, &attr))
-	{
-		CloseHandle(dev_handle);
-		dev_handle = 0;
-		return false;
-	}
-#endif
-
-  // TODO: thread isn't started here now, do this elsewhere
-  // This isn't as drastic as it sounds, since the process in which the threads
-  // reside is normal priority. Needed for keeping audio reports at a decent rate
-  /*
-    if (!SetThreadPriority(m_wiimote_thread.native_handle(), THREAD_PRIORITY_TIME_CRITICAL))
-    {
-      ERROR_LOG_FMT(WIIMOTE, "Failed to set Wiimote thread priority");
-    }
-  */
-
   return true;
 }
 
@@ -771,7 +729,7 @@ int IORead(HANDLE& dev_handle, OVERLAPPED& hid_overlap_read, u8* buf, int index)
     }
     else
     {
-      WARN_LOG_FMT(WIIMOTE, "ReadFile error {} on Wiimote {}.", read_err, index + 1);
+      WARN_LOG_FMT(WIIMOTE, "ReadFile on Wiimote {}: {}", index + 1, Common::HRWrap(read_err));
       return 0;
     }
   }
@@ -955,8 +913,8 @@ bool AttachWiimote(HANDLE hRadio, const BLUETOOTH_RADIO_INFO& radio_info,
 
     if (ERROR_SUCCESS != auth_result)
     {
-      ERROR_LOG_FMT(WIIMOTE, "AttachWiimote: BluetoothAuthenticateDeviceEx returned {:08x}",
-                    auth_result);
+      ERROR_LOG_FMT(WIIMOTE, "AttachWiimote: BluetoothAuthenticateDeviceEx failed: {}",
+                    Common::HRWrap(auth_result));
     }
 
     DWORD pcServices = 16;
@@ -967,8 +925,8 @@ bool AttachWiimote(HANDLE hRadio, const BLUETOOTH_RADIO_INFO& radio_info,
 
     if (ERROR_SUCCESS != srv_result)
     {
-      ERROR_LOG_FMT(WIIMOTE, "AttachWiimote: BluetoothEnumerateInstalledServices returned {:08x}",
-                    srv_result);
+      ERROR_LOG_FMT(WIIMOTE, "AttachWiimote: BluetoothEnumerateInstalledServices failed: {}",
+                    Common::HRWrap(auth_result));
     }
 #endif
     // Activate service
@@ -979,7 +937,8 @@ bool AttachWiimote(HANDLE hRadio, const BLUETOOTH_RADIO_INFO& radio_info,
 
     if (FAILED(hr))
     {
-      ERROR_LOG_FMT(WIIMOTE, "AttachWiimote: BluetoothSetServiceState returned {:08x}", hr);
+      ERROR_LOG_FMT(WIIMOTE, "AttachWiimote: BluetoothSetServiceState failed: {}",
+                    Common::HRWrap(hr));
     }
     else
     {

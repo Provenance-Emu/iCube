@@ -1,6 +1,5 @@
 // Copyright 2021 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "InputCommon/DynamicInputTextures/DITSpecification.h"
 
@@ -137,8 +136,7 @@ bool ProcessSpecificationV1(picojson::value& root, std::vector<Data>& input_text
             return false;
           }
 
-          if (!std::all_of(region_offsets.begin(), region_offsets.end(),
-                           [](picojson::value val) { return val.is<double>(); }))
+          if (!std::ranges::all_of(region_offsets, &picojson::value::is<double>))
           {
             ERROR_LOG_FMT(
                 VIDEO,

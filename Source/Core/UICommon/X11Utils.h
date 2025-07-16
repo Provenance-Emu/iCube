@@ -1,6 +1,5 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -21,10 +20,6 @@
 namespace X11Utils
 {
 bool ToggleFullscreen(Display* dpy, Window win);
-Window XWindowFromHandle(void* Handle);
-Display* XDisplayFromHandle(void* Handle);
-
-void InhibitScreensaver(Window win, bool suspend);
 
 #ifdef HAVE_XRANDR
 class XRRConfiguration

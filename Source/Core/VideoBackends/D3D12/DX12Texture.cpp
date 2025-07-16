@@ -1,12 +1,14 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "VideoBackends/D3D12/DX12Texture.h"
+
 #include "Common/Align.h"
 #include "Common/Assert.h"
+#include "Common/StringUtil.h"
+
 #include "VideoBackends/D3D12/Common.h"
-#include "VideoBackends/D3D12/D3D12Renderer.h"
+#include "VideoBackends/D3D12/D3D12Gfx.h"
 #include "VideoBackends/D3D12/D3D12StreamBuffer.h"
 #include "VideoBackends/D3D12/DX12Context.h"
 #include "VideoBackends/D3D12/DescriptorHeapManager.h"
@@ -37,14 +39,18 @@ static ComPtr<ID3D12Resource> CreateTextureUploadBuffer(u32 buffer_size)
   HRESULT hr = g_dx_context->GetDevice()->CreateCommittedResource(
       &heap_properties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
       IID_PPV_ARGS(&resource));
-  CHECK(SUCCEEDED(hr), "Create texture upload buffer");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create texture upload buffer: {}", DX12HRWrap(hr));
   return resource;
 }
 
 DXTexture::DXTexture(const TextureConfig& config, ID3D12Resource* resource,
-                     D3D12_RESOURCE_STATES state)
-    : AbstractTexture(config), m_resource(resource), m_state(state)
+                     D3D12_RESOURCE_STATES state, std::string_view name)
+    : AbstractTexture(config), m_resource(resource), m_state(state), m_name(UTF8ToWString(name))
 {
+  if (!m_name.empty())
+  {
+    resource->SetName(m_name.c_str());
+  }
 }
 
 DXTexture::~DXTexture()
@@ -64,7 +70,7 @@ DXTexture::~DXTexture()
     g_dx_context->DeferResourceDestruction(m_resource.Get());
 }
 
-std::unique_ptr<DXTexture> DXTexture::Create(const TextureConfig& config)
+std::unique_ptr<DXTexture> DXTexture::Create(const TextureConfig& config, std::string_view name)
 {
   constexpr D3D12_HEAP_PROPERTIES heap_properties = {D3D12_HEAP_TYPE_DEFAULT};
   D3D12_RESOURCE_STATES resource_state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
@@ -110,11 +116,12 @@ std::unique_ptr<DXTexture> DXTexture::Create(const TextureConfig& config)
   HRESULT hr = g_dx_context->GetDevice()->CreateCommittedResource(
       &heap_properties, D3D12_HEAP_FLAG_NONE, &resource_desc, resource_state,
       config.IsRenderTarget() ? &optimized_clear_value : nullptr, IID_PPV_ARGS(&resource));
-  CHECK(SUCCEEDED(hr), "Create D3D12 texture resource");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create D3D12 texture resource: {}", DX12HRWrap(hr));
   if (FAILED(hr))
     return nullptr;
 
-  auto tex = std::unique_ptr<DXTexture>(new DXTexture(config, resource.Get(), resource_state));
+  auto tex =
+      std::unique_ptr<DXTexture>(new DXTexture(config, resource.Get(), resource_state, name));
   if (!tex->CreateSRVDescriptor() || (config.IsComputeImage() && !tex->CreateUAVDescriptor()))
     return nullptr;
 
@@ -133,7 +140,8 @@ std::unique_ptr<DXTexture> DXTexture::CreateAdopted(ID3D12Resource* resource)
   }
 
   TextureConfig config(static_cast<u32>(desc.Width), desc.Height, desc.MipLevels,
-                       desc.DepthOrArraySize, desc.SampleDesc.Count, format, 0);
+                       desc.DepthOrArraySize, desc.SampleDesc.Count, format, 0,
+                       AbstractTextureType::Texture_2DArray);
   if (desc.Flags &
       (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
   {
@@ -143,7 +151,7 @@ std::unique_ptr<DXTexture> DXTexture::CreateAdopted(ID3D12Resource* resource)
     config.flags |= AbstractTextureFlag_ComputeImage;
 
   auto tex =
-      std::unique_ptr<DXTexture>(new DXTexture(config, resource, D3D12_RESOURCE_STATE_COMMON));
+      std::unique_ptr<DXTexture>(new DXTexture(config, resource, D3D12_RESOURCE_STATE_COMMON, ""));
   if (!tex->CreateSRVDescriptor())
     return nullptr;
 
@@ -158,19 +166,50 @@ bool DXTexture::CreateSRVDescriptor()
     return false;
   }
 
-  D3D12_SHADER_RESOURCE_VIEW_DESC desc = {D3DCommon::GetSRVFormatForAbstractFormat(m_config.format),
-                                          m_config.IsMultisampled() ?
-                                              D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY :
-                                              D3D12_SRV_DIMENSION_TEXTURE2DARRAY,
-                                          D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING};
-  if (m_config.IsMultisampled())
+  D3D12_SRV_DIMENSION dimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+  if (m_config.type == AbstractTextureType::Texture_2DArray)
   {
-    desc.Texture2DMSArray.ArraySize = m_config.layers;
+    if (m_config.IsMultisampled())
+      dimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+    else
+      dimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+  }
+  else if (m_config.type == AbstractTextureType::Texture_2D)
+  {
+    if (m_config.IsMultisampled())
+      dimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+    else
+      dimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+  }
+  else if (m_config.type == AbstractTextureType::Texture_CubeMap)
+  {
+    dimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
   }
   else
   {
-    desc.Texture2DArray.MipLevels = m_config.levels;
-    desc.Texture2DArray.ArraySize = m_config.layers;
+    PanicAlertFmt("Failed to allocate SRV - unhandled type");
+    return false;
+  }
+  D3D12_SHADER_RESOURCE_VIEW_DESC desc = {D3DCommon::GetSRVFormatForAbstractFormat(m_config.format),
+                                          dimension, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING};
+
+  if (m_config.type == AbstractTextureType::Texture_CubeMap)
+  {
+    desc.TextureCube.MostDetailedMip = 0;
+    desc.TextureCube.MipLevels = m_config.levels;
+    desc.TextureCube.ResourceMinLODClamp = 0.0f;
+  }
+  else
+  {
+    if (m_config.IsMultisampled())
+    {
+      desc.Texture2DMSArray.ArraySize = m_config.layers;
+    }
+    else
+    {
+      desc.Texture2DArray.MipLevels = m_config.levels;
+      desc.Texture2DArray.ArraySize = m_config.layers;
+    }
   }
   g_dx_context->GetDevice()->CreateShaderResourceView(m_resource.Get(), &desc,
                                                       m_srv_descriptor.cpu_handle);
@@ -196,7 +235,7 @@ bool DXTexture::CreateUAVDescriptor()
 }
 
 void DXTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8* buffer,
-                     size_t buffer_size)
+                     size_t buffer_size, u32 layer)
 {
   // Textures greater than 1024*1024 will be put in staging textures that are released after
   // execution instead. A 2048x2048 texture is 16MB, and we'd only fit four of these in our
@@ -223,9 +262,15 @@ void DXTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8*
   {
     const D3D12_RANGE read_range = {0, 0};
     staging_buffer = CreateTextureUploadBuffer(upload_size);
-    if (!staging_buffer || FAILED(staging_buffer->Map(0, &read_range, &upload_buffer_ptr)))
+    if (!staging_buffer)
     {
-      PanicAlertFmt("Failed to allocate/map temporary texture upload buffer");
+      PanicAlertFmt("Failed to allocate temporary texture upload buffer");
+      return;
+    }
+    HRESULT hr = staging_buffer->Map(0, &read_range, &upload_buffer_ptr);
+    if (FAILED(hr))
+    {
+      PanicAlertFmt("Failed to map temporary texture upload buffer: {}", DX12HRWrap(hr));
       return;
     }
 
@@ -241,7 +286,7 @@ void DXTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8*
     {
       WARN_LOG_FMT(VIDEO,
                    "Executing command list while waiting for space in texture upload buffer");
-      Renderer::GetInstance()->ExecuteCommandList(false);
+      Gfx::GetInstance()->ExecuteCommandList(false);
       if (!g_dx_context->GetTextureUploadBuffer().ReserveMemory(
               upload_size, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT))
       {
@@ -288,7 +333,7 @@ void DXTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8*
   const u32 aligned_height = Common::AlignUp(height, block_size);
   const D3D12_TEXTURE_COPY_LOCATION dst_loc = {m_resource.Get(),
                                                D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                                               {static_cast<UINT>(CalcSubresource(level, 0))}};
+                                               {static_cast<UINT>(CalcSubresource(level, layer))}};
   const D3D12_TEXTURE_COPY_LOCATION src_loc = {
       upload_buffer_resource,
       D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
@@ -380,10 +425,12 @@ void DXTexture::DestroyResource()
 }
 
 DXFramebuffer::DXFramebuffer(AbstractTexture* color_attachment, AbstractTexture* depth_attachment,
+                             std::vector<AbstractTexture*> additional_color_attachments,
                              AbstractTextureFormat color_format, AbstractTextureFormat depth_format,
                              u32 width, u32 height, u32 layers, u32 samples)
-    : AbstractFramebuffer(color_attachment, depth_attachment, color_format, depth_format, width,
-                          height, layers, samples)
+    : AbstractFramebuffer(color_attachment, depth_attachment,
+                          std::move(additional_color_attachments), color_format, depth_format,
+                          width, height, layers, samples)
 {
 }
 
@@ -399,15 +446,90 @@ DXFramebuffer::~DXFramebuffer()
       g_dx_context->DeferDescriptorDestruction(g_dx_context->GetRTVHeapManager(),
                                                m_int_rtv_descriptor.index);
     }
+  }
+  for (auto render_target : m_render_targets)
+  {
     g_dx_context->DeferDescriptorDestruction(g_dx_context->GetRTVHeapManager(),
-                                             m_rtv_descriptor.index);
+                                             render_target.index);
   }
 }
 
-std::unique_ptr<DXFramebuffer> DXFramebuffer::Create(DXTexture* color_attachment,
-                                                     DXTexture* depth_attachment)
+const D3D12_CPU_DESCRIPTOR_HANDLE* DXFramebuffer::GetIntRTVDescriptorArray() const
 {
-  if (!ValidateConfig(color_attachment, depth_attachment))
+  if (m_color_attachment == nullptr)
+    return nullptr;
+
+  const auto& handle = m_int_rtv_descriptor.cpu_handle;
+
+  // To save space in the descriptor heap, m_int_rtv_descriptor.cpu_handle.ptr is only allocated
+  // when the integer RTV format corresponding to the current abstract format differs from the
+  // non-integer RTV format. Only use the integer handle if it has been allocated.
+  if (handle.ptr != 0)
+    return &handle;
+
+  // The integer and non-integer RTV formats are the same, so use the non-integer descriptor.
+  return GetRTVDescriptorArray();
+}
+
+void DXFramebuffer::Unbind()
+{
+  static const D3D12_DISCARD_REGION dr = {0, nullptr, 0, 1};
+  if (HasColorBuffer())
+  {
+    g_dx_context->GetCommandList()->DiscardResource(
+        static_cast<DXTexture*>(GetColorAttachment())->GetResource(), &dr);
+  }
+  for (auto additional_color_attachment : m_additional_color_attachments)
+  {
+    g_dx_context->GetCommandList()->DiscardResource(
+        static_cast<DXTexture*>(additional_color_attachment)->GetResource(), &dr);
+  }
+  if (HasDepthBuffer())
+  {
+    g_dx_context->GetCommandList()->DiscardResource(
+        static_cast<DXTexture*>(GetDepthAttachment())->GetResource(), &dr);
+  }
+}
+
+void DXFramebuffer::ClearRenderTargets(const ClearColor& color_value,
+                                       const D3D12_RECT* rectangle) const
+{
+  for (auto render_target : m_render_targets_raw)
+  {
+    g_dx_context->GetCommandList()->ClearRenderTargetView(render_target, color_value.data(),
+                                                          rectangle ? 1 : 0, rectangle);
+  }
+}
+
+void DXFramebuffer::ClearDepth(float depth_value, const D3D12_RECT* rectangle) const
+{
+  if (HasDepthBuffer())
+  {
+    g_dx_context->GetCommandList()->ClearDepthStencilView(GetDSVDescriptor().cpu_handle,
+                                                          D3D12_CLEAR_FLAG_DEPTH, depth_value, 0,
+                                                          rectangle ? 1 : 0, rectangle);
+  }
+}
+
+void DXFramebuffer::TransitionRenderTargets() const
+{
+  if (HasColorBuffer())
+  {
+    static_cast<DXTexture*>(GetColorAttachment())
+        ->TransitionToState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+  }
+  for (auto additional_color_attachment : m_additional_color_attachments)
+  {
+    static_cast<DXTexture*>(additional_color_attachment)
+        ->TransitionToState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+  }
+}
+
+std::unique_ptr<DXFramebuffer>
+DXFramebuffer::Create(DXTexture* color_attachment, DXTexture* depth_attachment,
+                      std::vector<AbstractTexture*> additional_color_attachments)
+{
+  if (!ValidateConfig(color_attachment, depth_attachment, additional_color_attachments))
     return nullptr;
 
   const AbstractTextureFormat color_format =
@@ -420,10 +542,10 @@ std::unique_ptr<DXFramebuffer> DXFramebuffer::Create(DXTexture* color_attachment
   const u32 layers = either_attachment->GetLayers();
   const u32 samples = either_attachment->GetSamples();
 
-  std::unique_ptr<DXFramebuffer> fb(new DXFramebuffer(color_attachment, depth_attachment,
-                                                      color_format, depth_format, width, height,
-                                                      layers, samples));
-  if ((color_attachment && !fb->CreateRTVDescriptor()) ||
+  std::unique_ptr<DXFramebuffer> fb(
+      new DXFramebuffer(color_attachment, depth_attachment, std::move(additional_color_attachments),
+                        color_format, depth_format, width, height, layers, samples));
+  if (!fb->CreateRTVDescriptors() || (color_attachment && !fb->CreateIRTVDescriptor()) ||
       (depth_attachment && !fb->CreateDSVDescriptor()))
   {
     return nullptr;
@@ -432,38 +554,77 @@ std::unique_ptr<DXFramebuffer> DXFramebuffer::Create(DXTexture* color_attachment
   return fb;
 }
 
-bool DXFramebuffer::CreateRTVDescriptor()
+bool DXFramebuffer::CreateRTVDescriptors()
 {
-  if (!g_dx_context->GetRTVHeapManager().Allocate(&m_rtv_descriptor))
+  if (m_color_attachment)
+  {
+    if (!CreateRTVDescriptor(m_layers, m_color_attachment))
+    {
+      return false;
+    }
+  }
+
+  for (auto* attachment : m_additional_color_attachments)
+  {
+    if (!CreateRTVDescriptor(1, attachment))
+    {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool DXFramebuffer::CreateRTVDescriptor(u32 layers, AbstractTexture* attachment)
+{
+  DescriptorHandle rtv;
+  if (!g_dx_context->GetRTVHeapManager().Allocate(&rtv))
   {
     PanicAlertFmt("Failed to allocate RTV descriptor");
     return false;
   }
+  m_render_targets.push_back(std::move(rtv));
+  m_render_targets_raw.push_back(m_render_targets.back().cpu_handle);
 
   const bool multisampled = m_samples > 1;
   D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {
       D3DCommon::GetRTVFormatForAbstractFormat(m_color_format, false),
       multisampled ? D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY : D3D12_RTV_DIMENSION_TEXTURE2DARRAY};
   if (multisampled)
-    rtv_desc.Texture2DMSArray.ArraySize = m_layers;
+    rtv_desc.Texture2DMSArray.ArraySize = layers;
   else
-    rtv_desc.Texture2DArray.ArraySize = m_layers;
+    rtv_desc.Texture2DArray.ArraySize = layers;
   g_dx_context->GetDevice()->CreateRenderTargetView(
-      static_cast<DXTexture*>(m_color_attachment)->GetResource(), &rtv_desc,
-      m_rtv_descriptor.cpu_handle);
+      static_cast<DXTexture*>(attachment)->GetResource(), &rtv_desc, m_render_targets_raw.back());
 
+  return true;
+}
+
+bool DXFramebuffer::CreateIRTVDescriptor()
+{
+  const bool multisampled = m_samples > 1;
+  DXGI_FORMAT non_int_format = D3DCommon::GetRTVFormatForAbstractFormat(m_color_format, false);
   DXGI_FORMAT int_format = D3DCommon::GetRTVFormatForAbstractFormat(m_color_format, true);
-  if (int_format != rtv_desc.Format)
+
+  // If the integer and non-integer RTV formats are the same for a given abstract format we can save
+  // space in the descriptor heap by only allocating the non-integer descriptor and using it for
+  // the integer RTV too.
+  if (int_format != non_int_format)
   {
     if (!g_dx_context->GetRTVHeapManager().Allocate(&m_int_rtv_descriptor))
       return false;
 
-    rtv_desc.Format = int_format;
+    D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {int_format, multisampled ?
+                                                              D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY :
+                                                              D3D12_RTV_DIMENSION_TEXTURE2DARRAY};
+    if (multisampled)
+      rtv_desc.Texture2DMSArray.ArraySize = m_layers;
+    else
+      rtv_desc.Texture2DArray.ArraySize = m_layers;
     g_dx_context->GetDevice()->CreateRenderTargetView(
         static_cast<DXTexture*>(m_color_attachment)->GetResource(), &rtv_desc,
         m_int_rtv_descriptor.cpu_handle);
   }
-
   return true;
 }
 
@@ -591,7 +752,7 @@ bool DXStagingTexture::Map()
 
   const D3D12_RANGE read_range = {0u, m_type == StagingTextureType::Upload ? 0u : m_buffer_size};
   HRESULT hr = m_resource->Map(0, &read_range, reinterpret_cast<void**>(&m_map_pointer));
-  CHECK(SUCCEEDED(hr), "Map resource failed");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Map resource failed: {}", DX12HRWrap(hr));
   if (FAILED(hr))
     return false;
 
@@ -619,7 +780,7 @@ void DXStagingTexture::Flush()
   // the current list and wait for it to complete. This is the slowest path. Otherwise, if the
   // command list with the copy has been submitted, we only need to wait for the fence.
   if (m_completed_fence == g_dx_context->GetCurrentFenceValue())
-    Renderer::GetInstance()->ExecuteCommandList(true);
+    Gfx::GetInstance()->ExecuteCommandList(true);
   else
     g_dx_context->WaitForFence(m_completed_fence);
 }
@@ -656,7 +817,7 @@ std::unique_ptr<DXStagingTexture> DXStagingTexture::Create(StagingTextureType ty
       &heap_properties, D3D12_HEAP_FLAG_NONE, &desc,
       is_upload ? D3D12_RESOURCE_STATE_GENERIC_READ : D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
       IID_PPV_ARGS(&resource));
-  CHECK(SUCCEEDED(hr), "Create staging texture resource");
+  ASSERT_MSG(VIDEO, SUCCEEDED(hr), "Failed to create staging texture resource: {}", DX12HRWrap(hr));
   if (FAILED(hr))
     return nullptr;
 

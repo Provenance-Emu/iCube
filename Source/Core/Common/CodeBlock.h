@@ -1,6 +1,5 @@
 // Copyright 2014 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -18,7 +17,7 @@ namespace Common
 // having to prefix them with gen-> or something similar.
 // Example implementation:
 // class JIT : public CodeBlock<ARMXEmitter> {}
-template <class T>
+template <class T, bool executable = true>
 class CodeBlock : public T
 {
 private:
@@ -29,9 +28,6 @@ private:
 
 protected:
   u8* region = nullptr;
-#ifdef _BULLETPROOF_JIT
-  u8* secondary_region = nullptr;
-#endif
   // Size of region we can use.
   size_t region_size = 0;
   // Original size of the region we allocated.
@@ -57,14 +53,11 @@ public:
   {
     region_size = size;
     total_region_size = size;
-    region = static_cast<u8*>(Common::AllocateExecutableMemory(total_region_size));
+    if constexpr (executable)
+      region = static_cast<u8*>(Common::AllocateExecutableMemory(total_region_size));
+    else
+      region = static_cast<u8*>(Common::AllocateMemoryPages(total_region_size));
     T::SetCodePtr(region, region + size);
-
-#ifdef _BULLETPROOF_JIT
-    secondary_region = static_cast<u8*>(Common::RemapExecutableRegion(region, total_region_size));
-
-    T::SetBpDifference(secondary_region - region);
-#endif
   }
 
   // Always clear code space with breakpoints, so that if someone accidentally executes
@@ -80,27 +73,31 @@ public:
   {
     ASSERT(!m_is_child);
     Common::FreeMemoryPages(region, total_region_size);
-#ifdef _BULLETPROOF_JIT
-    Common::FreeMemoryPages(secondary_region, total_region_size);
-#endif
     region = nullptr;
     region_size = 0;
     total_region_size = 0;
     for (CodeBlock* child : m_children)
     {
       child->region = nullptr;
-#ifdef _BULLETPROOF_JIT
-      child->secondary_region = nullptr;
-#endif
       child->region_size = 0;
       child->total_region_size = 0;
     }
   }
 
   bool IsInSpace(const u8* ptr) const { return ptr >= region && ptr < (region + region_size); }
-  // Cannot currently be undone. Will write protect the entire code region.
-  // Start over if you need to change the code (call FreeCodeSpace(), AllocCodeSpace()).
-  void WriteProtect() { Common::WriteProtectMemory(region, region_size, true); }
+  bool IsInSpaceOrChildSpace(const u8* ptr) const
+  {
+    return ptr >= region && ptr < (region + total_region_size);
+  }
+  u8* GetRegionPtr() { return region; }
+  void WriteProtect(bool allow_execute)
+  {
+    Common::WriteProtectMemory(region, region_size, allow_execute);
+  }
+  void UnWriteProtect(bool allow_execute)
+  {
+    Common::UnWriteProtectMemory(region, region_size, allow_execute);
+  }
   void ResetCodePtr() { T::SetCodePtr(region, region + region_size); }
   size_t GetSpaceLeft() const
   {
@@ -117,9 +114,10 @@ public:
   bool HasChildren() const { return region_size != total_region_size; }
   u8* AllocChildCodeSpace(size_t child_size)
   {
-    ASSERT_MSG(DYNA_REC, child_size < GetSpaceLeft(), "Insufficient space for child allocation.");
+    ASSERT_MSG(DYNA_REC, child_size <= GetSpaceLeft(), "Insufficient space for child allocation.");
     u8* child_region = region + region_size - child_size;
     region_size -= child_size;
+    ResetCodePtr();
     return child_region;
   }
   void AddChildCodeSpace(CodeBlock* child, size_t child_size)
@@ -129,10 +127,6 @@ public:
     child->region = child_region;
     child->region_size = child_size;
     child->total_region_size = child_size;
-#ifdef _BULLETPROOF_JIT
-    long difference = secondary_region - region;
-    child->secondary_region = child->region + difference;
-#endif
     child->ResetCodePtr();
     m_children.emplace_back(child);
   }

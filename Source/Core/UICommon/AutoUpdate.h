@@ -1,10 +1,10 @@
 // Copyright 2018 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #include <string>
+#include <string_view>
 
 // Refer to docs/autoupdate_overview.md for a detailed overview of the autoupdate process
 
@@ -13,9 +13,15 @@
 class AutoUpdateChecker
 {
 public:
+  enum class CheckType
+  {
+    Automatic,
+    Manual,
+  };
   // Initiates a check for updates in the background. Calls the OnUpdateAvailable callback if an
   // update is available, does "nothing" otherwise.
-  void CheckForUpdate();
+  void CheckForUpdate(std::string_view update_track, std::string_view hash_override,
+                      CheckType check_type);
 
   static bool SystemSupportsAutoUpdates();
 

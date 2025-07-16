@@ -1,6 +1,5 @@
 // Copyright 2014 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -13,19 +12,17 @@
 #include "VideoCommon/CPMemory.h"
 #include "VideoCommon/NativeVertexFormat.h"
 
-class DataReader;
-
 class VertexLoaderUID
 {
-  std::array<u32, 5> vid;
-  size_t hash;
+  std::array<u32, 5> vid{};
+  size_t hash = 0;
 
 public:
   VertexLoaderUID() {}
   VertexLoaderUID(const TVtxDesc& vtx_desc, const VAT& vat)
   {
-    vid[0] = vtx_desc.GetLegacyHex0();
-    vid[1] = vtx_desc.GetLegacyHex1();
+    vid[0] = vtx_desc.low.Hex;
+    vid[1] = vtx_desc.high.Hex;
     vid[2] = vat.g0.Hex;
     vid[3] = vat.g1.Hex;
     vid[4] = vat.g2.Hex;
@@ -49,25 +46,21 @@ private:
   }
 };
 
-namespace std
-{
 template <>
-struct hash<VertexLoaderUID>
+struct std::hash<VertexLoaderUID>
 {
-  size_t operator()(const VertexLoaderUID& uid) const { return uid.GetHash(); }
+  size_t operator()(const VertexLoaderUID& uid) const noexcept { return uid.GetHash(); }
 };
-}  // namespace std
 
 class VertexLoaderBase
 {
 public:
   static u32 GetVertexSize(const TVtxDesc& vtx_desc, const VAT& vtx_attr);
   static u32 GetVertexComponents(const TVtxDesc& vtx_desc, const VAT& vtx_attr);
-  static std::vector<u32> GetVertexComponentSizes(const TVtxDesc& vtx_desc, const VAT& vtx_attr);
   static std::unique_ptr<VertexLoaderBase> CreateVertexLoader(const TVtxDesc& vtx_desc,
                                                               const VAT& vtx_attr);
   virtual ~VertexLoaderBase() {}
-  virtual int RunVertices(DataReader src, DataReader dst, int count) = 0;
+  virtual int RunVertices(const u8* src, u8* dst, int count) = 0;
 
   // per loader public state
   PortableVertexDeclaration m_native_vtx_decl{};

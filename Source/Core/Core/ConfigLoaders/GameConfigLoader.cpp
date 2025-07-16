@@ -1,6 +1,5 @@
 // Copyright 2016 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/ConfigLoaders/GameConfigLoader.h"
 
@@ -25,7 +24,9 @@
 #include "Common/MsgHandler.h"
 #include "Common/StringUtil.h"
 
+#include "Core/Config/MainSettings.h"
 #include "Core/Config/SYSCONFSettings.h"
+#include "Core/Config/WiimoteSettings.h"
 #include "Core/ConfigLoaders/IsSettingSaveable.h"
 
 namespace ConfigLoaders
@@ -59,9 +60,22 @@ std::vector<std::string> GetGameIniFilenames(const std::string& id, std::optiona
   return filenames;
 }
 
+struct SectionKey
+{
+  std::string section;
+  std::string key;
+  friend auto operator<=>(const SectionKey&, const SectionKey&) = default;
+};
+
+struct SystemSection
+{
+  Config::System system;
+  std::string section;
+};
+
 using Location = Config::Location;
-using INIToLocationMap = std::map<std::pair<std::string, std::string>, Location>;
-using INIToSectionMap = std::map<std::string, std::pair<Config::System, std::string>>;
+using INIToLocationMap = std::map<SectionKey, Location>;
+using INIToSectionMap = std::map<std::string, SystemSection>;
 
 // This is a mapping from the legacy section-key pairs to Locations.
 // New settings do not need to be added to this mapping.
@@ -73,6 +87,17 @@ static const INIToLocationMap& GetINIToLocationMap()
       {{"Core", "PAL60"}, {Config::SYSCONF_PAL60.GetLocation()}},
       {{"Wii", "Widescreen"}, {Config::SYSCONF_WIDESCREEN.GetLocation()}},
       {{"Wii", "Language"}, {Config::SYSCONF_LANGUAGE.GetLocation()}},
+      {{"Core", "HLE_BS2"}, {Config::MAIN_SKIP_IPL.GetLocation()}},
+      {{"Core", "GameCubeLanguage"}, {Config::MAIN_GC_LANGUAGE.GetLocation()}},
+      {{"Controls", "PadType0"}, {Config::GetInfoForSIDevice(0).GetLocation()}},
+      {{"Controls", "PadType1"}, {Config::GetInfoForSIDevice(1).GetLocation()}},
+      {{"Controls", "PadType2"}, {Config::GetInfoForSIDevice(2).GetLocation()}},
+      {{"Controls", "PadType3"}, {Config::GetInfoForSIDevice(3).GetLocation()}},
+      {{"Controls", "WiimoteSource0"}, {Config::WIIMOTE_1_SOURCE.GetLocation()}},
+      {{"Controls", "WiimoteSource1"}, {Config::WIIMOTE_2_SOURCE.GetLocation()}},
+      {{"Controls", "WiimoteSource2"}, {Config::WIIMOTE_3_SOURCE.GetLocation()}},
+      {{"Controls", "WiimoteSource3"}, {Config::WIIMOTE_4_SOURCE.GetLocation()}},
+      {{"Controls", "WiimoteSourceBB"}, {Config::WIIMOTE_BB_SOURCE.GetLocation()}},
   };
   return ini_to_location;
 }
@@ -84,6 +109,7 @@ static const INIToSectionMap& GetINIToSectionMap()
 {
   static const INIToSectionMap ini_to_section = {
       {"Core", {Config::System::Main, "Core"}},
+      {"DSP", {Config::System::Main, "DSP"}},
       {"Display", {Config::System::Main, "Display"}},
       {"Video_Hardware", {Config::System::GFX, "Hardware"}},
       {"Video_Settings", {Config::System::GFX, "Settings"}},
@@ -91,6 +117,7 @@ static const INIToSectionMap& GetINIToSectionMap()
       {"Video_Stereoscopy", {Config::System::GFX, "Stereoscopy"}},
       {"Video_Hacks", {Config::System::GFX, "Hacks"}},
       {"Video", {Config::System::GFX, "GameSpecific"}},
+      {"Controls", {Config::System::GameSettingsOnly, "Controls"}},
   };
   return ini_to_section;
 }
@@ -109,7 +136,7 @@ static Location MapINIToRealLocation(const std::string& section, const std::stri
   static const INIToSectionMap& ini_to_section = GetINIToSectionMap();
   const auto it2 = ini_to_section.find(section);
   if (it2 != ini_to_section.end())
-    return {it2->second.first, it2->second.second, key};
+    return {it2->second.system, it2->second.section, key};
 
   // Attempt to load it as a configuration option
   // It will be in the format of '<System>.<Section>'
@@ -130,21 +157,19 @@ static Location MapINIToRealLocation(const std::string& section, const std::stri
   return {Config::System::Main, "", ""};
 }
 
-static std::pair<std::string, std::string> GetINILocationFromConfig(const Location& location)
+static SectionKey GetINILocationFromConfig(const Location& location)
 {
-  static const INIToLocationMap& ini_to_location = GetINIToLocationMap();
-  const auto it = std::find_if(ini_to_location.begin(), ini_to_location.end(),
-                               [&location](const auto& entry) { return entry.second == location; });
-  if (it != ini_to_location.end())
-    return it->first;
+  for (auto& [ini_location, config_location] : GetINIToLocationMap())
+  {
+    if (config_location == location)
+      return ini_location;
+  }
 
-  static const INIToSectionMap& ini_to_section = GetINIToSectionMap();
-  const auto it2 =
-      std::find_if(ini_to_section.begin(), ini_to_section.end(), [&location](const auto& entry) {
-        return entry.second.first == location.system && entry.second.second == location.section;
-      });
-  if (it2 != ini_to_section.end())
-    return {it2->first, location.key};
+  for (auto& [section_name, sys_sec] : GetINIToSectionMap())
+  {
+    if (sys_sec.system == location.system && sys_sec.section == location.section)
+      return {section_name, location.key};
+  }
 
   return {Config::GetSystemName(location.system) + "." + location.section, location.key};
 }
@@ -161,7 +186,7 @@ public:
 
   void Load(Config::Layer* layer) override
   {
-    IniFile ini;
+    Common::IniFile ini;
     if (layer->GetLayer() == Config::LayerType::GlobalGame)
     {
       for (const std::string& filename : GetGameIniFilenames(m_id, m_revision))
@@ -173,7 +198,7 @@ public:
         ini.Load(File::GetUserPath(D_GAMESETTINGS_IDX) + filename, true);
     }
 
-    const std::list<IniFile::Section>& system_sections = ini.GetSections();
+    const auto& system_sections = ini.GetSections();
 
     for (const auto& section : system_sections)
     {
@@ -194,8 +219,9 @@ private:
     if (m_id == "00000000")
       return;
 
-    const std::array<std::tuple<std::string, std::string, Config::System>, 2> profile_info = {{
+    const std::array<std::tuple<std::string, std::string, Config::System>, 3> profile_info = {{
         std::make_tuple("Pad", "GCPad", Config::System::GCPad),
+        std::make_tuple("GBA", "GBA", Config::System::GCPad),
         std::make_tuple("Wiimote", "Wiimote", Config::System::WiiPad),
     }};
 
@@ -220,37 +246,35 @@ private:
             continue;
           }
 
-          IniFile profile_ini;
+          Common::IniFile profile_ini;
           profile_ini.Load(ini_path);
 
-          const IniFile::Section* ini_section = profile_ini.GetOrCreateSection("Profile");
-          const IniFile::Section::SectionMap& section_map = ini_section->GetValues();
-          for (const auto& value : section_map)
+          const auto* ini_section = profile_ini.GetOrCreateSection("Profile");
+          for (const auto& [key, value] : ini_section->GetValues())
           {
-            Config::Location location{std::get<2>(use_data), std::get<1>(use_data) + num,
-                                      value.first};
-            layer->Set(location, value.second);
+            Config::Location location{std::get<2>(use_data), std::get<1>(use_data) + num, key};
+            layer->Set(location, value);
           }
         }
       }
     }
   }
 
-  void LoadFromSystemSection(Config::Layer* layer, const IniFile::Section& section) const
+  void LoadFromSystemSection(Config::Layer* layer, const Common::IniFile::Section& section) const
   {
     const std::string section_name = section.GetName();
 
-    // Regular key,value pairs
-    const IniFile::Section::SectionMap& section_map = section.GetValues();
-
-    for (const auto& value : section_map)
+    for (const auto& [key, value] : section.GetValues())
     {
-      const auto location = MapINIToRealLocation(section_name, value.first);
+      const auto location = MapINIToRealLocation(section_name, key);
 
       if (location.section.empty() && location.key.empty())
         continue;
 
-      layer->Set(location, value.second);
+      if (location.system == Config::System::Session)
+        continue;
+
+      layer->Set(location, value);
     }
   }
 
@@ -263,30 +287,27 @@ void INIGameConfigLayerLoader::Save(Config::Layer* layer)
   if (layer->GetLayer() != Config::LayerType::LocalGame)
     return;
 
-  IniFile ini;
+  Common::IniFile ini;
   for (const std::string& file_name : GetGameIniFilenames(m_id, m_revision))
     ini.Load(File::GetUserPath(D_GAMESETTINGS_IDX) + file_name, true);
 
-  for (const auto& config : layer->GetLayerMap())
+  for (const auto& [location, value] : layer->GetLayerMap())
   {
-    const Config::Location& location = config.first;
-    const std::optional<std::string>& value = config.second;
-
-    if (!IsSettingSaveable(location))
+    if (!IsSettingSaveable(location) || location.system == Config::System::Session)
       continue;
 
     const auto ini_location = GetINILocationFromConfig(location);
-    if (ini_location.first.empty() && ini_location.second.empty())
+    if (ini_location.section.empty() && ini_location.key.empty())
       continue;
 
     if (value)
     {
-      IniFile::Section* ini_section = ini.GetOrCreateSection(ini_location.first);
-      ini_section->Set(ini_location.second, *value);
+      auto* ini_section = ini.GetOrCreateSection(ini_location.section);
+      ini_section->Set(ini_location.key, *value);
     }
     else
     {
-      ini.DeleteKey(ini_location.first, ini_location.second);
+      ini.DeleteKey(ini_location.section, ini_location.key);
     }
   }
 

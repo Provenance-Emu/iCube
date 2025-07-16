@@ -1,6 +1,5 @@
 // Copyright 2015 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/HW/GCKeyboard.h"
 
@@ -18,7 +17,7 @@
 
 namespace Keyboard
 {
-static InputConfig s_config("GCKeyNew", _trans("Keyboard"), "GCKey");
+static InputConfig s_config("GCKeyNew", _trans("Keyboard"), "GCKey", "GCKey");
 InputConfig* GetConfig()
 {
   return &s_config;
@@ -42,12 +41,12 @@ void Initialize()
   s_config.RegisterHotplugCallback();
 
   // Load the saved controller config
-  s_config.LoadConfig(true);
+  s_config.LoadConfig();
 }
 
 void LoadConfig()
 {
-  s_config.LoadConfig(true);
+  s_config.LoadConfig();
 }
 
 ControllerEmu::ControlGroup* GetGroup(int port, KeyboardGroup group)

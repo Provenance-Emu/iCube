@@ -1,6 +1,5 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/IOS/USB/USB_KBD.h"
 
@@ -11,9 +10,10 @@
 #include "Common/IniFile.h"
 #include "Common/Logging/Log.h"
 #include "Common/Swap.h"
-#include "Core/ConfigManager.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/Core.h"  // Local core functions
 #include "Core/HW/Memmap.h"
+#include "Core/System.h"
 #include "InputCommon/ControlReference/ControlReference.h"  // For background input check
 
 #ifdef _WIN32
@@ -184,14 +184,15 @@ USB_KBD::MessageData::MessageData(MessageType type, u8 modifiers_, PressedKeyDat
 
 // TODO: support in netplay/movies.
 
-USB_KBD::USB_KBD(Kernel& ios, const std::string& device_name) : Device(ios, device_name)
+USB_KBD::USB_KBD(EmulationKernel& ios, const std::string& device_name)
+    : EmulationDevice(ios, device_name)
 {
 }
 
 std::optional<IPCReply> USB_KBD::Open(const OpenRequest& request)
 {
   INFO_LOG_FMT(IOS, "USB_KBD: Open");
-  IniFile ini;
+  Common::IniFile ini;
   ini.Load(File::GetUserPath(F_DOLPHINCONFIG_IDX));
   ini.GetOrCreateSection("USB Keyboard")->Get("Layout", &m_keyboard_layout, KBD_LAYOUT_QWERTY);
 
@@ -211,10 +212,12 @@ std::optional<IPCReply> USB_KBD::Write(const ReadWriteRequest& request)
 
 std::optional<IPCReply> USB_KBD::IOCtl(const IOCtlRequest& request)
 {
-  if (SConfig::GetInstance().m_WiiKeyboard && !Core::WantsDeterminism() &&
+  if (Config::Get(Config::MAIN_WII_KEYBOARD) && !Core::WantsDeterminism() &&
       ControlReference::GetInputGate() && !m_message_queue.empty())
   {
-    Memory::CopyToEmu(request.buffer_out, &m_message_queue.front(), sizeof(MessageData));
+    auto& system = GetSystem();
+    auto& memory = system.GetMemory();
+    memory.CopyToEmu(request.buffer_out, &m_message_queue.front(), sizeof(MessageData));
     m_message_queue.pop();
   }
   return IPCReply(IPC_SUCCESS);
@@ -232,7 +235,7 @@ bool USB_KBD::IsKeyPressed(int key) const
 
 void USB_KBD::Update()
 {
-  if (!SConfig::GetInstance().m_WiiKeyboard || Core::WantsDeterminism() || !m_is_active)
+  if (!Config::Get(Config::MAIN_WII_KEYBOARD) || Core::WantsDeterminism() || !m_is_active)
     return;
 
   u8 modifiers = 0x00;

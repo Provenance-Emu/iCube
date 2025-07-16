@@ -1,10 +1,10 @@
 // Copyright 2009 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "AudioCommon/AlsaSoundStream.h"
 
 #include <mutex>
 
-#include "AudioCommon/AlsaSoundStream.h"
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/Thread.h"
@@ -20,7 +20,7 @@ AlsaSound::~AlsaSound()
   m_thread_status.store(ALSAThreadStatus::STOPPING);
 
   // Immediately lock and unlock mutex to prevent cv race.
-  std::unique_lock<std::mutex>{cv_m};
+  std::unique_lock<std::mutex>{cv_m}.unlock();
 
   // Give the opportunity to the audio thread
   // to realize we are stopping the emulation
@@ -40,11 +40,6 @@ bool AlsaSound::Init()
 
   thread = std::thread(&AlsaSound::SoundLoop, this);
   return true;
-}
-
-void AlsaSound::Update()
-{
-  // don't need to do anything here.
 }
 
 // Called on audio thread.
@@ -87,7 +82,7 @@ bool AlsaSound::SetRunning(bool running)
   m_thread_status.store(running ? ALSAThreadStatus::RUNNING : ALSAThreadStatus::PAUSED);
 
   // Immediately lock and unlock mutex to prevent cv race.
-  std::unique_lock<std::mutex>{cv_m};
+  std::unique_lock<std::mutex>{cv_m}.unlock();
 
   // Notify thread that status has changed
   cv.notify_one();

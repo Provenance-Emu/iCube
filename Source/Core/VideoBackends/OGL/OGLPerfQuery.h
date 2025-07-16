@@ -1,6 +1,5 @@
 // Copyright 2012 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -13,15 +12,15 @@
 
 namespace OGL
 {
-std::unique_ptr<PerfQueryBase> GetPerfQuery();
+std::unique_ptr<PerfQueryBase> GetPerfQuery(bool is_gles);
 
 class PerfQuery : public PerfQueryBase
 {
 public:
   PerfQuery();
   ~PerfQuery() {}
-  void EnableQuery(PerfQueryGroup type) override;
-  void DisableQuery(PerfQueryGroup type) override;
+  void EnableQuery(PerfQueryGroup group) override;
+  void DisableQuery(PerfQueryGroup group) override;
   void ResetQuery() override;
   u32 GetQueryResult(PerfQueryType type) override;
   void FlushResults() override;
@@ -31,7 +30,7 @@ protected:
   struct ActiveQuery
   {
     GLuint query_id;
-    PerfQueryGroup query_type;
+    PerfQueryGroup query_group;
   };
 
   // when testing in SMS: 64 was too small, 128 was ok
@@ -53,8 +52,8 @@ public:
   PerfQueryGL(GLenum query_type);
   ~PerfQueryGL();
 
-  void EnableQuery(PerfQueryGroup type) override;
-  void DisableQuery(PerfQueryGroup type) override;
+  void EnableQuery(PerfQueryGroup group) override;
+  void DisableQuery(PerfQueryGroup group) override;
   void FlushResults() override;
 
 private:
@@ -71,8 +70,8 @@ public:
   PerfQueryGLESNV();
   ~PerfQueryGLESNV();
 
-  void EnableQuery(PerfQueryGroup type) override;
-  void DisableQuery(PerfQueryGroup type) override;
+  void EnableQuery(PerfQueryGroup group) override;
+  void DisableQuery(PerfQueryGroup group) override;
   void FlushResults() override;
 
 private:

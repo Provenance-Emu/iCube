@@ -1,6 +1,5 @@
 // Copyright 2012 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -34,6 +33,8 @@ class PerfQueryBase
 public:
   PerfQueryBase() : m_query_count(0) {}
   virtual ~PerfQueryBase() {}
+
+  virtual bool Initialize() { return true; }
 
   // Checks if performance queries are enabled in the gameini configuration.
   // NOTE: Called from CPU+GPU thread

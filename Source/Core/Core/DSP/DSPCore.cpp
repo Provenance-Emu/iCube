@@ -1,7 +1,6 @@
 // Copyright 2008 Dolphin Emulator Project
 // Copyright 2004 Duddie & Tratax
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/DSP/DSPCore.h"
 
@@ -34,25 +33,28 @@ static bool VerifyRoms(const SDSP& dsp)
     u32 hash_drom;  // dsp_coef.bin
   };
 
-  static const std::array<DspRomHashes, 6> known_roms = {{
+  static const std::array<DspRomHashes, 7> known_roms = {{
       // Official Nintendo ROM
       {0x66f334fe, 0xf3b93527},
 
-      // LM1234 replacement ROM (Zelda UCode only)
+      // v0.1: LM1234 replacement ROM (Zelda UCode only)
       {0x9c8f593c, 0x10000001},
 
-      // delroth's improvement on LM1234 replacement ROM (Zelda and AX only,
+      // v0.2: delroth's improvement on LM1234 replacement ROM (Zelda and AX only,
       // IPL/Card/GBA still broken)
       {0xd9907f71, 0xb019c2fb},
 
-      // above with improved resampling coefficients
+      // v0.2.1: above with improved resampling coefficients
       {0xd9907f71, 0xdb6880c1},
 
-      // above with support for GBA ucode
+      // v0.3: above with support for GBA ucode
       {0x3aa4a793, 0xa4a575f5},
 
-      // above with fix to skip bootucode_ax when running from ROM entrypoint
+      // v0.3.1: above with fix to skip bootucode_ax when running from ROM entrypoint
       {0x128ea7a2, 0xa4a575f5},
+
+      // v0.4: above with fixes for invalid use of SRS instruction
+      {0xe789b5a5, 0xa4a575f5},
   }};
 
   const u32 hash_irom =
@@ -70,28 +72,30 @@ static bool VerifyRoms(const SDSP& dsp)
 
   if (rom_idx < 0)
   {
-    if (AskYesNoFmtT("Your DSP ROMs have incorrect hashes.\n"
+    if (AskYesNoFmtT("Your DSP ROMs have incorrect hashes.\n\n"
+                     "Delete the dsp_rom.bin and dsp_coef.bin files in the GC folder in the User "
+                     "folder to use the free DSP ROM, or replace them with good dumps from a real "
+                     "GameCube/Wii.\n\n"
                      "Would you like to stop now to fix the problem?\n"
                      "If you select \"No\", audio might be garbled."))
+    {
       return false;
+    }
   }
 
-  if (rom_idx == 1)
+  if (rom_idx >= 1 && rom_idx <= 5)
   {
-    Host::OSD_AddMessage("You are using an old free DSP ROM made by the Dolphin Team.", 6000);
-    Host::OSD_AddMessage("Only games using the Zelda UCode will work correctly.", 6000);
-  }
-  else if (rom_idx == 2 || rom_idx == 3)
-  {
-    Host::OSD_AddMessage("You are using a free DSP ROM made by the Dolphin Team.", 8000);
-    Host::OSD_AddMessage("All Wii games will work correctly, and most GameCube games", 8000);
-    Host::OSD_AddMessage("should also work fine, but the GBA/CARD UCodes will not work.", 8000);
-  }
-  else if (rom_idx == 4)
-  {
-    Host::OSD_AddMessage("You are using a free DSP ROM made by the Dolphin Team.", 8000);
-    Host::OSD_AddMessage("All Wii games will work correctly, and most GameCube games", 8000);
-    Host::OSD_AddMessage("should also work fine, but the CARD UCode will not work.", 8000);
+    if (AskYesNoFmtT(
+            "You are using an old free DSP ROM made by the Dolphin Team.\n"
+            "Due to emulation accuracy improvements, this ROM no longer works correctly.\n\n"
+            "Delete the dsp_rom.bin and dsp_coef.bin files in the GC folder in the User folder "
+            "to use the most recent free DSP ROM, or replace them with good dumps from a real "
+            "GameCube/Wii.\n\n"
+            "Would you like to stop now to fix the problem?\n"
+            "If you select \"No\", audio might be garbled."))
+    {
+      return false;
+    }
   }
 
   return true;
@@ -139,25 +143,25 @@ bool SDSP::Initialize(const DSPInitOptions& opts)
 
   std::memset(&r, 0, sizeof(r));
 
-  std::fill(std::begin(reg_stack_ptrs), std::end(reg_stack_ptrs), 0);
+  std::ranges::fill(reg_stack_ptrs, 0);
 
   for (auto& stack : reg_stacks)
-    std::fill(std::begin(stack), std::end(stack), 0);
+    std::ranges::fill(stack, 0);
 
   // Fill IRAM with HALT opcodes.
-  std::fill(iram, iram + DSP_IRAM_SIZE, 0x0021);
+  std::ranges::fill_n(iram, DSP_IRAM_SIZE, 0x0021);
 
   // Just zero out DRAM.
-  std::fill(dram, dram + DSP_DRAM_SIZE, 0);
+  std::ranges::fill_n(dram, DSP_DRAM_SIZE, 0);
 
   // Copied from a real console after the custom UCode has been loaded.
   // These are the indexing wrapping registers.
-  std::fill(std::begin(r.wr), std::end(r.wr), 0xffff);
+  std::ranges::fill(r.wr, 0xffff);
 
   r.sr |= SR_INT_ENABLE;
   r.sr |= SR_EXT_INT_ENABLE;
 
-  cr = CR_INIT | CR_HALT;
+  control_reg = CR_INIT | CR_HALT;
   InitializeIFX();
   // Mostly keep IRAM write protected. We unprotect only when DMA-ing
   // in new ucodes.
@@ -168,7 +172,7 @@ bool SDSP::Initialize(const DSPInitOptions& opts)
 void SDSP::Reset()
 {
   pc = DSP_RESET_VECTOR;
-  std::fill(std::begin(r.wr), std::end(r.wr), 0xffff);
+  std::ranges::fill(r.wr, 0xffff);
 }
 
 void SDSP::Shutdown()
@@ -206,7 +210,7 @@ void SDSP::CheckExternalInterrupt()
   // Signal the SPU about new mail
   SetException(ExceptionType::ExternalInterrupt);
 
-  cr &= ~CR_EXTERNAL_INT;
+  control_reg &= ~CR_EXTERNAL_INT;
 }
 
 void SDSP::CheckExceptions()
@@ -296,7 +300,7 @@ u16 SDSP::ReadRegister(size_t reg) const
   case DSP_REG_ACM1:
     return r.ac[reg - DSP_REG_ACM0].m;
   default:
-    ASSERT_MSG(DSP_CORE, 0, "cannot happen");
+    ASSERT_MSG(DSPLLE, 0, "cannot happen");
     return 0;
   }
 }
@@ -374,7 +378,8 @@ void SDSP::DoState(PointerWrap& p)
 {
   p.Do(r);
   p.Do(pc);
-  p.Do(cr);
+  p.Do(control_reg);
+  p.Do(control_reg_init_code_clear_time);
   p.Do(reg_stack_ptrs);
   p.Do(exceptions);
   p.Do(external_interrupt_waiting);
@@ -394,7 +399,7 @@ void SDSP::DoState(PointerWrap& p)
   Common::WriteProtectMemory(iram, DSP_IRAM_BYTE_SIZE, false);
   // TODO: This uses the wrong endianness (producing bad disassembly)
   // and a bogus byte count (producing bad hashes)
-  if (p.GetMode() == PointerWrap::MODE_READ)
+  if (p.IsReadMode())
     Host::CodeLoaded(m_dsp_core, reinterpret_cast<const u8*>(iram), DSP_IRAM_BYTE_SIZE);
   p.DoArray(dram, DSP_DRAM_SIZE);
 }

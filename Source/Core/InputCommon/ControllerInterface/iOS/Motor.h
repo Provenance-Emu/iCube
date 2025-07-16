@@ -4,44 +4,36 @@
 
 #pragma once
 
-#ifdef __OBJC__
-#include <CoreHaptics/CoreHaptics.h>
-#else
-struct NSObject;
-struct CHHapticEngine;
-struct CHHapticAdvancedPatternPlayer;
-#endif
+#include <mutex>
 
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
-#include "InputCommon/ControllerInterface/Touch/ButtonManager.h"
+
+@class CHHapticEngine;
+@protocol CHHapticAdvancedPatternPlayer;
 
 namespace ciface::iOS
 {
 class Motor : public Core::Device::Output
 {
 public:
-  Motor(const std::string name);
-  Motor(const std::string name, CHHapticEngine* engine);
+  Motor(CHHapticEngine* engine, const std::string name);
   ~Motor();
+
+  bool StartEngine();
+
   std::string GetName() const override;
   void SetState(ControlState state) override;
 
 private:
-  void CreatePlayer();
-  
+  std::mutex m_lock;
+
+  bool m_player_created = false;
+  bool m_player_needs_restart = false;
+
   CHHapticEngine* m_haptic_engine;
-#ifdef __OBJC__
   id<CHHapticAdvancedPatternPlayer> m_haptic_player;
-#else
-  // TODO: is this correct?
-  CHHapticAdvancedPatternPlayer* m_haptic_player;
-#endif
+
   const std::string m_name;
-#ifdef __OBJC__
-  id<NSObject> m_notification_token;
-#else
-  NSObject* m_notification_token;
-#endif
-  ControlState m_last_state;
+  ControlState m_last_state = 0.0;
 };
 }  // namespace ciface::iOS

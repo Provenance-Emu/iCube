@@ -1,6 +1,5 @@
 // Copyright 2011 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -27,7 +26,7 @@ public:
   void Shutdown() override;
   bool IsLLE() const override { return true; }
   void DoState(PointerWrap& p) override;
-  void PauseAndLock(bool do_lock, bool unpause_on_unlock = true) override;
+  void PauseAndLock(bool do_lock) override;
 
   void DSP_WriteMailBoxHigh(bool cpu_mailbox, u16 value) override;
   void DSP_WriteMailBoxLow(bool cpu_mailbox, u16 value) override;

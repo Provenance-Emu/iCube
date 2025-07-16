@@ -1,11 +1,11 @@
 // Copyright 2021 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
 #ifdef _WIN32
 #include <WinSock2.h>
+#include <mutex>
 #endif
 
 namespace Common
@@ -24,7 +24,9 @@ public:
 
 private:
 #ifdef _WIN32
-  WSADATA m_data;
+  static std::mutex s_lock;
+  static size_t s_num_objects;
+  static WSADATA s_data;
 #endif
 };
 }  // namespace Common

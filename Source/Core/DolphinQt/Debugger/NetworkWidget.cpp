@@ -1,6 +1,5 @@
 // Copyright 2020 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Debugger/NetworkWidget.h"
 
@@ -25,8 +24,10 @@
 
 #include "Common/FileUtil.h"
 #include "Core/Config/MainSettings.h"
+#include "Core/Core.h"
 #include "Core/IOS/Network/SSL.h"
 #include "Core/IOS/Network/Socket.h"
+#include "Core/System.h"
 #include "DolphinQt/Host.h"
 #include "DolphinQt/Settings.h"
 
@@ -96,9 +97,8 @@ QTableWidgetItem* GetSocketState(s32 host_fd)
   return new QTableWidgetItem(QTableWidget::tr("Unbound"));
 }
 
-QTableWidgetItem* GetSocketBlocking(s32 wii_fd)
+static QTableWidgetItem* GetSocketBlocking(const IOS::HLE::WiiSockMan& socket_manager, s32 wii_fd)
 {
-  const auto& socket_manager = IOS::HLE::WiiSockMan::GetInstance();
   if (socket_manager.GetHostSocket(wii_fd) < 0)
     return new QTableWidgetItem();
   const bool is_blocking = socket_manager.IsSocketBlocking(wii_fd);
@@ -207,7 +207,7 @@ void NetworkWidget::CreateWidgets()
 
 void NetworkWidget::ConnectWidgets()
 {
-  connect(m_dump_format_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+  connect(m_dump_format_combo, &QComboBox::currentIndexChanged, this,
           &NetworkWidget::OnDumpFormatComboChanged);
   connect(m_dump_ssl_read_checkbox, &QCheckBox::stateChanged, [](int state) {
     Config::SetBaseOrCurrent(Config::MAIN_NETWORK_SSL_DUMP_READ, state == Qt::Checked);
@@ -224,7 +224,10 @@ void NetworkWidget::ConnectWidgets()
   connect(m_verify_certificates_checkbox, &QCheckBox::stateChanged, [](int state) {
     Config::SetBaseOrCurrent(Config::MAIN_NETWORK_SSL_VERIFY_CERTIFICATES, state == Qt::Checked);
   });
-  connect(m_open_dump_folder, &QPushButton::pressed, [] {
+  connect(m_dump_bba_checkbox, &QCheckBox::stateChanged, [](int state) {
+    Config::SetBaseOrCurrent(Config::MAIN_NETWORK_DUMP_BBA, state == Qt::Checked);
+  });
+  connect(m_open_dump_folder, &QPushButton::clicked, [] {
     const std::string location = File::GetUserPath(D_DUMPSSL_IDX);
     const QUrl url = QUrl::fromLocalFile(QString::fromStdString(location));
     QDesktopServices::openUrl(url);
@@ -233,22 +236,47 @@ void NetworkWidget::ConnectWidgets()
 
 void NetworkWidget::Update()
 {
+  if (!isVisible())
+    return;
+
+  auto& system = Core::System::GetInstance();
+  if (Core::GetState(system) != Core::State::Paused)
+  {
+    m_socket_table->setDisabled(true);
+    m_ssl_table->setDisabled(true);
+    return;
+  }
+
+  m_socket_table->setDisabled(false);
+  m_ssl_table->setDisabled(false);
+
+  // needed because there's a race condition on the IOS instance otherwise
+  const Core::CPUThreadGuard guard(system);
+
+  auto* ios = system.GetIOS();
+  if (!ios)
+    return;
+
+  auto socket_manager = ios->GetSocketManager();
+  if (!socket_manager)
+    return;
+
   m_socket_table->setRowCount(0);
-  for (u32 wii_fd = 0; wii_fd < IOS::HLE::WII_SOCKET_FD_MAX; wii_fd++)
+  for (s32 wii_fd = 0; wii_fd < IOS::HLE::WII_SOCKET_FD_MAX; wii_fd++)
   {
     m_socket_table->insertRow(wii_fd);
-    const s32 host_fd = IOS::HLE::WiiSockMan::GetInstance().GetHostSocket(wii_fd);
+    const s32 host_fd = socket_manager->GetHostSocket(wii_fd);
     m_socket_table->setItem(wii_fd, 0, new QTableWidgetItem(QString::number(wii_fd)));
     m_socket_table->setItem(wii_fd, 1, GetSocketDomain(host_fd));
     m_socket_table->setItem(wii_fd, 2, GetSocketType(host_fd));
     m_socket_table->setItem(wii_fd, 3, GetSocketState(host_fd));
-    m_socket_table->setItem(wii_fd, 4, GetSocketBlocking(wii_fd));
+    m_socket_table->setItem(wii_fd, 4, GetSocketBlocking(*socket_manager, wii_fd));
     m_socket_table->setItem(wii_fd, 5, GetSocketName(host_fd));
   }
   m_socket_table->resizeColumnsToContents();
 
   m_ssl_table->setRowCount(0);
-  for (u32 ssl_id = 0; ssl_id < IOS::HLE::NET_SSL_MAXINSTANCES; ssl_id++)
+  for (s32 ssl_id = 0; ssl_id < IOS::HLE::NET_SSL_MAXINSTANCES; ssl_id++)
   {
     m_ssl_table->insertRow(ssl_id);
     s32 host_fd = -1;
@@ -301,7 +329,7 @@ QGroupBox* NetworkWidget::CreateSocketTableGroup()
   m_socket_table = new QTableWidget();
   // i18n: FD stands for file descriptor (and in this case refers to sockets, not regular files)
   QStringList header{tr("FD"), tr("Domain"), tr("Type"), tr("State"), tr("Blocking"), tr("Name")};
-  m_socket_table->setColumnCount(header.size());
+  m_socket_table->setColumnCount(static_cast<int>(header.size()));
 
   m_socket_table->setHorizontalHeaderLabels(header);
   m_socket_table->setTabKeyNavigation(false);
@@ -323,7 +351,7 @@ QGroupBox* NetworkWidget::CreateSSLContextGroup()
 
   m_ssl_table = new QTableWidget();
   QStringList header{tr("ID"), tr("Domain"), tr("Type"), tr("State"), tr("Name"), tr("Hostname")};
-  m_ssl_table->setColumnCount(header.size());
+  m_ssl_table->setColumnCount(static_cast<int>(header.size()));
 
   m_ssl_table->setHorizontalHeaderLabels(header);
   m_ssl_table->setTabKeyNavigation(false);
@@ -350,6 +378,7 @@ QGroupBox* NetworkWidget::CreateDumpOptionsGroup()
   // i18n: CA stands for certificate authority
   m_dump_root_ca_checkbox = new QCheckBox(tr("Dump root CA certificates"));
   m_dump_peer_cert_checkbox = new QCheckBox(tr("Dump peer certificates"));
+  m_dump_bba_checkbox = new QCheckBox(tr("Dump GameCube BBA traffic"));
   m_open_dump_folder = new QPushButton(tr("Open dump folder"));
   m_open_dump_folder->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
@@ -368,6 +397,7 @@ QGroupBox* NetworkWidget::CreateDumpOptionsGroup()
   dump_options_layout->addWidget(m_dump_ssl_write_checkbox);
   dump_options_layout->addWidget(m_dump_root_ca_checkbox);
   dump_options_layout->addWidget(m_dump_peer_cert_checkbox);
+  dump_options_layout->addWidget(m_dump_bba_checkbox);
   dump_options_layout->addWidget(m_open_dump_folder);
 
   dump_options_layout->setSpacing(1);
@@ -412,23 +442,28 @@ void NetworkWidget::OnDumpFormatComboChanged(int index)
   case FormatComboId::BinarySSL:
     m_dump_ssl_read_checkbox->setChecked(true);
     m_dump_ssl_write_checkbox->setChecked(true);
+    m_dump_bba_checkbox->setChecked(false);
     break;
   case FormatComboId::BinarySSLRead:
     m_dump_ssl_read_checkbox->setChecked(true);
     m_dump_ssl_write_checkbox->setChecked(false);
+    m_dump_bba_checkbox->setChecked(false);
     break;
   case FormatComboId::BinarySSLWrite:
     m_dump_ssl_read_checkbox->setChecked(false);
     m_dump_ssl_write_checkbox->setChecked(true);
+    m_dump_bba_checkbox->setChecked(false);
     break;
   default:
     m_dump_ssl_read_checkbox->setChecked(false);
     m_dump_ssl_write_checkbox->setChecked(false);
+    m_dump_bba_checkbox->setChecked(false);
     break;
   }
   // Enable raw or decrypted SSL choices for PCAP
   const bool is_pcap = combo_id == FormatComboId::PCAP;
   m_dump_ssl_read_checkbox->setEnabled(is_pcap);
   m_dump_ssl_write_checkbox->setEnabled(is_pcap);
+  m_dump_bba_checkbox->setEnabled(is_pcap);
   Config::SetBaseOrCurrent(Config::MAIN_NETWORK_DUMP_AS_PCAP, is_pcap);
 }

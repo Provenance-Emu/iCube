@@ -1,6 +1,5 @@
 // Copyright 2021 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/Config/Mapping/FreeLookRotation.h"
 
@@ -12,6 +11,7 @@
 
 #include "Core/FreeLookManager.h"
 #include "DolphinQt/Config/ControllerInterface/ControllerInterfaceWindow.h"
+#include "DolphinQt/QtUtils/SetWindowDecorations.h"
 #include "InputCommon/InputConfig.h"
 
 FreeLookRotation::FreeLookRotation(MappingWindow* window) : MappingWidget(window)
@@ -34,6 +34,7 @@ void FreeLookRotation::CreateMainLayout()
     ControllerInterfaceWindow* window = new ControllerInterfaceWindow(this);
     window->setAttribute(Qt::WA_DeleteOnClose, true);
     window->setWindowModality(Qt::WindowModality::WindowModal);
+    SetQWidgetWindowDecorations(window);
     window->show();
   });
   m_main_layout->addLayout(alternate_input_layout, 0, 0, 1, -1);

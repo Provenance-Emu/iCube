@@ -1,6 +1,5 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -35,6 +34,7 @@ private:
   // Extensions
   QComboBox* m_extension_combo;
   QLabel* m_extension_combo_dynamic_indicator;
+  QPushButton* m_configure_ext_button;
 
   WiimoteEmuExtension* m_extension_widget;
 };

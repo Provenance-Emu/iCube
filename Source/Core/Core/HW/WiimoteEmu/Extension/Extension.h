@@ -1,10 +1,7 @@
 // Copyright 2010 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
-
-#include "Core/HW/WiimoteEmu/Extension/Extension.h"
 
 #include <array>
 #include <string>
@@ -17,6 +14,8 @@
 
 namespace WiimoteEmu
 {
+struct DesiredExtensionState;
+
 class Extension : public ControllerEmu::EmulatedController, public I2CSlave
 {
 public:
@@ -26,6 +25,8 @@ public:
   std::string GetName() const override;
   std::string GetDisplayName() const override;
 
+  InputConfig* GetConfig() const override;
+
   // Used by the wiimote to detect extension changes.
   // The normal extensions short this pin so it's always connected,
   // but M+ does some tricks with it during activation.
@@ -33,7 +34,8 @@ public:
 
   virtual void Reset() = 0;
   virtual void DoState(PointerWrap& p) = 0;
-  virtual void Update() = 0;
+  virtual void BuildDesiredExtensionState(DesiredExtensionState* target_state) = 0;
+  virtual void Update(const DesiredExtensionState& target_state) = 0;
 
 private:
   const char* const m_config_name;
@@ -47,7 +49,8 @@ public:
 
 private:
   bool ReadDeviceDetectPin() const override;
-  void Update() override;
+  void BuildDesiredExtensionState(DesiredExtensionState* target_state) override;
+  void Update(const DesiredExtensionState& target_state) override;
   void Reset() override;
   void DoState(PointerWrap& p) override;
 
@@ -64,11 +67,6 @@ public:
 
   using Extension::Extension;
 
-  // TODO: This is public for TAS reasons.
-  // TODO: TAS handles encryption poorly.
-  EncryptionKey ext_key;
-
-protected:
   static constexpr int CALIBRATION_CHECKSUM_BYTES = 2;
 
 #pragma pack(push, 1)
@@ -98,6 +96,8 @@ protected:
 
   static_assert(0x100 == sizeof(Register));
 
+protected:
+  EncryptionKey ext_key;
   Register m_reg = {};
 
   void Reset() override;

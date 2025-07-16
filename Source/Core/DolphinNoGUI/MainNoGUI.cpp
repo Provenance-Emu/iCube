@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinNoGUI/Platform.h"
 
@@ -18,12 +17,14 @@
 #include <Windows.h>
 #endif
 
+#include "Common/ScopeGuard.h"
 #include "Common/StringUtil.h"
 #include "Core/Boot/Boot.h"
 #include "Core/BootManager.h"
 #include "Core/Core.h"
 #include "Core/DolphinAnalytics.h"
 #include "Core/Host.h"
+#include "Core/System.h"
 
 #include "UICommon/CommandLineParse.h"
 #ifdef USE_DISCORD_PRESENCE
@@ -31,7 +32,8 @@
 #endif
 #include "UICommon/UICommon.h"
 
-#include "VideoCommon/RenderBase.h"
+#include "InputCommon/GCAdapter.h"
+
 #include "VideoCommon/VideoBackendBase.h"
 
 static std::unique_ptr<Platform> s_platform;
@@ -55,7 +57,11 @@ std::vector<std::string> Host_GetPreferredLocales()
   return {};
 }
 
-void Host_NotifyMapLoaded()
+void Host_PPCSymbolsChanged()
+{
+}
+
+void Host_PPCBreakpointsChanged()
 {
 }
 
@@ -84,16 +90,20 @@ void Host_UpdateDisasmDialog()
 {
 }
 
+void Host_JitCacheInvalidation()
+{
+}
+
+void Host_JitProfileDataWiped()
+{
+}
+
 void Host_UpdateMainFrame()
 {
   s_update_main_frame_event.Set();
 }
 
 void Host_RequestRenderWindowSize(int width, int height)
-{
-}
-
-void Host_TargetRectangleWasUpdated()
 {
 }
 
@@ -113,6 +123,11 @@ bool Host_RendererIsFullscreen()
   return s_platform->IsWindowFullscreen();
 }
 
+bool Host_TASInputHasFocus()
+{
+  return false;
+}
+
 void Host_YieldToUI()
 {
 }
@@ -122,6 +137,35 @@ void Host_TitleChanged()
 #ifdef USE_DISCORD_PRESENCE
   Discord::UpdateDiscordPresence();
 #endif
+}
+
+void Host_UpdateDiscordClientID(const std::string& client_id)
+{
+#ifdef USE_DISCORD_PRESENCE
+  Discord::UpdateClientID(client_id);
+#endif
+}
+
+bool Host_UpdateDiscordPresenceRaw(const std::string& details, const std::string& state,
+                                   const std::string& large_image_key,
+                                   const std::string& large_image_text,
+                                   const std::string& small_image_key,
+                                   const std::string& small_image_text,
+                                   const int64_t start_timestamp, const int64_t end_timestamp,
+                                   const int party_size, const int party_max)
+{
+#ifdef USE_DISCORD_PRESENCE
+  return Discord::UpdateDiscordPresenceRaw(details, state, large_image_key, large_image_text,
+                                           small_image_key, small_image_text, start_timestamp,
+                                           end_timestamp, party_size, party_max);
+#else
+  return false;
+#endif
+}
+
+std::unique_ptr<GBAHostInterface> Host_CreateGBAHost(std::weak_ptr<HW::GBA::Core> core)
+{
+  return nullptr;
 }
 
 static std::unique_ptr<Platform> GetPlatform(const optparse::Values& options)
@@ -142,6 +186,10 @@ static std::unique_ptr<Platform> GetPlatform(const optparse::Values& options)
   if (platform_name == "win32" || platform_name.empty())
     return Platform::CreateWin32Platform();
 #endif
+#ifdef __APPLE__
+  if (platform_name == "macos" || platform_name.empty())
+    return Platform::CreateMacOSPlatform();
+#endif
 
   if (platform_name == "headless" || platform_name.empty())
     return Platform::CreateHeadlessPlatform();
@@ -149,8 +197,14 @@ static std::unique_ptr<Platform> GetPlatform(const optparse::Values& options)
   return nullptr;
 }
 
+#ifdef _WIN32
+#define main app_main
+#endif
+
 int main(int argc, char* argv[])
 {
+  Core::DeclareAsHostThread();
+
   auto parser = CommandLineParse::CreateParser(CommandLineParse::ParserOptions::OmitGUIOptions);
   parser->add_option("-p", "--platform")
       .action("store")
@@ -168,6 +222,10 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
             ,
             "win32"
+#endif
+#ifdef __APPLE__
+            ,
+            "macos"
 #endif
       });
 
@@ -187,7 +245,8 @@ int main(int argc, char* argv[])
     const std::list<std::string> paths_list = options.all("exec");
     const std::vector<std::string> paths{std::make_move_iterator(std::begin(paths_list)),
                                          std::make_move_iterator(std::end(paths_list))};
-    boot = BootParameters::GenerateFromFile(paths, save_state_path);
+    boot = BootParameters::GenerateFromFile(
+        paths, BootSessionData(save_state_path, DeleteSavestateAfterBoot::No));
     game_specified = true;
   }
   else if (options.is_set("nand_title"))
@@ -204,7 +263,8 @@ int main(int argc, char* argv[])
   }
   else if (args.size())
   {
-    boot = BootParameters::GenerateFromFile(args.front(), save_state_path);
+    boot = BootParameters::GenerateFromFile(
+        args.front(), BootSessionData(save_state_path, DeleteSavestateAfterBoot::No));
     args.erase(args.begin());
     game_specified = true;
   }
@@ -218,15 +278,23 @@ int main(int argc, char* argv[])
   if (options.is_set("user"))
     user_directory = static_cast<const char*>(options.get("user"));
 
-  UICommon::SetUserDirectory(user_directory);
-  UICommon::Init();
-
   s_platform = GetPlatform(options);
   if (!s_platform || !s_platform->Init())
   {
     fprintf(stderr, "No platform found, or failed to initialize.\n");
     return 1;
   }
+
+  const WindowSystemInfo wsi = s_platform->GetWindowSystemInfo();
+
+  UICommon::SetUserDirectory(user_directory);
+  UICommon::Init();
+  UICommon::InitControllers(wsi);
+
+  Common::ScopeGuard ui_common_guard([] {
+    UICommon::ShutdownControllers();
+    UICommon::Shutdown();
+  });
 
   if (save_state_path && !game_specified)
   {
@@ -254,7 +322,7 @@ int main(int argc, char* argv[])
 
   DolphinAnalytics::Instance().ReportDolphinStart("nogui");
 
-  if (!BootManager::BootCore(std::move(boot), s_platform->GetWindowSystemInfo()))
+  if (!BootManager::BootCore(Core::System::GetInstance(), std::move(boot), wsi))
   {
     fprintf(stderr, "Could not boot the specified file\n");
     return 1;
@@ -265,11 +333,25 @@ int main(int argc, char* argv[])
 #endif
 
   s_platform->MainLoop();
-  Core::Stop();
+  Core::Stop(Core::System::GetInstance());
 
-  Core::Shutdown();
+  Core::Shutdown(Core::System::GetInstance());
   s_platform.reset();
-  UICommon::Shutdown();
 
   return 0;
 }
+
+#ifdef _WIN32
+int wmain(int, wchar_t*[], wchar_t*[])
+{
+  std::vector<std::string> args = Common::CommandLineToUtf8Argv(GetCommandLineW());
+  const int argc = static_cast<int>(args.size());
+  std::vector<char*> argv(args.size());
+  for (size_t i = 0; i < args.size(); ++i)
+    argv[i] = args[i].data();
+
+  return main(argc, argv.data());
+}
+
+#undef main
+#endif

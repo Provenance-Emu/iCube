@@ -1,6 +1,5 @@
 // Copyright 2018 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <unistd.h>
 
@@ -14,20 +13,22 @@ static constexpr auto X_None = None;
 
 #include "Common/MsgHandler.h"
 #include "Core/Config/MainSettings.h"
-#include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/State.h"
+#include "Core/System.h"
 
 #include <climits>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
+#include "UICommon/UICommon.h"
 #include "UICommon/X11Utils.h"
-#include "VideoCommon/RenderBase.h"
+#include "VideoCommon/Present.h"
 
 #ifndef HOST_NAME_MAX
 #define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
@@ -71,7 +72,7 @@ PlatformX11::~PlatformX11()
 
   if (m_display)
   {
-    if (SConfig::GetInstance().bHideCursor)
+    if (Config::Get(Config::MAIN_SHOW_CURSOR) == Config::ShowCursor::Never)
       XFreeCursor(m_display, m_blank_cursor);
 
     XCloseDisplay(m_display);
@@ -84,7 +85,7 @@ bool PlatformX11::Init()
   m_display = XOpenDisplay(nullptr);
   if (!m_display)
   {
-    PanicAlert("No X11 display found");
+    PanicAlertFmt("No X11 display found");
     return false;
   }
 
@@ -110,13 +111,13 @@ bool PlatformX11::Init()
   ProcessEvents();
 
   if (Config::Get(Config::MAIN_DISABLE_SCREENSAVER))
-    X11Utils::InhibitScreensaver(m_window, true);
+    UICommon::InhibitScreenSaver(true);
 
 #ifdef HAVE_XRANDR
   m_xrr_config = new X11Utils::XRRConfiguration(m_display, m_window);
 #endif
 
-  if (SConfig::GetInstance().bHideCursor)
+  if (Config::Get(Config::MAIN_SHOW_CURSOR) == Config::ShowCursor::Never)
   {
     // make a blank cursor
     Pixmap Blank;
@@ -152,7 +153,7 @@ void PlatformX11::MainLoop()
   while (IsRunning())
   {
     UpdateRunningFlag();
-    Core::HostDispatchJobs();
+    Core::HostDispatchJobs(Core::System::GetInstance());
     ProcessEvents();
     UpdateWindowPosition();
 
@@ -199,17 +200,17 @@ void PlatformX11::ProcessEvents()
       }
       else if (key == XK_F10)
       {
-        if (Core::GetState() == Core::State::Running)
+        if (Core::GetState(Core::System::GetInstance()) == Core::State::Running)
         {
-          if (SConfig::GetInstance().bHideCursor)
+          if (Config::Get(Config::MAIN_SHOW_CURSOR) == Config::ShowCursor::Never)
             XUndefineCursor(m_display, m_window);
-          Core::SetState(Core::State::Paused);
+          Core::SetState(Core::System::GetInstance(), Core::State::Paused);
         }
         else
         {
-          if (SConfig::GetInstance().bHideCursor)
+          if (Config::Get(Config::MAIN_SHOW_CURSOR) == Config::ShowCursor::Never)
             XDefineCursor(m_display, m_window, m_blank_cursor);
-          Core::SetState(Core::State::Running);
+          Core::SetState(Core::System::GetInstance(), Core::State::Running);
         }
       }
       else if ((key == XK_Return) && (event.xkey.state & Mod1Mask))
@@ -225,33 +226,36 @@ void PlatformX11::ProcessEvents()
       {
         int slot_number = key - XK_F1 + 1;
         if (event.xkey.state & ShiftMask)
-          State::Save(slot_number);
+          State::Save(Core::System::GetInstance(), slot_number);
         else
-          State::Load(slot_number);
+          State::Load(Core::System::GetInstance(), slot_number);
       }
       else if (key == XK_F9)
         Core::SaveScreenShot();
       else if (key == XK_F11)
-        State::LoadLastSaved();
+        State::LoadLastSaved(Core::System::GetInstance());
       else if (key == XK_F12)
       {
         if (event.xkey.state & ShiftMask)
-          State::UndoLoadState();
+          State::UndoLoadState(Core::System::GetInstance());
         else
-          State::UndoSaveState();
+          State::UndoSaveState(Core::System::GetInstance());
       }
       break;
     case FocusIn:
     {
       m_window_focus = true;
-      if (SConfig::GetInstance().bHideCursor && Core::GetState() != Core::State::Paused)
+      if (Config::Get(Config::MAIN_SHOW_CURSOR) == Config::ShowCursor::Never &&
+          Core::GetState(Core::System::GetInstance()) != Core::State::Paused)
+      {
         XDefineCursor(m_display, m_window, m_blank_cursor);
+      }
     }
     break;
     case FocusOut:
     {
       m_window_focus = false;
-      if (SConfig::GetInstance().bHideCursor)
+      if (Config::Get(Config::MAIN_SHOW_CURSOR) == Config::ShowCursor::Never)
         XUndefineCursor(m_display, m_window);
     }
     break;
@@ -264,8 +268,8 @@ void PlatformX11::ProcessEvents()
     break;
     case ConfigureNotify:
     {
-      if (g_renderer)
-        g_renderer->ResizeSurface();
+      if (g_presenter)
+        g_presenter->ResizeSurface();
     }
     break;
     }

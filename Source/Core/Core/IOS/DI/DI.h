@@ -1,6 +1,5 @@
 // Copyright 2008 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
 
@@ -16,9 +15,13 @@
 class CBoot;
 class PointerWrap;
 
-namespace DVDInterface
+namespace DVD
 {
 enum class DIInterruptType : int;
+}
+namespace Core
+{
+class System;
 }
 namespace CoreTiming
 {
@@ -32,12 +35,12 @@ void Init();
 
 namespace IOS::HLE
 {
-class DIDevice : public Device
+class DIDevice : public EmulationDevice
 {
 public:
-  DIDevice(Kernel& ios, const std::string& device_name);
+  DIDevice(EmulationKernel& ios, const std::string& device_name);
 
-  static void InterruptFromDVDInterface(DVDInterface::DIInterruptType interrupt_type);
+  static void InterruptFromDVDInterface(DVD::DIInterruptType interrupt_type);
   static DiscIO::Partition GetCurrentPartition();
 
   void DoState(PointerWrap& p) override;
@@ -111,16 +114,13 @@ private:
   struct ExecutingCommandInfo
   {
     ExecutingCommandInfo() {}
-    ExecutingCommandInfo(u32 request_address)
-        : m_request_address(request_address), m_copy_diimmbuf(false)
-    {
-    }
-    u32 m_request_address;
-    bool m_copy_diimmbuf;
+    ExecutingCommandInfo(u32 request_address) : m_request_address(request_address) {}
+    u32 m_request_address = 0;
+    bool m_copy_diimmbuf = false;
   };
 
   friend class ::CBoot;
-  friend void ::IOS::HLE::Init();
+  friend void ::IOS::HLE::Init(Core::System&);
 
   void ProcessQueuedIOCtl();
   std::optional<DIResult> StartIOCtl(const IOCtlRequest& request);
@@ -132,7 +132,7 @@ private:
   void ChangePartition(const DiscIO::Partition partition);
   void InitializeIfFirstTime();
   void ResetDIRegisters();
-  static void FinishDICommandCallback(u64 userdata, s64 ticksbehind);
+  static void FinishDICommandCallback(Core::System& system, u64 userdata, s64 ticksbehind);
   void FinishDICommand(DIResult result);
 
   static CoreTiming::EventType* s_finish_executing_di_command;
