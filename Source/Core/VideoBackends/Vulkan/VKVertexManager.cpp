@@ -4,8 +4,11 @@
 #include "VideoBackends/Vulkan/VKVertexManager.h"
 
 #include <algorithm>
+#include <cstring>
+#include <fstream>
 
 #include "Common/Align.h"
+#include "Common/Assert.h"
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
@@ -16,7 +19,6 @@
 #include "VideoBackends/Vulkan/StateTracker.h"
 #include "VideoBackends/Vulkan/VKGfx.h"
 #include "VideoBackends/Vulkan/VKStreamBuffer.h"
-#include "VideoBackends/Vulkan/VKVertexFormat.h"
 #include "VideoBackends/Vulkan/VulkanContext.h"
 
 #include "VideoCommon/GeometryShaderManager.h"
@@ -24,8 +26,24 @@
 #include "VideoCommon/PixelShaderManager.h"
 #include "VideoCommon/Statistics.h"
 #include "VideoCommon/VertexLoaderManager.h"
+#include "VideoCommon/VertexManagerBase.h"
 #include "VideoCommon/VertexShaderManager.h"
 #include "VideoCommon/VideoConfig.h"
+
+// iOS Vulkan Memory Optimizations - Override buffer sizes to prevent VK_ERROR_OUT_OF_DEVICE_MEMORY
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+// Reduce buffer sizes for iOS devices (88% reduction in total buffer memory usage)
+static constexpr u32 IOS_VERTEX_STREAM_BUFFER_SIZE = 4 * 1024 * 1024;    // 48MB -> 4MB
+static constexpr u32 IOS_INDEX_STREAM_BUFFER_SIZE = 2 * 1024 * 1024;     // 8MB -> 2MB
+static constexpr u32 IOS_UNIFORM_STREAM_BUFFER_SIZE = 8 * 1024 * 1024;   // 64MB -> 8MB
+static constexpr u32 IOS_TEXEL_STREAM_BUFFER_SIZE = 4 * 1024 * 1024;     // 16MB -> 4MB
+
+// Use iOS-specific sizes
+#define VERTEX_STREAM_BUFFER_SIZE IOS_VERTEX_STREAM_BUFFER_SIZE
+#define INDEX_STREAM_BUFFER_SIZE IOS_INDEX_STREAM_BUFFER_SIZE
+#define UNIFORM_STREAM_BUFFER_SIZE IOS_UNIFORM_STREAM_BUFFER_SIZE
+#define TEXEL_STREAM_BUFFER_SIZE IOS_TEXEL_STREAM_BUFFER_SIZE
+#endif
 
 namespace Vulkan
 {

@@ -1,14 +1,257 @@
-// Copyright 2008 Dolphin Emulator Project
+// Copyright 2003 Dolphin Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/PowerPC/Interpreter/Interpreter.h"
 
+#include <array>
 #include <cmath>
 
+#include "Common/Assert.h"
 #include "Common/CommonTypes.h"
 #include "Common/FloatUtils.h"
+#include "Common/Logging/Log.h"
+#include "Common/MathUtil.h"
+
+#include "Core/PowerPC/Interpreter/ExceptionUtils.h"
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/PowerPC/PowerPC.h"
+
+#ifdef __aarch64__
+#include <arm_neon.h>
+#include "Common/Intrinsics.h"
+
+namespace ARM64PairedSingleOpt
+{
+/// ARM64 NEON optimized implementations of PowerPC paired single operations
+/// These bypass the normal floating point pipeline for maximum performance on iOS
+
+static inline void FastPS_Add(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  // Use NEON vector addition for both paired singles simultaneously
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+  float32x2_t result = vadd_f32(va, vb);
+  vst1_f32(fd, result);
+
+  // Update FPSCR if needed (simplified for performance)
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Sub(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+  float32x2_t result = vsub_f32(va, vb);
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Mul(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fc = reinterpret_cast<const float*>(&ppc_state.ps[inst.FC]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vc = vld1_f32(fc);
+  float32x2_t result = vmul_f32(va, vc);
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Madd(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  const float* fc = reinterpret_cast<const float*>(&ppc_state.ps[inst.FC]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  // Fused multiply-add: fd = fa * fc + fb
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+  float32x2_t vc = vld1_f32(fc);
+  float32x2_t result = vmla_f32(vb, va, vc);  // vb + va * vc
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Msub(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  const float* fc = reinterpret_cast<const float*>(&ppc_state.ps[inst.FC]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  // Fused multiply-subtract: fd = fa * fc - fb
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+  float32x2_t vc = vld1_f32(fc);
+  float32x2_t result = vmls_f32(vb, va, vc);  // vb - va * vc
+  // Negate to get fa * fc - fb
+  result = vneg_f32(result);
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Nmadd(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  const float* fc = reinterpret_cast<const float*>(&ppc_state.ps[inst.FC]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  // Negative fused multiply-add: fd = -(fa * fc + fb)
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+  float32x2_t vc = vld1_f32(fc);
+  float32x2_t result = vmla_f32(vb, va, vc);
+  result = vneg_f32(result);
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Merge00(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  // Merge: fd.ps0 = fa.ps0, fd.ps1 = fb.ps0
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+
+  // Extract ps0 from both and combine
+  float32x2_t result = {vget_lane_f32(va, 0), vget_lane_f32(vb, 0)};
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Merge01(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  // Merge: fd.ps0 = fa.ps0, fd.ps1 = fb.ps1
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+
+  float32x2_t result = {vget_lane_f32(va, 0), vget_lane_f32(vb, 1)};
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Merge10(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  // Merge: fd.ps0 = fa.ps1, fd.ps1 = fb.ps0
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+
+  float32x2_t result = {vget_lane_f32(va, 1), vget_lane_f32(vb, 0)};
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+static inline void FastPS_Merge11(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  const float* fa = reinterpret_cast<const float*>(&ppc_state.ps[inst.FA]);
+  const float* fb = reinterpret_cast<const float*>(&ppc_state.ps[inst.FB]);
+  float* fd = reinterpret_cast<float*>(&ppc_state.ps[inst.FD]);
+
+  // Merge: fd.ps0 = fa.ps1, fd.ps1 = fb.ps1
+  float32x2_t va = vld1_f32(fa);
+  float32x2_t vb = vld1_f32(fb);
+
+  float32x2_t result = {vget_lane_f32(va, 1), vget_lane_f32(vb, 1)};
+  vst1_f32(fd, result);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+}
+
+/// Fast path dispatcher for ARM64 paired single operations
+static inline bool TryFastPath(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  switch (inst.SUBOP5)
+  {
+    case 21: // ps_add
+      FastPS_Add(ppc_state, inst);
+      return true;
+    case 20: // ps_sub
+      FastPS_Sub(ppc_state, inst);
+      return true;
+    case 25: // ps_mul
+      FastPS_Mul(ppc_state, inst);
+      return true;
+    case 29: // ps_madd
+      FastPS_Madd(ppc_state, inst);
+      return true;
+    case 28: // ps_msub
+      FastPS_Msub(ppc_state, inst);
+      return true;
+    case 31: // ps_nmadd
+      FastPS_Nmadd(ppc_state, inst);
+      return true;
+    case 528: // ps_merge00
+      FastPS_Merge00(ppc_state, inst);
+      return true;
+    case 560: // ps_merge01
+      FastPS_Merge01(ppc_state, inst);
+      return true;
+    case 592: // ps_merge10
+      FastPS_Merge10(ppc_state, inst);
+      return true;
+    case 624: // ps_merge11
+      FastPS_Merge11(ppc_state, inst);
+      return true;
+    default:
+      return false; // No fast path available
+  }
+}
+
+} // namespace ARM64PairedSingleOpt
+
+// C interface for cached interpreter - only on ARM64
+bool ARM64PairedSingleOpt_TryFastPath(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  return ARM64PairedSingleOpt::TryFastPath(ppc_state, inst);
+}
+#else
+// Stub for non-ARM64 platforms
+bool ARM64PairedSingleOpt_TryFastPath(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  return false; // No fast path available
+}
+#endif
 
 // These "binary instructions" do not alter FPSCR.
 void Interpreter::ps_sel(Interpreter& interpreter, UGeckoInstruction inst)

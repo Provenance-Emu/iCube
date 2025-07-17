@@ -84,6 +84,15 @@ constexpr u32 NUM_UTILITY_PIXEL_SAMPLERS = 8;
 // Number of texel buffer binding points.
 constexpr u32 NUM_COMPUTE_TEXEL_BUFFERS = 2;
 
+// iOS Vulkan Memory Optimizations - Reduce texture buffer sizes to prevent VK_ERROR_OUT_OF_DEVICE_MEMORY
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+// Textures that don't fit into this buffer will be uploaded with a separate buffer (see below).
+constexpr u32 TEXTURE_UPLOAD_BUFFER_SIZE = 8 * 1024 * 1024;  // Reduced from 32MB to 8MB for iOS
+
+// Textures greater than 512KB will be put in staging textures that are released after
+// execution instead. Reduced threshold for iOS to prevent memory pressure.
+constexpr u32 STAGING_TEXTURE_UPLOAD_THRESHOLD = 512 * 1024;  // Reduced from 4MB to 512KB for iOS
+#else
 // Textures that don't fit into this buffer will be uploaded with a separate buffer (see below).
 constexpr u32 TEXTURE_UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 
@@ -93,4 +102,5 @@ constexpr u32 TEXTURE_UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 // large anyway, so it's only really an issue for HD texture packs, and memory is not
 // a limiting factor in these scenarios anyway.
 constexpr u32 STAGING_TEXTURE_UPLOAD_THRESHOLD = 1024 * 1024 * 4;
+#endif
 }  // namespace Vulkan

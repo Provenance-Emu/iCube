@@ -49,6 +49,161 @@
 
 #include "VideoCommon/VideoBackendBase.h"
 
+#ifdef __aarch64__
+#include <arm_neon.h>
+#include "Common/Intrinsics.h"
+
+namespace ARM64MemoryOpt
+{
+/// ARM64-optimized byte swapping using hardware acceleration
+static inline u16 FastSwap16(u16 val)
+{
+  // ARM64 has native byte-reverse instructions
+  return __builtin_bswap16(val);
+}
+
+static inline u32 FastSwap32(u32 val)
+{
+  // ARM64 REV instruction is single cycle
+  return __builtin_bswap32(val);
+}
+
+static inline u64 FastSwap64(u64 val)
+{
+  // ARM64 REV instruction for 64-bit
+  return __builtin_bswap64(val);
+}
+
+/// ARM64 NEON optimized memory operations for aligned blocks
+static inline void FastMemCopy16Aligned(void* dst, const void* src, size_t count)
+{
+  if (count >= 8 && ((uintptr_t)dst & 15) == 0 && ((uintptr_t)src & 15) == 0)
+  {
+    const uint8x16_t* src_vec = reinterpret_cast<const uint8x16_t*>(src);
+    uint8x16_t* dst_vec = reinterpret_cast<uint8x16_t*>(dst);
+
+    for (size_t i = 0; i < count / 8; ++i)
+    {
+      // Load two 128-bit chunks and copy
+      uint8x16_t chunk1 = vld1q_u8(reinterpret_cast<const uint8_t*>(&src_vec[i * 2]));
+      uint8x16_t chunk2 = vld1q_u8(reinterpret_cast<const uint8_t*>(&src_vec[i * 2 + 1]));
+
+      vst1q_u8(reinterpret_cast<uint8_t*>(&dst_vec[i * 2]), chunk1);
+      vst1q_u8(reinterpret_cast<uint8_t*>(&dst_vec[i * 2 + 1]), chunk2);
+    }
+
+    // Handle remaining elements
+    size_t remaining = count & 7;
+    if (remaining > 0)
+    {
+      std::memcpy(reinterpret_cast<uint8_t*>(dst) + ((count / 8) * 128),
+                  reinterpret_cast<const uint8_t*>(src) + ((count / 8) * 128),
+                  remaining * 16);
+    }
+  }
+  else
+  {
+    std::memcpy(dst, src, count * 16);
+  }
+}
+
+/// Fast endian-aware memory operations
+static inline void FastSwapMemCopy32(void* dst, const void* src, size_t count)
+{
+  if (count >= 4 && ((uintptr_t)dst & 3) == 0 && ((uintptr_t)src & 3) == 0)
+  {
+    const uint32x4_t* src_vec = reinterpret_cast<const uint32x4_t*>(src);
+    uint32x4_t* dst_vec = reinterpret_cast<uint32x4_t*>(dst);
+
+    for (size_t i = 0; i < count / 4; ++i)
+    {
+      uint32x4_t data = vld1q_u32(reinterpret_cast<const uint32_t*>(&src_vec[i]));
+      // Use NEON reverse bytes in word instruction
+      data = vrev32q_u8(vreinterpretq_u8_u32(data));
+      vst1q_u32(reinterpret_cast<uint32_t*>(&dst_vec[i]), vreinterpretq_u32_u8(data));
+    }
+
+    // Handle remaining elements
+    const u32* src_remaining = reinterpret_cast<const u32*>(src) + (count / 4) * 4;
+    u32* dst_remaining = reinterpret_cast<u32*>(dst) + (count / 4) * 4;
+    for (size_t i = 0; i < count & 3; ++i)
+    {
+      dst_remaining[i] = FastSwap32(src_remaining[i]);
+    }
+  }
+  else
+  {
+    const u32* src_u32 = reinterpret_cast<const u32*>(src);
+    u32* dst_u32 = reinterpret_cast<u32*>(dst);
+    for (size_t i = 0; i < count; ++i)
+    {
+      dst_u32[i] = FastSwap32(src_u32[i]);
+    }
+  }
+}
+
+/// Optimized PowerPC cache line operations
+static inline void FastCacheLineCopy(void* dst, const void* src)
+{
+  // PowerPC cache lines are 32 bytes, perfect for two 128-bit NEON operations
+  const uint8x16_t* src_vec = reinterpret_cast<const uint8x16_t*>(src);
+  uint8x16_t* dst_vec = reinterpret_cast<uint8x16_t*>(dst);
+
+  uint8x16_t chunk1 = vld1q_u8(reinterpret_cast<const uint8_t*>(&src_vec[0]));
+  uint8x16_t chunk2 = vld1q_u8(reinterpret_cast<const uint8_t*>(&src_vec[1]));
+
+  vst1q_u8(reinterpret_cast<uint8_t*>(&dst_vec[0]), chunk1);
+  vst1q_u8(reinterpret_cast<uint8_t*>(&dst_vec[1]), chunk2);
+}
+
+/// Fast memory comparison for cache validation
+static inline bool FastMemCompare(const void* a, const void* b, size_t size)
+{
+  if (size >= 32 && ((uintptr_t)a & 15) == 0 && ((uintptr_t)b & 15) == 0)
+  {
+    const uint8x16_t* a_vec = reinterpret_cast<const uint8x16_t*>(a);
+    const uint8x16_t* b_vec = reinterpret_cast<const uint8x16_t*>(b);
+
+    for (size_t i = 0; i < size / 32; ++i)
+    {
+      uint8x16_t chunk_a1 = vld1q_u8(reinterpret_cast<const uint8_t*>(&a_vec[i * 2]));
+      uint8x16_t chunk_a2 = vld1q_u8(reinterpret_cast<const uint8_t*>(&a_vec[i * 2 + 1]));
+      uint8x16_t chunk_b1 = vld1q_u8(reinterpret_cast<const uint8_t*>(&b_vec[i * 2]));
+      uint8x16_t chunk_b2 = vld1q_u8(reinterpret_cast<const uint8_t*>(&b_vec[i * 2 + 1]));
+
+      uint8x16_t cmp1 = vceqq_u8(chunk_a1, chunk_b1);
+      uint8x16_t cmp2 = vceqq_u8(chunk_a2, chunk_b2);
+
+      // Check if all bytes match
+      uint64x2_t result1 = vreinterpretq_u64_u8(cmp1);
+      uint64x2_t result2 = vreinterpretq_u64_u8(cmp2);
+
+      if (vgetq_lane_u64(result1, 0) != ~0ULL || vgetq_lane_u64(result1, 1) != ~0ULL ||
+          vgetq_lane_u64(result2, 0) != ~0ULL || vgetq_lane_u64(result2, 1) != ~0ULL)
+      {
+        return false;
+      }
+    }
+
+    // Check remaining bytes
+    size_t remaining = size & 31;
+    if (remaining > 0)
+    {
+      return std::memcmp(reinterpret_cast<const uint8_t*>(a) + (size & ~31),
+                         reinterpret_cast<const uint8_t*>(b) + (size & ~31),
+                         remaining) == 0;
+    }
+    return true;
+  }
+  else
+  {
+    return std::memcmp(a, b, size) == 0;
+  }
+}
+
+} // namespace ARM64MemoryOpt
+#endif
+
 namespace PowerPC
 {
 MMU::MMU(Core::System& system, Memory::MemoryManager& memory, PowerPC::PowerPCManager& power_pc)
@@ -58,6 +213,33 @@ MMU::MMU(Core::System& system, Memory::MemoryManager& memory, PowerPC::PowerPCMa
 
 MMU::~MMU() = default;
 
+// ARM64-optimized byteswap functions for better performance on iOS
+#ifdef __aarch64__
+[[maybe_unused]] static u8 bswap(u8 val)
+{
+  return val;
+}
+[[maybe_unused]] static s8 bswap(s8 val)
+{
+  return val;
+}
+[[maybe_unused]] static u16 bswap(u16 val)
+{
+  return ARM64MemoryOpt::FastSwap16(val);
+}
+[[maybe_unused]] static s16 bswap(s16 val)
+{
+  return ARM64MemoryOpt::FastSwap16(val);
+}
+[[maybe_unused]] static u32 bswap(u32 val)
+{
+  return ARM64MemoryOpt::FastSwap32(val);
+}
+[[maybe_unused]] static u64 bswap(u64 val)
+{
+  return ARM64MemoryOpt::FastSwap64(val);
+}
+#else
 // Overloaded byteswap functions, for use within the templated functions below.
 [[maybe_unused]] static u8 bswap(u8 val)
 {
@@ -83,6 +265,7 @@ MMU::~MMU() = default;
 {
   return Common::swap64(val);
 }
+#endif
 
 static constexpr bool IsOpcodeFlag(XCheckTLBFlag flag)
 {

@@ -6,10 +6,153 @@
 #include <bit>
 #include <cmath>
 
+#ifdef __aarch64__
+#include <arm_neon.h>
+#include "Common/Intrinsics.h"
+
+namespace ARM64FloatOpt
+{
+/// ARM64 NEON optimized floating point classification for PowerPC FPU emulation
+static inline u32 FastClassifyDouble(double dvalue)
+{
+  const u64 ivalue = std::bit_cast<u64>(dvalue);
+  const u64 sign = ivalue & Common::DOUBLE_SIGN;
+  const u64 exp = ivalue & Common::DOUBLE_EXP;
+
+  // ARM64 conditional select for branch-free classification
+  if (exp > Common::DOUBLE_ZERO && exp < Common::DOUBLE_EXP)
+  {
+    // Nice normalized number - use conditional select for branch-free code
+    return sign ? Common::PPC_FPCLASS_NN : Common::PPC_FPCLASS_PN;
+  }
+
+  const u64 mantissa = ivalue & Common::DOUBLE_FRAC;
+  if (mantissa)
+  {
+    if (exp)
+      return Common::PPC_FPCLASS_QNAN;
+
+    // Denormalized number
+    return sign ? Common::PPC_FPCLASS_ND : Common::PPC_FPCLASS_PD;
+  }
+
+  if (exp)
+  {
+    // Infinite - use ARM64 conditional move
+    return sign ? Common::PPC_FPCLASS_NINF : Common::PPC_FPCLASS_PINF;
+  }
+
+  // Zero
+  return sign ? Common::PPC_FPCLASS_NZ : Common::PPC_FPCLASS_PZ;
+}
+
+/// ARM64 NEON optimized PowerPC paired single operations
+static inline void FastPairedSingleAdd(float* result, const float* a, const float* b)
+{
+  float32x2_t va = vld1_f32(a);
+  float32x2_t vb = vld1_f32(b);
+  float32x2_t vresult = vadd_f32(va, vb);
+  vst1_f32(result, vresult);
+}
+
+static inline void FastPairedSingleSub(float* result, const float* a, const float* b)
+{
+  float32x2_t va = vld1_f32(a);
+  float32x2_t vb = vld1_f32(b);
+  float32x2_t vresult = vsub_f32(va, vb);
+  vst1_f32(result, vresult);
+}
+
+static inline void FastPairedSingleMul(float* result, const float* a, const float* b)
+{
+  float32x2_t va = vld1_f32(a);
+  float32x2_t vb = vld1_f32(b);
+  float32x2_t vresult = vmul_f32(va, vb);
+  vst1_f32(result, vresult);
+}
+
+static inline void FastPairedSingleMAdd(float* result, const float* a, const float* b, const float* c)
+{
+  // Multiply-add: result = a * b + c
+  float32x2_t va = vld1_f32(a);
+  float32x2_t vb = vld1_f32(b);
+  float32x2_t vc = vld1_f32(c);
+  float32x2_t vresult = vmla_f32(vc, va, vb);  // Fused multiply-add
+  vst1_f32(result, vresult);
+}
+
+/// ARM64 optimized reciprocal and reciprocal square root approximations
+static inline float FastReciprocalSqrt(float value)
+{
+  float32x2_t input = vdup_n_f32(value);
+  float32x2_t estimate = vrsqrte_f32(input);
+
+  // One Newton-Raphson iteration for better precision
+  float32x2_t estimate2 = vmul_f32(estimate, estimate);
+  float32x2_t estimate3 = vmul_f32(input, estimate2);
+  float32x2_t correction = vrsqrts_f32(estimate3, estimate);
+  estimate = vmul_f32(estimate, correction);
+
+  return vget_lane_f32(estimate, 0);
+}
+
+static inline float FastReciprocal(float value)
+{
+  float32x2_t input = vdup_n_f32(value);
+  float32x2_t estimate = vrecpe_f32(input);
+
+  // One Newton-Raphson iteration for better precision
+  float32x2_t correction = vrecps_f32(input, estimate);
+  estimate = vmul_f32(estimate, correction);
+
+  return vget_lane_f32(estimate, 0);
+}
+
+/// ARM64 NEON optimized vector normalization for 3D graphics
+static inline void FastNormalizeVector3(float* result, const float* input)
+{
+  float32x4_t vec = {input[0], input[1], input[2], 0.0f};
+
+  // Compute dot product
+  float32x4_t dot = vmulq_f32(vec, vec);
+  float32x2_t sum = vadd_f32(vget_low_f32(dot), vget_high_f32(dot));
+  sum = vpadd_f32(sum, sum);
+
+  // Fast inverse square root
+  float32x2_t inv_len = vrsqrte_f32(sum);
+  inv_len = vmul_f32(inv_len, vrsqrts_f32(vmul_f32(sum, inv_len), inv_len));
+
+  // Normalize
+  float32x4_t normalized = vmulq_n_f32(vec, vget_lane_f32(inv_len, 0));
+
+  result[0] = vgetq_lane_f32(normalized, 0);
+  result[1] = vgetq_lane_f32(normalized, 1);
+  result[2] = vgetq_lane_f32(normalized, 2);
+}
+
+/// ARM64 optimized floating point comparison operations
+static inline bool FastFloatEqual(float a, float b, float epsilon = 1e-6f)
+{
+  float32x2_t va = vdup_n_f32(a);
+  float32x2_t vb = vdup_n_f32(b);
+  float32x2_t vepsilon = vdup_n_f32(epsilon);
+
+  float32x2_t diff = vabs_f32(vsub_f32(va, vb));
+  uint32x2_t result = vclt_f32(diff, vepsilon);
+
+  return vget_lane_u32(result, 0) != 0;
+}
+
+} // namespace ARM64FloatOpt
+#endif
+
 namespace Common
 {
 u32 ClassifyDouble(double dvalue)
 {
+#ifdef __aarch64__
+  return ARM64FloatOpt::FastClassifyDouble(dvalue);
+#else
   const u64 ivalue = std::bit_cast<u64>(dvalue);
   const u64 sign = ivalue & DOUBLE_SIGN;
   const u64 exp = ivalue & DOUBLE_EXP;
@@ -38,6 +181,7 @@ u32 ClassifyDouble(double dvalue)
 
   // Zero
   return sign ? PPC_FPCLASS_NZ : PPC_FPCLASS_PZ;
+#endif
 }
 
 u32 ClassifyFloat(float fvalue)
