@@ -8,6 +8,10 @@
 
 #include "Common/MathUtil.h"
 
+#ifdef __aarch64__
+#include <arm_neon.h>
+#endif
+
 namespace
 {
 // Multiply a NxM matrix by a MxP matrix.
@@ -17,21 +21,144 @@ auto MatrixMultiply(const std::array<T, N * M>& a, const std::array<T, M * P>& b
 {
   std::array<T, N * P> result;
 
-  for (int n = 0; n != N; ++n)
+#ifdef __aarch64__
+  // ARM64 NEON optimization for 4x4 float matrix multiplication (most common case)
+  if constexpr (N == 4 && M == 4 && P == 4 && std::is_same_v<T, float>)
   {
-    for (int p = 0; p != P; ++p)
+    // Load matrix A rows
+    float32x4_t a_row0 = vld1q_f32(&a[0]);
+    float32x4_t a_row1 = vld1q_f32(&a[4]);
+    float32x4_t a_row2 = vld1q_f32(&a[8]);
+    float32x4_t a_row3 = vld1q_f32(&a[12]);
+
+    // Load matrix B columns
+    float32x4_t b_col0 = {b[0], b[4], b[8], b[12]};
+    float32x4_t b_col1 = {b[1], b[5], b[9], b[13]};
+    float32x4_t b_col2 = {b[2], b[6], b[10], b[14]};
+    float32x4_t b_col3 = {b[3], b[7], b[11], b[15]};
+
+    // Compute result matrix using NEON vector operations
+    float32x4_t result_row0, result_row1, result_row2, result_row3;
+
+    // Row 0
+    result_row0 = vmulq_n_f32(b_col0, vgetq_lane_f32(a_row0, 0));
+    result_row0 = vmlaq_n_f32(result_row0, b_col1, vgetq_lane_f32(a_row0, 1));
+    result_row0 = vmlaq_n_f32(result_row0, b_col2, vgetq_lane_f32(a_row0, 2));
+    result_row0 = vmlaq_n_f32(result_row0, b_col3, vgetq_lane_f32(a_row0, 3));
+
+    // Row 1
+    result_row1 = vmulq_n_f32(b_col0, vgetq_lane_f32(a_row1, 0));
+    result_row1 = vmlaq_n_f32(result_row1, b_col1, vgetq_lane_f32(a_row1, 1));
+    result_row1 = vmlaq_n_f32(result_row1, b_col2, vgetq_lane_f32(a_row1, 2));
+    result_row1 = vmlaq_n_f32(result_row1, b_col3, vgetq_lane_f32(a_row1, 3));
+
+    // Row 2
+    result_row2 = vmulq_n_f32(b_col0, vgetq_lane_f32(a_row2, 0));
+    result_row2 = vmlaq_n_f32(result_row2, b_col1, vgetq_lane_f32(a_row2, 1));
+    result_row2 = vmlaq_n_f32(result_row2, b_col2, vgetq_lane_f32(a_row2, 2));
+    result_row2 = vmlaq_n_f32(result_row2, b_col3, vgetq_lane_f32(a_row2, 3));
+
+    // Row 3
+    result_row3 = vmulq_n_f32(b_col0, vgetq_lane_f32(a_row3, 0));
+    result_row3 = vmlaq_n_f32(result_row3, b_col1, vgetq_lane_f32(a_row3, 1));
+    result_row3 = vmlaq_n_f32(result_row3, b_col2, vgetq_lane_f32(a_row3, 2));
+    result_row3 = vmlaq_n_f32(result_row3, b_col3, vgetq_lane_f32(a_row3, 3));
+
+    // Store results
+    vst1q_f32(reinterpret_cast<float*>(&result[0]), result_row0);
+    vst1q_f32(reinterpret_cast<float*>(&result[4]), result_row1);
+    vst1q_f32(reinterpret_cast<float*>(&result[8]), result_row2);
+    vst1q_f32(reinterpret_cast<float*>(&result[12]), result_row3);
+
+    return result;
+  }
+  else
+#endif
+  {
+    // Generic implementation for non-optimized cases
+    for (int n = 0; n != N; ++n)
     {
-      T temp = {};
-      for (int m = 0; m != M; ++m)
+      for (int p = 0; p != P; ++p)
       {
-        temp += a[n * M + m] * b[m * P + p];
+        T temp = {};
+        for (int m = 0; m != M; ++m)
+        {
+          temp += a[n * M + m] * b[m * P + p];
+        }
+        result[n * P + p] = temp;
       }
-      result[n * P + p] = temp;
     }
   }
 
   return result;
 }
+
+#ifdef __aarch64__
+/// ARM64 NEON optimized vector operations for common 3D math
+namespace NEON_Math
+{
+/// Fast vector normalization using NEON
+static inline Common::Vec3 FastNormalize(const Common::Vec3& v)
+{
+  float32x4_t vec = {v.x, v.y, v.z, 0.0f};
+
+  // Compute dot product
+  float32x4_t dot = vmulq_f32(vec, vec);
+  float32x2_t sum = vadd_f32(vget_low_f32(dot), vget_high_f32(dot));
+  sum = vpadd_f32(sum, sum);
+
+  // Fast inverse square root approximation + one Newton-Raphson iteration
+  float32x2_t rsqrt = vrsqrte_f32(sum);
+  rsqrt = vmul_f32(rsqrt, vrsqrts_f32(vmul_f32(sum, rsqrt), rsqrt));
+
+  // Multiply by inverse square root
+  float32x4_t normalized = vmulq_n_f32(vec, vget_lane_f32(rsqrt, 0));
+
+  Common::Vec3 result;
+  vst1q_lane_f32(&result.x, normalized, 0);
+  vst1q_lane_f32(&result.y, normalized, 1);
+  vst1q_lane_f32(&result.z, normalized, 2);
+
+  return result;
+}
+
+/// Fast dot product using NEON
+static inline float FastDotProduct(const Common::Vec3& a, const Common::Vec3& b)
+{
+  float32x4_t va = {a.x, a.y, a.z, 0.0f};
+  float32x4_t vb = {b.x, b.y, b.z, 0.0f};
+
+  float32x4_t mul = vmulq_f32(va, vb);
+  float32x2_t sum = vadd_f32(vget_low_f32(mul), vget_high_f32(mul));
+  sum = vpadd_f32(sum, sum);
+
+  return vget_lane_f32(sum, 0);
+}
+
+/// Fast cross product using NEON
+static inline Common::Vec3 FastCrossProduct(const Common::Vec3& a, const Common::Vec3& b)
+{
+  float32x4_t va = {a.x, a.y, a.z, 0.0f};
+  float32x4_t vb = {b.x, b.y, b.z, 0.0f};
+
+  // Shuffle for cross product calculation
+  float32x4_t va_yzx = {a.y, a.z, a.x, 0.0f};
+  float32x4_t vb_yzx = {b.y, b.z, b.x, 0.0f};
+
+  float32x4_t cross1 = vmulq_f32(va, vb_yzx);
+  float32x4_t cross2 = vmulq_f32(va_yzx, vb);
+  float32x4_t result = vsubq_f32(cross1, cross2);
+
+  // Shuffle back to xyz
+  Common::Vec3 output;
+  output.x = vgetq_lane_f32(result, 2);
+  output.y = vgetq_lane_f32(result, 0);
+  output.z = vgetq_lane_f32(result, 1);
+
+  return output;
+}
+}
+#endif
 
 }  // namespace
 
@@ -44,17 +171,17 @@ Quaternion Quaternion::Identity()
 
 Quaternion Quaternion::RotateX(float rad)
 {
-  return Rotate(rad, Vec3(1, 0, 0));
+  return Rotate(rad, Common::Vec3(1, 0, 0));
 }
 
 Quaternion Quaternion::RotateY(float rad)
 {
-  return Rotate(rad, Vec3(0, 1, 0));
+  return Rotate(rad, Common::Vec3(0, 1, 0));
 }
 
 Quaternion Quaternion::RotateZ(float rad)
 {
-  return Rotate(rad, Vec3(0, 0, 1));
+  return Rotate(rad, Common::Vec3(0, 0, 1));
 }
 
 Quaternion Quaternion::RotateXYZ(const Vec3& rads)
