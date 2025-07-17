@@ -831,7 +831,14 @@ bool VulkanContext::CreateAllocator(u32 vk_api_version)
   allocator_info.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
   allocator_info.physicalDevice = m_physical_device;
   allocator_info.device = m_device;
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+  // iOS Memory Optimization: Use smaller heap blocks to reduce memory pressure and prevent VK_ERROR_OUT_OF_DEVICE_MEMORY
+  allocator_info.preferredLargeHeapBlockSize = 16 << 20;  // Reduced from 64MB to 16MB for iOS
+#else
   allocator_info.preferredLargeHeapBlockSize = 64 << 20;
+#endif
+
   allocator_info.pAllocationCallbacks = nullptr;
   allocator_info.pDeviceMemoryCallbacks = nullptr;
   allocator_info.pHeapSizeLimit = nullptr;
