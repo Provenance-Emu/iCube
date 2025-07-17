@@ -25,6 +25,172 @@
 #include "Core/PowerPC/PPCAnalyst.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
+#include "Core/HW/Memmap.h"
+
+#ifdef __aarch64__
+#include <arm_neon.h>
+#include "Common/Intrinsics.h"
+#endif
+
+// ARM64-specific optimizations for iOS
+#ifdef __aarch64__
+namespace ARM64Optimizations
+{
+/// ARM64-optimized instruction execution with reduced overhead
+static inline bool FastPathExecute(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst, u32 pc)
+{
+  const u32 op = inst.OPCD;
+
+  // Fast path for most common instructions (addi, lwz, stw, add, etc.)
+  switch (op)
+  {
+    case 14: // addi - Add Immediate (very common)
+    {
+      if (inst.RA == 0)
+        ppc_state.gpr[inst.RD] = inst.SIMM_16;
+      else
+        ppc_state.gpr[inst.RD] = ppc_state.gpr[inst.RA] + inst.SIMM_16;
+      return true;
+    }
+
+    case 15: // addis - Add Immediate Shifted (common)
+    {
+      if (inst.RA == 0)
+        ppc_state.gpr[inst.RD] = inst.SIMM_16 << 16;
+      else
+        ppc_state.gpr[inst.RD] = ppc_state.gpr[inst.RA] + (inst.SIMM_16 << 16);
+      return true;
+    }
+
+    case 32: // lwz - Load Word Zero (very common)
+    {
+      // Fall back to normal interpreter path for memory access
+      return false;
+    }
+
+    case 36: // stw - Store Word (very common)
+    {
+      // Fall back to normal interpreter path for memory access
+      return false;
+    }
+
+    case 31: // Extended opcodes
+    {
+      switch (inst.SUBOP10)
+      {
+        case 266: // add
+        {
+          ppc_state.gpr[inst.RD] = ppc_state.gpr[inst.RA] + ppc_state.gpr[inst.RB];
+          return true;
+        }
+        case 40: // subf
+        {
+          ppc_state.gpr[inst.RD] = ppc_state.gpr[inst.RB] - ppc_state.gpr[inst.RA];
+          return true;
+        }
+        case 316: // xor
+        {
+          ppc_state.gpr[inst.RD] = ppc_state.gpr[inst.RA] ^ ppc_state.gpr[inst.RB];
+          return true;
+        }
+        case 444: // or
+        {
+          ppc_state.gpr[inst.RD] = ppc_state.gpr[inst.RA] | ppc_state.gpr[inst.RB];
+          return true;
+        }
+        case 28: // and
+        {
+          ppc_state.gpr[inst.RD] = ppc_state.gpr[inst.RA] & ppc_state.gpr[inst.RB];
+          return true;
+        }
+      }
+      return false;
+    }
+
+    case 16: // bc - Branch Conditional (common in loops)
+    {
+      // Simple branch condition check - avoid complex condition logic for common cases
+      const u32 ctr_ok = (inst.BO & 4) != 0 || (--ppc_state.spr[SPR_CTR] != 0) == ((inst.BO & 2) != 0);
+      const u32 cond_ok = (inst.BO & 16) != 0 || ((ppc_state.cr.fields[inst.BI >> 2] >> (3 - (inst.BI & 3))) & 1) == ((inst.BO & 8) != 0);
+
+      if (ctr_ok && cond_ok)
+      {
+        if (inst.LK)
+          ppc_state.spr[SPR_LR] = pc + 4;
+        ppc_state.npc = inst.AA ? inst.BD << 2 : pc + (inst.BD << 2);
+      }
+      return true;
+    }
+  }
+
+  return false; // No fast path, use normal interpreter
+}
+
+/// ARM64 NEON optimized paired single operations
+static inline void FastPairedSingleMath(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst)
+{
+  // Use NEON for paired single operations when possible
+  const u32 fa = inst.FA;
+  const u32 fb = inst.FB;
+  const u32 fd = inst.FD;
+
+  // Load paired singles into NEON registers
+  float32x2_t va = vld1_f32(reinterpret_cast<const float*>(&ppc_state.ps[fa]));
+  float32x2_t vb = vld1_f32(reinterpret_cast<const float*>(&ppc_state.ps[fb]));
+  float32x2_t result;
+
+  switch (inst.SUBOP5)
+  {
+    case 21: // ps_add
+      result = vadd_f32(va, vb);
+      break;
+    case 20: // ps_sub
+      result = vsub_f32(va, vb);
+      break;
+    case 25: // ps_mul
+      result = vmul_f32(va, vb);
+      break;
+    default:
+      return; // Not optimized, fall back
+  }
+
+  // Store result back
+  vst1_f32(reinterpret_cast<float*>(&ppc_state.ps[fd]), result);
+}
+
+/// ARM64 optimized memory block operations
+static inline void FastMemoryCopy(void* dst, const void* src, size_t size)
+{
+  // Use ARM64 optimized memory copy for large blocks
+  if (size >= 64 && ((uintptr_t)dst & 15) == 0 && ((uintptr_t)src & 15) == 0)
+  {
+    // 128-bit aligned copy using NEON
+    const uint8x16_t* src_vec = reinterpret_cast<const uint8x16_t*>(src);
+    uint8x16_t* dst_vec = reinterpret_cast<uint8x16_t*>(dst);
+    size_t vec_count = size / 16;
+
+    for (size_t i = 0; i < vec_count; ++i)
+    {
+      vst1q_u8(reinterpret_cast<uint8_t*>(&dst_vec[i]), vld1q_u8(reinterpret_cast<const uint8_t*>(&src_vec[i])));
+    }
+
+    // Handle remaining bytes
+    size_t remaining = size & 15;
+    if (remaining > 0)
+    {
+      std::memcpy(reinterpret_cast<uint8_t*>(dst) + (vec_count * 16),
+                  reinterpret_cast<const uint8_t*>(src) + (vec_count * 16),
+                  remaining);
+    }
+  }
+  else
+  {
+    std::memcpy(dst, src, size);
+  }
+}
+
+} // namespace ARM64Optimizations
+#endif
 
 CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_block_cache(*this)
 {
@@ -63,9 +229,62 @@ void CachedInterpreter::ExecuteOneBlock()
   }
 
   auto& ppc_state = m_ppc_state;
+
+#ifdef __aarch64__
+  // ARM64 fast path: try to execute common instruction sequences with reduced overhead
+  u32 fast_instructions = 0;
+  const u32 max_fast_instructions = 16; // Limit to prevent infinite loops
+#endif
+
   while (true)
   {
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
+
+#ifdef __aarch64__
+        // ARM64 optimization: check if this is a simple interpret callback that we can optimize
+    if (fast_instructions < max_fast_instructions &&
+        (callback == AnyCallbackCast(Interpret<true>) || callback == AnyCallbackCast(Interpret<false>)))
+    {
+      const auto* operands = reinterpret_cast<const InterpretOperands*>(normal_entry + sizeof(callback));
+
+            // Try ARM64 paired single fast path first (most common in GameCube/Wii games)
+      if (operands->inst.OPCD == 4) // PowerPC paired single opcode
+      {
+        // Use ARM64 paired single optimizations if available
+        extern bool ARM64PairedSingleOpt_TryFastPath(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst);
+        if (ARM64PairedSingleOpt_TryFastPath(ppc_state, operands->inst))
+        {
+          // Update PC for instruction that writes PC
+          if (callback == AnyCallbackCast(Interpret<true>))
+          {
+            ppc_state.pc = operands->current_pc;
+            ppc_state.npc = operands->current_pc + 4;
+          }
+
+          normal_entry += sizeof(callback) + sizeof(InterpretOperands);
+          fast_instructions++;
+          continue;
+        }
+      }
+
+      // Try general ARM64 fast path execution
+      if (ARM64Optimizations::FastPathExecute(ppc_state, operands->inst, operands->current_pc))
+      {
+        // Fast path succeeded - update PC and continue
+        if (callback == AnyCallbackCast(Interpret<true>))
+        {
+          ppc_state.pc = operands->current_pc;
+          ppc_state.npc = operands->current_pc + 4;
+        }
+
+        normal_entry += sizeof(callback) + sizeof(InterpretOperands);
+        fast_instructions++;
+        continue;
+      }
+    }
+    fast_instructions = 0; // Reset counter if we can't fast path
+#endif
+
     if (const auto distance = callback(ppc_state, normal_entry + sizeof(callback)))
       normal_entry += distance;
     else
