@@ -261,16 +261,41 @@ void Metal::Util::PopulateBackendInfoFeatures(VideoConfig* config, id<MTLDevice>
                       DriverDetails::Family::UNKNOWN, std::move(name));
 
 #if TARGET_OS_OSX
-  config->backend_info.bSupportsDepthClamp = true;
-  config->backend_info.bSupportsST3CTextures = true;
-  config->backend_info.bSupportsBPTCTextures = true;
-#elif TARGET_OS_IOS
-  bool supports_apple4 = false;
-  bool supports_bcn = false;
-  if (@available(iOS 13, *))
-    supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
-  else
-    supports_apple4 = [device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1];
+    config->backend_info.bSupportsDepthClamp   = true;
+    config->backend_info.bSupportsST3CTextures = true;
+    config->backend_info.bSupportsBPTCTextures = true;
+
+#else   // iOS / tvOS
+    bool supports_apple4 = false;
+    bool supports_bcn    = false;
+
+    /* ------------------------------------------------------------------
+       - tvOS 13/iOS 13 introduced the modern `supportsFamily:` selector.
+       - Before that we must fall back to the older feature-set enums.
+       - Starting with tvOS 15 / iOS 15 we can rely exclusively on
+         `supportsFamily:` because every currently-shipping device has it.
+       ------------------------------------------------------------------ */
+
+    if (@available(iOS 13.0, tvOS 13.0, *)) {
+        // Newer path – query the GPU family directly.
+        // Apple 4 is the minimum family that guarantees BCn / depth-clamp.
+        supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
+    } else {
+    #if TARGET_OS_IOS
+        supports_apple4 = [device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1];
+    #else // TARGET_OS_TV
+      supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
+    #endif
+    }
+
+    /* BCn (S3TC/BPTC) and depth-clamp come free with Apple 4 or newer   */
+    supports_bcn    = supports_apple4;
+    if (supports_apple4) {
+        config->backend_info.bSupportsDepthClamp   = true;
+        config->backend_info.bSupportsST3CTextures = true;   // S3TC / BC1-3
+        config->backend_info.bSupportsBPTCTextures = true;   // BC6/BC7
+    }
+#endif
   if (@available(iOS 16.4, *))
     supports_bcn = [device supportsBCTextureCompression];
   config->backend_info.bSupportsDepthClamp = supports_apple4;
@@ -278,19 +303,6 @@ void Metal::Util::PopulateBackendInfoFeatures(VideoConfig* config, id<MTLDevice>
   config->backend_info.bSupportsBPTCTextures = supports_bcn;
 
   config->backend_info.bSupportsFramebufferFetch = true;
-#elif TARGET_OS_TV
-  bool supports_apple4 = false;
-  bool supports_bcn = false;
-  if (@available(tvOS 13, *))
-    supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
-  if (@available(tvOS 16.4, *))
-    supports_bcn = [device supportsBCTextureCompression];
-  config->backend_info.bSupportsDepthClamp = supports_apple4;
-  config->backend_info.bSupportsST3CTextures = supports_bcn;
-  config->backend_info.bSupportsBPTCTextures = supports_bcn;
-
-  config->backend_info.bSupportsFramebufferFetch = true;
-#endif
 
   config->backend_info.AAModes.clear();
   for (u32 i = 1; i <= 64; i <<= 1)
