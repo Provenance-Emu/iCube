@@ -9,9 +9,18 @@
 #include "Core/Core.h"
 #include "Core/Host.h"
 #include "Core/System.h"
+#include "UICommon/UICommon.h"
 
 #include "HostNotifications.h"
 #include "HostQueue.h"
+
+// Force inclusion of UICommon symbols
+void EnsureUICommonSymbols() {
+  // Reference the symbols to ensure they're included in the final binary
+  UICommon::SetUserDirectory("");
+  UICommon::CreateDirectories();
+  UICommon::Init();
+}
 
 std::vector<std::string> Host_GetPreferredLocales()
 {
