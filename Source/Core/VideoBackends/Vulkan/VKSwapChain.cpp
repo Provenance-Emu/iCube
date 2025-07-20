@@ -10,6 +10,10 @@
 #include "Common/CommonFuncs.h"
 #include "Common/Contains.h"
 #include "Common/Logging/Log.h"
+
+#if defined(__APPLE__)
+#include <dispatch/dispatch.h>
+#endif
 #include "Common/MsgHandler.h"
 
 #include "VideoBackends/Vulkan/CommandBufferManager.h"
@@ -20,6 +24,17 @@
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
 #include <X11/Xlib.h>
+#endif
+
+#if defined(__APPLE__)
+// Helper function to dispatch code to the main thread
+static void dispatch_to_main_thread(dispatch_block_t block) {
+  if (dispatch_get_current_queue() == dispatch_get_main_queue()) {
+    block();
+  } else {
+    dispatch_sync(dispatch_get_main_queue(), block);
+  }
+}
 #endif
 
 namespace Vulkan
@@ -304,15 +319,37 @@ bool SwapChain::SelectPresentMode()
 
 bool SwapChain::CreateSwapChain()
 {
+#if defined(__APPLE__)
+  // On iOS/tvOS, we need to ensure all UI operations happen on the main thread
+  __block bool success = false;
+  __block VkSurfaceCapabilitiesKHR surface_capabilities = {};
+  
+  dispatch_to_main_thread(^{
+    // Look up surface properties to determine image count and dimensions
+    VkResult local_res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_vulkan_context->GetPhysicalDevice(),
+                                                              m_surface, &surface_capabilities);
+    if (local_res != VK_SUCCESS)
+    {
+      LOG_VULKAN_ERROR(local_res, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed: ");
+      success = false;
+      return;
+    }
+    success = true;
+  });
+  
+  if (!success)
+    return false;
+#else
   // Look up surface properties to determine image count and dimensions
   VkSurfaceCapabilitiesKHR surface_capabilities;
   VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_vulkan_context->GetPhysicalDevice(),
-                                                           m_surface, &surface_capabilities);
+                                                            m_surface, &surface_capabilities);
   if (res != VK_SUCCESS)
   {
     LOG_VULKAN_ERROR(res, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed: ");
     return false;
   }
+#endif
 
   // Select swap chain format and present mode
   if (!SelectSurfaceFormat() || !SelectPresentMode())
@@ -389,6 +426,53 @@ bool SwapChain::CreateSwapChain()
     swap_chain_info.pQueueFamilyIndices = indices.data();
   }
 
+#if defined(__APPLE__)
+  __block VkResult res = VK_SUCCESS;
+  __block bool swapchain_created = false;
+  
+  dispatch_to_main_thread(^{
+#ifdef SUPPORTS_VULKAN_EXCLUSIVE_FULLSCREEN
+    if (m_fullscreen_supported)
+    {
+      VkSurfaceFullScreenExclusiveInfoEXT fullscreen_support = {};
+      swap_chain_info.pNext = &fullscreen_support;
+      fullscreen_support.sType = VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT;
+      fullscreen_support.fullScreenExclusive = VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT;
+
+      auto platform_info = g_vulkan_context->GetPlatformExclusiveFullscreenInfo(m_wsi);
+      fullscreen_support.pNext = &platform_info;
+
+      res = vkCreateSwapchainKHR(g_vulkan_context->GetDevice(), &swap_chain_info, nullptr,
+                                &m_swap_chain);
+      if (res != VK_SUCCESS)
+      {
+        // Try without exclusive fullscreen.
+        WARN_LOG_FMT(VIDEO, "Failed to create exclusive fullscreen swapchain, trying without.");
+        swap_chain_info.pNext = nullptr;
+        g_Config.backend_info.bSupportsExclusiveFullscreen = false;
+        g_ActiveConfig.backend_info.bSupportsExclusiveFullscreen = false;
+        m_fullscreen_supported = false;
+      }
+    }
+#endif
+
+    if (m_swap_chain == VK_NULL_HANDLE)
+    {
+      res = vkCreateSwapchainKHR(g_vulkan_context->GetDevice(), &swap_chain_info, nullptr,
+                                &m_swap_chain);
+    }
+    
+    swapchain_created = (res == VK_SUCCESS);
+  });
+  
+  if (!swapchain_created)
+  {
+    LOG_VULKAN_ERROR(res, "vkCreateSwapchainKHR failed: ");
+    return false;
+  }
+#else
+  VkResult res = VK_SUCCESS;
+  
 #ifdef SUPPORTS_VULKAN_EXCLUSIVE_FULLSCREEN
   if (m_fullscreen_supported)
   {
@@ -401,7 +485,7 @@ bool SwapChain::CreateSwapChain()
     fullscreen_support.pNext = &platform_info;
 
     res = vkCreateSwapchainKHR(g_vulkan_context->GetDevice(), &swap_chain_info, nullptr,
-                               &m_swap_chain);
+                              &m_swap_chain);
     if (res != VK_SUCCESS)
     {
       // Try without exclusive fullscreen.
@@ -416,13 +500,14 @@ bool SwapChain::CreateSwapChain()
   if (m_swap_chain == VK_NULL_HANDLE)
   {
     res = vkCreateSwapchainKHR(g_vulkan_context->GetDevice(), &swap_chain_info, nullptr,
-                               &m_swap_chain);
+                              &m_swap_chain);
   }
   if (res != VK_SUCCESS)
   {
     LOG_VULKAN_ERROR(res, "vkCreateSwapchainKHR failed: ");
     return false;
   }
+#endif
 
   // Now destroy the old swap chain, since it's been recreated.
   // We can do this immediately since all work should have been completed before calling resize.
@@ -439,6 +524,30 @@ bool SwapChain::SetupSwapChainImages()
 {
   ASSERT(m_swap_chain_images.empty());
 
+#if defined(__APPLE__)
+  __block uint32_t image_count = 0;
+  __block VkResult res = VK_SUCCESS;
+  __block std::vector<VkImage> images;
+  __block bool success = false;
+  
+  dispatch_to_main_thread(^{
+    res = vkGetSwapchainImagesKHR(g_vulkan_context->GetDevice(), m_swap_chain, &image_count, nullptr);
+    if (res != VK_SUCCESS)
+    {
+      LOG_VULKAN_ERROR(res, "vkGetSwapchainImagesKHR failed: ");
+      success = false;
+      return;
+    }
+    
+    images.resize(image_count);
+    res = vkGetSwapchainImagesKHR(g_vulkan_context->GetDevice(), m_swap_chain, &image_count,
+                                 images.data());
+    success = (res == VK_SUCCESS);
+  });
+  
+  if (!success)
+    return false;
+#else
   uint32_t image_count;
   VkResult res =
       vkGetSwapchainImagesKHR(g_vulkan_context->GetDevice(), m_swap_chain, &image_count, nullptr);
@@ -450,8 +559,9 @@ bool SwapChain::SetupSwapChainImages()
 
   std::vector<VkImage> images(image_count);
   res = vkGetSwapchainImagesKHR(g_vulkan_context->GetDevice(), m_swap_chain, &image_count,
-                                images.data());
+                                 images.data());
   ASSERT(res == VK_SUCCESS);
+#endif
 
   const TextureConfig texture_config(
       TextureConfig(m_width, m_height, 1, m_layers, 1, m_texture_format,
@@ -467,6 +577,41 @@ bool SwapChain::SetupSwapChainImages()
   }
 
   m_swap_chain_images.reserve(image_count);
+  
+#if defined(__APPLE__)
+  __block bool all_images_created = true;
+  
+  dispatch_to_main_thread(^{
+    for (uint32_t i = 0; i < image_count; i++)
+    {
+      SwapChainImage image;
+      image.image = images[i];
+
+      // Create texture object, which creates a view of the backbuffer
+      image.texture =
+          VKTexture::CreateAdopted(texture_config, image.image,
+                                   m_layers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D,
+                                   VK_IMAGE_LAYOUT_UNDEFINED);
+      if (!image.texture)
+      {
+        all_images_created = false;
+        return;
+      }
+
+      image.framebuffer = VKFramebuffer::Create(image.texture.get(), nullptr, {});
+      if (!image.framebuffer)
+      {
+        image.texture.reset();
+        all_images_created = false;
+        return;
+      }
+
+      m_swap_chain_images.emplace_back(std::move(image));
+    }
+  });
+  
+  return all_images_created;
+#else
   for (uint32_t i = 0; i < image_count; i++)
   {
     SwapChainImage image;
@@ -489,6 +634,9 @@ bool SwapChain::SetupSwapChainImages()
 
     m_swap_chain_images.emplace_back(std::move(image));
   }
+  
+  return true;
+#endif
 
   return true;
 }
