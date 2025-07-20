@@ -26,6 +26,7 @@
 #endif
 
 #if defined(__APPLE__)
+#include <TargetConditionals.h>
 #ifdef _M_X86_64
 #define THREAD_STATE64_COUNT x86_THREAD_STATE64_COUNT
 #define THREAD_STATE64 x86_THREAD_STATE64
@@ -166,14 +167,19 @@ static void ExceptionThread(mach_port_t port)
     // a message: either a mach_exception_raise_state RPC due to
     // thread_set_exception_ports, or MACH_NOTIFY_NO_SENDERS due to
     // mach_port_request_notification.
+#if TARGET_OS_IOS
     CheckKR("mach_msg_overwrite",
             mach_msg_overwrite(&msg_out.Head, option, send_size, sizeof(msg_in), port,
                                MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL, &msg_in.Head, 0));
-
+#endif
     if (msg_in.Head.msgh_id == MACH_NOTIFY_NO_SENDERS)
     {
       // the other thread exited
+#if TARGET_OS_IOS
       mach_port_destroy(mach_task_self(), port);
+#elif TARGET_OS_TV
+      mach_port_deallocate(mach_task_self(), port);
+#endif
       return;
     }
 
@@ -234,9 +240,11 @@ void InstallExceptionHandler()
           mach_port_insert_right(mach_task_self(), port, port, MACH_MSG_TYPE_MAKE_SEND));
   // Mach tries the following exception ports in order: thread, task, host.
   // Debuggers set the task port, so we grab the thread port.
+#if TARGET_OS_IOS
   CheckKR("thread_set_exception_ports",
           thread_set_exception_ports(mach_thread_self(), EXC_MASK_BAD_ACCESS, port,
                                      EXCEPTION_STATE | MACH_EXCEPTION_CODES, THREAD_STATE64));
+#endif
   // ...and get rid of our copy so that MACH_NOTIFY_NO_SENDERS works.
   CheckKR("mach_port_mod_refs",
           mach_port_mod_refs(mach_task_self(), port, MACH_PORT_RIGHT_SEND, -1));
