@@ -79,8 +79,10 @@ void Host_UpdateDisasmDialog()
 {
 }
 
-void Host_JitCacheInvalidation()
+__attribute__((visibility("default"))) void Host_JitCacheInvalidation()
 {
+  // Stub implementation for JIT cache invalidation
+  // This function is called by Gecko code handler
 }
 
 void Host_JitProfileDataWiped()
