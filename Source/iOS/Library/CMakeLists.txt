@@ -42,7 +42,7 @@ PUBLIC
   Iconv::Iconv
   rcheevos
   zstd
-  xxhash
+  xxhash::xxhash
 )
 
 # Determine platform suffix based on PLATFORM variable

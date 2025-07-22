@@ -27,6 +27,11 @@
 
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
+#include <mach/mach.h>
+#include <mach/message.h>
+#include <mach/kern_return.h>
+#include <mach/mach_types.h>
+#include <mach/thread_status.h>
 #ifdef _M_X86_64
 #define THREAD_STATE64_COUNT x86_THREAD_STATE64_COUNT
 #define THREAD_STATE64 x86_THREAD_STATE64

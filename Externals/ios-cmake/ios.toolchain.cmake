@@ -63,6 +63,7 @@
 #    TVOS = Build for arm64 tvOS.
 #    TVOSCOMBINED = Build for arm64 x86_64 tvOS. Combined into FAT STATIC lib (supported on 3.14+ of CMake with "-G Xcode" argument ONLY)
 #    SIMULATOR_TVOS = Build for x86_64 tvOS Simulator.
+#    SIMULATORARM64_TVOS = Build for arm64 tvOS Simulator.
 #    WATCHOS = Build for armv7k arm64_32 for watchOS.
 #    WATCHOSCOMBINED = Build for armv7k arm64_32 x86_64 watchOS. Combined into FAT STATIC lib (supported on 3.14+ of CMake with "-G Xcode" argument ONLY)
 #    SIMULATOR_WATCHOS = Build for x86_64 for watchOS Simulator.
@@ -101,6 +102,7 @@
 #    SIMULATORARM64 = arm64
 #    TVOS = arm64
 #    SIMULATOR_TVOS = x86_64 (i386 has since long been deprecated)
+#    SIMULATORARM64_TVOS = arm64
 #    WATCHOS = armv7k arm64_32 (if applicable)
 #    SIMULATOR_WATCHOS = x86_64 (i386 has since long been deprecated)
 #    MAC = x86_64
@@ -150,7 +152,7 @@ option(DROP_32_BIT "Drops the 32-bit targets universally." YES)
 # List of supported platform values
 list(APPEND _supported_platforms
         "OS" "OS64" "OS64COMBINED" "SIMULATOR" "SIMULATOR64" "SIMULATORARM64"
-        "TVOS" "TVOSCOMBINED" "SIMULATOR_TVOS"
+        "TVOS" "TVOSCOMBINED" "SIMULATOR_TVOS" "SIMULATORARM64_TVOS"
         "WATCHOS" "WATCHOSCOMBINED" "SIMULATOR_WATCHOS"
         "MAC" "MAC_ARM64"
         "MAC_CATALYST" "MAC_CATALYST_ARM64")
@@ -373,6 +375,14 @@ elseif(PLATFORM_INT STREQUAL "SIMULATOR_TVOS")
   if(NOT ARCHS)
     set(ARCHS x86_64)
     set(APPLE_TARGET_TRIPLE_INT x86_64-apple-tvos${DEPLOYMENT_TARGET}-simulator)
+  else()
+    set(APPLE_TARGET_TRIPLE_INT ${ARCHS_SPLIT}-apple-tvos${DEPLOYMENT_TARGET}-simulator)
+  endif()
+elseif(PLATFORM_INT STREQUAL "SIMULATORARM64_TVOS")
+  set(SDK_NAME appletvsimulator)
+  if(NOT ARCHS)
+    set(ARCHS arm64)
+    set(APPLE_TARGET_TRIPLE_INT aarch64-apple-tvos${DEPLOYMENT_TARGET}-simulator)
   else()
     set(APPLE_TARGET_TRIPLE_INT ${ARCHS_SPLIT}-apple-tvos${DEPLOYMENT_TARGET}-simulator)
   endif()
@@ -677,12 +687,15 @@ set(CMAKE_C_OSX_CURRENT_VERSION_FLAG "-current_version ")
 set(CMAKE_CXX_OSX_COMPATIBILITY_VERSION_FLAG "${CMAKE_C_OSX_COMPATIBILITY_VERSION_FLAG}")
 set(CMAKE_CXX_OSX_CURRENT_VERSION_FLAG "${CMAKE_C_OSX_CURRENT_VERSION_FLAG}")
 
+message(STATUS "DEBUG: ARCHS=${ARCHS}")
 if(ARCHS MATCHES "((^|;|, )(arm64|arm64e|x86_64))+")
   set(CMAKE_C_SIZEOF_DATA_PTR 8)
   set(CMAKE_CXX_SIZEOF_DATA_PTR 8)
   if(ARCHS MATCHES "((^|;|, )(arm64|arm64e))+")
+    message(STATUS "DEBUG: Setting CMAKE_SYSTEM_PROCESSOR to aarch64")
     set(CMAKE_SYSTEM_PROCESSOR "aarch64")
   else()
+    message(STATUS "DEBUG: Setting CMAKE_SYSTEM_PROCESSOR to x86_64")
     set(CMAKE_SYSTEM_PROCESSOR "x86_64")
   endif()
 else()
@@ -708,6 +721,9 @@ if(${CMAKE_VERSION} VERSION_LESS "3.11")
     set(SDK_NAME_VERSION_FLAGS
             "-mtvos-version-min=${DEPLOYMENT_TARGET}")
   elseif(PLATFORM_INT STREQUAL "SIMULATOR_TVOS")
+    set(SDK_NAME_VERSION_FLAGS
+            "-mtvos-simulator-version-min=${DEPLOYMENT_TARGET}")
+  elseif(PLATFORM_INT STREQUAL "SIMULATORARM64_TVOS")
     set(SDK_NAME_VERSION_FLAGS
             "-mtvos-simulator-version-min=${DEPLOYMENT_TARGET}")
   elseif(PLATFORM_INT STREQUAL "WATCHOS")

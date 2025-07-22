@@ -15,6 +15,7 @@
 #include <set>
 #include <iostream>
 #include <sstream>
+#include <initializer_list>
 
 namespace optparse {
 

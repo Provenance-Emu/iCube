@@ -214,15 +214,26 @@ else()
   add_definitions(-D_ARCH_32=1)
 endif()
 
-if(ENABLE_GENERIC)
+message(STATUS "DEBUG: _ARCH_64=${_ARCH_64}, CMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR}")
+
+# Override architecture detection for iOS/tvOS ARM64 builds
+if(IOS AND CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+  message(STATUS "DEBUG: iOS/tvOS ARM64 detected - forcing _M_ARM_64=1")
+  set(_M_ARM_64 1)
+  add_definitions(-D_M_ARM_64=1)
+  # CRC instruction set is used in the CRC32 hash function
+  check_and_add_flag(HAVE_ARCH_ARMV8 -march=armv8-a+crc)
+elseif(ENABLE_GENERIC)
   message(STATUS "Warning! Building generic build!")
   set(_M_GENERIC 1)
   add_definitions(-D_M_GENERIC=1)
 elseif(_ARCH_64 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+  message(STATUS "DEBUG: Setting _M_X86_64=1")
   set(_M_X86_64 1)
   add_definitions(-D_M_X86_64=1)
   check_and_add_flag(HAVE_SSE2 -msse2)
 elseif(_ARCH_64 AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+  message(STATUS "DEBUG: Setting _M_ARM_64=1")
   set(_M_ARM_64 1)
   add_definitions(-D_M_ARM_64=1)
   # CRC instruction set is used in the CRC32 hash function
