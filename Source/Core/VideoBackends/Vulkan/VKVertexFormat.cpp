@@ -120,7 +120,27 @@ void VertexFormat::MapAttributes()
 void VertexFormat::SetupInputState()
 {
   m_binding_description.binding = 0;
-  m_binding_description.stride = m_decl.stride;
+  
+  // Fix for MoltenVK/Metal alignment: ensure stride is properly aligned
+  // Metal requires stricter alignment than Vulkan, causing GPU address faults
+  // if the buffer size doesn't match what the translated Metal shader expects
+  uint32_t aligned_stride = m_decl.stride;
+  
+#if defined(__APPLE__)
+  // On iOS/macOS with MoltenVK, ensure stride is aligned to 8-byte boundary
+  // This prevents Metal validation errors and GPU device loss
+  const uint32_t METAL_ALIGNMENT = 8;
+  aligned_stride = (m_decl.stride + METAL_ALIGNMENT - 1) & ~(METAL_ALIGNMENT - 1);
+  
+  // Log stride adjustment for debugging
+  if (aligned_stride != m_decl.stride) {
+    // Note: Using printf instead of logging to avoid circular dependencies
+    printf("[Dolphin] Adjusted vertex stride from %u to %u bytes for Metal alignment\n", 
+           m_decl.stride, aligned_stride);
+  }
+#endif
+  
+  m_binding_description.stride = aligned_stride;
   m_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
   m_input_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
