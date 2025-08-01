@@ -167,6 +167,15 @@ void AchievementManager::LoadGame(const std::string& file_path, const DiscIO::Vo
   if (volume)
   {
     std::lock_guard lg{m_lock};
+#ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
+    const auto& names = volume->GetLongNames();
+    if (const auto it = names.find(DiscIO::Language::English); it != names.end())
+      m_title_estimate = it->second;
+    else if (!names.empty())
+      m_title_estimate = names.begin()->second;
+    else
+      m_title_estimate = "";
+#endif  // RC_CLIENT_SUPPORTS_RAINTEGRATION
     if (!m_loading_volume)
     {
       m_loading_volume = DiscIO::CreateVolume(volume->GetBlobReader().CopyReader());
@@ -667,15 +676,15 @@ void AchievementManager::CloseGame()
     std::lock_guard lg{m_lock};
     if (rc_client_get_game_info(m_client))
     {
-      m_active_challenges.clear();
-      m_active_leaderboards.clear();
-      m_game_badge.width = 0;
-      m_game_badge.height = 0;
-      m_game_badge.data.clear();
-      m_unlocked_badges.clear();
-      m_locked_badges.clear();
-      m_leaderboard_map.clear();
-      m_rich_presence.fill('\0');
+    m_active_challenges.clear();
+    m_active_leaderboards.clear();
+    m_game_badge.width = 0;
+    m_game_badge.height = 0;
+    m_game_badge.data.clear();
+    m_unlocked_badges.clear();
+    m_locked_badges.clear();
+    m_leaderboard_map.clear();
+    m_rich_presence.fill('\0');
       rc_api_destroy_fetch_game_data_response(&m_game_data);
       m_game_data = {};
       m_queue.Cancel();
@@ -684,8 +693,8 @@ void AchievementManager::CloseGame()
       m_system.store(nullptr, std::memory_order_release);
       if (Config::Get(Config::RA_DISCORD_PRESENCE_ENABLED))
         Discord::UpdateDiscordPresence();
-      INFO_LOG_FMT(ACHIEVEMENTS, "Game closed.");
-    }
+    INFO_LOG_FMT(ACHIEVEMENTS, "Game closed.");
+  }
   }
 
   m_update_callback(UpdatedItems{.all = true});
@@ -940,14 +949,14 @@ void AchievementManager::LoadGameCallback(int result, const char* error_message,
   }
 
   auto* game = rc_client_get_game_info(client);
-  if (!game)
-  {
-    ERROR_LOG_FMT(ACHIEVEMENTS, "Failed to retrieve game information from client.");
-    OSD::AddMessage("Failed to load achievements for this title.", OSD::Duration::VERY_LONG,
-                    OSD::Color::RED);
+    if (!game)
+    {
+      ERROR_LOG_FMT(ACHIEVEMENTS, "Failed to retrieve game information from client.");
+      OSD::AddMessage("Failed to load achievements for this title.", OSD::Duration::VERY_LONG,
+                      OSD::Color::RED);
     return;
-  }
-  INFO_LOG_FMT(ACHIEVEMENTS, "Loaded data for game ID {}.", game->id);
+    }
+      INFO_LOG_FMT(ACHIEVEMENTS, "Loaded data for game ID {}.", game->id);
 
   auto& instance = AchievementManager::GetInstance();
   rc_client_set_read_memory_function(instance.m_client, MemoryPeeker);
@@ -1258,13 +1267,13 @@ void AchievementManager::Request(const rc_api_request_t* request,
                          server_response.http_status_code, preview_len, preview);
             fprintf(stderr, "[RA] Response(v6) code=%d body[0..%zu]=%.*s\n",
                     server_response.http_status_code, preview_len, (int)preview_len, server_response.body);
-          }
-          else
-          {
-            static constexpr char error_message[] = "Failed HTTP request.";
-            server_response.body = error_message;
-            server_response.body_length = sizeof(error_message);
-            server_response.http_status_code = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+        }
+        else
+        {
+          static constexpr char error_message[] = "Failed HTTP request.";
+          server_response.body = error_message;
+          server_response.body_length = sizeof(error_message);
+          server_response.http_status_code = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
             WARN_LOG_FMT(ACHIEVEMENTS,
                          "RA Request failed: no response received after fallback (curl err={})",
                          http_request_v6.GetLastErrorString());
@@ -1293,7 +1302,7 @@ u32 AchievementManager::MemoryVerifier(u32 address, u8* buffer, u32 num_bytes, r
   auto& system = Core::System::GetInstance();
   u32 ram_size = system.GetMemory().GetRamSizeReal();
   if (address >= ram_size)
-    return 0;
+  return 0;
   return std::min(ram_size - address, num_bytes);
 }
 
@@ -1332,7 +1341,7 @@ void AchievementManager::FetchBadge(AchievementManager::Badge* badge, u32 badge_
   }
 
   m_image_queue.EmplaceItem([this, badge, badge_type, function = std::move(function),
-                             callback_data = std::move(callback_data)] {
+                      callback_data = std::move(callback_data)] {
     Common::ScopeGuard on_end_scope([&]() {
       if (m_display_welcome_message && badge_type == RC_IMAGE_TYPE_GAME)
         DisplayWelcomeMessage();
