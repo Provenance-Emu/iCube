@@ -73,7 +73,7 @@ void Statistics::Display() const
     ImGui::NextColumn();
   };
 
-  if (g_ActiveConfig.backend_info.api_type == APIType::Nothing)
+  if (g_backend_info.api_type == APIType::Nothing)
   {
     draw_statistic("Objects", "%d", this_frame.num_drawn_objects);
     draw_statistic("Vertices Loaded", "%d", this_frame.num_vertices_loaded);
@@ -323,7 +323,7 @@ void Statistics::DisplayScissor()
     }
   };
   constexpr auto NUM_SCISSOR_COLUMNS = 8;
-  const auto draw_scissor_table_header = [&]() {
+  const auto draw_scissor_table_header = [&] {
     ImGui::TableSetupColumn("#");
     ImGui::TableSetupColumn("x0");
     ImGui::TableSetupColumn("y0");
@@ -413,7 +413,7 @@ void Statistics::DisplayScissor()
     }
   };
   constexpr auto NUM_VIEWPORT_COLUMNS = 5;
-  const auto draw_viewport_table_header = [&]() {
+  const auto draw_viewport_table_header = [&] {
     ImGui::TableSetupColumn("#");
     ImGui::TableSetupColumn("vx0");
     ImGui::TableSetupColumn("vy0");

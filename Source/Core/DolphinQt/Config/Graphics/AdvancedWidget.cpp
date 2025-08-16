@@ -18,41 +18,26 @@
 #include "DolphinQt/Config/ConfigControls/ConfigChoice.h"
 #include "DolphinQt/Config/ConfigControls/ConfigInteger.h"
 #include "DolphinQt/Config/GameConfigWidget.h"
-#include "DolphinQt/Config/Graphics/GraphicsWindow.h"
-#include "DolphinQt/Config/ToolTipControls/ToolTipCheckBox.h"
-#include "DolphinQt/QtUtils/SignalBlocking.h"
+#include "DolphinQt/Config/Graphics/GraphicsPane.h"
 #include "DolphinQt/Settings.h"
 
 #include "VideoCommon/VideoConfig.h"
 
-AdvancedWidget::AdvancedWidget(GraphicsWindow* parent)
+AdvancedWidget::AdvancedWidget(GraphicsPane* gfx_pane) : m_game_layer{gfx_pane->GetConfigLayer()}
 {
   CreateWidgets();
   ConnectWidgets();
   AddDescriptions();
 
-  connect(parent, &GraphicsWindow::BackendChanged, this, &AdvancedWidget::OnBackendChanged);
+  connect(gfx_pane, &GraphicsPane::BackendChanged, this, &AdvancedWidget::OnBackendChanged);
   connect(&Settings::Instance(), &Settings::EmulationStateChanged, this, [this](Core::State state) {
     OnEmulationStateChanged(state != Core::State::Uninitialized);
   });
   connect(m_manual_texture_sampling, &QCheckBox::toggled,
-          [parent] { emit parent->UseFastTextureSamplingChanged(); });
+          [gfx_pane] { emit gfx_pane->UseFastTextureSamplingChanged(); });
 
   OnBackendChanged();
   OnEmulationStateChanged(!Core::IsUninitialized(Core::System::GetInstance()));
-}
-
-AdvancedWidget::AdvancedWidget(GameConfigWidget* parent, Config::Layer* layer) : m_game_layer(layer)
-{
-  CreateWidgets();
-  ConnectWidgets();
-  AddDescriptions();
-
-  connect(&Settings::Instance(), &Settings::EmulationStateChanged, this, [this](Core::State state) {
-    OnEmulationStateChanged(state != Core::State::Uninitialized);
-  });
-  OnEmulationStateChanged(Core::GetState(Core::System::GetInstance()) !=
-                          Core::State::Uninitialized);
 }
 
 void AdvancedWidget::CreateWidgets()
@@ -271,10 +256,9 @@ void AdvancedWidget::ConnectWidgets()
 
 void AdvancedWidget::OnBackendChanged()
 {
-  m_backend_multithreading->setEnabled(g_Config.backend_info.bSupportsMultithreading);
-  m_prefer_vs_for_point_line_expansion->setEnabled(
-      g_Config.backend_info.bSupportsGeometryShaders &&
-      g_Config.backend_info.bSupportsVSLinePointExpand);
+  m_backend_multithreading->setEnabled(g_backend_info.bSupportsMultithreading);
+  m_prefer_vs_for_point_line_expansion->setEnabled(g_backend_info.bSupportsGeometryShaders &&
+                                                   g_backend_info.bSupportsVSLinePointExpand);
   AddDescriptions();
 }
 
@@ -492,12 +476,12 @@ void AdvancedWidget::AddDescriptions()
   m_enable_prog_scan->SetDescription(tr(TR_PROGRESSIVE_SCAN_DESCRIPTION));
   m_backend_multithreading->SetDescription(tr(TR_BACKEND_MULTITHREADING_DESCRIPTION));
   QString vsexpand_extra;
-  if (!g_Config.backend_info.bSupportsGeometryShaders)
+  if (!g_backend_info.bSupportsGeometryShaders)
     vsexpand_extra = tr("Forced on because %1 doesn't support geometry shaders.")
-                         .arg(tr(g_Config.backend_info.DisplayName.c_str()));
-  else if (!g_Config.backend_info.bSupportsVSLinePointExpand)
+                         .arg(tr(g_backend_info.DisplayName.c_str()));
+  else if (!g_backend_info.bSupportsVSLinePointExpand)
     vsexpand_extra = tr("Forced off because %1 doesn't support VS expansion.")
-                         .arg(tr(g_Config.backend_info.DisplayName.c_str()));
+                         .arg(tr(g_backend_info.DisplayName.c_str()));
   else
     vsexpand_extra = tr(IF_UNSURE_UNCHECKED);
   m_prefer_vs_for_point_line_expansion->SetDescription(

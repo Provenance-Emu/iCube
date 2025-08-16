@@ -230,8 +230,7 @@ Expression::Expression(std::string_view text, ExprPointer ex, ExprVarListPointer
     : m_text(text), m_expr(std::move(ex)), m_vars(std::move(vars))
 {
   using LookupKV = std::pair<std::string_view, Expression::VarBinding>;
-  static constexpr auto sorted_lookup = []() consteval
-  {
+  static constexpr auto sorted_lookup = []() consteval {
     using enum Expression::VarBindingType;
     auto unsorted_lookup = std::to_array<LookupKV>({
         {"r0", {GPR, 0}},
@@ -385,8 +384,7 @@ Expression::Expression(std::string_view text, ExprPointer ex, ExprVarListPointer
     });
     std::ranges::sort(unsorted_lookup, {}, &LookupKV::first);
     return unsorted_lookup;
-  }
-  ();
+  }();
   static_assert(std::ranges::adjacent_find(sorted_lookup, {}, &LookupKV::first) ==
                     sorted_lookup.end(),
                 "Expression: Sorted lookup should not contain duplicate keys.");
@@ -449,9 +447,15 @@ void Expression::SynchronizeBindings(Core::System& system, SynchronizeDirection 
       break;
     case VarBindingType::SPR:
       if (dir == SynchronizeDirection::From)
+      {
         v->value = static_cast<double>(ppc_state.spr[bind->index]);
+      }
       else
+      {
         ppc_state.spr[bind->index] = static_cast<u32>(static_cast<s64>(v->value));
+        if (bind->index == SPR_SDR)
+          system.GetMMU().SDRUpdated();
+      }
       break;
     case VarBindingType::PCtr:
       if (dir == SynchronizeDirection::From)
@@ -459,9 +463,14 @@ void Expression::SynchronizeBindings(Core::System& system, SynchronizeDirection 
       break;
     case VarBindingType::MSR:
       if (dir == SynchronizeDirection::From)
+      {
         v->value = static_cast<double>(ppc_state.msr.Hex);
+      }
       else
+      {
         ppc_state.msr.Hex = static_cast<u32>(static_cast<s64>(v->value));
+        PowerPC::MSRUpdated(ppc_state);
+      }
       break;
     }
   }

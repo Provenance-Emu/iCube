@@ -3,6 +3,7 @@
 
 #include "DolphinQt/Config/Mapping/MappingCommon.h"
 
+#include <algorithm>
 #include <deque>
 #include <memory>
 
@@ -16,6 +17,7 @@
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "InputCommon/ControllerInterface/MappingCommon.h"
+#include "InputCommon/InputConfig.h"
 
 namespace MappingCommon
 {
@@ -25,15 +27,10 @@ constexpr auto INPUT_DETECT_MAXIMUM_TIME = std::chrono::seconds(5);
 // Ignore the mouse-click when queuing more buttons with "alternate mappings" enabled.
 constexpr auto INPUT_DETECT_ENDING_IGNORE_TIME = std::chrono::milliseconds(50);
 
-bool ContainsAnalogInput(const ciface::Core::InputDetector::Results& results)
-{
-  return std::ranges::any_of(results, [](auto& detection) { return detection.smoothness > 1; });
-}
-
-class MappingProcessor : public QWidget
+class MappingProcessor : public QObject
 {
 public:
-  MappingProcessor(MappingWindow* parent) : QWidget{parent}, m_parent{parent}
+  MappingProcessor(MappingWindow* parent) : QObject{parent}, m_parent{parent}
   {
     using MW = MappingWindow;
     using MP = MappingProcessor;
@@ -101,7 +98,7 @@ public:
       // Skip "Modifier" mappings when using analog inputs.
       auto* next_button = m_clicked_mapping_buttons.front();
       if (next_button->GetControlType() == MappingButton::ControlType::ModifierInput &&
-          ContainsAnalogInput(results))
+          std::ranges::any_of(results, &ciface::Core::InputDetector::Detection::IsAnalogPress))
       {
         // Clear "Modifier" mapping and queue the next button.
         SetButtonExpression(next_button, "");
@@ -135,6 +132,7 @@ public:
     m_parent->Save();
     m_parent->GetController()->UpdateSingleControlReference(g_controller_interface,
                                                             control_reference);
+    m_parent->GetController()->GetConfig()->GenerateControllerTextures();
   }
 
   void UpdateInputDetectionStartTimer()
@@ -170,7 +168,7 @@ public:
       // Ignore the mouse-click that queued this new detection and finalize the current mapping.
       auto results = m_input_detector->TakeResults();
       ciface::MappingCommon::RemoveDetectionsAfterTimePoint(
-          &results, ciface::Core::DeviceContainer::Clock::now() - INPUT_DETECT_ENDING_IGNORE_TIME);
+          &results, Clock::now() - INPUT_DETECT_ENDING_IGNORE_TIME);
       FinalizeMapping(&results);
     }
     UpdateInputDetectionStartTimer();

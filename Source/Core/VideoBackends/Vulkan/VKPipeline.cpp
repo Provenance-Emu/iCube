@@ -46,7 +46,7 @@ GetVulkanRasterizationState(const RasterizationState& state)
       {VK_CULL_MODE_NONE, VK_CULL_MODE_BACK_BIT, VK_CULL_MODE_FRONT_BIT,
        VK_CULL_MODE_FRONT_AND_BACK}};
 
-  bool depth_clamp = g_ActiveConfig.backend_info.bSupportsDepthClamp;
+  bool depth_clamp = g_backend_info.bSupportsDepthClamp;
 
   return {
       VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,  // VkStructureType sType
@@ -85,7 +85,7 @@ static VkPipelineDepthStencilStateCreateInfo GetVulkanDepthStencilState(const De
 {
   // Less/greater are swapped due to inverted depth.
   VkCompareOp compare_op;
-  bool inverted_depth = !g_ActiveConfig.backend_info.bSupportsReversedDepthRange;
+  bool inverted_depth = !g_backend_info.bSupportsReversedDepthRange;
   switch (state.func)
   {
   case CompareMode::Never:
@@ -215,7 +215,7 @@ GetVulkanColorBlendState(const BlendingState& state,
        VK_LOGIC_OP_COPY_INVERTED, VK_LOGIC_OP_OR_INVERTED, VK_LOGIC_OP_NAND, VK_LOGIC_OP_SET}};
 
   VkBool32 vk_logic_op_enable = static_cast<VkBool32>(state.logicopenable);
-  if (vk_logic_op_enable && !g_ActiveConfig.backend_info.bSupportsLogicOp)
+  if (vk_logic_op_enable && !g_backend_info.bSupportsLogicOp)
   {
     // At the time of writing, Adreno and Mali drivers didn't support logic ops.
     // The "emulation" through blending path has been removed, so just disable it completely.
@@ -306,7 +306,7 @@ std::unique_ptr<VKPipeline> VKPipeline::Create(const AbstractPipelineConfig& con
   // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
   // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY or VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
   // primitiveRestartEnable must be VK_FALSE
-  if (g_ActiveConfig.backend_info.bSupportsPrimitiveRestart &&
+  if (g_backend_info.bSupportsPrimitiveRestart &&
       IsStripPrimitiveTopology(input_assembly_state.topology))
   {
     input_assembly_state.primitiveRestartEnable = VK_TRUE;
@@ -368,12 +368,19 @@ std::unique_ptr<VKPipeline> VKPipeline::Create(const AbstractPipelineConfig& con
       GetVulkanColorBlendState(config.blending_state, blend_attachment_states.data(),
                                static_cast<uint32_t>(blend_attachment_states.size()));
 
+  static const VkDepthClampRangeEXT clamp_range = {0.0f, MAX_EFB_DEPTH};
+  static const VkPipelineViewportDepthClampControlCreateInfoEXT depth_clamp_state = {
+      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLAMP_CONTROL_CREATE_INFO_EXT, nullptr,
+      VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT,  // VkDepthClampModeEXT            depthClampMode
+      &clamp_range  // const VkDepthClampRangeEXT*    pDepthClampRange
+  };
+
   // This viewport isn't used, but needs to be specified anyway.
   static const VkViewport viewport = {0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
   static const VkRect2D scissor = {{0, 0}, {1, 1}};
   static const VkPipelineViewportStateCreateInfo viewport_state = {
       VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      nullptr,
+      g_backend_info.bSupportsUnrestrictedDepthRange ? &depth_clamp_state : nullptr,
       0,          // VkPipelineViewportStateCreateFlags    flags;
       1,          // uint32_t                              viewportCount
       &viewport,  // const VkViewport*                     pViewports

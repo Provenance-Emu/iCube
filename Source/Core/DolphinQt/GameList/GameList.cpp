@@ -66,8 +66,8 @@
 #include "DolphinQt/QtUtils/DolphinFileDialog.h"
 #include "DolphinQt/QtUtils/DoubleClickEventFilter.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
+#include "DolphinQt/QtUtils/NonAutodismissibleMenu.h"
 #include "DolphinQt/QtUtils/ParallelProgressDialog.h"
-#include "DolphinQt/QtUtils/SetWindowDecorations.h"
 #include "DolphinQt/Resources.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/WiiUpdate.h"
@@ -92,6 +92,25 @@ protected:
       return QTableView::moveCursor(cursorAction, modifiers | Qt::ControlModifier);
     else
       return QTableView::moveCursor(cursorAction, modifiers);
+  }
+
+  virtual void mouseDoubleClickEvent(QMouseEvent* const event) override
+  {
+    if (event->button() == Qt::LeftButton)
+      QTableView::mouseDoubleClickEvent(event);
+  }
+};
+
+class GameListListView : public QListView
+{
+public:
+  explicit GameListListView(QWidget* parent = nullptr) : QListView(parent) {}
+
+protected:
+  virtual void mouseDoubleClickEvent(QMouseEvent* const event) override
+  {
+    if (event->button() == Qt::LeftButton)
+      QListView::mouseDoubleClickEvent(event);
   }
 };
 }  // namespace
@@ -187,12 +206,11 @@ void GameList::MakeListView()
 
   if (!Settings::GetQSettings().contains(QStringLiteral("tableheader/state")))
     m_list->sortByColumn(static_cast<int>(GameListModel::Column::Title), Qt::AscendingOrder);
-
-  const auto SetResizeMode = [&hor_header](const GameListModel::Column column,
-                                           const QHeaderView::ResizeMode mode) {
-    hor_header->setSectionResizeMode(static_cast<int>(column), mode);
-  };
   {
+    const auto SetResizeMode = [&hor_header](const GameListModel::Column column,
+                                             const QHeaderView::ResizeMode mode) {
+      hor_header->setSectionResizeMode(static_cast<int>(column), mode);
+    };
     using Column = GameListModel::Column;
     using Mode = QHeaderView::ResizeMode;
     SetResizeMode(Column::Platform, Mode::Fixed);
@@ -319,7 +337,7 @@ void GameList::resizeEvent(QResizeEvent* event)
 
 void GameList::MakeGridView()
 {
-  m_grid = new QListView(this);
+  m_grid = new GameListListView(this);
   m_grid->setModel(m_grid_proxy);
   m_grid->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
@@ -502,7 +520,8 @@ void GameList::ShowContextMenu(const QPoint&)
 
     menu->addSeparator();
 
-    auto* tags_menu = menu->addMenu(tr("Tags"));
+    auto* const tags_menu{new QtUtils::NonAutodismissibleMenu(tr("Tags"), menu)};
+    menu->addMenu(tags_menu);
 
     auto path = game->GetFilePath();
     auto game_tags = m_model.GetGameTags(path);
@@ -548,20 +567,28 @@ void GameList::OpenProperties()
   if (!game)
     return;
 
+  auto property_windows = this->findChildren<PropertiesDialog*>();
+  auto it =
+      std::ranges::find(property_windows, game->GetFilePath(), &PropertiesDialog::GetFilePath);
+  if (it != property_windows.end())
+  {
+    (*it)->raise();
+    return;
+  }
+
   PropertiesDialog* properties = new PropertiesDialog(this, *game);
 
   connect(properties, &PropertiesDialog::OpenGeneralSettings, this, &GameList::OpenGeneralSettings);
   connect(properties, &PropertiesDialog::OpenGraphicsSettings, this,
           &GameList::OpenGraphicsSettings);
   connect(properties, &PropertiesDialog::finished, this,
-          [properties]() { properties->deleteLater(); });
+          [properties] { properties->deleteLater(); });
 
 #ifdef USE_RETRO_ACHIEVEMENTS
   connect(properties, &PropertiesDialog::OpenAchievementSettings, this,
           &GameList::OpenAchievementSettings);
 #endif  // USE_RETRO_ACHIEVEMENTS
 
-  SetQWidgetWindowDecorations(properties);
   properties->show();
 }
 
@@ -616,7 +643,6 @@ void GameList::ConvertFile()
     return;
 
   ConvertDialog dialog{std::move(games), this};
-  SetQWidgetWindowDecorations(&dialog);
   dialog.exec();
 }
 
@@ -634,7 +660,6 @@ void GameList::InstallWAD()
   result_dialog.setWindowTitle(success ? tr("Success") : tr("Failure"));
   result_dialog.setText(success ? tr("Successfully installed this title to the NAND.") :
                                   tr("Failed to install this title to the NAND."));
-  SetQWidgetWindowDecorations(&result_dialog);
   result_dialog.exec();
 }
 
@@ -652,7 +677,6 @@ void GameList::UninstallWAD()
                             "this title from the NAND without deleting its save data. Continue?"));
   warning_dialog.setStandardButtons(QMessageBox::No | QMessageBox::Yes);
 
-  SetQWidgetWindowDecorations(&warning_dialog);
   if (warning_dialog.exec() == QMessageBox::No)
     return;
 
@@ -664,7 +688,6 @@ void GameList::UninstallWAD()
   result_dialog.setWindowTitle(success ? tr("Success") : tr("Failure"));
   result_dialog.setText(success ? tr("Successfully removed this title from the NAND.") :
                                   tr("Failed to remove this title from the NAND."));
-  SetQWidgetWindowDecorations(&result_dialog);
   result_dialog.exec();
 }
 
@@ -833,7 +856,6 @@ void GameList::DeleteFile()
   confirm_dialog.setInformativeText(tr("This cannot be undone!"));
   confirm_dialog.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
 
-  SetQWidgetWindowDecorations(&confirm_dialog);
   if (confirm_dialog.exec() == QMessageBox::Yes)
   {
     for (const auto& game : GetSelectedGames())
@@ -859,7 +881,6 @@ void GameList::DeleteFile()
                                              "delete the file or whether it's still in use."));
           error_dialog.setStandardButtons(QMessageBox::Retry | QMessageBox::Abort);
 
-          SetQWidgetWindowDecorations(&error_dialog);
           if (error_dialog.exec() == QMessageBox::Abort)
             break;
         }
@@ -1024,8 +1045,6 @@ void GameList::OnSectionResized(int index, int, int)
 {
   auto* hor_header = m_list->horizontalHeader();
 
-  std::vector<int> sections;
-
   const int vis_index = hor_header->visualIndex(index);
   const int col_count = hor_header->count() - hor_header->hiddenSectionCount();
 
@@ -1043,6 +1062,7 @@ void GameList::OnSectionResized(int index, int, int)
 
   if (!last)
   {
+    std::vector<int> sections;
     for (int i = 0; i < vis_index; i++)
     {
       const int logical_index = hor_header->logicalIndex(i);

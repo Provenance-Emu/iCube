@@ -72,8 +72,8 @@ extern const std::map<const std::pair<const u16, const u16>, SkyData> list_skyla
 class SkylanderUSB final : public Device
 {
 public:
-  SkylanderUSB(EmulationKernel& ios);
-  ~SkylanderUSB();
+  SkylanderUSB();
+  ~SkylanderUSB() override;
   DeviceDescriptor GetDeviceDescriptor() const override;
   std::vector<ConfigDescriptor> GetConfigurations() const override;
   std::vector<InterfaceDescriptor> GetInterfaces(u8 config) const override;
@@ -92,7 +92,6 @@ public:
                         s32 expected_count, u64 expected_time_us);
 
 private:
-  EmulationKernel& m_ios;
   u16 m_vid = 0;
   u16 m_pid = 0;
   u8 m_active_interface = 0;

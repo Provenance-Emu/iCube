@@ -27,17 +27,14 @@ USB_HIDv4::USB_HIDv4(EmulationKernel& ios, const std::string& device_name)
 {
 }
 
-USB_HIDv4::~USB_HIDv4()
-{
-  m_scan_thread.Stop();
-}
+USB_HIDv4::~USB_HIDv4() = default;
 
 std::optional<IPCReply> USB_HIDv4::IOCtl(const IOCtlRequest& request)
 {
   auto& system = GetSystem();
   auto& memory = system.GetMemory();
 
-  request.Log(GetDeviceName(), Common::Log::LogType::IOS_USB);
+  request.Log(GetDeviceName(), Common::Log::LogType::IOS_USB, Common::Log::LogLevel::LDEBUG);
   switch (request.request)
   {
   case USB::IOCTL_USBV4_GETVERSION:
@@ -64,7 +61,7 @@ std::optional<IPCReply> USB_HIDv4::IOCtl(const IOCtlRequest& request)
     if (!device->Attach())
       return IPCReply(IPC_EINVAL);
     return HandleTransfer(device, request.request,
-                          [&, this]() { return SubmitTransfer(*device, request); });
+                          [&, this] { return SubmitTransfer(*device, request); });
   }
   default:
     request.DumpUnknown(GetSystem(), GetDeviceName(), Common::Log::LogType::IOS_USB);

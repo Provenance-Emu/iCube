@@ -22,6 +22,7 @@ import org.dolphinemu.dolphinemu.features.input.model.InputMappingBooleanSetting
 import org.dolphinemu.dolphinemu.features.input.model.InputMappingDoubleSetting
 import org.dolphinemu.dolphinemu.features.input.model.InputMappingIntSetting
 import org.dolphinemu.dolphinemu.features.input.model.controlleremu.ControlGroup
+import org.dolphinemu.dolphinemu.features.input.model.controlleremu.ControlGroupContainer
 import org.dolphinemu.dolphinemu.features.input.model.controlleremu.EmulatedController
 import org.dolphinemu.dolphinemu.features.input.model.controlleremu.NumericSetting
 import org.dolphinemu.dolphinemu.features.input.model.view.InputDeviceSetting
@@ -98,10 +99,6 @@ class SettingsFragmentPresenter(
                 fragmentView.setOldControllerSettingsWarningVisibility(hasOldControllerSettings)
             }
         }
-
-    fun loadDefaultSettings() {
-        loadSettingsList()
-    }
 
     private fun loadSettingsList() {
         val sl = ArrayList<SettingsItem>()
@@ -343,6 +340,14 @@ class SettingsFragmentPresenter(
                 R.string.osd_messages_description
             )
         )
+        sl.add(
+            SwitchSetting(
+                context,
+                BooleanSetting.MAIN_TIME_TRACKING,
+                R.string.time_tracking,
+                R.string.time_tracking_description
+            )
+        )
 
         val appTheme: AbstractIntSetting = object : AbstractIntSetting {
             override val isOverridden: Boolean
@@ -531,11 +536,23 @@ class SettingsFragmentPresenter(
             )
         )
         sl.add(
+            IntSliderSetting(
+                context,
+                IntSetting.MAIN_AUDIO_BUFFER_SIZE,
+                R.string.audio_buffer_size,
+                R.string.audio_buffer_size_description,
+                16,
+                512,
+                "ms",
+                8
+            )
+        )
+        sl.add(
             SwitchSetting(
                 context,
-                BooleanSetting.MAIN_AUDIO_STRETCH,
-                R.string.audio_stretch,
-                R.string.audio_stretch_description
+                BooleanSetting.MAIN_AUDIO_FILL_GAPS,
+                R.string.audio_fill_gaps,
+                R.string.audio_fill_gaps_description
             )
         )
         sl.add(
@@ -879,6 +896,22 @@ class SettingsFragmentPresenter(
                 0
             )
         )
+        sl.add(
+            SwitchSetting(
+                context,
+                BooleanSetting.MAIN_EMULATE_WII_SPEAK,
+                R.string.emulate_wii_speak,
+                0
+            )
+        )
+        sl.add(
+            SwitchSetting(
+                context,
+                BooleanSetting.MAIN_WII_SPEAK_MUTED,
+                R.string.mute_wii_speak,
+                0
+            )
+        )
     }
 
     private fun addAdvancedSettings(sl: ArrayList<SettingsItem>) {
@@ -1010,7 +1043,7 @@ class SettingsFragmentPresenter(
                 false
             )
         )
-sl.add(Add commentMore actions
+        sl.add(
             SwitchSetting(
                 context,
                 BooleanSetting.MAIN_VI_OVERCLOCK_ENABLE,
@@ -1029,7 +1062,7 @@ sl.add(Add commentMore actions
                 "%",
                 1f,
                 false
-            )Add commentMore actions
+            )
         )
 
         val mem1Size = ScaledIntSetting(1024 * 1024, IntSetting.MAIN_MEM1_SIZE)
@@ -1961,7 +1994,7 @@ sl.add(Add commentMore actions
                 IntSetting.LOGGER_VERBOSITY,
                 R.string.log_verbosity,
                 0,
-                logVerbosityEntries, logVerbosityValues
+                getLogVerbosityEntries(), getLogVerbosityValues()
             )
         )
         sl.add(
@@ -1993,8 +2026,8 @@ sl.add(Add commentMore actions
             ) { SettingsAdapter.clearLog() })
 
         sl.add(HeaderSetting(context, R.string.log_types, 0))
-        for ((key, value) in LOG_TYPE_NAMES) {
-            sl.add(LogSwitchSetting(key, value, ""))
+        for (logType in NativeLibrary.GetLogTypeNames()) {
+            sl.add(LogSwitchSetting(logType.first, logType.second, ""))
         }
     }
 
@@ -2276,8 +2309,9 @@ sl.add(Add commentMore actions
         wiimoteNumber: Int,
         extensionType: Int
     ) {
-        addControllerMappingSettings(
+        addContainerMappingSettings(
             sl,
+            EmulatedController.getWiimote(wiimoteNumber),
             EmulatedController.getWiimoteAttachment(wiimoteNumber, extensionType),
             null
         )
@@ -2425,15 +2459,32 @@ sl.add(Add commentMore actions
      * @param groupTypeFilter If this is non-null, only groups whose types match this are considered.
      */
     private fun addControllerMappingSettings(
+      sl: ArrayList<SettingsItem>,
+      controller: EmulatedController,
+      groupTypeFilter: Set<Int>?
+    ) {
+      addContainerMappingSettings(sl, controller, controller, groupTypeFilter)
+    }
+
+    /**
+     * Adds mapping settings and other control-specific settings.
+     *
+     * @param sl              The list to place controller settings into.
+     * @param controller      The encompassing controller.
+     * @param container       The container of control groups to add settings for.
+     * @param groupTypeFilter If this is non-null, only groups whose types match this are considered.
+     */
+    private fun addContainerMappingSettings(
         sl: ArrayList<SettingsItem>,
         controller: EmulatedController,
+        container: ControlGroupContainer,
         groupTypeFilter: Set<Int>?
     ) {
         updateOldControllerSettingsWarningVisibility(controller)
 
-        val groupCount = controller.getGroupCount()
+        val groupCount = container.getGroupCount()
         for (i in 0 until groupCount) {
-            val group = controller.getGroup(i)
+            val group = container.getGroup(i)
             val groupType = group.getGroupType()
             if (groupTypeFilter != null && !groupTypeFilter.contains(groupType)) continue
 
@@ -2525,11 +2576,11 @@ sl.add(Add commentMore actions
     fun setAllLogTypes(value: Boolean) {
         val settings = fragmentView.settings
 
-        for ((key) in LOG_TYPE_NAMES) {
+        for (logType in NativeLibrary.GetLogTypeNames()) {
             AdHocBooleanSetting(
                 Settings.FILE_LOGGER,
                 Settings.SECTION_LOGGER_LOGS,
-                key,
+                logType.first,
                 false
             ).setBoolean(settings!!, value)
         }
@@ -2586,26 +2637,29 @@ sl.add(Add commentMore actions
     }
 
     companion object {
-        private val LOG_TYPE_NAMES = NativeLibrary.GetLogTypeNames()
         const val ARG_CONTROLLER_TYPE = "controller_type"
         const val ARG_SERIALPORT1_TYPE = "serialport1_type"
 
         // Value obtained from LogLevel in Common/Logging/Log.h
-        private val logVerbosityEntries: Int
-            get() =
-                if (NativeLibrary.GetMaxLogLevel() == 5) {
-                    R.array.logVerbosityEntriesMaxLevelDebug
-                } else {
-                    R.array.logVerbosityEntriesMaxLevelInfo
-                }
+        private fun getLogVerbosityEntries(): Int {
+            // GetMaxLogLevel is effectively a constant, but we can't call it before loading
+            // the native library
+            return if (NativeLibrary.GetMaxLogLevel() == 5) {
+                R.array.logVerbosityEntriesMaxLevelDebug
+            } else {
+                R.array.logVerbosityEntriesMaxLevelInfo
+            }
+        }
 
         // Value obtained from LogLevel in Common/Logging/Log.h
-        private val logVerbosityValues: Int
-            get() =
-                if (NativeLibrary.GetMaxLogLevel() == 5) {
-                    R.array.logVerbosityValuesMaxLevelDebug
-                } else {
-                    R.array.logVerbosityValuesMaxLevelInfo
-                }
+        private fun getLogVerbosityValues(): Int {
+            // GetMaxLogLevel is effectively a constant, but we can't call it before loading
+            // the native library
+            return if (NativeLibrary.GetMaxLogLevel() == 5) {
+                R.array.logVerbosityValuesMaxLevelDebug
+            } else {
+                R.array.logVerbosityValuesMaxLevelInfo
+            }
+        }
     }
 }

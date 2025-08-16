@@ -59,7 +59,7 @@ Settings::Settings()
     });
   });
 
-  Config::AddConfigChangedCallback([this] {
+  m_config_changed_callback_id = Config::AddConfigChangedCallback([this] {
     static std::atomic<bool> do_once{true};
     if (do_once.exchange(false))
     {
@@ -94,7 +94,10 @@ Settings::Settings()
   });
 }
 
-Settings::~Settings() = default;
+Settings::~Settings()
+{
+  Config::RemoveConfigChangedCallback(m_config_changed_callback_id);
+}
 
 void Settings::UnregisterDevicesChangedCallback()
 {
@@ -172,40 +175,40 @@ void Settings::ApplyStyle()
   }
 
 #ifdef _WIN32
-  if (stylesheet_contents.isEmpty())
+  // Unlike other OSes we don't automatically get a default dark theme on Windows.
+  // We manually load a dark palette for our included "(Dark)" style,
+  //  and for *any* external style when the system is in "Dark" mode.
+  // Unfortunately it doesn't seem trivial to load a palette based on the stylesheet itself.
+  if (style_type == StyleType::Dark || (style_type != StyleType::Light && IsSystemDark()))
   {
-    // No theme selected or found. Usually we would just fallthrough and set an empty stylesheet
-    // which would select Qt's default theme, but unlike other OSes we don't automatically get a
-    // default dark theme on Windows when the user has selected dark mode in the Windows settings.
-    // So manually check if the user wants dark mode and, if yes, load our embedded dark theme.
-    if (style_type == StyleType::Dark || (style_type != StyleType::Light && IsSystemDark()))
+    if (stylesheet_contents.isEmpty())
     {
       QFile file(QStringLiteral(":/dolphin_dark_win/dark.qss"));
       if (file.open(QFile::ReadOnly))
         stylesheet_contents = QString::fromUtf8(file.readAll().data());
+    }
 
-      QPalette palette = qApp->style()->standardPalette();
-      palette.setColor(QPalette::Window, QColor(32, 32, 32));
-      palette.setColor(QPalette::WindowText, QColor(220, 220, 220));
-      palette.setColor(QPalette::Base, QColor(32, 32, 32));
-      palette.setColor(QPalette::AlternateBase, QColor(48, 48, 48));
-      palette.setColor(QPalette::PlaceholderText, QColor(126, 126, 126));
-      palette.setColor(QPalette::Text, QColor(220, 220, 220));
-      palette.setColor(QPalette::Button, QColor(48, 48, 48));
-      palette.setColor(QPalette::ButtonText, QColor(220, 220, 220));
-      palette.setColor(QPalette::BrightText, QColor(255, 255, 255));
-      palette.setColor(QPalette::Highlight, QColor(0, 120, 215));
-      palette.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
-      palette.setColor(QPalette::Link, QColor(100, 160, 220));
-      palette.setColor(QPalette::LinkVisited, QColor(100, 160, 220));
-      qApp->setPalette(palette);
-    }
-    else
-    {
-      // reset any palette changes that may exist from a previously set dark mode
-      if (s_default_palette)
-        qApp->setPalette(*s_default_palette);
-    }
+    QPalette palette = qApp->style()->standardPalette();
+    palette.setColor(QPalette::Window, QColor(32, 32, 32));
+    palette.setColor(QPalette::WindowText, QColor(220, 220, 220));
+    palette.setColor(QPalette::Base, QColor(32, 32, 32));
+    palette.setColor(QPalette::AlternateBase, QColor(48, 48, 48));
+    palette.setColor(QPalette::PlaceholderText, QColor(126, 126, 126));
+    palette.setColor(QPalette::Text, QColor(220, 220, 220));
+    palette.setColor(QPalette::Button, QColor(48, 48, 48));
+    palette.setColor(QPalette::ButtonText, QColor(220, 220, 220));
+    palette.setColor(QPalette::BrightText, QColor(255, 255, 255));
+    palette.setColor(QPalette::Highlight, QColor(0, 120, 215));
+    palette.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+    palette.setColor(QPalette::Link, QColor(100, 160, 220));
+    palette.setColor(QPalette::LinkVisited, QColor(100, 160, 220));
+    qApp->setPalette(palette);
+  }
+  else
+  {
+    // reset any palette changes that may exist from a previously set dark mode
+    if (s_default_palette)
+      qApp->setPalette(*s_default_palette);
   }
 #endif
 
@@ -438,22 +441,17 @@ int Settings::GetVolume() const
 void Settings::SetVolume(int volume)
 {
   if (GetVolume() != volume)
-  {
     Config::SetBaseOrCurrent(Config::MAIN_AUDIO_VOLUME, volume);
-    emit VolumeChanged(volume);
-  }
 }
 
 void Settings::IncreaseVolume(int volume)
 {
   AudioCommon::IncreaseVolume(Core::System::GetInstance(), volume);
-  emit VolumeChanged(GetVolume());
 }
 
 void Settings::DecreaseVolume(int volume)
 {
   AudioCommon::DecreaseVolume(Core::System::GetInstance(), volume);
-  emit VolumeChanged(GetVolume());
 }
 
 bool Settings::IsLogVisible() const
@@ -520,8 +518,6 @@ void Settings::SetDebugModeEnabled(bool enabled)
   {
     Config::SetBaseOrCurrent(Config::MAIN_ENABLE_DEBUGGING, enabled);
     emit DebugModeToggled(enabled);
-    if (enabled)
-      SetCodeVisible(true);
   }
 }
 
@@ -601,7 +597,7 @@ void Settings::SetCodeVisible(bool enabled)
 
 bool Settings::IsCodeVisible() const
 {
-  return GetQSettings().value(QStringLiteral("debugger/showcode")).toBool();
+  return GetQSettings().value(QStringLiteral("debugger/showcode"), true).toBool();
 }
 
 void Settings::SetMemoryVisible(bool enabled)
@@ -795,6 +791,20 @@ void Settings::SetUSBKeyboardConnected(bool connected)
     Config::SetBaseOrCurrent(Config::MAIN_WII_KEYBOARD, connected);
     emit USBKeyboardConnectionChanged(connected);
   }
+}
+
+bool Settings::IsWiiSpeakMuted() const
+{
+  return Config::Get(Config::MAIN_WII_SPEAK_MUTED);
+}
+
+void Settings::SetWiiSpeakMuted(bool muted)
+{
+  if (IsWiiSpeakMuted() == muted)
+    return;
+
+  Config::SetBaseOrCurrent(Config::MAIN_WII_SPEAK_MUTED, muted);
+  emit WiiSpeakMuteChanged(muted);
 }
 
 void Settings::SetIsContinuouslyFrameStepping(bool is_stepping)

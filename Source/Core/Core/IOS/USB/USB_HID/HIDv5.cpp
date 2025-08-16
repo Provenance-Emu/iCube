@@ -18,10 +18,7 @@ namespace IOS::HLE
 {
 constexpr u32 USBV5_VERSION = 0x50001;
 
-USB_HIDv5::~USB_HIDv5()
-{
-  m_scan_thread.Stop();
-}
+USB_HIDv5::~USB_HIDv5() = default;
 
 std::optional<IPCReply> USB_HIDv5::IOCtl(const IOCtlRequest& request)
 {
@@ -78,7 +75,7 @@ std::optional<IPCReply> USB_HIDv5::IOCtlV(const IOCtlVRequest& request)
     else
       host_device->AttachAndChangeInterface(device->interface_number);
     return HandleTransfer(host_device, request.request,
-                          [&, this]() { return SubmitTransfer(*device, *host_device, request); });
+                          [&, this] { return SubmitTransfer(*device, *host_device, request); });
   }
   default:
     request.DumpUnknown(GetSystem(), GetDeviceName(), Common::Log::LogType::IOS_USB);
