@@ -27,6 +27,7 @@
 #include "Core/HW/Memmap.h"
 #include "Core/HW/SI/SI_Device.h"
 #include "Core/PowerPC/PowerPC.h"
+#include "Core/USBUtils.h"
 #include "DiscIO/Enums.h"
 #include "VideoCommon/VideoBackendBase.h"
 
@@ -45,7 +46,14 @@ const Info<bool> MAIN_ACCURATE_CPU_CACHE{{System::Main, "Core", "AccurateCPUCach
 const Info<bool> MAIN_DSP_HLE{{System::Main, "Core", "DSPHLE"}, true};
 const Info<int> MAIN_MAX_FALLBACK{{System::Main, "Core", "MaxFallback"}, 100};
 const Info<int> MAIN_TIMING_VARIANCE{{System::Main, "Core", "TimingVariance"}, 40};
-const Info<bool> MAIN_CPU_THREAD{{System::Main, "Core", "CPUThread"}, true};
+const Info<bool> MAIN_CORRECT_TIME_DRIFT{{System::Main, "Core", "CorrectTimeDrift"}, false};
+#if defined(ANDROID)
+// Currently enabled by default on Android because the performance boost is really needed.
+constexpr bool DEFAULT_CPU_THREAD = true;
+#else
+constexpr bool DEFAULT_CPU_THREAD = false;
+#endif
+const Info<bool> MAIN_CPU_THREAD{{System::Main, "Core", "CPUThread"}, DEFAULT_CPU_THREAD};
 const Info<bool> MAIN_SYNC_ON_SKIP_IDLE{{System::Main, "Core", "SyncOnSkipIdle"}, true};
 // Idle loop detection / fast-forward toggles (default enabled on iOS/tvOS, disabled elsewhere)
 #if defined(__APPLE__)
@@ -72,6 +80,8 @@ const Info<bool> MAIN_DPL2_DECODER{{System::Main, "Core", "DPL2Decoder"}, false}
 const Info<AudioCommon::DPL2Quality> MAIN_DPL2_QUALITY{{System::Main, "Core", "DPL2Quality"},
                                                        AudioCommon::GetDefaultDPL2Quality()};
 const Info<int> MAIN_AUDIO_LATENCY{{System::Main, "Core", "AudioLatency"}, 20};
+const Info<int> MAIN_AUDIO_BUFFER_SIZE{{System::Main, "Core", "AudioBufferSize"}, 80};
+const Info<bool> MAIN_AUDIO_FILL_GAPS{{System::Main, "Core", "AudioFillGaps"}, true};
 #if defined(__APPLE__)
 const Info<bool> MAIN_AUDIO_STRETCH{{System::Main, "Core", "AudioStretch"}, true};
 #else
@@ -137,6 +147,8 @@ const Info<ExpansionInterface::EXIDeviceType> MAIN_SLOT_B{{System::Main, "Core",
                                                           ExpansionInterface::EXIDeviceType::None};
 const Info<ExpansionInterface::EXIDeviceType> MAIN_SERIAL_PORT_1{
     {System::Main, "Core", "SerialPort1"}, ExpansionInterface::EXIDeviceType::None};
+const Info<ExpansionInterface::EXIDeviceType> MAIN_SERIAL_PORT_2{
+    {System::Main, "Core", "SerialPort2"}, ExpansionInterface::EXIDeviceType::None};
 
 const Info<ExpansionInterface::EXIDeviceType>& GetInfoForEXIDevice(ExpansionInterface::Slot slot)
 {
@@ -146,6 +158,7 @@ const Info<ExpansionInterface::EXIDeviceType>& GetInfoForEXIDevice(ExpansionInte
           &MAIN_SLOT_A,
           &MAIN_SLOT_B,
           &MAIN_SERIAL_PORT_1,
+          &MAIN_SERIAL_PORT_2,
       };
   return *infos[slot];
 }
@@ -207,6 +220,8 @@ const Info<u64> MAIN_WII_SD_CARD_FILESIZE{{System::Main, "Core", "WiiSDCardFiles
 const Info<bool> MAIN_WII_KEYBOARD{{System::Main, "Core", "WiiKeyboard"}, false};
 const Info<bool> MAIN_WIIMOTE_CONTINUOUS_SCANNING{
     {System::Main, "Core", "WiimoteContinuousScanning"}, false};
+const Info<std::string> MAIN_WIIMOTE_AUTO_CONNECT_ADDRESSES{
+    {System::Main, "Core", "WiimoteAutoConnectAddresses"}, ""};
 const Info<bool> MAIN_WIIMOTE_ENABLE_SPEAKER{{System::Main, "Core", "WiimoteEnableSpeaker"}, false};
 const Info<bool> MAIN_CONNECT_WIIMOTES_FOR_CONTROLLER_INTERFACE{
     {System::Main, "Core", "WiimoteControllerInterface"}, false};
@@ -228,6 +243,15 @@ const Info<bool> MAIN_FPRF{{System::Main, "Core", "FPRF"}, false};
 const Info<bool> MAIN_ACCURATE_NANS{{System::Main, "Core", "AccurateNaNs"}, false};
 const Info<bool> MAIN_DISABLE_ICACHE{{System::Main, "Core", "DisableICache"}, false};
 const Info<float> MAIN_EMULATION_SPEED{{System::Main, "Core", "EmulationSpeed"}, 1.0f};
+#if defined(ANDROID)
+// Currently disabled by default on Android for concern of increased power usage while on battery.
+// It is also not yet exposed in the UI on Android.
+constexpr bool DEFAULT_PRECISION_FRAME_TIMING = false;
+#else
+constexpr bool DEFAULT_PRECISION_FRAME_TIMING = true;
+#endif
+const Info<bool> MAIN_PRECISION_FRAME_TIMING{{System::Main, "Core", "PrecisionFrameTiming"},
+                                             DEFAULT_PRECISION_FRAME_TIMING};
 const Info<float> MAIN_OVERCLOCK{{System::Main, "Core", "Overclock"}, 1.0f};
 const Info<bool> MAIN_OVERCLOCK_ENABLE{{System::Main, "Core", "OverclockEnable"}, false};
 const Info<float> MAIN_VI_OVERCLOCK{{System::Main, "Core", "VIOverclock"}, 1.0f};
@@ -448,6 +472,7 @@ const Info<bool> MAIN_GAMELIST_LIST_WAD{{System::Main, "GameList", "ListWad"}, t
 const Info<bool> MAIN_GAMELIST_LIST_ELF_DOL{{System::Main, "GameList", "ListElfDol"}, true};
 const Info<bool> MAIN_GAMELIST_LIST_WII{{System::Main, "GameList", "ListWii"}, true};
 const Info<bool> MAIN_GAMELIST_LIST_GC{{System::Main, "GameList", "ListGC"}, true};
+const Info<bool> MAIN_GAMELIST_LIST_TRI{{System::Main, "GameList", "ListTriforce"}, true};
 const Info<bool> MAIN_GAMELIST_LIST_JPN{{System::Main, "GameList", "ListJap"}, true};
 const Info<bool> MAIN_GAMELIST_LIST_PAL{{System::Main, "GameList", "ListPal"}, true};
 const Info<bool> MAIN_GAMELIST_LIST_USA{{System::Main, "GameList", "ListUsa"}, true};
@@ -553,43 +578,40 @@ const Info<std::string> MAIN_BLUETOOTH_PASSTHROUGH_LINK_KEYS{
 
 // Main.USBPassthrough
 
+const Info<bool> MAIN_USB_PASSTHROUGH_DISGUISE_PLAYSTATION_AS_WII{
+    {System::Main, "USBPassthrough", "DisguisePlayStationAsWii"}, true};
 const Info<std::string> MAIN_USB_PASSTHROUGH_DEVICES{{System::Main, "USBPassthrough", "Devices"},
                                                      ""};
 
-static std::set<std::pair<u16, u16>> LoadUSBWhitelistFromString(const std::string& devices_string)
+static std::set<USBUtils::DeviceInfo> LoadUSBWhitelistFromString(const std::string& devices_string)
 {
-  std::set<std::pair<u16, u16>> devices;
+  std::set<USBUtils::DeviceInfo> devices;
   for (const auto& pair : SplitString(devices_string, ','))
   {
-    const auto index = pair.find(':');
-    if (index == std::string::npos)
-      continue;
-
-    const u16 vid = static_cast<u16>(strtol(pair.substr(0, index).c_str(), nullptr, 16));
-    const u16 pid = static_cast<u16>(strtol(pair.substr(index + 1).c_str(), nullptr, 16));
-    if (vid && pid)
-      devices.emplace(vid, pid);
+    auto device = USBUtils::DeviceInfo::FromString(pair);
+    if (device)
+      devices.emplace(*device);
   }
   return devices;
 }
 
-static std::string SaveUSBWhitelistToString(const std::set<std::pair<u16, u16>>& devices)
+static std::string SaveUSBWhitelistToString(const std::set<USBUtils::DeviceInfo>& devices)
 {
   std::ostringstream oss;
   for (const auto& device : devices)
-    oss << fmt::format("{:04x}:{:04x}", device.first, device.second) << ',';
+    oss << device.ToString() << ',';
   std::string devices_string = oss.str();
   if (!devices_string.empty())
     devices_string.pop_back();
   return devices_string;
 }
 
-std::set<std::pair<u16, u16>> GetUSBDeviceWhitelist()
+std::set<USBUtils::DeviceInfo> GetUSBDeviceWhitelist()
 {
   return LoadUSBWhitelistFromString(Config::Get(Config::MAIN_USB_PASSTHROUGH_DEVICES));
 }
 
-void SetUSBDeviceWhitelist(const std::set<std::pair<u16, u16>>& devices)
+void SetUSBDeviceWhitelist(const std::set<USBUtils::DeviceInfo>& devices)
 {
   Config::SetBase(Config::MAIN_USB_PASSTHROUGH_DEVICES, SaveUSBWhitelistToString(devices));
 }
@@ -601,6 +623,16 @@ const Info<bool> MAIN_EMULATE_SKYLANDER_PORTAL{
 
 const Info<bool> MAIN_EMULATE_INFINITY_BASE{
     {System::Main, "EmulatedUSBDevices", "EmulateInfinityBase"}, false};
+
+const Info<bool> MAIN_EMULATE_WII_SPEAK{{System::Main, "EmulatedUSBDevices", "EmulateWiiSpeak"},
+                                        false};
+
+const Info<std::string> MAIN_WII_SPEAK_MICROPHONE{
+    {System::Main, "EmulatedUSBDevices", "WiiSpeakMicrophone"}, ""};
+
+const Info<bool> MAIN_WII_SPEAK_MUTED{{System::Main, "EmulatedUSBDevices", "WiiSpeakMuted"}, true};
+const Info<s16> MAIN_WII_SPEAK_VOLUME_MODIFIER{
+    {System::Main, "EmulatedUSBDevices", "WiiSpeakVolumeModifier"}, 0};
 
 // The reason we need this function is because some memory card code
 // expects to get a non-NTSC-K region even if we're emulating an NTSC-K Wii.

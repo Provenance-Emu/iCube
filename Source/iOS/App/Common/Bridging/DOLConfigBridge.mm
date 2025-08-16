@@ -31,6 +31,10 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 
 @implementation DOLConfigBridge
 
++ (void)initializeConfigIfNeeded {
+  Config::Init();
+}
+
 + (NSString *)gfxBackend {
   const std::string v = Config::Get(Config::MAIN_GFX_BACKEND);
   return [NSString stringWithUTF8String:v.c_str()];
@@ -216,10 +220,16 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 }
 + (NSInteger)audioVolume { return (NSInteger)Config::Get(Config::MAIN_AUDIO_VOLUME); }
 + (void)setAudioVolume:(NSInteger)percent { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_VOLUME, (int)percent); }
-+ (BOOL)audioStretch { return Config::Get(Config::MAIN_AUDIO_STRETCH); }
-+ (void)setAudioStretch:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_STRETCH, (bool)enabled); }
-+ (NSInteger)audioStretchLatencyMs { return (NSInteger)Config::Get(Config::MAIN_AUDIO_STRETCH_LATENCY); }
-+ (void)setAudioStretchLatencyMs:(NSInteger)ms { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_STRETCH_LATENCY, (int)ms); }
++ (BOOL)audioStretch { return Config::Get(Config::MAIN_AUDIO_LATENCY) > 0; }
++ (void)setAudioStretch:(BOOL)enabled {
+  // Map stretch toggle to a non-zero latency when enabled, else zero.
+  int cur = Config::Get(Config::MAIN_AUDIO_LATENCY);
+  if (enabled && cur <= 0) cur = 80;
+  if (!enabled) cur = 0;
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_LATENCY, cur);
+}
++ (NSInteger)audioStretchLatencyMs { return (NSInteger)Config::Get(Config::MAIN_AUDIO_LATENCY); }
++ (void)setAudioStretchLatencyMs:(NSInteger)ms { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_LATENCY, (int)ms); }
 + (BOOL)audioMuteOnDisabledSpeedLimit { return Config::Get(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT); }
 + (void)setAudioMuteOnDisabledSpeedLimit:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT, (bool)enabled); }
 + (BOOL)audioMuteSwitchObey { return ((int)Config::Get(Config::MAIN_MUTE_SWITCH_MODE)) != 0; }
@@ -266,7 +276,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (BOOL)raEnabled { return Config::Get(Config::RA_ENABLED); }
 + (void)setRaEnabled:(BOOL)enabled {
   Config::SetBaseOrCurrent(Config::RA_ENABLED, (bool)enabled);
-  if (enabled) AchievementManager::GetInstance().Init(); else AchievementManager::GetInstance().Shutdown();
+  if (enabled) AchievementManager::GetInstance().Init(nullptr); else AchievementManager::GetInstance().Shutdown();
 }
 + (NSString*)raUsername {
   std::string u = Config::Get(Config::RA_USERNAME);
@@ -291,7 +301,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 }
 + (void)setRaHostURL:(NSString*)url { Config::SetBaseOrCurrent(Config::RA_HOST_URL, url.UTF8String ? url.UTF8String : ""); }
 + (BOOL)raHasAPIToken { return AchievementManager::GetInstance().HasAPIToken(); }
-+ (void)raInit { AchievementManager::GetInstance().Init(); }
++ (void)raInit { AchievementManager::GetInstance().Init(nullptr); }
 + (void)raShutdown { AchievementManager::GetInstance().Shutdown(); }
 + (void)raLogin:(NSString*)password { AchievementManager::GetInstance().Login(password.UTF8String ? password.UTF8String : ""); }
 + (void)raLogout { AchievementManager::GetInstance().Logout(); }
@@ -304,15 +314,15 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setGfxEnhanceDisableCopyFilter:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_ENHANCE_DISABLE_COPY_FILTER, (bool)enabled); }
 + (NSInteger)gfxEnhanceAnisotropySamples {
   // stored as exponent x for 1<<x; translate to samples for UI
-  int x = Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
-  int samples = 1 << std::clamp(x, 0, 4);
+  int af = (int)Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
+  int samples = 1 << std::clamp(af, 0, 4);
   return samples;
 }
 + (void)setGfxEnhanceAnisotropySamples:(NSInteger)samples {
   int s = (int)samples;
   int x = 0;
   if (s >= 16) x = 4; else if (s >= 8) x = 3; else if (s >= 4) x = 2; else if (s >= 2) x = 1; else x = 0;
-  Config::SetBaseOrCurrent(Config::GFX_ENHANCE_MAX_ANISOTROPY, x);
+  Config::SetBaseOrCurrent(Config::GFX_ENHANCE_MAX_ANISOTROPY, static_cast<AnisotropicFilteringMode>(x));
 }
 
 // Additional Enhancements

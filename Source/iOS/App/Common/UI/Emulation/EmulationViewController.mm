@@ -182,7 +182,7 @@
 
     if (![JitManager shared].acquiredJit && !is_interpreter_core) {
       // Fallback to Cached Interpreter for this run when JIT is unavailable
-      Config::Set(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
+      Config::SetCurrent(Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
     }
 
     if ([self checkIfNeedToShowNKitWarning]) {

@@ -277,13 +277,6 @@ void Host_PPCBreakpointsChanged()
                 [] { emit Host::GetInstance()->PPCBreakpointsChanged(); });
 }
 
-// We ignore these, and their purpose should be questioned individually.
-// In particular, RequestRenderWindowSize, RequestFullscreen, and
-// UpdateMainFrame should almost certainly be removed.
-void Host_UpdateMainFrame()
-{
-}
-
 void Host_RequestRenderWindowSize(int w, int h)
 {
   emit Host::GetInstance()->RequestRenderSize(w, h);
@@ -291,11 +284,9 @@ void Host_RequestRenderWindowSize(int w, int h)
 
 bool Host_UIBlocksControllerState()
 {
-  return ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard;
-}
-
-void Host_RefreshDSPDebuggerWindow()
-{
+  // TODO: Remove the Paused check once async presentation is implemented.
+  return ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard &&
+         Core::GetState(Core::System::GetInstance()) != Core::State::Paused;
 }
 
 void Host_TitleChanged()

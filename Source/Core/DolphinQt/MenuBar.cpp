@@ -9,6 +9,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QDesktopServices>
+#include <QDirIterator>
 #include <QFileDialog>
 #include <QFontDialog>
 #include <QInputDialog>
@@ -25,7 +26,6 @@
 #include "Common/StringUtil.h"
 
 #include "Core/AchievementManager.h"
-#include "Core/Boot/Boot.h"
 #include "Core/CommonTitles.h"
 #include "Core/Config/AchievementSettings.h"
 #include "Core/Config/MainSettings.h"
@@ -63,13 +63,18 @@
 #include "DolphinQt/NANDRepairDialog.h"
 #include "DolphinQt/QtUtils/DolphinFileDialog.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
+#include "DolphinQt/QtUtils/NonAutodismissibleMenu.h"
 #include "DolphinQt/QtUtils/ParallelProgressDialog.h"
-#include "DolphinQt/QtUtils/SetWindowDecorations.h"
+#include "DolphinQt/QtUtils/QueueOnObject.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/Updater.h"
 
 #include "UICommon/AutoUpdate.h"
 #include "UICommon/GameFile.h"
+
+#ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
+#include <rcheevos/include/rc_client_raintegration.h>
+#endif  // RC_CLIENT_SUPPORTS_RAINTEGRATION
 
 QPointer<MenuBar> MenuBar::s_menu_bar;
 
@@ -274,6 +279,7 @@ void MenuBar::AddToolsMenu()
   auto* usb_device_menu = new QMenu(tr("Emulated USB Devices"), tools_menu);
   usb_device_menu->addAction(tr("&Skylanders Portal"), this, &MenuBar::ShowSkylanderPortal);
   usb_device_menu->addAction(tr("&Infinity Base"), this, &MenuBar::ShowInfinityBase);
+  usb_device_menu->addAction(tr("&Wii Speak"), this, &MenuBar::ShowWiiSpeakWindow);
   tools_menu->addMenu(usb_device_menu);
 
   tools_menu->addSeparator();
@@ -284,8 +290,14 @@ void MenuBar::AddToolsMenu()
   tools_menu->addSeparator();
 
 #ifdef USE_RETRO_ACHIEVEMENTS
-  tools_menu->addAction(tr("Achievements"), this, [this] { emit ShowAchievementsWindow(); });
-
+  m_achievements_action =
+      tools_menu->addAction(tr("Achievements"), this, [this] { emit ShowAchievementsWindow(); });
+#ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
+  m_achievements_dev_menu = tools_menu->addMenu(tr("RetroAchievements Development"));
+  AchievementManager::GetInstance().SetDevMenuUpdateCallback(
+      [this] { QueueOnObject(this, [this] { this->UpdateAchievementDevelopmentMenu(); }); });
+  m_achievements_dev_menu->menuAction()->setVisible(false);
+#endif  // RC_CLIENT_SUPPORTS_RAINTEGRATION
   tools_menu->addSeparator();
 #endif  // USE_RETRO_ACHIEVEMENTS
 
@@ -334,25 +346,28 @@ void MenuBar::AddToolsMenu()
 
   m_import_wii_save =
       tools_menu->addAction(tr("Import Wii Save..."), this, &MenuBar::ImportWiiSave);
+  m_import_wii_saves =
+      tools_menu->addAction(tr("Import Wii Saves..."), this, &MenuBar::ImportWiiSaves);
   m_export_wii_saves =
       tools_menu->addAction(tr("Export All Wii Saves"), this, &MenuBar::ExportWiiSaves);
 
-  QMenu* menu = new QMenu(tr("Connect Wii Remotes"), tools_menu);
+  auto* const connect_wii_remotes_menu{
+      new QtUtils::NonAutodismissibleMenu(tr("Connect Wii Remotes"), tools_menu)};
 
   tools_menu->addSeparator();
-  tools_menu->addMenu(menu);
+  tools_menu->addMenu(connect_wii_remotes_menu);
 
   for (int i = 0; i < 4; i++)
   {
-    m_wii_remotes[i] = menu->addAction(tr("Connect Wii Remote %1").arg(i + 1), this,
-                                       [this, i] { emit ConnectWiiRemote(i); });
+    m_wii_remotes[i] = connect_wii_remotes_menu->addAction(
+        tr("Connect Wii Remote %1").arg(i + 1), this, [this, i] { emit ConnectWiiRemote(i); });
     m_wii_remotes[i]->setCheckable(true);
   }
 
-  menu->addSeparator();
+  connect_wii_remotes_menu->addSeparator();
 
-  m_wii_remotes[4] =
-      menu->addAction(tr("Connect Balance Board"), this, [this] { emit ConnectWiiRemote(4); });
+  m_wii_remotes[4] = connect_wii_remotes_menu->addAction(tr("Connect Balance Board"), this,
+                                                         [this] { emit ConnectWiiRemote(4); });
   m_wii_remotes[4]->setCheckable(true);
 }
 
@@ -391,7 +406,7 @@ void MenuBar::AddStateLoadMenu(QMenu* emu_menu)
   {
     QAction* action = m_state_load_slots_menu->addAction(QString{});
 
-    connect(action, &QAction::triggered, this, [=, this]() { emit StateLoadSlotAt(i); });
+    connect(action, &QAction::triggered, this, [=, this] { emit StateLoadSlotAt(i); });
   }
 }
 
@@ -408,7 +423,7 @@ void MenuBar::AddStateSaveMenu(QMenu* emu_menu)
   {
     QAction* action = m_state_save_slots_menu->addAction(QString{});
 
-    connect(action, &QAction::triggered, this, [=, this]() { emit StateSaveSlotAt(i); });
+    connect(action, &QAction::triggered, this, [=, this] { emit StateSaveSlotAt(i); });
   }
 }
 
@@ -425,7 +440,7 @@ void MenuBar::AddStateSlotMenu(QMenu* emu_menu)
     if (Settings::Instance().GetStateSlot() == i)
       action->setChecked(true);
 
-    connect(action, &QAction::triggered, this, [=, this]() { emit SetStateSlot(i); });
+    connect(action, &QAction::triggered, this, [=, this] { emit SetStateSlot(i); });
     connect(this, &MenuBar::SetStateSlot, [action, i](const int slot) {
       if (slot == i)
         action->setChecked(true);
@@ -450,7 +465,8 @@ void MenuBar::UpdateStateSlotMenu()
 
 void MenuBar::AddViewMenu()
 {
-  QMenu* view_menu = addMenu(tr("&View"));
+  auto* const view_menu{new QtUtils::NonAutodismissibleMenu(tr("&View"), this)};
+  addMenu(view_menu);
   QAction* show_log = view_menu->addAction(tr("Show &Log"));
   show_log->setCheckable(true);
   show_log->setChecked(Settings::Instance().IsLogVisible());
@@ -585,7 +601,8 @@ void MenuBar::AddViewMenu()
 
 void MenuBar::AddOptionsMenu()
 {
-  QMenu* options_menu = addMenu(tr("&Options"));
+  auto* const options_menu{new QtUtils::NonAutodismissibleMenu(tr("&Options"), this)};
+  addMenu(options_menu);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
   options_menu->addAction(tr("Co&nfiguration"), QKeySequence::Preferences, this,
                           &MenuBar::Configure);
@@ -613,7 +630,7 @@ void MenuBar::AddOptionsMenu()
 
   m_reset_ignore_panic_handler = options_menu->addAction(tr("Reset Ignore Panic Handler"));
 
-  connect(m_reset_ignore_panic_handler, &QAction::triggered, this, []() {
+  connect(m_reset_ignore_panic_handler, &QAction::triggered, this, [] {
     Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_USE_PANIC_HANDLERS);
   });
 
@@ -636,17 +653,17 @@ void MenuBar::AddHelpMenu()
 
   QAction* website = help_menu->addAction(tr("&Website"));
   connect(website, &QAction::triggered, this,
-          []() { QDesktopServices::openUrl(QUrl(QStringLiteral("https://dolphin-emu.org/"))); });
+          [] { QDesktopServices::openUrl(QUrl(QStringLiteral("https://dolphin-emu.org/"))); });
   QAction* documentation = help_menu->addAction(tr("Online &Documentation"));
-  connect(documentation, &QAction::triggered, this, []() {
+  connect(documentation, &QAction::triggered, this, [] {
     QDesktopServices::openUrl(QUrl(QStringLiteral("https://dolphin-emu.org/docs/guides")));
   });
   QAction* github = help_menu->addAction(tr("&GitHub Repository"));
-  connect(github, &QAction::triggered, this, []() {
+  connect(github, &QAction::triggered, this, [] {
     QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/dolphin-emu/dolphin")));
   });
   QAction* bugtracker = help_menu->addAction(tr("&Bug Tracker"));
-  connect(bugtracker, &QAction::triggered, this, []() {
+  connect(bugtracker, &QAction::triggered, this, [] {
     QDesktopServices::openUrl(
         QUrl(QStringLiteral("https://bugs.dolphin-emu.org/projects/emulator")));
   });
@@ -705,7 +722,8 @@ void MenuBar::AddListColumnsMenu(QMenu* view_menu)
       {tr("Tags"), &Config::MAIN_GAMELIST_COLUMN_TAGS}};
 
   QActionGroup* column_group = new QActionGroup(this);
-  m_cols_menu = view_menu->addMenu(tr("List Columns"));
+  m_cols_menu = new QtUtils::NonAutodismissibleMenu(tr("List Columns"), view_menu);
+  view_menu->addMenu(m_cols_menu);
   column_group->setExclusive(false);
 
   for (const auto& key : columns.keys())
@@ -726,11 +744,13 @@ void MenuBar::AddShowPlatformsMenu(QMenu* view_menu)
   static const QMap<QString, const Config::Info<bool>*> platform_map{
       {tr("Show Wii"), &Config::MAIN_GAMELIST_LIST_WII},
       {tr("Show GameCube"), &Config::MAIN_GAMELIST_LIST_GC},
+      {tr("Show Triforce"), &Config::MAIN_GAMELIST_LIST_TRI},
       {tr("Show WAD"), &Config::MAIN_GAMELIST_LIST_WAD},
       {tr("Show ELF/DOL"), &Config::MAIN_GAMELIST_LIST_ELF_DOL}};
 
   QActionGroup* platform_group = new QActionGroup(this);
-  QMenu* plat_menu = view_menu->addMenu(tr("Show Platforms"));
+  auto* const plat_menu{new QtUtils::NonAutodismissibleMenu(tr("Show Platforms"), view_menu)};
+  view_menu->addMenu(plat_menu);
   platform_group->setExclusive(false);
 
   for (const auto& key : platform_map.keys())
@@ -764,7 +784,8 @@ void MenuBar::AddShowRegionsMenu(QMenu* view_menu)
       {tr("Show World"), &Config::MAIN_GAMELIST_LIST_WORLD},
       {tr("Show Unknown"), &Config::MAIN_GAMELIST_LIST_UNKNOWN}};
 
-  QMenu* const region_menu = view_menu->addMenu(tr("Show Regions"));
+  auto* const region_menu{new QtUtils::NonAutodismissibleMenu(tr("Show Regions"), view_menu)};
+  view_menu->addMenu(region_menu);
   const QAction* const show_all_regions = region_menu->addAction(tr("Show All"));
   const QAction* const hide_all_regions = region_menu->addAction(tr("Hide All"));
   region_menu->addSeparator();
@@ -792,7 +813,8 @@ void MenuBar::AddShowRegionsMenu(QMenu* view_menu)
 
 void MenuBar::AddMovieMenu()
 {
-  auto* movie_menu = addMenu(tr("&Movie"));
+  auto* const movie_menu{new QtUtils::NonAutodismissibleMenu(tr("&Movie"), this)};
+  addMenu(movie_menu);
   m_recording_start =
       movie_menu->addAction(tr("Start Re&cording Input"), this, [this] { emit StartRecording(); });
   m_recording_play =
@@ -871,7 +893,8 @@ void MenuBar::AddMovieMenu()
 
 void MenuBar::AddJITMenu()
 {
-  m_jit = addMenu(tr("JIT"));
+  m_jit = new QtUtils::NonAutodismissibleMenu(tr("JIT"), this);
+  addMenu(m_jit);
 
   m_jit_interpreter_core = m_jit->addAction(tr("Interpreter Core"));
   m_jit_interpreter_core->setCheckable(true);
@@ -1086,6 +1109,7 @@ void MenuBar::UpdateToolsMenu(const Core::State state)
   m_import_backup->setEnabled(is_uninitialized);
   m_check_nand->setEnabled(is_uninitialized);
   m_import_wii_save->setEnabled(is_uninitialized);
+  m_import_wii_saves->setEnabled(is_uninitialized);
   m_export_wii_saves->setEnabled(is_uninitialized);
 
   if (is_uninitialized)
@@ -1123,6 +1147,38 @@ void MenuBar::UpdateToolsMenu(const Core::State state)
   }
 }
 
+#ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
+void MenuBar::UpdateAchievementDevelopmentMenu()
+{
+  auto* dev_menu = AchievementManager::GetInstance().GetDevelopmentMenu();
+  if (dev_menu)
+  {
+    m_achievements_dev_menu->menuAction()->setVisible(true);
+    m_achievements_dev_menu->clear();
+    for (u32 i = 0; i < dev_menu->num_items; i++)
+    {
+      const auto& menu_item = dev_menu->items[i];
+      if (menu_item.label == nullptr)
+      {
+        m_achievements_dev_menu->addSeparator();
+        continue;
+      }
+      auto* ra_dev_menu_item = m_achievements_dev_menu->addAction(
+          QString::fromStdString(menu_item.label), this,
+          [menu_item] { AchievementManager::GetInstance().ActivateDevMenuItem(menu_item.id); });
+      ra_dev_menu_item->setEnabled(menu_item.enabled);
+      // Recommended hardcode by RAIntegration.dll developer Jamiras
+      ra_dev_menu_item->setCheckable(i < 2);
+      ra_dev_menu_item->setChecked(menu_item.checked);
+    }
+  }
+  else
+  {
+    m_achievements_dev_menu->menuAction()->setVisible(false);
+  }
+}
+#endif  // RC_CLIENT_SUPPORTS_RAINTEGRATION
+
 void MenuBar::InstallWAD()
 {
   QString wad_file = DolphinFileDialog::getOpenFileName(this, tr("Select Title to Install to NAND"),
@@ -1157,7 +1213,8 @@ void MenuBar::ImportWiiSave()
     return ModalMessageBox::question(
                this, tr("Save Import"),
                tr("Save data for this title already exists in the NAND. Consider backing up "
-                  "the current data before overwriting.\nOverwrite now?")) == QMessageBox::Yes;
+                  "the current data before overwriting.\n\nOverwrite existing save data?")) ==
+           QMessageBox::Yes;
   };
 
   const auto result = WiiSave::Import(file.toStdString(), can_overwrite);
@@ -1186,6 +1243,95 @@ void MenuBar::ImportWiiSave()
            "NAND...), then import the save again."));
     break;
   }
+}
+
+void MenuBar::ImportWiiSaves()
+{
+  QString folder =
+      DolphinFileDialog::getExistingDirectory(this, tr("Select Save Folder"), QDir::currentPath());
+
+  if (folder.isEmpty())
+    return;
+
+  QDirIterator it(folder, QStringList(QStringLiteral("*.bin")), QDir::Files,
+                  QDirIterator::Subdirectories);
+  QStringList failure_details;
+  size_t success_count = 0;
+  size_t fail_count = 0;
+  bool yes_all = false;
+  bool no_all = false;
+
+  while (it.hasNext())
+  {
+    const QString file = it.next();
+
+    auto can_overwrite = [&] {
+      if (yes_all)
+        return true;
+      if (no_all)
+        return false;
+
+      auto response = ModalMessageBox::question(
+          this, tr("Save Import"),
+          tr("%1: Save data for this title already exists in the NAND. Consider backing up "
+             "the current data before overwriting.\n\nOverwrite existing save data?")
+              .arg(file),
+          QMessageBox::StandardButton::YesAll | QMessageBox::StandardButton::Yes |
+              QMessageBox::StandardButton::No | QMessageBox::StandardButton::NoAll);
+
+      if (response == QMessageBox::YesAll)
+      {
+        yes_all = true;
+        return true;
+      }
+      else if (response == QMessageBox::NoAll)
+      {
+        no_all = true;
+        return false;
+      }
+      return response == QMessageBox::Yes;
+    };
+
+    const auto result = WiiSave::Import(file.toStdString(), can_overwrite);
+    switch (result)
+    {
+    case WiiSave::CopyResult::Success:
+      success_count++;
+      break;
+    case WiiSave::CopyResult::CorruptedSource:
+      fail_count++;
+      failure_details.append(tr("%1: Failed to import save file. The given file appears to be "
+                                "corrupted or is not a valid Wii save.")
+                                 .arg(file));
+      break;
+    case WiiSave::CopyResult::TitleMissing:
+      fail_count++;
+      failure_details.append(
+          tr("%1: Failed to import save file. Please launch the game once, then try again.")
+              .arg(file));
+      break;
+    case WiiSave::CopyResult::Cancelled:
+      break;
+    default:
+      fail_count++;
+      failure_details.append(
+          tr("%1: Failed to import save file. Your NAND may be corrupt, or something is preventing "
+             "access to files within it. Try repairing your NAND (Tools -> Manage NAND -> Check "
+             "NAND...), then import the save again.")
+              .arg(file));
+      break;
+    }
+  }
+
+  if (success_count == 0 && fail_count == 0)
+    return;
+
+  ModalMessageBox::information(this, tr("Save Import"),
+                               tr("Successfully imported %1 save file(s) with %2 failure(s)")
+                                   .arg(success_count)
+                                   .arg(fail_count),
+                               QMessageBox::Ok, QMessageBox::NoButton, Qt::WindowModal,
+                               failure_details.join(QStringLiteral("\n\n")));
 }
 
 void MenuBar::ExportWiiSaves()
@@ -1248,7 +1394,6 @@ void MenuBar::CheckNAND()
 
   {
     NANDRepairDialog dialog(result, this);
-    SetQWidgetWindowDecorations(&dialog);
     if (dialog.exec() != QDialog::Accepted)
       return;
   }
@@ -1419,7 +1564,6 @@ void MenuBar::GenerateSymbolsFromRSOAuto()
 
     return matches;
   });
-  SetQWidgetWindowDecorations(progress.GetRaw());
   progress.GetRaw()->exec();
 
   const auto matches = future.get();
@@ -1572,7 +1716,7 @@ void MenuBar::LoadSymbolMap()
   auto& ppc_symbol_db = system.GetPPCSymbolDB();
 
   std::string existing_map_file, writable_map_file;
-  bool map_exists = CBoot::FindMapFile(&existing_map_file, &writable_map_file);
+  bool map_exists = PPCSymbolDB::FindMapFile(&existing_map_file, &writable_map_file);
 
   if (!map_exists)
   {
@@ -1610,7 +1754,7 @@ void MenuBar::LoadSymbolMap()
 void MenuBar::SaveSymbolMap()
 {
   std::string existing_map_file, writable_map_file;
-  CBoot::FindMapFile(&existing_map_file, &writable_map_file);
+  PPCSymbolDB::FindMapFile(&existing_map_file, &writable_map_file);
 
   TrySaveSymbolMap(QString::fromStdString(writable_map_file));
 }
@@ -1666,7 +1810,7 @@ void MenuBar::SaveSymbolMapAs()
 void MenuBar::SaveCode()
 {
   std::string existing_map_file, writable_map_file;
-  CBoot::FindMapFile(&existing_map_file, &writable_map_file);
+  PPCSymbolDB::FindMapFile(&existing_map_file, &writable_map_file);
 
   const std::string path =
       writable_map_file.substr(0, writable_map_file.find_last_of('.')) + "_code.map";

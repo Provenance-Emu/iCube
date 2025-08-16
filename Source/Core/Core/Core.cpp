@@ -35,9 +35,7 @@
 #include "Common/FPURoundMode.h"
 #include "Common/FatFsUtil.h"
 #include "Common/FileUtil.h"
-#include "Common/Flag.h"
 #include "Common/Logging/Log.h"
-#include "Common/MemoryUtil.h"
 #include "Common/MsgHandler.h"
 #include "Common/ScopeGuard.h"
 #include "Common/StringUtil.h"
@@ -49,7 +47,6 @@
 #include "Core/Boot/Boot.h"
 #include "Core/BootManager.h"
 #include "Core/CPUThreadConfigCallback.h"
-#include "Core/Config/AchievementSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/CoreTiming.h"
@@ -92,13 +89,11 @@
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "InputCommon/GCAdapter.h"
 
-#include "VideoCommon/Assets/CustomAssetLoader.h"
 #include "VideoCommon/AsyncRequests.h"
 #include "VideoCommon/Fifo.h"
 #include "VideoCommon/FrameDumper.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/PerformanceMetrics.h"
-#include "VideoCommon/Present.h"
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoEvents.h"
 
@@ -112,7 +107,6 @@ static std::vector<StateChangedCallbackFunc> s_on_state_changed_callbacks;
 
 static std::thread s_cpu_thread;
 static bool s_is_throttler_temp_disabled = false;
-static std::atomic<double> s_last_actual_emulation_speed{1.0};
 static bool s_frame_step = false;
 static std::atomic<bool> s_stop_frame_step;
 
@@ -123,6 +117,8 @@ static std::atomic<State> s_state = State::Uninitialized;
 #ifdef USE_MEMORYWATCHER
 static std::unique_ptr<MemoryWatcher> s_memory_watcher;
 #endif
+
+void Callback_FramePresented(const PresentInfo& present_info);
 
 struct HostJob
 {
@@ -158,16 +154,8 @@ static void TuneCPUThreadForApple() {}
 static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
                       WindowSystemInfo wsi);
 
-static Common::EventHook s_frame_presented = AfterPresentEvent::Register(
-    [](auto& present_info) {
-      const double last_speed_denominator = g_perf_metrics.GetLastSpeedDenominator();
-      // The denominator should always be > 0 but if it's not, just return 1
-      const double last_speed = last_speed_denominator > 0.0 ? (1.0 / last_speed_denominator) : 1.0;
-
-      if (present_info.reason != PresentInfo::PresentReason::VideoInterfaceDuplicate)
-        Core::Callback_FramePresented(last_speed);
-    },
-    "Core Frame Presented");
+static Common::EventHook s_frame_presented =
+    AfterPresentEvent::Register(&Core::Callback_FramePresented, "Core Frame Presented");
 
 bool GetIsThrottlerTempDisabled()
 {
@@ -177,11 +165,6 @@ bool GetIsThrottlerTempDisabled()
 void SetIsThrottlerTempDisabled(bool disable)
 {
   s_is_throttler_temp_disabled = disable;
-}
-
-double GetActualEmulationSpeed()
-{
-  return s_last_actual_emulation_speed;
 }
 
 void FrameUpdateOnCPUThread()
@@ -282,8 +265,6 @@ bool Init(Core::System& system, std::unique_ptr<BootParameters> boot, const Wind
   INFO_LOG_FMT(BOOT, "Starting core = {} mode", system.IsWii() ? "Wii" : "GameCube");
   INFO_LOG_FMT(BOOT, "CPU Thread separate = {}", system.IsDualCoreMode() ? "Yes" : "No");
 
-  Host_UpdateMainFrame();  // Disable any menus or buttons at boot
-
   // Manually reactivate the video backend in case a GameINI overrides the video backend setting.
   VideoBackendBase::PopulateBackendInfo(wsi);
 
@@ -319,7 +300,7 @@ void Stop(Core::System& system)  // - Hammertime!
 
   s_state.store(State::Stopping);
 
-  CallOnStateChangedCallbacks(State::Stopping);
+  NotifyStateChanged(State::Stopping);
 
   // Dump left over jobs
   HostDispatchJobs(system);
@@ -334,15 +315,13 @@ void Stop(Core::System& system)  // - Hammertime!
 
   if (system.IsDualCoreMode())
   {
-    // Video_EnterLoop() should now exit so that EmuThread()
+    // FIFO processing should now exit so that EmuThread()
     // will continue concurrently with the rest of the commands
     // in this function. We no longer rely on Postmessage.
     INFO_LOG_FMT(CONSOLE, "{}", StopMessage(true, "Wait for Video Loop to exit ..."));
 
-    g_video_backend->Video_ExitLoop();
+    system.GetFifo().ExitGpuLoop();
   }
-
-  s_last_actual_emulation_speed = 1.0;
 }
 
 void DeclareAsCPUThread()
@@ -384,7 +363,6 @@ static void CPUSetInitialExecutionState(bool force_paused = false)
     bool paused = SConfig::GetInstance().bBootToPause || force_paused;
     SetState(system, paused ? State::Paused : State::Running, true, true);
     Host_UpdateDisasmDialog();
-    Host_UpdateMainFrame();
     Host_Message(HostMessageID::WMUserCreate);
   });
 }
@@ -512,11 +490,11 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
 static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
                       WindowSystemInfo wsi)
 {
-  CallOnStateChangedCallbacks(State::Starting);
+  NotifyStateChanged(State::Starting);
   Common::ScopeGuard flag_guard{[] {
     s_state.store(State::Uninitialized);
 
-    CallOnStateChangedCallbacks(State::Uninitialized);
+    NotifyStateChanged(State::Uninitialized);
 
     INFO_LOG_FMT(CONSOLE, "Stop\t\t---- Shutdown complete ----");
   }};
@@ -550,14 +528,13 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
                         Config::Get(Config::MAIN_WII_SD_CARD_ENABLE_FOLDER_SYNC);
   if (sync_sd_folder)
   {
-    sync_sd_folder =
-        Common::SyncSDFolderToSDImage([]() { return false; }, Core::WantsDeterminism());
+    sync_sd_folder = Common::SyncSDFolderToSDImage([] { return false; }, Core::WantsDeterminism());
   }
 
   Common::ScopeGuard sd_folder_sync_guard{[sync_sd_folder] {
     if (sync_sd_folder && Config::Get(Config::MAIN_ALLOW_SD_WRITES))
     {
-      const bool sync_ok = Common::SyncSDImageToSDFolder([]() { return false; });
+      const bool sync_ok = Common::SyncSDImageToSDFolder([] { return false; });
       if (!sync_ok)
       {
         PanicAlertFmtT(
@@ -569,16 +546,9 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
     }
   }};
 
-  // Load Wiimotes - only if we are booting in Wii mode
-  if (system.IsWii() && !Config::Get(Config::MAIN_BLUETOOTH_PASSTHROUGH_ENABLED))
-  {
-    Wiimote::LoadConfig();
-  }
+  // Wiimote input config is loaded in OnESTitleChanged
 
   FreeLook::LoadInputConfig();
-
-  system.GetCustomAssetLoader().Init();
-  Common::ScopeGuard asset_loader_guard([&system] { system.GetCustomAssetLoader().Shutdown(); });
 
   system.GetMovie().Init(*boot);
   Common::ScopeGuard movie_guard([&system] { system.GetMovie().Shutdown(); });
@@ -758,7 +728,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
 // Set or get the running state
 
 void SetState(Core::System& system, State state, bool report_state_change,
-              bool initial_execution_state)
+              bool override_achievement_restrictions)
 {
   // State cannot be controlled until the CPU Thread is operational
   if (s_state.load() != State::Running)
@@ -768,7 +738,7 @@ void SetState(Core::System& system, State state, bool report_state_change,
   {
   case State::Paused:
 #ifdef USE_RETRO_ACHIEVEMENTS
-    if (!initial_execution_state && !AchievementManager::GetInstance().CanPause())
+    if (!override_achievement_restrictions && !AchievementManager::GetInstance().CanPause())
       return;
 #endif  // USE_RETRO_ACHIEVEMENTS
     // NOTE: GetState() will return State::Paused immediately, even before anything has
@@ -794,7 +764,7 @@ void SetState(Core::System& system, State state, bool report_state_change,
   // Certain callers only change the state momentarily. Sending a callback for them causes
   // unwanted updates, such as the Pause/Play button flickering between states on frame advance.
   if (report_state_change)
-    CallOnStateChangedCallbacks(GetState(system));
+    NotifyStateChanged(GetState(system));
 }
 
 State GetState(Core::System& system)
@@ -896,7 +866,8 @@ static bool PauseAndLock(Core::System& system, bool do_lock, bool unpause_on_unl
   return was_unpaused;
 }
 
-void RunOnCPUThread(Core::System& system, std::function<void()> function, bool wait_for_completion)
+void RunOnCPUThread(Core::System& system, Common::MoveOnlyFunction<void()> function,
+                    bool wait_for_completion)
 {
   // If the CPU thread is not running, assume there is no active CPU thread we can race against.
   if (!IsRunning(system) || IsCPUThread())
@@ -913,7 +884,7 @@ void RunOnCPUThread(Core::System& system, std::function<void()> function, bool w
   {
     // Trigger the event after executing the function.
     s_cpu_thread_job_finished.Reset();
-    system.GetCPU().AddCPUThreadJob([&function]() {
+    system.GetCPU().AddCPUThreadJob([&function] {
       function();
       s_cpu_thread_job_finished.Set();
     });
@@ -937,13 +908,14 @@ void RunOnCPUThread(Core::System& system, std::function<void()> function, bool w
 
 // --- Callbacks for backends / engine ---
 
-// Called from Renderer::Swap (GPU thread) when a new (non-duplicate)
-// frame is presented to the host screen
-void Callback_FramePresented(double actual_emulation_speed)
+// Called from Renderer::Swap (GPU thread) when a frame is presented to the host screen.
+void Callback_FramePresented(const PresentInfo& present_info)
 {
   g_perf_metrics.CountFrame();
 
-  s_last_actual_emulation_speed = actual_emulation_speed;
+  if (present_info.reason == PresentInfo::PresentReason::VideoInterfaceDuplicate)
+    return;
+
   s_stop_frame_step.store(true);
 }
 
@@ -963,7 +935,7 @@ void Callback_NewField(Core::System& system)
     {
       s_frame_step = false;
       system.GetCPU().Break();
-      CallOnStateChangedCallbacks(Core::GetState(system));
+      NotifyStateChanged(Core::GetState(system));
     }
   }
 
@@ -1028,13 +1000,14 @@ bool RemoveOnStateChangedCallback(int* handle)
   return false;
 }
 
-void CallOnStateChangedCallbacks(Core::State state)
+void NotifyStateChanged(Core::State state)
 {
   for (const StateChangedCallbackFunc& on_state_changed_callback : s_on_state_changed_callbacks)
   {
     if (on_state_changed_callback)
       on_state_changed_callback(state);
   }
+  g_perf_metrics.OnEmulationStateChanged(state);
 }
 
 void UpdateWantDeterminism(Core::System& system, bool initial)

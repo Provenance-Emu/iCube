@@ -49,8 +49,7 @@ const TBreakPoint* BreakPoints::GetBreakpoint(u32 address) const
 
 const TBreakPoint* BreakPoints::GetRegularBreakpoint(u32 address) const
 {
-  auto bp = std::find_if(m_breakpoints.begin(), m_breakpoints.end(),
-                         [address](const auto& bp_) { return bp_.address == address; });
+  auto bp = std::ranges::find(m_breakpoints, address, &TBreakPoint::address);
 
   if (bp == m_breakpoints.end())
     return nullptr;
@@ -127,8 +126,7 @@ void BreakPoints::Add(u32 address, bool break_on_hit, bool log_on_hit,
 {
   // Check for existing breakpoint, and overwrite with new info.
   // This is assuming we usually want the new breakpoint over an old one.
-  auto iter = std::find_if(m_breakpoints.begin(), m_breakpoints.end(),
-                           [address](const auto& bp) { return bp.address == address; });
+  auto iter = std::ranges::find(m_breakpoints, address, &TBreakPoint::address);
 
   TBreakPoint bp;  // breakpoint settings
   bp.is_enabled = true;
@@ -176,8 +174,7 @@ bool BreakPoints::ToggleBreakPoint(u32 address)
 
 bool BreakPoints::ToggleEnable(u32 address)
 {
-  auto iter = std::find_if(m_breakpoints.begin(), m_breakpoints.end(),
-                           [address](const auto& bp) { return bp.address == address; });
+  auto iter = std::ranges::find(m_breakpoints, address, &TBreakPoint::address);
 
   if (iter == m_breakpoints.end())
     return false;
@@ -188,8 +185,7 @@ bool BreakPoints::ToggleEnable(u32 address)
 
 bool BreakPoints::Remove(u32 address)
 {
-  const auto iter = std::find_if(m_breakpoints.begin(), m_breakpoints.end(),
-                                 [address](const auto& bp) { return bp.address == address; });
+  const auto iter = std::ranges::find(m_breakpoints, address, &TBreakPoint::address);
 
   if (iter == m_breakpoints.cend())
     return false;
@@ -256,6 +252,7 @@ MemChecks::TMemChecksStr MemChecks::GetStrings() const
 void MemChecks::AddFromStrings(const TMemChecksStr& mc_strings)
 {
   const Core::CPUThreadGuard guard(m_system);
+  DelayedMemCheckUpdate delayed_update(this);
 
   for (const std::string& mc_string : mc_strings)
   {
@@ -283,22 +280,18 @@ void MemChecks::AddFromStrings(const TMemChecksStr& mc_strings)
       mc.condition = Expression::TryParse(condition);
     }
 
-    Add(std::move(mc), false);
+    delayed_update |= Add(std::move(mc));
   }
-
-  Update();
 }
 
-void MemChecks::Add(TMemCheck memory_check, bool update)
+DelayedMemCheckUpdate MemChecks::Add(TMemCheck memory_check)
 {
   const Core::CPUThreadGuard guard(m_system);
 
   // Check for existing breakpoint, and overwrite with new info.
   // This is assuming we usually want the new breakpoint over an old one.
   const u32 address = memory_check.start_address;
-  auto old_mem_check =
-      std::find_if(m_mem_checks.begin(), m_mem_checks.end(),
-                   [address](const auto& check) { return check.start_address == address; });
+  auto old_mem_check = std::ranges::find(m_mem_checks, address, &TMemCheck::start_address);
   if (old_mem_check != m_mem_checks.end())
   {
     memory_check.is_enabled = old_mem_check->is_enabled;  // Preserve enabled status
@@ -310,14 +303,12 @@ void MemChecks::Add(TMemCheck memory_check, bool update)
     m_mem_checks.emplace_back(std::move(memory_check));
   }
 
-  if (update)
-    Update();
+  return DelayedMemCheckUpdate(this, true);
 }
 
 bool MemChecks::ToggleEnable(u32 address)
 {
-  auto iter = std::find_if(m_mem_checks.begin(), m_mem_checks.end(),
-                           [address](const auto& bp) { return bp.start_address == address; });
+  auto iter = std::ranges::find(m_mem_checks, address, &TMemCheck::start_address);
 
   if (iter == m_mem_checks.end())
     return false;
@@ -326,22 +317,17 @@ bool MemChecks::ToggleEnable(u32 address)
   return true;
 }
 
-bool MemChecks::Remove(u32 address, bool update)
+DelayedMemCheckUpdate MemChecks::Remove(u32 address)
 {
-  const auto iter =
-      std::find_if(m_mem_checks.cbegin(), m_mem_checks.cend(),
-                   [address](const auto& check) { return check.start_address == address; });
+  const auto iter = std::ranges::find(m_mem_checks, address, &TMemCheck::start_address);
 
   if (iter == m_mem_checks.cend())
-    return false;
+    return DelayedMemCheckUpdate(this, false);
 
   const Core::CPUThreadGuard guard(m_system);
   m_mem_checks.erase(iter);
 
-  if (update)
-    Update();
-
-  return true;
+  return DelayedMemCheckUpdate(this, true);
 }
 
 void MemChecks::Clear()

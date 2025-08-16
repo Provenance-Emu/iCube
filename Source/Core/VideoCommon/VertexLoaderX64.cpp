@@ -57,11 +57,10 @@ VertexLoaderX64::VertexLoaderX64(const TVtxDesc& vtx_desc, const VAT& vtx_att)
 
 OpArg VertexLoaderX64::GetVertexAddr(CPArray array, VertexComponentFormat attribute)
 {
-  OpArg data = MDisp(src_reg, m_src_ofs);
   if (IsIndexed(attribute))
   {
     int bits = attribute == VertexComponentFormat::Index8 ? 8 : 16;
-    LoadAndSwap(bits, scratch1, data);
+    LoadAndSwap(bits, scratch1, MDisp(src_reg, m_src_ofs));
     m_src_ofs += bits / 8;
     if (array == CPArray::Position)
     {
@@ -74,7 +73,7 @@ OpArg VertexLoaderX64::GetVertexAddr(CPArray array, VertexComponentFormat attrib
   }
   else
   {
-    return data;
+    return MDisp(src_reg, m_src_ofs);
   }
 }
 
@@ -126,7 +125,7 @@ void VertexLoaderX64::ReadVertex(OpArg data, VertexComponentFormat attribute,
 
   X64Reg coords = XMM0;
 
-  const auto write_zfreeze = [&]() {  // zfreeze
+  const auto write_zfreeze = [&] {  // zfreeze
     if (native_format == &m_native_vtx_decl.position)
     {
       CMP(32, R(remaining_reg), Imm8(3));

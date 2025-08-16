@@ -15,7 +15,7 @@
 #import "Core/System.h"
 #import "Core/Config/MainSettings.h"
 
-#import "VideoCommon/RenderBase.h"
+#import "VideoCommon/Present.h"
 #import "VideoCommon/Present.h"
 #include "UICommon/UICommon.h"
 #include "Core/HW/SI/SI_Device.h"
@@ -236,7 +236,7 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
   dispatch_source_set_event_handler(_adaptiveClockTimer, ^{
     auto& sys = Core::System::GetInstance();
     if (Core::GetState(sys) != Core::State::Running) return;
-    const double speed_ratio = Core::GetActualEmulationSpeed();
+    const double speed_ratio = Config::Get(Config::MAIN_EMULATION_SPEED);
     const float pct = (float)(speed_ratio * 100.0);
     Core::QueueHostJob([&](Core::System& s) {
       if (pct > 0.f && pct < 95.0f) {
@@ -592,7 +592,7 @@ after_set:
       const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter;
       if (![JitManager shared].acquiredJit && !is_interpreter_core)
       {
-        Config::Set(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
+        Config::SetCurrent(Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
       }
     }
 

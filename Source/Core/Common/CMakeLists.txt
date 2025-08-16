@@ -18,6 +18,7 @@ add_library(common
   BitSet.h
   BitUtils.h
   BlockingLoop.h
+  Buffer.h
   ChunkFile.h
   CodeBlock.h
   ColorUtil.cpp
@@ -63,12 +64,15 @@ add_library(common
   FatFsUtil.h
   FileSearch.cpp
   FileSearch.h
+  FilesystemWatcher.cpp
+  FilesystemWatcher.h
   FileUtil.cpp
   FileUtil.h
   FixedSizeQueue.h
   Flag.h
   FloatUtils.cpp
   FloatUtils.h
+  Functional.h
   FormatUtil.h
   FPURoundMode.h
   GekkoDisassembler.cpp
@@ -114,6 +118,7 @@ add_library(common
   PcapFile.h
   Profiler.cpp
   Profiler.h
+  Projection.h
   QoSSession.cpp
   QoSSession.h
   Random.cpp
@@ -153,6 +158,7 @@ add_library(common
   VariantUtil.h
   Version.cpp
   Version.h
+  WaitableFlag.h
   WindowSystemInfo.h
   WorkQueueThread.h
 )
@@ -172,7 +178,7 @@ PUBLIC
   enet::enet
   fmt::fmt
   MbedTLS::mbedtls
-  minizip::minizip
+  minizip-ng::minizip-ng
   sfml-network
 
 PRIVATE
@@ -182,6 +188,11 @@ PRIVATE
   spng::spng
   ${VTUNE_LIBRARIES}
 )
+
+# Link filesystem watcher only on macOS (FSEvents)
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  target_link_libraries(common PRIVATE watcher)
+endif()
 
 if ((DEFINED CMAKE_ANDROID_ARCH_ABI AND CMAKE_ANDROID_ARCH_ABI MATCHES "x86|x86_64") OR
     (NOT DEFINED CMAKE_ANDROID_ARCH_ABI AND _M_X86_64))
@@ -310,6 +321,8 @@ if(WIN32)
     CompatPatches.cpp
     GL/GLInterface/WGL.cpp
     GL/GLInterface/WGL.h
+    WindowsDevice.cpp
+    WindowsDevice.h
     WindowsRegistry.cpp
   )
 elseif(APPLE AND NOT IOS)

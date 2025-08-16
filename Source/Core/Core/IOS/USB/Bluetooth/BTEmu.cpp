@@ -79,18 +79,6 @@ BluetoothEmuDevice::BluetoothEmuDevice(EmulationKernel& ios, const std::string& 
 
 BluetoothEmuDevice::~BluetoothEmuDevice() = default;
 
-template <typename T>
-static void DoStateForMessage(EmulationKernel& ios, PointerWrap& p, std::unique_ptr<T>& message)
-{
-  u32 request_address = (message != nullptr) ? message->ios_request.address : 0;
-  p.Do(request_address);
-  if (request_address != 0)
-  {
-    IOCtlVRequest request{ios.GetSystem(), request_address};
-    message = std::make_unique<T>(ios, request);
-  }
-}
-
 void BluetoothEmuDevice::DoState(PointerWrap& p)
 {
   bool passthrough_bluetooth = false;
@@ -347,10 +335,13 @@ void BluetoothEmuDevice::Update()
     wiimote->Update();
 
   const u64 interval = GetSystem().GetSystemTimers().GetTicksPerSecond() / Wiimote::UPDATE_FREQ;
-  const u64 now = GetSystem().GetCoreTiming().GetTicks();
+  auto& core_timing = GetSystem().GetCoreTiming();
+  const u64 now = core_timing.GetTicks();
 
   if (now - m_last_ticks > interval)
   {
+    // Throttle before Wii Remote update so input is taken just before needed. (lower input latency)
+    core_timing.Throttle(now);
     g_controller_interface.SetCurrentInputChannel(ciface::InputChannel::Bluetooth);
     g_controller_interface.UpdateInput();
 

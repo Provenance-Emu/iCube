@@ -63,7 +63,7 @@ private:
   // Used for filename generation.
   std::time_t m_start_time = {};
   u32 m_file_index = 0;
-  
+
   // Some codecs (like MPEG4) have a limit to this
   int64_t m_max_denominator = std::numeric_limits<s64>::max();
 };

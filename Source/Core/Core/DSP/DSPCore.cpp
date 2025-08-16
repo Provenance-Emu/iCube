@@ -109,7 +109,18 @@ public:
 protected:
   u8 ReadMemory(u32 address) override { return Host::ReadHostMemory(address); }
   void WriteMemory(u32 address, u8 value) override { Host::WriteHostMemory(value, address); }
-  void OnEndException() override { m_dsp.SetException(ExceptionType::AcceleratorOverflow); }
+  void OnRawReadEndException() override
+  {
+    m_dsp.SetException(ExceptionType::AcceleratorRawReadOverflow);
+  }
+  void OnRawWriteEndException() override
+  {
+    m_dsp.SetException(ExceptionType::AcceleratorRawWriteOverflow);
+  }
+  void OnSampleReadEndException() override
+  {
+    m_dsp.SetException(ExceptionType::AcceleratorSampleReadOverflow);
+  }
 
 private:
   SDSP& m_dsp;
@@ -471,8 +482,6 @@ int DSPCore::RunCycles(int cycles)
 
       m_dsp_interpreter->Step();
       cycles--;
-
-      Host::UpdateDebugger();
       break;
     case State::Stopped:
       break;
@@ -508,8 +517,6 @@ void DSPCore::SetState(State new_state)
   // kick the event, in case we are waiting
   if (new_state == State::Running)
     m_step_event.Set();
-
-  Host::UpdateDebugger();
 }
 
 State DSPCore::GetState() const

@@ -165,7 +165,7 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   auto& system = Core::System::GetInstance();
   Core::RunOnCPUThread(system, [enabled]() {
     auto* group = Wiimote::GetWiimoteGroup(0, WiimoteEmu::WiimoteGroup::IMUPoint);
-    if (group) group->enabled = enabled;
+    if (group) group->enabled.SetValue(enabled);
   }, true);
 }
 

@@ -14,14 +14,13 @@
 #include "VideoCommon/AbstractGfx.h"
 #include "VideoCommon/AbstractStagingTexture.h"
 #include "VideoCommon/AbstractTexture.h"
-#include "VideoCommon/RenderBase.h"
 
 namespace DX12
 {
 class DXTexture final : public AbstractTexture
 {
 public:
-  ~DXTexture();
+  ~DXTexture() override;
 
   static std::unique_ptr<DXTexture> Create(const TextureConfig& config, std::string_view name);
   static std::unique_ptr<DXTexture> CreateAdopted(ID3D12Resource* resource);
@@ -111,7 +110,7 @@ private:
 class DXStagingTexture final : public AbstractStagingTexture
 {
 public:
-  ~DXStagingTexture();
+  ~DXStagingTexture() override;
 
   void CopyFromTexture(const AbstractTexture* src, const MathUtil::Rectangle<int>& src_rect,
                        u32 src_layer, u32 src_level,

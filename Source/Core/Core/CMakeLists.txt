@@ -205,6 +205,8 @@ add_library(core
   HW/EXI/EXI_DeviceAD16.h
   HW/EXI/EXI_DeviceAGP.cpp
   HW/EXI/EXI_DeviceAGP.h
+  HW/EXI/EXI_DeviceBaseboard.cpp
+  HW/EXI/EXI_DeviceBaseboard.h
   HW/EXI/EXI_DeviceDummy.cpp
   HW/EXI/EXI_DeviceDummy.h
   HW/EXI/EXI_DeviceEthernet.cpp
@@ -429,12 +431,16 @@ add_library(core
   IOS/USB/Common.h
   IOS/USB/Emulated/Infinity.cpp
   IOS/USB/Emulated/Infinity.h
+  IOS/USB/Emulated/Microphone.cpp
+  IOS/USB/Emulated/Microphone.h
   IOS/USB/Emulated/Skylanders/Skylander.cpp
   IOS/USB/Emulated/Skylanders/Skylander.h
   IOS/USB/Emulated/Skylanders/SkylanderCrypto.cpp
   IOS/USB/Emulated/Skylanders/SkylanderCrypto.h
   IOS/USB/Emulated/Skylanders/SkylanderFigure.cpp
   IOS/USB/Emulated/Skylanders/SkylanderFigure.h
+  IOS/USB/Emulated/WiiSpeak.cpp
+  IOS/USB/Emulated/WiiSpeak.h
   IOS/USB/Host.cpp
   IOS/USB/Host.h
   IOS/USB/OH0/OH0.cpp
@@ -449,6 +455,8 @@ add_library(core
   IOS/USB/USB_KBD.h
   IOS/USB/USB_VEN/VEN.cpp
   IOS/USB/USB_VEN/VEN.h
+  IOS/USB/USBScanner.cpp
+  IOS/USB/USBScanner.h
   IOS/USB/USBV0.cpp
   IOS/USB/USBV0.h
   IOS/USB/USBV4.cpp
@@ -545,6 +553,8 @@ add_library(core
   TimePlayed.h
   TitleDatabase.cpp
   TitleDatabase.h
+  USBUtils.cpp
+  USBUtils.h
   WC24PatchEngine.cpp
   WC24PatchEngine.h
   WiiRoot.cpp
@@ -654,8 +664,9 @@ PRIVATE
   ZLIB::ZLIB
 )
 
-if (ENABLE_CUBEB)
-  target_link_libraries(core PRIVATE cubeb::cubeb)
+if(LIBUDEV_FOUND)
+  target_include_directories(core PRIVATE ${LIBUDEV_INCLUDE_DIR})
+  target_link_libraries(core PRIVATE ${LIBUDEV_LIBRARY})
 endif()
 
 if (APPLE)
@@ -688,6 +699,10 @@ if(TARGET LibUSB::LibUSB)
     IOS/USB/LibusbDevice.h
     IOS/USB/Bluetooth/BTReal.cpp
     IOS/USB/Bluetooth/BTReal.h
+    IOS/USB/Bluetooth/LibUSBBluetoothAdapter.cpp
+    IOS/USB/Bluetooth/LibUSBBluetoothAdapter.h
+    IOS/USB/Bluetooth/RealtekFirmwareLoader.cpp
+    IOS/USB/Bluetooth/RealtekFirmwareLoader.h
   )
 endif()
 
@@ -793,4 +808,7 @@ if(USE_RETRO_ACHIEVEMENTS)
   target_link_libraries(core PUBLIC rcheevos)
   target_compile_definitions(core PUBLIC -DUSE_RETRO_ACHIEVEMENTS)
   target_compile_definitions(core PUBLIC -DRC_CLIENT_SUPPORTS_HASH)
+  if(RC_CLIENT_SUPPORTS_RAINTEGRATION)
+    target_compile_definitions(core PUBLIC -DRC_CLIENT_SUPPORTS_RAINTEGRATION)
+  endif()
 endif()

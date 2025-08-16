@@ -39,18 +39,12 @@
 #include "DolphinQt/QtUtils/DolphinFileDialog.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
 #include "DolphinQt/QtUtils/NonDefaultQPushButton.h"
-#include "DolphinQt/QtUtils/SetWindowDecorations.h"
 #include "DolphinQt/QtUtils/SignalBlocking.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/Settings/BroadbandAdapterSettingsDialog.h"
 
-enum
-{
-  SLOT_A_INDEX,
-  SLOT_B_INDEX,
-  SLOT_SP1_INDEX,
-  SLOT_COUNT
-};
+constexpr std::initializer_list<ExpansionInterface::Slot> GUI_SLOTS = {
+    ExpansionInterface::Slot::A, ExpansionInterface::Slot::B, ExpansionInterface::Slot::SP1};
 
 GameCubePane::GameCubePane()
 {
@@ -95,7 +89,7 @@ void GameCubePane::CreateWidgets()
   QGridLayout* device_layout = new QGridLayout(device_box);
   device_box->setLayout(device_layout);
 
-  for (ExpansionInterface::Slot slot : ExpansionInterface::SLOTS)
+  for (ExpansionInterface::Slot slot : GUI_SLOTS)
   {
     m_slot_combos[slot] = new QComboBox(device_box);
     m_slot_combos[slot]->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
@@ -251,7 +245,7 @@ void GameCubePane::ConnectWidgets()
   connect(m_language_combo, &QComboBox::currentIndexChanged, this, &GameCubePane::SaveSettings);
 
   // Device Settings
-  for (ExpansionInterface::Slot slot : ExpansionInterface::SLOTS)
+  for (ExpansionInterface::Slot slot : GUI_SLOTS)
   {
     connect(m_slot_combos[slot], &QComboBox::currentIndexChanged, this,
             [this, slot] { UpdateButton(slot); });
@@ -358,6 +352,9 @@ void GameCubePane::UpdateButton(ExpansionInterface::Slot slot)
                   device == ExpansionInterface::EXIDeviceType::EthernetBuiltIn ||
                   device == ExpansionInterface::EXIDeviceType::ModemTapServer);
     break;
+  case ExpansionInterface::Slot::SP2:
+    has_config = false;
+    break;
   }
 
   m_slot_buttons[slot]->setEnabled(has_config);
@@ -383,28 +380,24 @@ void GameCubePane::OnConfigPressed(ExpansionInterface::Slot slot)
   {
     // TODO: convert MappingWindow to use Slot?
     MappingWindow dialog(this, MappingWindow::Type::MAPPING_GC_MICROPHONE, static_cast<int>(slot));
-    SetQWidgetWindowDecorations(&dialog);
     dialog.exec();
     return;
   }
   case ExpansionInterface::EXIDeviceType::Ethernet:
   {
     BroadbandAdapterSettingsDialog dialog(this, BroadbandAdapterSettingsDialog::Type::Ethernet);
-    SetQWidgetWindowDecorations(&dialog);
     dialog.exec();
     return;
   }
   case ExpansionInterface::EXIDeviceType::EthernetXLink:
   {
     BroadbandAdapterSettingsDialog dialog(this, BroadbandAdapterSettingsDialog::Type::XLinkKai);
-    SetQWidgetWindowDecorations(&dialog);
     dialog.exec();
     return;
   }
   case ExpansionInterface::EXIDeviceType::EthernetTapServer:
   {
     BroadbandAdapterSettingsDialog dialog(this, BroadbandAdapterSettingsDialog::Type::TapServer);
-    SetQWidgetWindowDecorations(&dialog);
     dialog.exec();
     return;
   }
@@ -412,14 +405,12 @@ void GameCubePane::OnConfigPressed(ExpansionInterface::Slot slot)
   {
     BroadbandAdapterSettingsDialog dialog(this,
                                           BroadbandAdapterSettingsDialog::Type::ModemTapServer);
-    SetQWidgetWindowDecorations(&dialog);
     dialog.exec();
     return;
   }
   case ExpansionInterface::EXIDeviceType::EthernetBuiltIn:
   {
     BroadbandAdapterSettingsDialog dialog(this, BroadbandAdapterSettingsDialog::Type::BuiltIn);
-    SetQWidgetWindowDecorations(&dialog);
     dialog.exec();
     return;
   }
@@ -735,11 +726,11 @@ void GameCubePane::LoadSettings()
     }
   }
 
-  m_skip_main_menu->setEnabled(have_menu);
+  m_skip_main_menu->setEnabled(have_menu || !m_skip_main_menu->isChecked());
   m_skip_main_menu->setToolTip(have_menu ? QString{} : tr("Put IPL ROMs in User/GC/<region>."));
 
   // Device Settings
-  for (ExpansionInterface::Slot slot : ExpansionInterface::SLOTS)
+  for (ExpansionInterface::Slot slot : GUI_SLOTS)
   {
     const ExpansionInterface::EXIDeviceType exi_device =
         Config::Get(Config::GetInfoForEXIDevice(slot));
@@ -784,7 +775,7 @@ void GameCubePane::SaveSettings()
 
   auto& system = Core::System::GetInstance();
   // Device Settings
-  for (ExpansionInterface::Slot slot : ExpansionInterface::SLOTS)
+  for (ExpansionInterface::Slot slot : GUI_SLOTS)
   {
     const auto dev =
         static_cast<ExpansionInterface::EXIDeviceType>(m_slot_combos[slot]->currentData().toInt());

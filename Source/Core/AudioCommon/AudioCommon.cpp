@@ -16,7 +16,6 @@
 #include "AudioCommon/OpenSLESStream.h"
 #include "AudioCommon/PulseAudioStream.h"
 #include "AudioCommon/WASAPIStream.h"
-#include "Common/Common.h"
 #include "Common/FileUtil.h"
 #include "Common/Logging/Log.h"
 #include "Common/TimeUtil.h"
@@ -106,21 +105,23 @@ void ShutdownSoundStream(Core::System& system)
 
 std::string GetDefaultSoundBackend()
 {
-  std::string backend = BACKEND_NULLSOUND;
-#if defined ANDROID
-  backend = BACKEND_OPENSLES;
-#elif defined __linux__
-  if (AlsaSound::IsValid())
-    backend = BACKEND_ALSA;
-  else if (CubebStream::IsValid())
-    backend = BACKEND_CUBEB;
-#elif defined(IPHONEOS)
-  backend = BACKEND_COREAUDIO;
-#elif defined(__APPLE__) || defined(_WIN32) || defined(__OpenBSD__)
-  if (CubebStream::IsValid())
-    backend = BACKEND_CUBEB;
+#if defined(IPHONEOS)
+  return BACKEND_COREAUDIO;
 #endif
-  return backend;
+
+#if defined(ANDROID)
+  return BACKEND_OPENSLES;
+#else
+  if (CubebStream::IsValid())
+    return BACKEND_CUBEB;
+#endif
+
+#if defined(__linux__)
+  if (AlsaSound::IsValid())
+    return BACKEND_ALSA;
+#endif
+
+  return BACKEND_NULLSOUND;
 }
 
 DPL2Quality GetDefaultDPL2Quality()
@@ -189,7 +190,8 @@ void UpdateSoundStream(Core::System& system)
 
   if (sound_stream)
   {
-    int volume = Config::Get(Config::MAIN_AUDIO_MUTED) ? 0 : Config::Get(Config::MAIN_AUDIO_VOLUME);
+    int const volume =
+        Config::Get(Config::MAIN_AUDIO_MUTED) ? 0 : Config::Get(Config::MAIN_AUDIO_VOLUME);
     sound_stream->SetVolume(volume);
   }
 }
@@ -215,7 +217,7 @@ void SetSoundStreamRunning(Core::System& system, bool running)
 
 void SendAIBuffer(Core::System& system, const short* samples, unsigned int num_samples)
 {
-  SoundStream* sound_stream = system.GetSoundStream();
+  const SoundStream* const sound_stream = system.GetSoundStream();
 
   if (!sound_stream)
     return;
@@ -235,9 +237,9 @@ void SendAIBuffer(Core::System& system, const short* samples, unsigned int num_s
 
 void StartAudioDump(Core::System& system)
 {
-  SoundStream* sound_stream = system.GetSoundStream();
+  const SoundStream* const sound_stream = system.GetSoundStream();
 
-  std::time_t start_time = std::time(nullptr);
+  std::time_t const start_time = std::time(nullptr);
 
   std::string path_prefix = File::GetUserPath(D_DUMPAUDIO_IDX) + SConfig::GetInstance().GetGameID();
 
@@ -258,7 +260,7 @@ void StartAudioDump(Core::System& system)
 
 void StopAudioDump(Core::System& system)
 {
-  SoundStream* sound_stream = system.GetSoundStream();
+  const SoundStream* const sound_stream = system.GetSoundStream();
 
   if (!sound_stream)
     return;
@@ -291,7 +293,7 @@ void DecreaseVolume(Core::System& system, unsigned short offset)
 
 void ToggleMuteVolume(Core::System& system)
 {
-  bool isMuted = Config::Get(Config::MAIN_AUDIO_MUTED);
+  bool const isMuted = Config::Get(Config::MAIN_AUDIO_MUTED);
   Config::SetBaseOrCurrent(Config::MAIN_AUDIO_MUTED, !isMuted);
   UpdateSoundStream(system);
 }

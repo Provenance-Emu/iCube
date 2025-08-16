@@ -129,7 +129,7 @@
 - (void)integrationChanged {
   Config::SetBaseOrCurrent(Config::RA_ENABLED, self.integrationSwitch.on);
   if (self.integrationSwitch.on) {
-    AchievementManager::GetInstance().Init();
+    AchievementManager::GetInstance().Init(nullptr);
   } else {
     AchievementManager::GetInstance().Shutdown();
   }
@@ -162,7 +162,7 @@
   if (newHost != current) {
     Config::SetBaseOrCurrent(Config::RA_HOST_URL, newHost);
     AchievementManager::GetInstance().Shutdown();
-    AchievementManager::GetInstance().Init();
+    AchievementManager::GetInstance().Init(nullptr);
   }
 }
 
@@ -291,7 +291,7 @@
 
   [self _applyHostOverrideIfNeededAndReinit];
   [self _startLoginSpinner];
-  AchievementManager::GetInstance().Init();
+  AchievementManager::GetInstance().Init(nullptr);
   if (!AchievementManager::GetInstance().HasAPIToken()) {
     AchievementManager::GetInstance().Login(pw.UTF8String ? pw.UTF8String : "");
   }
@@ -477,7 +477,7 @@
       _cachedPassword = [password copy];
       [self _applyHostOverrideIfNeededAndReinit];
       [self _startLoginSpinner];
-      AchievementManager::GetInstance().Init();
+      AchievementManager::GetInstance().Init(nullptr);
       AchievementManager::GetInstance().Login(password.UTF8String ? password.UTF8String : "");
       [_loginTimer invalidate];
       _loginTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 target:self selector:@selector(_pollLoginStatus) userInfo:nil repeats:YES];
