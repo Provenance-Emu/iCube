@@ -47,7 +47,7 @@
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
 
-#include "VideoCommon/VideoBackendBase.h"
+#include "VideoCommon/EFBInterface.h"
 
 namespace PowerPC
 {
@@ -109,12 +109,12 @@ static u32 EFB_Read(const u32 addr)
   }
   else if (addr & 0x00400000)
   {
-    var = g_video_backend->Video_AccessEFB(EFBAccessType::PeekZ, x, y, 0);
+    var = g_efb_interface->PeekDepth(x, y);
     DEBUG_LOG_FMT(MEMMAP, "EFB Z Read @ {}, {}\t= {:#010x}", x, y, var);
   }
   else
   {
-    var = g_video_backend->Video_AccessEFB(EFBAccessType::PeekColor, x, y, 0);
+    var = g_efb_interface->PeekColor(x, y);
     DEBUG_LOG_FMT(MEMMAP, "EFB Color Read @ {}, {}\t= {:#010x}", x, y, var);
   }
 
@@ -134,12 +134,12 @@ static void EFB_Write(u32 data, u32 addr)
   }
   else if (addr & 0x00400000)
   {
-    g_video_backend->Video_AccessEFB(EFBAccessType::PokeZ, x, y, data);
+    g_efb_interface->PokeDepth(x, y, data);
     DEBUG_LOG_FMT(MEMMAP, "EFB Z Write {:08x} @ {}, {}", data, x, y);
   }
   else
   {
-    g_video_backend->Video_AccessEFB(EFBAccessType::PokeColor, x, y, data);
+    g_efb_interface->PokeColor(x, y, data);
     DEBUG_LOG_FMT(MEMMAP, "EFB Color Write {:08x} @ {}, {}", data, x, y);
   }
 }
@@ -937,37 +937,33 @@ bool MMU::IsOptimizableRAMAddress(const u32 address, const u32 access_size) cons
   return (bat_result_1 & bat_result_2 & BAT_PHYSICAL_BIT) != 0;
 }
 
-template <XCheckTLBFlag flag>
-bool MMU::IsRAMAddress(u32 address, bool translate)
+bool MMU::IsPhysicalRAMAddress(const u32 address) const
 {
-  if (translate)
-  {
-    auto translate_address = TranslateAddress<flag>(address);
-    if (!translate_address.Success())
-      return false;
-    address = translate_address.address;
-  }
-
-  u32 segment = address >> 28;
+  const u32 segment = address >> 28;
   if (m_memory.GetRAM() && segment == 0x0 && (address & 0x0FFFFFFF) < m_memory.GetRamSizeReal())
   {
     return true;
   }
-  else if (m_memory.GetEXRAM() && segment == 0x1 &&
-           (address & 0x0FFFFFFF) < m_memory.GetExRamSizeReal())
+  if (m_memory.GetEXRAM() && segment == 0x1 && (address & 0x0FFFFFFF) < m_memory.GetExRamSizeReal())
   {
     return true;
   }
-  else if (m_memory.GetFakeVMEM() && ((address & 0xFE000000) == 0x7E000000))
+  if (m_memory.GetFakeVMEM() && (address & 0xFE000000) == 0x7E000000)
   {
     return true;
   }
-  else if (m_memory.GetL1Cache() && segment == 0xE &&
-           (address < (0xE0000000 + m_memory.GetL1CacheSize())))
+  if (m_memory.GetL1Cache() && segment == 0xE && address < 0xE0000000 + m_memory.GetL1CacheSize())
   {
     return true;
   }
   return false;
+}
+
+template <XCheckTLBFlag flag>
+bool MMU::IsEffectiveRAMAddress(const u32 address)
+{
+  const auto translate_address = TranslateAddress<flag>(address);
+  return translate_address.Success() && IsPhysicalRAMAddress(translate_address.address);
 }
 
 bool MMU::HostIsRAMAddress(const Core::CPUThreadGuard& guard, u32 address,
@@ -977,13 +973,14 @@ bool MMU::HostIsRAMAddress(const Core::CPUThreadGuard& guard, u32 address,
   switch (space)
   {
   case RequestedAddressSpace::Effective:
-    return mmu.IsRAMAddress<XCheckTLBFlag::NoException>(address, mmu.m_ppc_state.msr.DR);
+    return mmu.m_ppc_state.msr.DR ? mmu.IsEffectiveRAMAddress<XCheckTLBFlag::NoException>(address) :
+                                    mmu.IsPhysicalRAMAddress(address);
   case RequestedAddressSpace::Physical:
-    return mmu.IsRAMAddress<XCheckTLBFlag::NoException>(address, false);
+    return mmu.IsPhysicalRAMAddress(address);
   case RequestedAddressSpace::Virtual:
     if (!mmu.m_ppc_state.msr.DR)
       return false;
-    return mmu.IsRAMAddress<XCheckTLBFlag::NoException>(address, true);
+    return mmu.IsEffectiveRAMAddress<XCheckTLBFlag::NoException>(address);
   }
 
   ASSERT(false);
@@ -1001,13 +998,15 @@ bool MMU::HostIsInstructionRAMAddress(const Core::CPUThreadGuard& guard, u32 add
   switch (space)
   {
   case RequestedAddressSpace::Effective:
-    return mmu.IsRAMAddress<XCheckTLBFlag::OpcodeNoException>(address, mmu.m_ppc_state.msr.IR);
+    return mmu.m_ppc_state.msr.IR ?
+               mmu.IsEffectiveRAMAddress<XCheckTLBFlag::OpcodeNoException>(address) :
+               mmu.IsPhysicalRAMAddress(address);
   case RequestedAddressSpace::Physical:
-    return mmu.IsRAMAddress<XCheckTLBFlag::OpcodeNoException>(address, false);
+    return mmu.IsPhysicalRAMAddress(address);
   case RequestedAddressSpace::Virtual:
     if (!mmu.m_ppc_state.msr.IR)
       return false;
-    return mmu.IsRAMAddress<XCheckTLBFlag::OpcodeNoException>(address, true);
+    return mmu.IsEffectiveRAMAddress<XCheckTLBFlag::OpcodeNoException>(address);
   }
 
   ASSERT(false);
@@ -1274,8 +1273,20 @@ void MMU::GenerateDSIException(u32 effective_address, bool write)
   // DSI exceptions are only supported in MMU mode.
   if (!m_system.IsMMUMode())
   {
-    PanicAlertFmt("Invalid {} {:#010x}, PC = {:#010x}", write ? "write to" : "read from",
-                  effective_address, m_ppc_state.pc);
+    if (write)
+    {
+      PanicAlertFmtT(
+          "Invalid write to {0:#010x}, PC = {1:#010x}; the game probably would have crashed on "
+          "real hardware.\n\nFor accurate emulation, enable MMU in advanced settings.",
+          effective_address, m_ppc_state.pc);
+    }
+    else
+    {
+      PanicAlertFmtT(
+          "Invalid read from {0:#010x}, PC = {1:#010x}; the game probably would have crashed on "
+          "real hardware.\n\nFor accurate emulation, enable MMU in advanced settings.",
+          effective_address, m_ppc_state.pc);
+    }
     if (m_system.IsPauseOnPanicMode())
     {
       m_system.GetCPU().Break();

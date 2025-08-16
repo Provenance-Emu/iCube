@@ -442,12 +442,7 @@ FSTEntry ScanDirectoryTree(std::string directory, bool recursive)
 
   auto path_to_physical_name = [](const fs::path& path) {
 #ifdef _WIN32
-    // TODO Ideally this would not be needed - dolphin really should not have code directly mucking
-    // about with directory separators (for host paths - emulated paths may require it) and instead
-    // use fs::path to interact with them.
-    auto wpath = path.wstring();
-    std::ranges::replace(wpath, L'\\', L'/');
-    return WStringToUTF8(wpath);
+    return WStringToUTF8(path.generic_wstring());
 #else
     return PathToString(path);
 #endif
@@ -890,6 +885,8 @@ static void RebuildUserDirectories(unsigned int dir_index)
     s_user_paths[D_RESOURCEPACK_IDX] = s_user_paths[D_USER_IDX] + RESOURCEPACK_DIR DIR_SEP;
     s_user_paths[D_DYNAMICINPUT_IDX] = s_user_paths[D_LOAD_IDX] + DYNAMICINPUT_DIR DIR_SEP;
     s_user_paths[D_GRAPHICSMOD_IDX] = s_user_paths[D_LOAD_IDX] + GRAPHICSMOD_DIR DIR_SEP;
+    s_user_paths[D_BANNERS_WIIROOT_IDX] = s_user_paths[D_LOAD_IDX] + WIIBANNERS_DIR DIR_SEP;
+    s_user_paths[D_FIRMWARE_IDX] = s_user_paths[D_LOAD_IDX] + FIRMWARE_DIR DIR_SEP;
     s_user_paths[D_WIISDCARDSYNCFOLDER_IDX] = s_user_paths[D_LOAD_IDX] + WIISDSYNC_DIR DIR_SEP;
     s_user_paths[F_DOLPHINCONFIG_IDX] = s_user_paths[D_CONFIG_IDX] + DOLPHIN_CONFIG;
     s_user_paths[F_GCPADCONFIG_IDX] = s_user_paths[D_CONFIG_IDX] + GCPAD_CONFIG;
@@ -981,6 +978,7 @@ static void RebuildUserDirectories(unsigned int dir_index)
     s_user_paths[D_RIIVOLUTION_IDX] = s_user_paths[D_LOAD_IDX] + RIIVOLUTION_DIR DIR_SEP;
     s_user_paths[D_DYNAMICINPUT_IDX] = s_user_paths[D_LOAD_IDX] + DYNAMICINPUT_DIR DIR_SEP;
     s_user_paths[D_GRAPHICSMOD_IDX] = s_user_paths[D_LOAD_IDX] + GRAPHICSMOD_DIR DIR_SEP;
+    s_user_paths[D_BANNERS_WIIROOT_IDX] = s_user_paths[D_LOAD_IDX] + WIIBANNERS_DIR DIR_SEP;
     break;
   }
 }

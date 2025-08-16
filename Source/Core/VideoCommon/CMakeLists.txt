@@ -10,10 +10,11 @@ add_library(videocommon
   AbstractTexture.h
   Assets/CustomAsset.cpp
   Assets/CustomAsset.h
-  Assets/CustomAssetLibrary.cpp
   Assets/CustomAssetLibrary.h
   Assets/CustomAssetLoader.cpp
   Assets/CustomAssetLoader.h
+  Assets/CustomResourceManager.cpp
+  Assets/CustomResourceManager.h
   Assets/CustomTextureData.cpp
   Assets/CustomTextureData.h
   Assets/DirectFilesystemAssetLibrary.cpp
@@ -26,6 +27,10 @@ add_library(videocommon
   Assets/ShaderAsset.h
   Assets/TextureAsset.cpp
   Assets/TextureAsset.h
+  Assets/TextureAssetUtils.cpp
+  Assets/TextureAssetUtils.h
+  Assets/Types.h
+  Assets/WatchableFilesystemAssetLibrary.h
   AsyncRequests.cpp
   AsyncRequests.h
   AsyncShaderCompiler.cpp
@@ -49,6 +54,8 @@ add_library(videocommon
   CPUCullImpl.h
   DriverDetails.cpp
   DriverDetails.h
+  EFBInterface.cpp
+  EFBInterface.h
   Fifo.cpp
   Fifo.h
   FramebufferManager.cpp
@@ -134,8 +141,6 @@ add_library(videocommon
   PostProcessing.h
   Present.cpp
   Present.h
-  RenderBase.cpp
-  RenderBase.h
   RenderState.cpp
   RenderState.h
   ShaderCache.cpp

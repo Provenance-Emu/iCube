@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
-  <ItemGroup>
-    <ClInclude Include="AudioCommon\AudioCommon.h" />
-    <ClInclude Include="AudioCommon\AudioStretcher.h" />
+  <ItemGroup Condition="'$(EnableCubeb)'!='false'">
     <ClInclude Include="AudioCommon\CubebStream.h" />
     <ClInclude Include="AudioCommon\CubebUtils.h" />
+    <ClInclude Include="Core\HW\EXI\EXI_DeviceMic.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AudioCommon\AudioCommon.h" />
     <ClInclude Include="AudioCommon\Enums.h" />
     <ClInclude Include="AudioCommon\Mixer.h" />
     <ClInclude Include="AudioCommon\NullSoundStream.h" />
@@ -27,6 +29,7 @@
     <ClInclude Include="Common\BitSet.h" />
     <ClInclude Include="Common\BitUtils.h" />
     <ClInclude Include="Common\BlockingLoop.h" />
+    <ClInclude Include="Common\Buffer.h" />
     <ClInclude Include="Common\ChunkFile.h" />
     <ClInclude Include="Common\CodeBlock.h" />
     <ClInclude Include="Common\ColorUtil.h" />
@@ -56,12 +59,14 @@
     <ClInclude Include="Common\Event.h" />
     <ClInclude Include="Common\FatFsUtil.h" />
     <ClInclude Include="Common\FileSearch.h" />
+    <ClInclude Include="Common\FilesystemWatcher.h" />
     <ClInclude Include="Common\FileUtil.h" />
     <ClInclude Include="Common\FixedSizeQueue.h" />
     <ClInclude Include="Common\Flag.h" />
     <ClInclude Include="Common\FloatUtils.h" />
     <ClInclude Include="Common\FormatUtil.h" />
     <ClInclude Include="Common\FPURoundMode.h" />
+    <ClInclude Include="Common\Functional.h" />
     <ClInclude Include="Common\GekkoDisassembler.h" />
     <ClInclude Include="Common\GL\GLContext.h" />
     <ClInclude Include="Common\GL\GLExtensions\AMD_pinned_memory.h" />
@@ -144,6 +149,7 @@
     <ClInclude Include="Common\Network.h" />
     <ClInclude Include="Common\PcapFile.h" />
     <ClInclude Include="Common\Profiler.h" />
+    <ClInclude Include="Common\Projection.h" />
     <ClInclude Include="Common\QoSSession.h" />
     <ClInclude Include="Common\Random.h" />
     <ClInclude Include="Common\Result.h" />
@@ -171,6 +177,8 @@
     <ClInclude Include="Common\UPnP.h" />
     <ClInclude Include="Common\VariantUtil.h" />
     <ClInclude Include="Common\Version.h" />
+    <ClInclude Include="Common\WaitableFlag.h" />
+    <ClInclude Include="Common\WindowsDevice.h" />
     <ClInclude Include="Common\WindowsRegistry.h" />
     <ClInclude Include="Common\WindowSystemInfo.h" />
     <ClInclude Include="Common\WorkQueueThread.h" />
@@ -281,12 +289,12 @@
     <ClInclude Include="Core\HW\EXI\EXI_Device.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceAD16.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceAGP.h" />
+    <ClInclude Include="Core\HW\EXI\EXI_DeviceBaseboard.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceDummy.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceEthernet.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceGecko.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceIPL.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceMemoryCard.h" />
-    <ClInclude Include="Core\HW\EXI\EXI_DeviceMic.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceModem.h" />
     <ClInclude Include="Core\HW\EXI\EXI.h" />
     <ClInclude Include="Core\HW\GBACore.h" />
@@ -395,15 +403,19 @@
     <ClInclude Include="Core\IOS\USB\Bluetooth\BTEmu.h" />
     <ClInclude Include="Core\IOS\USB\Bluetooth\BTReal.h" />
     <ClInclude Include="Core\IOS\USB\Bluetooth\BTStub.h" />
+    <ClInclude Include="Core\IOS\USB\Bluetooth\LibUSBBluetoothAdapter.h" />
+    <ClInclude Include="Core\IOS\USB\Bluetooth\RealtekFirmwareLoader.h" />
     <ClInclude Include="Core\IOS\USB\Bluetooth\hci.h" />
     <ClInclude Include="Core\IOS\USB\Bluetooth\l2cap.h" />
     <ClInclude Include="Core\IOS\USB\Bluetooth\WiimoteDevice.h" />
     <ClInclude Include="Core\IOS\USB\Bluetooth\WiimoteHIDAttr.h" />
     <ClInclude Include="Core\IOS\USB\Common.h" />
     <ClInclude Include="Core\IOS\USB\Emulated\Infinity.h" />
+    <ClInclude Include="Core\IOS\USB\Emulated\Microphone.h" />
     <ClInclude Include="Core\IOS\USB\Emulated\Skylanders\Skylander.h" />
     <ClInclude Include="Core\IOS\USB\Emulated\Skylanders\SkylanderCrypto.h" />
     <ClInclude Include="Core\IOS\USB\Emulated\Skylanders\SkylanderFigure.h" />
+    <ClInclude Include="Core\IOS\USB\Emulated\WiiSpeak.h" />
     <ClInclude Include="Core\IOS\USB\Host.h" />
     <ClInclude Include="Core\IOS\USB\LibusbDevice.h" />
     <ClInclude Include="Core\IOS\USB\OH0\OH0.h" />
@@ -412,6 +424,7 @@
     <ClInclude Include="Core\IOS\USB\USB_HID\HIDv5.h" />
     <ClInclude Include="Core\IOS\USB\USB_KBD.h" />
     <ClInclude Include="Core\IOS\USB\USB_VEN\VEN.h" />
+    <ClInclude Include="Core\IOS\USB\USBScanner.h" />
     <ClInclude Include="Core\IOS\USB\USBV0.h" />
     <ClInclude Include="Core\IOS\USB\USBV4.h" />
     <ClInclude Include="Core\IOS\USB\USBV5.h" />
@@ -461,6 +474,7 @@
     <ClInclude Include="Core\System.h" />
     <ClInclude Include="Core\TimePlayed.h" />
     <ClInclude Include="Core\TitleDatabase.h" />
+    <ClInclude Include="Core\USBUtils.h" />
     <ClInclude Include="Core\WC24PatchEngine.h" />
     <ClInclude Include="Core\WiiRoot.h" />
     <ClInclude Include="Core\WiiUtils.h" />
@@ -537,6 +551,7 @@
     <ClInclude Include="InputCommon\ControllerInterface\Win32\Win32.h" />
     <ClInclude Include="InputCommon\ControllerInterface\XInput\XInput.h" />
     <ClInclude Include="InputCommon\ControllerInterface\SDL\SDL.h" />
+    <ClInclude Include="InputCommon\ControllerInterface\SDL\SDLGamepad.h" />
     <ClInclude Include="InputCommon\ControlReference\ControlReference.h" />
     <ClInclude Include="InputCommon\ControlReference\ExpressionParser.h" />
     <ClInclude Include="InputCommon\ControlReference\FunctionExpression.h" />
@@ -560,7 +575,6 @@
     <ClInclude Include="UICommon\ResourcePack\Manifest.h" />
     <ClInclude Include="UICommon\ResourcePack\ResourcePack.h" />
     <ClInclude Include="UICommon\UICommon.h" />
-    <ClInclude Include="UICommon\USBUtils.h" />
     <ClInclude Include="UpdaterCommon\UI.h" />
     <ClInclude Include="UpdaterCommon\UpdaterCommon.h" />
     <ClInclude Include="VideoBackends\D3D\D3DBase.h" />
@@ -615,14 +629,13 @@
     <ClInclude Include="VideoBackends\Software\Clipper.h" />
     <ClInclude Include="VideoBackends\Software\CopyRegion.h" />
     <ClInclude Include="VideoBackends\Software\EfbCopy.h" />
-    <ClInclude Include="VideoBackends\Software\EfbInterface.h" />
     <ClInclude Include="VideoBackends\Software\NativeVertexFormat.h" />
     <ClInclude Include="VideoBackends\Software\Rasterizer.h" />
     <ClInclude Include="VideoBackends\Software\SetupUnit.h" />
     <ClInclude Include="VideoBackends\Software\SWBoundingBox.h" />
+    <ClInclude Include="VideoBackends\Software\SWEfbInterface.h" />
     <ClInclude Include="VideoBackends\Software\SWGfx.h" />
     <ClInclude Include="VideoBackends\Software\SWOGLWindow.h" />
-    <ClInclude Include="VideoBackends\Software\SWRenderer.h" />
     <ClInclude Include="VideoBackends\Software\SWTexture.h" />
     <ClInclude Include="VideoBackends\Software\SWVertexLoader.h" />
     <ClInclude Include="VideoBackends\Software\Tev.h" />
@@ -630,7 +643,6 @@
     <ClInclude Include="VideoBackends\Software\TextureEncoder.h" />
     <ClInclude Include="VideoBackends\Software\TextureSampler.h" />
     <ClInclude Include="VideoBackends\Software\TransformUnit.h" />
-    <ClInclude Include="VideoBackends\Software\Vec3.h" />
     <ClInclude Include="VideoBackends\Software\VideoBackend.h" />
     <ClInclude Include="VideoBackends\Vulkan\CommandBufferManager.h" />
     <ClInclude Include="VideoBackends\Vulkan\Constants.h" />
@@ -660,12 +672,16 @@
     <ClInclude Include="VideoCommon\Assets\CustomAsset.h" />
     <ClInclude Include="VideoCommon\Assets\CustomAssetLibrary.h" />
     <ClInclude Include="VideoCommon\Assets\CustomAssetLoader.h" />
+    <ClInclude Include="VideoCommon\Assets\CustomResourceManager.h" />
     <ClInclude Include="VideoCommon\Assets\CustomTextureData.h" />
     <ClInclude Include="VideoCommon\Assets\DirectFilesystemAssetLibrary.h" />
     <ClInclude Include="VideoCommon\Assets\MaterialAsset.h" />
     <ClInclude Include="VideoCommon\Assets\MeshAsset.h" />
     <ClInclude Include="VideoCommon\Assets\ShaderAsset.h" />
     <ClInclude Include="VideoCommon\Assets\TextureAsset.h" />
+    <ClInclude Include="VideoCommon\Assets\TextureAssetUtils.h" />
+    <ClInclude Include="VideoCommon\Assets\Types.h" />
+    <ClInclude Include="VideoCommon\Assets\WatchableFilesystemAssetLibrary.h" />
     <ClInclude Include="VideoCommon\AsyncRequests.h" />
     <ClInclude Include="VideoCommon\AsyncShaderCompiler.h" />
     <ClInclude Include="VideoCommon\BoundingBox.h" />
@@ -680,6 +696,7 @@
     <ClInclude Include="VideoCommon\CPUCullImpl.h" />
     <ClInclude Include="VideoCommon\DataReader.h" />
     <ClInclude Include="VideoCommon\DriverDetails.h" />
+    <ClInclude Include="VideoCommon\EFBInterface.h" />
     <ClInclude Include="VideoCommon\Fifo.h" />
     <ClInclude Include="VideoCommon\FramebufferManager.h" />
     <ClInclude Include="VideoCommon\FramebufferShaderGen.h" />
@@ -729,7 +746,6 @@
     <ClInclude Include="VideoCommon\PixelShaderManager.h" />
     <ClInclude Include="VideoCommon\PostProcessing.h" />
     <ClInclude Include="VideoCommon\Present.h" />
-    <ClInclude Include="VideoCommon\RenderBase.h" />
     <ClInclude Include="VideoCommon\RenderState.h" />
     <ClInclude Include="VideoCommon\ShaderCache.h" />
     <ClInclude Include="VideoCommon\ShaderGenCommon.h" />
@@ -768,11 +784,13 @@
     <ClInclude Include="VideoCommon\XFStateManager.h" />
     <ClInclude Include="VideoCommon\XFStructs.h" />
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="AudioCommon\AudioCommon.cpp" />
-    <ClCompile Include="AudioCommon\AudioStretcher.cpp" />
+  <ItemGroup Condition="'$(EnableCubeb)'!='false'">
     <ClCompile Include="AudioCommon\CubebStream.cpp" />
     <ClCompile Include="AudioCommon\CubebUtils.cpp" />
+    <ClCompile Include="Core\HW\EXI\EXI_DeviceMic.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="AudioCommon\AudioCommon.cpp" />
     <ClCompile Include="AudioCommon\Mixer.cpp" />
     <ClCompile Include="AudioCommon\NullSoundStream.cpp" />
     <ClCompile Include="AudioCommon\OpenALStream.cpp" />
@@ -803,6 +821,7 @@
     <ClCompile Include="Common\ENet.cpp" />
     <ClCompile Include="Common\FatFsUtil.cpp" />
     <ClCompile Include="Common\FileSearch.cpp" />
+    <ClCompile Include="Common\FilesystemWatcher.cpp" />
     <ClCompile Include="Common\FileUtil.cpp" />
     <ClCompile Include="Common\FloatUtils.cpp" />
     <ClCompile Include="Common\GekkoDisassembler.cpp" />
@@ -843,6 +862,7 @@
     <ClCompile Include="Common\TimeUtil.cpp" />
     <ClCompile Include="Common\TraversalClient.cpp" />
     <ClCompile Include="Common\UPnP.cpp" />
+    <ClCompile Include="Common\WindowsDevice.cpp" />
     <ClCompile Include="Common\WindowsRegistry.cpp" />
     <ClCompile Include="Common\Version.cpp" />
     <ClCompile Include="Core\AchievementManager.cpp" />
@@ -950,12 +970,12 @@
     <ClCompile Include="Core\HW\EXI\EXI_Device.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceAD16.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceAGP.cpp" />
+    <ClCompile Include="Core\HW\EXI\EXI_DeviceBaseboard.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceDummy.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceEthernet.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceGecko.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceIPL.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceMemoryCard.cpp" />
-    <ClCompile Include="Core\HW\EXI\EXI_DeviceMic.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceModem.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI.cpp" />
     <ClCompile Include="Core\HW\GBACore.cpp" />
@@ -1062,13 +1082,17 @@
     <ClCompile Include="Core\IOS\USB\Bluetooth\BTEmu.cpp" />
     <ClCompile Include="Core\IOS\USB\Bluetooth\BTReal.cpp" />
     <ClCompile Include="Core\IOS\USB\Bluetooth\BTStub.cpp" />
+    <ClCompile Include="Core\IOS\USB\Bluetooth\LibUSBBluetoothAdapter.cpp" />
+    <ClCompile Include="Core\IOS\USB\Bluetooth\RealtekFirmwareLoader.cpp" />
     <ClCompile Include="Core\IOS\USB\Bluetooth\WiimoteDevice.cpp" />
     <ClCompile Include="Core\IOS\USB\Bluetooth\WiimoteHIDAttr.cpp" />
     <ClCompile Include="Core\IOS\USB\Common.cpp" />
     <ClCompile Include="Core\IOS\USB\Emulated\Infinity.cpp" />
+    <ClCompile Include="Core\IOS\USB\Emulated\Microphone.cpp" />
     <ClCompile Include="Core\IOS\USB\Emulated\Skylanders\Skylander.cpp" />
     <ClCompile Include="Core\IOS\USB\Emulated\Skylanders\SkylanderCrypto.cpp" />
     <ClCompile Include="Core\IOS\USB\Emulated\Skylanders\SkylanderFigure.cpp" />
+    <ClCompile Include="Core\IOS\USB\Emulated\WiiSpeak.cpp" />
     <ClCompile Include="Core\IOS\USB\Host.cpp" />
     <ClCompile Include="Core\IOS\USB\LibusbDevice.cpp" />
     <ClCompile Include="Core\IOS\USB\OH0\OH0.cpp" />
@@ -1077,6 +1101,7 @@
     <ClCompile Include="Core\IOS\USB\USB_HID\HIDv5.cpp" />
     <ClCompile Include="Core\IOS\USB\USB_KBD.cpp" />
     <ClCompile Include="Core\IOS\USB\USB_VEN\VEN.cpp" />
+    <ClCompile Include="Core\IOS\USB\USBScanner.cpp" />
     <ClCompile Include="Core\IOS\USB\USBV0.cpp" />
     <ClCompile Include="Core\IOS\USB\USBV4.cpp" />
     <ClCompile Include="Core\IOS\USB\USBV5.cpp" />
@@ -1128,6 +1153,7 @@
     <ClCompile Include="Core\System.cpp" />
     <ClCompile Include="Core\TimePlayed.cpp" />
     <ClCompile Include="Core\TitleDatabase.cpp" />
+    <ClCompile Include="Core\USBUtils.cpp" />
     <ClCompile Include="Core\WiiRoot.cpp" />
     <ClCompile Include="Core\WiiUtils.cpp" />
     <ClCompile Include="Core\WC24PatchEngine.cpp" />
@@ -1199,6 +1225,7 @@
     <ClCompile Include="InputCommon\ControllerInterface\Win32\Win32.cpp" />
     <ClCompile Include="InputCommon\ControllerInterface\XInput\XInput.cpp" />
     <ClCompile Include="InputCommon\ControllerInterface\SDL\SDL.cpp" />
+    <ClCompile Include="InputCommon\ControllerInterface\SDL\SDLGamepad.cpp" />
     <ClCompile Include="InputCommon\ControlReference\ControlReference.cpp" />
     <ClCompile Include="InputCommon\ControlReference\ExpressionParser.cpp" />
     <ClCompile Include="InputCommon\ControlReference\FunctionExpression.cpp" />
@@ -1219,7 +1246,6 @@
     <ClCompile Include="UICommon\ResourcePack\Manifest.cpp" />
     <ClCompile Include="UICommon\ResourcePack\ResourcePack.cpp" />
     <ClCompile Include="UICommon\UICommon.cpp" />
-    <ClCompile Include="UICommon\USBUtils.cpp" />
     <ClCompile Include="UpdaterCommon\UpdaterCommon.cpp" />
     <ClCompile Include="VideoBackends\D3D\D3DBase.cpp" />
     <ClCompile Include="VideoBackends\D3D\D3DBoundingBox.cpp" />
@@ -1269,14 +1295,13 @@
     <ClCompile Include="VideoBackends\OGL\SamplerCache.cpp" />
     <ClCompile Include="VideoBackends\Software\Clipper.cpp" />
     <ClCompile Include="VideoBackends\Software\EfbCopy.cpp" />
-    <ClCompile Include="VideoBackends\Software\EfbInterface.cpp" />
     <ClCompile Include="VideoBackends\Software\Rasterizer.cpp" />
     <ClCompile Include="VideoBackends\Software\SetupUnit.cpp" />
     <ClCompile Include="VideoBackends\Software\SWmain.cpp" />
     <ClCompile Include="VideoBackends\Software\SWBoundingBox.cpp" />
+    <ClCompile Include="VideoBackends\Software\SWEfbInterface.cpp" />
     <ClCompile Include="VideoBackends\Software\SWGfx.cpp" />
     <ClCompile Include="VideoBackends\Software\SWOGLWindow.cpp" />
-    <ClCompile Include="VideoBackends\Software\SWRenderer.cpp" />
     <ClCompile Include="VideoBackends\Software\SWTexture.cpp" />
     <ClCompile Include="VideoBackends\Software\SWVertexLoader.cpp" />
     <ClCompile Include="VideoBackends\Software\Tev.cpp" />
@@ -1306,14 +1331,15 @@
     <ClCompile Include="VideoCommon\AbstractStagingTexture.cpp" />
     <ClCompile Include="VideoCommon\AbstractTexture.cpp" />
     <ClCompile Include="VideoCommon\Assets\CustomAsset.cpp" />
-    <ClCompile Include="VideoCommon\Assets\CustomAssetLibrary.cpp" />
     <ClCompile Include="VideoCommon\Assets\CustomAssetLoader.cpp" />
+    <ClCompile Include="VideoCommon\Assets\CustomResourceManager.cpp" />
     <ClCompile Include="VideoCommon\Assets\CustomTextureData.cpp" />
     <ClCompile Include="VideoCommon\Assets\DirectFilesystemAssetLibrary.cpp" />
     <ClCompile Include="VideoCommon\Assets\MaterialAsset.cpp" />
     <ClCompile Include="VideoCommon\Assets\MeshAsset.cpp" />
     <ClCompile Include="VideoCommon\Assets\ShaderAsset.cpp" />
     <ClCompile Include="VideoCommon\Assets\TextureAsset.cpp" />
+    <ClCompile Include="VideoCommon\Assets\TextureAssetUtils.cpp" />
     <ClCompile Include="VideoCommon\AsyncRequests.cpp" />
     <ClCompile Include="VideoCommon\AsyncShaderCompiler.cpp" />
     <ClCompile Include="VideoCommon\BoundingBox.cpp" />
@@ -1324,6 +1350,7 @@
     <ClCompile Include="VideoCommon\CPMemory.cpp" />
     <ClCompile Include="VideoCommon\CPUCull.cpp" />
     <ClCompile Include="VideoCommon\DriverDetails.cpp" />
+    <ClCompile Include="VideoCommon\EFBInterface.cpp" />
     <ClCompile Include="VideoCommon\Fifo.cpp" />
     <ClCompile Include="VideoCommon\FramebufferManager.cpp" />
     <ClCompile Include="VideoCommon\FramebufferShaderGen.cpp" />
@@ -1364,7 +1391,6 @@
     <ClCompile Include="VideoCommon\PixelShaderManager.cpp" />
     <ClCompile Include="VideoCommon\PostProcessing.cpp" />
     <ClCompile Include="VideoCommon\Present.cpp" />
-    <ClCompile Include="VideoCommon\RenderBase.cpp" />
     <ClCompile Include="VideoCommon\RenderState.cpp" />
     <ClCompile Include="VideoCommon\ShaderCache.cpp" />
     <ClCompile Include="VideoCommon\ShaderGenCommon.cpp" />

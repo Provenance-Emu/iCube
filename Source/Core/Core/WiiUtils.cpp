@@ -43,6 +43,7 @@
 #include "Core/SysConf.h"
 #include "Core/System.h"
 #include "DiscIO/DiscExtractor.h"
+#include "DiscIO/DiscUtils.h"
 #include "DiscIO/Enums.h"
 #include "DiscIO/Filesystem.h"
 #include "DiscIO/VolumeDisc.h"
@@ -84,7 +85,7 @@ static bool ImportWAD(IOS::HLE::Kernel& ios, const DiscIO::VolumeWAD& wad,
     return false;
   }
 
-  const bool contents_imported = [&]() {
+  const bool contents_imported = [&] {
     const u64 title_id = tmd.GetTitleId();
     for (const IOS::ES::Content& content : tmd.GetContents())
     {
@@ -583,7 +584,7 @@ UpdateResult OnlineSystemUpdater::InstallTitleFromNUS(const std::string& prefix_
 
   // Now download and install contents listed in the TMD.
   const std::vector<IOS::ES::Content> stored_contents = es.GetStoredContentsFromTMD(tmd.first);
-  const UpdateResult import_result = [&]() {
+  const UpdateResult import_result = [&] {
     for (const IOS::ES::Content& content : tmd.first.GetContents())
     {
       const bool is_already_installed =
@@ -743,10 +744,9 @@ UpdateResult DiscSystemUpdater::DoDiscUpdate()
     return UpdateResult::RegionMismatch;
 
   const auto partitions = m_volume->GetPartitions();
-  const auto update_partition =
-      std::find_if(partitions.cbegin(), partitions.cend(), [&](const DiscIO::Partition& partition) {
-        return m_volume->GetPartitionType(partition) == 1u;
-      });
+  const auto update_partition = std::ranges::find(
+      partitions, DiscIO::PARTITION_UPDATE,
+      [&](const DiscIO::Partition& partition) { return m_volume->GetPartitionType(partition); });
 
   if (update_partition == partitions.cend())
   {

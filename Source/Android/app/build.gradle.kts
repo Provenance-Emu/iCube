@@ -7,7 +7,7 @@ plugins {
 
 @Suppress("UnstableApiUsage")
 android {
-    compileSdkVersion = "android-34"
+    compileSdkVersion = "android-36"
     ndkVersion = "27.0.12077973"
 
     buildFeatures {
@@ -40,7 +40,7 @@ android {
     defaultConfig {
         applicationId = "org.dolphinemu.dolphinemu"
         minSdk = 21
-        targetSdk = 34
+        targetSdk = 36
 
         versionCode = getBuildVersionCode()
 
@@ -152,6 +152,8 @@ dependencies {
 
     // For loading custom GPU drivers
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     implementation("com.nononsenseapps:filepicker:4.2.1")
 }

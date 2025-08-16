@@ -211,6 +211,7 @@ std::unique_ptr<DXStagingTexture> DXStagingTexture::Create(StagingTextureType ty
 {
   D3D11_USAGE usage;
   UINT cpu_flags;
+  UINT bind_flags = 0;
   if (type == StagingTextureType::Readback)
   {
     usage = D3D11_USAGE_STAGING;
@@ -220,6 +221,7 @@ std::unique_ptr<DXStagingTexture> DXStagingTexture::Create(StagingTextureType ty
   {
     usage = D3D11_USAGE_DYNAMIC;
     cpu_flags = D3D11_CPU_ACCESS_WRITE;
+    bind_flags = D3D11_BIND_SHADER_RESOURCE;
   }
   else
   {
@@ -228,7 +230,7 @@ std::unique_ptr<DXStagingTexture> DXStagingTexture::Create(StagingTextureType ty
   }
 
   CD3D11_TEXTURE2D_DESC desc(D3DCommon::GetDXGIFormatForAbstractFormat(config.format, false),
-                             config.width, config.height, 1, 1, 0, usage, cpu_flags);
+                             config.width, config.height, 1, 1, bind_flags, usage, cpu_flags);
 
   ComPtr<ID3D11Texture2D> texture;
   HRESULT hr = D3D::device->CreateTexture2D(&desc, nullptr, texture.GetAddressOf());
@@ -317,7 +319,7 @@ bool DXStagingTexture::Map()
   if (m_type == StagingTextureType::Readback)
     map_type = D3D11_MAP_READ;
   else if (m_type == StagingTextureType::Upload)
-    map_type = D3D11_MAP_WRITE;
+    map_type = D3D11_MAP_WRITE_DISCARD;
   else
     map_type = D3D11_MAP_READ_WRITE;
 
@@ -327,7 +329,7 @@ bool DXStagingTexture::Map()
   if (FAILED(hr))
     return false;
 
-  m_map_pointer = reinterpret_cast<char*>(sr.pData);
+  m_map_pointer = static_cast<char*>(sr.pData);
   m_map_stride = sr.RowPitch;
   return true;
 }
@@ -452,7 +454,7 @@ DXFramebuffer::Create(DXTexture* color_attachment, DXTexture* depth_attachment,
     // Only create the integer RTV when logic ops are supported (Win8+).
     DXGI_FORMAT integer_format =
         D3DCommon::GetRTVFormatForAbstractFormat(color_attachment->GetFormat(), true);
-    if (g_ActiveConfig.backend_info.bSupportsLogicOp && integer_format != desc.Format)
+    if (g_backend_info.bSupportsLogicOp && integer_format != desc.Format)
     {
       desc.Format = integer_format;
       hr = D3D::device->CreateRenderTargetView(color_attachment->GetD3DTexture(), &desc,

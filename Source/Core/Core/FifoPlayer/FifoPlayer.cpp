@@ -220,7 +220,7 @@ class FifoPlayer::CPUCore final : public CPUCoreBase
 public:
   explicit CPUCore(FifoPlayer* parent) : m_parent(parent) {}
   CPUCore(const CPUCore&) = delete;
-  ~CPUCore() {}
+  ~CPUCore() override {}
   CPUCore& operator=(const CPUCore&) = delete;
 
   void Init() override
@@ -262,7 +262,6 @@ public:
 
       case CPU::State::Stepping:
         cpu.Break();
-        Host_UpdateMainFrame();
         break;
 
       case CPU::State::Running:
