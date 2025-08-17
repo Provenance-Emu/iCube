@@ -26,6 +26,10 @@
 #endif
 
 #if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+#if defined(__APPLE__)
 #ifdef _M_X86_64
 #define THREAD_STATE64_COUNT x86_THREAD_STATE64_COUNT
 #define THREAD_STATE64 x86_THREAD_STATE64
@@ -119,7 +123,7 @@ bool IsExceptionHandlerSupported()
   return true;
 }
 
-#elif defined(__APPLE__) && !defined(USE_SIGACTION_ON_APPLE)
+#elif defined(__APPLE__) && !defined(USE_SIGACTION_ON_APPLE) && TARGET_OS_OSX
 
 static void CheckKR(const char* name, kern_return_t kr)
 {
@@ -255,7 +259,7 @@ bool IsExceptionHandlerSupported()
   return true;
 }
 
-#elif defined(_POSIX_VERSION) && !defined(_M_GENERIC)
+#elif defined(_POSIX_VERSION) && !defined(_M_GENERIC) && !(defined(__APPLE__) && !TARGET_OS_OSX)
 
 static struct sigaction old_sa_segv;
 static struct sigaction old_sa_bus;
@@ -369,7 +373,7 @@ bool IsExceptionHandlerSupported()
   return true;
 }
 
-#else  // _M_GENERIC or unsupported platform
+#else  // _M_GENERIC or unsupported platform (including iOS/tvOS where handlers are unavailable)
 
 void InstallExceptionHandler()
 {
