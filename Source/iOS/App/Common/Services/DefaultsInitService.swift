@@ -7,22 +7,27 @@ class DefaultsInitService : UIResponder, UIApplicationDelegate {
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
     // Create the Documents folder in case it doesn't exist
     let userFolder: String = UserFolderUtil.getUserFolder()
-    try! FileManager.default.createDirectory(atPath: userFolder, withIntermediateDirectories: true, attributes: nil)
-    
-    let softwareFolder: String = UserFolderUtil.getSoftwareFolder()
-    try! FileManager.default.createDirectory(atPath: softwareFolder, withIntermediateDirectories: true, attributes: nil)
-    
-    // Set NSURLIsExcludedFromBackupKey on the folder and all its subcontents
-    
-    var softwareResourceValues = URLResourceValues()
-    softwareResourceValues.isExcludedFromBackup = true
-    
-    var softwareFolderUrl: URL = URL(fileURLWithPath: softwareFolder)
-    try! softwareFolderUrl.setResourceValues(softwareResourceValues)
-    
-#if targetEnvironment(simulator)
-    NSLog("User folder: %@", userFolder)
-#endif
+    do {
+      try FileManager.default.createDirectory(atPath: userFolder, withIntermediateDirectories: true, attributes: nil)
+      
+      let softwareFolder: String = UserFolderUtil.getSoftwareFolder()
+      try FileManager.default.createDirectory(atPath: softwareFolder, withIntermediateDirectories: true, attributes: nil)
+      
+      // Set NSURLIsExcludedFromBackupKey on the folder and all its subcontents
+      
+      var softwareResourceValues = URLResourceValues()
+      softwareResourceValues.isExcludedFromBackup = true
+      
+      var softwareFolderUrl: URL = URL(fileURLWithPath: softwareFolder)
+      try softwareFolderUrl.setResourceValues(softwareResourceValues)
+      
+  #if targetEnvironment(simulator)
+      NSLog("User folder: %@", userFolder)
+  #endif
+
+    } catch {
+      NSLog("Error creating user folder: \(error)")
+    }
     
     return true
   }
