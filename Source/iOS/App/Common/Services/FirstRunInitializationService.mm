@@ -47,7 +47,7 @@
     [self importDefaultProfileForInputConfig:Pad::GetConfig()];
     [self importDefaultProfileForInputConfig:Wiimote::GetConfig()];
     
-    Config::SetBase(Config::MAIN_GFX_BACKEND, "Metal");
+    Config::SetBase(Config::MAIN_GFX_BACKEND, std::string("Metal"));
     
     [[BootNoticeManager shared] enqueueViewController:[[UnofficialBuildNoticeViewController alloc] initWithNibName:@"UnofficialBuildNotice" bundle:nil]];
   }

@@ -12,7 +12,6 @@
 #import "Core/Core.h"
 #import "Core/System.h"
 
-#import "VideoCommon/RenderBase.h"
 #import "VideoCommon/Present.h"
 
 #import "EmulationBootParameter.h"

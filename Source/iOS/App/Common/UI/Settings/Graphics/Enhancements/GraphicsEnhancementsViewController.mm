@@ -40,7 +40,7 @@
     self.resolutionCell.choiceSettingLabel.text = DOLCoreLocalizedString(@"Auto");
   }
   
-  const int maxAnisotropy = Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
+  const int maxAnisotropy = static_cast<int>(Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY));
   const TextureFilteringMode filteringMode = Config::Get(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING);
   
   NSString* filteringAnisotropy;

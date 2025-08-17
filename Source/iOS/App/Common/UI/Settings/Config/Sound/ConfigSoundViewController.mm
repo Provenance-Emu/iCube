@@ -21,7 +21,8 @@
 - (void)viewDidLoad {
   [super viewDidLoad];
   
-  bool stretchingEnabled = Config::Get(Config::MAIN_AUDIO_STRETCH);
+  int initialLatency = Config::Get(Config::MAIN_AUDIO_LATENCY);
+  bool stretchingEnabled = initialLatency > 0;
   
   self.stretchingSwitch.on = stretchingEnabled;
   [self.stretchingSwitch addValueChangedTarget:self action:@selector(stretchingChanged)];
@@ -31,7 +32,7 @@
   
   [self updateVolumeLabel];
   
-  self.bufferSizeSlider.value = Config::Get(Config::MAIN_AUDIO_STRETCH_LATENCY);
+  self.bufferSizeSlider.value = initialLatency;
   self.bufferSizeSlider.enabled = stretchingEnabled;
   
   [self updateBufferSizeLabel];
@@ -61,26 +62,29 @@
   self.volumeLabel.text = [NSString stringWithFormat:@"%d%%", volume];
 }
 
-- (void)stretchingChanged {
+-(void)stretchingChanged {
   bool stretchingEnabled = self.stretchingSwitch.on;
   
-  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_STRETCH, stretchingEnabled);
-  
   self.bufferSizeSlider.enabled = stretchingEnabled;
+  
+  // Update latency: when disabling, set 0; when enabling, preserve current slider value.
+  int newLatency = stretchingEnabled ? (int)self.bufferSizeSlider.value : 0;
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_LATENCY, newLatency);
+  [self updateBufferSizeLabel];
   
   // There is a bug on iOS 14+ where a UISlider won't update its appearance when enabled is toggled.
   [self.bufferSizeSlider setNeedsLayout];
   [self.bufferSizeSlider layoutIfNeeded];
 }
 
-- (IBAction)bufferSizeChanged:(id)sender {
-  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_STRETCH_LATENCY, (int)self.bufferSizeSlider.value);
+-(IBAction)bufferSizeChanged:(id)sender {
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_LATENCY, (int)self.bufferSizeSlider.value);
   
   [self updateBufferSizeLabel];
 }
 
-- (void)updateBufferSizeLabel {
-  int bufferSize = Config::Get(Config::MAIN_AUDIO_STRETCH_LATENCY);
+-(void)updateBufferSizeLabel {
+  int bufferSize = Config::Get(Config::MAIN_AUDIO_LATENCY);
   self.bufferSizeLabel.text = [NSString stringWithFormat:DOLCoreLocalizedStringWithArgs(@"%1 ms", @"d"), bufferSize];
 }
 

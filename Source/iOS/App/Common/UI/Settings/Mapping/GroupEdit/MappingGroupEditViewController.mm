@@ -38,7 +38,7 @@ typedef NS_ENUM(NSInteger, DOLMappingGroupEditSection) {
 }
 
 - (void)enableSwitchValueDidChange:(MappingGroupEditEnabledCell*)cell {
-  self.controlGroup->enabled = cell.enabledSwitch.on;
+  self.controlGroup->enabled.SetValue(cell.enabledSwitch.on);
   
   for (int i = 0; i < self.controlGroup->controls.size(); i++) {
     MappingGroupEditControlCell* controlCell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:i inSection:DOLMappingGroupEditSectionControls]];
@@ -71,21 +71,21 @@ typedef NS_ENUM(NSInteger, DOLMappingGroupEditSection) {
 }
 
 - (void)updateControlCellBasedOnEnabled:(MappingGroupEditControlCell*)cell {
-  bool enabled = self.controlGroup->enabled;
+  bool enabled = self.controlGroup->enabled.GetValue();
   
   cell.selectionStyle = enabled ? UITableViewCellSelectionStyleDefault : UITableViewCellSelectionStyleNone;
   cell.nameLabel.textColor = enabled ? [UIColor labelColor] : [UIColor systemGrayColor];
 }
 
 - (void)updateDoubleCellBasedOnEnabled:(MappingGroupEditDoubleCell*)cell {
-  bool enabled = self.controlGroup->enabled;
+  bool enabled = self.controlGroup->enabled.GetValue();
   
   cell.nameLabel.textColor = enabled ? [UIColor labelColor] : [UIColor systemGrayColor];
   cell.textField.enabled = enabled;
 }
 
 - (void)updateBoolCellBasedOnEnabled:(MappingGroupEditBoolCell*)cell {
-  bool enabled = self.controlGroup->enabled;
+  bool enabled = self.controlGroup->enabled.GetValue();
   
   cell.nameLabel.textColor = enabled ? [UIColor labelColor] : [UIColor systemGrayColor];
   cell.enabledSwitch.enabled = enabled;
@@ -194,7 +194,7 @@ typedef NS_ENUM(NSInteger, DOLMappingGroupEditSection) {
       MappingGroupEditEnabledCell* enabledCell = [tableView dequeueReusableCellWithIdentifier:@"EnabledCell" forIndexPath:indexPath];
       
       enabledCell.delegate = self;
-      enabledCell.enabledSwitch.on = self.controlGroup->enabled;
+      enabledCell.enabledSwitch.on = self.controlGroup->enabled.GetValue();
       
       return enabledCell;
     }

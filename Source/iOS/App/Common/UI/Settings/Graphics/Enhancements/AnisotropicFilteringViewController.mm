@@ -18,7 +18,7 @@
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
   
-  const int maxAnisotropy = Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
+  const int maxAnisotropy = static_cast<int>(Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY));
   const TextureFilteringMode filteringMode = Config::Get(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING);
   
   if (filteringMode == TextureFilteringMode::Default) {
@@ -89,7 +89,8 @@
         break;
     }
     
-    Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY, maxAnisotropy);
+    Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY,
+                    static_cast<AnisotropicFilteringMode>(maxAnisotropy));
     Config::SetBase(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING, filteringMode);
     
     UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];

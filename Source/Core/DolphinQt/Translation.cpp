@@ -320,7 +320,7 @@ void Translation::Initialize()
     ModalMessageBox::warning(
         nullptr, QObject::tr("Error"),
         QObject::tr("Error loading selected language. Falling back to system default."));
-    Config::SetBase(Config::MAIN_INTERFACE_LANGUAGE, "");
+    Config::SetBase(Config::MAIN_INTERFACE_LANGUAGE, std::string());
   }
 
   for (const auto& lang : QLocale::system().uiLanguages())

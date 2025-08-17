@@ -12,6 +12,9 @@
 #import "InputCommon/ControlReference/ControlReference.h"
 #import "InputCommon/ControllerInterface/ControllerInterface.h"
 #import "InputCommon/ControllerInterface/MappingCommon.h"
+// Needed for ciface::Core::InputDetector
+#import "InputCommon/ControllerInterface/CoreDevice.h"
+#import <thread>
 
 #import "FoundationStringUtil.h"
 #import "LocalizationUtil.h"
@@ -79,7 +82,20 @@
         devices = {defaultDevice.ToString()};
       }
       
-      auto detections = g_controller_interface.DetectInput(devices, initial_time, confirmation_time, maximum_time);
+      // Use the new InputDetector API
+      ciface::Core::InputDetector detector;
+      detector.Start(g_controller_interface, std::span<const std::string>(devices.data(), devices.size()));
+
+      // Poll until detection completes or times out; small sleep to avoid busy wait
+      while (!detector.IsComplete())
+      {
+        detector.Update(std::chrono::duration_cast<std::chrono::milliseconds>(initial_time),
+                        confirmation_time,
+                        std::chrono::duration_cast<std::chrono::milliseconds>(maximum_time));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+
+      auto detections = detector.TakeResults();
       
       ciface::MappingCommon::RemoveSpuriousTriggerCombinations(&detections);
       
