@@ -264,7 +264,7 @@ void Metal::Util::PopulateBackendInfoFeatures(VideoConfig* config, id<MTLDevice>
   config->backend_info.bSupportsDepthClamp = true;
   config->backend_info.bSupportsST3CTextures = true;
   config->backend_info.bSupportsBPTCTextures = true;
-#else
+#elif TARGET_OS_IOS
   bool supports_apple4 = false;
   bool supports_bcn = false;
   if (@available(iOS 13, *))
@@ -272,6 +272,18 @@ void Metal::Util::PopulateBackendInfoFeatures(VideoConfig* config, id<MTLDevice>
   else
     supports_apple4 = [device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1];
   if (@available(iOS 16.4, *))
+    supports_bcn = [device supportsBCTextureCompression];
+  config->backend_info.bSupportsDepthClamp = supports_apple4;
+  config->backend_info.bSupportsST3CTextures = supports_bcn;
+  config->backend_info.bSupportsBPTCTextures = supports_bcn;
+
+  config->backend_info.bSupportsFramebufferFetch = true;
+#elif TARGET_OS_TV
+  bool supports_apple4 = false;
+  bool supports_bcn = false;
+  if (@available(tvOS 13, *))
+    supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
+  if (@available(tvOS 16.4, *))
     supports_bcn = [device supportsBCTextureCompression];
   config->backend_info.bSupportsDepthClamp = supports_apple4;
   config->backend_info.bSupportsST3CTextures = supports_bcn;
@@ -561,7 +573,7 @@ std::optional<std::string> Metal::Util::TranslateShaderToMSL(ShaderStage stage,
   spirv_cross::CompilerMSL::Options options;
 #if TARGET_OS_OSX
   options.platform = spirv_cross::CompilerMSL::Options::macOS;
-#elif TARGET_OS_IOS
+#elif TARGET_OS_IOS || TARGET_OS_TV
   options.platform = spirv_cross::CompilerMSL::Options::iOS;
   // Otherwise SPIRV-Cross will try to compile subgroup ops to quad ops instead
   // (And crash because there's no quad_min or quad_max)

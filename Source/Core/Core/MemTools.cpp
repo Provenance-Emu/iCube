@@ -7,6 +7,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 #include "Common/Assert.h"
 #include "Common/CommonFuncs.h"
@@ -119,7 +122,7 @@ bool IsExceptionHandlerSupported()
   return true;
 }
 
-#elif defined(__APPLE__) && !defined(USE_SIGACTION_ON_APPLE)
+#elif defined(__APPLE__) && !defined(USE_SIGACTION_ON_APPLE) && !(defined(TARGET_OS_TV) && TARGET_OS_TV)
 
 static void CheckKR(const char* name, kern_return_t kr)
 {
