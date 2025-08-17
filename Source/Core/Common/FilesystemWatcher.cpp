@@ -3,7 +3,9 @@
 
 #include "Common/FilesystemWatcher.h"
 
-#include <wtr/watcher.hpp>
+#if COMMON_WATCHER_ENABLED
+ #include <wtr/watcher.hpp>
+#endif
 
 #include "Common/Logging/Log.h"
 #include "Common/StringUtil.h"
@@ -15,6 +17,7 @@ FilesystemWatcher::~FilesystemWatcher() = default;
 
 void FilesystemWatcher::Watch(const std::string& path)
 {
+#if COMMON_WATCHER_ENABLED
   const auto [iter, inserted] = m_watched_paths.try_emplace(path, nullptr);
   if (inserted)
   {
@@ -58,6 +61,10 @@ void FilesystemWatcher::Watch(const std::string& path)
       }
     });
   }
+#else
+  // Watcher not supported on this platform; maintain a record only
+  m_watched_paths[path] = true;
+#endif
 }
 
 void FilesystemWatcher::Unwatch(const std::string& path)

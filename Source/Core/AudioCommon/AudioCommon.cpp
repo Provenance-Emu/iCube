@@ -98,7 +98,7 @@ void ShutdownSoundStream(Core::System& system)
 std::string GetDefaultSoundBackend()
 {
 #if defined(IPHONEOS)
-  return = BACKEND_COREAUDIO;
+  return BACKEND_COREAUDIO;
 #endif
 
 #if defined(ANDROID)

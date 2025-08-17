@@ -8,13 +8,22 @@
 #include <string>
 #include <string_view>
 
-namespace wtr
-{
-inline namespace watcher
-{
-class watch;
-}
-}  // namespace wtr
+#if defined(__APPLE__)
+ #include <TargetConditionals.h>
+#endif
+
+#if defined(__APPLE__) && !TARGET_OS_IPHONE && !TARGET_OS_TV
+ #define COMMON_WATCHER_ENABLED 1
+ namespace wtr
+ {
+ inline namespace watcher
+ {
+ class watch;
+ }
+ }  // namespace wtr
+#else
+ #define COMMON_WATCHER_ENABLED 0
+#endif
 
 namespace Common
 {
@@ -42,6 +51,11 @@ private:
   // A file or folder was deleted in one of the watched paths
   virtual void PathDeleted(std::string_view path) {}
 
-  std::map<std::string, std::unique_ptr<wtr::watch>> m_watched_paths;
+ #if COMMON_WATCHER_ENABLED
+   std::map<std::string, std::unique_ptr<wtr::watch>> m_watched_paths;
+ #else
+   // Placeholder to track watched paths when watcher is disabled on platform
+   std::map<std::string, bool> m_watched_paths;
+ #endif
 };
 }  // namespace Common
