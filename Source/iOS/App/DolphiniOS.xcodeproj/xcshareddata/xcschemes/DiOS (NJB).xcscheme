@@ -70,6 +70,16 @@
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
       debugDocumentVersioning = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "B9DC3DF527EFBD2C0084DAA4"
+            BuildableName = "DolphiniOS.app"
+            BlueprintName = "DolphiniOS"
+            ReferencedContainer = "container:DolphiniOS.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug (Non-Jailbroken)">
