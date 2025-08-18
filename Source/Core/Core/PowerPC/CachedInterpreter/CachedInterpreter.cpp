@@ -59,6 +59,9 @@ void CachedInterpreter::Shutdown()
   m_block_cache.Shutdown();
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 void CachedInterpreter::ExecuteOneBlock()
 {
   const u8* normal_entry = m_block_cache.Dispatch();
@@ -72,13 +75,16 @@ void CachedInterpreter::ExecuteOneBlock()
   while (true)
   {
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
-    if (const auto distance = callback(ppc_state, normal_entry + sizeof(callback)))
+    if (const auto distance = callback(ppc_state, normal_entry + sizeof(callback))) [[likely]]
       normal_entry += distance;
     else
       break;
   }
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 void CachedInterpreter::Run()
 {
   auto& core_timing = m_system.GetCoreTiming();
