@@ -137,6 +137,15 @@ void VertexLoaderARM64::ReadVertex(VertexComponentFormat attribute, ComponentFor
       m_float_emit.REV16(8, EncodeRegToDouble(coords), EncodeRegToDouble(coords));
       m_float_emit.SXTL(16, EncodeRegToDouble(coords), EncodeRegToDouble(coords));
       break;
+    // The following formats are not expected here because of the enclosing
+    // 'if (format < ComponentFormat::Float)'. They are included to satisfy
+    // -Wswitch exhaustive checking on enum classes.
+    case ComponentFormat::Float:
+    case ComponentFormat::InvalidFloat5:
+    case ComponentFormat::InvalidFloat6:
+    case ComponentFormat::InvalidFloat7:
+      // Unreachable in this branch; handled by the else path below.
+      break;
     }
 
     m_float_emit.SCVTF(32, coords, coords);
