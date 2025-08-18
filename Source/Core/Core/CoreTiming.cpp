@@ -469,7 +469,8 @@ void CoreTimingManager::Idle()
   }
 
   auto& ppc_state = m_system.GetPPCState();
-  PowerPC::UpdatePerformanceMonitor(ppc_state.downcount, 0, 0, ppc_state);
+  if (PowerPC::PerformanceMonitorActive(ppc_state))
+    PowerPC::UpdatePerformanceMonitor(ppc_state.downcount, 0, 0, ppc_state);
   m_idled_cycles += DowncountToCycles(ppc_state.downcount);
   ppc_state.downcount = 0;
 }

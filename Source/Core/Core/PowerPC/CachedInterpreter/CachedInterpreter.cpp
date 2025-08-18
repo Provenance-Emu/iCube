@@ -117,8 +117,11 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
 {
   ppc_state.pc = ppc_state.npc;
   ppc_state.downcount -= operands.downcount;
-  PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
-                                    operands.num_fp_inst, ppc_state);
+  if (PowerPC::PerformanceMonitorActive(ppc_state))
+  {
+    PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
+                                      operands.num_fp_inst, ppc_state);
+  }
   if constexpr (profiled)
     JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
   return 0;
