@@ -39,7 +39,13 @@ void CachedInterpreter::Init()
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
 
+  // Enable block linking on ARM64 to reduce dispatch overhead.
+  // Safe on iOS/tvOS and provides measurable speedups.
+  #if defined(__aarch64__)
+  jo.enableBlocklink = true;
+  #else
   jo.enableBlocklink = false;
+  #endif
 
   m_block_cache.Init();
 
