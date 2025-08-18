@@ -7,7 +7,6 @@
 #include <atomic>
 #include <cstdarg>
 #include <cstdlib>
-#include <iostream>
 
 #if defined(ANDROID)
 #include <adrenotools/driver.h>
@@ -46,46 +45,49 @@ static Common::DynamicLibrary s_vulkan_module;
 
 static bool OpenVulkanLibrary(bool force_system_library)
 {
-  #ifdef __APPLE__
+#if defined(__APPLE__)
+#if !defined(IPHONEOS)
   // Check if a path to a specific Vulkan library has been specified.
   char* libvulkan_env = getenv("LIBVULKAN_PATH");
   if (libvulkan_env && s_vulkan_module.Open(libvulkan_env))
     return true;
 
-  // Use the libvulkan.dylib from the application bundle.
-    const std::vector<std::string> vulkanPaths = {
-        File::GetBundleDirectory() + "/Frameworks/libMoltenVK_Dolphin.dylib",
-        File::GetBundleDirectory() + "/Frameworks/libMoltenVK.dylib",
-        File::GetBundleDirectory() + "/Frameworks/MoltenVK-1.2.8.framework/MoltenVK",
-        File::GetBundleDirectory() + "/Frameworks/MoltenVK-1.2.8.framework/MoltenVK-1.2.8",
-        File::GetBundleDirectory() + "/Frameworks/MoltenVK.framework/MoltenVK",
-        "@executable_path/Frameworks/MoltenVK-1.2.8.framework/MoltenVK",
-        "@executable_path/Frameworks/MoltenVK-1.2.8.framework/MoltenVK-1.2.8",
-        "@executable_path/Frameworks/MoltenVK.framework/MoltenVK"
-    };
-
-    for (const auto& path : vulkanPaths)
-    {
-        std::cout << "Attempting to load Vulkan library from: " << path << std::endl;
-        GENERIC_LOG_FMT(Common::Log::LogType::VIDEO, Common::Log::LogLevel::LINFO, "{}", "Attempting to load Vulkan library from: " + path);
-
-        if (s_vulkan_module.Open(path.c_str()))
-        {
-            std::cout << "Successfully loaded Vulkan library from: " << path << std::endl;
-            GENERIC_LOG_FMT(Common::Log::LogType::VIDEO, Common::Log::LogLevel::LINFO, "{}", "Successfully loaded Vulkan library from: from: " + path);
-
-            return true;
-        }
-        else
-        {
-            std::cout << "Failed to load Vulkan library from: " << path << std::endl;
-            GENERIC_LOG_FMT(Common::Log::LogType::VIDEO, Common::Log::LogLevel::LINFO, "{}", "Failed to load Vulkan library from: from: " + path);
-        }
-    }
-
-    std::cout << "Failed to load Vulkan library from any of the specified paths." << std::endl;
-    return false;
+  // Use the libMoltenVK.dylib from the application bundle.
+  std::string filename = File::GetBundleDirectory() + "/Contents/Frameworks/libMoltenVK.dylib";
 #else
+  std::string filename = File::GetBundleDirectory() + "/Frameworks/MoltenVK.framework/MoltenVK";
+#endif
+  return s_vulkan_module.Open(filename.c_str());
+#else
+
+#if defined(ANDROID) && _M_ARM_64
+  const std::string& driver_lib_name = g_Config.customDriverLibraryName;
+
+  if (!force_system_library && !driver_lib_name.empty() && SupportsCustomDriver())
+  {
+    std::string tmp_dir = File::GetGpuDriverDirectory(D_GPU_DRIVERS_TMP);
+    std::string hook_dir = File::GetGpuDriverDirectory(D_GPU_DRIVERS_HOOKS);
+    std::string file_redirect_dir = File::GetGpuDriverDirectory(D_GPU_DRIVERS_FILE_REDIRECT);
+    std::string driver_dir = File::GetGpuDriverDirectory(D_GPU_DRIVERS_EXTRACTED);
+    INFO_LOG_FMT(HOST_GPU, "Loading driver: {}", driver_lib_name);
+
+    s_vulkan_module = adrenotools_open_libvulkan(
+        RTLD_NOW, ADRENOTOOLS_DRIVER_FILE_REDIRECT | ADRENOTOOLS_DRIVER_CUSTOM, tmp_dir.c_str(),
+        hook_dir.c_str(), driver_dir.c_str(), driver_lib_name.c_str(), file_redirect_dir.c_str(),
+        nullptr);
+    if (s_vulkan_module.IsOpen())
+    {
+      INFO_LOG_FMT(HOST_GPU, "Successfully loaded driver: {}", driver_lib_name);
+      return true;
+    }
+    else
+    {
+      WARN_LOG_FMT(HOST_GPU, "Loading driver {} failed.", driver_lib_name);
+    }
+  }
+#endif
+
+  WARN_LOG_FMT(HOST_GPU, "Loading system driver");
   std::string filename = Common::DynamicLibrary::GetVersionedFilename("vulkan", 1);
   if (s_vulkan_module.Open(filename.c_str()))
     return true;
