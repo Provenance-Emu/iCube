@@ -300,7 +300,20 @@ private:
   void GenerateDSIException(u32 effective_address, bool write);
   void GenerateISIException(u32 effective_address);
 
+  // Mark Memcheck cold so the compiler optimizes hot paths better when memchecks are disabled.
+  // Guarded for compilers that support GNU-style attributes (Clang/GCC); no-ops elsewhere.
+  #if defined(__GNUC__) || defined(__clang__)
+  __attribute__((cold))
+  #endif
   void Memcheck(u32 address, u64 var, bool write, size_t size);
+
+  // Templated wrapper to pass size as a compile-time constant from hot paths.
+  template <size_t N>
+  inline void MemcheckSized(u32 address, u64 var, bool write)
+  {
+    static_assert(N == 1 || N == 2 || N == 4 || N == 8, "MemcheckSized<N>: N must be 1,2,4,8");
+    Memcheck(address, var, write, N);
+  }
 
   void UpdateBATs(BatTable& bat_table, u32 base_spr);
   void UpdateFakeMMUBat(BatTable& bat_table, u32 start_addr);
