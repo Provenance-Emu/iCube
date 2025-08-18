@@ -331,6 +331,22 @@ private:
 void UpdatePerformanceMonitor(u32 cycles, u32 num_load_stores, u32 num_fp_inst,
                               PowerPCState& ppc_state);
 
+// Fast query for hot paths to determine if UpdatePerformanceMonitor may do work.
+// Returns true if any PMCs are configured to increment or if performance monitor
+// interrupts are enabled (so the overflow check must run).
+inline bool PerformanceMonitorActive(const PowerPCState& ppc_state)
+{
+  const auto mmcr0 = MMCR0(const_cast<PowerPCState&>(ppc_state));
+  const auto mmcr1 = MMCR1(const_cast<PowerPCState&>(ppc_state));
+  const bool inc_pmc1 = (mmcr0.PMC1SELECT == 1);
+  const bool inc_pmc2 = (mmcr0.PMC2SELECT == 1) || (mmcr0.PMC2SELECT == 11);
+  const bool inc_pmc3 = (mmcr1.PMC3SELECT == 1) || (mmcr1.PMC3SELECT == 11);
+  const bool inc_pmc4 = (mmcr1.PMC4SELECT == 1);
+  const bool any_inc = inc_pmc1 || inc_pmc2 || inc_pmc3 || inc_pmc4;
+  const bool any_int_enabled = (mmcr0.PMC1INTCONTROL != 0) || (mmcr0.PMCINTCONTROL != 0);
+  return any_inc || any_int_enabled;
+}
+
 void CheckExceptionsFromJIT(PowerPCManager& power_pc);
 void CheckExternalExceptionsFromJIT(PowerPCManager& power_pc);
 void CheckAndHandleBreakPointsFromJIT(PowerPCManager& power_pc);

@@ -401,6 +401,34 @@ void PowerPCManager::WriteFullTimeBaseValue(u64 value)
 void UpdatePerformanceMonitor(u32 cycles, u32 num_load_stores, u32 num_fp_inst,
                               PowerPCState& ppc_state)
 {
+  // Fast path: if no counters are configured to increment, skip all work.
+  // NOTE: Overflow exceptions can only occur when a counter increments past the high bit.
+  // If no counters are incrementing in this call, no new overflow can happen.
+  const auto mmcr0 = MMCR0(ppc_state);
+  const auto mmcr1 = MMCR1(ppc_state);
+  const bool inc_pmc1 = (mmcr0.PMC1SELECT == 1);
+  const bool inc_pmc2 = (mmcr0.PMC2SELECT == 1) || (mmcr0.PMC2SELECT == 11);
+  const bool inc_pmc3 = (mmcr1.PMC3SELECT == 1) || (mmcr1.PMC3SELECT == 11);
+  const bool inc_pmc4 = (mmcr1.PMC4SELECT == 1);
+  const bool any_inc = inc_pmc1 || inc_pmc2 || inc_pmc3 || inc_pmc4;
+  const bool any_int_enabled = (mmcr0.PMC1INTCONTROL != 0) || (mmcr0.PMCINTCONTROL != 0);
+  if (!(any_inc || any_int_enabled))
+    return;
+
+  // If interrupts are enabled but no counters will increment this call,
+  // skip the switch/update work and only do the overflow check.
+  if (!any_inc)
+  {
+    if ((MMCR0(ppc_state).PMC1INTCONTROL && (ppc_state.spr[SPR_PMC1] & 0x80000000) != 0) ||
+        (MMCR0(ppc_state).PMCINTCONTROL && (ppc_state.spr[SPR_PMC2] & 0x80000000) != 0) ||
+        (MMCR0(ppc_state).PMCINTCONTROL && (ppc_state.spr[SPR_PMC3] & 0x80000000) != 0) ||
+        (MMCR0(ppc_state).PMCINTCONTROL && (ppc_state.spr[SPR_PMC4] & 0x80000000) != 0))
+    {
+      ppc_state.Exceptions |= EXCEPTION_PERFORMANCE_MONITOR;
+    }
+    return;
+  }
+
   switch (MMCR0(ppc_state).PMC1SELECT)
   {
   case 0:  // No change
