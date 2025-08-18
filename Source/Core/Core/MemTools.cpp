@@ -266,7 +266,8 @@ bool IsExceptionHandlerSupported()
   return true;
 }
 
-#elif defined(_POSIX_VERSION) && !defined(_M_GENERIC)
+#elif defined(_POSIX_VERSION) && !defined(_M_GENERIC) && \
+      !(defined(__APPLE__) && (TARGET_OS_IPHONE || TARGET_OS_TV || TARGET_OS_WATCH))
 
 static struct sigaction old_sa_segv;
 static struct sigaction old_sa_bus;
