@@ -19,6 +19,11 @@
 #include <windows.h>
 #endif
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#include <pthread.h>
+#endif
+
 #include "AudioCommon/AudioCommon.h"
 
 #include "Common/Assert.h"
@@ -130,6 +135,24 @@ static Common::Event s_cpu_thread_job_finished;
 static thread_local bool tls_is_cpu_thread = false;
 static thread_local bool tls_is_gpu_thread = false;
 static thread_local bool tls_is_host_thread = false;
+
+#if defined(__APPLE__) && (TARGET_OS_IOS || TARGET_OS_TV)
+// On Apple mobile platforms, elevate CPU emulation thread QoS and set FPCR for performance.
+static void TuneCPUThreadForApple()
+{
+  // Set thread QoS to user-interactive for minimal latency on emulation frame loop.
+  // pthread_set_qos_class_self_np is available on Apple platforms.
+  pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+#if defined(__aarch64__)
+  // Prefer flushing denormals to zero and default rounding to nearest as a fast baseline.
+  // The emulator will adjust rounding/non-IEEE mode as FPSCR changes via SetSIMDMode.
+  Common::FPU::SetSIMDMode(Common::FPU::ROUND_NEAR, /*non_ieee_mode=*/true);
+#endif
+}
+#else
+static void TuneCPUThreadForApple() {}
+#endif
 
 static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot,
                       WindowSystemInfo wsi);
@@ -370,6 +393,7 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
                       bool delete_savestate)
 {
   DeclareAsCPUThread();
+  TuneCPUThreadForApple();
 
   if (system.IsDualCoreMode())
     Common::SetCurrentThreadName("CPU thread");
@@ -449,6 +473,7 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
                              bool delete_savestate)
 {
   DeclareAsCPUThread();
+  TuneCPUThreadForApple();
 
   if (system.IsDualCoreMode())
     Common::SetCurrentThreadName("FIFO player thread");
