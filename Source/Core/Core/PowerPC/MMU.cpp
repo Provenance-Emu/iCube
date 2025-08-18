@@ -580,28 +580,32 @@ void MMU::Memcheck(u32 address, u64 var, bool write, size_t size)
 u8 MMU::Read_U8(const u32 address)
 {
   u8 var = ReadFromHardware<XCheckTLBFlag::Read, u8>(address);
-  Memcheck(address, var, false, 1);
+  if (m_power_pc.GetMemChecks().HasAny())
+    Memcheck(address, var, false, 1);
   return var;
 }
 
 u16 MMU::Read_U16(const u32 address)
 {
   u16 var = ReadFromHardware<XCheckTLBFlag::Read, u16>(address);
-  Memcheck(address, var, false, 2);
+  if (m_power_pc.GetMemChecks().HasAny())
+    Memcheck(address, var, false, 2);
   return var;
 }
 
 u32 MMU::Read_U32(const u32 address)
 {
   u32 var = ReadFromHardware<XCheckTLBFlag::Read, u32>(address);
-  Memcheck(address, var, false, 4);
+  if (m_power_pc.GetMemChecks().HasAny())
+    Memcheck(address, var, false, 4);
   return var;
 }
 
 u64 MMU::Read_U64(const u32 address)
 {
   u64 var = ReadFromHardware<XCheckTLBFlag::Read, u64>(address);
-  Memcheck(address, var, false, 8);
+  if (m_power_pc.GetMemChecks().HasAny())
+    Memcheck(address, var, false, 8);
   return var;
 }
 
@@ -682,13 +686,15 @@ std::optional<ReadResult<double>> MMU::HostTryReadF64(const Core::CPUThreadGuard
 
 void MMU::Write_U8(const u32 var, const u32 address)
 {
-  Memcheck(address, var, true, 1);
+  if (m_power_pc.GetMemChecks().HasAny())
+    Memcheck(address, var, true, 1);
   WriteToHardware<XCheckTLBFlag::Write>(address, var, 1);
 }
 
 void MMU::Write_U16(const u32 var, const u32 address)
 {
-  Memcheck(address, var, true, 2);
+  if (m_power_pc.GetMemChecks().HasAny())
+    Memcheck(address, var, true, 2);
   WriteToHardware<XCheckTLBFlag::Write>(address, var, 2);
 }
 void MMU::Write_U16_Swap(const u32 var, const u32 address)
@@ -698,7 +704,8 @@ void MMU::Write_U16_Swap(const u32 var, const u32 address)
 
 void MMU::Write_U32(const u32 var, const u32 address)
 {
-  Memcheck(address, var, true, 4);
+  if (m_power_pc.GetMemChecks().HasAny())
+    Memcheck(address, var, true, 4);
   WriteToHardware<XCheckTLBFlag::Write>(address, var, 4);
 }
 void MMU::Write_U32_Swap(const u32 var, const u32 address)
@@ -708,7 +715,8 @@ void MMU::Write_U32_Swap(const u32 var, const u32 address)
 
 void MMU::Write_U64(const u64 var, const u32 address)
 {
-  Memcheck(address, var, true, 8);
+  if (m_power_pc.GetMemChecks().HasAny())
+    Memcheck(address, var, true, 8);
   WriteToHardware<XCheckTLBFlag::Write>(address, static_cast<u32>(var >> 32), 4);
   WriteToHardware<XCheckTLBFlag::Write>(address + sizeof(u32), static_cast<u32>(var), 4);
 }
