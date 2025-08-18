@@ -541,6 +541,9 @@ std::optional<ReadResult<u32>> MMU::HostTryReadInstruction(const Core::CPUThread
   return std::nullopt;
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((cold))
+#endif
 void MMU::Memcheck(u32 address, u64 var, bool write, size_t size)
 {
   if (!m_power_pc.GetMemChecks().HasAny()) [[likely]]
@@ -577,6 +580,9 @@ void MMU::Memcheck(u32 address, u64 var, bool write, size_t size)
   m_ppc_state.Exceptions |= EXCEPTION_DSI | EXCEPTION_FAKE_MEMCHECK_HIT;
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 u8 MMU::Read_U8(const u32 address)
 {
   u8 var = ReadFromHardware<XCheckTLBFlag::Read, u8>(address);
@@ -585,6 +591,9 @@ u8 MMU::Read_U8(const u32 address)
   return var;
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 u16 MMU::Read_U16(const u32 address)
 {
   u16 var = ReadFromHardware<XCheckTLBFlag::Read, u16>(address);
@@ -593,6 +602,9 @@ u16 MMU::Read_U16(const u32 address)
   return var;
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 u32 MMU::Read_U32(const u32 address)
 {
   u32 var = ReadFromHardware<XCheckTLBFlag::Read, u32>(address);
@@ -601,6 +613,9 @@ u32 MMU::Read_U32(const u32 address)
   return var;
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 u64 MMU::Read_U64(const u32 address)
 {
   u64 var = ReadFromHardware<XCheckTLBFlag::Read, u64>(address);
@@ -684,6 +699,9 @@ std::optional<ReadResult<double>> MMU::HostTryReadF64(const Core::CPUThreadGuard
   return ReadResult<double>(result->translated, std::bit_cast<double>(result->value));
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 void MMU::Write_U8(const u32 var, const u32 address)
 {
   if (m_power_pc.GetMemChecks().HasAny()) [[unlikely]]
@@ -691,6 +709,9 @@ void MMU::Write_U8(const u32 var, const u32 address)
   WriteToHardware<XCheckTLBFlag::Write>(address, var, 1);
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 void MMU::Write_U16(const u32 var, const u32 address)
 {
   if (m_power_pc.GetMemChecks().HasAny()) [[unlikely]]
@@ -702,6 +723,9 @@ void MMU::Write_U16_Swap(const u32 var, const u32 address)
   Write_U16((var & 0xFFFF0000) | Common::swap16(static_cast<u16>(var)), address);
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 void MMU::Write_U32(const u32 var, const u32 address)
 {
   if (m_power_pc.GetMemChecks().HasAny()) [[unlikely]]
@@ -713,6 +737,9 @@ void MMU::Write_U32_Swap(const u32 var, const u32 address)
   Write_U32(Common::swap32(var), address);
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((hot))
+#endif
 void MMU::Write_U64(const u64 var, const u32 address)
 {
   if (m_power_pc.GetMemChecks().HasAny()) [[unlikely]]
