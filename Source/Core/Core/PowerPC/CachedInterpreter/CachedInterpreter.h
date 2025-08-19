@@ -196,27 +196,34 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
   u32 exram_mask;
 };
 
-// Minimal micro-op engine scaffolding for Phase 3
-enum class MicroOpCode : u8
-{
-  CONST32,
-  CONST32_ADDRA,
-  ADDI,
-  ADDIS,
-  ORI,
-  ORIS,
-  XORI,
-  XORIS,
-  ANDI,
-  ANDIS,
-  // New ops for jitless optimization
-  RLWINM_IMM, // RA = rotl(RS, SH) & mask(MB, ME); optional record via rc flag
-  AND_RR,     // RA = RS & RB; optional record via rc flag
-  OR_RR,      // RA = RS | RB; optional record via rc flag
-  XOR_RR,     // RA = RS ^ RB; optional record via rc flag
-  NOP,
-  COUNT,
-};
+  // Minimal micro-op engine scaffolding for Phase 3
+  enum class MicroOpCode : u8
+  {
+    CONST32,
+    CONST32_ADDRA,
+    ADDI,
+    ADDIS,
+    ORI,
+    ORIS,
+    XORI,
+    XORIS,
+    ANDI,
+    ANDIS,
+    // New ops for jitless optimization
+    RLWINM_IMM, // RA = rotl(RS, SH) & mask(MB, ME); optional record via rc flag
+    AND_RR,     // RA = RS & RB; optional record via rc flag
+    OR_RR,      // RA = RS | RB; optional record via rc flag
+    XOR_RR,     // RA = RS ^ RB; optional record via rc flag
+    RLWIMI_IMM, // RA = (RA & ~mask) | (rotl(RS, SH) & mask); optional record via rc flag
+    RLWNM_VAR,  // RA = rotl(RS, RB & 31) & mask(MB, ME); optional record via rc flag
+    ANDC_RR,    // RA = RS & ~RB; optional record via rc flag
+    ORC_RR,     // RA = RS | ~RB; optional record via rc flag
+    NAND_RR,    // RA = ~(RS & RB); optional record via rc flag
+    NOR_RR,     // RA = ~(RS | RB); optional record via rc flag
+    EQV_RR,     // RA = ~(RS ^ RB); optional record via rc flag
+    NOP,
+    COUNT,
+  };
 
 struct MicroOp
 {

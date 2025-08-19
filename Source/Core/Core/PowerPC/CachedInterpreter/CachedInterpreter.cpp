@@ -500,7 +500,14 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
         &&op_AND_RR,        // 11 MicroOpCode::AND_RR
         &&op_OR_RR,         // 12 MicroOpCode::OR_RR
         &&op_XOR_RR,        // 13 MicroOpCode::XOR_RR
-        &&op_NOP            // 14 MicroOpCode::NOP
+        &&op_RLWIMI_IMM,    // 14 MicroOpCode::RLWIMI_IMM
+        &&op_RLWNM_VAR,     // 15 MicroOpCode::RLWNM_VAR
+        &&op_ANDC_RR,       // 16 MicroOpCode::ANDC_RR
+        &&op_ORC_RR,        // 17 MicroOpCode::ORC_RR
+        &&op_NAND_RR,       // 18 MicroOpCode::NAND_RR
+        &&op_NOR_RR,        // 19 MicroOpCode::NOR_RR
+        &&op_EQV_RR,        // 20 MicroOpCode::EQV_RR
+        &&op_NOP            // 21 MicroOpCode::NOP
     };
     static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
                   "dispatch_table must cover all MicroOpCode entries and match enum order");
@@ -667,6 +674,98 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
 
+  op_RLWIMI_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 ra_old = ppc_state.gpr[m.rd];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 sh = (m.imm >> 0) & 31u;
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      const u32 rot = std::rotl(rs_val, sh) & mask;
+      ppc_state.gpr[m.rd] = (ra_old & ~mask) | rot;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_RLWNM_VAR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb] & 31u; // shift is low 5 bits of RB
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      ppc_state.gpr[m.rd] = std::rotl(rs_val, rb_val) & mask;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ANDC_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val & ~rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ORC_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val | ~rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_NAND_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val & rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_NOR_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val | rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_EQV_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
   op_NOP:
     {
       ++i;
@@ -787,6 +886,77 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 rb_val = ppc_state.gpr[m.rb];
       ppc_state.gpr[m.rd] = rs_val ^ rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::RLWIMI_IMM:
+    {
+      const u32 ra_old = ppc_state.gpr[m.rd];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 sh = (m.imm >> 0) & 31u;
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      const u32 rot = std::rotl(rs_val, sh) & mask;
+      ppc_state.gpr[m.rd] = (ra_old & ~mask) | rot;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::RLWNM_VAR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb] & 31u;
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      ppc_state.gpr[m.rd] = std::rotl(rs_val, rb_val) & mask;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::ANDC_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val & ~rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::ORC_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val | ~rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::NAND_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val & rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::NOR_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val | rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::EQV_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
       if (m.rc)
         CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
       break;
@@ -1211,7 +1381,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             {
             case 14: // addi
             case 15: // addis
+            case 20: // rlwimix
             case 21: // rlwinm / rlwinm.
+            case 23: // rlwnmx
             case 24: // ori
             case 25: // oris
             case 26: // xori
@@ -1225,6 +1397,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               case 28:  // andx
               case 444: // orx
               case 316: // xorx
+              case 60:  // andcx
+              case 412: // orcx
+              case 476: // nandx
+              case 124: // norx
+              case 284: // eqvx
                 return true;
               default:
                 return false;
@@ -1267,6 +1444,17 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.ra = next.inst.RA;
                 mu.imm = static_cast<u32>(next.inst.SIMM_16);
                 break;
+              case 20: // rlwimix
+                mu.op = MicroOpCode::RLWIMI_IMM;
+                mu.rd = next.inst.RA; // destination RA
+                mu.ra = next.inst.RS; // source RS
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
+                mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
+                         ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                break;
               case 21: // rlwinm/rlwinm.
                 mu.op = MicroOpCode::RLWINM_IMM;
                 mu.rd = next.inst.RA; // destination RA
@@ -1276,6 +1464,16 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
                 mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
                          ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                break;
+              case 23: // rlwnmx
+                mu.op = MicroOpCode::RLWNM_VAR;
+                mu.rd = next.inst.RA; // destination RA
+                mu.ra = next.inst.RS; // source RS
+                mu.rb = next.inst.RB; // variable shift from RB
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                // Pack MB/ME into imm: [5..9]=MB, [10..14]=ME (SH is variable from RB)
+                mu.imm = ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
                          ((static_cast<u32>(next.inst.ME) & 31u) << 10);
                 break;
               case 24: // ori
@@ -1326,6 +1524,21 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   break;
                 case 316: // xorx
                   mu.op = MicroOpCode::XOR_RR;
+                  break;
+                case 60: // andcx
+                  mu.op = MicroOpCode::ANDC_RR;
+                  break;
+                case 412: // orcx
+                  mu.op = MicroOpCode::ORC_RR;
+                  break;
+                case 476: // nandx
+                  mu.op = MicroOpCode::NAND_RR;
+                  break;
+                case 124: // norx
+                  mu.op = MicroOpCode::NOR_RR;
+                  break;
+                case 284: // eqvx
+                  mu.op = MicroOpCode::EQV_RR;
                   break;
                 default:
                   // Not supported; undo reservation and stop packing
