@@ -44,18 +44,18 @@
     _mtkView = [[MTKView alloc] init];
     _mtkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _mtkView.preferredFramesPerSecond = 120;
-    
+
     _metalLayer = (CAMetalLayer*)_mtkView.layer;
-    
+
     self.isExternalDisplayConnected = false;
   }
-  
+
   return self;
 }
 
 - (void)setIsExternalDisplayConnected:(bool)connected {
   self->_isExternalDisplayConnected = connected;
-  
+
   if (!_isExternalDisplayConnected) {
     [self requestDisplayOnSuperview:_mainDisplayView];
   }
@@ -63,7 +63,7 @@
 
 - (void)registerMainDisplayView:(UIView*)mainView {
   _mainDisplayView = mainView;
-  
+
   if (!self.isExternalDisplayConnected) {
     [self requestDisplayOnSuperview:mainView];
   }
@@ -75,10 +75,10 @@
 
 - (void)requestDisplayOnSuperview:(UIView*)superview {
   [_mtkView removeFromSuperview];
-  
+
   [superview addSubview:_mtkView];
   [_mtkView setFrame:superview.bounds];
-  
+
   if (g_presenter) {
     g_presenter->ResizeSurface();
   }
@@ -100,35 +100,47 @@
     wsi.type = WindowSystemType::iOS;
     wsi.render_surface = (__bridge void*)self->_metalLayer;
     wsi.render_surface_scale = UIScreen.mainScreen.scale;
-    
+
     auto& system = Core::System::GetInstance();
-    
+
     // Signal to the core whether JIT is available or not.
     system.SetJitAvailable([JitManager shared].acquiredJit);
-    
+
     std::unique_ptr<BootParameters> boot = [bootParameter generateDolphinBootParameter];
-    
+
     if (!BootManager::BootCore(system, std::move(boot), wsi)) {
       PanicAlertFmt("Failed to init core!");
     }
   });
-  
+
+  // Wait for state changes instead of polling
+  dispatch_semaphore_t stateSemaphore = dispatch_semaphore_create(0);
+  __block int callbackHandle = -1;
+  callbackHandle = Core::AddOnStateChangedCallback([stateSemaphore](Core::State state) {
+    if (state == Core::State::Running || state == Core::State::Paused || state == Core::State::Uninitialized)
+      dispatch_semaphore_signal(stateSemaphore);
+  });
+
+  // Wait until core leaves Starting state
   while (Core::GetState(Core::System::GetInstance()) == Core::State::Starting) {
-    [NSThread sleepForTimeInterval:0.025];
+    dispatch_semaphore_wait(stateSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)));
   }
-  
+
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidStartNotification object:self userInfo:nil];
-  
+
+  // Wait until core stops running
   while (Core::IsRunning(Core::System::GetInstance())) {
-    [NSThread sleepForTimeInterval:0.025];
+    dispatch_semaphore_wait(stateSemaphore, DISPATCH_TIME_FOREVER);
   }
-  
+
+  Core::RemoveOnStateChangedCallback(&callbackHandle);
+
   dispatch_sync(dispatch_get_main_queue(), ^{
     Core::DeclareAsHostThread();
   });
-  
+
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification object:self userInfo:nil];
-  
+
   _mainDisplayView = nil;
 }
 
@@ -140,34 +152,34 @@
   if (userRequestedPause == _userRequestedPause) {
     return;
   }
-  
+
   DOLHostQueueRunSync(^{
     Core::SetState(Core::System::GetInstance(), userRequestedPause ? Core::State::Paused : Core::State::Running);
   });
-  
+
   _userRequestedPause = userRequestedPause;
 }
 
 - (void)clearMetalLayer {
   id<CAMetalDrawable> drawable = [_metalLayer nextDrawable];
-  
+
   if (drawable == nil) {
     return;
   }
-  
+
   MTLRenderPassDescriptor* renderPass = [MTLRenderPassDescriptor renderPassDescriptor];
   renderPass.colorAttachments[0].texture = drawable.texture;
   renderPass.colorAttachments[0].loadAction = MTLLoadActionClear;
   renderPass.colorAttachments[0].storeAction = MTLStoreActionStore;
   renderPass.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
-  
+
   id<MTLCommandQueue> commandQueue = [_mtkView.preferredDevice newCommandQueue];
   id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
-  
+
   id<MTLRenderCommandEncoder> commandEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPass];
   commandEncoder.label = @"Clear";
   [commandEncoder endEncoding];
- 
+
   [commandBuffer presentDrawable:drawable];
   [commandBuffer commit];
 }
