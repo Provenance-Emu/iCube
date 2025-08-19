@@ -165,10 +165,30 @@ void SwitchCurrentThread()
   usleep(1000 * 1);
 }
 
+static inline void SetCurrentThreadQoS_Apple(const char* name)
+{
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+  if (!name) return;
+  qos_class_t qos = QOS_CLASS_DEFAULT;
+  if (strstr(name, "CPU") || strstr(name, "CPU thread")) qos = QOS_CLASS_USER_INTERACTIVE;
+  else if (strstr(name, "DSP") || strstr(name, "Audio")) qos = QOS_CLASS_USER_INITIATED;
+  else if (strstr(name, "Video") || strstr(name, "GPU") || strstr(name, "FIFO-GPU") ||
+           strstr(name, "AsyncShaderCompiler"))
+    qos = QOS_CLASS_USER_INITIATED;
+  else if (strstr(name, "DVD") || strstr(name, "Memcard") || strstr(name, "Asset") ||
+           strstr(name, "Analytics") || strstr(name, "FrameDumping") || strstr(name, "USB") ||
+           strstr(name, "Wiimote"))
+    qos = QOS_CLASS_UTILITY;
+  pthread_set_qos_class_self_np(qos, 0);
+#endif
+}
+
 void SetCurrentThreadName(const char* name)
 {
 #ifdef __APPLE__
   pthread_setname_np(name);
+  SetCurrentThreadQoS_Apple(name);
 #elif defined __FreeBSD__ || defined __OpenBSD__
   pthread_set_name_np(pthread_self(), name);
 #elif defined(__NetBSD__)
@@ -180,8 +200,6 @@ void SetCurrentThreadName(const char* name)
   pthread_setname_np(pthread_self(), std::string(name).substr(0, 15).c_str());
 #endif
 #ifdef USE_VTUNE
-  // VTune uses OS thread names by default but probably supports longer names when set via its own
-  // API.
   __itt_thread_set_name(name);
 #endif
 }
