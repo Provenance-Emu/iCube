@@ -26,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet UILabel* memTwoLabel;
 @property (weak, nonatomic) IBOutlet DOLSwitch* rtcSwitch;
 @property (weak, nonatomic) IBOutlet UIDatePicker* rtcPicker;
+@property (weak, nonatomic) IBOutlet DOLSwitch* disableICacheSwitch;
+@property (weak, nonatomic) IBOutlet DOLSwitch* lowDCBZHackSwitch;
 
 @end
 

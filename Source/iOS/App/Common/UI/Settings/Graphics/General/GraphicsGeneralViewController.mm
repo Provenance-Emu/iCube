@@ -36,17 +36,27 @@
   BOOL triple = [NSUserDefaults.standardUserDefaults objectForKey:@"gfx_triple_buffering"] ? [NSUserDefaults.standardUserDefaults boolForKey:@"gfx_triple_buffering"] : YES;
   self.tripleBufferCell.boolSwitch.on = triple;
   [self.tripleBufferCell.boolSwitch addValueChangedTarget:self action:@selector(tripleBufferingChanged:)];
+
+  // Force scale 1.0 on non-ProMotion
+  self.forceScaleOneCell.boolLabel.text = @"Force scale 1.0 on non‑ProMotion";
+  BOOL forceScaleOne = [NSUserDefaults.standardUserDefaults boolForKey:@"gfx_force_scale_one_non_promo"];
+  self.forceScaleOneCell.boolSwitch.on = forceScaleOne;
+  [self.forceScaleOneCell.boolSwitch addValueChangedTarget:self action:@selector(forceScaleOneChanged:)];
 }
 
 - (void)tripleBufferingChanged:(id)sender {
   [NSUserDefaults.standardUserDefaults setBool:self.tripleBufferCell.boolSwitch.on forKey:@"gfx_triple_buffering"];
 }
 
+- (void)forceScaleOneChanged:(id)sender {
+  [NSUserDefaults.standardUserDefaults setBool:self.forceScaleOneCell.boolSwitch.on forKey:@"gfx_force_scale_one_non_promo"];
+}
+
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  
+
   std::string currentBackend = Config::Get(Config::MAIN_GFX_BACKEND);
-  
+
   NSString* localizableBackend = nil;
   for (auto& backend : VideoBackendBase::GetAvailableBackends()) {
     if (currentBackend == backend->GetName()) {
@@ -54,13 +64,13 @@
       break;
     }
   }
-  
+
   if (localizableBackend != nil) {
     self.backendLabel.text = DOLCoreLocalizedString(localizableBackend);
   } else {
     self.backendLabel.text = CppToFoundationString(currentBackend);
   }
-  
+
   NSString* aspectRatio;
   switch (Config::Get(Config::GFX_ASPECT_RATIO)) {
     case AspectMode::Auto:

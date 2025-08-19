@@ -31,6 +31,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* cpuCullCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* deferEfbCacheCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* manualSamplingCell;
+@property (weak, nonatomic) IBOutlet UISlider* shaderCompilerThreadsSlider;
+@property (weak, nonatomic) IBOutlet UILabel* shaderCompilerThreadsLabel;
+@property (weak, nonatomic) IBOutlet UISlider* shaderPrecompilerThreadsSlider;
+@property (weak, nonatomic) IBOutlet UILabel* shaderPrecompilerThreadsLabel;
 
 @end
 
