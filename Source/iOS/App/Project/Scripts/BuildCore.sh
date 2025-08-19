@@ -47,6 +47,31 @@ if [ "$PGO_MODE" = "generate" ]; then
 elif [ "$PGO_MODE" = "use" ] && [ -n "$DOL_CORE_PGO_PROFILE" ]; then
     PGO_FLAGS_C="-fprofile-instr-use=$DOL_CORE_PGO_PROFILE"
     PGO_FLAGS_CXX="-fprofile-instr-use=$DOL_CORE_PGO_PROFILE"
+elif [ "$PGO_MODE" = "on" ] && [ -z "$DOL_CORE_PGO_PROFILE" ]; then
+    # Auto-detect newest cached .profdata and enable PGO use if found
+    CANDIDATES=()
+    if [ -d "$CMAKE_BUILD_DIR" ]; then
+      while IFS= read -r -d '' f; do CANDIDATES+=("$f"); done < <(find "$CMAKE_BUILD_DIR" -type f -name '*.profdata' -print0 2>/dev/null || true)
+    fi
+    if [ -d "$REPO_ROOT_DIR/pgo" ]; then
+      while IFS= read -r -d '' f; do CANDIDATES+=("$f"); done < <(find "$REPO_ROOT_DIR/pgo" -type f -name '*.profdata' -print0 2>/dev/null || true)
+    fi
+    if [ -f "$REPO_ROOT_DIR/dolphin.profdata" ]; then
+      CANDIDATES+=("$REPO_ROOT_DIR/dolphin.profdata")
+    fi
+    if [ ${#CANDIDATES[@]} -gt 0 ]; then
+      # Pick newest by mtime
+      NEWEST="$(ls -t "${CANDIDATES[@]}" 2>/dev/null | head -n1 || true)"
+      if [ -n "$NEWEST" ] && [ -f "$NEWEST" ]; then
+        DOL_CORE_PGO_PROFILE="$NEWEST"
+        PGO_FLAGS_C="-fprofile-instr-use=$DOL_CORE_PGO_PROFILE"
+        PGO_FLAGS_CXX="$PGO_FLAGS_C"
+        echo "[PGO] Auto-using cached profile: $DOL_CORE_PGO_PROFILE"
+      fi
+    fi
+    if [ -z "$PGO_FLAGS_C" ]; then
+      echo "[PGO] PGO_MODE=on but no .profdata found. Use DOL_CORE_PGO=generate to collect, or set DOL_CORE_PGO=use and DOL_CORE_PGO_PROFILE=<path>."
+    fi
 fi
 
 # CPU tuning flags per target arch
