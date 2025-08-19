@@ -53,7 +53,7 @@ fi
 CPU_TUNE_FLAGS=""
 case "$PLATFORM" in
   OS64|TVOS|SIMULATORARM64)
-    CPU_TUNE_FLAGS="-mcpu=apple-a10 -mtune=apple-a14 -march=armv8-a+simd+crc+crypto"
+    CPU_TUNE_FLAGS="-mcpu=apple-a10 -mtune=apple-a14 -march=armv8-a+simd+crc+crypto+fp16"
     ;;
   *)
     CPU_TUNE_FLAGS=""
