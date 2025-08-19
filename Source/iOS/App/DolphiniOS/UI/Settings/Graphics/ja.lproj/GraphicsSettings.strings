@@ -303,3 +303,6 @@
 
 /* Class = "UILabel"; text = "Cull Vertices on the CPU"; ObjectID = "edj-Ox-q0H"; */
 "edj-Ox-q0H.text" = "CPUで頂点をカリングする";
+
+/* Class = "UILabel"; text = "Show Auto IR OSD"; ObjectID = "AIR-OSD-LABEL"; */
+"AIR-OSD-LABEL.text" = "Show Auto IR OSD";

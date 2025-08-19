@@ -23,6 +23,7 @@
   
   [self.aspectRatioCell registerSetting:Config::GFX_ASPECT_RATIO];
   [self.vsyncCell registerSetting:Config::GFX_VSYNC];
+  [self.autoIrOsdCell registerSetting:Config::GFX_AUTO_IR_SHOW_OSD];
   [self.shaderModeCell registerSetting:Config::GFX_SHADER_COMPILATION_MODE];
   [self.shaderCompileCell registerSetting:Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING];
 }
@@ -122,6 +123,12 @@
                     "if emulation speed is below 100%.<br><br><dolphin_emphasis>If unsure, leave "
                     "this "
                     "unchecked.</dolphin_emphasis>";
+          break;
+        case 3:
+          message = @"Shows an on-screen message whenever the Auto Internal Resolution controller changes the "
+                    "internal resolution scale (e.g., 1x → 0.75x) along with current FPS. Helpful for "
+                    "diagnostics and performance tuning but can be distracting during gameplay.<br><br>"
+                    "<dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
           break;
       }
       break;

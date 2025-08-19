@@ -244,6 +244,37 @@
                                             <outlet property="boolSwitch" destination="yFm-by-fiQ" id="pIT-on-7hg"/>
                                         </connections>
                                     </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" accessoryType="detailButton" indentationWidth="10" id="AIR-OSD-CELL" customClass="GraphicsBoolCell">
+                                        <rect key="frame" x="16" y="185.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="AIR-OSD-CELL" id="AIR-OSD-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="303" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Show Auto IR OSD" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-OSD-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="222" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" horizontalCompressionResistancePriority="751" contentHorizontalAlignment="center" contentVerticalAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-OSD-SWITCH" customClass="DOLUIKitSwitch">
+                                                    <rect key="frame" x="246" y="6.5" width="51" height="31"/>
+                                                </switch>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="AIR-OSD-SWITCH" firstAttribute="centerY" secondItem="AIR-OSD-CONTENT" secondAttribute="centerY" id="AIR-OSD-centerY"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="AIR-OSD-LABEL" secondAttribute="bottom" id="AIR-OSD-bottom"/>
+                                                <constraint firstItem="AIR-OSD-LABEL" firstAttribute="leading" secondItem="AIR-OSD-CONTENT" secondAttribute="leadingMargin" id="AIR-OSD-leading"/>
+                                                <constraint firstItem="AIR-OSD-LABEL" firstAttribute="top" secondItem="AIR-OSD-CONTENT" secondAttribute="topMargin" id="AIR-OSD-top"/>
+                                                <constraint firstItem="AIR-OSD-SWITCH" firstAttribute="leading" secondItem="AIR-OSD-LABEL" secondAttribute="trailing" constant="8" id="AIR-OSD-leading2"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="AIR-OSD-SWITCH" secondAttribute="trailing" id="AIR-OSD-trailing"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="boolLabel" destination="AIR-OSD-LABEL" id="AIR-OSD-conn-label"/>
+                                            <outlet property="boolSwitch" destination="AIR-OSD-SWITCH" id="AIR-OSD-conn-switch"/>
+                                        </connections>
+                                    </tableViewCell>
                                 </cells>
                             </tableViewSection>
                             <tableViewSection headerTitle="Shader Compilation" id="chL-Ax-236">
@@ -327,6 +358,7 @@
                     <simulatedNavigationBarMetrics key="simulatedTopBarMetrics" prompted="NO"/>
                     <connections>
                         <outlet property="aspectRatioCell" destination="67I-qO-u0g" id="WBS-rM-U3m"/>
+                        <outlet property="autoIrOsdCell" destination="AIR-OSD-CELL" id="AIR-OSD-outlet"/>
                         <outlet property="backendLabel" destination="MER-bC-y11" id="Ewt-he-j2T"/>
                         <outlet property="shaderCompileCell" destination="Opv-LX-MRN" id="Btc-oi-iaz"/>
                         <outlet property="shaderModeCell" destination="yue-1l-hE1" id="ilc-nY-y8q"/>
