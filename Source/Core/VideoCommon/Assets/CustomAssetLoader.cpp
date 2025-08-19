@@ -5,6 +5,9 @@
 
 #include "Common/MemoryUtil.h"
 #include "VideoCommon/Assets/CustomAssetLibrary.h"
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 namespace VideoCommon
 {
@@ -18,6 +21,7 @@ void CustomAssetLoader::Init()
   m_max_memory_available =
       (sys_mem / 2 < recommended_min_mem) ? (sys_mem / 2) : (sys_mem - recommended_min_mem);
 
+#if !(defined(__APPLE__) && TARGET_OS_IPHONE)
   m_asset_monitor_thread = std::thread([this]() {
     Common::SetCurrentThreadName("Asset monitor");
     while (true)
@@ -43,6 +47,7 @@ void CustomAssetLoader::Init()
       }
     }
   });
+#endif
 
   m_asset_load_thread.Reset("Custom Asset Loader", [this](std::weak_ptr<CustomAsset> asset) {
     if (auto ptr = asset.lock())
@@ -74,7 +79,8 @@ void CustomAssetLoader ::Shutdown()
   m_asset_load_thread.Shutdown(true);
 
   m_asset_monitor_thread_shutdown.Set();
-  m_asset_monitor_thread.join();
+  if (m_asset_monitor_thread.joinable())
+    m_asset_monitor_thread.join();
   m_assets_to_monitor.clear();
   m_total_bytes_loaded = 0;
 }
