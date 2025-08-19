@@ -39,6 +39,37 @@
   return sharedInstance;
 }
 
+- (void)applyMetalLayerPreferences {
+  NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+  BOOL tripleBuffering = [defaults boolForKey:@"gfx_triple_buffering"];
+  BOOL forceScaleOneOnNonProMotion = [defaults boolForKey:@"gfx_force_scale_one_non_promo"];
+
+  if (_metalLayer) {
+    _metalLayer.framebufferOnly = YES;
+    if ([_metalLayer respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
+      _metalLayer.allowsNextDrawableTimeout = NO;
+    }
+    if ([_metalLayer respondsToSelector:@selector(setMaximumDrawableCount:)]) {
+      _metalLayer.maximumDrawableCount = tripleBuffering ? 3 : 2;
+    }
+    CGFloat surfaceScale = UIScreen.mainScreen.scale;
+    if (forceScaleOneOnNonProMotion && UIScreen.mainScreen.maximumFramesPerSecond <= 60) {
+      surfaceScale = 1.0;
+    }
+    _metalLayer.contentsScale = surfaceScale;
+  }
+}
+
+- (CGFloat)currentRenderSurfaceScale {
+  NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+  BOOL forceScaleOneOnNonProMotion = [defaults boolForKey:@"gfx_force_scale_one_non_promo"];
+  CGFloat surfaceScale = UIScreen.mainScreen.scale;
+  if (forceScaleOneOnNonProMotion && UIScreen.mainScreen.maximumFramesPerSecond <= 60) {
+    surfaceScale = 1.0;
+  }
+  return surfaceScale;
+}
+
 - (id)init {
   if (self = [super init]) {
     _mtkView = [[MTKView alloc] init];
@@ -46,6 +77,7 @@
     _mtkView.preferredFramesPerSecond = 120;
 
     _metalLayer = (CAMetalLayer*)_mtkView.layer;
+    [self applyMetalLayerPreferences];
 
     self.isExternalDisplayConnected = false;
   }
@@ -78,6 +110,7 @@
 
   [superview addSubview:_mtkView];
   [_mtkView setFrame:superview.bounds];
+  [self applyMetalLayerPreferences];
 
   if (g_presenter) {
     g_presenter->ResizeSurface();
@@ -99,7 +132,7 @@
     __block WindowSystemInfo wsi;
     wsi.type = WindowSystemType::iOS;
     wsi.render_surface = (__bridge void*)self->_metalLayer;
-    wsi.render_surface_scale = UIScreen.mainScreen.scale;
+    wsi.render_surface_scale = [self currentRenderSurfaceScale];
 
     auto& system = Core::System::GetInstance();
 

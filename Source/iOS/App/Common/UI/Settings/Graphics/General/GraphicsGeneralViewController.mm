@@ -30,6 +30,16 @@
   [self.autoIrMaxScaleCell registerSetting:Config::GFX_AUTO_IR_MAX_SCALE];
   [self.shaderModeCell registerSetting:Config::GFX_SHADER_COMPILATION_MODE];
   [self.shaderCompileCell registerSetting:Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING];
+
+  // Triple buffering toggle (NSUserDefaults-backed UI)
+  self.tripleBufferCell.boolLabel.text = @"Triple Buffering";
+  BOOL triple = [NSUserDefaults.standardUserDefaults objectForKey:@"gfx_triple_buffering"] ? [NSUserDefaults.standardUserDefaults boolForKey:@"gfx_triple_buffering"] : YES;
+  self.tripleBufferCell.boolSwitch.on = triple;
+  [self.tripleBufferCell.boolSwitch addValueChangedTarget:self action:@selector(tripleBufferingChanged:)];
+}
+
+- (void)tripleBufferingChanged:(id)sender {
+  [NSUserDefaults.standardUserDefaults setBool:self.tripleBufferCell.boolSwitch.on forKey:@"gfx_triple_buffering"];
 }
 
 - (void)viewWillAppear:(BOOL)animated {

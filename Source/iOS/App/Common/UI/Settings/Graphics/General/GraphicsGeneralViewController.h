@@ -20,6 +20,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet GraphicsChoiceCell* autoIrMaxScaleCell;
 @property (weak, nonatomic) IBOutlet GraphicsChoiceCell* shaderModeCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* shaderCompileCell;
+@property (weak, nonatomic) IBOutlet GraphicsBoolCell* tripleBufferCell;
 
 @end
 
