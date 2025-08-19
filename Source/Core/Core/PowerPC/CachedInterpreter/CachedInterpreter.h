@@ -209,6 +209,11 @@ enum class MicroOpCode : u8
   XORIS,
   ANDI,
   ANDIS,
+  // New ops for jitless optimization
+  RLWINM_IMM, // RA = rotl(RS, SH) & mask(MB, ME); optional record via rc flag
+  AND_RR,     // RA = RS & RB; optional record via rc flag
+  OR_RR,      // RA = RS | RB; optional record via rc flag
+  XOR_RR,     // RA = RS ^ RB; optional record via rc flag
   NOP,
   COUNT,
 };
@@ -218,6 +223,8 @@ struct MicroOp
   MicroOpCode op;
   u8 rd;   // destination (or RA for ORI)
   u8 ra;   // source register (0 means zero for ADDI semantics)
+  u8 rb;   // second source register for reg-reg ops (RB). Unused for immediates.
+  u8 rc;   // non-zero if this op should update CR0 (record bit)
   u32 imm; // immediate value (signed/unsigned depends on op)
 };
 
