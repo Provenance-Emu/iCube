@@ -196,6 +196,9 @@ enum class MicroOpCode : u8
   ORI,
   ORIS,
   XORI,
+  XORIS,
+  ANDI,
+  ANDIS,
   NOP,
   COUNT,
 };

@@ -437,7 +437,10 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
         &&op_ORI,           // 4 MicroOpCode::ORI
         &&op_ORIS,          // 5 MicroOpCode::ORIS
         &&op_XORI,          // 6 MicroOpCode::XORI
-        &&op_NOP            // 7 MicroOpCode::NOP
+        &&op_XORIS,         // 7 MicroOpCode::XORIS
+        &&op_ANDI,          // 8 MicroOpCode::ANDI
+        &&op_ANDIS,         // 9 MicroOpCode::ANDIS
+        &&op_NOP            // 10 MicroOpCode::NOP
     };
     static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
                   "dispatch_table must cover all MicroOpCode entries and match enum order");
@@ -521,6 +524,36 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
 
+  op_XORIS:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val ^ ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ANDI:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val & ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ANDIS:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val & ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
   op_NOP:
     {
       ++i;
@@ -581,6 +614,27 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 ui = m.imm & 0xFFFFu;
       ppc_state.gpr[m.rd] = rs_val ^ ui;
+      break;
+    }
+    case MicroOpCode::XORIS:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val ^ ui;
+      break;
+    }
+    case MicroOpCode::ANDI:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val & ui;
+      break;
+    }
+    case MicroOpCode::ANDIS:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val & ui;
       break;
     }
     case MicroOpCode::NOP:
@@ -1006,6 +1060,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             case 24: // ori
             case 25: // oris
             case 26: // xori
+            case 27: // xoris
               return true;
             default:
               return false;
@@ -1063,8 +1118,13 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 break;
+              case 27: // xoris
+                mu.op = MicroOpCode::XORIS;
+                mu.rd = next.inst.RA; // destination is RA
+                mu.ra = next.inst.RS; // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                break;
               default:
-                // Should not reach
                 mop.count--;
                 j = code_block.m_num_instructions; // force stop
                 break;
