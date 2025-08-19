@@ -352,6 +352,8 @@ union UVIHorizontalStepping
 
 class VideoInterfaceManager
 {
+  friend class PointerWrap;
+
 public:
   explicit VideoInterfaceManager(Core::System& system);
   VideoInterfaceManager(const VideoInterfaceManager&) = delete;
@@ -380,6 +382,16 @@ public:
 
   // Change values pertaining to video mode
   void UpdateParameters();
+  // Safer VI Skip helpers/state
+  bool IsInterlacedVideoMode() const;
+  bool IsRealXFBOrEFBActive() const;
+  void UpdateVISkipDecisionAtFieldBoundary();
+  bool IsVISkipAllowedForCurrentField() const { return m_viskip_skip_current_field; }
+
+  // VI Skip gating state
+  bool m_viskip_skip_current_field = false;
+  u32 m_viskip_consecutive_skips = 0;
+  u32 m_viskip_fields_since_present = 0;
 
   double GetTargetRefreshRate() const;
   u32 GetTargetRefreshRateNumerator() const;

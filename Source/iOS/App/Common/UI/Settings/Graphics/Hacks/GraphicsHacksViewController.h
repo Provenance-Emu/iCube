@@ -23,6 +23,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* boundingBoxCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* textureCacheCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* viSkipCell;
+// Tri-state VISkip segmented control inserted programmatically into viSkipCell
+@property (strong, nonatomic) UISegmentedControl* viSkipModeControl;
 
 @end
 

@@ -4,6 +4,7 @@
 #import "GraphicsHacksViewController.h"
 
 #import "Core/Config/GraphicsSettings.h"
+#import "VideoCommon/VideoConfig.h" // Defines TriState enum
 
 @interface GraphicsHacksViewController ()
 
@@ -26,7 +27,34 @@
   [self.vertexRoundingCell registerSetting:Config::GFX_HACK_VERTEX_ROUNDING];
   [self.boundingBoxCell registerSetting:Config::GFX_HACK_BBOX_ENABLE shouldReverse:true];
   [self.textureCacheCell registerSetting:Config::GFX_SAVE_TEXTURE_CACHE_TO_STATE];
-  [self.viSkipCell registerSetting:Config::GFX_HACK_VI_SKIP];
+  // Replace legacy boolean VISkip with tri-state segmented control (Off / Auto / On)
+  self.viSkipCell.boolSwitch.hidden = YES;
+  self.viSkipModeControl = [[UISegmentedControl alloc] initWithItems:@[ @"Off", @"Auto", @"On" ]];
+  self.viSkipModeControl.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.viSkipCell.contentView addSubview:self.viSkipModeControl];
+  [NSLayoutConstraint activateConstraints:@[
+    [self.viSkipModeControl.centerYAnchor constraintEqualToAnchor:self.viSkipCell.contentView.centerYAnchor],
+    [self.viSkipModeControl.trailingAnchor constraintEqualToAnchor:self.viSkipCell.contentView.layoutMarginsGuide.trailingAnchor]
+  ]];
+
+  // Migration: if legacy boolean was ON and mode is Off, upgrade to On once
+  TriState mode = Config::Get(Config::GFX_HACK_VI_SKIP_MODE);
+  const bool legacy_viskip = Config::Get(Config::GFX_HACK_VI_SKIP);
+  if (legacy_viskip && mode == TriState::Off)
+  {
+    mode = TriState::On;
+    Config::SetBaseOrCurrent(Config::GFX_HACK_VI_SKIP_MODE, mode);
+  }
+  // Initialize control from current mode
+  NSInteger index = 0;
+  switch (mode)
+  {
+    case TriState::Off: index = 0; break;
+    case TriState::Auto: index = 1; break;
+    case TriState::On: index = 2; break;
+  }
+  self.viSkipModeControl.selectedSegmentIndex = index;
+  [self.viSkipModeControl addTarget:self action:@selector(viSkipModeChanged:) forControlEvents:UIControlEventValueChanged];
   
   [self.efbToTextureCell.boolSwitch addValueChangedTarget:self action:@selector(updateDeferEnabled)];
   [self.xfbToTextureCell.boolSwitch addValueChangedTarget:self action:@selector(updateDeferEnabled)];
@@ -34,7 +62,7 @@
   [self updateDeferEnabled];
   
   [self.presentXfbCell.boolSwitch addValueChangedTarget:self action:@selector(updateDuplicateFramesEnabled)];
-  [self.viSkipCell.boolSwitch addValueChangedTarget:self action:@selector(updateDuplicateFramesEnabled)];
+  [self.viSkipModeControl addTarget:self action:@selector(updateDuplicateFramesEnabled) forControlEvents:UIControlEventValueChanged];
   
   [self updateDuplicateFramesEnabled];
   
@@ -70,9 +98,21 @@
 }
 
 - (void)updateDuplicateFramesEnabled {
-  const bool disabled = self.presentXfbCell.boolSwitch.on || self.viSkipCell.boolSwitch.on;
-  
+  const bool viSkipActive = self.viSkipModeControl.selectedSegmentIndex != 0; // not Off => may skip
+  const bool disabled = self.presentXfbCell.boolSwitch.on || viSkipActive;
   self.duplicateFramesCell.boolSwitch.enabled = !disabled;
+}
+
+- (void)viSkipModeChanged:(UISegmentedControl*)sender {
+  TriState mode = TriState::Off;
+  switch (sender.selectedSegmentIndex)
+  {
+    case 0: mode = TriState::Off; break;
+    case 1: mode = TriState::Auto; break;
+    case 2: mode = TriState::On; break;
+  }
+  Config::SetBaseOrCurrent(Config::GFX_HACK_VI_SKIP_MODE, mode);
+  [self updateDuplicateFramesEnabled];
 }
 
 - (IBAction)accuracyUpdated:(id)sender {

@@ -171,7 +171,10 @@ extern const Info<bool> GFX_HACK_EARLY_XFB_OUTPUT;
 extern const Info<bool> GFX_HACK_COPY_EFB_SCALED;
 extern const Info<bool> GFX_HACK_EFB_EMULATE_FORMAT_CHANGES;
 extern const Info<bool> GFX_HACK_VERTEX_ROUNDING;
+// Legacy boolean key (kept for backward compatibility)
 extern const Info<bool> GFX_HACK_VI_SKIP;
+// New tri-state mode: Off/On/Auto
+extern const Info<TriState> GFX_HACK_VI_SKIP_MODE;
 extern const Info<u32> GFX_HACK_MISSING_COLOR_VALUE;
 extern const Info<bool> GFX_HACK_FAST_TEXTURE_SAMPLING;
 #ifdef __APPLE__

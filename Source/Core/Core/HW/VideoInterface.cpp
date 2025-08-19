@@ -37,10 +37,67 @@
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VideoEvents.h"
 
+// VI Skip gating limits in anonymous namespace to guarantee visibility before all definitions
+namespace {
+constexpr u32 VISKIP_MAX_CONSECUTIVE_SKIPS = 4;
+constexpr u32 VISKIP_MAX_FIELDS_WITHOUT_PRESENT = 8;
+}
+
 namespace VideoInterface
 {
 VideoInterfaceManager::VideoInterfaceManager(Core::System& system) : m_system(system)
 {
+}
+
+// (moved to anonymous namespace at top)
+
+bool VideoInterfaceManager::IsInterlacedVideoMode() const
+{
+  // Interlaced if there are an odd number of half-lines per field
+  return (GetHalfLinesPerEvenField() & 1) == 1;
+}
+
+bool VideoInterfaceManager::IsRealXFBOrEFBActive() const
+{
+  // Heuristic: If either top or bottom XFB is enabled and has a base address, consider XFB active.
+  // This errs on the conservative side to prevent unsafe VI skipping when scanout is in use.
+  const bool top_enabled = (m_xfb_info_top.POFF == 0) && (m_xfb_info_top.FBB != 0);
+  const bool bottom_enabled = (m_xfb_info_bottom.POFF == 0) && (m_xfb_info_bottom.FBB != 0);
+  return top_enabled || bottom_enabled;
+}
+
+void VideoInterfaceManager::UpdateVISkipDecisionAtFieldBoundary()
+{
+  // Decide whether it's safe to skip the VI interrupt for the upcoming field.
+  // Rules (conservative):
+  // - Never skip in interlaced video modes.
+  // - Never skip when a real XFB appears to be active.
+  // - Limit the number of consecutive skips and maximum fields without a present.
+  const bool interlaced = IsInterlacedVideoMode();
+  const bool xfb_active = IsRealXFBOrEFBActive();
+
+  bool allow_skip = false;
+  if (!interlaced && !xfb_active &&
+      m_viskip_consecutive_skips < VISKIP_MAX_CONSECUTIVE_SKIPS &&
+      m_viskip_fields_since_present < VISKIP_MAX_FIELDS_WITHOUT_PRESENT)
+  {
+    allow_skip = true;
+  }
+
+  m_viskip_skip_current_field = allow_skip;
+
+  if (allow_skip)
+  {
+    // We intend to skip this field's VI interrupt.
+    m_viskip_consecutive_skips++;
+    m_viskip_fields_since_present++;
+  }
+  else
+  {
+    // Delivering VI interrupt (or disallowed). Reset gating counters.
+    m_viskip_consecutive_skips = 0;
+    m_viskip_fields_since_present = 0;
+  }
 }
 
 VideoInterfaceManager::~VideoInterfaceManager()
@@ -90,6 +147,10 @@ void VideoInterfaceManager::DoState(PointerWrap& p)
   p.Do(m_odd_field_first_hl);
   p.Do(m_even_field_last_hl);
   p.Do(m_odd_field_last_hl);
+  // Safer VI Skip state
+  p.Do(m_viskip_skip_current_field);
+  p.Do(m_viskip_consecutive_skips);
+  p.Do(m_viskip_fields_since_present);
 }
 
 // Executed after Init, before game boot
@@ -907,7 +968,11 @@ void VideoInterfaceManager::Update(u64 ticks)
   // dealing with SI polls, but after potentially sending a swap request to the GPU thread
 
   if (m_half_line_count == 0 || m_half_line_count == GetHalfLinesPerEvenField())
+  {
+    // Update VI Skip gating decision at field boundaries
+    UpdateVISkipDecisionAtFieldBoundary();
     Core::Callback_NewField(m_system);
+  }
 
   // If an SI poll is scheduled to happen on this half-line, do it!
 

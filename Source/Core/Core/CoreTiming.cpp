@@ -29,6 +29,8 @@
 #include "VideoCommon/PerformanceMetrics.h"
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoConfig.h"
+#include "Core/Config/GraphicsSettings.h"
+#include "Core/HW/VideoInterface.h"
 
 namespace CoreTiming
 {
@@ -421,7 +423,27 @@ TimePoint CoreTimingManager::GetCPUTimePoint(s64 cyclesLate) const
 
 bool CoreTimingManager::GetVISkip() const
 {
-  return m_throttle_disable_vi_int && g_ActiveConfig.bVISkip && !Core::WantsDeterminism();
+  if (!m_throttle_disable_vi_int || Core::WantsDeterminism())
+    return false;
+
+  // Respect new tri-state VISkip mode when available; fall back to legacy bool for compatibility.
+  const TriState mode = Config::Get(Config::GFX_HACK_VI_SKIP_MODE);
+
+  switch (mode)
+  {
+  case TriState::Off:
+    return false;
+  case TriState::On:
+    return true;
+  case TriState::Auto:
+  default:
+    // In Auto, consult VideoInterface gating decision for the current field.
+    // If VI is not available, fall back to legacy flag for safety.
+    {
+      auto& vi = m_system.GetVideoInterface();
+      return vi.IsVISkipAllowedForCurrentField();
+    }
+  }
 }
 
 float CoreTimingManager::GetOverclock() const
