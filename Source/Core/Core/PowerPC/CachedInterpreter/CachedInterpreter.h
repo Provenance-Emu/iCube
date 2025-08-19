@@ -189,6 +189,7 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
 // Minimal micro-op engine scaffolding for Phase 3
 enum class MicroOpCode : u8
 {
+  CONST32,
   ADDI,
   ADDIS,
   ORI,

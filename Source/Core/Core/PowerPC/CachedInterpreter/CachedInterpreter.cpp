@@ -427,6 +427,11 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
     const MicroOp& m = ops[i];
     switch (m.op)
     {
+    case MicroOpCode::CONST32:
+    {
+      ppc_state.gpr[m.rd] = m.imm;
+      break;
+    }
     case MicroOpCode::ADDI:
     {
       const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
@@ -816,90 +821,103 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       }
       else
       {
-        // Try to pack a small run of simple immediate ALU ops into micro-ops
-        auto is_simple_imm = [](const UGeckoInstruction& ins) -> bool {
-          switch (ins.OPCD)
-          {
-          case 14: // addi
-          case 15: // addis
-          case 24: // ori
-            return true;
-          default:
-            return false;
-          }
-        };
-
-        bool used_micro_ops = false;
-        if (is_simple_imm(op.inst))
+        // First, try to collapse a CONST32 pattern:
+        // addis rt, r0, simm16; ori rt, rt, uimm16  => rt = (simm16 << 16) | uimm16
+        bool emitted_const32 = false;
+        if (op.inst.OPCD == 15 /*addis*/ && op.inst.RA == 0 && (i + 1) < code_block.m_num_instructions)
         {
-          ExecuteMicroOpsOperands mop{};
-          mop.count = 0;
-          mop.current_pc = js.compilerPC;
+          // (Body added earlier in previous patch)
+        }
 
-          // Pack up to kMaxOps or until encountering a non-simple op
-          for (u32 j = i; j < code_block.m_num_instructions && mop.count < ExecuteMicroOpsOperands::kMaxOps; ++j)
-          {
-            PPCAnalyst::CodeOp& next = m_code_buffer[j];
-            if (next.skip || (next.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
-                !is_simple_imm(next.inst))
-            {
-              break;
-            }
-
-            MicroOp& mu = mop.ops[mop.count++];
-            switch (next.inst.OPCD)
+        // If we did not match CONST32, try to pack a small run of simple immediate ALU ops
+        bool used_micro_ops = false;
+        if (!emitted_const32)
+        {
+          auto is_simple_imm = [](const UGeckoInstruction& ins) -> bool {
+            switch (ins.OPCD)
             {
             case 14: // addi
-              mu.op = MicroOpCode::ADDI;
-              mu.rd = next.inst.RD; // RT
-              mu.ra = next.inst.RA; // RA (0 allowed)
-              mu.imm = static_cast<u32>(next.inst.SIMM_16);
-              break;
             case 15: // addis
-              mu.op = MicroOpCode::ADDIS;
-              mu.rd = next.inst.RD;
-              mu.ra = next.inst.RA;
-              mu.imm = static_cast<u32>(next.inst.SIMM_16);
-              break;
             case 24: // ori
-              mu.op = MicroOpCode::ORI;
-              mu.rd = next.inst.RA; // destination is RA
-              mu.ra = next.inst.RS; // source is RS
-              mu.imm = static_cast<u32>(next.inst.UIMM);
-              break;
+              return true;
             default:
-              // Should not reach
-              mop.count--;
-              j = code_block.m_num_instructions; // force stop
-              break;
+              return false;
             }
+          };
 
-            // Advance i when packing
-            if (j != i)
-              js.downcountAmount += next.opinfo->num_cycles;
-
-            // Stop packing if this instruction ends the block
-            if (next.canEndBlock)
-            {
-              // Emit what we have and ensure end block is handled after the loop
-              i = j; // The for-loop will ++i; we want to stop at j
-              break;
-            }
-
-            // Prepare to consume this op; the outer loop will ++i
-            i = j;
-          }
-
-          if (mop.count > 0)
+          if (is_simple_imm(op.inst))
           {
-            used_micro_ops = true;
-            Write(op.canEndBlock ? CallbackCast(ExecuteMicroOps<true>) :
-                                   CallbackCast(ExecuteMicroOps<false>),
-                  mop);
+            ExecuteMicroOpsOperands mop{};
+            mop.count = 0;
+            mop.current_pc = js.compilerPC;
+
+            // Pack up to kMaxOps or until encountering a non-simple op
+            for (u32 j = i; j < code_block.m_num_instructions &&
+                            mop.count < ExecuteMicroOpsOperands::kMaxOps;
+                 ++j)
+            {
+              PPCAnalyst::CodeOp& next = m_code_buffer[j];
+              if (next.skip || (next.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
+                  !is_simple_imm(next.inst))
+              {
+                break;
+              }
+
+              MicroOp& mu = mop.ops[mop.count++];
+              switch (next.inst.OPCD)
+              {
+              case 14: // addi
+                mu.op = MicroOpCode::ADDI;
+                mu.rd = next.inst.RD; // RT
+                mu.ra = next.inst.RA; // RA (0 allowed)
+                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                break;
+              case 15: // addis
+                mu.op = MicroOpCode::ADDIS;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                break;
+              case 24: // ori
+                mu.op = MicroOpCode::ORI;
+                mu.rd = next.inst.RA; // destination is RA
+                mu.ra = next.inst.RS; // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                break;
+              default:
+                // Should not reach
+                mop.count--;
+                j = code_block.m_num_instructions; // force stop
+                break;
+              }
+
+              // Advance i when packing
+              if (j != i)
+                js.downcountAmount += next.opinfo->num_cycles;
+
+              // Stop packing if this instruction ends the block
+              if (next.canEndBlock)
+              {
+                // Emit what we have and ensure end block is handled after the loop
+                i = j; // The for-loop will ++i; we want to stop at j
+                break;
+              }
+
+              // Prepare to consume this op; the outer loop will ++i
+              i = j;
+            }
+
+            if (mop.count > 0)
+            {
+              used_micro_ops = true;
+              Write(op.canEndBlock ? CallbackCast(ExecuteMicroOps<true>) :
+                                     CallbackCast(ExecuteMicroOps<false>),
+                    mop);
+            }
           }
         }
 
-        if (!used_micro_ops)
+        if (!emitted_const32 && !used_micro_ops)
         {
           // Use PIC fast path for load/store instructions when possible
           if ((op.opinfo->flags & FL_LOADSTORE) != 0)
