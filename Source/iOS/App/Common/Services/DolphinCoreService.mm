@@ -59,6 +59,7 @@
   Config::SetBase(Config::MAIN_FASTMEM, fastmemAvailable);
   Config::SetBase(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
   
+  Config::SetBase(Config::MAIN_FAST_DISC_SPEED, true);
   WindowSystemInfo wsi;
   wsi.type = WindowSystemType::iOS;
   
