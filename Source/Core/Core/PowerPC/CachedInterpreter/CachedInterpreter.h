@@ -87,6 +87,7 @@ private:
   struct InterpretOperands;
   struct InterpretAndCheckExceptionsOperands;
   struct LoadStoreDFormPICOperands;
+  struct ExecuteMicroOpsOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
@@ -115,6 +116,11 @@ private:
   template <bool write_pc>
   static s32 LoadStoreDFormPIC(std::ostream& stream,
                                const LoadStoreDFormPICOperands& operands);
+  template <bool write_pc>
+  static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
+                             const ExecuteMicroOpsOperands& operands);
+  template <bool write_pc>
+  static s32 ExecuteMicroOps(std::ostream& stream, const ExecuteMicroOpsOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,
@@ -178,6 +184,32 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
   u32 mem1_mask;
   u8* exram_base;
   u32 exram_mask;
+};
+
+// Minimal micro-op engine scaffolding for Phase 3
+enum class MicroOpCode : u8
+{
+  ADDI,
+  ADDIS,
+  ORI,
+  NOP,
+};
+
+struct MicroOp
+{
+  MicroOpCode op;
+  u8 rd;   // destination (or RA for ORI)
+  u8 ra;   // source register (0 means zero for ADDI semantics)
+  u32 imm; // immediate value (signed/unsigned depends on op)
+};
+
+struct CachedInterpreter::ExecuteMicroOpsOperands
+{
+  // Embedded small array keeps lifetime simple and avoids heap allocs
+  static constexpr u32 kMaxOps = 16;
+  u32 count;
+  MicroOp ops[kMaxOps];
+  u32 current_pc;
 };
 
 struct CachedInterpreter::HLEFunctionOperands

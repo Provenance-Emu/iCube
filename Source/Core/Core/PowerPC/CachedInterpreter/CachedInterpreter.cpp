@@ -403,6 +403,72 @@ void CachedInterpreter::Init()
   code_block.m_fpa = &js.fpa;
 }
 
+template <bool write_pc>
+static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = pc;
+    ppc_state.npc = pc + 4;
+  }
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
+                                       const ExecuteMicroOpsOperands& operands)
+{
+  CI_SetPCForMicroOps<write_pc>(ppc_state, operands.current_pc);
+
+  const u32 count = operands.count;
+  const MicroOp* ops = operands.ops;
+
+  for (u32 i = 0; i < count; ++i)
+  {
+    const MicroOp& m = ops[i];
+    switch (m.op)
+    {
+    case MicroOpCode::ADDI:
+    {
+      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+      // imm treated as signed 16 per ADDI semantics
+      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+      ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
+      break;
+    }
+    case MicroOpCode::ADDIS:
+    {
+      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+      ppc_state.gpr[m.rd] = ra_val + (static_cast<u32>(simm) << 16);
+      break;
+    }
+    case MicroOpCode::ORI:
+    {
+      // For ORI, rd holds the destination (RA field in instruction), ra holds RS (source)
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val | ui;
+      break;
+    }
+    case MicroOpCode::NOP:
+    default:
+      break;
+    }
+  }
+
+  // No exceptions/CR updates are modeled here; decoder must only emit safe ops.
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream,
+                                       const ExecuteMicroOpsOperands& operands)
+{
+  fmt::print(stream, "MicroOps (count={}) at PC={:#010x}\n", operands.count,
+             operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 void CachedInterpreter::Shutdown()
 {
   m_block_cache.Shutdown();
@@ -750,29 +816,115 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       }
       else
       {
-        // Use PIC fast path for load/store instructions when possible
-        if ((op.opinfo->flags & FL_LOADSTORE) != 0)
+        // Try to pack a small run of simple immediate ALU ops into micro-ops
+        auto is_simple_imm = [](const UGeckoInstruction& ins) -> bool {
+          switch (ins.OPCD)
+          {
+          case 14: // addi
+          case 15: // addis
+          case 24: // ori
+            return true;
+          default:
+            return false;
+          }
+        };
+
+        bool used_micro_ops = false;
+        if (is_simple_imm(op.inst))
         {
-          auto& mm = m_system.GetMemory();
-          const LoadStoreDFormPICOperands operands = {interpreter,
-                                                      Interpreter::GetInterpreterOp(op.inst),
-                                                      js.compilerPC,
-                                                      op.inst,
-                                                      power_pc,
-                                                      mm.GetRAM(),
-                                                      mm.GetRamMask(),
-                                                      mm.GetEXRAM(),
-                                                      mm.GetExRamMask()};
-          Write(op.canEndBlock ? CallbackCast(LoadStoreDFormPIC<true>) :
-                                 CallbackCast(LoadStoreDFormPIC<false>),
-                operands);
+          ExecuteMicroOpsOperands mop{};
+          mop.count = 0;
+          mop.current_pc = js.compilerPC;
+
+          // Pack up to kMaxOps or until encountering a non-simple op
+          for (u32 j = i; j < code_block.m_num_instructions && mop.count < ExecuteMicroOpsOperands::kMaxOps; ++j)
+          {
+            PPCAnalyst::CodeOp& next = m_code_buffer[j];
+            if (next.skip || (next.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
+                !is_simple_imm(next.inst))
+            {
+              break;
+            }
+
+            MicroOp& mu = mop.ops[mop.count++];
+            switch (next.inst.OPCD)
+            {
+            case 14: // addi
+              mu.op = MicroOpCode::ADDI;
+              mu.rd = next.inst.RD; // RT
+              mu.ra = next.inst.RA; // RA (0 allowed)
+              mu.imm = static_cast<u32>(next.inst.SIMM_16);
+              break;
+            case 15: // addis
+              mu.op = MicroOpCode::ADDIS;
+              mu.rd = next.inst.RD;
+              mu.ra = next.inst.RA;
+              mu.imm = static_cast<u32>(next.inst.SIMM_16);
+              break;
+            case 24: // ori
+              mu.op = MicroOpCode::ORI;
+              mu.rd = next.inst.RA; // destination is RA
+              mu.ra = next.inst.RS; // source is RS
+              mu.imm = static_cast<u32>(next.inst.UIMM);
+              break;
+            default:
+              // Should not reach
+              mop.count--;
+              j = code_block.m_num_instructions; // force stop
+              break;
+            }
+
+            // Advance i when packing
+            if (j != i)
+              js.downcountAmount += next.opinfo->num_cycles;
+
+            // Stop packing if this instruction ends the block
+            if (next.canEndBlock)
+            {
+              // Emit what we have and ensure end block is handled after the loop
+              i = j; // The for-loop will ++i; we want to stop at j
+              break;
+            }
+
+            // Prepare to consume this op; the outer loop will ++i
+            i = j;
+          }
+
+          if (mop.count > 0)
+          {
+            used_micro_ops = true;
+            Write(op.canEndBlock ? CallbackCast(ExecuteMicroOps<true>) :
+                                   CallbackCast(ExecuteMicroOps<false>),
+                  mop);
+          }
         }
-        else
+
+        if (!used_micro_ops)
         {
-          const InterpretOperands operands = {interpreter, Interpreter::GetInterpreterOp(op.inst),
-                                              js.compilerPC, op.inst};
-          Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
-                operands);
+          // Use PIC fast path for load/store instructions when possible
+          if ((op.opinfo->flags & FL_LOADSTORE) != 0)
+          {
+            auto& mm = m_system.GetMemory();
+            const LoadStoreDFormPICOperands operands = {interpreter,
+                                                        Interpreter::GetInterpreterOp(op.inst),
+                                                        js.compilerPC,
+                                                        op.inst,
+                                                        power_pc,
+                                                        mm.GetRAM(),
+                                                        mm.GetRamMask(),
+                                                        mm.GetEXRAM(),
+                                                        mm.GetExRamMask()};
+            Write(op.canEndBlock ? CallbackCast(LoadStoreDFormPIC<true>) :
+                                   CallbackCast(LoadStoreDFormPIC<false>),
+                  operands);
+          }
+          else
+          {
+            const InterpretOperands operands = {interpreter, Interpreter::GetInterpreterOp(op.inst),
+                                                js.compilerPC, op.inst};
+            Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
+                  operands);
+          }
         }
       }
 
