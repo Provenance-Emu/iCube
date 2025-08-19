@@ -32,7 +32,7 @@
 
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary<UIApplicationLaunchOptionsKey,id>*)launchOptions {
   Core::DeclareAsHostThread();
-  
+
   UICommon::SetUserDirectory(FoundationToCppString([UserFolderUtil getUserFolder]));
   UICommon::CreateDirectories();
 
@@ -40,32 +40,32 @@
   NSURL* loggerIniPath = [[NSBundle mainBundle] URLForResource:@"Logger" withExtension:@"ini"];
   std::string loggerIniCppPath = FoundationToCppString([loggerIniPath path]);
   std::string destPath = File::GetUserPath(F_LOGGERCONFIG_IDX);
-  
+
   File::Delete(File::GetUserPath(F_LOGGERCONFIG_IDX));
   File::Copy(loggerIniCppPath, File::GetUserPath(F_LOGGERCONFIG_IDX));
 #endif
-  
+
   UICommon::Init();
-  
+
   [[MsgAlertManager shared] registerHandler];
-  
+
   Common::RegisterStringTranslator([](const char* text) {
     return FoundationToCppString(DOLCoreLocalizedString(CToFoundationString(text)));
   });
-  
+
   Config::SetBase(Config::MAIN_USE_GAME_COVERS, true);
-  
+
   const bool fastmemAvailable = [FastmemManager shared].fastmemAvailable;
   Config::SetBase(Config::MAIN_FASTMEM, fastmemAvailable);
   Config::SetBase(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
-  
   Config::SetBase(Config::MAIN_FAST_DISC_SPEED, true);
   Config::SetBase(Config::MAIN_DSP_THREAD, true);
+
   WindowSystemInfo wsi;
   wsi.type = WindowSystemType::iOS;
-  
+
   UICommon::InitControllers(wsi);
-  
+
   // This technically doesn't send any reports since we disabled analytics...
   // However, it initializes DolphinAnalytics, which we need to do before starting any Wii games.
   DolphinAnalytics::Instance().ReportDolphinStart("ios");
@@ -76,7 +76,7 @@
 - (void)applicationDidBecomeActive:(UIApplication*)application {
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
-    
+
     if (Core::IsRunning(system) && ![EmulationCoordinator shared].userRequestedPause) {
       Core::SetState(system, Core::State::Running);
     }
@@ -86,11 +86,11 @@
 - (void)applicationWillResignActive:(UIApplication*)application {
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
-    
+
     if (Core::IsRunning(system) && ![EmulationCoordinator shared].userRequestedPause) {
       Core::SetState(system, Core::State::Paused);
     }
-    
+
     // Write out the configuration in case we don't get a chance later
     Config::Save();
   });
@@ -99,18 +99,18 @@
 - (void)applicationWillTerminate:(UIApplication*)application {
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
-    
+
     if (Core::IsRunning(system)) {
       Core::Stop(Core::System::GetInstance());
-      
+
       // Spin while Core stops
       while (Core::GetState(Core::System::GetInstance()) != Core::State::Uninitialized) {}
     }
-    
+
     Config::Save();
-    
+
     Core::Shutdown(system);
-    
+
     UICommon::ShutdownControllers();
     UICommon::Shutdown();
   });
