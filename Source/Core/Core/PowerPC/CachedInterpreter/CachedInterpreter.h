@@ -116,6 +116,13 @@ private:
   template <bool write_pc>
   static s32 LoadStoreDFormPIC(std::ostream& stream,
                                const LoadStoreDFormPICOperands& operands);
+  // X-form (indexed) Load/Store PIC fast path
+  template <bool write_pc>
+  static s32 LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
+                               const LoadStoreDFormPICOperands& operands);
+  template <bool write_pc>
+  static s32 LoadStoreXFormPIC(std::ostream& stream,
+                               const LoadStoreDFormPICOperands& operands);
   // Cold, out-of-line slow path for Load/Store PIC fallback to avoid i-cache pollution
   static s32 Cold_LoadStoreFallback(PowerPC::PowerPCState& ppc_state,
                                     const LoadStoreDFormPICOperands& operands);
