@@ -432,6 +432,15 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       ppc_state.gpr[m.rd] = m.imm;
       break;
     }
+    case MicroOpCode::CONST32_ADDRA:
+    {
+      const u32 ra_val = ppc_state.gpr[m.ra];
+      const s32 hi = static_cast<s16>(static_cast<u32>(m.imm) >> 16);
+      const u32 lo = m.imm & 0xFFFFu;
+      const u32 upper_add = ra_val + (static_cast<u32>(hi) << 16);
+      ppc_state.gpr[m.rd] = upper_add | lo;
+      break;
+    }
     case MicroOpCode::ADDI:
     {
       const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
@@ -453,6 +462,20 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 ui = m.imm & 0xFFFFu;
       ppc_state.gpr[m.rd] = rs_val | ui;
+      break;
+    }
+    case MicroOpCode::ORIS:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val | ui;
+      break;
+    }
+    case MicroOpCode::XORI:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val ^ ui;
       break;
     }
     case MicroOpCode::NOP:
@@ -829,7 +852,43 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           // (Body added earlier in previous patch)
         }
 
-        // If we did not match CONST32, try to pack a small run of simple immediate ALU ops
+        // If we did not match CONST32, try to collapse an AddRA CONST32 pattern:
+        // addis rt, ra, simm16; ori rt, rt, uimm16  => rt = GPR[ra] + ((simm16 << 16) | uimm16)
+        if (!emitted_const32 && op.inst.OPCD == 15 /*addis*/ && op.inst.RA != 0 &&
+            (i + 1) < code_block.m_num_instructions)
+        {
+          PPCAnalyst::CodeOp& op2 = m_code_buffer[i + 1];
+          if (!op2.skip && (op2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) == 0 &&
+              op2.inst.OPCD == 24 /*ori*/)
+          {
+            const u8 rt = op.inst.RD;
+            const u8 ra = op.inst.RA;
+            if (op2.inst.RA == rt && op2.inst.RS == rt)
+            {
+              ExecuteMicroOpsOperands mop{};
+              mop.count = 1;
+              mop.current_pc = js.compilerPC;
+              MicroOp& mu = mop.ops[0];
+              mu.op = MicroOpCode::CONST32_ADDRA;
+              mu.rd = rt;
+              mu.ra = ra;
+              const u32 hi = static_cast<u32>(static_cast<s16>(op.inst.SIMM_16));
+              const u32 lo = static_cast<u32>(op2.inst.UIMM & 0xFFFFu);
+              mu.imm = (hi << 16) | lo;
+
+              js.downcountAmount += op2.opinfo->num_cycles;
+              const bool end_block = op2.canEndBlock;
+              ++i; // consume op2
+
+              emitted_const32 = true;
+              Write(end_block ? CallbackCast(ExecuteMicroOps<true>) :
+                               CallbackCast(ExecuteMicroOps<false>),
+                    mop);
+            }
+          }
+        }
+
+        // If we did not match any CONST32 pattern, try to pack a small run of simple immediate ALU ops
         bool used_micro_ops = false;
         if (!emitted_const32)
         {
@@ -839,6 +898,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             case 14: // addi
             case 15: // addis
             case 24: // ori
+            case 25: // oris
+            case 26: // xori
               return true;
             default:
               return false;
@@ -880,6 +941,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 break;
               case 24: // ori
                 mu.op = MicroOpCode::ORI;
+                mu.rd = next.inst.RA; // destination is RA
+                mu.ra = next.inst.RS; // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                break;
+              case 25: // oris
+                mu.op = MicroOpCode::ORIS;
+                mu.rd = next.inst.RA; // destination is RA
+                mu.ra = next.inst.RS; // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                break;
+              case 26: // xori
+                mu.op = MicroOpCode::XORI;
                 mu.rd = next.inst.RA; // destination is RA
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);

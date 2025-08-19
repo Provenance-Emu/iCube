@@ -190,9 +190,12 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
 enum class MicroOpCode : u8
 {
   CONST32,
+  CONST32_ADDRA,
   ADDI,
   ADDIS,
   ORI,
+  ORIS,
+  XORI,
   NOP,
 };
 
