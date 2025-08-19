@@ -185,6 +185,21 @@ T MMU::ReadFromHardware(u32 em_address)
     wi = translated_addr.wi;
   }
 
+  // Ultra-fast hot path: aligned 32-bit RAM reads with dcache enabled and not write-inhibited.
+  // This mirrors the semantics of the later RAM path but avoids MMIO and other region checks.
+  if constexpr (sizeof(T) == 4)
+  {
+    if (flag == XCheckTLBFlag::Read && (em_address & 0x3) == 0 && m_ppc_state.m_enable_dcache && !wi &&
+        m_memory.GetRAM() && (em_address & 0xF8000000) == 0x00000000)
+    {
+      T value;
+      const u32 masked_em = em_address & m_memory.GetRamMask();
+      m_ppc_state.dCache.Read(m_memory, masked_em, &value, sizeof(T),
+                              HID0(m_ppc_state).DLOCK || flag != XCheckTLBFlag::Read);
+      return bswap(value);
+    }
+  }
+
   if (flag == XCheckTLBFlag::Read && (em_address & 0xF8000000) == 0x08000000)
   {
     if (em_address < 0x0c000000)
@@ -266,8 +281,15 @@ T MMU::ReadFromHardware(u32 em_address)
   return 0;
 }
 
+// Mark the write hot path as hot for compilers that support it.
+#if defined(__GNUC__) || defined(__clang__)
+#define DOLPHIN_HOT __attribute__((hot))
+#else
+#define DOLPHIN_HOT
+#endif
+
 template <XCheckTLBFlag flag, bool never_translate>
-void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
+void DOLPHIN_HOT MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
 {
   static_assert(flag == XCheckTLBFlag::NoException || flag == XCheckTLBFlag::Write);
 
@@ -285,6 +307,8 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
     WriteToHardware<flag, never_translate>(em_address, std::rotr(data, second_half_size * 8),
                                            first_half_size);
     WriteToHardware<flag, never_translate>(em_address_end_page, data, second_half_size);
+    // This is a special write-through/cache-inhibited path; clear the RAM page hint.
+    m_last_write_page_is_ram = false;
     return;
   }
 
@@ -303,6 +327,27 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
     wi = translated_addr.wi;
   }
 
+  // Compute swapped_data early for hot paths.
+  // Keep the original rotation+swap semantics to ensure correctness across all sizes.
+  const u32 swapped_data = Common::swap32(std::rotr(data, size * 8));
+
+  // Ultra-fast hot path: repeated 32-bit aligned RAM writes on the same page with dcache enabled.
+  // Uses a 1-entry last-page cache to avoid region checks and MMIO tests on the common path.
+  // Conditions mirror the later RAM fast path semantics where memcpy is skipped.
+  if (flag == XCheckTLBFlag::Write && size == 4 && (em_address & 0x3) == 0 &&
+      m_ppc_state.m_enable_dcache && !wi &&
+      m_memory.GetRAM() && (em_address & 0xF8000000) == 0x00000000)
+  {
+    // Compare unmasked physical page tags to avoid accidental matches after RAM mirroring.
+    const u32 page_tag = em_address & ~HW_PAGE_MASK;
+    if (m_last_write_page_is_ram && page_tag == m_last_write_page_tag)
+    {
+      const u32 masked_em = em_address & m_memory.GetRamMask();
+      m_ppc_state.dCache.Write(m_memory, masked_em, &swapped_data, 4, HID0(m_ppc_state).DLOCK);
+      return;
+    }
+  }
+
   // Check for a gather pipe write (which are not implemented through the MMIO system).
   //
   // Note that we must mask the address to correctly emulate certain games; Pac-Man World 3
@@ -316,6 +361,8 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
   if (flag == XCheckTLBFlag::Write &&
       (em_address & 0xFFFFF000) == GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS)
   {
+    // Not RAM: invalidate last-page RAM hint to avoid stale page hits.
+    m_last_write_page_is_ram = false;
     switch (size)
     {
     case 1:
@@ -337,10 +384,13 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
       }
       return;
     }
+    // (already invalidated before switch)
   }
 
   if (flag == XCheckTLBFlag::Write && (em_address & 0xF8000000) == 0x08000000)
   {
+    // Not RAM; invalidate last-page RAM hint up-front (returns below).
+    m_last_write_page_is_ram = false;
     if (em_address < 0x0c000000)
     {
       EFB_Write(data, em_address);
@@ -369,13 +419,15 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
     }
   }
 
-  const u32 swapped_data = Common::swap32(std::rotr(data, size * 8));
+  
 
   // Locked L1 technically doesn't have a fixed address, but games all use 0xE0000000.
   if (m_memory.GetL1Cache() && (em_address >> 28 == 0xE) &&
       (em_address < (0xE0000000 + m_memory.GetL1CacheSize())))
   {
     std::memcpy(&m_memory.GetL1Cache()[em_address & 0x0FFFFFFF], &swapped_data, size);
+    // Not RAM; invalidate last-page RAM hint.
+    m_last_write_page_is_ram = false;
     return;
   }
 
@@ -409,7 +461,12 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
   {
     // Handle RAM; the masking intentionally discards bits (essentially creating
     // mirrors of memory).
+    const u32 phys_page_tag = em_address & ~HW_PAGE_MASK; // use pre-mask physical tag
     em_address &= m_memory.GetRamMask();
+
+    // Update last-page RAM hint for future writes using the physical (unmasked) tag.
+    m_last_write_page_tag = phys_page_tag;
+    m_last_write_page_is_ram = true;
 
     if (m_ppc_state.m_enable_dcache && !wi)
       m_ppc_state.dCache.Write(m_memory, em_address, &swapped_data, size, HID0(m_ppc_state).DLOCK);
@@ -434,6 +491,8 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
     if (!m_ppc_state.m_enable_dcache || wi || flag != XCheckTLBFlag::Write)
       std::memcpy(&m_memory.GetEXRAM()[em_address], &swapped_data, size);
 
+    // Not RAM; invalidate last-page RAM hint.
+    m_last_write_page_is_ram = false;
     return;
   }
 
@@ -444,6 +503,8 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
   {
     std::memcpy(&m_memory.GetFakeVMEM()[em_address & m_memory.GetFakeVMemMask()], &swapped_data,
                 size);
+    // Not RAM; invalidate last-page RAM hint.
+    m_last_write_page_is_ram = false;
     return;
   }
 

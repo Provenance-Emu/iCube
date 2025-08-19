@@ -339,6 +339,11 @@ private:
 
   BatTable m_ibat_table;
   BatTable m_dbat_table;
+
+  // Minimal last-page write cache to accelerate repeated writes within the same RAM page.
+  // This avoids repeated region checks and speeds up the common aligned 32-bit write path.
+  u32 m_last_write_page_tag = 0xFFFFFFFFu; // effective physical page tag (em_address & ~HW_PAGE_MASK)
+  bool m_last_write_page_is_ram = false;
 };
 
 void ClearDCacheLineFromJit(MMU& mmu, u32 address);
