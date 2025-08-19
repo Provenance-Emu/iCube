@@ -374,6 +374,21 @@ template <bool write_pc>
   }
 
   // Slow path or unsupported opcodes: delegate to interpreter implementation.
+  return Cold_LoadStoreFallback(ppc_state, operands);
+}
+
+[[gnu::noinline]] [[gnu::cold]]
+s32 CachedInterpreter::Cold_LoadStoreFallback(PowerPC::PowerPCState& /*ppc_state*/,
+                                              const LoadStoreDFormPICOperands& operands)
+{
+  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
+               exram_mask] = operands;
+  (void)current_pc;
+  (void)power_pc;
+  (void)mem1_base;
+  (void)mem1_mask;
+  (void)exram_base;
+  (void)exram_mask;
   func(interpreter, inst);
   return sizeof(AnyCallback) + sizeof(operands);
 }

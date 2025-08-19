@@ -116,6 +116,9 @@ private:
   template <bool write_pc>
   static s32 LoadStoreDFormPIC(std::ostream& stream,
                                const LoadStoreDFormPICOperands& operands);
+  // Cold, out-of-line slow path for Load/Store PIC fallback to avoid i-cache pollution
+  static s32 Cold_LoadStoreFallback(PowerPC::PowerPCState& ppc_state,
+                                    const LoadStoreDFormPICOperands& operands);
   template <bool write_pc>
   static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
                              const ExecuteMicroOpsOperands& operands);
