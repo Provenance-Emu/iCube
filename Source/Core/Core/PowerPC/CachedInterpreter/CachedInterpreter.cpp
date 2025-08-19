@@ -6,6 +6,7 @@
 #include <span>
 #include <sstream>
 #include <utility>
+#include <cstring>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -25,9 +26,119 @@
 #include "Core/PowerPC/PPCAnalyst.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
+#include "Core/HW/Memmap.h"
+#include "Common/Swap.h"
 
 CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_block_cache(*this)
 {
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
+                                         const LoadStoreDFormPICOperands& operands)
+{
+  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
+               exram_mask] = operands;
+
+  // Always set PC/NPC like other callbacks: write_pc variant is selected at emission time.
+  // We mirror Interpret<write_pc> behavior by writing both; NPC will be updated by branch logic.
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = current_pc;
+    ppc_state.npc = current_pc + 4;
+  }
+
+  // Decode effective address for D-form: match Interpreter Helper_Get_EA
+  const u32 ra = inst.RA;
+  const u32 ea = ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16))
+                    : static_cast<u32>(inst.SIMM_16);
+
+  // Compute direct pointer if EA lies in MEM1 or EXRAM logical regions
+  u8* base_ptr = nullptr;
+  u32 offset = 0;
+  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (ea - Memory::MEM1_BASE_ADDR) & mem1_mask;
+  }
+  else if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
+  }
+
+  if (base_ptr)
+  {
+    // Fast-path for common integer D-form loads/stores (non-updating variants)
+    switch (inst.OPCD)
+    {
+    case 32: // lwz
+    {
+      u32 raw;
+      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u32 val = Common::FromBigEndian(raw);
+      ppc_state.gpr[inst.RD] = val;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 34: // lbz
+    {
+      const u8 val = *(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(val);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 40: // lhz
+    {
+      u16 raw;
+      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u16 val = Common::FromBigEndian(raw);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(val);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 42: // lha
+    {
+      u16 raw;
+      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u16 be = Common::FromBigEndian(raw);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(be));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 36: // stw
+    {
+      const u32 val = ppc_state.gpr[inst.RS];
+      const u32 raw = Common::swap32(val);
+      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 38: // stb
+    {
+      const u8 val = static_cast<u8>(ppc_state.gpr[inst.RS]);
+      *(base_ptr + offset) = val;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 44: // sth
+    {
+      const u16 val = static_cast<u16>(ppc_state.gpr[inst.RS]);
+      const u16 raw = Common::swap16(val);
+      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    default:
+      break; // Unsupported D-form opcode in fast path; fall back below.
+    }
+  }
+
+  // Slow path or unsupported opcodes: delegate to interpreter implementation.
+  func(interpreter, inst);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::LoadStoreDFormPIC(std::ostream& stream,
+                                         const LoadStoreDFormPICOperands& operands)
+{
+  fmt::print(stream, "PIC D-Form LS at PC={:#010x}, OPCD={}\n", operands.current_pc,
+             operands.inst.OPCD);
+  return sizeof(AnyCallback) + sizeof(operands);
 }
 
 CachedInterpreter::~CachedInterpreter() = default;
@@ -168,7 +279,7 @@ s32 CachedInterpreter::InterpretAndCheckExceptions(
 }
 
 s32 CachedInterpreter::HLEFunction(PowerPC::PowerPCState& ppc_state,
-                                   const HLEFunctionOperands& operands)
+                                    const HLEFunctionOperands& operands)
 {
   const auto& [system, current_pc, hook_index] = operands;
   ppc_state.pc = current_pc;
@@ -401,10 +512,30 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       }
       else
       {
-        const InterpretOperands operands = {interpreter, Interpreter::GetInterpreterOp(op.inst),
-                                            js.compilerPC, op.inst};
-        Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
-              operands);
+        // Use PIC fast path for load/store instructions when possible
+        if ((op.opinfo->flags & FL_LOADSTORE) != 0)
+        {
+          auto& mm = m_system.GetMemory();
+          const LoadStoreDFormPICOperands operands = {interpreter,
+                                                      Interpreter::GetInterpreterOp(op.inst),
+                                                      js.compilerPC,
+                                                      op.inst,
+                                                      power_pc,
+                                                      mm.GetRAM(),
+                                                      mm.GetRamMask(),
+                                                      mm.GetEXRAM(),
+                                                      mm.GetExRamMask()};
+          Write(op.canEndBlock ? CallbackCast(LoadStoreDFormPIC<true>) :
+                                 CallbackCast(LoadStoreDFormPIC<false>),
+                operands);
+        }
+        else
+        {
+          const InterpretOperands operands = {interpreter, Interpreter::GetInterpreterOp(op.inst),
+                                              js.compilerPC, op.inst};
+          Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
+                operands);
+        }
       }
 
       if (op.branchIsIdleLoop)

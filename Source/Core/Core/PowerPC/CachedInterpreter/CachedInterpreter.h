@@ -22,6 +22,14 @@ namespace CPU
 enum class State;
 }
 class Interpreter;
+namespace Memory
+{
+class MemoryManager;
+}
+namespace PowerPC
+{
+class MMU;
+}
 
 class CachedInterpreter : public JitBase, public CachedInterpreterCodeBlock
 {
@@ -78,6 +86,7 @@ private:
   struct EndBlockOperands;
   struct InterpretOperands;
   struct InterpretAndCheckExceptionsOperands;
+  struct LoadStoreDFormPICOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
@@ -100,6 +109,12 @@ private:
   template <bool write_pc>
   static s32 InterpretAndCheckExceptions(std::ostream& stream,
                                          const InterpretAndCheckExceptionsOperands& operands);
+  template <bool write_pc>
+  static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
+                               const LoadStoreDFormPICOperands& operands);
+  template <bool write_pc>
+  static s32 LoadStoreDFormPIC(std::ostream& stream,
+                               const LoadStoreDFormPICOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,
@@ -148,6 +163,21 @@ struct CachedInterpreter::InterpretAndCheckExceptionsOperands : InterpretOperand
 {
   PowerPC::PowerPCManager& power_pc;
   u32 downcount;
+};
+
+struct CachedInterpreter::LoadStoreDFormPICOperands
+{
+  Interpreter& interpreter;
+  void (*func)(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction
+  u32 current_pc;
+  UGeckoInstruction inst;
+
+  PowerPC::PowerPCManager& power_pc;
+
+  u8* mem1_base;
+  u32 mem1_mask;
+  u8* exram_base;
+  u32 exram_mask;
 };
 
 struct CachedInterpreter::HLEFunctionOperands
