@@ -335,6 +335,62 @@
                                             <segue destination="1bZ-c5-F77" kind="show" id="K9Q-uI-OOz"/>
                                         </connections>
                                     </tableViewCell>
+                                    <!-- INSERTED: Fast Disc Speed cell -->
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" indentationWidth="10" id="FDS-cL-01A">
+                                        <rect key="frame" x="16" y="270.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="FDS-cL-01A" id="FDS-cV-01A">
+                                            <rect key="frame" x="0.0" y="0.0" width="343" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Fast Disc Speed (speedup)" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="FDS-lb-01A">
+                                                    <rect key="frame" x="16" y="11" width="254" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" horizontalCompressionResistancePriority="751" contentHorizontalAlignment="center" contentVerticalAlignment="center" on="YES" translatesAutoresizingMaskIntoConstraints="NO" id="FDS-sw-01A" customClass="DOLUIKitSwitch">
+                                                    <rect key="frame" x="278" y="6" width="51" height="31"/>
+                                                </switch>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="FDS-sw-01A" firstAttribute="centerY" secondItem="FDS-cV-01A" secondAttribute="centerY" id="FDS-c1"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="FDS-sw-01A" secondAttribute="trailing" id="FDS-c2"/>
+                                                <constraint firstItem="FDS-sw-01A" firstAttribute="leading" secondItem="FDS-lb-01A" secondAttribute="trailing" constant="8" id="FDS-c3"/>
+                                                <constraint firstItem="FDS-lb-01A" firstAttribute="leading" secondItem="FDS-cV-01A" secondAttribute="leadingMargin" id="FDS-c4"/>
+                                                <constraint firstItem="FDS-lb-01A" firstAttribute="top" secondItem="FDS-cV-01A" secondAttribute="topMargin" id="FDS-c5"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="FDS-lb-01A" secondAttribute="bottom" id="FDS-c6"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                    </tableViewCell>
+                                    <!-- INSERTED: DSP Thread cell -->
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" indentationWidth="10" id="DSP-cL-02A">
+                                        <rect key="frame" x="16" y="313.5" width="343" height="43"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="DSP-cL-02A" id="DSP-cV-02A">
+                                            <rect key="frame" x="0.0" y="0.0" width="343" height="43"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="DSP Thread (speedup)" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="DSP-lb-02A">
+                                                    <rect key="frame" x="16" y="11" width="254" height="21"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" horizontalCompressionResistancePriority="751" contentHorizontalAlignment="center" contentVerticalAlignment="center" on="YES" translatesAutoresizingMaskIntoConstraints="NO" id="DSP-sw-02A" customClass="DOLUIKitSwitch">
+                                                    <rect key="frame" x="278" y="6" width="51" height="31"/>
+                                                </switch>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="DSP-sw-02A" firstAttribute="centerY" secondItem="DSP-cV-02A" secondAttribute="centerY" id="DSP-c1"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="DSP-sw-02A" secondAttribute="trailing" id="DSP-c2"/>
+                                                <constraint firstItem="DSP-sw-02A" firstAttribute="leading" secondItem="DSP-lb-02A" secondAttribute="trailing" constant="8" id="DSP-c3"/>
+                                                <constraint firstItem="DSP-lb-02A" firstAttribute="leading" secondItem="DSP-cV-02A" secondAttribute="leadingMargin" id="DSP-c4"/>
+                                                <constraint firstItem="DSP-lb-02A" firstAttribute="top" secondItem="DSP-cV-02A" secondAttribute="topMargin" id="DSP-c5"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="DSP-lb-02A" secondAttribute="bottom" id="DSP-c6"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                    </tableViewCell>
                                 </cells>
                             </tableViewSection>
                             <tableViewSection headerTitle="Fallback Region" footerTitle="Dolphin will use this for titles whose region cannot be determined automatically." id="w9f-Gt-sOg">
@@ -390,6 +446,9 @@
                         <outlet property="mismatchedRegionSwitch" destination="7Qq-58-BXb" id="Ps2-qU-lhO"/>
                         <outlet property="regionLabel" destination="d8e-ou-2Fp" id="8S6-WD-gaR"/>
                         <outlet property="speedLimitLabel" destination="yFY-lJ-VTt" id="Pb9-0s-LGh"/>
+                        <!-- INSERTED: outlet connections for new switches -->
+                        <outlet property="fastDiscSpeedSwitch" destination="FDS-sw-01A" id="out-fds-01"/>
+                        <outlet property="dspThreadSwitch" destination="DSP-sw-02A" id="out-dsp-02"/>
                     </connections>
                 </tableViewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="ozr-Wi-EvJ" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>

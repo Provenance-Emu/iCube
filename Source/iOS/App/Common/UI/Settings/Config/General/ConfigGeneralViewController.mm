@@ -15,31 +15,37 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  
+
   self.dualCoreSwitch.on = Config::Get(Config::MAIN_CPU_THREAD);
   [self.dualCoreSwitch addValueChangedTarget:self action:@selector(dualCoreChanged)];
-  
+
   self.cheatsSwitch.on = Config::Get(Config::MAIN_ENABLE_CHEATS);
   [self.cheatsSwitch addValueChangedTarget:self action:@selector(cheatsChanged)];
-  
+
   self.mismatchedRegionSwitch.on = Config::Get(Config::MAIN_OVERRIDE_REGION_SETTINGS);
   [self.mismatchedRegionSwitch addValueChangedTarget:self action:@selector(mismatchedRegionChanged)];
-  
+
   self.changeDiscsSwitch.on = Config::Get(Config::MAIN_AUTO_DISC_CHANGE);
   [self.changeDiscsSwitch addValueChangedTarget:self action:@selector(changeDiscsChanged)];
+
+  self.fastDiscSpeedSwitch.on = Config::Get(Config::MAIN_FAST_DISC_SPEED);
+  [self.fastDiscSpeedSwitch addValueChangedTarget:self action:@selector(fastDiscSpeedChanged)];
+
+  self.dspThreadSwitch.on = Config::Get(Config::MAIN_DSP_THREAD);
+  [self.dspThreadSwitch addValueChangedTarget:self action:@selector(dspThreadChanged)];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  
+
   int speedLimit = Config::Get(Config::MAIN_EMULATION_SPEED) * 100;
-  
+
   if (speedLimit == 0) {
     self.speedLimitLabel.text = DOLCoreLocalizedString(@"Unlimited");
   } else {
     self.speedLimitLabel.text = [NSString stringWithFormat:@"%d%%", speedLimit];
   }
-  
+
   NSString* region;
   switch (Config::Get(Config::MAIN_FALLBACK_REGION)) {
     case DiscIO::Region::NTSC_J:
@@ -58,7 +64,7 @@
       region = @"Error";
       break;
   }
-  
+
   self.regionLabel.text = DOLCoreLocalizedString(region);
 }
 
@@ -76,6 +82,14 @@
 
 - (void)changeDiscsChanged {
   Config::SetBase(Config::MAIN_AUTO_DISC_CHANGE, self.changeDiscsSwitch.on);
+}
+
+- (void)fastDiscSpeedChanged {
+  Config::SetBaseOrCurrent(Config::MAIN_FAST_DISC_SPEED, self.fastDiscSpeedSwitch.on);
+}
+
+- (void)dspThreadChanged {
+  Config::SetBaseOrCurrent(Config::MAIN_DSP_THREAD, self.dspThreadSwitch.on);
 }
 
 @end

@@ -390,3 +390,9 @@
 
 /* Class = "UILabel"; text = "100% (59.94 VPS)"; ObjectID = "vJL-tT-xta"; */
 "vJL-tT-xta.text" = "100% (59.94 VPS)";
+
+/* Class = "UILabel"; text = "DSP Thread (speedup)"; ObjectID = "DSP-lb-02A"; */
+"DSP-lb-02A.text" = "DSP Thread (speedup)";
+
+/* Class = "UILabel"; text = "Fast Disc Speed (speedup)"; ObjectID = "FDS-lb-01A"; */
+"FDS-lb-01A.text" = "Fast Disc Speed (speedup)";
