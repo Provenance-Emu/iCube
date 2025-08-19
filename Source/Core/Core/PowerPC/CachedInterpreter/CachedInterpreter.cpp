@@ -507,7 +507,14 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
         &&op_NAND_RR,       // 18 MicroOpCode::NAND_RR
         &&op_NOR_RR,        // 19 MicroOpCode::NOR_RR
         &&op_EQV_RR,        // 20 MicroOpCode::EQV_RR
-        &&op_NOP            // 21 MicroOpCode::NOP
+        &&op_CNTLZW,        // 21 MicroOpCode::CNTLZW
+        &&op_EXTSB,         // 22 MicroOpCode::EXTSB
+        &&op_EXTSH,         // 23 MicroOpCode::EXTSH
+        &&op_SLW_VAR,       // 24 MicroOpCode::SLW_VAR
+        &&op_SRW_VAR,       // 25 MicroOpCode::SRW_VAR
+        &&op_SRAW_VAR,      // 26 MicroOpCode::SRAW_VAR
+        &&op_SRAWI_IMM,     // 27 MicroOpCode::SRAWI_IMM
+        &&op_NOP            // 28 MicroOpCode::NOP
     };
     static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
                   "dispatch_table must cover all MicroOpCode entries and match enum order");
@@ -766,6 +773,101 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
 
+  op_CNTLZW:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = static_cast<u32>(std::countl_zero(ppc_state.gpr[m.ra]));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_EXTSB:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s8>(ppc_state.gpr[m.ra])));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_EXTSH:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s16>(ppc_state.gpr[m.ra])));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SLW_VAR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 amount = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] << (amount & 0x1fu));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SRW_VAR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 amount = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] >> (amount & 0x1fu));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SRAW_VAR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      if (rb_val & 0x20u)
+      {
+        if (ppc_state.gpr[m.ra] & 0x80000000u)
+        {
+          ppc_state.gpr[m.rd] = 0xFFFFFFFFu;
+          ppc_state.SetCarry(1);
+        }
+        else
+        {
+          ppc_state.gpr[m.rd] = 0x00000000u;
+          ppc_state.SetCarry(0);
+        }
+      }
+      else
+      {
+        const u32 amount = rb_val & 0x1fu;
+        const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+        ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+        ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+      }
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SRAWI_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 amount = m.imm & 31u;
+      const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+      ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+      ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
   op_NOP:
     {
       ++i;
@@ -957,6 +1059,80 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 rb_val = ppc_state.gpr[m.rb];
       ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::CNTLZW:
+    {
+      ppc_state.gpr[m.rd] = static_cast<u32>(std::countl_zero(ppc_state.gpr[m.ra]));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::EXTSB:
+    {
+      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s8>(ppc_state.gpr[m.ra])));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::EXTSH:
+    {
+      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s16>(ppc_state.gpr[m.ra])));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::SLW_VAR:
+    {
+      const u32 amount = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] << (amount & 0x1fu));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::SRW_VAR:
+    {
+      const u32 amount = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] >> (amount & 0x1fu));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::SRAW_VAR:
+    {
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      if (rb_val & 0x20u)
+      {
+        if (ppc_state.gpr[m.ra] & 0x80000000u)
+        {
+          ppc_state.gpr[m.rd] = 0xFFFFFFFFu;
+          ppc_state.SetCarry(1);
+        }
+        else
+        {
+          ppc_state.gpr[m.rd] = 0x00000000u;
+          ppc_state.SetCarry(0);
+        }
+      }
+      else
+      {
+        const u32 amount = rb_val & 0x1fu;
+        const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+        ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+        ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+      }
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::SRAWI_IMM:
+    {
+      const u32 amount = m.imm & 31u;
+      const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+      ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+      ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
       if (m.rc)
         CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
       break;
@@ -1402,6 +1578,13 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               case 476: // nandx
               case 124: // norx
               case 284: // eqvx
+              case 26:  // cntlzwx
+              case 954: // extsbx
+              case 922: // extshx
+              case 24:  // slwx
+              case 536: // srwx
+              case 792: // srawx
+              case 824: // srawix
                 return true;
               default:
                 return false;
@@ -1512,7 +1695,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 break;
-              case 31: // reg-reg logicals
+              case 31: // X-form logicals/shifts/misc
               {
                 switch (next.inst.SUBOP10)
                 {
@@ -1540,12 +1723,69 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 case 284: // eqvx
                   mu.op = MicroOpCode::EQV_RR;
                   break;
+                case 26: // cntlzwx
+                  mu.op = MicroOpCode::CNTLZW;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 954: // extsbx
+                  mu.op = MicroOpCode::EXTSB;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 922: // extshx
+                  mu.op = MicroOpCode::EXTSH;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 24: // slwx
+                  mu.op = MicroOpCode::SLW_VAR;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 536: // srwx
+                  mu.op = MicroOpCode::SRW_VAR;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 792: // srawx
+                  mu.op = MicroOpCode::SRAW_VAR;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 824: // srawix
+                  mu.op = MicroOpCode::SRAWI_IMM;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = static_cast<u32>(next.inst.SH & 31u);
+                  goto end_pack_switch;
                 default:
                   // Not supported; undo reservation and stop packing
                   mop.count--;
                   j = code_block.m_num_instructions; // force stop
                   goto end_pack_switch;
                 }
+                // Common reg-reg logicals fallthrough: set standard fields
                 mu.rd = next.inst.RA;
                 mu.ra = next.inst.RS;
                 mu.rb = next.inst.RB;

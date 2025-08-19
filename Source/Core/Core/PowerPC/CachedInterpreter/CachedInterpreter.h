@@ -221,6 +221,14 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
     NAND_RR,    // RA = ~(RS & RB); optional record via rc flag
     NOR_RR,     // RA = ~(RS | RB); optional record via rc flag
     EQV_RR,     // RA = ~(RS ^ RB); optional record via rc flag
+    // New integer ops (X-form and variants)
+    CNTLZW,     // RA = count leading zeros of RS; optional record via rc flag
+    EXTSB,      // RA = sign-extend byte from RS; optional record via rc flag
+    EXTSH,      // RA = sign-extend halfword from RS; optional record via rc flag
+    SLW_VAR,    // RA = (RB & 0x20) ? 0 : (RS << (RB & 0x1f)); optional record via rc flag
+    SRW_VAR,    // RA = (RB & 0x20) ? 0 : (RS >> (RB & 0x1f)); optional record via rc flag
+    SRAW_VAR,   // RA = arithmetic right shift by RB; updates CA; optional record via rc flag
+    SRAWI_IMM,  // RA = arithmetic right shift by SH; updates CA; optional record via rc flag
     NOP,
     COUNT,
   };
