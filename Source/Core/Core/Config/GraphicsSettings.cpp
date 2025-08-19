@@ -112,6 +112,40 @@ const Info<bool> GFX_PREFER_VS_FOR_LINE_POINT_EXPANSION{
     {System::GFX, "Settings", "PreferVSForLinePointExpansion"}, false};
 const Info<bool> GFX_CPU_CULL{{System::GFX, "Settings", "CPUCull"}, false};
 
+// Auto Internal Resolution Controller
+const Info<bool> GFX_AUTO_IR_ENABLE{{System::GFX, "Settings", "AutoInternalResolution"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                     true
+#else
+                                     false
+#endif
+};
+const Info<int> GFX_AUTO_IR_TARGET_FPS{{System::GFX, "Settings", "AutoIRTargetFPS"}, 60};
+const Info<int> GFX_AUTO_IR_MIN_SCALE{{System::GFX, "Settings", "AutoIRMinScale"}, 1};
+const Info<int> GFX_AUTO_IR_MAX_SCALE{{System::GFX, "Settings", "AutoIRMaxScale"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                       4
+#else
+                                       12
+#endif
+};
+const Info<int> GFX_AUTO_IR_COOLDOWN_FRAMES{{System::GFX, "Settings", "AutoIRCooldownFrames"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                             90
+#else
+                                             60
+#endif
+};
+const Info<int> GFX_AUTO_IR_HYSTERESIS_PERCENT{{System::GFX, "Settings", "AutoIRHysteresisPct"},
+                                                12};
+const Info<bool> GFX_AUTO_IR_SHOW_OSD{{System::GFX, "Settings", "AutoIRShowOSD"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                      true
+#else
+                                      false
+#endif
+};
+
 const Info<TriState> GFX_MTL_MANUALLY_UPLOAD_BUFFERS{
     {System::GFX, "Settings", "ManuallyUploadBuffers"}, TriState::Auto};
 const Info<TriState> GFX_MTL_USE_PRESENT_DRAWABLE{

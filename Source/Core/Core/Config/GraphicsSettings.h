@@ -97,6 +97,16 @@ extern const Info<bool> GFX_SAVE_TEXTURE_CACHE_TO_STATE;
 extern const Info<bool> GFX_PREFER_VS_FOR_LINE_POINT_EXPANSION;
 extern const Info<bool> GFX_CPU_CULL;
 
+// Auto Internal Resolution Controller
+extern const Info<bool> GFX_AUTO_IR_ENABLE;
+extern const Info<int> GFX_AUTO_IR_TARGET_FPS;
+extern const Info<int> GFX_AUTO_IR_MIN_SCALE;
+extern const Info<int> GFX_AUTO_IR_MAX_SCALE;
+extern const Info<int> GFX_AUTO_IR_COOLDOWN_FRAMES;
+extern const Info<int> GFX_AUTO_IR_HYSTERESIS_PERCENT;
+// Show OSD toast when Auto IR changes scale
+extern const Info<bool> GFX_AUTO_IR_SHOW_OSD;
+
 extern const Info<TriState> GFX_MTL_MANUALLY_UPLOAD_BUFFERS;
 extern const Info<TriState> GFX_MTL_USE_PRESENT_DRAWABLE;
 

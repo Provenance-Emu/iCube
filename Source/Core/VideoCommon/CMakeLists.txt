@@ -122,6 +122,8 @@ add_library(videocommon
   PerfQueryBase.h
   PerformanceMetrics.cpp
   PerformanceMetrics.h
+  AutoIRController.cpp
+  AutoIRController.h
   PerformanceTracker.cpp
   PerformanceTracker.h
   PixelEngine.cpp
