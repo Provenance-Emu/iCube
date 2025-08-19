@@ -214,7 +214,7 @@ struct MicroOp
 struct CachedInterpreter::ExecuteMicroOpsOperands
 {
   // Embedded small array keeps lifetime simple and avoids heap allocs
-  static constexpr u32 kMaxOps = 16;
+  static constexpr u32 kMaxOps = 32;
   u32 count;
   MicroOp ops[kMaxOps];
   u32 current_pc;
