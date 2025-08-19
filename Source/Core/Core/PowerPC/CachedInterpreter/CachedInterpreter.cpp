@@ -30,6 +30,24 @@
 #include "Core/HW/Memmap.h"
 #include "Common/Swap.h"
 
+// Local helper to update CR0, mirroring Interpreter::Helper_UpdateCR0, which is private.
+static inline void CI_UpdateCR0(PowerPC::PowerPCState& ppc_state, u32 value)
+{
+  const s64 sign_extended = s64{s32(value)};
+  u64 cr_val = u64(sign_extended);
+
+  if (value == 0)
+  {
+    // Preserve GT semantics when setting SO on zero -> non-zero transition.
+    cr_val |= 1ULL << 63;
+  }
+
+  cr_val = (cr_val & ~(1ULL << PowerPC::CR_EMU_SO_BIT)) |
+           (u64{ppc_state.GetXER_SO()} << PowerPC::CR_EMU_SO_BIT);
+
+  ppc_state.cr.fields[0] = cr_val;
+}
+
 CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_block_cache(*this)
 {
 }
@@ -540,6 +558,7 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 ui = m.imm & 0xFFFFu;
       ppc_state.gpr[m.rd] = rs_val & ui;
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
       ++i;
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
@@ -550,6 +569,7 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 ui = (m.imm & 0xFFFFu) << 16;
       ppc_state.gpr[m.rd] = rs_val & ui;
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
       ++i;
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
@@ -1061,6 +1081,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             case 25: // oris
             case 26: // xori
             case 27: // xoris
+            case 28: // andi.
+            case 29: // andis.
               return true;
             default:
               return false;
@@ -1121,6 +1143,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               case 27: // xoris
                 mu.op = MicroOpCode::XORIS;
                 mu.rd = next.inst.RA; // destination is RA
+                mu.ra = next.inst.RS; // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                break;
+              case 28: // andi.
+                mu.op = MicroOpCode::ANDI;
+                mu.rd = next.inst.RA; // destination is RA (recording variant)
+                mu.ra = next.inst.RS; // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                break;
+              case 29: // andis.
+                mu.op = MicroOpCode::ANDIS;
+                mu.rd = next.inst.RA; // destination is RA (recording variant)
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 break;
