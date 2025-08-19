@@ -48,10 +48,21 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
     ppc_state.npc = current_pc + 4;
   }
 
-  // Decode effective address for D-form: match Interpreter Helper_Get_EA
+  // Decode effective address
+  // - D-form: ea = (RA ? GPR[RA] : 0) + SIMM_16
+  // - X-form: ea = (RA ? GPR[RA] : 0) + GPR[RB]
   const u32 ra = inst.RA;
-  const u32 ea = ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16))
-                    : static_cast<u32>(inst.SIMM_16);
+  u32 ea;
+  if (inst.OPCD == 31)
+  {
+    const u32 rb = inst.RB;
+    ea = (ra ? ppc_state.gpr[ra] : 0) + ppc_state.gpr[rb];
+  }
+  else
+  {
+    ea = ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16))
+            : static_cast<u32>(inst.SIMM_16);
+  }
 
   // Compute direct pointer if EA lies in MEM1 or EXRAM logical regions
   u8* base_ptr = nullptr;
@@ -71,6 +82,7 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
   {
     // offset already computed as (ea - base) & mask above; do not recompute with (ea & mask)
     // which would be incorrect for EXRAM and MEM1 logical addresses.
+    // Handle D-form by primary opcode, X-form by SUBOP10 under OPCD=31
     switch (inst.OPCD)
     {
     case 32: // lwz
@@ -203,6 +215,111 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       std::memcpy(base_ptr + offset, &raw, sizeof(raw));
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 31: // X-form indexed load/store
+    {
+      switch (inst.SUBOP10)
+      {
+      // Loads (indexed)
+      case 23: // lwzx
+      case 55: // lwzux (update)
+      {
+        const bool update = (inst.SUBOP10 == 55);
+        if ((ea & 0b11) != 0 || (update && ra == 0))
+          break; // misaligned or illegal
+        u32 raw;
+        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u32 val = Common::FromBigEndian(raw);
+        ppc_state.gpr[inst.RD] = val;
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 87:  // lbzx
+      case 119: // lbzux (update)
+      {
+        const bool update = (inst.SUBOP10 == 119);
+        if (update && ra == 0)
+          break; // illegal
+        const u8 val = *(base_ptr + offset);
+        ppc_state.gpr[inst.RD] = static_cast<u32>(val);
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 279: // lhzx
+      case 311: // lhzux (update)
+      {
+        const bool update = (inst.SUBOP10 == 311);
+        if ((ea & 0b1) != 0 || (update && ra == 0))
+          break; // misaligned or illegal
+        u16 raw;
+        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u16 val = Common::FromBigEndian(raw);
+        ppc_state.gpr[inst.RD] = static_cast<u32>(val);
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 343: // lhax
+      case 375: // lhaux (update)
+      {
+        const bool update = (inst.SUBOP10 == 375);
+        if ((ea & 0b1) != 0 || (update && ra == 0))
+          break; // misaligned or illegal
+        u16 raw;
+        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u16 be = Common::FromBigEndian(raw);
+        ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(be));
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+
+      // Stores (indexed)
+      case 151: // stwx
+      case 183: // stwux (update)
+      {
+        const bool update = (inst.SUBOP10 == 183);
+        if ((ea & 0b11) != 0 || (update && ra == 0))
+          break; // misaligned or illegal
+        const u32 val = ppc_state.gpr[inst.RS];
+        const u32 raw = Common::swap32(val);
+        std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 215: // stbx
+      case 247: // stbux (update)
+      {
+        const bool update = (inst.SUBOP10 == 247);
+        if (update && ra == 0)
+          break; // illegal
+        const u8 val = static_cast<u8>(ppc_state.gpr[inst.RS]);
+        *(base_ptr + offset) = val;
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 407: // sthx
+      case 439: // sthux (update)
+      {
+        const bool update = (inst.SUBOP10 == 439);
+        if ((ea & 0b1) != 0 || (update && ra == 0))
+          break; // misaligned or illegal
+        const u16 val = static_cast<u16>(ppc_state.gpr[inst.RS]);
+        const u16 raw = Common::swap16(val);
+        std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+
+      default:
+        break; // unsupported X-form in PIC
+      }
+      break; // end case 31
     }
     default:
       break; // Unsupported D-form opcode in fast path; fall back below.
