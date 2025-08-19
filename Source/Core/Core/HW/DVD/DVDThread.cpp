@@ -340,21 +340,73 @@ void DVDThread::DVDThreadMain()
       return;
 
     ReadRequest request;
-    while (m_request_queue.Pop(request))
+    bool has_pending = false;
+    ReadRequest pending;
+
+    while (true)
     {
+      if (has_pending)
+      {
+        request = pending;
+        has_pending = false;
+      }
+      else
+      {
+        if (!m_request_queue.Pop(request))
+          break;
+      }
+
       m_file_logger.Log(*m_disc, request.partition, request.dvd_offset);
 
-      std::vector<u8> buffer(request.length);
-      if (!m_disc->Read(request.dvd_offset, request.length, buffer.data(), request.partition))
-        buffer.resize(0);
+      // Coalesce sequential requests up to a cap using single lookahead
+      constexpr u32 kMaxCoalesce = 256 * 1024; // 256KB
+      u64 base_offset = request.dvd_offset;
+      u32 total_length = request.length;
+      std::vector<ReadRequest> batched;
+      batched.push_back(request);
 
-      request.realtime_done_us = Common::Timer::NowUs();
+      // Attempt to pop additional sequential items
+      while (true)
+      {
+        ReadRequest next;
+        if (!m_request_queue.Pop(next))
+          break;
+        if (next.partition == request.partition && next.copy_to_ram &&
+            next.dvd_offset == base_offset + total_length &&
+            total_length + next.length <= kMaxCoalesce)
+        {
+          batched.push_back(next);
+          total_length += next.length;
+        }
+        else
+        {
+          // Defer processing of non-coalescable next item
+          pending = next;
+          has_pending = true;
+          break;
+        }
+      }
 
-      m_result_queue.Push(ReadResult(std::move(request), std::move(buffer)));
-      m_result_queue_expanded.Set();
+      std::vector<u8> big_buffer(total_length);
+      if (!m_disc->Read(base_offset, total_length, big_buffer.data(), request.partition))
+        big_buffer.resize(0);
 
-      if (m_dvd_thread_exiting.IsSet())
-        return;
+      u32 cursor = 0;
+      for (auto& r : batched)
+      {
+        std::vector<u8> slice;
+        if (!big_buffer.empty())
+        {
+          slice.assign(big_buffer.begin() + cursor, big_buffer.begin() + cursor + r.length);
+        }
+        cursor += r.length;
+        r.realtime_done_us = Common::Timer::NowUs();
+        m_result_queue.Push(ReadResult(std::move(r), std::move(slice)));
+        m_result_queue_expanded.Set();
+
+        if (m_dvd_thread_exiting.IsSet())
+          return;
+      }
     }
   }
 }
