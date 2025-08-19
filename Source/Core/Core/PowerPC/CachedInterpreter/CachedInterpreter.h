@@ -197,6 +197,7 @@ enum class MicroOpCode : u8
   ORIS,
   XORI,
   NOP,
+  COUNT,
 };
 
 struct MicroOp

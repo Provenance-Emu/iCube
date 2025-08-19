@@ -4,6 +4,7 @@
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
 
 #include <span>
+#include <iterator>
 #include <sstream>
 #include <utility>
 #include <cstring>
@@ -438,11 +439,16 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
         &&op_XORI,          // 6 MicroOpCode::XORI
         &&op_NOP            // 7 MicroOpCode::NOP
     };
+    static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
+                  "dispatch_table must cover all MicroOpCode entries and match enum order");
 
   micro_dispatch:
     {
       const MicroOp& m = ops[i];
-      goto *dispatch_table[static_cast<unsigned>(m.op)];
+      const unsigned op_index = static_cast<unsigned>(m.op);
+      if (__builtin_expect(op_index >= static_cast<unsigned>(MicroOpCode::COUNT), 0))
+        goto micro_done; // fail fast; invalid op emitted
+      goto *dispatch_table[op_index];
     }
 
   op_CONST32:
