@@ -53,8 +53,8 @@ CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_
 }
 
 template <bool write_pc>
-s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
-                                         const LoadStoreDFormPICOperands& operands)
+[[gnu::hot]] s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
+                                                      const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
                exram_mask] = operands;
@@ -84,7 +84,7 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
   }
 
   // Compute direct pointer if EA lies in MEM1 or EXRAM logical regions
-  u8* base_ptr = nullptr;
+  u8* __restrict base_ptr = nullptr;
   u32 offset = 0;
   if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
   {
@@ -97,7 +97,7 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
     offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
   }
 
-  if (base_ptr)
+  if (base_ptr) [[likely]]
   {
     // offset already computed as (ea - base) & mask above; do not recompute with (ea & mask)
     // which would be incorrect for EXRAM and MEM1 logical addresses.
@@ -106,20 +106,18 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
     {
     case 32: // lwz
     {
-      if ((ea & 0b11) != 0)
+      if ((ea & 0b11) != 0) [[unlikely]]
         break; // misaligned -> fallback
-      u32 raw;
-      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
       const u32 val = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = val;
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 33: // lwzu (update)
     {
-      if (ra == 0 || (ea & 0b11) != 0)
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
-      u32 raw;
-      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
       const u32 val = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = val;
       ppc_state.gpr[ra] = ea;
@@ -142,20 +140,18 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
     }
     case 40: // lhz
     {
-      if ((ea & 0b1) != 0)
+      if ((ea & 0b1) != 0) [[unlikely]]
         break; // misaligned -> fallback
-      u16 raw;
-      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
       const u16 val = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = static_cast<u32>(val);
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 41: // lhzu (update)
     {
-      if (ra == 0 || (ea & 0b1) != 0)
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
-      u16 raw;
-      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
       const u16 val = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = static_cast<u32>(val);
       ppc_state.gpr[ra] = ea;
@@ -163,20 +159,18 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
     }
     case 42: // lha
     {
-      if ((ea & 0b1) != 0)
+      if ((ea & 0b1) != 0) [[unlikely]]
         break; // misaligned -> fallback
-      u16 raw;
-      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
       const u16 be = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(be));
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 43: // lhau (update)
     {
-      if (ra == 0 || (ea & 0b1) != 0)
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
-      u16 raw;
-      std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
       const u16 be = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(be));
       ppc_state.gpr[ra] = ea;
@@ -184,20 +178,20 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
     }
     case 36: // stw
     {
-      if ((ea & 0b11) != 0)
+      if ((ea & 0b11) != 0) [[unlikely]]
         break; // misaligned -> fallback
       const u32 val = ppc_state.gpr[inst.RS];
       const u32 raw = Common::swap32(val);
-      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      *reinterpret_cast<u32*>(base_ptr + offset) = raw;
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 37: // stwu (update)
     {
-      if (ra == 0 || (ea & 0b11) != 0)
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
       const u32 val = ppc_state.gpr[inst.RS];
       const u32 raw = Common::swap32(val);
-      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      *reinterpret_cast<u32*>(base_ptr + offset) = raw;
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
@@ -218,20 +212,20 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
     }
     case 44: // sth
     {
-      if ((ea & 0b1) != 0)
+      if ((ea & 0b1) != 0) [[unlikely]]
         break; // misaligned -> fallback
       const u16 val = static_cast<u16>(ppc_state.gpr[inst.RS]);
       const u16 raw = Common::swap16(val);
-      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      *reinterpret_cast<u16*>(base_ptr + offset) = raw;
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 45: // sthu (update)
     {
-      if (ra == 0 || (ea & 0b1) != 0)
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
       const u16 val = static_cast<u16>(ppc_state.gpr[inst.RS]);
       const u16 raw = Common::swap16(val);
-      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      *reinterpret_cast<u16*>(base_ptr + offset) = raw;
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
@@ -244,10 +238,9 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       case 55: // lwzux (update)
       {
         const bool update = (inst.SUBOP10 == 55);
-        if ((ea & 0b11) != 0 || (update && ra == 0))
+        if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
           break; // misaligned or illegal
-        u32 raw;
-        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
         const u32 val = Common::FromBigEndian(raw);
         ppc_state.gpr[inst.RD] = val;
         if (update)
@@ -270,10 +263,9 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       case 311: // lhzux (update)
       {
         const bool update = (inst.SUBOP10 == 311);
-        if ((ea & 0b1) != 0 || (update && ra == 0))
+        if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
           break; // misaligned or illegal
-        u16 raw;
-        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
         const u16 val = Common::FromBigEndian(raw);
         ppc_state.gpr[inst.RD] = static_cast<u32>(val);
         if (update)
@@ -284,10 +276,9 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       case 375: // lhaux (update)
       {
         const bool update = (inst.SUBOP10 == 375);
-        if ((ea & 0b1) != 0 || (update && ra == 0))
+        if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
           break; // misaligned or illegal
-        u16 raw;
-        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
         const u16 be = Common::FromBigEndian(raw);
         ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(be));
         if (update)
@@ -300,11 +291,11 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       case 183: // stwux (update)
       {
         const bool update = (inst.SUBOP10 == 183);
-        if ((ea & 0b11) != 0 || (update && ra == 0))
+        if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
           break; // misaligned or illegal
         const u32 val = ppc_state.gpr[inst.RS];
         const u32 raw = Common::swap32(val);
-        std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        *reinterpret_cast<u32*>(base_ptr + offset) = raw;
         if (update)
           ppc_state.gpr[ra] = ea;
         return sizeof(AnyCallback) + sizeof(operands);
@@ -325,11 +316,11 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       case 439: // sthux (update)
       {
         const bool update = (inst.SUBOP10 == 439);
-        if ((ea & 0b1) != 0 || (update && ra == 0))
+        if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
           break; // misaligned or illegal
         const u16 val = static_cast<u16>(ppc_state.gpr[inst.RS]);
         const u16 raw = Common::swap16(val);
-        std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        *reinterpret_cast<u16*>(base_ptr + offset) = raw;
         if (update)
           ppc_state.gpr[ra] = ea;
         return sizeof(AnyCallback) + sizeof(operands);
@@ -338,20 +329,18 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       // Byte-reverse indexed variants
       case 534: // lwbrx
       {
-        if ((ea & 0b11) != 0)
+        if ((ea & 0b11) != 0) [[unlikely]]
           break; // misaligned
-        u32 raw;
-        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
         const u32 val = Common::swap32(Common::FromBigEndian(raw));
         ppc_state.gpr[inst.RD] = val;
         return sizeof(AnyCallback) + sizeof(operands);
       }
       case 790: // lhbrx
       {
-        if ((ea & 0b1) != 0)
+        if ((ea & 0b1) != 0) [[unlikely]]
           break; // misaligned
-        u16 raw;
-        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
         const u16 val = Common::swap16(Common::FromBigEndian(raw));
         ppc_state.gpr[inst.RD] = static_cast<u32>(val);
         return sizeof(AnyCallback) + sizeof(operands);
