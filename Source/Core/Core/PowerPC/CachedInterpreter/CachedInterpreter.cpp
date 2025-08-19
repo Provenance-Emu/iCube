@@ -69,8 +69,8 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
 
   if (base_ptr)
   {
-    const u32 mem_mask = (ea >= Memory::MEM1_BASE_ADDR) ? mem1_mask : exram_mask;
-    offset = (ea & mem_mask);
+    // offset already computed as (ea - base) & mask above; do not recompute with (ea & mask)
+    // which would be incorrect for EXRAM and MEM1 logical addresses.
     switch (inst.OPCD)
     {
     case 32: // lwz
