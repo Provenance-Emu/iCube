@@ -23,7 +23,11 @@
   
   [self.aspectRatioCell registerSetting:Config::GFX_ASPECT_RATIO];
   [self.vsyncCell registerSetting:Config::GFX_VSYNC];
+  [self.autoIrEnableCell registerSetting:Config::GFX_AUTO_IR_ENABLE];
   [self.autoIrOsdCell registerSetting:Config::GFX_AUTO_IR_SHOW_OSD];
+  [self.autoIrTargetFpsCell registerSetting:Config::GFX_AUTO_IR_TARGET_FPS];
+  [self.autoIrMinScaleCell registerSetting:Config::GFX_AUTO_IR_MIN_SCALE];
+  [self.autoIrMaxScaleCell registerSetting:Config::GFX_AUTO_IR_MAX_SCALE];
   [self.shaderModeCell registerSetting:Config::GFX_SHADER_COMPILATION_MODE];
   [self.shaderCompileCell registerSetting:Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING];
 }
@@ -88,6 +92,16 @@
   }
   
   self.shaderModeCell.choiceSettingLabel.text = DOLCoreLocalizedString(shaderMode);
+
+  // Auto IR value labels
+  const int target_fps = Config::Get(Config::GFX_AUTO_IR_TARGET_FPS);
+  self.autoIrTargetFpsCell.choiceSettingLabel.text = [NSString stringWithFormat:@"%d FPS", target_fps];
+
+  const int min_scale = Config::Get(Config::GFX_AUTO_IR_MIN_SCALE);
+  self.autoIrMinScaleCell.choiceSettingLabel.text = [NSString stringWithFormat:@"%dx", min_scale];
+
+  const int max_scale = Config::Get(Config::GFX_AUTO_IR_MAX_SCALE);
+  self.autoIrMaxScaleCell.choiceSettingLabel.text = [NSString stringWithFormat:@"%dx", max_scale];
 }
 
 - (void)tableView:(UITableView*)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath*)indexPath {
