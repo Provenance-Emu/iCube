@@ -109,6 +109,7 @@ if [ ! -f "$CMAKE_BUILD_DIR/build.ninja" ]; then
     -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-dead_strip -Wl,-dead_strip_dylibs" \
     -DIOS=ON \
     -DENABLE_ANALYTICS=NO \
+    -DENABLE_LTO=ON \
     -DUSE_SYSTEM_LIBS=OFF \
     -DENABLE_TESTS=OFF \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
