@@ -198,6 +198,17 @@ T MMU::ReadFromHardware(u32 em_address)
                               HID0(m_ppc_state).DLOCK || flag != XCheckTLBFlag::Read);
       return bswap(value);
     }
+    // Ultra-fast hot path: aligned 32-bit EXRAM reads with dcache enabled and not write-inhibited.
+    if (flag == XCheckTLBFlag::Read && (em_address & 0x3) == 0 && m_ppc_state.m_enable_dcache && !wi &&
+        m_memory.GetEXRAM() && (em_address >> 28) == 0x1 &&
+        ((em_address & 0x0FFFFFFF) < m_memory.GetExRamSizeReal()))
+    {
+      T value;
+      const u32 ex_ofs = (em_address & 0x0FFFFFFF) + 0x10000000;
+      m_ppc_state.dCache.Read(m_memory, ex_ofs, &value, sizeof(T),
+                              HID0(m_ppc_state).DLOCK || flag != XCheckTLBFlag::Read);
+      return bswap(value);
+    }
   }
 
   if (flag == XCheckTLBFlag::Read && (em_address & 0xF8000000) == 0x08000000)
@@ -422,7 +433,7 @@ void DOLPHIN_HOT MMU::WriteToHardware(u32 em_address, const u32 data, const u32 
   
 
   // Locked L1 technically doesn't have a fixed address, but games all use 0xE0000000.
-  if (m_memory.GetL1Cache() && (em_address >> 28 == 0xE) &&
+  if (m_memory.GetL1Cache() && ((em_address >> 28) == 0xE) &&
       (em_address < (0xE0000000 + m_memory.GetL1CacheSize())))
   {
     std::memcpy(&m_memory.GetL1Cache()[em_address & 0x0FFFFFFF], &swapped_data, size);
