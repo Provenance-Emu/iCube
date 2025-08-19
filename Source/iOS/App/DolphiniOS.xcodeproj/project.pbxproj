@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B3B31ABD2E5525A6002BF20C /* AchievementsSettingsViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */; };
 		B900A7A127F255EF000361DD /* libdolphin.dylib in CopyFiles */ = {isa = PBXBuildFile; fileRef = B9476B2427F23FFE009C0A4B /* libdolphin.dylib */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		B900A7A727F26F61000361DD /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7A627F26F61000361DD /* AppDelegate.swift */; };
 		B900A7AE27F27F36000361DD /* DolphinCoreService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AD27F27F36000361DD /* DolphinCoreService.mm */; };
@@ -221,6 +222,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B3B31ABA2E5525A6002BF20C /* AchievementsSettingsViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AchievementsSettingsViewController.h; sourceTree = "<group>"; };
+		B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AchievementsSettingsViewController.mm; sourceTree = "<group>"; };
 		B900A7A227F25718000361DD /* Common.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Common.xcconfig; sourceTree = "<group>"; };
 		B900A7A627F26F61000361DD /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B900A7AC27F27F36000361DD /* DolphinCoreService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DolphinCoreService.h; sourceTree = "<group>"; };
@@ -603,6 +606,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B3B31ABC2E5525A6002BF20C /* Achievements */ = {
+			isa = PBXGroup;
+			children = (
+				B3B31ABA2E5525A6002BF20C /* AchievementsSettingsViewController.h */,
+				B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */,
+			);
+			path = Achievements;
+			sourceTree = "<group>";
+		};
 		B900A7A327F260EF000361DD /* Libraries */ = {
 			isa = PBXGroup;
 			children = (
@@ -945,6 +957,7 @@
 			isa = PBXGroup;
 			children = (
 				B97C49AC297E6CE400E30877 /* About */,
+				B3B31ABC2E5525A6002BF20C /* Achievements */,
 				B9398700287F98E7008E8E47 /* Config */,
 				B904ACE628866E12008B6BE9 /* Controllers */,
 				B9114F982893C69E00B9C57A /* Debug */,
@@ -2067,6 +2080,7 @@
 				B904AD3B288904AC008B6BE9 /* MappingGroupEditBoolCell.m in Sources */,
 				B9809C602A48236900877579 /* SoftwarePropertiesInfoViewController.mm in Sources */,
 				B9809C832A4A22EB00877579 /* ActionReplayCodeEditViewController.mm in Sources */,
+				B3B31ABD2E5525A6002BF20C /* AchievementsSettingsViewController.mm in Sources */,
 				B9B2C64F288E1C4F00CB6569 /* MainDisplaySceneDelegate.swift in Sources */,
 				B904AD012887B9D1008B6BE9 /* ControllersPortViewController.mm in Sources */,
 				B904AD272888D346008B6BE9 /* MappingUtil.mm in Sources */,

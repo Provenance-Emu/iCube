@@ -168,6 +168,31 @@
                                             <segue destination="TFH-fa-6z1" kind="show" id="znR-iG-iMc"/>
                                         </connections>
                                     </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" accessoryType="disclosureIndicator" indentationWidth="10" id="ACH-IOS-CELL">
+                                        <rect key="frame" x="16" y="277.5" width="343" height="43"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="ACH-IOS-CELL" id="ACH-IOS-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="316.5" height="43"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Achievements" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="ACH-IOS-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="292.5" height="21"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                            </subviews>
+                                            <constraints>
+                                                                                            <constraint firstAttribute="bottomMargin" secondItem="ACH-IOS-LABEL" secondAttribute="bottom" id="ACH-IOS-BOT"/>
+                                            <constraint firstItem="ACH-IOS-LABEL" firstAttribute="leading" secondItem="ACH-IOS-CONTENT" secondAttribute="leadingMargin" id="ACH-IOS-LEAD"/>
+                                            <constraint firstItem="ACH-IOS-LABEL" firstAttribute="top" secondItem="ACH-IOS-CONTENT" secondAttribute="topMargin" id="ACH-IOS-TOP"/>
+                                            <constraint firstAttribute="trailingMargin" secondItem="ACH-IOS-LABEL" secondAttribute="trailing" id="ACH-IOS-TRAIL"/>
+                                        </constraints>
+                                    </tableViewCellContentView>
+                                    <connections>
+                                        <segue destination="ACH-VC" kind="show" id="ACH-SEG"/>
+                                    </connections>
+                                </tableViewCell>
                                 </cells>
                             </tableViewSection>
                         </sections>
@@ -182,6 +207,20 @@
                 <placeholder placeholderIdentifier="IBFirstResponder" id="paw-Y6-gW7" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="494" y="-91"/>
+        </scene>
+        <!--Achievements Programmatic Scene-->
+        <scene sceneID="ACH-SCENE">
+            <objects>
+                <tableViewController id="ACH-VC" customClass="AchievementsSettingsViewController" sceneMemberID="viewController">
+                    <tableView key="view" clipsSubviews="YES" contentMode="scaleToFill" dataMode="static" style="insetGrouped" id="ACH-TABLE">
+                        <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                    </tableView>
+                    <navigationItem key="navigationItem" title="Achievements" id="ACH-NAV"/>
+                </tableViewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="ACH-FR" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="1425" y="-600"/>
         </scene>
         <!--General-->
         <scene sceneID="0US-Jm-r2e">

@@ -10,6 +10,9 @@
 #import "Core/HW/VideoInterface.h"
 #import "Core/System.h"
 #import "Core/PowerPC/PowerPC.h"
+#ifdef USE_RETRO_ACHIEVEMENTS
+#import "Core/Config/AchievementSettings.h"
+#endif
 
 #import "LocalizationUtil.h"
 
@@ -216,6 +219,15 @@
 
 - (void)lowDCBZHackChanged {
   Config::SetBaseOrCurrent(Config::MAIN_LOW_DCBZ_HACK, self.lowDCBZHackSwitch.on);
+}
+
+- (BOOL)tableView:(UITableView*)tableView shouldHighlightRowAtIndexPath:(NSIndexPath*)indexPath {
+  UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];
+  return cell.accessoryType == UITableViewCellAccessoryDisclosureIndicator;
+}
+
+- (void)tableView:(UITableView*)tableView didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  [super tableView:tableView didSelectRowAtIndexPath:indexPath];
 }
 
 @end

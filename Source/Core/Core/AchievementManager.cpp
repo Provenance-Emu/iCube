@@ -1173,6 +1173,8 @@ void AchievementManager::Request(const rc_api_request_t* request,
        callback_data = std::move(callback_data)] {
         Common::HttpRequest http_request;
         Common::HttpRequest::Response http_response;
+        INFO_LOG_FMT(ACHIEVEMENTS, "RA Request: method={} url={} body_len={}",
+                     post_data.empty() ? "GET" : "POST", url, post_data.size());
         if (!post_data.empty())
         {
           http_response = http_request.Post(url, post_data, USER_AGENT_HEADER,
@@ -1190,6 +1192,10 @@ void AchievementManager::Request(const rc_api_request_t* request,
           server_response.body = reinterpret_cast<const char*>(http_response->data());
           server_response.body_length = http_response->size();
           server_response.http_status_code = http_request.GetLastResponseCode();
+          const size_t preview_len = std::min<size_t>(server_response.body_length, 256);
+          std::string preview(server_response.body, server_response.body + preview_len);
+          INFO_LOG_FMT(ACHIEVEMENTS, "RA Response: code={} body[0..{}]={}",
+                       server_response.http_status_code, preview_len, preview);
         }
         else
         {
@@ -1197,6 +1203,7 @@ void AchievementManager::Request(const rc_api_request_t* request,
           server_response.body = error_message;
           server_response.body_length = sizeof(error_message);
           server_response.http_status_code = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+          WARN_LOG_FMT(ACHIEVEMENTS, "RA Request failed: no response received");
         }
 
         callback(&server_response, callback_data);

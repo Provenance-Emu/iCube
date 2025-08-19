@@ -396,3 +396,8 @@
 
 /* Class = "UILabel"; text = "Fast Disc Speed (speedup)"; ObjectID = "FDS-lb-01A"; */
 "FDS-lb-01A.text" = "Fast Disc Speed (speedup)";
+/* Class = "UILabel"; text = "Achievements"; ObjectID = "ACH-IOS-LABEL"; */
+"ACH-IOS-LABEL.text" = "実績";
+
+/* Class = "UINavigationItem"; title = "Achievements"; ObjectID = "ACH-NAV"; */
+"ACH-NAV.title" = "実績";

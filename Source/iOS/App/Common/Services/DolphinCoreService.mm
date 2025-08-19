@@ -11,6 +11,9 @@
 #import "Core/HW/GCPad.h"
 #import "Core/HW/Wiimote.h"
 #import "Core/System.h"
+#ifdef USE_RETRO_ACHIEVEMENTS
+#import "Core/AchievementManager.h"
+#endif
 
 #import "Common/FileUtil.h"
 #import "Common/MsgHandler.h"
@@ -70,6 +73,15 @@
   // However, it initializes DolphinAnalytics, which we need to do before starting any Wii games.
   DolphinAnalytics::Instance().ReportDolphinStart("ios");
 
+#ifdef USE_RETRO_ACHIEVEMENTS
+  AchievementManager::GetInstance().Init();
+  AchievementManager::GetInstance().SetUpdateCallback([](const AchievementManager::UpdatedItems& items) {
+    if (items.failed_login_code != 0) {
+      [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLRAFailedLogin" object:nil userInfo:@{ @"code": @(items.failed_login_code) }];
+    }
+  });
+#endif
+
   return YES;
 }
 
@@ -108,6 +120,10 @@
     }
 
     Config::Save();
+
+#ifdef USE_RETRO_ACHIEVEMENTS
+    AchievementManager::GetInstance().Shutdown();
+#endif
 
     Core::Shutdown(system);
 
