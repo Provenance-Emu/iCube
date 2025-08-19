@@ -316,6 +316,45 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
         return sizeof(AnyCallback) + sizeof(operands);
       }
 
+      // Byte-reverse indexed variants
+      case 534: // lwbrx
+      {
+        if ((ea & 0b11) != 0)
+          break; // misaligned
+        u32 raw;
+        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u32 val = Common::swap32(Common::FromBigEndian(raw));
+        ppc_state.gpr[inst.RD] = val;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 790: // lhbrx
+      {
+        if ((ea & 0b1) != 0)
+          break; // misaligned
+        u16 raw;
+        std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+        const u16 val = Common::swap16(Common::FromBigEndian(raw));
+        ppc_state.gpr[inst.RD] = static_cast<u32>(val);
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 662: // stwbrx
+      {
+        if ((ea & 0b11) != 0)
+          break; // misaligned
+        // Write bytes in reverse order relative to normal big-endian store.
+        const u32 raw = ppc_state.gpr[inst.RS];
+        std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 918: // sthbrx
+      {
+        if ((ea & 0b1) != 0)
+          break; // misaligned
+        const u16 raw = static_cast<u16>(ppc_state.gpr[inst.RS]);
+        std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+
       default:
         break; // unsupported X-form in PIC
       }
