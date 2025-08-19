@@ -421,17 +421,118 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
 
   const u32 count = operands.count;
   const MicroOp* ops = operands.ops;
+#if defined(__GNUC__) || defined(__clang__)
+  {
+    u32 i = 0;
+    if (i >= count)
+      goto micro_done;
 
+    // The order here MUST match enum class MicroOpCode in CachedInterpreter.h
+    static const void* dispatch_table[] = {
+        &&op_CONST32,       // 0 MicroOpCode::CONST32
+        &&op_CONST32_ADDRA, // 1 MicroOpCode::CONST32_ADDRA
+        &&op_ADDI,          // 2 MicroOpCode::ADDI
+        &&op_ADDIS,         // 3 MicroOpCode::ADDIS
+        &&op_ORI,           // 4 MicroOpCode::ORI
+        &&op_ORIS,          // 5 MicroOpCode::ORIS
+        &&op_XORI,          // 6 MicroOpCode::XORI
+        &&op_NOP            // 7 MicroOpCode::NOP
+    };
+
+  micro_dispatch:
+    {
+      const MicroOp& m = ops[i];
+      goto *dispatch_table[static_cast<unsigned>(m.op)];
+    }
+
+  op_CONST32:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = m.imm;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CONST32_ADDRA:
+    {
+      const MicroOp& m = ops[i];
+      const u32 ra_val = ppc_state.gpr[m.ra];
+      const s32 hi = static_cast<s16>(static_cast<u32>(m.imm) >> 16);
+      const u32 lo = m.imm & 0xFFFFu;
+      const u32 upper_add = ra_val + (static_cast<u32>(hi) << 16);
+      ppc_state.gpr[m.rd] = upper_add | lo;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDI:
+    {
+      const MicroOp& m = ops[i];
+      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+      ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDIS:
+    {
+      const MicroOp& m = ops[i];
+      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+      ppc_state.gpr[m.rd] = ra_val + (static_cast<u32>(simm) << 16);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ORI:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val | ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ORIS:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val | ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_XORI:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val ^ ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_NOP:
+    {
+      ++i;
+      if (i < count) goto micro_dispatch;
+    }
+
+  micro_done:
+    ;
+  }
+#else
   for (u32 i = 0; i < count; ++i)
   {
     const MicroOp& m = ops[i];
     switch (m.op)
     {
     case MicroOpCode::CONST32:
-    {
       ppc_state.gpr[m.rd] = m.imm;
       break;
-    }
     case MicroOpCode::CONST32_ADDRA:
     {
       const u32 ra_val = ppc_state.gpr[m.ra];
@@ -444,7 +545,6 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
     case MicroOpCode::ADDI:
     {
       const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
-      // imm treated as signed 16 per ADDI semantics
       const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
       ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
       break;
@@ -458,7 +558,6 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
     }
     case MicroOpCode::ORI:
     {
-      // For ORI, rd holds the destination (RA field in instruction), ra holds RS (source)
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 ui = m.imm & 0xFFFFu;
       ppc_state.gpr[m.rd] = rs_val | ui;
@@ -483,6 +582,7 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       break;
     }
   }
+#endif
 
   // No exceptions/CR updates are modeled here; decoder must only emit safe ops.
   return sizeof(AnyCallback) + sizeof(operands);
