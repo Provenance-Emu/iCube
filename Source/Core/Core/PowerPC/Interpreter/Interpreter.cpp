@@ -102,7 +102,7 @@ void Interpreter::Trace(const UGeckoInstruction& inst)
                 "INTER PC: {:08x} SRR0: {:08x} SRR1: {:08x} CRval: {:016x} "
                 "FPSCR: {:08x} MSR: {:08x} LR: {:08x} {} {:08x} {}",
                 m_ppc_state.pc, SRR0(m_ppc_state), SRR1(m_ppc_state), m_ppc_state.cr.fields[0],
-                m_ppc_state.fpscr.Hex, m_ppc_state.msr.Hex, m_ppc_state.spr[8], regs, inst.hex,
+                m_ppc_state.fpscr.Hex, m_ppc_state.msr.Hex, m_ppc_state.spr[SPR_LR], regs, inst.hex,
                 ppc_inst);
 }
 
@@ -190,11 +190,9 @@ int Interpreter::SingleStepInner()
   }
 
   UpdatePC();
-  if (PowerPC::PerformanceMonitorActive(m_ppc_state))
-  {
-    PowerPC::UpdatePerformanceMonitor(opinfo->num_cycles, (opinfo->flags & FL_LOADSTORE) != 0,
-                                      (opinfo->flags & FL_USE_FPU) != 0, m_ppc_state);
-  }
+
+  PowerPC::UpdatePerformanceMonitor(opinfo->num_cycles, (opinfo->flags & FL_LOADSTORE) != 0,
+                                    (opinfo->flags & FL_USE_FPU) != 0, m_ppc_state);
   return opinfo->num_cycles;
 }
 
@@ -219,7 +217,7 @@ void Interpreter::SingleStep()
   }
 }
 
-//#define SHOW_HISTORY
+// #define SHOW_HISTORY
 #ifdef SHOW_HISTORY
 static std::vector<u32> s_pc_vec;
 static std::vector<u32> s_pc_block_vec;
