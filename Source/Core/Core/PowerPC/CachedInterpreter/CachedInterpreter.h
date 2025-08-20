@@ -229,6 +229,17 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
     SRW_VAR,    // RA = (RB & 0x20) ? 0 : (RS >> (RB & 0x1f)); optional record via rc flag
     SRAW_VAR,   // RA = arithmetic right shift by RB; updates CA; optional record via rc flag
     SRAWI_IMM,  // RA = arithmetic right shift by SH; updates CA; optional record via rc flag
+    // Integer add/sub with carry/overflow semantics
+    ADD_RR,     // RD = RA + RB; optional OV update via imm bit0; optional record via rc
+    ADDC_RR,    // RD = RA + RB; set CA; optional OV via imm bit0; optional record via rc
+    ADDE_RR,    // RD = RA + RB + CA; set CA; optional OV via imm bit0; optional record via rc
+    ADDME,      // RD = RA + 0xFFFFFFFF + CA; set CA; optional OV via imm bit0; optional record via rc
+    ADDZE,      // RD = RA + CA; set CA; optional OV via imm bit0; optional record via rc
+    SUBF_RR,    // RD = ~RA + RB + 1; optional OV via imm bit0; optional record via rc
+    SUBFC_RR,   // RD = ~RA + RB + 1; set CA; optional OV via imm bit0; optional record via rc
+    SUBFE_RR,   // RD = ~RA + RB + CA; set CA; optional OV via imm bit0; optional record via rc
+    SUBFME,     // RD = ~RA + 0xFFFFFFFF + CA; set CA; optional OV via imm bit0; optional record via rc
+    SUBFZE,     // RD = ~RA + CA; set CA; optional OV via imm bit0; optional record via rc
     NOP,
     COUNT,
   };

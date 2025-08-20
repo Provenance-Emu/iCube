@@ -49,6 +49,18 @@ static inline void CI_UpdateCR0(PowerPC::PowerPCState& ppc_state, u32 value)
   ppc_state.cr.fields[0] = cr_val;
 }
 
+// Carry/overflow helpers matching Interpreter semantics
+static inline bool CI_Helper_Carry(u32 value1, u32 value2)
+{
+  return value2 > (~value1);
+}
+
+static inline bool CI_HasAddOverflowed(u32 x, u32 y, u32 result)
+{
+  // If x and y have the same sign, but the result is different then an overflow has occurred.
+  return (((x ^ result) & (y ^ result)) >> 31) != 0;
+}
+
 CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_block_cache(*this)
 {
 }
@@ -514,7 +526,18 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
         &&op_SRW_VAR,       // 25 MicroOpCode::SRW_VAR
         &&op_SRAW_VAR,      // 26 MicroOpCode::SRAW_VAR
         &&op_SRAWI_IMM,     // 27 MicroOpCode::SRAWI_IMM
-        &&op_NOP            // 28 MicroOpCode::NOP
+        // Integer add/sub with carry/overflow semantics
+        &&op_ADD_RR,        // 28 MicroOpCode::ADD_RR
+        &&op_ADDC_RR,       // 29 MicroOpCode::ADDC_RR
+        &&op_ADDE_RR,       // 30 MicroOpCode::ADDE_RR
+        &&op_ADDME,         // 31 MicroOpCode::ADDME
+        &&op_ADDZE,         // 32 MicroOpCode::ADDZE
+        &&op_SUBF_RR,       // 33 MicroOpCode::SUBF_RR
+        &&op_SUBFC_RR,      // 34 MicroOpCode::SUBFC_RR
+        &&op_SUBFE_RR,      // 35 MicroOpCode::SUBFE_RR
+        &&op_SUBFME,        // 36 MicroOpCode::SUBFME
+        &&op_SUBFZE,        // 37 MicroOpCode::SUBFZE
+        &&op_NOP            // 38 MicroOpCode::NOP
     };
     static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
                   "dispatch_table must cover all MicroOpCode entries and match enum order");
@@ -868,6 +891,169 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
 
+  // Integer add/sub with carry/overflow semantics
+  op_ADD_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b;
+      ppc_state.gpr[m.rd] = result;
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDC_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDE_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b) || (carry != 0 && CI_Helper_Carry(a + b, carry)));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDME:
+    {
+      const MicroOp& m = ops[i];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = 0xFFFFFFFFu;
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDZE:
+    {
+      const MicroOp& m = ops[i];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 result = a + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBF_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + 1u;
+      ppc_state.gpr[m.rd] = result;
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFC_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + 1u;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(a == 0xFFFFFFFFu || CI_Helper_Carry(b, a + 1u));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFE_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b) || CI_Helper_Carry(a + b, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFME:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = 0xFFFFFFFFu;
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFZE:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
   op_NOP:
     {
       ++i;
@@ -1135,6 +1321,139 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
       ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
       if (m.rc)
         CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    // Integer add/sub with carry/overflow semantics
+    case MicroOpCode::ADD_RR:
+    {
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b;
+      ppc_state.gpr[m.rd] = result;
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::ADDC_RR:
+    {
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::ADDE_RR:
+    {
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b) || (carry != 0 && CI_Helper_Carry(a + b, carry)));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::ADDME:
+    {
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = 0xFFFFFFFFu;
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::ADDZE:
+    {
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 result = a + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBF_RR:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + 1u;
+      ppc_state.gpr[m.rd] = result;
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBFC_RR:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + 1u;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(a == 0xFFFFFFFFu || CI_Helper_Carry(b, a + 1u));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBFE_RR:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b) || CI_Helper_Carry(a + b, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBFME:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = 0xFFFFFFFFu;
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBFZE:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
       break;
     }
     case MicroOpCode::NOP:
