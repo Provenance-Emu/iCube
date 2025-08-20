@@ -1,16 +1,37 @@
 // Copyright 2014 Dolphin Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// Optional micro-trace execution (disabled by default)
+#ifndef CI_TRACE_ENABLE
+#define CI_TRACE_ENABLE 1
+#endif
+
+// Verbose CI trace logging (disabled by default to avoid I/O stalls)
+#ifndef CI_TRACE_VERBOSE
+#define CI_TRACE_VERBOSE 0
+#endif
+
+// Backoff (in instructions) after a failed micro-trace attempt to avoid per-instruction overhead
+#ifndef CI_TRACE_BACKOFF
+#define CI_TRACE_BACKOFF 256
+#endif
+
+#ifndef CI_TRACE_PROACTIVE_DSI
+#define CI_TRACE_PROACTIVE_DSI 0
+#endif
+
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
 
 #include <span>
 #include <iterator>
 #include <sstream>
 #include <bit>
-#include <utility>
 #include <cstring>
+#include <utility>
 #include <algorithm>
 #include <limits>
+#include <cstdio>
+#include <atomic>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -33,6 +54,1108 @@
 #include "Core/HW/Memmap.h"
 #include "Common/Swap.h"
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
+#include "Core/Core.h"
+#include "Core/PowerPC/MMU.h"
+#include "Core/CoreTiming.h"
+#include "Core/HW/SystemTimers.h"
+#include <atomic>
+
+namespace {
+// Lightweight counters to avoid high I/O overhead from per-op logging.
+// Always defined so references compile regardless of CI_TRACE_ENABLE.
+struct CITraceStats
+{
+  std::atomic<uint64_t> dsi_isi_after_lwz{0};
+  std::atomic<uint64_t> dsi_isi_after_lbz{0};
+  std::atomic<uint64_t> dsi_isi_after_lhz{0};
+  std::atomic<uint64_t> dsi_isi_after_lwzx{0};
+  std::atomic<uint64_t> dsi_isi_after_stwx{0};
+  std::atomic<uint64_t> dsi_isi_after_stbx{0};
+  std::atomic<uint64_t> dsi_isi_after_sthx{0};
+  // Region cache metrics
+  std::atomic<uint64_t> rc_ram_hits{0};
+  std::atomic<uint64_t> rc_nonram_hits{0};
+  std::atomic<uint64_t> rc_nonram_misses{0};
+  std::atomic<uint64_t> rc_crosspage_rejects{0};
+  std::atomic<uint64_t> rc_lowaddr_rejects{0};
+};
+
+static CITraceStats g_ci_trace_stats;
+
+#if CI_TRACE_ENABLE
+// Periodic dump of CI trace exception counters. Very low frequency to avoid I/O overhead.
+static CoreTiming::EventType* s_event_ci_trace_stats = nullptr;
+
+// Dynamic backoff counter to suppress repeated micro-trace attempts when they aren't hitting.
+// Decrements each instruction; when non-zero, ExecuteOneBlock will skip the micro-trace path.
+static std::atomic<uint32_t> s_ci_trace_backoff{0};
+static std::atomic<u32> s_last_fault_pc{0};
+static std::atomic<uint32_t> s_fault_pc_cooldown{0};
+
+static void CITraceStatsCallback(Core::System& system, u64 /*userdata*/, s64 /*cyclesLate*/)
+{
+  const auto dump_if_needed = []() {
+    const uint64_t a = g_ci_trace_stats.dsi_isi_after_lwz.load(std::memory_order_relaxed);
+    const uint64_t b = g_ci_trace_stats.dsi_isi_after_lbz.load(std::memory_order_relaxed);
+    const uint64_t c = g_ci_trace_stats.dsi_isi_after_lhz.load(std::memory_order_relaxed);
+    const uint64_t d = g_ci_trace_stats.dsi_isi_after_lwzx.load(std::memory_order_relaxed);
+    const uint64_t e = g_ci_trace_stats.dsi_isi_after_stwx.load(std::memory_order_relaxed);
+    const uint64_t f = g_ci_trace_stats.dsi_isi_after_stbx.load(std::memory_order_relaxed);
+    const uint64_t g = g_ci_trace_stats.dsi_isi_after_sthx.load(std::memory_order_relaxed);
+    const uint64_t r1 = g_ci_trace_stats.rc_ram_hits.load(std::memory_order_relaxed);
+    const uint64_t r2 = g_ci_trace_stats.rc_nonram_hits.load(std::memory_order_relaxed);
+    const uint64_t r3 = g_ci_trace_stats.rc_nonram_misses.load(std::memory_order_relaxed);
+    const uint64_t r4 = g_ci_trace_stats.rc_crosspage_rejects.load(std::memory_order_relaxed);
+    const uint64_t r5 = g_ci_trace_stats.rc_lowaddr_rejects.load(std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    const bool should_print = true;
+#else
+    const bool should_print = (a | b | c | d | e | f | g | r1 | r2 | r3 | r4 | r5) != 0;
+#endif
+    if (should_print)
+    {
+      std::fprintf(stderr,
+                   "[CI-TRACE][STATS] DSI/ISI lwz=%llu lbz=%llu lhz=%llu lwzx=%llu stwx=%llu stbx=%llu sthx=%llu | rc: ram_hit=%llu nonram_hit=%llu nonram_miss=%llu xpage=%llu lowaddr=%llu\n",
+                   static_cast<unsigned long long>(a), static_cast<unsigned long long>(b),
+                   static_cast<unsigned long long>(c), static_cast<unsigned long long>(d),
+                   static_cast<unsigned long long>(e), static_cast<unsigned long long>(f),
+                   static_cast<unsigned long long>(g), static_cast<unsigned long long>(r1),
+                   static_cast<unsigned long long>(r2), static_cast<unsigned long long>(r3),
+                   static_cast<unsigned long long>(r4), static_cast<unsigned long long>(r5));
+    }
+    // Reset after printing to show deltas per interval
+    g_ci_trace_stats.dsi_isi_after_lwz.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.dsi_isi_after_lbz.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.dsi_isi_after_lhz.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.dsi_isi_after_lwzx.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.dsi_isi_after_stwx.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.dsi_isi_after_stbx.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.dsi_isi_after_sthx.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.rc_ram_hits.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.rc_nonram_hits.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.rc_nonram_misses.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.rc_crosspage_rejects.store(0, std::memory_order_relaxed);
+    g_ci_trace_stats.rc_lowaddr_rejects.store(0, std::memory_order_relaxed);
+  };
+
+  dump_if_needed();
+
+  // Reschedule for roughly once per second of emulated time
+  auto& ct = system.GetCoreTiming();
+  const u64 ticks_per_sec = system.GetSystemTimers().GetTicksPerSecond();
+  ct.ScheduleEvent(ticks_per_sec, s_event_ci_trace_stats);
+}
+#endif // CI_TRACE_ENABLE
+
+// Minimal micro-trace skeleton (Phase M1): no fusion, no behavior change unless enabled.
+struct TraceExecCtx
+{
+  struct RegionCacheEntry
+  {
+    u32 tag;
+    u8* base;
+  };
+
+  RegionCacheEntry rc[4];
+  int rc_size = 0;
+  int ops_since_check = 0;
+  // Hoisted guard and metadata for precise fault logging
+  Core::CPUThreadGuard* guard = nullptr;
+  u32 current_pc = 0;
+  u16 op_index = 0;
+  // RAM region cache (MEM1/MEM2)
+  u8* mem1_base = nullptr;
+  u32 mem1_mask = 0;
+  u8* mem2_base = nullptr;
+  u32 mem2_mask = 0;
+};
+
+enum class MT_OpCode : u16
+{
+  Invalid = 0,
+  Lwz,
+  Lbz,
+  Lhz,
+  Stw,
+  Addi,
+  Ori,
+  Lwzx,
+  Stwx,
+  Addis,
+  Rlwinm,
+  Lbzx,
+  Lhzx,
+  Stbx,
+  Sthx,
+  // Extend with more ops as needed
+};
+
+using MT_OpFn = void (*)(PowerPC::PowerPCState&, const void* op_data, TraceExecCtx&);
+
+struct MT_Op
+{
+  MT_OpFn fn = nullptr;
+  MT_OpCode code = MT_OpCode::Invalid;
+  u8 size = 0;        // bytes of payload stored in data blob
+  u8 flags = 0;       // reserved for future use
+  u16 data_offset = 0; // offset into data blob
+};
+
+struct MT_Trace
+{
+  u32 entry_pc = 0;
+  u16 op_count = 0;
+  u16 required_flags = 0; // e.g., needs_fp_enabled, needs_lsqe
+  u32 srmw_guard = 0;     // self-modify guard generation
+  // Simple fixed-size buffers for skeleton; can be made dynamic later
+  static constexpr size_t kMaxOps = 16;
+  static constexpr size_t kDataCap = 512;
+  MT_Op ops[kMaxOps]{};
+  u8 data_blob[kDataCap]{};
+  u16 data_size = 0;
+};
+
+struct MT_TraceCache
+{
+  // Extremely small direct-mapped cache for now
+  static constexpr size_t kSlots = 64;
+  MT_Trace* slots[kSlots]{};
+
+  ~MT_TraceCache()
+  {
+    for (auto*& t : slots)
+    {
+      delete t;
+      t = nullptr;
+    }
+  }
+
+  MT_Trace* Get(u32 pc)
+  {
+    MT_Trace* t = slots[(pc >> 2) & (kSlots - 1)];
+    return (t && t->entry_pc == pc) ? t : nullptr;
+  }
+
+  void Put(MT_Trace* t)
+  {
+    slots[(t->entry_pc >> 2) & (kSlots - 1)] = t;
+  }
+};
+
+// Singleton cache instance (file-local)
+MT_TraceCache g_trace_cache;
+
+// Self-modifying code guard: compute a lightweight content hash of the
+// 32-byte instruction cache line containing the PC. This acts as a
+// page write generation without requiring cross-module wiring.
+// Cheap and robust: 8 instruction reads with FNV-1a mixing.
+static inline u32 GetPageWriteGeneration(u32 pc)
+{
+  Core::System& system = Core::System::GetInstance();
+  Core::CPUThreadGuard guard(system);
+  const u32 line_base = pc & ~0x1Fu; // 32-byte I-cache line base
+  u32 hash = 2166136261u;            // FNV-1a 32-bit offset basis
+  for (int i = 0; i < 8; ++i)
+  {
+    const u32 addr = line_base + static_cast<u32>(i * 4);
+    const UGeckoInstruction inst = PowerPC::MMU::HostRead_Instruction(guard, addr);
+    const u32 word = inst.hex;
+    hash ^= word;
+    hash *= 16777619u; // FNV-1a prime
+  }
+  return hash;
+}
+
+// -------- RAM region helpers (MEM1/MEM2) --------
+static inline u8* CI_TryMapRAM(TraceExecCtx& ctx, u32 ea)
+{
+  // MEM1 mirrors
+  const u32 off_80 = ea - 0x80000000u;
+  if (off_80 <= ctx.mem1_mask && ctx.mem1_base)
+  {
+    g_ci_trace_stats.rc_ram_hits.fetch_add(1, std::memory_order_relaxed);
+    return ctx.mem1_base + (off_80 & ctx.mem1_mask);
+  }
+  const u32 off_c0 = ea - 0xC0000000u;
+  if (off_c0 <= ctx.mem1_mask && ctx.mem1_base)
+  {
+    g_ci_trace_stats.rc_ram_hits.fetch_add(1, std::memory_order_relaxed);
+    return ctx.mem1_base + (off_c0 & ctx.mem1_mask);
+  }
+
+  // MEM2 mirrors
+  const u32 off_90 = ea - 0x90000000u;
+  if (off_90 <= ctx.mem2_mask && ctx.mem2_base)
+  {
+    g_ci_trace_stats.rc_ram_hits.fetch_add(1, std::memory_order_relaxed);
+    return ctx.mem2_base + (off_90 & ctx.mem2_mask);
+  }
+  const u32 off_d0 = ea - 0xD0000000u;
+  if (off_d0 <= ctx.mem2_mask && ctx.mem2_base)
+  {
+    g_ci_trace_stats.rc_ram_hits.fetch_add(1, std::memory_order_relaxed);
+    return ctx.mem2_base + (off_d0 & ctx.mem2_mask);
+  }
+
+  return nullptr;
+}
+
+// Non-RAM region cache using MemoryManager spans. We only cache full 4KB page pointers.
+static inline u8* CI_TryMapRegion(TraceExecCtx& ctx, u32 ea, u32 size)
+{
+  // First prefer RAM fast path
+  if (u8* p = CI_TryMapRAM(ctx, ea))
+    return p;
+
+  // Only consider high-memory regions; reject low addresses outright
+  if (ea < 0x80000000u)
+  {
+    g_ci_trace_stats.rc_lowaddr_rejects.fetch_add(1, std::memory_order_relaxed);
+    return nullptr;
+  }
+
+  // Only serve if access fits within a 4KB page to keep metadata minimal
+  const u32 page_offset = ea & 0xFFFu;
+  if (page_offset + size > 4096u)
+  {
+    g_ci_trace_stats.rc_crosspage_rejects.fetch_add(1, std::memory_order_relaxed);
+    return nullptr;
+  }
+
+  const u32 tag = ea & ~0xFFFu;
+  // Direct-mapped 4-entry cache
+  const u32 idx = (tag >> 12) & 3u;
+  TraceExecCtx::RegionCacheEntry& e = ctx.rc[idx];
+  if (e.base && e.tag == tag)
+  {
+    g_ci_trace_stats.rc_nonram_hits.fetch_add(1, std::memory_order_relaxed);
+    return e.base + page_offset;
+  }
+
+  // Miss: try to fetch a full-page span
+  auto& mm = ctx.guard->GetSystem().GetMemory();
+  u8* base = mm.GetPointerForRange(tag, 4096u);
+  if (!base)
+  {
+    // Invalidate any stale entry at this slot
+    e.tag = 0;
+    e.base = nullptr;
+    g_ci_trace_stats.rc_nonram_misses.fetch_add(1, std::memory_order_relaxed);
+    return nullptr;
+  }
+
+  e.tag = tag;
+  e.base = base;
+  g_ci_trace_stats.rc_nonram_hits.fetch_add(1, std::memory_order_relaxed);
+  return e.base + page_offset;
+}
+
+static inline u8 CI_Load8(TraceExecCtx& ctx, u32 ea)
+{
+  if (u8* p = CI_TryMapRegion(ctx, ea, 1))
+    return *p;
+  return ctx.guard->GetSystem().GetMMU().Read_U8(ea);
+}
+
+static inline u16 CI_Load16(TraceExecCtx& ctx, u32 ea)
+{
+  if (u8* p = CI_TryMapRegion(ctx, ea, 2))
+  {
+    u16 raw;
+    std::memcpy(&raw, p, sizeof(raw));
+    return Common::FromBigEndian(raw);
+  }
+  return ctx.guard->GetSystem().GetMMU().Read_U16(ea);
+}
+
+static inline u32 CI_Load32(TraceExecCtx& ctx, u32 ea)
+{
+  if (u8* p = CI_TryMapRegion(ctx, ea, 4))
+  {
+    u32 raw;
+    std::memcpy(&raw, p, sizeof(raw));
+    return Common::FromBigEndian(raw);
+  }
+  return ctx.guard->GetSystem().GetMMU().Read_U32(ea);
+}
+
+static inline void CI_Store8(TraceExecCtx& ctx, u32 ea, u8 val)
+{
+  if (u8* p = CI_TryMapRAM(ctx, ea))
+  {
+    *p = val;
+    return;
+  }
+  ctx.guard->GetSystem().GetMMU().Write_U8(val, ea);
+}
+
+static inline void CI_Store16(TraceExecCtx& ctx, u32 ea, u16 val)
+{
+  if (u8* p = CI_TryMapRAM(ctx, ea))
+  {
+    const u16 be = Common::FromBigEndian(val);
+    std::memcpy(p, &be, sizeof(be));
+    return;
+  }
+  ctx.guard->GetSystem().GetMMU().Write_U16(val, ea);
+}
+
+static inline void CI_Store32(TraceExecCtx& ctx, u32 ea, u32 val)
+{
+  if (u8* p = CI_TryMapRAM(ctx, ea))
+  {
+    const u32 be = Common::FromBigEndian(val);
+    std::memcpy(p, &be, sizeof(be));
+    return;
+  }
+  PowerPC::MMU::HostWrite_U32(*ctx.guard, val, ea);
+}
+
+// Stub micro-op implementation: LWZ (M1 example). Not used until wired.
+struct OpLWZPayload
+{
+  u8 rd;
+  u8 ra;
+  s16 simm; // pre-sign-extended immediate
+};
+
+struct OpLBZPayload
+{
+  u8 rd;
+  u8 ra;
+  s16 simm;
+};
+
+struct OpLHZPayload
+{
+  u8 rd;
+  u8 ra;
+  s16 simm;
+};
+
+struct OpSTWPayload
+{
+  u8 rs;
+  u8 ra;
+  s16 simm;
+};
+
+struct OpADDIPayload
+{
+  u8 rd;
+  u8 ra;
+  s16 simm;
+};
+
+struct OpORIPayload
+{
+  u8 ra;    // destination
+  u8 rs;    // source
+  u16 uimm; // zero-extended immediate
+};
+
+struct OpLWZXPayload
+{
+  u8 rd;
+  u8 ra; // base (may be 0)
+  u8 rb; // index
+};
+
+struct OpSTWXPayload
+{
+  u8 rs;
+  u8 ra; // base (may be 0)
+  u8 rb; // index
+};
+
+struct OpADDISPayload
+{
+  u8 rd;
+  u8 ra;
+  s16 simm;
+};
+
+struct OpRLWINMPayload
+{
+  u8 ra; // dest
+  u8 rs; // src
+  u8 sh;
+  u8 mb;
+  u8 me;
+};
+
+struct OpLBZXPayload2 { u8 rd, ra, rb; };
+struct OpLHZXPayload2 { u8 rd, ra, rb; };
+struct OpSTBXPayload2 { u8 rs, ra, rb; };
+struct OpSTHXPayload2 { u8 rs, ra, rb; };
+
+static void OpLWZ(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpLWZPayload*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 ea = static_cast<u32>(base + static_cast<s32>(p.simm));
+  const u32 val = CI_Load32(ctx, ea);
+  state.gpr[p.rd] = val;
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_lwz.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after LWZ pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 4);
+#endif
+  }
+  return;
+}
+
+static void OpLBZ(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpLBZPayload*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 ea = static_cast<u32>(base + static_cast<s32>(p.simm));
+  const u8 val = CI_Load8(ctx, ea);
+  state.gpr[p.rd] = static_cast<u32>(val);
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_lbz.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after LBZ pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 1);
+#endif
+  }
+  return;
+}
+
+static void OpLHZ(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpLHZPayload*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 ea = static_cast<u32>(base + static_cast<s32>(p.simm));
+  const u16 val = CI_Load16(ctx, ea);
+  state.gpr[p.rd] = static_cast<u32>(val);
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_lhz.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after LHZ pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 2);
+#endif
+  }
+  return;
+}
+
+static void OpSTW(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpSTWPayload*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 ea = static_cast<u32>(base + static_cast<s32>(p.simm));
+  CI_Store32(ctx, ea, state.gpr[p.rs]);
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    std::fprintf(stderr,
+                 "[CI-TRACE][CRITICAL] DSI/ISI after STW pc=%08x op=%u ea=%08x size=4\n",
+                 ctx.current_pc, ctx.op_index, ea);
+  }
+  return;
+}
+
+static void OpADDI(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpADDIPayload*>(op_data);
+  (void)ctx;
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 result = static_cast<u32>(base + static_cast<s32>(p.simm));
+  state.gpr[p.rd] = result;
+}
+
+static void OpORI(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpORIPayload*>(op_data);
+  (void)ctx;
+  const u32 result = state.gpr[p.rs] | static_cast<u32>(p.uimm);
+  state.gpr[p.ra] = result;
+}
+
+static void OpLWZX(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpLWZXPayload*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 idx = state.gpr[p.rb];
+  const u32 ea = base + idx;
+  const u32 val = CI_Load32(ctx, ea);
+  state.gpr[p.rd] = val;
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_lwzx.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after LWZX pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 4);
+#endif
+  }
+}
+
+static void OpSTWX(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpSTWXPayload*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 idx = state.gpr[p.rb];
+  const u32 ea = base + idx;
+  CI_Store32(ctx, ea, state.gpr[p.rs]);
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_stwx.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after STWX pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 4);
+#endif
+  }
+}
+
+static void OpADDIS(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpADDISPayload*>(op_data);
+  (void)ctx;
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 result = static_cast<u32>(base + (static_cast<u32>(static_cast<s32>(p.simm)) << 16));
+  state.gpr[p.rd] = result;
+}
+
+static inline u32 PPCMask(u32 mb, u32 me)
+{
+  mb &= 31u;
+  me &= 31u;
+  if (mb <= me)
+  {
+    const u32 left = 0xFFFFFFFFu << (31 - me);
+    const u32 right = 0xFFFFFFFFu >> mb;
+    return left & right;
+  }
+  else
+  {
+    const u32 left = 0xFFFFFFFFu << (31 - me);
+    const u32 right = 0xFFFFFFFFu >> mb;
+    return left | right;
+  }
+}
+
+static void OpRLWINM(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpRLWINMPayload*>(op_data);
+  (void)ctx;
+  const u32 v = state.gpr[p.rs];
+  const u32 rot = (v << (p.sh & 31)) | (v >> ((32 - (p.sh & 31)) & 31));
+  const u32 mask = PPCMask(p.mb, p.me);
+  state.gpr[p.ra] = rot & mask;
+}
+
+static void OpLBZX2(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpLBZXPayload2*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 ea = base + state.gpr[p.rb];
+  const u8 val = CI_Load8(ctx, ea);
+  state.gpr[p.rd] = static_cast<u32>(val);
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_stbx.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after LBZX pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 1);
+#endif
+  }
+}
+
+static void OpLHDZX2(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpLHZXPayload2*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 ea = base + state.gpr[p.rb];
+  const u16 val = CI_Load16(ctx, ea);
+  state.gpr[p.rd] = static_cast<u32>(val);
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_lhz.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after LHZx pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 2);
+#endif
+  }
+}
+
+static void OpSTBX2(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpSTBXPayload2*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 ea = base + state.gpr[p.rb];
+  CI_Store8(ctx, ea, static_cast<u8>(state.gpr[p.rs] & 0xFFu));
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_stbx.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after STBX pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 1);
+#endif
+  }
+}
+
+static void OpSTHX2(PowerPC::PowerPCState& state, const void* op_data, TraceExecCtx& ctx)
+{
+  const auto& p = *reinterpret_cast<const OpSTHXPayload2*>(op_data);
+  const u32 base = p.ra ? state.gpr[p.ra] : 0u;
+  const u32 ea = base + state.gpr[p.rb];
+  CI_Store16(ctx, ea, static_cast<u16>(state.gpr[p.rs] & 0xFFFFu));
+  if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+  {
+    g_ci_trace_stats.dsi_isi_after_sthx.fetch_add(1, std::memory_order_relaxed);
+#if CI_TRACE_VERBOSE
+    TraceLogRare("[CI-TRACE][CRITICAL] DSI/ISI after STHX pc=%08x op=%u ea=%08x size=%u\n",
+                 ctx.current_pc, ctx.op_index, ea, 2);
+#endif
+  }
+}
+
+// Build a minimal trace starting at PC. Returns nullptr on failure.
+static MT_Trace* BuildTrace(PowerPC::PowerPCState& state, u32 entry_pc)
+{
+#if CI_TRACE_ENABLE
+  // Fetch instruction using the proven debugger-safe API with a CPU thread guard.
+  Core::System& system = Core::System::GetInstance();
+  Core::CPUThreadGuard guard(system);
+  auto* t = new MT_Trace();
+  t->entry_pc = entry_pc;
+  t->srmw_guard = GetPageWriteGeneration(entry_pc);
+
+  u32 pc = entry_pc;
+  u16 count = 0;
+  u16 data_off = 0;
+  while (count < MT_Trace::kMaxOps)
+  {
+    const UGeckoInstruction inst = PowerPC::MMU::HostRead_Instruction(guard, pc);
+    const u32 opcd = inst.OPCD;
+    switch (opcd)
+    {
+      case 32: // lwz
+      {
+        const u16 size = sizeof(OpLWZPayload);
+        if (data_off + size > MT_Trace::kDataCap)
+          goto done;
+        t->ops[count].fn = &OpLWZ;
+        t->ops[count].code = MT_OpCode::Lwz;
+        t->ops[count].data_offset = data_off;
+        t->ops[count].size = size;
+        auto* p = reinterpret_cast<OpLWZPayload*>(t->data_blob + data_off);
+        p->rd = static_cast<u8>(inst.RD);
+        p->ra = static_cast<u8>(inst.RA);
+        p->simm = static_cast<s16>(inst.SIMM_16);
+        data_off += size;
+        ++count;
+        pc += 4;
+        continue;
+      }
+      case 34: // lbz
+      {
+        const u16 size = sizeof(OpLBZPayload);
+        if (data_off + size > MT_Trace::kDataCap)
+          goto done;
+        t->ops[count].fn = &OpLBZ;
+        t->ops[count].code = MT_OpCode::Lbz;
+        t->ops[count].data_offset = data_off;
+        t->ops[count].size = size;
+        auto* p = reinterpret_cast<OpLBZPayload*>(t->data_blob + data_off);
+        p->rd = static_cast<u8>(inst.RD);
+        p->ra = static_cast<u8>(inst.RA);
+        p->simm = static_cast<s16>(inst.SIMM_16);
+        data_off += size;
+        ++count;
+        pc += 4;
+        continue;
+      }
+      case 40: // lhz
+      {
+        const u16 size = sizeof(OpLHZPayload);
+        if (data_off + size > MT_Trace::kDataCap)
+          goto done;
+        t->ops[count].fn = &OpLHZ;
+        t->ops[count].code = MT_OpCode::Lhz;
+        t->ops[count].data_offset = data_off;
+        t->ops[count].size = size;
+        auto* p = reinterpret_cast<OpLHZPayload*>(t->data_blob + data_off);
+        p->rd = static_cast<u8>(inst.RD);
+        p->ra = static_cast<u8>(inst.RA);
+        p->simm = static_cast<s16>(inst.SIMM_16);
+        data_off += size;
+        ++count;
+        pc += 4;
+        continue;
+      }
+      case 36: // stw
+      {
+        const u16 size = sizeof(OpSTWPayload);
+        if (data_off + size > MT_Trace::kDataCap)
+          goto done;
+        t->ops[count].fn = &OpSTW;
+        t->ops[count].code = MT_OpCode::Stw;
+        t->ops[count].data_offset = data_off;
+        t->ops[count].size = size;
+        auto* p = reinterpret_cast<OpSTWPayload*>(t->data_blob + data_off);
+        p->rs = static_cast<u8>(inst.RS);
+        p->ra = static_cast<u8>(inst.RA);
+        p->simm = static_cast<s16>(inst.SIMM_16);
+        data_off += size;
+        ++count;
+        pc += 4;
+        continue;
+      }
+      case 14: // addi
+      {
+        const u16 size = sizeof(OpADDIPayload);
+        if (data_off + size > MT_Trace::kDataCap)
+          goto done;
+        t->ops[count].fn = &OpADDI;
+        t->ops[count].code = MT_OpCode::Addi;
+        t->ops[count].data_offset = data_off;
+        t->ops[count].size = size;
+        auto* p = reinterpret_cast<OpADDIPayload*>(t->data_blob + data_off);
+        p->rd = static_cast<u8>(inst.RD);
+        p->ra = static_cast<u8>(inst.RA);
+        p->simm = static_cast<s16>(inst.SIMM_16);
+        data_off += size;
+        ++count;
+        pc += 4;
+        continue;
+      }
+      case 24: // ori
+      {
+        const u16 size = sizeof(OpORIPayload);
+        if (data_off + size > MT_Trace::kDataCap)
+          goto done;
+        t->ops[count].fn = &OpORI;
+        t->ops[count].code = MT_OpCode::Ori;
+        t->ops[count].data_offset = data_off;
+        t->ops[count].size = size;
+        auto* p = reinterpret_cast<OpORIPayload*>(t->data_blob + data_off);
+        p->ra = static_cast<u8>(inst.RA);
+        p->rs = static_cast<u8>(inst.RS);
+        p->uimm = static_cast<u16>(inst.UIMM);
+        data_off += size;
+        ++count;
+        pc += 4;
+        continue;
+      }
+      case 31: // X-form group
+      {
+        const u32 xo = inst.SUBOP10;
+        if (xo == 23) // lwzx
+        {
+          const u16 size = sizeof(OpLWZXPayload);
+          if (data_off + size > MT_Trace::kDataCap)
+            goto done;
+          t->ops[count].fn = &OpLWZX;
+          t->ops[count].code = MT_OpCode::Lwzx;
+          t->ops[count].data_offset = data_off;
+          t->ops[count].size = size;
+          auto* p = reinterpret_cast<OpLWZXPayload*>(t->data_blob + data_off);
+          p->rd = static_cast<u8>(inst.RD);
+          p->ra = static_cast<u8>(inst.RA);
+          p->rb = static_cast<u8>(inst.RB);
+          data_off += size;
+          ++count;
+          pc += 4;
+          continue;
+        }
+        if (xo == 151) // stwx
+        {
+          const u16 size = sizeof(OpSTWXPayload);
+          if (data_off + size > MT_Trace::kDataCap)
+            goto done;
+          t->ops[count].fn = &OpSTWX;
+          t->ops[count].code = MT_OpCode::Stwx;
+          t->ops[count].data_offset = data_off;
+          t->ops[count].size = size;
+          auto* p = reinterpret_cast<OpSTWXPayload*>(t->data_blob + data_off);
+          p->rs = static_cast<u8>(inst.RS);
+          p->ra = static_cast<u8>(inst.RA);
+          p->rb = static_cast<u8>(inst.RB);
+          data_off += size;
+          ++count;
+          pc += 4;
+          continue;
+        }
+        if (xo == 87) // lbzx
+        {
+          const u16 size = sizeof(OpLBZXPayload2);
+          if (data_off + size > MT_Trace::kDataCap)
+            goto done;
+          t->ops[count].fn = &OpLBZX2;
+          t->ops[count].code = MT_OpCode::Lbzx;
+          t->ops[count].data_offset = data_off;
+          t->ops[count].size = size;
+          auto* p = reinterpret_cast<OpLBZXPayload2*>(t->data_blob + data_off);
+          p->rd = static_cast<u8>(inst.RD);
+          p->ra = static_cast<u8>(inst.RA);
+          p->rb = static_cast<u8>(inst.RB);
+          data_off += size;
+          ++count;
+          pc += 4;
+          continue;
+        }
+        if (xo == 279) // lhzx
+        {
+          const u16 size = sizeof(OpLHZXPayload2);
+          if (data_off + size > MT_Trace::kDataCap)
+            goto done;
+          t->ops[count].fn = &OpLHDZX2;
+          t->ops[count].code = MT_OpCode::Lhzx;
+          t->ops[count].data_offset = data_off;
+          t->ops[count].size = size;
+          auto* p = reinterpret_cast<OpLHZXPayload2*>(t->data_blob + data_off);
+          p->rd = static_cast<u8>(inst.RD);
+          p->ra = static_cast<u8>(inst.RA);
+          p->rb = static_cast<u8>(inst.RB);
+          data_off += size;
+          ++count;
+          pc += 4;
+          continue;
+        }
+        if (xo == 215) // stbx
+        {
+          const u16 size = sizeof(OpSTBXPayload2);
+          if (data_off + size > MT_Trace::kDataCap)
+            goto done;
+          t->ops[count].fn = &OpSTBX2;
+          t->ops[count].code = MT_OpCode::Stbx;
+          t->ops[count].data_offset = data_off;
+          t->ops[count].size = size;
+          auto* p = reinterpret_cast<OpSTBXPayload2*>(t->data_blob + data_off);
+          p->rs = static_cast<u8>(inst.RS);
+          p->ra = static_cast<u8>(inst.RA);
+          p->rb = static_cast<u8>(inst.RB);
+          data_off += size;
+          ++count;
+          pc += 4;
+          continue;
+        }
+        if (xo == 407) // sthx
+        {
+          const u16 size = sizeof(OpSTHXPayload2);
+          if (data_off + size > MT_Trace::kDataCap)
+            goto done;
+          t->ops[count].fn = &OpSTHX2;
+          t->ops[count].code = MT_OpCode::Sthx;
+          t->ops[count].data_offset = data_off;
+          t->ops[count].size = size;
+          auto* p = reinterpret_cast<OpSTHXPayload2*>(t->data_blob + data_off);
+          p->rs = static_cast<u8>(inst.RS);
+          p->ra = static_cast<u8>(inst.RA);
+          p->rb = static_cast<u8>(inst.RB);
+          data_off += size;
+          ++count;
+          pc += 4;
+          continue;
+        }
+        goto done;
+      }
+      case 15: // addis
+      {
+        const u16 size = sizeof(OpADDISPayload);
+        if (data_off + size > MT_Trace::kDataCap)
+          goto done;
+        t->ops[count].fn = &OpADDIS;
+        t->ops[count].code = MT_OpCode::Addis;
+        t->ops[count].data_offset = data_off;
+        t->ops[count].size = size;
+        auto* p = reinterpret_cast<OpADDISPayload*>(t->data_blob + data_off);
+        p->rd = static_cast<u8>(inst.RD);
+        p->ra = static_cast<u8>(inst.RA);
+        p->simm = static_cast<s16>(inst.SIMM_16);
+        data_off += size;
+        ++count;
+        pc += 4;
+        continue;
+      }
+      case 21: // rlwinm
+      {
+        const u16 size = sizeof(OpRLWINMPayload);
+        if (data_off + size > MT_Trace::kDataCap)
+          goto done;
+        t->ops[count].fn = &OpRLWINM;
+        t->ops[count].code = MT_OpCode::Rlwinm;
+        t->ops[count].data_offset = data_off;
+        t->ops[count].size = size;
+        auto* p = reinterpret_cast<OpRLWINMPayload*>(t->data_blob + data_off);
+        p->ra = static_cast<u8>(inst.RA);
+        p->rs = static_cast<u8>(inst.RS);
+        p->sh = static_cast<u8>(inst.SH);
+        p->mb = static_cast<u8>(inst.MB);
+        p->me = static_cast<u8>(inst.ME);
+        data_off += size;
+        ++count;
+        pc += 4;
+        continue;
+      }
+      default:
+        goto done;
+    }
+  }
+done:
+  if (count == 0)
+  {
+    delete t;
+    return nullptr;
+  }
+  t->op_count = count;
+  t->data_size = data_off;
+  return t;
+#else
+  (void)state;
+  (void)entry_pc;
+  return nullptr;
+#endif
+}
+
+// Run the trace. Returns new PC or 0 on failure.
+static u32 RunTrace(PowerPC::PowerPCState& state, MT_Trace* t)
+{
+#if CI_TRACE_ENABLE
+  if (!t)
+    return 0;
+  // Self-modifying code guard: reject if page generation changed.
+  if (t->srmw_guard != GetPageWriteGeneration(t->entry_pc))
+    return 0;
+  TraceExecCtx ctx;
+  Core::System& system = Core::System::GetInstance();
+  Core::CPUThreadGuard guard(system);
+  ctx.guard = &guard;
+  // Initialize RAM region cache once per trace run
+  auto& mm = system.GetMemory();
+  ctx.mem1_base = mm.GetRAM();
+  ctx.mem1_mask = mm.GetRamMask();
+  ctx.mem2_base = mm.GetEXRAM();
+  ctx.mem2_mask = mm.GetExRamMask();
+  // Clear non-RAM region cache entries
+  for (int i = 0; i < 4; ++i)
+  {
+    ctx.rc[i].tag = 0;
+    ctx.rc[i].base = nullptr;
+  }
+  for (u16 i = 0; i < t->op_count; ++i)
+  {
+    const MT_Op& op = t->ops[i];
+    const void* data = t->data_blob + op.data_offset;
+    ctx.current_pc = t->entry_pc + 4u * static_cast<u32>(i);
+    ctx.op_index = i;
+    // Mirror interpreter callback behavior: set PC/NPC prior to executing the op
+    state.pc = ctx.current_pc;
+    state.npc = ctx.current_pc + 4u;
+
+    // Lightweight pre-check: if we can cheaply compute EA for mem ops and it's a low address,
+    // reject the trace immediately and back off to avoid repeated MMU warnings.
+    auto reject_low_ea_if_needed = [&]() -> bool {
+      u32 ea = 0;
+      switch (op.code)
+      {
+      case MT_OpCode::Lwz: {
+        const auto* p = reinterpret_cast<const OpLWZPayload*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + static_cast<s32>(p->simm));
+        break; }
+      case MT_OpCode::Lbz: {
+        const auto* p = reinterpret_cast<const OpLBZPayload*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + static_cast<s32>(p->simm));
+        break; }
+      case MT_OpCode::Lhz: {
+        const auto* p = reinterpret_cast<const OpLHZPayload*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + static_cast<s32>(p->simm));
+        break; }
+      case MT_OpCode::Stw: {
+        const auto* p = reinterpret_cast<const OpSTWPayload*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + static_cast<s32>(p->simm));
+        break; }
+      case MT_OpCode::Lwzx: {
+        const auto* p = reinterpret_cast<const OpLWZXPayload*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + state.gpr[p->rb]);
+        break; }
+      case MT_OpCode::Stwx: {
+        const auto* p = reinterpret_cast<const OpSTWXPayload*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + state.gpr[p->rb]);
+        break; }
+      case MT_OpCode::Lbzx: {
+        const auto* p = reinterpret_cast<const OpLBZXPayload2*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + state.gpr[p->rb]);
+        break; }
+      case MT_OpCode::Lhzx: {
+        const auto* p = reinterpret_cast<const OpLHZXPayload2*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + state.gpr[p->rb]);
+        break; }
+      case MT_OpCode::Stbx: {
+        const auto* p = reinterpret_cast<const OpSTBXPayload2*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + state.gpr[p->rb]);
+        break; }
+      case MT_OpCode::Sthx: {
+        const auto* p = reinterpret_cast<const OpSTHXPayload2*>(data);
+        const u32 base = p->ra ? state.gpr[p->ra] : 0u;
+        ea = static_cast<u32>(base + state.gpr[p->rb]);
+        break; }
+      default:
+        return false; // not a memory op we preview
+      }
+      if (ea < 0x80000000u)
+      {
+        // Low-EA guard: suppress micro-trace for obviously invalid addresses.
+        // Default behavior is conservative: do NOT alter exception state here.
+        // Optionally, proactive DSI can be enabled via CI_TRACE_PROACTIVE_DSI.
+#if CI_TRACE_PROACTIVE_DSI
+        state.Exceptions |= EXCEPTION_DSI;
+        s_last_fault_pc.store(t->entry_pc, std::memory_order_relaxed);
+        s_fault_pc_cooldown.store(4096u, std::memory_order_relaxed);
+        s_ci_trace_backoff.store(CI_TRACE_BACKOFF * 4u, std::memory_order_relaxed);
+        // Mirror interpreter callback behavior
+        Core::System& sys = Core::System::GetInstance();
+        sys.GetPowerPC().CheckExceptions();
+        return true;
+#else
+        s_last_fault_pc.store(t->entry_pc, std::memory_order_relaxed);
+        s_fault_pc_cooldown.store(4096u, std::memory_order_relaxed);
+        s_ci_trace_backoff.store(CI_TRACE_BACKOFF * 4u, std::memory_order_relaxed);
+        return true;
+#endif
+      }
+      return false;
+    };
+    if (reject_low_ea_if_needed())
+      return 0;
+    op.fn(state, data, ctx);
+    // Abort on exceptions to mirror interpreter callbacks' behavior.
+    if ((state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+    {
+      // Match interpreter behavior: set PC to faulting instruction and raise exceptions.
+      state.pc = ctx.current_pc;
+      state.npc = ctx.current_pc + 4u;
+      Core::System& sys = Core::System::GetInstance();
+      sys.GetPowerPC().CheckExceptions();
+      // Record fault PC and increase backoff so we don't retry micro-traces repeatedly here
+      s_last_fault_pc.store(t->entry_pc, std::memory_order_relaxed);
+      s_fault_pc_cooldown.store(4096u, std::memory_order_relaxed);
+      s_ci_trace_backoff.store(CI_TRACE_BACKOFF * 4u, std::memory_order_relaxed);
+      return 0;
+    }
+  }
+  return t->entry_pc + 4u * static_cast<u32>(t->op_count);
+#else
+  (void)state;
+  (void)t;
+  return 0;
+#endif
+}
+
+} // anonymous namespace
 
 // PSQ fast-path helpers (mirror Interpreter_LoadStorePaired semantics)
 static inline float CI_DequantizeFactor(u32 scale)
@@ -809,6 +1932,21 @@ void CachedInterpreter::Init()
   code_block.m_stats = &js.st;
   code_block.m_gpa = &js.gpa;
   code_block.m_fpa = &js.fpa;
+
+#if CI_TRACE_ENABLE
+  // Register periodic stats dumper
+  if (!s_event_ci_trace_stats)
+  {
+    auto& ct = m_system.GetCoreTiming();
+    s_event_ci_trace_stats = ct.RegisterEvent("CITraceStats", CITraceStatsCallback);
+    const u64 ticks_per_sec = m_system.GetSystemTimers().GetTicksPerSecond();
+    ct.ScheduleEvent(ticks_per_sec, s_event_ci_trace_stats);
+  }
+  // One-time banner so users can verify CI trace runtime settings without flooding logs
+  std::fprintf(stderr,
+               "[CI-TRACE] ENABLED (verbose=%d, backoff=%u)\n",
+               (int)CI_TRACE_VERBOSE, (unsigned)CI_TRACE_BACKOFF);
+#endif
 }
 
 template <bool write_pc>
@@ -1887,6 +3025,85 @@ __attribute__((hot))
 #endif
 void CachedInterpreter::ExecuteOneBlock()
 {
+#if CI_TRACE_ENABLE
+  // Optional micro-trace fast path: attempt to run a cached/built trace at current PC.
+  // Phase M1: single-op traces only; guarded by CI_TRACE_ENABLE==0 by default (no behavior change).
+  {
+    // Per-PC cooldown: if we recently faulted at this PC, avoid retrying for a while
+    const u32 entry_pc = m_ppc_state.pc;
+    if (entry_pc == s_last_fault_pc.load(std::memory_order_relaxed))
+    {
+      if (uint32_t cd = s_fault_pc_cooldown.load(std::memory_order_relaxed))
+      {
+        s_fault_pc_cooldown.store(cd - 1, std::memory_order_relaxed);
+        goto skip_micro_trace;
+      }
+    }
+    // Lightweight dynamic backoff to avoid per-instruction overhead when traces aren't hitting.
+    if (uint32_t backoff = s_ci_trace_backoff.load(std::memory_order_relaxed))
+    {
+      s_ci_trace_backoff.store(backoff - 1, std::memory_order_relaxed);
+      goto skip_micro_trace;
+    }
+    // entry_pc already loaded above
+#if CI_TRACE_VERBOSE
+    std::fprintf(stderr, "[CI-TRACE] try pc=%08x\n", entry_pc);
+#endif
+    MT_Trace* t = g_trace_cache.Get(entry_pc);
+    if (!t)
+    {
+      t = BuildTrace(m_ppc_state, entry_pc);
+      if (t)
+        g_trace_cache.Put(t);
+      // If building the trace triggered an exception (e.g., ISI), bail out now
+      // so the normal exception handling path can run.
+      if ((m_ppc_state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+        return;
+    }
+    if (t)
+    {
+      if (u32 new_pc = RunTrace(m_ppc_state, t))
+      {
+#if CI_TRACE_VERBOSE
+        std::fprintf(stderr, "[CI-TRACE] ran trace pc=%08x -> %08x ops=%u\n", entry_pc, new_pc,
+                      t->op_count);
+#endif
+        // Keep timing consistent with interpreter: one downcount per op
+        m_ppc_state.downcount -= static_cast<s32>(t->op_count);
+        m_ppc_state.pc = new_pc;
+        // Success: reset backoff so we continue attempting to trace
+        s_ci_trace_backoff.store(0, std::memory_order_relaxed);
+        return; // executed one or more ops; end block execution
+      }
+      else
+      {
+#if CI_TRACE_VERBOSE
+        std::fprintf(stderr, "[CI-TRACE] trace rejected/guard pc=%08x\n", entry_pc);
+#endif
+        // If an exception was raised inside the attempted trace, exit block now so
+        // the core can handle it like normal interpreter path.
+        if ((m_ppc_state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM | EXCEPTION_ISI)) != 0)
+        {
+          // Back off further attempts after a fault to avoid hammering the trace path
+          s_ci_trace_backoff.store(CI_TRACE_BACKOFF, std::memory_order_relaxed);
+          return;
+        }
+        // Guard reject or other non-exception failure: back off further attempts for a while
+        s_ci_trace_backoff.store(CI_TRACE_BACKOFF, std::memory_order_relaxed);
+      }
+    }
+    else
+    {
+#if CI_TRACE_VERBOSE
+      std::fprintf(stderr, "[CI-TRACE] no trace at pc=%08x\n", entry_pc);
+#endif
+      // Miss: avoid rebuilding every instruction
+      s_ci_trace_backoff.store(CI_TRACE_BACKOFF, std::memory_order_relaxed);
+    }
+  }
+#endif
+
+skip_micro_trace:
   const u8* normal_entry = m_block_cache.Dispatch();
   if (!normal_entry)
   {
