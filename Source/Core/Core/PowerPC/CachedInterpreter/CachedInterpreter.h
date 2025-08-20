@@ -240,6 +240,11 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
     SUBFE_RR,   // RD = ~RA + RB + CA; set CA; optional OV via imm bit0; optional record via rc
     SUBFME,     // RD = ~RA + 0xFFFFFFFF + CA; set CA; optional OV via imm bit0; optional record via rc
     SUBFZE,     // RD = ~RA + CA; set CA; optional OV via imm bit0; optional record via rc
+    // Integer compare ops (update CR field only; rd encodes CRFD)
+    CMP_S_RR,   // CR[rd] = cmp(s32(RA), s32(RB))
+    CMPL_U_RR,  // CR[rd] = cmp(u32(RA), u32(RB))
+    CMP_S_IMM,  // CR[rd] = cmp(s32(RA), SIMM16=imm)
+    CMPL_U_IMM, // CR[rd] = cmp(u32(RA), UIMM16=imm)
     NOP,
     COUNT,
   };

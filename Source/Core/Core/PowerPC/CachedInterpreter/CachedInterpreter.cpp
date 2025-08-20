@@ -30,6 +30,7 @@
 #include "Core/System.h"
 #include "Core/HW/Memmap.h"
 #include "Common/Swap.h"
+#include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 
 // Local helper to update CR0, mirroring Interpreter::Helper_UpdateCR0, which is private.
 static inline void CI_UpdateCR0(PowerPC::PowerPCState& ppc_state, u32 value)
@@ -47,6 +48,14 @@ static inline void CI_UpdateCR0(PowerPC::PowerPCState& ppc_state, u32 value)
            (u64{ppc_state.GetXER_SO()} << PowerPC::CR_EMU_SO_BIT);
 
   ppc_state.cr.fields[0] = cr_val;
+}
+
+// Local helper to write a CR field (CRFD), mirroring Helper_IntCompare SO behavior.
+static inline void CI_WriteCRField(PowerPC::PowerPCState& ppc_state, u32 crfd, u32 cr_field)
+{
+  if (ppc_state.GetXER_SO())
+    cr_field |= PowerPC::CR_SO;
+  ppc_state.cr.SetField(crfd, cr_field);
 }
 
 // Carry/overflow helpers matching Interpreter semantics
@@ -113,6 +122,70 @@ template <bool write_pc>
       const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
       const u32 val = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = val;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Floating-point loads/stores (indexed)
+    case 535: // lfsx
+    case 567: // lfsux (update)
+    {
+      const bool update = (inst.SUBOP10 == 567);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break; // misaligned or illegal
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      const u32 be = Common::FromBigEndian(raw);
+      const u64 ps = ConvertToDouble(be);
+      ppc_state.ps[inst.FD].Fill(ps);
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 599: // lfdx
+    case 631: // lfdux (update)
+    {
+      const bool update = (inst.SUBOP10 == 631);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break; // misaligned or illegal
+      const u64 raw = *reinterpret_cast<const u64*>(base_ptr + offset);
+      const u64 be = Common::FromBigEndian(raw);
+      ppc_state.ps[inst.FD].SetPS0(be);
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 663: // stfsx
+    case 695: // stfsux (update)
+    {
+      const bool update = (inst.SUBOP10 == 695);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break; // misaligned or illegal
+      const u32 conv = ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64());
+      const u32 raw = Common::swap32(conv);
+      *reinterpret_cast<u32*>(base_ptr + offset) = raw;
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 727: // stfdx
+    case 759: // stfdux (update)
+    {
+      const bool update = (inst.SUBOP10 == 759);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break; // misaligned or illegal
+      const u64 val = ppc_state.ps[inst.FS].PS0AsU64();
+      const u64 raw = Common::swap64(val);
+      *reinterpret_cast<u64*>(base_ptr + offset) = raw;
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 983: // stfiwx
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break; // misaligned
+      const u32 val = ppc_state.ps[inst.FS].PS0AsU32();
+      const u32 raw = Common::swap32(val);
+      *reinterpret_cast<u32*>(base_ptr + offset) = raw;
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 33: // lwzu (update)
@@ -537,7 +610,12 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
         &&op_SUBFE_RR,      // 35 MicroOpCode::SUBFE_RR
         &&op_SUBFME,        // 36 MicroOpCode::SUBFME
         &&op_SUBFZE,        // 37 MicroOpCode::SUBFZE
-        &&op_NOP            // 38 MicroOpCode::NOP
+        // Integer compare ops
+        &&op_CMP_S_RR,      // 38 MicroOpCode::CMP_S_RR
+        &&op_CMPL_U_RR,     // 39 MicroOpCode::CMPL_U_RR
+        &&op_CMP_S_IMM,     // 40 MicroOpCode::CMP_S_IMM
+        &&op_CMPL_U_IMM,    // 41 MicroOpCode::CMPL_U_IMM
+        &&op_NOP            // 42 MicroOpCode::NOP
     };
     static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
                   "dispatch_table must cover all MicroOpCode entries and match enum order");
@@ -555,6 +633,63 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
     {
       const MicroOp& m = ops[i];
       ppc_state.gpr[m.rd] = m.imm;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  // Compare handlers: update CR[rd] only, no GPR writes
+  op_CMP_S_RR:
+    {
+      const MicroOp& m = ops[i];
+      const s32 a = s32(ppc_state.gpr[m.ra]);
+      const s32 b = s32(ppc_state.gpr[m.rb]);
+      u32 crf = 0;
+      crf |= (a < b) ? PowerPC::CR_LT : 0;
+      crf |= (a > b) ? PowerPC::CR_GT : 0;
+      crf |= (a == b) ? PowerPC::CR_EQ : 0;
+      CI_WriteCRField(ppc_state, m.rd, crf);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CMPL_U_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      u32 crf = 0;
+      crf |= (a < b) ? PowerPC::CR_LT : 0;
+      crf |= (a > b) ? PowerPC::CR_GT : 0;
+      crf |= (a == b) ? PowerPC::CR_EQ : 0;
+      CI_WriteCRField(ppc_state, m.rd, crf);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CMP_S_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const s32 a = s32(ppc_state.gpr[m.ra]);
+      const s32 b = s32(s16(m.imm & 0xFFFF));
+      u32 crf = 0;
+      crf |= (a < b) ? PowerPC::CR_LT : 0;
+      crf |= (a > b) ? PowerPC::CR_GT : 0;
+      crf |= (a == b) ? PowerPC::CR_EQ : 0;
+      CI_WriteCRField(ppc_state, m.rd, crf);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CMPL_U_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = m.imm & 0xFFFFu;
+      u32 crf = 0;
+      crf |= (a < b) ? PowerPC::CR_LT : 0;
+      crf |= (a > b) ? PowerPC::CR_GT : 0;
+      crf |= (a == b) ? PowerPC::CR_EQ : 0;
+      CI_WriteCRField(ppc_state, m.rd, crf);
       ++i;
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
@@ -1874,6 +2009,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           auto is_simple_mop = [](const UGeckoInstruction& ins) -> bool {
             switch (ins.OPCD)
             {
+            case 10: // cmpli
+            case 11: // cmpi
             case 14: // addi
             case 15: // addis
             case 20: // rlwimix
@@ -1889,6 +2026,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             case 31: // X-form logical reg-reg and/or/xor
               switch (ins.SUBOP10)
               {
+              case 0:   // cmp
+              case 32:  // cmpl
               case 28:  // andx
               case 444: // orx
               case 316: // xorx
@@ -1897,6 +2036,27 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               case 476: // nandx
               case 124: // norx
               case 284: // eqvx
+              // arithmetic add/sub family
+              case 266: // addx
+              case 778: // addox
+              case 10:  // addcx
+              case 522: // addcox
+              case 138: // addex
+              case 650: // addeox
+              case 234: // addmex
+              case 746: // addmeox
+              case 202: // addzex
+              case 714: // addzeox
+              case 40:  // subfx
+              case 552: // subfox
+              case 8:   // subfcx
+              case 520: // subfcox
+              case 136: // subfex
+              case 648: // subfeox
+              case 232: // subfmex
+              case 744: // subfmeox
+              case 200: // subfzex
+              case 712: // subfzeox
               case 26:  // cntlzwx
               case 954: // extsbx
               case 922: // extshx
@@ -1934,6 +2094,26 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               MicroOp& mu = mop.ops[mop.count++];
               switch (next.inst.OPCD)
               {
+              case 10: // cmpli
+              {
+                mu.op = MicroOpCode::CMPL_U_IMM;
+                mu.rd = next.inst.CRFD;
+                mu.ra = next.inst.RA;
+                mu.rb = 0;
+                mu.rc = 0;
+                mu.imm = next.inst.UIMM;
+                goto end_pack_switch;
+              }
+              case 11: // cmpi
+              {
+                mu.op = MicroOpCode::CMP_S_IMM;
+                mu.rd = next.inst.CRFD;
+                mu.ra = next.inst.RA;
+                mu.rb = 0;
+                mu.rc = 0;
+                mu.imm = static_cast<u16>(next.inst.SIMM_16); // keep 16-bit immediate
+                goto end_pack_switch;
+              }
               case 14: // addi
                 mu.op = MicroOpCode::ADDI;
                 mu.rd = next.inst.RD; // RT
@@ -2018,6 +2198,26 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               {
                 switch (next.inst.SUBOP10)
                 {
+                case 0: // cmp
+                {
+                  mu.op = MicroOpCode::CMP_S_RR;
+                  mu.rd = next.inst.CRFD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = 0;
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                }
+                case 32: // cmpl
+                {
+                  mu.op = MicroOpCode::CMPL_U_RR;
+                  mu.rd = next.inst.CRFD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = 0;
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                }
                 case 28: // andx
                   mu.op = MicroOpCode::AND_RR;
                   break;
@@ -2042,6 +2242,117 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 case 284: // eqvx
                   mu.op = MicroOpCode::EQV_RR;
                   break;
+                // arithmetic add/sub family
+                case 266: // addx
+                case 778: // addox (OE)
+                {
+                  mu.op = MicroOpCode::ADD_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 778) ? 1u : 0u; // imm bit0 -> OE
+                  goto end_pack_switch;
+                }
+                case 10: // addcx
+                case 522: // addcox (OE)
+                {
+                  mu.op = MicroOpCode::ADDC_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 522) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 138: // addex
+                case 650: // addeox (OE)
+                {
+                  mu.op = MicroOpCode::ADDE_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 650) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 234: // addmex
+                case 746: // addmeox (OE)
+                {
+                  mu.op = MicroOpCode::ADDME;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 746) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 202: // addzex
+                case 714: // addzeox (OE)
+                {
+                  mu.op = MicroOpCode::ADDZE;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 714) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 40: // subfx
+                case 552: // subfox (OE)
+                {
+                  mu.op = MicroOpCode::SUBF_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 552) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 8: // subfcx
+                case 520: // subfcox (OE)
+                {
+                  mu.op = MicroOpCode::SUBFC_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 520) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 136: // subfex
+                case 648: // subfeox (OE)
+                {
+                  mu.op = MicroOpCode::SUBFE_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 648) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 232: // subfmex
+                case 744: // subfmeox (OE)
+                {
+                  mu.op = MicroOpCode::SUBFME;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 744) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 200: // subfzex
+                case 712: // subfzeox (OE)
+                {
+                  mu.op = MicroOpCode::SUBFZE;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 712) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
                 case 26: // cntlzwx
                   mu.op = MicroOpCode::CNTLZW;
                   mu.rd = next.inst.RA;
