@@ -9,6 +9,8 @@
 #include <bit>
 #include <utility>
 #include <cstring>
+#include <algorithm>
+#include <limits>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -31,6 +33,34 @@
 #include "Core/HW/Memmap.h"
 #include "Common/Swap.h"
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
+
+// PSQ fast-path helpers (mirror Interpreter_LoadStorePaired semantics)
+static inline float CI_DequantizeFactor(u32 scale)
+{
+  // scale 0..31 => 1/(1<<scale), 32..63 => 1<<(64-scale)
+  if (scale <= 31)
+    return 1.0f / static_cast<float>(1u << scale);
+  const u32 p = 64u - scale;
+  return static_cast<float>(1ull << p);
+}
+
+static inline float CI_QuantizeFactor(u32 scale)
+{
+  // scale 0..31 => 1<<scale, 32..63 => 1/(1<<(64-scale))
+  if (scale <= 31)
+    return static_cast<float>(1u << scale);
+  const u32 p = 64u - scale;
+  return 1.0f / static_cast<float>(1ull << p);
+}
+
+template <typename SType>
+static inline SType CI_ScaleAndClamp(double ps, u32 st_scale)
+{
+  const float conv = static_cast<float>(ps) * CI_QuantizeFactor(st_scale);
+  constexpr float minv = static_cast<float>(std::numeric_limits<SType>::min());
+  constexpr float maxv = static_cast<float>(std::numeric_limits<SType>::max());
+  return static_cast<SType>(std::clamp(conv, minv, maxv));
+}
 
 // Local helper to update CR0, mirroring Interpreter::Helper_UpdateCR0, which is private.
 static inline void CI_UpdateCR0(PowerPC::PowerPCState& ppc_state, u32 value)
@@ -476,6 +506,242 @@ template <bool write_pc>
         break; // misaligned
       const u16 raw = static_cast<u16>(ppc_state.gpr[inst.RS]);
       std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Paired-single quantized loads/stores (indexed)
+    case 6:   // psq_lx
+    case 38:  // psq_lux (update)
+    {
+      const bool update = (inst.SUBOP10 == 38);
+      const u32 idx = inst.Ix;
+      const u32 w = inst.Wx; // 1 = single element, 0 = pair
+      if ((update && ra == 0))
+        break; // illegal update form
+      const UGQR gqr(ppc_state.spr[SPR_GQR0 + idx]);
+      const EQuantizeType ld_type = gqr.ld_type;
+      const u32 ld_scale = gqr.ld_scale;
+
+      double ps0 = 0.0;
+      double ps1 = 0.0;
+
+      switch (ld_type)
+      {
+      case QUANTIZE_FLOAT:
+        if (w != 0)
+        {
+          u32 raw;
+          std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+          const u32 be = Common::FromBigEndian(raw);
+          ps0 = std::bit_cast<double>(ConvertToDouble(be));
+          ps1 = 1.0;
+        }
+        else
+        {
+          u64 raw;
+          std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+          const u64 be64 = Common::FromBigEndian(raw);
+          const u32 first = static_cast<u32>(be64 >> 32);
+          const u32 second = static_cast<u32>(be64);
+          ps0 = std::bit_cast<double>(ConvertToDouble(first));
+          ps1 = std::bit_cast<double>(ConvertToDouble(second));
+        }
+        break;
+
+      case QUANTIZE_U8:
+      case QUANTIZE_S8:
+      case QUANTIZE_U16:
+      case QUANTIZE_S16:
+      {
+        const float factor = CI_DequantizeFactor(ld_scale);
+        if (w != 0)
+        {
+          if (ld_type == QUANTIZE_U8 || ld_type == QUANTIZE_S8)
+          {
+            const u8 val = *(base_ptr + offset);
+            ps0 = static_cast<double>(ld_type == QUANTIZE_S8 ? static_cast<s8>(val)
+                                                              : static_cast<u8>(val)) *
+                  factor;
+          }
+          else
+          {
+            u16 raw16;
+            std::memcpy(&raw16, base_ptr + offset, sizeof(raw16));
+            const u16 be16 = Common::FromBigEndian(raw16);
+            ps0 = static_cast<double>(ld_type == QUANTIZE_S16 ? static_cast<s16>(be16)
+                                                              : static_cast<u16>(be16)) *
+                  factor;
+          }
+          ps1 = 1.0;
+        }
+        else
+        {
+          if (ld_type == QUANTIZE_U8 || ld_type == QUANTIZE_S8)
+          {
+            u16 raw16;
+            std::memcpy(&raw16, base_ptr + offset, sizeof(raw16));
+            const u16 be16 = Common::FromBigEndian(raw16);
+            const u8 first = static_cast<u8>(be16 >> 8);
+            const u8 second = static_cast<u8>(be16);
+            ps0 = static_cast<double>(ld_type == QUANTIZE_S8 ? static_cast<s8>(first)
+                                                              : static_cast<u8>(first)) *
+                  factor;
+            ps1 = static_cast<double>(ld_type == QUANTIZE_S8 ? static_cast<s8>(second)
+                                                              : static_cast<u8>(second)) *
+                  factor;
+          }
+          else
+          {
+            u32 raw32;
+            std::memcpy(&raw32, base_ptr + offset, sizeof(raw32));
+            const u32 be32 = Common::FromBigEndian(raw32);
+            const u16 first = static_cast<u16>(be32 >> 16);
+            const u16 second = static_cast<u16>(be32);
+            ps0 = static_cast<double>(ld_type == QUANTIZE_S16 ? static_cast<s16>(first)
+                                                              : static_cast<u16>(first)) *
+                  factor;
+            ps1 = static_cast<double>(ld_type == QUANTIZE_S16 ? static_cast<s16>(second)
+                                                              : static_cast<u16>(second)) *
+                  factor;
+          }
+        }
+        break;
+      }
+
+      default:
+        // Invalid types fall back
+        break;
+      }
+
+      if (ld_type != QUANTIZE_FLOAT && ld_type != QUANTIZE_U8 && ld_type != QUANTIZE_S8 &&
+          ld_type != QUANTIZE_U16 && ld_type != QUANTIZE_S16)
+      {
+        break; // fallback to cold path
+      }
+
+      ppc_state.ps[inst.RD].SetBoth(ps0, ps1);
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    case 7:   // psq_stx
+    case 39:  // psq_stux (update)
+    {
+      const bool update = (inst.SUBOP10 == 39);
+      const u32 idx = inst.Ix;
+      const u32 w = inst.Wx;
+      if ((update && ra == 0))
+        break; // illegal update form
+      const UGQR gqr(ppc_state.spr[SPR_GQR0 + idx]);
+      const EQuantizeType st_type = gqr.st_type;
+      const u32 st_scale = gqr.st_scale;
+
+      const double ps0 = ppc_state.ps[inst.RS].PS0AsDouble();
+      const double ps1 = ppc_state.ps[inst.RS].PS1AsDouble();
+
+      switch (st_type)
+      {
+      case QUANTIZE_FLOAT:
+      {
+        const u64 q0 = std::bit_cast<u64>(ps0);
+        const u32 s0 = ConvertToSingleFTZ(q0);
+        if (w != 0)
+        {
+          const u32 raw = Common::swap32(s0);
+          std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        }
+        else
+        {
+          const u32 s1 = ConvertToSingleFTZ(std::bit_cast<u64>(ps1));
+          const u64 be64 = (static_cast<u64>(s0) << 32) | static_cast<u64>(s1);
+          const u64 raw = Common::swap64(be64);
+          std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        }
+        break;
+      }
+
+      case QUANTIZE_U8:
+      case QUANTIZE_S8:
+      case QUANTIZE_U16:
+      case QUANTIZE_S16:
+      {
+        if (w != 0)
+        {
+          if (st_type == QUANTIZE_U8 || st_type == QUANTIZE_S8)
+          {
+            u8 v0;
+            if (st_type == QUANTIZE_S8)
+              v0 = static_cast<u8>(CI_ScaleAndClamp<s8>(ps0, st_scale));
+            else
+              v0 = CI_ScaleAndClamp<u8>(ps0, st_scale);
+            *(base_ptr + offset) = v0;
+          }
+          else
+          {
+            u16 v0;
+            if (st_type == QUANTIZE_S16)
+              v0 = static_cast<u16>(CI_ScaleAndClamp<s16>(ps0, st_scale));
+            else
+              v0 = CI_ScaleAndClamp<u16>(ps0, st_scale);
+            const u16 raw16 = Common::swap16(v0);
+            std::memcpy(base_ptr + offset, &raw16, sizeof(raw16));
+          }
+        }
+        else
+        {
+          if (st_type == QUANTIZE_U8 || st_type == QUANTIZE_S8)
+          {
+            u8 v0;
+            u8 v1;
+            if (st_type == QUANTIZE_S8)
+            {
+              v0 = static_cast<u8>(CI_ScaleAndClamp<s8>(ps0, st_scale));
+              v1 = static_cast<u8>(CI_ScaleAndClamp<s8>(ps1, st_scale));
+            }
+            else
+            {
+              v0 = CI_ScaleAndClamp<u8>(ps0, st_scale);
+              v1 = CI_ScaleAndClamp<u8>(ps1, st_scale);
+            }
+            const u16 be16 = static_cast<u16>((u16(v0) << 8) | u16(v1));
+            const u16 raw16 = Common::swap16(be16);
+            std::memcpy(base_ptr + offset, &raw16, sizeof(raw16));
+          }
+          else
+          {
+            u16 v0;
+            u16 v1;
+            if (st_type == QUANTIZE_S16)
+            {
+              v0 = static_cast<u16>(CI_ScaleAndClamp<s16>(ps0, st_scale));
+              v1 = static_cast<u16>(CI_ScaleAndClamp<s16>(ps1, st_scale));
+            }
+            else
+            {
+              v0 = CI_ScaleAndClamp<u16>(ps0, st_scale);
+              v1 = CI_ScaleAndClamp<u16>(ps1, st_scale);
+            }
+            const u32 be32 = (static_cast<u32>(v0) << 16) | static_cast<u32>(v1);
+            const u32 raw32 = Common::swap32(be32);
+            std::memcpy(base_ptr + offset, &raw32, sizeof(raw32));
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
+      }
+
+      if (st_type != QUANTIZE_FLOAT && st_type != QUANTIZE_U8 && st_type != QUANTIZE_S8 &&
+          st_type != QUANTIZE_U16 && st_type != QUANTIZE_S16)
+      {
+        break; // fallback
+      }
+
+      if (update)
+        ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
 
