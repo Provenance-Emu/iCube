@@ -270,6 +270,94 @@ template <bool write_pc>
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
+
+    // Floating-point single-precision loads/stores (D-form)
+    case 48: // lfs
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break; // misaligned -> fallback
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      const u32 be = Common::FromBigEndian(raw);
+      const u64 value = ConvertToDouble(be);
+      ppc_state.ps[inst.FD].Fill(value);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 49: // lfsu (update)
+    {
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
+        break; // illegal or misaligned -> fallback
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      const u32 be = Common::FromBigEndian(raw);
+      const u64 value = ConvertToDouble(be);
+      ppc_state.ps[inst.FD].Fill(value);
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Floating-point double-precision loads (D-form)
+    case 50: // lfd
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break; // misaligned -> fallback
+      u64 raw64;
+      std::memcpy(&raw64, base_ptr + offset, sizeof(raw64));
+      const u64 be64 = Common::FromBigEndian(raw64);
+      ppc_state.ps[inst.FD].SetPS0(be64);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 51: // lfdu (update)
+    {
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
+        break; // illegal or misaligned -> fallback
+      u64 raw64;
+      std::memcpy(&raw64, base_ptr + offset, sizeof(raw64));
+      const u64 be64 = Common::FromBigEndian(raw64);
+      ppc_state.ps[inst.FD].SetPS0(be64);
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Floating-point single-precision stores (D-form)
+    case 52: // stfs
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break; // misaligned -> fallback
+      const u32 conv = ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64());
+      const u32 raw_out = Common::swap32(conv);
+      *reinterpret_cast<u32*>(base_ptr + offset) = raw_out;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 53: // stfsu (update)
+    {
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
+        break; // illegal or misaligned -> fallback
+      const u32 conv = ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64());
+      const u32 raw_out = Common::swap32(conv);
+      *reinterpret_cast<u32*>(base_ptr + offset) = raw_out;
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Floating-point double-precision stores (D-form)
+    case 54: // stfd
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break; // misaligned -> fallback
+      const u64 val64 = ppc_state.ps[inst.FS].PS0AsU64();
+      const u64 raw64 = Common::swap64(val64);
+      std::memcpy(base_ptr + offset, &raw64, sizeof(raw64));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 55: // stfdu (update)
+    {
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
+        break; // illegal or misaligned -> fallback
+      const u64 val64 = ppc_state.ps[inst.FS].PS0AsU64();
+      const u64 raw64 = Common::swap64(val64);
+      std::memcpy(base_ptr + offset, &raw64, sizeof(raw64));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
     }
   }
   // Slow path or unsupported opcodes: delegate to interpreter implementation.
