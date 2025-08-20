@@ -154,71 +154,6 @@ template <bool write_pc>
       ppc_state.gpr[inst.RD] = val;
       return sizeof(AnyCallback) + sizeof(operands);
     }
-
-    // Floating-point single-precision loads/stores (indexed)
-    case 535: // lfsx
-    case 567: // lfsux (update)
-    {
-      const bool update = (inst.SUBOP10 == 567);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break; // misaligned or illegal update
-      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
-      const u32 be = Common::FromBigEndian(raw);
-      const u64 value = ConvertToDouble(be);
-      ppc_state.ps[inst.FD].Fill(value);
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-
-    case 599: // lfdx
-    case 631: // lfdux (update)
-    {
-      const bool update = (inst.SUBOP10 == 631);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break; // misaligned or illegal
-      const u64 raw = *reinterpret_cast<const u64*>(base_ptr + offset);
-      const u64 be = Common::FromBigEndian(raw);
-      ppc_state.ps[inst.FD].SetPS0(be);
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 663: // stfsx
-    case 695: // stfsux (update)
-    {
-      const bool update = (inst.SUBOP10 == 695);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break; // misaligned or illegal
-      const u32 conv = ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64());
-      const u32 raw = Common::swap32(conv);
-      *reinterpret_cast<u32*>(base_ptr + offset) = raw;
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 727: // stfdx
-    case 759: // stfdux (update)
-    {
-      const bool update = (inst.SUBOP10 == 759);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break; // misaligned or illegal
-      const u64 val = ppc_state.ps[inst.FS].PS0AsU64();
-      const u64 raw = Common::swap64(val);
-      *reinterpret_cast<u64*>(base_ptr + offset) = raw;
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 983: // stfiwx
-    {
-      if ((ea & 0b11) != 0) [[unlikely]]
-        break; // misaligned
-      const u32 val = ppc_state.ps[inst.FS].PS0AsU32();
-      const u32 raw = Common::swap32(val);
-      *reinterpret_cast<u32*>(base_ptr + offset) = raw;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
     case 33: // lwzu (update)
     {
       if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
@@ -431,6 +366,76 @@ template <bool write_pc>
       ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(be));
       if (update)
         ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Floating-point single-precision loads/stores (indexed)
+    case 535: // lfsx
+    case 567: // lfsux (update)
+    {
+      const bool update = (inst.SUBOP10 == 567);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break; // misaligned or illegal
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      const u32 be = Common::FromBigEndian(raw);
+      const u64 value = ConvertToDouble(be);
+      ppc_state.ps[inst.FD].Fill(value);
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Double-precision floating-point loads (indexed)
+    case 599: // lfdx
+    case 631: // lfdux (update)
+    {
+      const bool update = (inst.SUBOP10 == 631);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break; // misaligned or illegal
+      u64 raw64;
+      std::memcpy(&raw64, base_ptr + offset, sizeof(raw64));
+      const u64 be64 = Common::FromBigEndian(raw64);
+      ppc_state.ps[inst.FD].SetPS0(be64);
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    case 663: // stfsx
+    case 695: // stfsux (update)
+    {
+      const bool update = (inst.SUBOP10 == 695);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break; // misaligned or illegal
+      const u32 conv = ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64());
+      const u32 raw = Common::swap32(conv);
+      *reinterpret_cast<u32*>(base_ptr + offset) = raw;
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Double-precision floating-point stores (indexed)
+    case 727: // stfdx
+    case 759: // stfdux (update)
+    {
+      const bool update = (inst.SUBOP10 == 759);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break; // misaligned or illegal
+      const u64 val = ppc_state.ps[inst.FS].PS0AsU64();
+      const u64 raw = Common::swap64(val);
+      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 983: // stfiwx
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break; // misaligned
+      const u32 val = ppc_state.ps[inst.FS].PS0AsU32();
+      const u32 raw = Common::swap32(val);
+      *reinterpret_cast<u32*>(base_ptr + offset) = raw;
       return sizeof(AnyCallback) + sizeof(operands);
     }
 
