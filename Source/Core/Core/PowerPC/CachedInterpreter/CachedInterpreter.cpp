@@ -11,6 +11,7 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
+#include <cstdio>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -33,6 +34,10 @@
 #include "Core/HW/Memmap.h"
 #include "Common/Swap.h"
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
+
+#define CI_LS_FALLBACK_TRACE
+#define CI_RA_WB_TRACE
+#define CI_REG_TRACE
 
 // PSQ fast-path helpers (mirror Interpreter_LoadStorePaired semantics)
 static inline float CI_DequantizeFactor(u32 scale)
@@ -119,23 +124,61 @@ template <bool write_pc>
     ppc_state.npc = current_pc + 4;
   }
 
-  // Decode effective address for D-form: ea = (RA ? GPR[RA] : 0) + SIMM_16
+  // Decode effective address for D-form: ea = (RA ? GPR[RA] : 0) + sign_extend(SIMM_16)
   const u32 ra = inst.RA;
-  const u32 ea = ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16))
-                    : static_cast<u32>(inst.SIMM_16);
+#ifdef CI_REG_TRACE
+  {
+    const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                              current_pc == 0x801c008c || current_pc == 0x801c009c;
+    if (pc_in_window)
+    {
+      const u32 rb = inst.RB;
+      const u32 gpr_ra = ra ? ppc_state.gpr[ra] : 0u;
+      const u32 gpr_rb = rb ? ppc_state.gpr[rb] : 0u;
+      std::fprintf(stderr,
+                   "CI REG (entry): PC=0x%08x OPCD=%u SUBOP10=%u RA=%u RB=%u GPR_RA=0x%08x GPR_RB=0x%08x\n",
+                   current_pc, static_cast<unsigned>(inst.OPCD),
+                   static_cast<unsigned>(inst.SUBOP10), ra, rb, gpr_ra, gpr_rb);
+      std::fflush(stderr);
+    }
+  }
+#endif
+  const s32 d_imm = static_cast<s16>(inst.SIMM_16);
+  const u32 ea = (ra ? ppc_state.gpr[ra] : 0u) + static_cast<u32>(d_imm);
 
   // Compute direct pointer if EA lies in MEM1 or EXRAM logical regions
   u8* __restrict base_ptr = nullptr;
   u32 offset = 0;
-  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  // Region decode with logical mirror handling (cached/uncached)
+  if (ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
   {
     base_ptr = mem1_base;
     offset = (ea - Memory::MEM1_BASE_ADDR) & mem1_mask;
   }
-  else if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
+  else if (ea - 0x80000000u <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (ea - 0x80000000u) & mem1_mask;
+  }
+  else if (ea - 0xC0000000u <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (ea - 0xC0000000u) & mem1_mask;
+  }
+  else if (ea - Memory::MEM2_BASE_ADDR <= exram_mask)
   {
     base_ptr = exram_base;
     offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
+  }
+  else if (ea - 0x90000000u <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (ea - 0x90000000u) & exram_mask;
+  }
+  else if (ea - 0xD0000000u <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (ea - 0xD0000000u) & exram_mask;
   }
 
   if (base_ptr) [[likely]]
@@ -145,6 +188,261 @@ template <bool write_pc>
     // Handle D-form by primary opcode, X-form by SUBOP10 under OPCD=31
     switch (inst.OPCD)
     {
+    // Paired-single quantized loads/stores (D-form)
+    case 56: // psq_l
+    case 57: // psq_lu (update)
+    {
+      if (HID2(ppc_state).LSQE == 0)
+        break; // illegal -> fallback to raise
+      const bool update = (inst.OPCD == 57);
+      const u32 idx = inst.I;
+      const u32 w = inst.W; // 1 = single element, 0 = pair
+      if (update && ra == 0)
+        break; // illegal update form
+      const UGQR gqr(ppc_state.spr[SPR_GQR0 + idx]);
+      const EQuantizeType ld_type = gqr.ld_type;
+      const u32 ld_scale = gqr.ld_scale;
+
+      double ps0 = 0.0;
+      double ps1 = 0.0;
+
+      switch (ld_type)
+      {
+      case QUANTIZE_FLOAT:
+        if (w != 0)
+        {
+          u32 raw;
+          std::memcpy(&raw, base_ptr + offset, sizeof(raw));
+          const u32 be = Common::FromBigEndian(raw);
+          ps0 = std::bit_cast<double>(ConvertToDouble(be));
+          ps1 = 1.0;
+        }
+        else
+        {
+          u32 raw_hi;
+          u32 raw_lo;
+          std::memcpy(&raw_hi, base_ptr + offset, sizeof(raw_hi));
+          std::memcpy(&raw_lo, base_ptr + offset + 4, sizeof(raw_lo));
+          const u32 be_hi = Common::FromBigEndian(raw_hi);
+          const u32 be_lo = Common::FromBigEndian(raw_lo);
+          ps0 = std::bit_cast<double>(ConvertToDouble(be_hi));
+          ps1 = std::bit_cast<double>(ConvertToDouble(be_lo));
+        }
+        break;
+
+      case QUANTIZE_U8:
+      case QUANTIZE_S8:
+      case QUANTIZE_U16:
+      case QUANTIZE_S16:
+      {
+        const float factor = CI_DequantizeFactor(ld_scale);
+        if (w != 0)
+        {
+          if (ld_type == QUANTIZE_U8 || ld_type == QUANTIZE_S8)
+          {
+            const u8 val = *(base_ptr + offset);
+            ps0 = static_cast<double>(ld_type == QUANTIZE_S8 ? static_cast<s8>(val)
+                                                              : static_cast<u8>(val)) *
+                  factor;
+          }
+          else
+          {
+            u16 raw16;
+            std::memcpy(&raw16, base_ptr + offset, sizeof(raw16));
+            const u16 be16 = Common::FromBigEndian(raw16);
+            ps0 = static_cast<double>(ld_type == QUANTIZE_S16 ? static_cast<s16>(be16)
+                                                              : static_cast<u16>(be16)) *
+                  factor;
+          }
+          ps1 = 1.0;
+        }
+        else
+        {
+          if (ld_type == QUANTIZE_U8 || ld_type == QUANTIZE_S8)
+          {
+            u16 raw16;
+            std::memcpy(&raw16, base_ptr + offset, sizeof(raw16));
+            const u16 be16 = Common::FromBigEndian(raw16);
+            const u8 first = static_cast<u8>(be16 >> 8);
+            const u8 second = static_cast<u8>(be16);
+            ps0 = static_cast<double>(ld_type == QUANTIZE_S8 ? static_cast<s8>(first)
+                                                              : static_cast<u8>(first)) *
+                  factor;
+            ps1 = static_cast<double>(ld_type == QUANTIZE_S8 ? static_cast<s8>(second)
+                                                              : static_cast<u8>(second)) *
+                  factor;
+          }
+          else
+          {
+            u32 raw32;
+            std::memcpy(&raw32, base_ptr + offset, sizeof(raw32));
+            const u32 be32 = Common::FromBigEndian(raw32);
+            const u16 first = static_cast<u16>(be32 >> 16);
+            const u16 second = static_cast<u16>(be32);
+            ps0 = static_cast<double>(ld_type == QUANTIZE_S16 ? static_cast<s16>(first)
+                                                              : static_cast<u16>(first)) *
+                  factor;
+            ps1 = static_cast<double>(ld_type == QUANTIZE_S16 ? static_cast<s16>(second)
+                                                              : static_cast<u16>(second)) *
+                  factor;
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
+      }
+
+      if (ld_type != QUANTIZE_FLOAT && ld_type != QUANTIZE_U8 && ld_type != QUANTIZE_S8 &&
+          ld_type != QUANTIZE_U16 && ld_type != QUANTIZE_S16)
+      {
+        break;
+      }
+
+      ppc_state.ps[inst.FD].SetBoth(ps0, ps1);
+      if (update)
+      {
+#ifdef CI_RA_WB_TRACE
+        const u32 old_ra = ppc_state.gpr[ra];
+        const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                  current_pc == 0x801c008c || current_pc == 0x801c009c;
+        if (pc_in_window && (ra == 9 || ea < 0x100))
+        {
+          std::fprintf(stderr,
+                       "CI RA_WB (psq_lu): PC=0x%08x RA=%u old=0x%08x new(EA)=0x%08x base=0x%08x simm=%d\n",
+                       current_pc, ra, old_ra, ea, (ra ? old_ra : 0u),
+                       static_cast<int>(static_cast<s16>(inst.SIMM_16)));
+          std::fflush(stderr);
+        }
+#endif
+        ppc_state.gpr[ra] = ea;
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    case 60: // psq_st
+    case 61: // psq_stu (update)
+    {
+      if (HID2(ppc_state).LSQE == 0)
+        break; // illegal -> fallback
+      const bool update = (inst.OPCD == 61);
+      const u32 idx = inst.I;
+      const u32 w = inst.W;
+      if (update && ra == 0)
+        break; // illegal update form
+      const UGQR gqr(ppc_state.spr[SPR_GQR0 + idx]);
+      const EQuantizeType st_type = gqr.st_type;
+      const u32 st_scale = gqr.st_scale;
+
+      const double ps0 = ppc_state.ps[inst.FS].PS0AsDouble();
+      const double ps1 = ppc_state.ps[inst.FS].PS1AsDouble();
+
+      switch (st_type)
+      {
+      case QUANTIZE_FLOAT:
+      {
+        const u64 q0 = std::bit_cast<u64>(ps0);
+        const u32 s0 = ConvertToSingleFTZ(q0);
+        if (w != 0)
+        {
+          const u32 raw = Common::swap32(s0);
+          std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        }
+        else
+        {
+          const u32 s1 = ConvertToSingleFTZ(std::bit_cast<u64>(ps1));
+          const u64 be64 = (static_cast<u64>(s0) << 32) | static_cast<u64>(s1);
+          const u64 raw = Common::swap64(be64);
+          std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        }
+        break;
+      }
+
+      case QUANTIZE_U8:
+      case QUANTIZE_S8:
+      case QUANTIZE_U16:
+      case QUANTIZE_S16:
+      {
+        if (w != 0)
+        {
+          if (st_type == QUANTIZE_U8 || st_type == QUANTIZE_S8)
+          {
+            u8 v0;
+            if (st_type == QUANTIZE_S8)
+              v0 = static_cast<u8>(CI_ScaleAndClamp<s8>(ps0, st_scale));
+            else
+              v0 = CI_ScaleAndClamp<u8>(ps0, st_scale);
+            *(base_ptr + offset) = v0;
+          }
+          else
+          {
+            u16 v0;
+            if (st_type == QUANTIZE_S16)
+              v0 = static_cast<u16>(CI_ScaleAndClamp<s16>(ps0, st_scale));
+            else
+              v0 = CI_ScaleAndClamp<u16>(ps0, st_scale);
+            const u16 raw16 = Common::swap16(v0);
+            std::memcpy(base_ptr + offset, &raw16, sizeof(raw16));
+          }
+        }
+        else
+        {
+          if (st_type == QUANTIZE_U8 || st_type == QUANTIZE_S8)
+          {
+            u8 v0;
+            u8 v1;
+            if (st_type == QUANTIZE_S8)
+            {
+              v0 = static_cast<u8>(CI_ScaleAndClamp<s8>(ps0, st_scale));
+              v1 = static_cast<u8>(CI_ScaleAndClamp<s8>(ps1, st_scale));
+            }
+            else
+            {
+              v0 = CI_ScaleAndClamp<u8>(ps0, st_scale);
+              v1 = CI_ScaleAndClamp<u8>(ps1, st_scale);
+            }
+            const u16 be16 = static_cast<u16>((u16(v0) << 8) | u16(v1));
+            const u16 raw16 = Common::swap16(be16);
+            std::memcpy(base_ptr + offset, &raw16, sizeof(raw16));
+          }
+          else
+          {
+            u16 v0;
+            u16 v1;
+            if (st_type == QUANTIZE_S16)
+            {
+              v0 = static_cast<u16>(CI_ScaleAndClamp<s16>(ps0, st_scale));
+              v1 = static_cast<u16>(CI_ScaleAndClamp<s16>(ps1, st_scale));
+            }
+            else
+            {
+              v0 = CI_ScaleAndClamp<u16>(ps0, st_scale);
+              v1 = CI_ScaleAndClamp<u16>(ps1, st_scale);
+            }
+            const u32 be32 = (static_cast<u32>(v0) << 16) | static_cast<u32>(v1);
+            const u32 raw32 = Common::swap32(be32);
+            std::memcpy(base_ptr + offset, &raw32, sizeof(raw32));
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
+      }
+
+      if (st_type != QUANTIZE_FLOAT && st_type != QUANTIZE_U8 && st_type != QUANTIZE_S8 &&
+          st_type != QUANTIZE_U16 && st_type != QUANTIZE_S16)
+      {
+        break;
+      }
+
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
     case 32: // lwz
     {
       if ((ea & 0b11) != 0) [[unlikely]]
@@ -167,7 +465,21 @@ template <bool write_pc>
       const u64 ps = ConvertToDouble(be);
       ppc_state.ps[inst.FD].Fill(ps);
       if (update)
+      {
+#ifdef CI_RA_WB_TRACE
+        const u32 old_ra = ppc_state.gpr[ra];
+        const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                  current_pc == 0x801c008c || current_pc == 0x801c009c;
+        if (pc_in_window && (ra == 9 || ea < 0x100))
+        {
+          std::fprintf(stderr,
+                       "CI RA_WB (lfsux): PC=0x%08x RA=%u old=0x%08x new(EA)=0x%08x\n",
+                       current_pc, ra, old_ra, ea);
+          std::fflush(stderr);
+        }
+#endif
         ppc_state.gpr[ra] = ea;
+      }
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 599: // lfdx
@@ -180,7 +492,21 @@ template <bool write_pc>
       const u64 be = Common::FromBigEndian(raw);
       ppc_state.ps[inst.FD].SetPS0(be);
       if (update)
+      {
+#ifdef CI_RA_WB_TRACE
+        const u32 old_ra = ppc_state.gpr[ra];
+        const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                  current_pc == 0x801c008c || current_pc == 0x801c009c;
+        if (pc_in_window && (ra == 9 || ea < 0x100))
+        {
+          std::fprintf(stderr,
+                       "CI RA_WB (lfdux): PC=0x%08x RA=%u old=0x%08x new(EA)=0x%08x\n",
+                       current_pc, ra, old_ra, ea);
+          std::fflush(stderr);
+        }
+#endif
         ppc_state.gpr[ra] = ea;
+      }
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 663: // stfsx
@@ -193,7 +519,21 @@ template <bool write_pc>
       const u32 raw = Common::swap32(conv);
       *reinterpret_cast<u32*>(base_ptr + offset) = raw;
       if (update)
+      {
+#ifdef CI_RA_WB_TRACE
+        const u32 old_ra = ppc_state.gpr[ra];
+        const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                  current_pc == 0x801c008c || current_pc == 0x801c009c;
+        if (pc_in_window && (ra == 9 || ea < 0x100))
+        {
+          std::fprintf(stderr,
+                       "CI RA_WB (stfsux): PC=0x%08x RA=%u old=0x%08x new(EA)=0x%08x\n",
+                       current_pc, ra, old_ra, ea);
+          std::fflush(stderr);
+        }
+#endif
         ppc_state.gpr[ra] = ea;
+      }
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 727: // stfdx
@@ -206,7 +546,21 @@ template <bool write_pc>
       const u64 raw = Common::swap64(val);
       *reinterpret_cast<u64*>(base_ptr + offset) = raw;
       if (update)
+      {
+#ifdef CI_RA_WB_TRACE
+        const u32 old_ra = ppc_state.gpr[ra];
+        const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                  current_pc == 0x801c008c || current_pc == 0x801c009c;
+        if (pc_in_window && (ra == 9 || ea < 0x100))
+        {
+          std::fprintf(stderr,
+                       "CI RA_WB (stfdux): PC=0x%08x RA=%u old=0x%08x new(EA)=0x%08x\n",
+                       current_pc, ra, old_ra, ea);
+          std::fflush(stderr);
+        }
+#endif
         ppc_state.gpr[ra] = ea;
+      }
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 983: // stfiwx
@@ -225,7 +579,21 @@ template <bool write_pc>
       const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
       const u32 val = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = val;
-      ppc_state.gpr[ra] = ea;
+      {
+#ifdef CI_RA_WB_TRACE
+        const u32 old_ra = ppc_state.gpr[ra];
+        const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                  current_pc == 0x801c008c || current_pc == 0x801c009c;
+        if (pc_in_window && (ra == 9 || ea < 0x100))
+        {
+          std::fprintf(stderr,
+                       "CI RA_WB (lwzu): PC=0x%08x RA=%u old=0x%08x new(EA)=0x%08x\n",
+                       current_pc, ra, old_ra, ea);
+          std::fflush(stderr);
+        }
+#endif
+        ppc_state.gpr[ra] = ea;
+      }
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 34: // lbz
@@ -259,7 +627,21 @@ template <bool write_pc>
       const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
       const u16 val = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = static_cast<u32>(val);
-      ppc_state.gpr[ra] = ea;
+      {
+#ifdef CI_RA_WB_TRACE
+        const u32 old_ra = ppc_state.gpr[ra];
+        const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                  current_pc == 0x801c008c || current_pc == 0x801c009c;
+        if (pc_in_window && (ra == 9 || ea < 0x100))
+        {
+          std::fprintf(stderr,
+                       "CI RA_WB (lhzu): PC=0x%08x RA=%u old=0x%08x new(EA)=0x%08x\n",
+                       current_pc, ra, old_ra, ea);
+          std::fflush(stderr);
+        }
+#endif
+        ppc_state.gpr[ra] = ea;
+      }
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 42: // lha
@@ -278,7 +660,21 @@ template <bool write_pc>
       const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
       const u16 be = Common::FromBigEndian(raw);
       ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(be));
-      ppc_state.gpr[ra] = ea;
+      {
+#ifdef CI_RA_WB_TRACE
+        const u32 old_ra = ppc_state.gpr[ra];
+        const bool pc_in_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                  current_pc == 0x801c008c || current_pc == 0x801c009c;
+        if (pc_in_window && (ra == 9 || ea < 0x100))
+        {
+          std::fprintf(stderr,
+                       "CI RA_WB (lhau): PC=0x%08x RA=%u old=0x%08x new(EA)=0x%08x\n",
+                       current_pc, ra, old_ra, ea);
+          std::fflush(stderr);
+        }
+#endif
+        ppc_state.gpr[ra] = ea;
+      }
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 36: // stw
@@ -365,15 +761,36 @@ template <bool write_pc>
   // Region decode
   u8* __restrict base_ptr = nullptr;
   u32 offset = 0;
-  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  // Handle logical mirrors (cached/uncached) for MEM1 and MEM2
+  if (ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
   {
     base_ptr = mem1_base;
     offset = (ea - Memory::MEM1_BASE_ADDR) & mem1_mask;
   }
-  else if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
+  else if (ea - 0x80000000u <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (ea - 0x80000000u) & mem1_mask;
+  }
+  else if (ea - 0xC0000000u <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (ea - 0xC0000000u) & mem1_mask;
+  }
+  else if (ea - Memory::MEM2_BASE_ADDR <= exram_mask)
   {
     base_ptr = exram_base;
     offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
+  }
+  else if (ea - 0x90000000u <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (ea - 0x90000000u) & exram_mask;
+  }
+  else if (ea - 0xD0000000u <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (ea - 0xD0000000u) & exram_mask;
   }
 
   if (base_ptr) [[likely]]
@@ -763,17 +1180,42 @@ s32 CachedInterpreter::LoadStoreXFormPIC(std::ostream& stream,
 }
 
 [[gnu::noinline]] [[gnu::cold]]
-s32 CachedInterpreter::Cold_LoadStoreFallback(PowerPC::PowerPCState& /*ppc_state*/,
+s32 CachedInterpreter::Cold_LoadStoreFallback(PowerPC::PowerPCState& ppc_state,
                                               const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
                exram_mask] = operands;
-  (void)current_pc;
-  (void)power_pc;
-  (void)mem1_base;
-  (void)mem1_mask;
-  (void)exram_base;
-  (void)exram_mask;
+  // Optional targeted trace (enable by defining CI_LS_FALLBACK_TRACE)
+  #if defined(CI_LS_FALLBACK_TRACE)
+  {
+    const u32 ra = inst.RA;
+    const u32 rb = inst.RB;
+    const s32 d_imm = static_cast<s16>(inst.SIMM_16);
+    const u32 ea_d = (inst.OPCD != 31)
+                         ? (static_cast<u32>((ra ? ppc_state.gpr[ra] : 0) + d_imm))
+                         : 0u;
+    const u32 ea_x = (inst.OPCD == 31)
+                         ? ((ra ? ppc_state.gpr[ra] : 0) + ppc_state.gpr[rb])
+                         : 0u;
+    const u32 ea = (inst.OPCD == 31) ? ea_x : ea_d;
+    const u32 gpr_ra = ra ? ppc_state.gpr[ra] : 0u;
+    const s32 simm_se = static_cast<s16>(inst.SIMM_16);
+    // Only log suspicious low EAs for the specific code region we are investigating
+    const bool pc_in_investigation_window = (current_pc >= 0x801c0000 && current_pc <= 0x801c00ff) ||
+                                            current_pc == 0x801c008c || current_pc == 0x801c009c;
+    if ((ea < 0x100 && pc_in_investigation_window))
+    {
+      std::fprintf(stderr,
+                   "CI Cold_LoadStoreFallback: PC=0x%08x OPCD=%u SUBOP10=%u RA=%u RB=%u D=0x%04x "
+                   "EA_D=0x%08x EA_X=0x%08x GPR_RA=0x%08x SIMM_SE=0x%04x(%d)\n",
+                   current_pc, static_cast<unsigned>(inst.OPCD),
+                   static_cast<unsigned>(inst.SUBOP10), ra, rb,
+                   static_cast<unsigned>(static_cast<u16>(inst.SIMM_16)), ea_d, ea_x,
+                   gpr_ra, static_cast<unsigned>(static_cast<u16>(simm_se)), simm_se);
+      std::fflush(stderr);
+    }
+  }
+  #endif
   func(interpreter, inst);
   return sizeof(AnyCallback) + sizeof(operands);
 }
