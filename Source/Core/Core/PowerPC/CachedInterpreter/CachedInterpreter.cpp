@@ -155,21 +155,22 @@ template <bool write_pc>
       return sizeof(AnyCallback) + sizeof(operands);
     }
 
-    // Floating-point loads/stores (indexed)
+    // Floating-point single-precision loads/stores (indexed)
     case 535: // lfsx
     case 567: // lfsux (update)
     {
       const bool update = (inst.SUBOP10 == 567);
       if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break; // misaligned or illegal
+        break; // misaligned or illegal update
       const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
       const u32 be = Common::FromBigEndian(raw);
-      const u64 ps = ConvertToDouble(be);
-      ppc_state.ps[inst.FD].Fill(ps);
+      const u64 value = ConvertToDouble(be);
+      ppc_state.ps[inst.FD].Fill(value);
       if (update)
         ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
+
     case 599: // lfdx
     case 631: // lfdux (update)
     {
