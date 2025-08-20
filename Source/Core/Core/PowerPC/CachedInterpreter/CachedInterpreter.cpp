@@ -270,12 +270,8 @@ template <bool write_pc>
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
-    // Note: X-form is handled in LoadStoreXFormPIC
-    default:
-      break; // Unsupported D-form opcode in fast path; fall back below.
     }
   }
-
   // Slow path or unsupported opcodes: delegate to interpreter implementation.
   return Cold_LoadStoreFallback(ppc_state, operands);
 }
