@@ -10,8 +10,10 @@
 #import "FoundationStringUtil.h"
 #import "JitManager+Debugger.h"
 
+#if !TARGET_OS_MACCATALYST
 void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
 CFTypeRef SecTaskCopyValueForEntitlement(void* task, CFStringRef entitlement, CFErrorRef* _Nullable error);
+#endif
 
 #define PT_TRACE_ME 0
 #define PT_DETACH 11
