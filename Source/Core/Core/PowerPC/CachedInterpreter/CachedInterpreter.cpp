@@ -104,6 +104,44 @@ CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_
 {
 }
 
+// DRY helper: resolve EA within MEM1/MEM2 logical regions (including mirrors)
+// Returns true and fills out_base/out_offset on success; otherwise leaves out_base null.
+static inline bool ResolveRamPointer(u32 ea, u8* mem1_base, u32 mem1_mask, u8* exram_base,
+                                     u32 exram_mask, u8*& out_base, u32& out_offset)
+{
+  out_base = nullptr;
+  out_offset = 0;
+  // MEM1: 0x8000_0000 and mirror at 0xC000_0000 (+0x4000_0000)
+  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  {
+    out_base = mem1_base;
+    out_offset = (ea - Memory::MEM1_BASE_ADDR) & mem1_mask;
+    return true;
+  }
+  if (ea >= Memory::MEM1_BASE_ADDR + 0x40000000u &&
+      ea - (Memory::MEM1_BASE_ADDR + 0x40000000u) <= mem1_mask)
+  {
+    out_base = mem1_base;
+    out_offset = (ea - (Memory::MEM1_BASE_ADDR + 0x40000000u)) & mem1_mask;
+    return true;
+  }
+  // MEM2: 0x9000_0000 and mirror at 0xD000_0000 (+0x4000_0000)
+  if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
+  {
+    out_base = exram_base;
+    out_offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
+    return true;
+  }
+  if (ea >= Memory::MEM2_BASE_ADDR + 0x40000000u &&
+      ea - (Memory::MEM2_BASE_ADDR + 0x40000000u) <= exram_mask)
+  {
+    out_base = exram_base;
+    out_offset = (ea - (Memory::MEM2_BASE_ADDR + 0x40000000u)) & exram_mask;
+    return true;
+  }
+  return false;
+}
+
 template <bool write_pc>
 [[gnu::hot]] s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
                                                       const LoadStoreDFormPICOperands& operands)
@@ -127,16 +165,7 @@ template <bool write_pc>
   // Compute direct pointer if EA lies in MEM1 or EXRAM logical regions
   u8* __restrict base_ptr = nullptr;
   u32 offset = 0;
-  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
-  {
-    base_ptr = mem1_base;
-    offset = (ea - Memory::MEM1_BASE_ADDR) & mem1_mask;
-  }
-  else if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
-  {
-    base_ptr = exram_base;
-    offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
-  }
+  ResolveRamPointer(ea, mem1_base, mem1_mask, exram_base, exram_mask, base_ptr, offset);
 
   if (base_ptr) [[likely]]
   {
@@ -271,6 +300,65 @@ template <bool write_pc>
       return sizeof(AnyCallback) + sizeof(operands);
     }
 
+    case 46: // lmw
+    {
+      // Interpreter semantics: requires 4-byte alignment and rejects MSR.LE
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break; // misaligned or LE -> fallback (interpreter will raise)
+
+      // Ensure the entire span [ea, ea + 4*(31-RD)] remains within the same
+      // resolved RAM region without wrapping; otherwise, fallback.
+      const u32 rd = inst.RD;
+      const u32 total_regs = 32u - rd; // number of GPRs to load
+      const u64 last_offset64 = static_cast<u64>(offset) + static_cast<u64>((total_regs - 1u) * 4u);
+
+      // Re-resolve the end address and ensure it maps to the same base and does not wrap.
+      u8* end_base = nullptr;
+      u32 end_off = 0;
+      const u32 end_ea = ea + (total_regs - 1u) * 4u;
+      ResolveRamPointer(end_ea, mem1_base, mem1_mask, exram_base, exram_mask, end_base, end_off);
+      if (!end_base || end_base != base_ptr || last_offset64 > static_cast<u64>(end_off)) [[unlikely]]
+        break; // crosses region or wraps -> fallback
+
+      // Fast path load loop
+      u32 cur_off = offset;
+      for (u32 r = rd; r <= 31u; ++r, cur_off += 4u)
+      {
+        const u32 raw = *reinterpret_cast<const u32*>(base_ptr + cur_off);
+        const u32 val = Common::FromBigEndian(raw);
+        ppc_state.gpr[r] = val;
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 47: // stmw
+    {
+      // Interpreter semantics: requires 4-byte alignment and rejects MSR.LE
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break; // misaligned or LE -> fallback (interpreter will raise)
+
+      // Ensure the entire span [ea, ea + 4*(31-RS)] remains within the same
+      // resolved RAM region without wrapping; otherwise, fallback.
+      const u32 rs = inst.RS;
+      const u32 total_regs = 32u - rs; // number of GPRs to store
+      const u64 last_offset64 = static_cast<u64>(offset) + static_cast<u64>((total_regs - 1u) * 4u);
+
+      u8* end_base = nullptr;
+      u32 end_off = 0;
+      const u32 end_ea = ea + (total_regs - 1u) * 4u;
+      ResolveRamPointer(end_ea, mem1_base, mem1_mask, exram_base, exram_mask, end_base, end_off);
+      if (!end_base || end_base != base_ptr || last_offset64 > static_cast<u64>(end_off)) [[unlikely]]
+        break; // crosses region or wraps -> fallback
+
+      // Fast path store loop
+      u32 cur_off = offset;
+      for (u32 r = rs; r <= 31u; ++r, cur_off += 4u)
+      {
+        const u32 raw = Common::swap32(ppc_state.gpr[r]);
+        *reinterpret_cast<u32*>(base_ptr + cur_off) = raw;
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
     // Floating-point single-precision loads/stores (D-form)
     case 48: // lfs
     {
@@ -382,19 +470,10 @@ template <bool write_pc>
   const u32 rb = inst.RB;
   const u32 ea = (ra ? ppc_state.gpr[ra] : 0) + ppc_state.gpr[rb];
 
-  // Region decode
+  // Region decode (MEM1/MEM2, including mirrors)
   u8* __restrict base_ptr = nullptr;
   u32 offset = 0;
-  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
-  {
-    base_ptr = mem1_base;
-    offset = (ea - Memory::MEM1_BASE_ADDR) & mem1_mask;
-  }
-  else if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
-  {
-    base_ptr = exram_base;
-    offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
-  }
+  ResolveRamPointer(ea, mem1_base, mem1_mask, exram_base, exram_mask, base_ptr, offset);
 
   if (base_ptr) [[likely]]
   {
@@ -450,6 +529,39 @@ template <bool write_pc>
       ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(be));
       if (update)
         ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+
+    // Byte-reverse indexed loads/stores (no update variants)
+    case 534: // lwbrx
+    {
+      // No alignment check; mirror interpreter behavior and avoid UB with memcpy
+      u32 raw32;
+      std::memcpy(&raw32, base_ptr + offset, sizeof(raw32));
+      const u32 val = Common::swap32(Common::FromBigEndian(raw32));
+      ppc_state.gpr[inst.RD] = val;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 790: // lhbrx
+    {
+      // No alignment check; memcpy for safety
+      u16 raw16;
+      std::memcpy(&raw16, base_ptr + offset, sizeof(raw16));
+      const u16 val16 = Common::swap16(Common::FromBigEndian(raw16));
+      ppc_state.gpr[inst.RD] = static_cast<u32>(val16);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 662: // stwbrx
+    {
+      // Write bytes reversed relative to normal stwx; memcpy to allow unaligned
+      const u32 out = ppc_state.gpr[inst.RS];
+      std::memcpy(base_ptr + offset, &out, sizeof(out));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 918: // sthbrx
+    {
+      const u16 out = static_cast<u16>(ppc_state.gpr[inst.RS]);
+      std::memcpy(base_ptr + offset, &out, sizeof(out));
       return sizeof(AnyCallback) + sizeof(operands);
     }
 
@@ -563,41 +675,7 @@ template <bool write_pc>
       return sizeof(AnyCallback) + sizeof(operands);
     }
 
-    // Byte-reverse indexed variants
-    case 534: // lwbrx
-    {
-      if ((ea & 0b11) != 0) [[unlikely]]
-        break; // misaligned
-      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
-      const u32 val = Common::swap32(Common::FromBigEndian(raw));
-      ppc_state.gpr[inst.RD] = val;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 790: // lhbrx
-    {
-      if ((ea & 0b1) != 0) [[unlikely]]
-        break; // misaligned
-      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
-      const u16 val = Common::swap16(Common::FromBigEndian(raw));
-      ppc_state.gpr[inst.RD] = static_cast<u32>(val);
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 662: // stwbrx
-    {
-      if ((ea & 0b11) != 0)
-        break; // misaligned
-      const u32 raw = ppc_state.gpr[inst.RS];
-      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 918: // sthbrx
-    {
-      if ((ea & 0b1) != 0)
-        break; // misaligned
-      const u16 raw = static_cast<u16>(ppc_state.gpr[inst.RS]);
-      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
+    
 
     // Paired-single quantized loads/stores (indexed)
     case 6:   // psq_lx
