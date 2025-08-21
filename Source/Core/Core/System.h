@@ -5,6 +5,10 @@
 
 #include <memory>
 
+#if __has_include(<TargetConditionals.h>)
+#include <TargetConditionals.h>
+#endif
+
 class GeometryShaderManager;
 class Interpreter;
 class JitInterface;
@@ -151,7 +155,7 @@ public:
   bool IsAudioDumpStarted() const;
   void SetAudioDumpStarted(bool started);
 
-#if defined(IPHONEOS) || TARGET_OS_IOS
+#if defined(IPHONEOS) || TARGET_OS_IOS || TARGET_OS_TV
   bool IsJitAvailable() const { return m_jit_available; }
   void SetJitAvailable(bool available) { m_jit_available = available; }
 #endif
@@ -208,7 +212,7 @@ private:
   bool m_is_mios = false;
   bool m_is_wii = false;
   bool m_branch_watch_ignore_apploader = false;
-#if defined(IPHONEOS) || TARGET_OS_IOS
+#if defined(IPHONEOS) || TARGET_OS_IOS || TARGET_OS_TV
   bool m_jit_available = false;
 #endif
 };
