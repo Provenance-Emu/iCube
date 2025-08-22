@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <errno.h>
 #if defined __APPLE__ || defined __FreeBSD__ || defined __OpenBSD__ || defined __NetBSD__
 #include <sys/sysctl.h>
 #elif defined __HAIKU__
@@ -29,8 +30,25 @@
 #endif
 #endif
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 #ifdef IPHONEOS
 #include "Common/JITMemoryTracker.h"
+#endif
+
+#if defined(__APPLE__) && defined(_M_ARM_64)
+#include <dlfcn.h>
+static inline void AppleToggleJitWriteProtect(bool enable)
+{
+  using ToggleFn = void (*)(int);
+  static ToggleFn fn = (ToggleFn)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");
+  if (fn)
+    fn(enable ? 1 : 0);
+}
+#else
+static inline void AppleToggleJitWriteProtect(bool) {}
 #endif
 
 namespace Common
@@ -48,19 +66,43 @@ void* AllocateExecutableMemory(size_t size)
   void* ptr = VirtualAlloc(nullptr, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 #else
   int map_flags = MAP_ANON | MAP_PRIVATE;
-#if defined(__APPLE__) && !defined(IPHONEOS)
+#if defined(__APPLE__)
   map_flags |= MAP_JIT;
 #endif
 
-  int map_prot = PROT_READ | PROT_EXEC;
-#ifndef IPHONEOS
-  // The default protection is r-x on non-iOS platforms.
-  map_prot |= PROT_WRITE;
+#if defined(__APPLE__)
+  // On Apple platforms with MAP_JIT, allocate RW and toggle execution with pthread_jit_write_protect_np.
+  int map_prot = PROT_READ | PROT_WRITE;
+#else
+  // Other POSIX: allow RX by default and add W for JIT writes via mprotect.
+  int map_prot = PROT_READ | PROT_EXEC | PROT_WRITE;
 #endif
 
-  void* ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
+  void* ptr = nullptr;
+#if defined(__APPLE__) && defined(_M_ARM_64)
+  // Enter write mode before creating a MAP_JIT mapping to satisfy tightened tvOS 16+ rules.
+  AppleToggleJitWriteProtect(false);
+  ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
+  if (ptr == MAP_FAILED)
+  {
+    // If permission denied, retry without MAP_JIT as a last resort for debugger JIT entropy regions.
+    int saved_errno = errno;
+    ptr = nullptr;
+    if (saved_errno == EPERM)
+    {
+      int fallback_flags = (MAP_ANON | MAP_PRIVATE);
+      void* retry = mmap(nullptr, size, map_prot, fallback_flags, -1, 0);
+      if (retry != MAP_FAILED)
+        ptr = retry;
+    }
+  }
+  // Restore execute protection state after mapping.
+  AppleToggleJitWriteProtect(true);
+#else
+  ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
   if (ptr == MAP_FAILED)
     ptr = nullptr;
+#endif
 #endif
 
   if (ptr == nullptr)
@@ -114,13 +156,10 @@ static int& JITPageWriteNestCounter()
 // Allows a thread to write to executable memory, but not execute the data.
 void JITPageWriteEnableExecuteDisable()
 {
-#if defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS)
+#if defined(_M_ARM_64) && defined(__APPLE__)
   if (JITPageWriteNestCounter() == 0)
   {
-    if (__builtin_available(macOS 11.0, *))
-    {
-      pthread_jit_write_protect_np(0);
-    }
+    AppleToggleJitWriteProtect(false);
   }
 #endif
   JITPageWriteNestCounter()++;
@@ -136,13 +175,10 @@ void JITPageWriteDisableExecuteEnable()
   if (JITPageWriteNestCounter() < 0)
     PanicAlertFmt("JITPageWriteNestCounter() underflowed");
 
-#if defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS)
+#if defined(_M_ARM_64) && defined(__APPLE__)
   if (JITPageWriteNestCounter() == 0)
   {
-    if (__builtin_available(macOS 11.0, *))
-    {
-      pthread_jit_write_protect_np(1);
-    }
+    AppleToggleJitWriteProtect(true);
   }
 #endif
 }
@@ -256,10 +292,7 @@ bool WriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     PanicAlertFmt("WriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
     return false;
   }
-#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
-  // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
-  // that were marked executable, instead it uses the protections offered by MAP_JIT
-  // for write protection.
+#elif !(defined(_M_ARM_64) && defined(__APPLE__))
   if (mprotect(ptr, size, allowExecute ? (PROT_READ | PROT_EXEC) : PROT_READ) != 0)
   {
     PanicAlertFmt("WriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
@@ -278,10 +311,7 @@ bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     PanicAlertFmt("UnWriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
     return false;
   }
-#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
-  // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
-  // that were marked executable, instead it uses the protections offered by MAP_JIT
-  // for write protection.
+#elif !(defined(_M_ARM_64) && defined(__APPLE__))
   if (mprotect(ptr, size,
                allowExecute ? (PROT_READ | PROT_WRITE | PROT_EXEC) : PROT_WRITE | PROT_READ) != 0)
   {

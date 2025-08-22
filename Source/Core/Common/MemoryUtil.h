@@ -5,6 +5,9 @@
 
 #include <cstddef>
 #include <string>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 #include "Common/CommonTypes.h"
 
@@ -17,7 +20,7 @@ void* AllocateExecutableMemory(size_t size);
 // In general where applicable the ScopedJITPageWriteAndNoExecute wrapper
 // should be used to prevent bugs from not pairing up the calls properly.
 
-#ifndef IPHONEOS
+#if !(defined(__APPLE__) && (TARGET_OS_IPHONE || TARGET_OS_TV))
 // Allows a thread to write to executable memory, but not execute the data.
 void JITPageWriteEnableExecuteDisable();
 // Allows a thread to execute memory allocated for execution, but not write to it.
@@ -30,8 +33,9 @@ struct ScopedJITPageWriteAndNoExecute
   ~ScopedJITPageWriteAndNoExecute() { JITPageWriteDisableExecuteEnable(); }
 };
 #else
-void JITPageWriteEnableExecuteDisable(void* ptr);
-void JITPageWriteDisableExecuteEnable(void* ptr);
+  #define APPLE_MOBILE (TARGET_OS_IPHONE || TARGET_OS_TV)
+  void JITPageWriteEnableExecuteDisable(void* ptr);
+  void JITPageWriteDisableExecuteEnable(void* ptr);
 
 struct ScopedJITPageWriteAndNoExecute
 {

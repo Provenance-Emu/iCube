@@ -6,6 +6,23 @@
 #include "Common/CommonTypes.h"
 #include "Common/MemoryUtil.h"
 #include "Common/MsgHandler.h"
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#include <pthread.h>
+#endif
+
+#if defined(__APPLE__) && defined(_M_ARM_64)
+#include <dlfcn.h>
+static inline void AppleToggleJitWriteProtect(bool enable)
+{
+  using ToggleFn = void (*)(int);
+  static ToggleFn fn = (ToggleFn)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");
+  if (fn)
+    fn(enable ? 1 : 0);
+}
+#else
+static inline void AppleToggleJitWriteProtect(bool) {}
+#endif
 
 namespace Common
 {
@@ -63,7 +80,14 @@ void JITMemoryTracker::JITRegionWriteEnableExecuteDisable(void* ptr)
 
   if (info->nest_counter == 0)
   {
-    UnWriteProtectMemory(info->start_ptr, info->size, false);
+#if defined(__APPLE__) && defined(_M_ARM_64)
+    // On Apple ARM64 platforms (iOS/tvOS/macOS), W^X is toggled per-thread.
+    // Switch to write mode for this thread.
+    AppleToggleJitWriteProtect(false);
+#else
+    // Non-Apple platforms fall back to page protection changes.
+    UnWriteProtectMemory(info->start_ptr, info->size, true);
+#endif
   }
 
   info->nest_counter++;
@@ -88,7 +112,12 @@ void JITMemoryTracker::JITRegionWriteDisableExecuteEnable(void* ptr)
   }
   else if (info->nest_counter == 0)
   {
+#if defined(__APPLE__) && defined(_M_ARM_64)
+    // Restore execute mode for this thread.
+    AppleToggleJitWriteProtect(true);
+#else
     WriteProtectMemory(info->start_ptr, info->size, true);
+#endif
   }
 }
 }  // namespace Common
