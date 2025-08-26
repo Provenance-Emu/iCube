@@ -395,52 +395,58 @@
   Config::RemoveLayer(Config::LayerType::LocalGame);
   // Clear CurrentRun ephemeral overrides
   Config::RemoveLayer(Config::LayerType::CurrentRun);
-  // Re-add base if needed and save
-  Config::AddLayer(ConfigLoaders::GenerateBaseConfigLoader());
+  // Save current configuration; Base defaults remain
   Config::Save();
 }
 
 + (void)resetPageToDefaults:(NSInteger)page {
-  // For now, clear CurrentRun overrides for a coarse reset of the active page group.
-  // This relies on Base layer shipping sane defaults.
+  auto safe_delete = [](auto info) {
+    // Only delete from CurrentRun if that layer exists and the active layer is CurrentRun
+    if (Config::GetActiveLayerForConfig(info) == Config::LayerType::CurrentRun) {
+      if (Config::GetLayer(Config::LayerType::CurrentRun)) {
+        Config::DeleteKey(Config::LayerType::CurrentRun, info);
+      }
+    }
+  };
+
   switch (page) {
-    case 0: // Config (General)
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_THREAD);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_ENABLE_CHEATS);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_OVERRIDE_REGION_SETTINGS);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_AUTO_DISC_CHANGE);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_FAST_DISC_SPEED);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_DSP_THREAD);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_FALLBACK_REGION);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_EMULATION_SPEED);
+    case 0:
+      safe_delete(Config::MAIN_CPU_THREAD);
+      safe_delete(Config::MAIN_ENABLE_CHEATS);
+      safe_delete(Config::MAIN_OVERRIDE_REGION_SETTINGS);
+      safe_delete(Config::MAIN_AUTO_DISC_CHANGE);
+      safe_delete(Config::MAIN_FAST_DISC_SPEED);
+      safe_delete(Config::MAIN_DSP_THREAD);
+      safe_delete(Config::MAIN_FALLBACK_REGION);
+      safe_delete(Config::MAIN_EMULATION_SPEED);
       break;
-    case 1: // Graphics
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_GFX_BACKEND);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_VSYNC);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_EFB_SCALE);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_WIDESCREEN_HACK);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_DISABLE_FOG);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_ASYNC_PRESENT);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_ENABLE);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_TARGET_FPS);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_MIN_SCALE);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_MAX_SCALE);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_SHOW_OSD);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_SHADER_COMPILATION_MODE);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING);
+    case 1:
+      safe_delete(Config::MAIN_GFX_BACKEND);
+      safe_delete(Config::GFX_VSYNC);
+      safe_delete(Config::GFX_EFB_SCALE);
+      safe_delete(Config::GFX_WIDESCREEN_HACK);
+      safe_delete(Config::GFX_DISABLE_FOG);
+      safe_delete(Config::GFX_ASYNC_PRESENT);
+      safe_delete(Config::GFX_AUTO_IR_ENABLE);
+      safe_delete(Config::GFX_AUTO_IR_TARGET_FPS);
+      safe_delete(Config::GFX_AUTO_IR_MIN_SCALE);
+      safe_delete(Config::GFX_AUTO_IR_MAX_SCALE);
+      safe_delete(Config::GFX_AUTO_IR_SHOW_OSD);
+      safe_delete(Config::GFX_SHADER_COMPILATION_MODE);
+      safe_delete(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING);
       break;
-    case 2: // Controllers
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_INPUT_BACKGROUND_INPUT);
+    case 2:
+      safe_delete(Config::MAIN_INPUT_BACKGROUND_INPUT);
       for (int p = 1; p <= 4; ++p) {
-        Config::DeleteKey(Config::LayerType::CurrentRun, Config::GetInfoForSIDevice(p));
-        Config::DeleteKey(Config::LayerType::CurrentRun, Config::GetInfoForWiimoteSource(p));
+        safe_delete(Config::GetInfoForSIDevice(p));
+        safe_delete(Config::GetInfoForWiimoteSource(p));
       }
       break;
-    case 3: // Debug
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_FASTMEM);
-      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_SYNC_ON_SKIP_IDLE);
+    case 3:
+      safe_delete(Config::MAIN_FASTMEM);
+      safe_delete(Config::MAIN_SYNC_ON_SKIP_IDLE);
       break;
-    case 4: // About (no keys)
+    case 4:
     default:
       break;
   }
