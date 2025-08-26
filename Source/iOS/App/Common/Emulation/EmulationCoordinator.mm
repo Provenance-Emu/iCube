@@ -25,6 +25,7 @@
 #include "InputCommon/InputConfig.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerInterface/CoreDevice.h"
+#import "Core/PowerPC/PowerPC.h"
 
 #import "EmulationBootParameter.h"
 #import "HostNotifications.h"
@@ -251,6 +252,16 @@
     auto& system = Core::System::GetInstance();
 
     system.SetJitAvailable([JitManager shared].acquiredJit);
+
+    // Enforce CPU-core fallback when JIT is not available for this run
+    {
+      const PowerPC::CPUCore current_core = Config::Get(Config::MAIN_CPU_CORE);
+      const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter;
+      if (![JitManager shared].acquiredJit && !is_interpreter_core)
+      {
+        Config::Set(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
+      }
+    }
 
     __block std::unique_ptr<BootParameters> boot = [bootParameter generateDolphinBootParameter];
 

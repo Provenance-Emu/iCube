@@ -59,14 +59,39 @@ private final class EmuContainerViewController: UIViewController {
         displayContainer.backgroundColor = .black
         vc.view.addSubview(displayContainer)
 
-        DispatchQueue.main.async {
-          TVEmulationBridge.registerMainDisplay(displayContainer)
-            if TVEmulationBridge.isRunning() {
-                NSLog("[INPUT] tvOS Container: core running, skipping relaunch; display registered")
-            } else {
-                NSLog("[INPUT] tvOS Container: launching game after registerMainDisplayView")
-                TVEmulationBridge.launchGame(atPath: self.gamePath)
+        func launchCore() {
+            DispatchQueue.main.async {
+              TVEmulationBridge.registerMainDisplay(displayContainer)
+                if TVEmulationBridge.isRunning() {
+                    NSLog("[INPUT] tvOS Container: core running, skipping relaunch; display registered")
+                } else {
+                    NSLog("[INPUT] tvOS Container: launching game after registerMainDisplayView")
+                    TVEmulationBridge.launchGame(atPath: self.gamePath)
+                }
             }
+        }
+
+        // JIT warning dialog when JIT is unavailable and a JIT core is selected
+        let manager = JitManager.shared()
+        let currentCore = DOLConfigBridge.mainCpuCore()
+        let isJitCoreSelected = (currentCore == 3) // JITARM64
+        if !manager.acquiredJit && isJitCoreSelected {
+            let alert = UIAlertController(title: "Waiting for JIT", message: "DolphiniOS may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Help", style: .default, handler: { _ in
+                if let url = URL(string: "https://dolphinios.oatmealdome.me/jit-help") {
+                    UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                }
+            }))
+            alert.addAction(UIAlertAction(title: "Use No JIT Mode (Slow)", style: .default, handler: { _ in
+                // Continue; core fallback to Cached Interpreter is enforced per-run in EmulationCoordinator when JIT is unavailable
+                launchCore()
+            }))
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: { _ in
+                NotificationCenter.default.post(name: Notification.Name("DOLEmulationDidEndNotification"), object: nil)
+            }))
+            present(alert, animated: true, completion: nil)
+        } else {
+            launchCore()
         }
 
         exitObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil, queue: .main) { [weak self] _ in

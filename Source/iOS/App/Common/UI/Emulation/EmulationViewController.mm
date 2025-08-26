@@ -181,12 +181,11 @@
     const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter;
 
     if (![JitManager shared].acquiredJit && !is_interpreter_core) {
-      JitWaitViewController* jitController = [[JitWaitViewController alloc] initWithNibName:@"JitWait" bundle:nil];
-      jitController.delegate = self;
-      jitController.modalInPresentation = true;
+      // Fallback to Cached Interpreter for this run when JIT is unavailable
+      Config::Set(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
+    }
 
-      [self presentViewController:jitController animated:true completion:nil];
-    } else if ([self checkIfNeedToShowNKitWarning]) {
+    if ([self checkIfNeedToShowNKitWarning]) {
       [self showNKitWarning];
     } else {
       [self startEmulation];
