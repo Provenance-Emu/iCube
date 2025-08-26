@@ -1,0 +1,12 @@
+services:
+  webdav:
+    image: hacdias/webdav:latest
+    restart: always
+    ports:
+      - "8080:6065"
+    environment:
+      - WEBDAV_USER=username:password
+    volumes:
+      - "/Users/jmattiello/Library/Containers/com.joemattiello.DolphiniOS-njb-debug/Data/Documents/Software:/srv"
+
+
