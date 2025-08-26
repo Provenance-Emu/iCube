@@ -123,7 +123,7 @@ void AdvancedPane::CreateLayout()
   auto* vi_rate_override = new QGroupBox(tr("VBI Frequency Override"));
   auto* vi_rate_override_layout = new QVBoxLayout();
   vi_rate_override->setLayout(vi_rate_override_layout);
-  main_layout->addWidget(vi_rate_override);Add commentMore actions
+  main_layout->addWidget(vi_rate_override);
 
   m_vi_rate_override_checkbox =
       new ConfigBool(tr("Enable VBI Frequency Override"), Config::MAIN_VI_OVERCLOCK_ENABLE);

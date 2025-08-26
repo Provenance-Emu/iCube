@@ -260,14 +260,19 @@ void Metal::Util::PopulateBackendInfoFeatures(VideoConfig* config, id<MTLDevice>
   DriverDetails::Init(DriverDetails::API_METAL, vendor, DriverDetails::DRIVER_APPLE, version,
                       DriverDetails::Family::UNKNOWN, std::move(name));
 
+  // Initialize support variables for all platforms
+  bool supports_apple4 = false;
+  bool supports_bcn = false;
+
 #if TARGET_OS_OSX
+    // On macOS, these features are always available
+    supports_apple4 = true;
+    supports_bcn = true;
     config->backend_info.bSupportsDepthClamp   = true;
     config->backend_info.bSupportsST3CTextures = true;
     config->backend_info.bSupportsBPTCTextures = true;
 
 #else   // iOS / tvOS
-    bool supports_apple4 = false;
-    bool supports_bcn    = false;
 
     /* ------------------------------------------------------------------
        - tvOS 13/iOS 13 introduced the modern `supportsFamily:` selector.
