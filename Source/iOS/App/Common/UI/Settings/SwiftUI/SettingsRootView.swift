@@ -155,7 +155,7 @@ struct SettingsRootView<Background: View>: View {
         }
         .frame(width: 480)
       }
-      .padding(60)
+      .padding(.horizontal, 60)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
   }
@@ -292,20 +292,23 @@ private struct SettingsSubMenuView: View {
         }
         .buttonStyle(.plain)
 
-        // Settings content - use existing views with styling
-        contentForPage(page)
+        // Settings content - ensure NavigationStack for NavigationLink to work, and focus enabled
+        NavigationStack { contentForPage(page) }
           .environment(\.colorScheme, .dark)
           .foregroundStyle(.white)
           #if !os(tvOS)
           .scrollContentBackground(.hidden)
           #endif
           .background(Color.clear)
+          .frame(maxWidth: 820, maxHeight: 520)
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
       }
       .frame(width: 480)
       .frame(maxHeight: .infinity)
     }
-    .padding(60)
+    .padding(.horizontal, 60)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onExitCommand { onBack() }
   }
 
   private func titleForPage(_ page: SettingsPage) -> String {

@@ -18,6 +18,7 @@ internal struct PauseMenuView: View {
       internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, exit, back, slot(Int), save, load }
     private enum Pane { case main, saves, cheats, controllers }
     @State private var pane: Pane = .main
+    @State private var showExitDialog: Bool = false
 
   var body: some View {
     ZStack {
@@ -303,7 +304,7 @@ internal struct PauseMenuView: View {
             .focused($focused, equals: .settings)
 
             // Exit Game
-            Button(action: { NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil) }) {
+            Button(action: { showExitDialog = true }) {
               HStack(spacing: 20) {
                 // Icon with background
                 ZStack {
@@ -348,6 +349,20 @@ internal struct PauseMenuView: View {
       .padding(60)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .zIndex(100)
+      .alert(L("Exit Game"), isPresented: $showExitDialog) {
+        Button(L("Cancel"), role: .cancel) { showExitDialog = false }
+        Button(L("Quit"), role: .destructive) {
+          TVEmulationBridge.stop()
+          NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+        }
+        Button(L("Save & Quit")) {
+          TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
+          TVEmulationBridge.stop()
+          NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+        }
+      } message: {
+        Text(L("Do you want to quit the game? Unsaved progress will be lost."))
+      }
     }
     .animation(.easeInOut(duration: 0.3), value: focused)
   }
@@ -401,7 +416,7 @@ internal struct PauseMenuView: View {
               .font(.system(size: 28, weight: .bold))
               .foregroundColor(.white)
 
-            Text("Manage your game progress")
+            Text(L("Manage your game progress"))
               .font(.system(size: 16, weight: .medium))
               .foregroundColor(.white.opacity(0.7))
           }
@@ -442,12 +457,15 @@ internal struct PauseMenuView: View {
                       }
                     }
 
-                    Text("Slot \(i)")
+                    Text(L("Slot") + "\(i)")
                       .font(.system(size: 8, weight: .medium))
                       .foregroundColor(.white.opacity(0.7))
                   }
                 }
                 .buttonStyle(.plain)
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .compositingGroup()
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .focused($focused, equals: .slot(i))
               }
             }
@@ -461,7 +479,7 @@ internal struct PauseMenuView: View {
             HStack(spacing: 12) {
               Image(systemName: "square.and.arrow.down")
                 .font(.system(size: 16, weight: .semibold))
-              Text(L("Save to Slot \(selectedSlot)"))
+              Text(L("Save to Slot") + "\(selectedSlot)")
                 .font(.system(size: 16, weight: .semibold))
             }
             .foregroundColor(.white)
@@ -482,7 +500,7 @@ internal struct PauseMenuView: View {
             HStack(spacing: 12) {
               Image(systemName: "square.and.arrow.up")
                 .font(.system(size: 16, weight: .semibold))
-              Text(L("Load from Slot \(selectedSlot)"))
+              Text(L("Load from Slot") + "\(selectedSlot)")
                 .font(.system(size: 16, weight: .semibold))
             }
             .foregroundColor(.white)
@@ -600,16 +618,16 @@ internal struct ModernCheatsContent: View {
 
     private func downloadCheats() {
         isLoading = true
-        statusMessage = L("Downloading cheats...")
+        statusMessage = L("Downloading cheats") + "..."
 
         TVCheatsBridge.downloadGeckoCodes(forGameId: game.gameID, revision: game.revision, gametdbId: game.gametdbID) { success, downloadedCount, addedCount in
             DispatchQueue.main.async {
                 isLoading = false
                 if success {
-                    statusMessage = L("✓ Downloaded \(downloadedCount) cheats, added \(addedCount) new")
+                    statusMessage = "✓" + " " + L("Downloaded") + "\(downloadedCount)" + L("cheats, added") + "\(addedCount)" + L("new")
                     loadCheats()
                 } else {
-                    statusMessage = L("✗ Failed to download cheats")
+                    statusMessage = L("✗") + " " + L("Failed to download cheats")
                 }
 
                 // Clear status after delay
@@ -705,7 +723,7 @@ internal struct ModernCheatSection: View {
 
                 Spacer()
 
-                Text("\(codes.count) codes")
+                Text("\(codes.count)" + " " + L("codes"))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.6))
             }
@@ -1202,7 +1220,7 @@ internal struct ControllerMappingView: View {
 
         // Connected controllers section
         VStack(alignment: .leading, spacing: 16) {
-          Text("Connected Controllers")
+          Text(L("Connected Controllers"))
             .font(.system(size: 20, weight: .semibold))
             .foregroundColor(.white)
 
@@ -1268,7 +1286,7 @@ internal struct ControllerMappingView: View {
     .onExitCommand { onBack() }
     .sheet(isPresented: Binding(get: { showPickerForPort != nil }, set: { if !$0 { showPickerForPort = nil } })) {
       if let port = showPickerForPort {
-        ControllerPickerSheet(port: port) { selected in
+        ControllerPickerSheet(game: game, port: port) { selected in
           if let idx = selected, controllers.indices.contains(idx) {
             TVControllerMappingBridge.assign(controllers[idx], toGCPort: port)
             reload()
@@ -1281,58 +1299,159 @@ internal struct ControllerMappingView: View {
 }
 
 private struct ControllerPickerSheet: View {
+  let game: TVGameItem
   let port: Int
   let onDone: (Int?) -> Void // selected controller index or nil
   @Environment(\.dismiss) private var dismiss
   @State private var controllers: [GCController] = []
   @State private var selection: Int?
+  @FocusState private var focused: FocusField?
+  private enum FocusField: Hashable { case back, row(Int), done }
 
   var body: some View {
-    NavigationStack {
-      List {
-        ForEach(Array(controllers.enumerated()), id: \.offset) { idx, c in
-          Button(action: {
-            selection = idx
-            // Assign controller immediately when selected
-            if controllers.indices.contains(idx) {
-              TVControllerMappingBridge.assign(controllers[idx], toGCPort: port)
-              NSLog("[CONTROLLER] Immediately assigned controller \(c.vendorName ?? c.productCategory) to port \(port)")
-            }
-          }) {
-            HStack {
-              VStack(alignment: .leading) {
-                Text(c.vendorName ?? c.productCategory)
-                Text(c.productCategory).font(.caption).foregroundStyle(.secondary)
+    ZStack {
+      // Background
+      Image(uiImage: game.coverImage)
+        .resizable()
+        .scaledToFill()
+        .blur(radius: 25)
+        .opacity(0.8)
+        .ignoresSafeArea()
+
+      LinearGradient(
+        colors: [
+          Color.black.opacity(0.85),
+          Color.black.opacity(0.4),
+          Color.black.opacity(0.85)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      .ignoresSafeArea()
+
+      // Content
+      HStack(spacing: 80) {
+        // Left column — game cover + info
+        VStack(alignment: .leading, spacing: 16) {
+          Image(uiImage: game.coverImage)
+            .resizable()
+            .aspectRatio(2.0/3.0, contentMode: .fit)
+            .frame(width: 180, height: 270)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
+
+          VStack(alignment: .leading, spacing: 6) {
+            Text(L("Assign Controller"))
+              .font(.system(size: 24, weight: .bold))
+              .foregroundColor(.white)
+            Text(String(format: L("Player") + " %d", port))
+              .font(.system(size: 14, weight: .medium))
+              .foregroundColor(.white.opacity(0.7))
+          }
+        }
+        .frame(width: 180)
+
+        // Right column — list & actions
+        VStack(alignment: .leading, spacing: 24) {
+          // Header actions
+          HStack(alignment: .center, spacing: 20) {
+            Button(action: { onDone(nil); dismiss() }) {
+              HStack(spacing: 12) {
+                Image(systemName: "chevron.left")
+                  .font(.system(size: 16, weight: .semibold))
+                Text(L("Back"))
+                  .font(.system(size: 18, weight: .semibold))
               }
-              Spacer()
-              if selection == idx { Image(systemName: "checkmark") }
+              .foregroundColor(.white.opacity(0.8))
+              .padding(.horizontal, 20)
+              .padding(.vertical, 12)
+              .background(.white.opacity(0.1))
+              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .focused($focused, equals: .back)
+
+            Spacer()
+
+            Text(String(format: L("Assign to Player %d"), port))
+              .font(.system(size: 28, weight: .bold))
+              .foregroundColor(.white)
+
+            Spacer()
+
+            Button(action: { onDone(selection); dismiss() }) {
+              HStack(spacing: 12) {
+                Text(L("Done"))
+                  .font(.system(size: 18, weight: .semibold))
+              }
+              .foregroundColor(.white)
+              .padding(.horizontal, 20)
+              .padding(.vertical, 12)
+              .background(.blue.opacity(0.4))
+              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .focused($focused, equals: .done)
+          }
+
+          // Controller list
+          ScrollView {
+            LazyVStack(spacing: 12) {
+              ForEach(Array(controllers.enumerated()), id: \.offset) { idx, c in
+                Button(action: {
+                  selection = idx
+                  if controllers.indices.contains(idx) {
+                    TVControllerMappingBridge.assign(controllers[idx], toGCPort: port)
+                    NSLog("[CONTROLLER] Immediately assigned controller \(c.vendorName ?? c.productCategory) to port \(port)")
+                  }
+                }) {
+                  HStack(spacing: 16) {
+                    ZStack {
+                      RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.white.opacity(0.1))
+                        .frame(width: 32, height: 32)
+                      Image(systemName: "gamecontroller.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                      Text(c.vendorName ?? c.productCategory)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
+                      Text(c.productCategory)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                    }
+
+                    Spacer()
+
+                    if selection == idx {
+                      Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    }
+                  }
+                  .padding(.horizontal, 16)
+                  .padding(.vertical, 12)
+                  .background(.white.opacity(0.05))
+                  .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .focused($focused, equals: .row(idx))
+              }
             }
           }
-          .buttonStyle(.plain)
+          .frame(maxWidth: 820, maxHeight: 520)
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        .frame(maxWidth: 900, alignment: .leading)
       }
-      .navigationTitle(L("Assign to Player \(port)"))
-      .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
-          Button(L("Cancel")) {
-            onDone(nil)
-            dismiss()
-          }
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-          Button(L("Done")) {
-            onDone(selection)
-            dismiss()
-          }
-        }
-      }
-      .onAppear { controllers = GCController.controllers() }
-      .onExitCommand {
-        // When B is pressed, still call onDone to refresh the parent view
-        onDone(selection)
-        dismiss()
-      }
+      .padding(.horizontal, 60)
     }
+    .focusSection()
+    .defaultFocus($focused, .back)
+    .onAppear { controllers = GCController.controllers() }
+    .onExitCommand { onDone(selection); dismiss() }
   }
 }
 

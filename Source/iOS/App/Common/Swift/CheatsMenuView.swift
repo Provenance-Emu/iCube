@@ -10,6 +10,7 @@ struct CheatsMenuView: View {
 
     @State private var geckoCodeList: [TVGeckoCodeInfo] = []
     @State private var actionReplayCodeList: [TVActionReplayCodeInfo] = []
+    @State private var searchText: String = ""
     @FocusState private var focused: FocusField?
 
     enum FocusField: Hashable {
@@ -89,8 +90,25 @@ struct CheatsMenuView: View {
                             .foregroundColor(.white)
                     }
 
-                    // Action buttons
+                    // Search & actions
                     HStack(spacing: 24) {
+                        // Search field (tvOS-friendly)
+                        HStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.white.opacity(0.7))
+                            TextField(L("Search cheats"), text: $searchText)
+                                .textCase(.none)
+                                .disableAutocorrection(true)
+                                .textInputAutocapitalization(.never)
+                                .foregroundColor(.white)
+                                .tint(.white)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(.white.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .frame(maxWidth: 360)
+
                         Button(action: {
                             TVCheatsBridge.downloadGeckoCodes(forGameId: game.gameID, revision: game.revision, gametdbId: game.gametdbID) { success, downloaded, added in
                                 DispatchQueue.main.async { loadCheats() }
@@ -143,7 +161,7 @@ struct CheatsMenuView: View {
                     // Combined cheats list — clamped size like a page panel
                     ScrollView {
                         LazyVStack(spacing: 14) {
-                            let allCheats = createCombinedCheatList()
+                            let allCheats = createCombinedCheatList().filter { searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? true : $0.name.localizedCaseInsensitiveContains(searchText) || $0.type.localizedCaseInsensitiveContains(searchText) }
                             if allCheats.isEmpty {
                                 VStack(spacing: 16) {
                                     Image(systemName: "gamecontroller")
@@ -171,7 +189,6 @@ struct CheatsMenuView: View {
                         .padding(.trailing, 10)
                     }
                     .frame(maxWidth: 820, maxHeight: 520) // clamp like a panel
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .frame(maxWidth: 900, alignment: .leading) // clamp right column width
             }
@@ -252,6 +269,7 @@ struct CheatRowView: View {
                             .stroke(.white.opacity(isFocused ? 0.35 : 0.1), lineWidth: isFocused ? 2 : 1)
                     )
             )
+            .zIndex(isFocused ? 10 : 0)
         }
         .buttonStyle(.plain)
         .scaleEffect(isFocused ? 1.02 : 1.0)
