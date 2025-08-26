@@ -61,7 +61,10 @@
 }
 
 + (void)loadStateFromSlot:(NSInteger)slot {
-  State::Load(Core::System::GetInstance(), (int)slot);
+  int s = (int)slot;
+  Core::QueueHostJob([s](Core::System& system) {
+    State::Load(system, s);
+  });
 }
 
 @end
