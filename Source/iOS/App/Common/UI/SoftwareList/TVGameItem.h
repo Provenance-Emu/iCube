@@ -10,6 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface TVGameItem : NSObject
 
+@property (nonatomic, readonly) NSString *id;
 @property (nonatomic, readonly) NSString *title;
 @property (nonatomic, readonly) NSString *filePath;
 @property (nonatomic, readonly) BOOL isNKit;

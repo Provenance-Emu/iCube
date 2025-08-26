@@ -62,10 +62,30 @@ func installInputDebugHandlers(_ c: GCController) {
                     InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: 0.0)
                 }
             }
-            // Detect all 4 paddles + menu to open pause menu (tvOS)
+            // Multiple pause gesture options for different controller types (tvOS)
             #if os(tvOS)
-            let combo = gamepad.leftShoulder.isPressed && gamepad.rightShoulder.isPressed && gamepad.leftTrigger.isPressed && gamepad.rightTrigger.isPressed && (gamepad.buttonMenu.isPressed)
-            if combo { TVEmulationBridge.pause(); NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil) }
+            let allFourShoulders = gamepad.leftShoulder.isPressed && gamepad.rightShoulder.isPressed && gamepad.leftTrigger.isPressed && gamepad.rightTrigger.isPressed
+
+            // Option 1: All 4 shoulders + Menu (for controllers with Menu button)
+            let menuCombo = allFourShoulders && gamepad.buttonMenu.isPressed
+            if menuCombo {
+                TVEmulationBridge.pause()
+                NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+            }
+
+            // Option 2: All 4 shoulders held for 2 seconds (for controllers without Menu button)
+            PauseGestureTracker.shared.updateShoulderState(allPressed: allFourShoulders)
+
+            // Option 3: L1+R1+Options (if available, for controllers with Options but no Menu)
+            if #available(tvOS 14.0, *) {
+                if let options = gamepad.buttonOptions {
+                    let optionsCombo = gamepad.leftShoulder.isPressed && gamepad.rightShoulder.isPressed && options.isPressed
+                    if optionsCombo {
+                        TVEmulationBridge.pause()
+                        NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+                    }
+                }
+            }
             #endif
         }
     }

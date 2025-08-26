@@ -10,6 +10,7 @@
 
 @implementation TVGameItem {
     GameFilePtrWrapper *_wrapper;
+    NSString *_id;
     NSString *_title;
     NSString *_filePath;
     BOOL _isNKit;
@@ -32,6 +33,7 @@
         const UICommon::GameFile &game = *wrapper.gameFile;
         _title = CppToFoundationString(game.GetName(UICommon::GameFile::Variant::LongAndPossiblyCustom));
         _filePath = CppToFoundationString(game.GetFilePath());
+        _id = _filePath; // Use filePath as unique identifier
         _isNKit = game.IsNKit();
 
         const UICommon::GameCover &cover = game.GetCoverImage();
@@ -75,6 +77,7 @@
     return self;
 }
 
+- (NSString *)id { return _id; }
 - (NSString *)title { return _title; }
 - (NSString *)filePath { return _filePath; }
 - (BOOL)isNKit { return _isNKit; }

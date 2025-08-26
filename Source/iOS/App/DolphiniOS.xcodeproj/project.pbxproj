@@ -23,8 +23,6 @@
 		B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */; };
 		B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */; };
 		B34EE6B32E57D65400301907 /* ShaderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EE6B12E57D65400301907 /* ShaderSettingsView.swift */; };
-		B36B48BE2E5CFD31009A2303 /* PVlibDolphin.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; };
-		B36B48BF2E5CFD31009A2303 /* PVlibDolphin.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B36B48C12E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */; };
 		B36B48C42E5D0056009A2303 /* TVCheatsBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C32E5D0056009A2303 /* TVCheatsBridge.mm */; };
 		B36B48C62E5D0496009A2303 /* TVMultilineTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */; };
@@ -40,6 +38,8 @@
 		B36B519B2E5E46AC009A2303 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519A2E5E46AC009A2303 /* KeychainService.swift */; };
 		B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */; };
 		B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519E2E5E4700009A2303 /* SourcesView.swift */; };
+		B36B63032E5E588C009A2303 /* PVlibDolphin.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; };
+		B36B63042E5E588C009A2303 /* PVlibDolphin.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38205FF2E57FF0E00D4853F /* CompiledShader.swift */; };
 		B382060D2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */; };
 		B382060E2E57FF0E00D4853F /* Converters.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206012E57FF0E00D4853F /* Converters.metal */; };
@@ -61,6 +61,7 @@
 		B3B31ABD2E5525A6002BF20C /* AchievementsSettingsViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */; };
 		B3B334442E566EBC002BF20C /* DOLUIKitSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */; };
 		B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = B3D89A742E57DEF700EF1CB1 /* Zip */; };
+		B3F20D912E5E6A9F00AF38F3 /* PauseGestureTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */; };
 		B900A7A727F26F61000361DD /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7A627F26F61000361DD /* AppDelegate.swift */; };
 		B900A7AE27F27F36000361DD /* DolphinCoreService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AD27F27F36000361DD /* DolphinCoreService.mm */; };
 		B900A7B027F2866D000361DD /* UserFolderUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AF27F2866D000361DD /* UserFolderUtil.swift */; };
@@ -264,7 +265,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */,
-				B36B48BF2E5CFD31009A2303 /* PVlibDolphin.xcframework in CopyFiles */,
+				B36B63042E5E588C009A2303 /* PVlibDolphin.xcframework in CopyFiles */,
 				B34ECD082E5785BD00301907 /* libMoltenVK.dylib in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -306,6 +307,7 @@
 		B36B519A2E5E46AC009A2303 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourcesStore.swift; sourceTree = "<group>"; };
 		B36B519E2E5E4700009A2303 /* SourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesView.swift; sourceTree = "<group>"; };
+		B36B63002E5E56A3009A2303 /* PVlibDolphin.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PVlibDolphin.xcframework; path = ../../../../build/xcframework/PVlibDolphin.xcframework; sourceTree = "<group>"; };
 		B38205FF2E57FF0E00D4853F /* CompiledShader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShader.swift; sourceTree = "<group>"; };
 		B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShaderContainer.swift; sourceTree = "<group>"; };
 		B38206012E57FF0E00D4853F /* Converters.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Converters.metal; sourceTree = "<group>"; };
@@ -331,6 +333,7 @@
 		B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AchievementsSettingsViewController.mm; sourceTree = "<group>"; };
 		B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOLUIKitSwitch.swift; sourceTree = "<group>"; };
 		B3B334452E5674FD002BF20C /* libMoltenVK.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libMoltenVK.dylib; path = "../../../Externals/MoltenVK-macOS/libMoltenVK.dylib"; sourceTree = "<group>"; };
+		B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseGestureTracker.swift; sourceTree = "<group>"; };
 		B900A7A227F25718000361DD /* Common.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Common.xcconfig; sourceTree = "<group>"; };
 		B900A7A627F26F61000361DD /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B900A7AC27F27F36000361DD /* DolphinCoreService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DolphinCoreService.h; sourceTree = "<group>"; };
@@ -684,7 +687,26 @@
 		B9FF01E92977DD0000B49B00 /* Release (Beta, TrollStore).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Release (Beta, TrollStore).xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B36B63282E5E6443009A2303 /* Exceptions for "Metal" folder in "DolphiniOS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Filters/MasterShader.metal.disabled,
+				Filters/SameBoy.metal.disabled,
+			);
+			target = B9DC3DF527EFBD2C0084DAA4 /* DolphiniOS */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		B36B63182E5E6435009A2303 /* Metal */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B36B63282E5E6443009A2303 /* Exceptions for "Metal" folder in "DolphiniOS" target */,
+			);
+			path = Metal;
+			sourceTree = "<group>";
+		};
 		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = Core;
@@ -711,7 +733,7 @@
 				B34ECD072E5785BD00301907 /* libMoltenVK.dylib in Frameworks */,
 				B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */,
 				B9FCB7DE28988E7E0020E233 /* AltKit in Frameworks */,
-				B36B48BE2E5CFD31009A2303 /* PVlibDolphin.xcframework in Frameworks */,
+				B36B63032E5E588C009A2303 /* PVlibDolphin.xcframework in Frameworks */,
 				B9D9389E283EF7AD00B290FC /* MetalKit.framework in Frameworks */,
 				B9FCB7E62898FAC10020E233 /* GameController.framework in Frameworks */,
 				B97E4B492964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
@@ -744,6 +766,7 @@
 		B34EE6B22E57D65400301907 /* Shaders */ = {
 			isa = PBXGroup;
 			children = (
+				B36B63182E5E6435009A2303 /* Metal */,
 				B38206012E57FF0E00D4853F /* Converters.metal */,
 				B38206092E57FF0E00D4853F /* Shaders.metal */,
 				B38205FF2E57FF0E00D4853F /* CompiledShader.swift */,
@@ -1088,6 +1111,7 @@
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
+				B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */,
 				B36B519E2E5E4700009A2303 /* SourcesView.swift */,
 				B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
@@ -1762,6 +1786,7 @@
 			isa = PBXGroup;
 			children = (
 				B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */,
+				B36B63002E5E56A3009A2303 /* PVlibDolphin.xcframework */,
 				B95AC52F2D29C7FD0048E48B /* AVFoundation.framework */,
 				B97C49B5297F8B0D00E30877 /* UniformTypeIdentifiers.framework */,
 				B9FCB7E52898FAC10020E233 /* GameController.framework */,
@@ -1968,6 +1993,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B36B63182E5E6435009A2303 /* Metal */,
 			);
 			name = DolphiniOS;
 			packageProductDependencies = (
@@ -2221,6 +2249,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B950CFAA29616B4F00197719 /* MainSceneCoordinator.m in Sources */,
+				B3F20D912E5E6A9F00AF38F3 /* PauseGestureTracker.swift in Sources */,
 				B904AD092887DAF1008B6BE9 /* ControllersTypeViewController.mm in Sources */,
 				B9913785288146D700588446 /* WiiAspectRatioViewController.mm in Sources */,
 				B9B2C64D288E170600CB6569 /* ServiceManager.swift in Sources */,

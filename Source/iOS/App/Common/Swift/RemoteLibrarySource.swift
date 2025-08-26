@@ -1,14 +1,24 @@
 import Foundation
 
-/// Represents a single remote ROM entry.
-public struct RemoteLibraryItem: Hashable, Identifiable {
-    public var id: String { url.absoluteString }
-    public let url: URL
-    public let displayName: String
-    public let sizeBytes: Int64?
-    public let etag: String?
-    public let lastModified: Date?
-    public init(url: URL, displayName: String, sizeBytes: Int64?, etag: String?, lastModified: Date?) {
+/// Represents a single item (ROM file) from a remote library source
+struct RemoteLibraryItem: Identifiable, Hashable {
+    var id: String { url.absoluteString }
+    let url: URL
+    let displayName: String
+    let sizeBytes: Int64?
+    let etag: String?
+    let lastModified: Date?
+
+    // Convenience initializers for backward compatibility
+    init(url: URL, name: String, size: Int64) {
+        self.url = url
+        self.displayName = name
+        self.sizeBytes = size > 0 ? size : nil
+        self.etag = nil
+        self.lastModified = nil
+    }
+
+    init(url: URL, displayName: String, sizeBytes: Int64?, etag: String?, lastModified: Date?) {
         self.url = url
         self.displayName = displayName
         self.sizeBytes = sizeBytes
@@ -17,22 +27,33 @@ public struct RemoteLibraryItem: Hashable, Identifiable {
     }
 }
 
-/// Protocol for any remote library source (e.g., WebDAV).
-public protocol RemoteLibrarySource: AnyObject {
-    /// Stable identifier for persistence
+/// Protocol for remote library sources (WebDAV, FTP, etc.)
+protocol RemoteLibrarySource {
     var id: String { get }
-    /// Human-readable name
     var name: String { get }
-    /// Base URL for discovery
-    var baseURL: URL { get }
-    /// Whether the source is currently online
     var isOnline: Bool { get }
-    /// Async stream of online state changes
+
+    /// Stream of online/offline status changes
     var onlineStream: AsyncStream<Bool> { get }
-    /// Async stream of the latest discovered items list
+
+    /// Stream of discovered items
     var itemsStream: AsyncStream<[RemoteLibraryItem]> { get }
-    /// Start background monitoring and discovery
+
+    /// Start monitoring this source
     func start()
-    /// Stop any background work
+
+    /// Stop monitoring this source
     func stop()
+
+    /// Pre-cache a specific item to local storage
+    func preCacheItem(_ item: RemoteLibraryItem, progressCallback: @escaping (Double) -> Void) async throws -> String
+
+    /// Cancel pre-caching for an item
+    func cancelPreCache(_ item: RemoteLibraryItem) async
+
+    /// Remove cached item from local storage
+    func removeCachedItem(_ item: RemoteLibraryItem) async throws
+
+    /// Get local cache directory for this source
+    func getCacheDirectory() -> URL
 }

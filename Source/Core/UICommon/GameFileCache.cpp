@@ -88,6 +88,8 @@ bool GameFileCache::Update(std::span<const std::string> all_game_paths,
                            const GameRemovedFromCacheFn& game_removed_from_cache,
                            const std::atomic_bool& processing_halted)
 {
+  INFO_LOG_FMT(DISCIO, "GameFileCache::Update called with {} paths", all_game_paths.size());
+
   // Copy game paths into a set, except ones that match DiscIO::ShouldHideFromGameList.
   // TODO: Prevent DoFileSearch from looking inside /files/ directories of DirectoryBlobs at all?
   // TODO: Make DoFileSearch support filter predicates so we don't have remove things afterwards?
@@ -96,9 +98,17 @@ bool GameFileCache::Update(std::span<const std::string> all_game_paths,
   for (const std::string& path : all_game_paths)
   {
     if (!DiscIO::ShouldHideFromGameList(path))
+    {
       game_paths.insert(path);
+      INFO_LOG_FMT(DISCIO, "GameFileCache::Update: added path to game_paths: {}", path);
+    }
+    else
+    {
+      INFO_LOG_FMT(DISCIO, "GameFileCache::Update: path hidden from game list: {}", path);
+    }
   }
 
+  INFO_LOG_FMT(DISCIO, "GameFileCache::Update: processing {} valid paths", game_paths.size());
   bool cache_changed = false;
 
   // Delete paths that aren't in game_paths from m_cached_files,
@@ -136,17 +146,24 @@ bool GameFileCache::Update(std::span<const std::string> all_game_paths,
     if (processing_halted)
       break;
 
+    INFO_LOG_FMT(DISCIO, "GameFileCache::Update: creating GameFile for path: {}", path);
     auto file = std::make_shared<GameFile>(path);
     if (file->IsValid())
     {
+      INFO_LOG_FMT(DISCIO, "GameFileCache::Update: GameFile is valid, adding to cache: {}", path);
       if (game_added_to_cache)
         game_added_to_cache(file);
 
       cache_changed = true;
       m_cached_files.push_back(std::move(file));
     }
+    else
+    {
+      INFO_LOG_FMT(DISCIO, "GameFileCache::Update: GameFile is invalid, not adding to cache: {}", path);
+    }
   }
 
+  INFO_LOG_FMT(DISCIO, "GameFileCache::Update: finished, cache_changed={}, total cached files={}", cache_changed, m_cached_files.size());
   return cache_changed;
 }
 

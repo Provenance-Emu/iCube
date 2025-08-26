@@ -20,6 +20,11 @@
 #include <thread>
 #include <vector>
 
+#ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
+#include <CFNetwork/CFNetwork.h>
+#endif
+
 #include "Common/Assert.h"
 #include "Common/Common.h"
 #include "Common/CommonFuncs.h"
@@ -138,6 +143,115 @@ u64 FileInfo::GetSize() const
 // Returns true if the path exists
 bool Exists(const std::string& path)
 {
+  // Handle HTTP URLs separately
+  std::string lower = path;
+  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+  if (lower.rfind("http://", 0) == 0 || lower.rfind("https://", 0) == 0 ||
+      lower.rfind("webdav://", 0) == 0 || lower.rfind("webdavs://", 0) == 0)
+  {
+    INFO_LOG_FMT(COMMON, "File::Exists checking HTTP URL: {}", path);
+#ifdef __APPLE__
+    // Convert webdav:// to http:// for actual HTTP request
+    std::string http_url = path;
+    if (http_url.rfind("webdav://", 0) == 0)
+      http_url = "http://" + http_url.substr(9);
+    else if (http_url.rfind("webdavs://", 0) == 0)
+      http_url = "https://" + http_url.substr(10);
+
+    INFO_LOG_FMT(COMMON, "File::Exists converted URL: {}", http_url);
+
+    // Use CFNetwork to check if URL exists via HEAD request
+    CFStringRef urlString = CFStringCreateWithCString(kCFAllocatorDefault, http_url.c_str(), kCFStringEncodingUTF8);
+    if (!urlString) {
+      ERROR_LOG_FMT(COMMON, "File::Exists failed to create CFString for URL: {}", http_url);
+      return false;
+    }
+
+    CFURLRef cfUrl = CFURLCreateWithString(kCFAllocatorDefault, urlString, nullptr);
+    CFRelease(urlString);
+    if (!cfUrl) {
+      ERROR_LOG_FMT(COMMON, "File::Exists failed to create CFURL for URL: {}", http_url);
+      return false;
+    }
+
+    CFHTTPMessageRef req = CFHTTPMessageCreateRequest(kCFAllocatorDefault, CFSTR("HEAD"), cfUrl, kCFHTTPVersion1_1);
+    CFRelease(cfUrl);
+    if (!req) {
+      ERROR_LOG_FMT(COMMON, "File::Exists failed to create HTTP request for URL: {}", http_url);
+      return false;
+    }
+
+    CFReadStreamRef stream = CFReadStreamCreateForHTTPRequest(kCFAllocatorDefault, req);
+    CFRelease(req);
+    if (!stream) {
+      ERROR_LOG_FMT(COMMON, "File::Exists failed to create HTTP stream for URL: {}", http_url);
+      return false;
+    }
+
+    bool exists = false;
+    if (CFReadStreamOpen(stream))
+    {
+      // Wait a bit for the stream to establish connection
+      CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, false);
+
+      CFHTTPMessageRef resp = (CFHTTPMessageRef)CFReadStreamCopyProperty(stream, kCFStreamPropertyHTTPResponseHeader);
+      if (resp)
+      {
+        CFIndex status = CFHTTPMessageGetResponseStatusCode(resp);
+        exists = (status >= 200 && status < 300); // 2xx status codes indicate success
+        INFO_LOG_FMT(COMMON, "File::Exists HTTP HEAD response status: {} for URL: {}", status, http_url);
+        CFRelease(resp);
+      }
+      else
+      {
+        ERROR_LOG_FMT(COMMON, "File::Exists failed to get HTTP response for URL: {}", http_url);
+      }
+      CFReadStreamClose(stream);
+    }
+    else
+    {
+      ERROR_LOG_FMT(COMMON, "File::Exists failed to open HTTP stream for URL: {}", http_url);
+    }
+    CFRelease(stream);
+
+    // If HEAD failed, try a simple GET with Range: bytes=0-0 as fallback
+    if (!exists) {
+      INFO_LOG_FMT(COMMON, "File::Exists HEAD failed, trying GET Range request for URL: {}", http_url);
+
+      CFURLRef cfUrl2 = CFURLCreateWithString(kCFAllocatorDefault, CFStringCreateWithCString(kCFAllocatorDefault, http_url.c_str(), kCFStringEncodingUTF8), nullptr);
+      if (cfUrl2) {
+        CFHTTPMessageRef req2 = CFHTTPMessageCreateRequest(kCFAllocatorDefault, CFSTR("GET"), cfUrl2, kCFHTTPVersion1_1);
+        if (req2) {
+          CFHTTPMessageSetHeaderFieldValue(req2, CFSTR("Range"), CFSTR("bytes=0-0"));
+          CFReadStreamRef stream2 = CFReadStreamCreateForHTTPRequest(kCFAllocatorDefault, req2);
+          if (stream2 && CFReadStreamOpen(stream2)) {
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, false);
+            CFHTTPMessageRef resp2 = (CFHTTPMessageRef)CFReadStreamCopyProperty(stream2, kCFStreamPropertyHTTPResponseHeader);
+            if (resp2) {
+              CFIndex status2 = CFHTTPMessageGetResponseStatusCode(resp2);
+              exists = (status2 >= 200 && status2 < 300);
+              INFO_LOG_FMT(COMMON, "File::Exists GET Range response status: {} for URL: {}", status2, http_url);
+              CFRelease(resp2);
+            }
+            CFReadStreamClose(stream2);
+          }
+          if (stream2) CFRelease(stream2);
+          CFRelease(req2);
+        }
+        CFRelease(cfUrl2);
+      }
+    }
+
+    INFO_LOG_FMT(COMMON, "File::Exists result: {} for URL: {}", exists, path);
+    return exists;
+#else
+    // For non-Apple platforms, assume HTTP URLs exist (fallback)
+    INFO_LOG_FMT(COMMON, "File::Exists assuming HTTP URL exists (non-Apple): {}", path);
+    return true;
+#endif
+  }
+
+  // For local files, use the standard filesystem check
   return FileInfo(path).Exists();
 }
 

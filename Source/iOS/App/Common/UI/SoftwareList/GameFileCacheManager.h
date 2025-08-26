@@ -14,6 +14,7 @@ typedef void GameFileCache;
 #endif
 
 @class GameFilePtrWrapper;
+@class TVGameItem;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -27,6 +28,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)(void))completion_handler;
 
 - (NSArray<GameFilePtrWrapper*>*)getGames;
+- (NSArray<TVGameItem*>*)currentGames;
 
 /// Updates the cache by merging local scan paths with the provided extra absolute paths (file or URL strings).
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch;

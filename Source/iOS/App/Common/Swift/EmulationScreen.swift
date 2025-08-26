@@ -198,6 +198,7 @@ struct EmulationScreen: View {
                 NSLog("[INPUT] tvOS initial controllers count: %d", initialCount)
                 GCController.shouldMonitorBackgroundEvents = true
                 configureAllControllersForTVOS()
+                setupPauseGestureHandlers()
                 logCurrentControllers()
                 if initialCount == 0 {
                     NSLog("[INPUT] tvOS starting wireless controller discovery")
@@ -206,7 +207,10 @@ struct EmulationScreen: View {
                     })
                 }
                 NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
-                    if let c = note.object as? GCController { configureControllerForTVOS(c) }
+                    if let c = note.object as? GCController {
+                        configureControllerForTVOS(c)
+                        setupPauseGestureHandler(for: c)
+                    }
                 }
                 NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
                 endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
@@ -295,6 +299,39 @@ struct EmulationScreen: View {
 
     private func togglePause() {
         if TVEmulationBridge.isPaused() { TVEmulationBridge.resume() } else { TVEmulationBridge.pause() }
+    }
+
+    /// Sets up pause gesture handlers for all currently connected controllers
+    private func setupPauseGestureHandlers() {
+        for controller in GCController.controllers() {
+            setupPauseGestureHandler(for: controller)
+        }
+    }
+
+    /// Sets up pause gesture handler for a specific controller
+    /// Supports multiple pause gesture combinations:
+    /// - L1+R1+L2+R2+Menu (for controllers with Menu button)
+    /// - L1+R1+L2+R2 held for 2 seconds (for controllers without Menu button)
+    /// - L1+R1+Options (for controllers with Options button but no Menu)
+    private func setupPauseGestureHandler(for controller: GCController) {
+        // The pause gesture handling is already implemented in installInputDebugHandlers
+        // in ControllerExtensions.swift, so we just need to ensure it's called
+        installInputDebugHandlers(controller)
+
+        // Also ensure Menu button is mapped to Start for controllers that have it
+        if let extendedGamepad = controller.extendedGamepad {
+            if #available(tvOS 14.0, *) {
+                // Ensure Menu button preference is set to always receive
+                extendedGamepad.buttonMenu.preferredSystemGestureState = .alwaysReceive
+            }
+        }
+
+        if let microGamepad = controller.microGamepad {
+            if #available(tvOS 14.0, *) {
+                // Ensure Menu button preference is set to always receive for micro gamepad too
+                microGamepad.buttonMenu.preferredSystemGestureState = .alwaysReceive
+            }
+        }
     }
 }
 
