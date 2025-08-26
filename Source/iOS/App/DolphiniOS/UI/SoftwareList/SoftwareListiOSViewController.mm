@@ -54,6 +54,7 @@ typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
     _openedUrl = nil;
   }
 
+#if TARGET_OS_IOS
   NSArray<UIMenuElement*>* wiiActions;
 
   UIMenuElement* wiiNandElement = [UIMenu menuWithTitle:DOLCoreLocalizedString(@"Manage NAND") children:@[
@@ -138,13 +139,15 @@ typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
     ]],
     [UIMenu menuWithTitle:DOLCoreLocalizedString(@"Wii") image:nil identifier:nil options:UIMenuOptionsDisplayInline children:wiiActions]
   ]];
+#endif
 }
 
 - (void)openDocumentPickerWithSoftwareContentTypesAndPickerType:(DOLSoftwareListDocumentPickerType)pickerType {
+#if TARGET_OS_IOS
   NSArray<UTType*>* types = @[
-    [UTType exportedTypeWithIdentifier:@"me.oatmealdome.dolphinios.generic-software"],
-    [UTType exportedTypeWithIdentifier:@"me.oatmealdome.dolphinios.gamecube-software"],
-    [UTType exportedTypeWithIdentifier:@"me.oatmealdome.dolphinios.wii-software"],
+    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.generic-software"],
+    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.gamecube-software"],
+    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.wii-software"],
     [UTType typeWithIdentifier:@"public.iso-image"],
     [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.rvz-image"],
     [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.dol-executable"],
@@ -154,10 +157,23 @@ typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
   ];
 
   [self openDocumentPickerWithContentTypes:types pickerType:pickerType];
+#else
+  (void)pickerType;
+#endif
 }
 
 - (void)openDocumentPickerWithContentTypes:(NSArray<UTType*>*)contentTypes pickerType:(DOLSoftwareListDocumentPickerType)pickerType {
-  UIDocumentPickerViewController* pickerController = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:contentTypes];
+#if TARGET_OS_IOS
+  UIDocumentPickerViewController* pickerController = nil;
+  if (@available(iOS 14.0, *)) {
+    pickerController = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:contentTypes asCopy:YES];
+  } else {
+    NSMutableArray<NSString*>* legacy = [NSMutableArray arrayWithCapacity:contentTypes.count];
+    for (UTType* t in contentTypes) {
+      [legacy addObject:t.identifier];
+    }
+    pickerController = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:legacy inMode:UIDocumentPickerModeImport];
+  }
   pickerController.delegate = self;
   pickerController.modalPresentationStyle = UIModalPresentationPageSheet;
   pickerController.allowsMultipleSelection = false;
@@ -165,12 +181,20 @@ typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
   _pickerType = pickerType;
 
   [self presentViewController:pickerController animated:true completion:nil];
+#else
+  (void)contentTypes; (void)pickerType;
+#endif
 }
 
 - (IBAction)addButtonPressed:(id)sender {
+#if TARGET_OS_IOS
   [self openDocumentPickerWithSoftwareContentTypesAndPickerType:DOLSoftwareListDocumentPickerTypeImportSoftware];
+#else
+  (void)sender;
+#endif
 }
 
+#if TARGET_OS_IOS
 - (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls {
   void (^showError)(NSString*) = ^(NSString* error) {
     UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:error preferredStyle:UIAlertControllerStyleAlert];
@@ -272,6 +296,7 @@ typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
     return [UIMenu menuWithTitle:gameName children:[actions copy]];
   }];
 }
+#endif
 
 - (void)receiveImportFileFinishedNotification {
   [self reloadGameFiles];

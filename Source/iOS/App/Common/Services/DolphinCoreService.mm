@@ -39,14 +39,58 @@
   UICommon::SetUserDirectory(FoundationToCppString([UserFolderUtil getUserFolder]));
   UICommon::CreateDirectories();
 
-#ifdef DEBUG
+  // Ensure Logger.ini is present in user folder
   NSURL* loggerIniPath = [[NSBundle mainBundle] URLForResource:@"Logger" withExtension:@"ini"];
-  std::string loggerIniCppPath = FoundationToCppString([loggerIniPath path]);
-  std::string destPath = File::GetUserPath(F_LOGGERCONFIG_IDX);
+  if (loggerIniPath) {
+    std::string loggerIniCppPath = FoundationToCppString([loggerIniPath path]);
+    File::Copy(loggerIniCppPath, File::GetUserPath(F_LOGGERCONFIG_IDX));
+  }
 
-  File::Delete(File::GetUserPath(F_LOGGERCONFIG_IDX));
-  File::Copy(loggerIniCppPath, File::GetUserPath(F_LOGGERCONFIG_IDX));
-#endif
+  // Configure libcurl to use bundled CA bundle for SSL
+  NSString* caPath = [[NSBundle mainBundle] pathForResource:@"cacert" ofType:@"pem"];
+  if (caPath.length > 0) {
+    setenv("CURL_CA_BUNDLE", [caPath UTF8String], 1);
+  }
+
+  // Apply UI overrides for console logging and verbosity before logging init
+  BOOL logsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"logger_console_enabled"];
+  NSInteger verbosity = [[NSUserDefaults standardUserDefaults] integerForKey:@"logger_console_verbosity"];
+  if (verbosity <= 0) verbosity = 4;
+  {
+    std::string iniPath = File::GetUserPath(F_LOGGERCONFIG_IDX);
+    std::string content;
+    if (File::Exists(iniPath)) {
+      FILE* fp = fopen(iniPath.c_str(), "rb");
+      if (fp) {
+        fseek(fp, 0, SEEK_END);
+        long sz = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+        if (sz > 0) {
+          content.resize((size_t)sz);
+          fread(content.data(), 1, (size_t)sz, fp);
+        }
+        fclose(fp);
+      }
+    }
+    if (!content.empty()) {
+      auto replaceLine = [&](const std::string& key, const std::string& value) {
+        const std::string prefix = key + " = ";
+        size_t pos = content.find(prefix);
+        if (pos != std::string::npos) {
+          size_t end = content.find('\n', pos);
+          if (end == std::string::npos) end = content.size();
+          content.replace(pos + prefix.size(), end - (pos + prefix.size()), value);
+        }
+      };
+      replaceLine("WriteToConsole", logsEnabled ? "True" : "False");
+      replaceLine("Verbosity", std::to_string((int)verbosity));
+      FILE* out = fopen(iniPath.c_str(), "wb");
+      if (out) {
+        fwrite(content.data(), 1, content.size(), out);
+        fclose(out);
+      }
+    }
+  }
 
   UICommon::Init();
 
@@ -63,6 +107,22 @@
   Config::SetBase(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
   Config::SetBase(Config::MAIN_FAST_DISC_SPEED, true);
   Config::SetBase(Config::MAIN_DSP_THREAD, true);
+  // Speed-first video/CPU defaults
+  Config::SetBaseOrCurrent(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
+  Config::SetBaseOrCurrent(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
+  Config::SetBaseOrCurrent(Config::GFX_HACK_IMMEDIATE_XFB, true);
+  Config::SetBaseOrCurrent(Config::GFX_HACK_VI_SKIP, true);
+  Config::SetBaseOrCurrent(Config::MAIN_ACCURATE_NANS, false);
+  Config::SetBaseOrCurrent(Config::MAIN_SYNC_GPU, false);
+
+  // Enforce safe shader compiler limits
+  const int hw = (int)[[NSProcessInfo processInfo] processorCount];
+  const int threads = std::max(1, std::min(2, hw - 1));
+  Config::SetBaseOrCurrent(Config::GFX_SHADER_COMPILER_THREADS, threads);
+  Config::SetBaseOrCurrent(Config::GFX_SHADER_PRECOMPILER_THREADS, threads);
+
+  // Prefer asynchronous present on iOS/tvOS by default (can be toggled in UI)
+  Config::SetBaseOrCurrent(Config::GFX_ASYNC_PRESENT, true);
 
   WindowSystemInfo wsi;
   wsi.type = WindowSystemType::iOS;

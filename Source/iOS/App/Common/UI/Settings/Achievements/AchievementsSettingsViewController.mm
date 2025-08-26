@@ -6,6 +6,7 @@
 #endif
 #import "Core/Core.h"
 #import "Core/System.h"
+#import "Common/Config/Config.h"
 
 @interface AchievementsSettingsViewController () {
   BOOL _usesDynamicUI;
@@ -13,6 +14,7 @@
   UIActivityIndicatorView* _loginSpinner;
   NSTimer* _loginTimer;
   NSString* _cachedPassword;
+  NSString* _hostOverride;
 #endif
 }
 @end
@@ -28,7 +30,11 @@
   if (_usesDynamicUI) {
     UITableView* tv = nil;
     if (@available(iOS 13.0, *)) {
+#if !TARGET_OS_TV
       tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
+#else
+      tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
+#endif
     } else {
       tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleGrouped];
     }
@@ -57,6 +63,15 @@
     if (!hasToken) {
       NSString* cached = [NSUserDefaults.standardUserDefaults stringForKey:@"dol_ra_cached_password"] ?: @"";
       self.passwordField.text = cached;
+    }
+
+    if (self.hostURLField) {
+      std::string host = Config::Get(Config::RA_HOST_URL);
+      if (!host.empty()) self.hostURLField.text = [NSString stringWithUTF8String:host.c_str()];
+      [self.hostURLField addTarget:self action:@selector(hostChanged:) forControlEvents:UIControlEventEditingChanged];
+    }
+    if (self.testConnectionButton) {
+      [self.testConnectionButton addTarget:self action:@selector(testConnectionPressed) forControlEvents:UIControlEventTouchUpInside];
     }
 
     [self.loginButton addTarget:self action:@selector(loginPressed) forControlEvents:UIControlEventTouchUpInside];
@@ -118,6 +133,72 @@
   } else {
     AchievementManager::GetInstance().Shutdown();
   }
+}
+
+- (NSString*)_normalizedHostURL:(NSString*)text {
+  if (!text) return @"";
+  NSString* trimmed = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  NSString* lower = [trimmed lowercaseString];
+  if (lower.length == 0) return @"";
+  if ([lower containsString:@"retroachievments.org"]) {
+    lower = [lower stringByReplacingOccurrencesOfString:@"retroachievments.org" withString:@"retroachievements.org"];
+    fprintf(stderr, "[RA] Normalized host typo to retroachievements.org\n");
+  }
+  if (![lower hasPrefix:@"http://"] && ![lower hasPrefix:@"https://"]) {
+    lower = [@"https://" stringByAppendingString:lower];
+  }
+  return lower;
+}
+
+- (void)hostChanged:(UITextField*)sender {
+  _hostOverride = [sender.text copy];
+}
+
+- (void)_applyHostOverrideIfNeededAndReinit {
+  std::string current = Config::Get(Config::RA_HOST_URL);
+  NSString* desired = _hostOverride ?: @"";
+  NSString* normalized = [self _normalizedHostURL:desired];
+  std::string newHost = normalized.length ? normalized.UTF8String : "";
+  if (newHost != current) {
+    Config::SetBaseOrCurrent(Config::RA_HOST_URL, newHost);
+    AchievementManager::GetInstance().Shutdown();
+    AchievementManager::GetInstance().Init();
+  }
+}
+
+- (void)testConnectionPressed {
+  [self _applyHostOverrideIfNeededAndReinit];
+  std::string host = Config::Get(Config::RA_HOST_URL);
+  NSString* base = host.empty() ? @"https://retroachievements.org" : [NSString stringWithUTF8String:host.c_str()];
+  NSURL* url = [NSURL URLWithString:base];
+  if (!url) {
+    UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Invalid URL" message:@"Please enter a valid server URL." preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+    return;
+  }
+  NSURLSessionConfiguration* cfg = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+  cfg.timeoutIntervalForRequest = 10;
+  NSURLSession* session = [NSURLSession sessionWithConfiguration:cfg];
+  __weak AchievementsSettingsViewController* weakself = self;
+  NSURLSessionDataTask* task = [session dataTaskWithURL:url completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+    __strong AchievementsSettingsViewController* strongself = weakself;
+    NSString* msg = nil;
+    if (error) {
+      msg = [NSString stringWithFormat:@"Failed: %@", error.localizedDescription];
+      fprintf(stderr, "[RA] Connectivity probe failed: %s\n", error.localizedDescription.UTF8String);
+    } else {
+      NSInteger status = [(NSHTTPURLResponse*)response statusCode];
+      msg = [NSString stringWithFormat:@"HTTP %ld", (long)status];
+      fprintf(stderr, "[RA] Connectivity probe success: HTTP %ld\n", (long)status);
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Test Connection" message:msg preferredStyle:UIAlertControllerStyleAlert];
+      [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+      [strongself presentViewController:alert animated:YES completion:nil];
+    });
+  }];
+  [task resume];
 }
 
 - (void)_startLoginSpinner {
@@ -208,6 +289,7 @@
     [NSUserDefaults.standardUserDefaults setObject:_cachedPassword forKey:@"dol_ra_cached_password"];
   }
 
+  [self _applyHostOverrideIfNeededAndReinit];
   [self _startLoginSpinner];
   AchievementManager::GetInstance().Init();
   if (!AchievementManager::GetInstance().HasAPIToken()) {
@@ -253,12 +335,14 @@
 
 // Dynamic UI fallback
 - (NSInteger)numberOfSectionsInTableView:(UITableView*)tableView {
-  return _usesDynamicUI ? 2 : [super numberOfSectionsInTableView:tableView];
+  return _usesDynamicUI ? 3 : [super numberOfSectionsInTableView:tableView];
 }
 
 - (NSString*)tableView:(UITableView*)tableView titleForHeaderInSection:(NSInteger)section {
   if (!_usesDynamicUI) return [super tableView:tableView titleForHeaderInSection:section];
-  return section == 0 ? @"RetroAchievements" : @"Options";
+  if (section == 0) return @"RetroAchievements";
+  if (section == 1) return @"Options";
+  return @"Advanced";
 }
 
 - (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
@@ -267,8 +351,12 @@
     // Enable, Username, Password, Login/Logout
     return 4;
   }
-  // Hardcore, Unofficial, Encore, Spectator, Discord, Progress
-  return 6;
+  if (section == 1) {
+    // Hardcore, Unofficial, Encore, Spectator, Discord, Progress
+    return 6;
+  }
+  // Advanced: Host URL, Test Connection
+  return 2;
 }
 
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
@@ -290,7 +378,7 @@
     switch (indexPath.row) {
       case 0: {
         cell.textLabel.text = @"Enable Integration";
-        UISwitch* sw = [[UISwitch alloc] init];
+        DOLSwitch* sw = [[DOLSwitch alloc] init];
         sw.on = enabled;
         [sw addTarget:self action:@selector(dynamicToggleChanged:) forControlEvents:UIControlEventValueChanged];
         sw.tag = 100; // RA_ENABLED
@@ -330,8 +418,8 @@
         break;
       }
     }
-  } else {
-    UISwitch* sw = [[UISwitch alloc] init];
+  } else if (indexPath.section == 1) {
+    DOLSwitch* sw = [[DOLSwitch alloc] init];
     [sw addTarget:self action:@selector(dynamicToggleChanged:) forControlEvents:UIControlEventValueChanged];
     switch (indexPath.row) {
       case 0: cell.textLabel.text = @"Hardcore Mode"; sw.on = Config::Get(Config::RA_HARDCORE_ENABLED); sw.tag = 300; break;
@@ -342,6 +430,30 @@
       case 5: cell.textLabel.text = @"Show Progress Popups"; sw.on = Config::Get(Config::RA_PROGRESS_ENABLED); sw.tag = 305; break;
     }
     cell.accessoryView = sw;
+  } else {
+    switch (indexPath.row) {
+      case 0: {
+        cell.textLabel.text = @"Server URL";
+        UITextField* tf = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 220, 30)];
+        tf.placeholder = @"https://retroachievements.org";
+        std::string host = Config::Get(Config::RA_HOST_URL);
+        if (!host.empty()) tf.text = [NSString stringWithUTF8String:host.c_str()];
+        tf.textAlignment = NSTextAlignmentRight;
+        tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        tf.autocorrectionType = UITextAutocorrectionTypeNo;
+        tf.keyboardType = UIKeyboardTypeURL;
+        tf.tag = 400; // host url
+        [tf addTarget:self action:@selector(dynamicTextChanged:) forControlEvents:UIControlEventEditingChanged];
+        cell.accessoryView = tf;
+        break;
+      }
+      case 1: {
+        cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+        cell.textLabel.textAlignment = NSTextAlignmentCenter;
+        cell.textLabel.text = @"Test Connection";
+        break;
+      }
+    }
   }
   return cell;
 }
@@ -363,6 +475,7 @@
       if (passTF) password = passTF.text ?: @"";
       Config::SetBaseOrCurrent(Config::RA_USERNAME, username.UTF8String ? username.UTF8String : "");
       _cachedPassword = [password copy];
+      [self _applyHostOverrideIfNeededAndReinit];
       [self _startLoginSpinner];
       AchievementManager::GetInstance().Init();
       AchievementManager::GetInstance().Login(password.UTF8String ? password.UTF8String : "");
@@ -375,10 +488,12 @@
       AchievementManager::GetInstance().Logout();
       dispatch_async(dispatch_get_main_queue(), ^{ [tableView reloadData]; });
     }
+  } else if (indexPath.section == 2 && indexPath.row == 1) {
+    [self testConnectionPressed];
   }
 }
 
-- (void)dynamicToggleChanged:(UISwitch*)sender {
+- (void)dynamicToggleChanged:(DOLSwitch*)sender {
   switch (sender.tag) {
     case 100: Config::SetBaseOrCurrent(Config::RA_ENABLED, sender.on); [self.tableView reloadData]; break;
     case 300: Config::SetBaseOrCurrent(Config::RA_HARDCORE_ENABLED, sender.on); break;
@@ -399,6 +514,8 @@
     if (_cachedPassword.length > 0) {
       [NSUserDefaults.standardUserDefaults setObject:_cachedPassword forKey:@"dol_ra_cached_password"];
     }
+  } else if (sender.tag == 400) {
+    _hostOverride = [sender.text copy];
   }
 }
 #endif

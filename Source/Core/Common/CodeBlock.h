@@ -64,6 +64,8 @@ public:
   // uninitialized, it just breaks into the debugger.
   void ClearCodeSpace()
   {
+    // Use RAII to toggle JIT W^X correctly across platforms while poisoning memory.
+    const Common::ScopedJITPageWriteAndNoExecute scope(GetRegionPtr());
     PoisonMemory();
     ResetCodePtr();
   }

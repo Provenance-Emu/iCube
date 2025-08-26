@@ -17,6 +17,14 @@
 #include "VideoCommon/VideoBackendBase.h"
 
 #include <fstream>
+#import <Foundation/Foundation.h>
+#import <Metal/Metal.h>
+
+@interface DOLShaderPostProcessor : NSObject
++ (instancetype)shared;
+- (void)configureWithDevice:(id<MTLDevice>)device;
+- (void)renderSource:(id<MTLTexture>)source commandBuffer:(id<MTLCommandBuffer>)cb drawable:(id<CAMetalDrawable>)drawable;
+@end
 
 Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
 {
@@ -279,7 +287,8 @@ void Metal::Gfx::WaitForGPUIdle()
   @autoreleasepool
   {
     g_state_tracker->FlushEncoders();
-    g_state_tracker->WaitForFlushedEncoders();
+    if (!g_ActiveConfig.bAsyncPresent)
+      g_state_tracker->WaitForFlushedEncoders();
   }
 }
 
@@ -453,10 +462,59 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
   {
     CheckForSurfaceChange();
     CheckForSurfaceResize();
-    m_drawable = MRCRetain([m_layer nextDrawable]);
-    m_backbuffer->UpdateBackbufferTexture([m_drawable texture]);
-    SetAndClearFramebuffer(m_backbuffer.get(), clear_color);
-    return m_drawable != nullptr;
+    // Fast-fail: avoid blocking waiting for a drawable when async present is enabled
+    CAMetalLayer* layer = m_layer;
+    if ([layer respondsToSelector:@selector(setAllowsNextDrawableTimeout:)])
+      layer.allowsNextDrawableTimeout = NO;
+    if ([layer respondsToSelector:@selector(setMaximumDrawableCount:)])
+      layer.maximumDrawableCount = 3;
+    if (@available(iOS 13.0, *))
+    {
+      id<CAMetalDrawable> next = [layer nextDrawable];
+      if (!next && g_ActiveConfig.bAsyncPresent)
+      {
+        // Skip this frame to avoid stalling the CPU thread
+        return false;
+      }
+      m_drawable = MRCRetain(next);
+      // If shaders are enabled via app preferences, render to an offscreen texture,
+      // then post-process into the drawable before present.
+      bool use_post = false;
+      @try {
+        use_post = [[NSUserDefaults standardUserDefaults] boolForKey:@"shader_enabled"];
+      } @catch (...) {
+        use_post = false;
+      }
+
+      if (use_post)
+      {
+        // Create or resize offscreen color target matching drawable
+        id<MTLTexture> draw_tex = [m_drawable texture];
+        MTLTextureDescriptor* desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:draw_tex.pixelFormat
+                                                                                       width:draw_tex.width
+                                                                                      height:draw_tex.height
+                                                                                   mipmapped:NO];
+        desc.storageMode = MTLStorageModePrivate;
+#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
+        desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead | (MTLTextureUsage) (1 << 3);
+#else
+        desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+#endif
+        static id<MTLTexture> s_offscreen = nil;
+        if (s_offscreen == nil || s_offscreen.width != draw_tex.width || s_offscreen.height != draw_tex.height || s_offscreen.pixelFormat != draw_tex.pixelFormat)
+        {
+          s_offscreen = [g_device newTextureWithDescriptor:desc];
+          [s_offscreen setLabel:@"Dolphin Offscreen Color for PostProcess"];
+        }
+        m_backbuffer->UpdateBackbufferTexture(s_offscreen);
+      }
+      else
+      {
+        m_backbuffer->UpdateBackbufferTexture([m_drawable texture]);
+      }
+      SetAndClearFramebuffer(m_backbuffer.get(), clear_color);
+      return m_drawable != nullptr;
+    }
   }
 }
 
@@ -467,6 +525,158 @@ void Metal::Gfx::PresentBackbuffer()
     g_state_tracker->EndRenderPass();
     if (m_drawable)
     {
+      // Decide post-processing and whether we need to blit from an offscreen target
+      bool use_post = false;
+      @try { use_post = [[NSUserDefaults standardUserDefaults] boolForKey:@"shader_enabled"]; } @catch (...) { use_post = false; }
+      id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
+      // Use the pass descriptor's bound color attachment (offscreen when shaders enabled) as source
+      id<MTLTexture> source = [m_backbuffer->PassDesc() colorAttachments][0].texture;
+      id<MTLTexture> dst = [m_drawable texture];
+      // Copy from the drawable only when we rendered directly into it
+      static id<MTLTexture> s_src_copy = nil;
+      if (dst && source == dst)
+      {
+        if (s_src_copy == nil || s_src_copy.width != dst.width || s_src_copy.height != dst.height || s_src_copy.pixelFormat != dst.pixelFormat)
+        {
+          MTLTextureDescriptor* desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:dst.pixelFormat
+                                                                                           width:dst.width
+                                                                                          height:dst.height
+                                                                                       mipmapped:NO];
+          desc.storageMode = MTLStorageModePrivate;
+#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
+          desc.usage = MTLTextureUsageShaderRead | (MTLTextureUsage) (1 << 3);
+#else
+          desc.usage = MTLTextureUsageShaderRead;
+#endif
+          s_src_copy = [g_device newTextureWithDescriptor:desc];
+          [s_src_copy setLabel:@"Dolphin Post Source Copy"];
+        }
+        id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+        if (blit)
+        {
+          [blit copyFromTexture:dst
+                    sourceSlice:0
+                    sourceLevel:0
+                   sourceOrigin:MTLOriginMake(0, 0, 0)
+                     sourceSize:MTLSizeMake(dst.width, dst.height, 1)
+                      toTexture:s_src_copy
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:MTLOriginMake(0, 0, 0)];
+          [blit endEncoding];
+          source = s_src_copy;
+        }
+      }
+      const bool needs_blit = (source && dst && source != dst);
+      // fprintf(stderr, "[Shaders] Present: use_post=%d needs_blit=%d src=%p dst=%p\n", use_post ? 1 : 0, needs_blit ? 1 : 0, (void*)source, (void*)dst);
+
+      // Force a blit from the render target into a dedicated sampling texture to avoid tile-memory hazards
+      static id<MTLTexture> s_post_src = nil;
+      if (use_post && source)
+      {
+        if (s_post_src == nil || s_post_src.width != source.width || s_post_src.height != source.height || s_post_src.pixelFormat != source.pixelFormat)
+        {
+          MTLTextureDescriptor* desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:source.pixelFormat
+                                                                                           width:source.width
+                                                                                          height:source.height
+                                                                                       mipmapped:NO];
+          desc.storageMode = MTLStorageModePrivate;
+#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
+          desc.usage = MTLTextureUsageShaderRead | (MTLTextureUsage) (1 << 3);
+#else
+          desc.usage = MTLTextureUsageShaderRead;
+#endif
+          s_post_src = [g_device newTextureWithDescriptor:desc];
+          [s_post_src setLabel:@"Dolphin Post Source Blit"];
+        }
+        id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+        if (blit)
+        {
+          [blit copyFromTexture:source
+                    sourceSlice:0
+                    sourceLevel:0
+                   sourceOrigin:MTLOriginMake(0, 0, 0)
+                     sourceSize:MTLSizeMake(source.width, source.height, 1)
+                      toTexture:s_post_src
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:MTLOriginMake(0, 0, 0)];
+          [blit endEncoding];
+          source = s_post_src;
+        }
+      }
+
+      // If an offscreen was used but postprocessing is disabled, blit to the drawable now.
+      if (needs_blit && !use_post)
+      {
+        id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+        if (blit)
+        {
+          [blit copyFromTexture:source
+                    sourceSlice:0
+                    sourceLevel:0
+                   sourceOrigin:MTLOriginMake(0, 0, 0)
+                     sourceSize:MTLSizeMake(source.width, source.height, 1)
+                      toTexture:dst
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:MTLOriginMake(0, 0, 0)];
+          [blit endEncoding];
+        }
+      }
+
+      if (use_post)
+      {
+        if (source && cb)
+        {
+          Class C = NSClassFromString(@"DOLShaderPostProcessor");
+          if (!C)
+          {
+            NSString* module = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
+            if (module && [module isKindOfClass:[NSString class]])
+            {
+              NSString* qualified = [NSString stringWithFormat:@"%@.%@", module, @"DOLShaderPostProcessor"];
+              C = NSClassFromString(qualified);
+              if (!C)
+                fprintf(stderr, "[Shaders] Swift class not found for %s or %s\n", "DOLShaderPostProcessor", qualified.UTF8String);
+            }
+          }
+          if (C && [C respondsToSelector:@selector(shared)])
+          {
+            id mgr = ((id(*)(id, SEL))[C methodForSelector:@selector(shared)])(C, @selector(shared));
+            if (mgr && [mgr respondsToSelector:@selector(configureWithDevice:)])
+              ((void(*)(id, SEL, id))[mgr methodForSelector:@selector(configureWithDevice:)])(mgr, @selector(configureWithDevice:), g_device);
+            if (mgr && [mgr respondsToSelector:@selector(renderSource:commandBuffer:drawable:)])
+            {
+              // Minimal diagnostics about formats and sizes
+              fprintf(stderr, "[Shaders] Post: src %ux%u fmt=%lu -> dst %ux%u fmt=%lu\n",
+                      (unsigned)source.width, (unsigned)source.height, (unsigned long)source.pixelFormat,
+                      (unsigned)dst.width, (unsigned)dst.height, (unsigned long)dst.pixelFormat);
+
+              ((void(*)(id, SEL, id, id, id))[mgr methodForSelector:@selector(renderSource:commandBuffer:drawable:)])(mgr, @selector(renderSource:commandBuffer:drawable:), source, cb, m_drawable);
+            }
+          }
+          else
+          {
+            // Fallback: simple blit copy
+            id<MTLBlitCommandEncoder> blit = [g_state_tracker->GetRenderCmdBuf() blitCommandEncoder];
+            if (blit)
+            {
+              [blit copyFromTexture:source
+                        sourceSlice:0
+                        sourceLevel:0
+                       sourceOrigin:MTLOriginMake(0, 0, 0)
+                         sourceSize:MTLSizeMake(source.width, source.height, 1)
+                          toTexture:[m_drawable texture]
+                   destinationSlice:0
+                   destinationLevel:0
+                  destinationOrigin:MTLOriginMake(0, 0, 0)];
+              [blit endEncoding];
+            }
+          }
+        }
+      }
+
       // PresentDrawable refuses to allow Dolphin to present faster than the display's refresh rate
       // when windowed (or fullscreen with vsync enabled, but that's more understandable).
       // On the other hand, it helps Xcode's GPU captures start and stop on frame boundaries
@@ -480,8 +690,10 @@ void Metal::Gfx::PresentBackbuffer()
             addScheduledHandler:[drawable = std::move(m_drawable)](id) { [drawable present]; }];
       m_backbuffer->UpdateBackbufferTexture(nullptr);
       m_drawable = nullptr;
+
+      // Commit and release encoders and associated resources for this frame.
+      g_state_tracker->FlushEncoders();
     }
-    g_state_tracker->FlushEncoders();
   }
 }
 

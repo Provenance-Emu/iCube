@@ -4,6 +4,5 @@
 
 import Foundation
 
-class TCClassicWiiPad: TCWiiPad
-{
+class TCClassicWiiPad: TCWiiPad {
 }

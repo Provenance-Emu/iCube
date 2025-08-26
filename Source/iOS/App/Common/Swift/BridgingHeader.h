@@ -5,7 +5,9 @@
 #import "BootNoticeManager.h"
 #import "DolphinCoreService.h"
 #import "EmulationCoordinator.h"
+#if !TARGET_OS_TV
 #import "FirebaseService.h"
+#endif
 #import "FirstRunInitializationService.h"
 #import "GameFileCacheManager.h"
 #import "JitManager.h"
@@ -16,8 +18,22 @@
 #import "MainSceneCoordinator.h"
 #import "UpdateNoticeViewController.h"
 #import "UpdateRequiredNoticeViewController.h"
+#import "FastmemManager.h"
+
+#if TARGET_OS_TV
+#import "EmuEventVC.h"
+#import "TCManagerInterface.h"
+#import "InputOverriderBridge.h"
+#endif
 
 #if TARGET_OS_IOS
 #import "DOLUIKitSwitch.h"
-#import "TCManagerInterface.h"
 #endif
+
+// SwiftUI tvOS bridges
+#import "TVGameItem.h"
+#import "TVLibraryBridge.h"
+#import "TVEmulationBridge.h"
+#import "DOLConfigBridge.h"
+#import "TVCheatsBridge.h"
+#import "TVControllerMappingBridge.h"

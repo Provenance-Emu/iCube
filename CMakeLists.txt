@@ -497,6 +497,7 @@ if(IOS)
   find_library(COREHAPTICS_LIBRARY CoreHaptics)
   find_library(FOUNDATION_LIBRARY Foundation)
   find_library(GAMECONTROLLER_LIBRARY GameController)
+  find_library(CFNETWORK_LIBRARY CFNetwork)
 
   set(USE_SHARED_LIBPNG OFF)
 endif()

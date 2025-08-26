@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotification";
+NSString* _Nonnull const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotification";
 
 NS_ASSUME_NONNULL_BEGIN
 

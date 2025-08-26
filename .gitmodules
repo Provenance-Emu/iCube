@@ -84,3 +84,9 @@
 [submodule "Externals/Vulkan-Headers"]
 	path = Externals/Vulkan-Headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "Externals/OpenEmu-Shaders"]
+	path = Externals/OpenEmu-Shaders
+	url = https://github.com/OpenEmu/OpenEmu-Shaders.git
+[submodule "Externals/slang-shaders"]
+	path = Externals/slang-shaders
+	url = https://github.com/libretro/slang-shaders.git

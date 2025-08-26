@@ -3,6 +3,7 @@
 
 #import "AnalyticsNoticeViewController.h"
 
+#if !TARGET_OS_TV && !TARGET_OS_MACCATALYST
 #import <FirebaseAnalytics/FirebaseAnalytics.h>
 #import <FirebaseCrashlytics/FirebaseCrashlytics.h>
 
@@ -39,3 +40,4 @@
 }
 
 @end
+#endif

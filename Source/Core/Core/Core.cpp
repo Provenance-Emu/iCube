@@ -680,6 +680,34 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
     system.GetPowerPC().SetMode(PowerPC::CoreMode::Interpreter);
   }
 
+  // Show which CPU core is active on the OSD for debugging
+  {
+    const auto cpu_core = Config::Get(Config::MAIN_CPU_CORE);
+    const char* core_name = "Unknown";
+    switch (cpu_core)
+    {
+    case PowerPC::CPUCore::Interpreter:
+      core_name = "Interpreter";
+      break;
+    case PowerPC::CPUCore::CachedInterpreter:
+      core_name = "Cached Interpreter";
+      break;
+#ifdef _M_X86_64
+    case PowerPC::CPUCore::JIT64:
+      core_name = "JIT (x86-64)";
+      break;
+#endif
+#ifdef _M_ARM_64
+    case PowerPC::CPUCore::JITARM64:
+      core_name = "JIT (ARM64)";
+      break;
+#endif
+    default:
+      break;
+    }
+    OSD::AddMessage(std::string("CPU core: ") + core_name, OSD::Duration::NORMAL, OSD::Color::GREEN);
+  }
+
   UpdateTitle(system);
 
   // ENTER THE VIDEO THREAD LOOP

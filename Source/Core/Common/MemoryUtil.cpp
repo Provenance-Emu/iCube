@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <errno.h>
 #if defined __APPLE__ || defined __FreeBSD__ || defined __OpenBSD__ || defined __NetBSD__
 #include <sys/sysctl.h>
 #elif defined __HAIKU__
@@ -29,8 +30,38 @@
 #endif
 #endif
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 #ifdef IPHONEOS
 #include "Common/JITMemoryTracker.h"
+#endif
+
+#if defined(__APPLE__) && defined(_M_ARM_64)
+#include <dlfcn.h>
+using ToggleFn = void (*)(int);
+static inline ToggleFn AppleGetJitToggle()
+{
+  static ToggleFn fn_cached = (ToggleFn)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");
+  return fn_cached;
+}
+static inline bool AppleHasJitToggle()
+{
+  return AppleGetJitToggle() != nullptr;
+}
+static inline void AppleToggleJitWriteProtect(bool enable)
+{
+  if (ToggleFn fn = AppleGetJitToggle())
+    fn(enable ? 1 : 0);
+}
+static inline bool ForceRWXMode()
+{
+  const char* env = std::getenv("DOL_JIT_FORCE_RWX");
+  return env && *env && (*env != '0');
+}
+#else
+static inline void AppleToggleJitWriteProtect(bool) {}
 #endif
 
 namespace Common
@@ -48,19 +79,106 @@ void* AllocateExecutableMemory(size_t size)
   void* ptr = VirtualAlloc(nullptr, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 #else
   int map_flags = MAP_ANON | MAP_PRIVATE;
-#if defined(__APPLE__) && !defined(IPHONEOS)
+#if defined(__APPLE__)
   map_flags |= MAP_JIT;
 #endif
 
-  int map_prot = PROT_READ | PROT_EXEC;
-#ifndef IPHONEOS
-  // The default protection is r-x on non-iOS platforms.
-  map_prot |= PROT_WRITE;
+#if defined(__APPLE__)
+  // On Apple platforms with MAP_JIT, allocate RW and toggle execution with pthread_jit_write_protect_np.
+  int map_prot = PROT_READ | PROT_WRITE;
+#else
+  // Other POSIX: allow RX by default and add W for JIT writes via mprotect.
+  int map_prot = PROT_READ | PROT_EXEC | PROT_WRITE;
 #endif
 
-  void* ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
+  void* ptr = nullptr;
+#if defined(__APPLE__) && defined(_M_ARM_64)
+  // Prefer RWX if pthread_jit_write_protect_np cannot be resolved at runtime,
+  // since MAP_JIT mappings require per-thread toggling to execute.
+  const bool have_toggle = AppleHasJitToggle();
+#if defined(TARGET_OS_TV) && TARGET_OS_TV
+  // tvOS: default to RWX due to MAP_JIT instability; env can still override for testing
+  const bool force_rwx = true;
+#else
+  const bool force_rwx = ForceRWXMode() || !have_toggle;
+#endif
+  if (!force_rwx)
+  {
+    // Enter write mode before creating a MAP_JIT mapping to satisfy tightened tvOS/iOS rules.
+    AppleToggleJitWriteProtect(false);
+    ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
+    if (ptr == MAP_FAILED)
+    {
+      int saved_errno = errno;
+      fprintf(stderr, "[JIT] MAP_JIT mmap failed: errno=%d\n", saved_errno);
+      ptr = nullptr;
+      // Retry strategies for tightened tvOS/iOS JIT rules
+      if (saved_errno == EPERM || saved_errno == EINVAL)
+      {
+        // 1) Try RWX without MAP_JIT (dev/debug only). This may still fail on some OS versions.
+        int rwx_prot = PROT_READ | PROT_WRITE | PROT_EXEC;
+        int no_jit_flags = (MAP_ANON | MAP_PRIVATE);
+        void* retry_rwx = mmap(nullptr, size, rwx_prot, no_jit_flags, -1, 0);
+        if (retry_rwx != MAP_FAILED)
+        {
+          fprintf(stderr, "[JIT] Fallback RWX mmap succeeded\n");
+          ptr = retry_rwx;
+        }
+        else
+        {
+          fprintf(stderr, "[JIT] Fallback RWX mmap failed errno=%d\n", errno);
+          // 2) Try RW and elevate to RWX via mprotect (dev/debug only)
+          void* retry_rw = mmap(nullptr, size, PROT_READ | PROT_WRITE, no_jit_flags, -1, 0);
+          if (retry_rw != MAP_FAILED)
+          {
+            if (mprotect(retry_rw, size, rwx_prot) == 0)
+            {
+              fprintf(stderr, "[JIT] RW mmap + mprotect(RWX) succeeded\n");
+              ptr = retry_rw;
+            }
+            else
+            {
+              fprintf(stderr, "[JIT] mprotect(RWX) failed errno=%d\n", errno);
+              munmap(retry_rw, size);
+            }
+          }
+        }
+      }
+    }
+    // Restore execute protection state after mapping.
+    AppleToggleJitWriteProtect(true);
+  }
+  else
+  {
+    // Forced or required RWX path first (no per-thread toggle available)
+    int rwx_prot = PROT_READ | PROT_WRITE | PROT_EXEC;
+    int no_jit_flags = (MAP_ANON | MAP_PRIVATE);
+    ptr = mmap(nullptr, size, rwx_prot, no_jit_flags, -1, 0);
+    if (ptr == MAP_FAILED)
+    {
+      fprintf(stderr, "[JIT] RWX mmap failed errno=%d, trying RW+mprotect\n", errno);
+      void* retry_rw = mmap(nullptr, size, PROT_READ | PROT_WRITE, no_jit_flags, -1, 0);
+      if (retry_rw != MAP_FAILED)
+      {
+        if (mprotect(retry_rw, size, rwx_prot) == 0)
+        {
+          fprintf(stderr, "[JIT] RW + mprotect(RWX) succeeded\n");
+          ptr = retry_rw;
+        }
+        else
+        {
+          fprintf(stderr, "[JIT] mprotect(RWX) failed errno=%d\n", errno);
+          munmap(retry_rw, size);
+        }
+      }
+    }
+  }
+#else
+  ptr = mmap(nullptr, size, map_prot, map_flags, -1, 0);
   if (ptr == MAP_FAILED)
     ptr = nullptr;
+#endif
+// Close #if defined(_WIN32)
 #endif
 
   if (ptr == nullptr)
@@ -114,13 +232,10 @@ static int& JITPageWriteNestCounter()
 // Allows a thread to write to executable memory, but not execute the data.
 void JITPageWriteEnableExecuteDisable()
 {
-#if defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS)
+#if defined(_M_ARM_64) && defined(__APPLE__)
   if (JITPageWriteNestCounter() == 0)
   {
-    if (__builtin_available(macOS 11.0, *))
-    {
-      pthread_jit_write_protect_np(0);
-    }
+    AppleToggleJitWriteProtect(false);
   }
 #endif
   JITPageWriteNestCounter()++;
@@ -136,13 +251,10 @@ void JITPageWriteDisableExecuteEnable()
   if (JITPageWriteNestCounter() < 0)
     PanicAlertFmt("JITPageWriteNestCounter() underflowed");
 
-#if defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS)
+#if defined(_M_ARM_64) && defined(__APPLE__)
   if (JITPageWriteNestCounter() == 0)
   {
-    if (__builtin_available(macOS 11.0, *))
-    {
-      pthread_jit_write_protect_np(1);
-    }
+    AppleToggleJitWriteProtect(true);
   }
 #endif
 }
@@ -256,10 +368,18 @@ bool WriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     PanicAlertFmt("WriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
     return false;
   }
-#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
-  // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
-  // that were marked executable, instead it uses the protections offered by MAP_JIT
-  // for write protection.
+#elif defined(__APPLE__) && defined(_M_ARM_64)
+  // When pthread_jit_write_protect_np is present, W^X is toggled per-thread.
+  // Otherwise, fall back to mprotect to set RX.
+  if (!AppleHasJitToggle())
+  {
+    if (mprotect(ptr, size, allowExecute ? (PROT_READ | PROT_EXEC) : PROT_READ) != 0)
+    {
+      PanicAlertFmt("WriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
+      return false;
+    }
+  }
+#else
   if (mprotect(ptr, size, allowExecute ? (PROT_READ | PROT_EXEC) : PROT_READ) != 0)
   {
     PanicAlertFmt("WriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
@@ -278,10 +398,19 @@ bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     PanicAlertFmt("UnWriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
     return false;
   }
-#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
-  // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
-  // that were marked executable, instead it uses the protections offered by MAP_JIT
-  // for write protection.
+#elif defined(__APPLE__) && defined(_M_ARM_64)
+  // When pthread_jit_write_protect_np is present, W^X is toggled per-thread.
+  // Otherwise, fall back to mprotect to set RW or RWX.
+  if (!AppleHasJitToggle())
+  {
+    if (mprotect(ptr, size,
+                 allowExecute ? (PROT_READ | PROT_WRITE | PROT_EXEC) : PROT_WRITE | PROT_READ) != 0)
+    {
+      PanicAlertFmt("UnWriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
+      return false;
+    }
+  }
+#else
   if (mprotect(ptr, size,
                allowExecute ? (PROT_READ | PROT_WRITE | PROT_EXEC) : PROT_WRITE | PROT_READ) != 0)
   {

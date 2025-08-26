@@ -52,7 +52,7 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("UIKit", .when(platforms: [.iOS, .tvOS, .macCatalyst, .visionOS])),
-                .linkedFramework("AppKit", .when(platforms: [.macOS])),
+                .linkedFramework("AppKit", .when(platforms: [.macOS]))
             ]
         ),
 

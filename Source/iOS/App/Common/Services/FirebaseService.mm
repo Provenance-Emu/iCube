@@ -3,10 +3,10 @@
 
 #import "FirebaseService.h"
 
+#if !TARGET_OS_TV && !TARGET_OS_MACCATALYST
 #import <FirebaseAnalytics/FirebaseAnalytics.h>
 #import <FirebaseCore/FirebaseCore.h>
 #import <FirebaseCrashlytics/FirebaseCrashlytics.h>
-
 #import "Core/Config/MainSettings.h"
 
 #import "AnalyticsNoticeViewController.h"
@@ -84,3 +84,4 @@
 }
 
 @end
+#endif

@@ -259,7 +259,11 @@ typedef NS_ENUM(NSInteger, DOLMappingGroupEditSection) {
       }
       
       if (setting->GetUIDescription()) {
+#if !TARGET_OS_TV
         numericCell.accessoryType = UITableViewCellAccessoryDetailButton;
+#else
+        numericCell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+#endif
       } else {
         numericCell.accessoryType = UITableViewCellAccessoryNone;
       }
@@ -315,6 +319,7 @@ typedef NS_ENUM(NSInteger, DOLMappingGroupEditSection) {
   [self presentViewController:alertController animated:true completion:nil];
 }
 
+#if !TARGET_OS_TV
 - (UISwipeActionsConfiguration*)tableView:(UITableView*)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath*)indexPath
 {
   if (indexPath.section != DOLMappingGroupEditSectionControls) {
@@ -343,5 +348,6 @@ typedef NS_ENUM(NSInteger, DOLMappingGroupEditSection) {
   
   return actions;
 }
+#endif
 
 @end

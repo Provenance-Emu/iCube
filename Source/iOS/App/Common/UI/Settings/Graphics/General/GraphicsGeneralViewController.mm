@@ -20,7 +20,7 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  
+
   [self.aspectRatioCell registerSetting:Config::GFX_ASPECT_RATIO];
   [self.vsyncCell registerSetting:Config::GFX_VSYNC];
   [self.autoIrEnableCell registerSetting:Config::GFX_AUTO_IR_ENABLE];
@@ -42,6 +42,11 @@
   BOOL forceScaleOne = [NSUserDefaults.standardUserDefaults boolForKey:@"gfx_force_scale_one_non_promo"];
   self.forceScaleOneCell.boolSwitch.on = forceScaleOne;
   [self.forceScaleOneCell.boolSwitch addValueChangedTarget:self action:@selector(forceScaleOneChanged:)];
+
+  // Async Present (avoid blocking waits on present/submit)
+  self.asyncPresentCell.boolLabel.text = @"Asynchronous Present";
+  self.asyncPresentCell.boolSwitch.on = Config::Get(Config::GFX_ASYNC_PRESENT);
+  [self.asyncPresentCell.boolSwitch addValueChangedTarget:self action:@selector(asyncPresentChanged:)];
 }
 
 - (void)tripleBufferingChanged:(id)sender {
@@ -50,6 +55,10 @@
 
 - (void)forceScaleOneChanged:(id)sender {
   [NSUserDefaults.standardUserDefaults setBool:self.forceScaleOneCell.boolSwitch.on forKey:@"gfx_force_scale_one_non_promo"];
+}
+
+- (void)asyncPresentChanged:(id)sender {
+  Config::SetBaseOrCurrent(Config::GFX_ASYNC_PRESENT, self.asyncPresentCell.boolSwitch.on);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -89,9 +98,9 @@
       aspectRatio = @"Error";
       break;
   }
-  
+
   self.aspectRatioCell.choiceSettingLabel.text = DOLCoreLocalizedString(aspectRatio);
-  
+
   NSString* shaderMode;
   switch (Config::Get(Config::GFX_SHADER_COMPILATION_MODE)) {
     case ShaderCompilationMode::Synchronous:
@@ -110,7 +119,7 @@
       shaderMode = @"Error";
       break;
   }
-  
+
   self.shaderModeCell.choiceSettingLabel.text = DOLCoreLocalizedString(shaderMode);
 
   // Auto IR value labels
@@ -124,9 +133,32 @@
   self.autoIrMaxScaleCell.choiceSettingLabel.text = [NSString stringWithFormat:@"%dx", max_scale];
 }
 
+// Use storyboard segues connected to the choice cells to navigate
+- (BOOL)tableView:(UITableView*)tableView shouldHighlightRowAtIndexPath:(NSIndexPath*)indexPath {
+  if (indexPath.section != 0) return [super tableView:tableView shouldHighlightRowAtIndexPath:indexPath];
+  // Aspect ratio (row 1) and the three Auto IR choice rows (rows mapped by storyboard segues)
+  return YES;
+}
+
+- (void)tableView:(UITableView*)tableView didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  [tableView deselectRowAtIndexPath:indexPath animated:YES];
+  if (indexPath.section != 0) return;
+  // Use segues defined in storyboard from the respective cells
+  if (tableView == self.tableView) {
+    UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];
+    if (cell == self.autoIrTargetFpsCell) {
+      [self performSegueWithIdentifier:@"AIR-TGT-SEG2" sender:self];
+    } else if (cell == self.autoIrMinScaleCell) {
+      [self performSegueWithIdentifier:@"AIR-MIN-SEG2" sender:self];
+    } else if (cell == self.autoIrMaxScaleCell) {
+      [self performSegueWithIdentifier:@"AIR-MAX-SEG2" sender:self];
+    }
+  }
+}
+
 - (void)tableView:(UITableView*)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath*)indexPath {
   NSString* message = nil;
-  
+
   switch (indexPath.section) {
     case 0:
       switch (indexPath.row) {
@@ -137,52 +169,39 @@
                     "backend, so for the best emulation experience it is recommended to try each and "
                     "select the backend that is least problematic.<br><br><dolphin_emphasis>If unsure, "
                     "select OpenGL.</dolphin_emphasis>";
-          
-          // We don't want users to pick OpenGL.
           NSString* localizedMessage = DOLCoreLocalizedString(message);
           localizedMessage = [localizedMessage stringByReplacingOccurrencesOfString:@"OpenGL" withString:@"Vulkan"];
-          
           [self showHelpWithMessage:localizedMessage];
-          
           return;
         }
         case 1:
           message = @"Selects which aspect ratio to use when rendering.<br><br>Auto: Uses the native aspect "
                     "ratio<br>Force 16:9: Mimics an analog TV with a widescreen aspect ratio.<br>Force 4:3: "
-                    "Mimics a standard 4:3 analog TV.<br>Stretch to Window: Stretches the picture to the "
-                    "window size.<br><br><dolphin_emphasis>If unsure, select Auto.</dolphin_emphasis>";
+                    "Mimics a standard 4:3 analog TV.<br><br><dolphin_emphasis>If unsure, select Auto.</dolphin_emphasis>";
           break;
         case 2:
           message = @"Waits for vertical blanks in order to prevent tearing.<br><br>Decreases performance "
-                    "if emulation speed is below 100%.<br><br><dolphin_emphasis>If unsure, leave "
-                    "this "
-                    "unchecked.</dolphin_emphasis>";
+                    "if emulation speed is below 100%.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
           break;
         case 3:
           message = @"Shows an on-screen message whenever the Auto Internal Resolution controller changes the "
-                    "internal resolution scale (e.g., 1x → 0.75x) along with current FPS. Helpful for "
-                    "diagnostics and performance tuning but can be distracting during gameplay.<br><br>"
-                    "<dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+                    "internal resolution scale (e.g., 1x → 0.75x) along with current FPS.";
           break;
       }
       break;
     case 1:
       switch (indexPath.row) {
-        case 0:
-          return;
+        case 0: return;
         case 1:
-          message = @"Waits for all shaders to finish compiling before starting a game. Enabling this "
-                    "option may reduce stuttering or hitching for a short time after the game is "
-                    "started, at the cost of a longer delay before the game starts. For systems with "
-                    "two or fewer cores, it is recommended to enable this option, as a large shader "
-                    "queue may reduce frame rates.<br><br><dolphin_emphasis>Otherwise, if "
-                    "unsure, leave this unchecked.</dolphin_emphasis>";
+          message = @"Waits for all shaders to finish compiling before starting a game.";
           break;
       }
       break;
   }
-  
+
   [self showHelpWithLocalizable:message];
 }
+
+
 
 @end

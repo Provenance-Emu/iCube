@@ -108,7 +108,7 @@ if(WIN32)
     ControllerInterface/ForceFeedback/ForceFeedbackDevice.cpp
     ControllerInterface/ForceFeedback/ForceFeedbackDevice.h
   )
-elseif(APPLE AND NOT IOS)
+elseif(APPLE AND NOT IOS AND NOT TVOS)
   target_sources(inputcommon PRIVATE
     ControllerInterface/Quartz/Quartz.h
     ControllerInterface/Quartz/Quartz.mm
@@ -124,7 +124,7 @@ elseif(APPLE AND NOT IOS)
   target_compile_options(inputcommon PRIVATE
     -fobjc-arc
   )
-elseif(IOS)
+elseif(IOS OR TVOS)
   target_sources(inputcommon PRIVATE
     ControllerInterface/iOS/ButtonType.h
     ControllerInterface/iOS/MFiController.h
@@ -141,6 +141,8 @@ elseif(IOS)
     ControllerInterface/iOS/StateManager.cpp
     ControllerInterface/iOS/Touchscreen.h
     ControllerInterface/iOS/Touchscreen.mm
+    ControllerInterface/Touch/InputOverrider.cpp
+    ControllerInterface/Touch/InputOverrider.h
   )
   target_link_libraries(inputcommon PRIVATE
     ${COREHAPTICS_LIBRARY}

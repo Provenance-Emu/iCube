@@ -20,8 +20,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet DOLSwitch* sdWritesSwitch;
 @property (weak, nonatomic) IBOutlet DOLSwitch* sdSyncSwitch;
 @property (weak, nonatomic) IBOutlet UILabel* sensorBarLabel;
+#if !TARGET_OS_TV
 @property (weak, nonatomic) IBOutlet UISlider* irSlider;
 @property (weak, nonatomic) IBOutlet UISlider* speakerVolumeSlider;
+#endif
 @property (weak, nonatomic) IBOutlet DOLSwitch* rumbleSwitch;
 
 @end

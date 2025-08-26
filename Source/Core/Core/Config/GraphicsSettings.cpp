@@ -150,6 +150,13 @@ const Info<TriState> GFX_MTL_MANUALLY_UPLOAD_BUFFERS{
     {System::GFX, "Settings", "ManuallyUploadBuffers"}, TriState::Auto};
 const Info<TriState> GFX_MTL_USE_PRESENT_DRAWABLE{
     {System::GFX, "Settings", "MTLUsePresentDrawable"}, TriState::Auto};
+const Info<bool> GFX_ASYNC_PRESENT{{System::GFX, "Settings", "AsyncPresent"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                   true
+#else
+                                   false
+#endif
+};
 
 const Info<bool> GFX_SW_DUMP_OBJECTS{{System::GFX, "Settings", "SWDumpObjects"}, false};
 const Info<bool> GFX_SW_DUMP_TEV_STAGES{{System::GFX, "Settings", "SWDumpTevStages"}, false};

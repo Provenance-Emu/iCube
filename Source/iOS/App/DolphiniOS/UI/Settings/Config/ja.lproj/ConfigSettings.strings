@@ -37,9 +37,6 @@
 /* Class = "UILabel"; text = "German"; ObjectID = "7Vg-RB-5CW"; */
 "7Vg-RB-5CW.text" = "ドイツ語";
 
-/* Class = "UINavigationItem"; title = "Config"; ObjectID = "7vA-H4-xrb"; */
-"7vA-H4-xrb.title" = "設定";
-
 /* Class = "UILabel"; text = "Backend"; ObjectID = "7wP-CJ-8PV"; */
 "7wP-CJ-8PV.text" = "ビデオAPI";
 
@@ -396,8 +393,21 @@
 
 /* Class = "UILabel"; text = "Fast Disc Speed (speedup)"; ObjectID = "FDS-lb-01A"; */
 "FDS-lb-01A.text" = "Fast Disc Speed (speedup)";
+
+/* Class = "UILabel"; text = "Adaptive Clock (auto VI/CPU)"; ObjectID = "ADP-CLK-LABEL"; */
+"ADP-CLK-LABEL.text" = "Adaptive Clock (auto VI/CPU)";
+
+/* Class = "UILabel"; text = "Low DCBZ Hack"; ObjectID = "DCBZ-LABEL"; */
+"DCBZ-LABEL.text" = "Low DCBZ Hack";
+
+/* Class = "UILabel"; text = "Disable I-Cache"; ObjectID = "DIC-LABEL"; */
+"DIC-LABEL.text" = "Disable I-Cache";
+
 /* Class = "UILabel"; text = "Achievements"; ObjectID = "ACH-IOS-LABEL"; */
 "ACH-IOS-LABEL.text" = "実績";
 
 /* Class = "UINavigationItem"; title = "Achievements"; ObjectID = "ACH-NAV"; */
 "ACH-NAV.title" = "実績";
+
+/* Class = "UINavigationItem"; title = "Config"; ObjectID = "NAV-CONFIG"; */
+"NAV-CONFIG.title" = "設定";

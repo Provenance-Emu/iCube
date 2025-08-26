@@ -198,17 +198,17 @@ T MMU::ReadFromHardware(u32 em_address)
                               HID0(m_ppc_state).DLOCK || flag != XCheckTLBFlag::Read);
       return bswap(value);
     }
-    // Ultra-fast hot path: aligned 32-bit EXRAM reads with dcache enabled and not write-inhibited.
-    if (flag == XCheckTLBFlag::Read && (em_address & 0x3) == 0 && m_ppc_state.m_enable_dcache && !wi &&
-        m_memory.GetEXRAM() && (em_address >> 28) == 0x1 &&
-        ((em_address & 0x0FFFFFFF) < m_memory.GetExRamSizeReal()))
-    {
-      T value;
-      const u32 ex_ofs = (em_address & 0x0FFFFFFF) + 0x10000000;
-      m_ppc_state.dCache.Read(m_memory, ex_ofs, &value, sizeof(T),
-                              HID0(m_ppc_state).DLOCK || flag != XCheckTLBFlag::Read);
-      return bswap(value);
-    }
+//    // Ultra-fast hot path: aligned 32-bit EXRAM reads with dcache enabled and not write-inhibited.
+//    if (flag == XCheckTLBFlag::Read && (em_address & 0x3) == 0 && m_ppc_state.m_enable_dcache && !wi &&
+//        m_memory.GetEXRAM() && (em_address >> 28) == 0x1 &&
+//        ((em_address & 0x0FFFFFFF) < m_memory.GetExRamSizeReal()))
+//    {
+//      T value;
+//      const u32 ex_ofs = (em_address & 0x0FFFFFFF) + 0x10000000;
+//      m_ppc_state.dCache.Read(m_memory, ex_ofs, &value, sizeof(T),
+//                              HID0(m_ppc_state).DLOCK || flag != XCheckTLBFlag::Read);
+//      return bswap(value);
+//    }
   }
 
   if (flag == XCheckTLBFlag::Read && (em_address & 0xF8000000) == 0x08000000)

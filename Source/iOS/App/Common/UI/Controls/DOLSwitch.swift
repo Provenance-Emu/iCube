@@ -7,6 +7,13 @@ import UIKit
 
 typealias DOLSwitch = DOLUIKitSwitch
 
+#elseif os(tvOS)
+
+@_exported import Foundation
+@_exported import UIKit
+
+typealias DOLSwitch = DOLTVSwitch
+
 #else
 
 #error("Unsupported platform")

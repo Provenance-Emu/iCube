@@ -13,7 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (weak, nonatomic, nullable) id<MappingGroupEditEnabledCellDelegate> delegate;
 
-@property (weak, nonatomic) IBOutlet DOLUIKitSwitch* enabledSwitch;
+@property (weak, nonatomic) IBOutlet DOLSwitch* enabledSwitch;
 
 @end
 

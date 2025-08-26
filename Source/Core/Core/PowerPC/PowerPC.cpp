@@ -197,6 +197,21 @@ void PowerPCManager::InitializeCPUCore(CPUCore cpu_core)
   auto& interpreter = m_system.GetInterpreter();
   interpreter.Init();
 
+  INFO_LOG_FMT(POWERPC, "InitializeCPUCore: requested core {}", static_cast<int>(cpu_core));
+
+  // Normalize invalid stored values (e.g., from older/incorrect UI mappings)
+  const bool valid_core = (cpu_core == CPUCore::Interpreter) || (cpu_core == CPUCore::JIT64) ||
+                          (cpu_core == CPUCore::JITARM64) || (cpu_core == CPUCore::CachedInterpreter);
+  if (!valid_core)
+  {
+    const CPUCore def = DefaultCPUCore();
+    WARN_LOG_FMT(POWERPC,
+                 "InitializeCPUCore: invalid CPU core {} in config. Normalizing to default {}.",
+                 static_cast<int>(cpu_core), static_cast<int>(def));
+    Config::SetBaseOrCurrent(Config::MAIN_CPU_CORE, def);
+    cpu_core = def;
+  }
+
   switch (cpu_core)
   {
   case CPUCore::Interpreter:
@@ -207,14 +222,17 @@ void PowerPCManager::InitializeCPUCore(CPUCore cpu_core)
     m_cpu_core_base = m_system.GetJitInterface().InitJitCore(cpu_core);
     if (!m_cpu_core_base)  // Handle Situations where JIT core isn't available
     {
-      WARN_LOG_FMT(POWERPC, "CPU core {} not available. Falling back to default.",
-                   static_cast<int>(cpu_core));
-      m_cpu_core_base = m_system.GetJitInterface().InitJitCore(DefaultCPUCore());
+      const CPUCore def = DefaultCPUCore();
+      WARN_LOG_FMT(POWERPC, "CPU core {} not available. Falling back to default {}.",
+                   static_cast<int>(cpu_core), static_cast<int>(def));
+      m_cpu_core_base = m_system.GetJitInterface().InitJitCore(def);
     }
     break;
   }
 
   m_mode = m_cpu_core_base == &interpreter ? CoreMode::Interpreter : CoreMode::JIT;
+  INFO_LOG_FMT(POWERPC, "InitializeCPUCore: selected core '{}' (mode={})", GetCPUName(),
+               m_mode == CoreMode::Interpreter ? "Interpreter" : "JIT");
 }
 
 std::span<const CPUCore> AvailableCPUCores()

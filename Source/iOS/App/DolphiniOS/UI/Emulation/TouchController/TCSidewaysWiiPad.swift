@@ -4,6 +4,5 @@
 
 import Foundation
 
-class TCSidewaysWiiPad: TCWiiPad
-{
+class TCSidewaysWiiPad: TCWiiPad {
 }

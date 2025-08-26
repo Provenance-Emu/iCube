@@ -46,8 +46,10 @@ public:
   void UseIPv4();
   void FollowRedirects(long max = 1);
   s32 GetLastResponseCode() const;
+  std::string GetLastErrorString() const;
   std::string EscapeComponent(const std::string& string);
   std::string GetHeaderValue(std::string_view name) const;
+  void PreResolveHost(const std::string& host, int port);
   Response Get(const std::string& url, const Headers& headers = {},
                AllowedReturnCodes codes = AllowedReturnCodes::Ok_Only);
   Response Post(const std::string& url, const std::vector<u8>& payload, const Headers& headers = {},

@@ -3,11 +3,11 @@
 
 import UIKit
 
-class GameFileCacheService : UIResponder, UIApplicationDelegate {
-  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+class GameFileCacheService: UIResponder, UIApplicationDelegate {
+  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     // Initiate a rescan of the Software directory.
     GameFileCacheManager.shared().rescan()
-    
+
     return true
   }
 }

@@ -3,25 +3,33 @@
 
 import Foundation
 import UIKit
+import SwiftUI
 
-class SettingsRootViewController : UITableViewController {
+class SettingsRootViewController: UITableViewController {
   @IBOutlet weak var versionLabel: UILabel!
   @IBOutlet weak var coreVersionLabel: UILabel!
-  
+
   override func viewDidLoad() {
-    let versionManager = VersionManager.shared()
-    
-    versionLabel.text = versionManager.appVersion.userFacing
-    coreVersionLabel.text = versionManager.coreVersion
+    super.viewDidLoad()
+
+    // Replace UIKit table with SwiftUI root settings
+    let swiftUIView = SettingsRootView()
+    let hosting = UIHostingController(rootView: swiftUIView)
+    addChild(hosting)
+    hosting.view.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(hosting.view)
+    NSLayoutConstraint.activate([
+      hosting.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      hosting.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
+      hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+    ])
+    hosting.didMove(toParent: self)
   }
-  
+
   override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
-    
-    if (indexPath.section == 0 && indexPath.row == 3) {
-      UIApplication.shared.open(URL(string: "https://oatmealdome.me/dolphinios/")!)
-    }
   }
-  
+
   @IBAction func unwindToSettings( _ seg: UIStoryboardSegue) {}
 }

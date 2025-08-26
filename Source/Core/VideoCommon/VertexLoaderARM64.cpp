@@ -56,6 +56,8 @@ VertexLoaderARM64::VertexLoaderARM64(const TVtxDesc& vtx_desc, const VAT& vtx_at
   const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr());
   ClearCodeSpace();
   GenerateVertexLoader();
+  // Ensure the instruction cache is coherent before enabling execute
+  FlushIcache();
   WriteProtect(true);
 }
 

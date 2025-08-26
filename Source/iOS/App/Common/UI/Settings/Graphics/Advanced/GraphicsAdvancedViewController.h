@@ -23,17 +23,22 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* loadTexturesCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* prefetchTexturesCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* disableEfbVramCell;
-@property (weak, nonatomic) IBOutlet DOLUIKitSwitch* graphicsModsSwitch;
+@property (weak, nonatomic) IBOutlet DOLSwitch* graphicsModsSwitch;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* cropCell;
-@property (weak, nonatomic) IBOutlet DOLUIKitSwitch* progressiveScanSwitch;
+@property (weak, nonatomic) IBOutlet DOLSwitch* progressiveScanSwitch;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* backendMultithreadingCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* vsPointLineExpansionCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* cpuCullCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* deferEfbCacheCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* manualSamplingCell;
+// TODO: Make these DOLSwitches which do have a tvOS substitute @JoeMatt
+#if !TARGET_OS_TV
 @property (weak, nonatomic) IBOutlet UISlider* shaderCompilerThreadsSlider;
+#endif
 @property (weak, nonatomic) IBOutlet UILabel* shaderCompilerThreadsLabel;
+#if !TARGET_OS_TV
 @property (weak, nonatomic) IBOutlet UISlider* shaderPrecompilerThreadsSlider;
+#endif
 @property (weak, nonatomic) IBOutlet UILabel* shaderPrecompilerThreadsLabel;
 
 @end

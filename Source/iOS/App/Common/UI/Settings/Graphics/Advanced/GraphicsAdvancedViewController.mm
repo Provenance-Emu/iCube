@@ -59,6 +59,7 @@
   int precompiler_threads = Config::Get(Config::GFX_SHADER_PRECOMPILER_THREADS);
   if (compiler_threads <= 0) compiler_threads = default_threads;
   if (precompiler_threads <= 0) precompiler_threads = default_threads;
+#if !TARGET_OS_TV
   self.shaderCompilerThreadsSlider.minimumValue = 1;
   self.shaderCompilerThreadsSlider.maximumValue = MAX(1, hw_cores - 1);
   self.shaderCompilerThreadsSlider.value = compiler_threads;
@@ -67,6 +68,7 @@
   self.shaderPrecompilerThreadsSlider.value = precompiler_threads;
   [self.shaderCompilerThreadsSlider addTarget:self action:@selector(shaderCompilerThreadsChanged:) forControlEvents:UIControlEventValueChanged];
   [self.shaderPrecompilerThreadsSlider addTarget:self action:@selector(shaderPrecompilerThreadsChanged:) forControlEvents:UIControlEventValueChanged];
+#endif
   [self updateShaderThreadLabels];
 }
 
@@ -82,6 +84,7 @@
   Config::SetBase(Config::SYSCONF_PROGRESSIVE_SCAN, self.progressiveScanSwitch.on);
 }
 
+#if !TARGET_OS_TV
 - (void)shaderCompilerThreadsChanged:(UISlider*)slider {
   const int value = (int)roundf(slider.value);
   slider.value = value;
@@ -95,10 +98,13 @@
   Config::SetBaseOrCurrent(Config::GFX_SHADER_PRECOMPILER_THREADS, value);
   [self updateShaderThreadLabels];
 }
+#endif
 
 - (void)updateShaderThreadLabels {
+#if !TARGET_OS_TV
   self.shaderCompilerThreadsLabel.text = [NSString stringWithFormat:@"%d", (int)roundf(self.shaderCompilerThreadsSlider.value)];
   self.shaderPrecompilerThreadsLabel.text = [NSString stringWithFormat:@"%d", (int)roundf(self.shaderPrecompilerThreadsSlider.value)];
+#endif
 }
 
 - (void)tableView:(UITableView*)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath*)indexPath {

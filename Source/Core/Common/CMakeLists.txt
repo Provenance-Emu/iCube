@@ -194,6 +194,7 @@ if (APPLE)
     ${APPKIT_LIBRARY}
     ${COREFOUNDATION_LIBRARY}
     ${IOK_LIBRARY}
+    ${CFNETWORK_LIBRARY}
   )
 elseif(WIN32)
   target_link_libraries(common

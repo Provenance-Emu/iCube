@@ -9,6 +9,6 @@ import Foundation
   case cancel
 }
 
-@objc protocol JitWaitViewControllerDelegate : AnyObject {
+@objc protocol JitWaitViewControllerDelegate: AnyObject {
   func didFinishJitScreen(result: JitWaitViewControllerResult, sender: Any)
 }

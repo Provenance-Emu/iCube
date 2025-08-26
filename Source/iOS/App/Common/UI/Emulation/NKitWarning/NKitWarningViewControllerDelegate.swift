@@ -3,6 +3,6 @@
 
 import Foundation
 
-@objc protocol NKitWarningViewControllerDelegate : AnyObject {
+@objc protocol NKitWarningViewControllerDelegate: AnyObject {
   func didFinishNKitWarningScreen(result: Bool, sender: Any)
 }

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "FC2F28B1-7BE2-44D7-B075-EA894770947B"
+   type = "4"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.SymbolicBreakpoint">
+         <BreakpointContent
+            uuid = "1CCA2E2B-7B19-431A-94E9-8F201AD3F8CD"
+            shouldBeEnabled = "No"
+            nameForDebugger = "Integrate_RocketSim_Connect"
+            ignoreCount = "0"
+            continueAfterRunningActions = "Yes"
+            symbolName = "UIApplicationMain"
+            moduleName = "">
+            <Actions>
+               <BreakpointActionProxy
+                  ActionExtensionID = "Xcode.BreakpointAction.DebuggerCommand">
+                  <ActionContent
+                     consoleCommand = "expr (void *)dlopen(&quot;/Applications/RocketSim.app/Contents/Frameworks/RocketSimConnectLinker.nocache.framework/RocketSimConnectLinker&quot;, 0x2)">
+                  </ActionContent>
+               </BreakpointActionProxy>
+               <BreakpointActionProxy
+                  ActionExtensionID = "Xcode.BreakpointAction.DebuggerCommand">
+                  <ActionContent
+                     consoleCommand = "p/x void *a = 0; asm(&quot;.global _return_to_lldb \n adrp x0, #0\n str x0, [%0] \n b _return_to_lldb \n .zero 0x4000000 \n _return_to_lldb: nop&quot;::&quot;r&quot;(&amp;a)); a">
+                  </ActionContent>
+               </BreakpointActionProxy>
+            </Actions>
+            <Locations>
+               <Location
+                  uuid = "1CCA2E2B-7B19-431A-94E9-8F201AD3F8CD - dc2f8c5e001177f0"
+                  shouldBeEnabled = "No"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "UIApplicationMain"
+                  moduleName = "UIKitCore"
+                  usesParentBreakpointCondition = "Yes">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>

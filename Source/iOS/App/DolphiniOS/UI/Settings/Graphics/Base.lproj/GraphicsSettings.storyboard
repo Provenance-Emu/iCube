@@ -211,6 +211,9 @@
                                             <outlet property="choiceNameLabel" destination="vdK-23-Asj" id="dmW-3W-M5f"/>
                                             <outlet property="choiceSettingLabel" destination="hGO-sw-f9e" id="YOL-B0-G9W"/>
                                             <segue destination="EBq-rf-pTT" kind="show" id="S63-HR-CyY"/>
+                                            <segue destination="AIR-TGT-VC" kind="show" id="AIR-TGT-SEG"/>
+                                            <segue destination="AIR-MIN-VC" kind="show" id="AIR-MIN-SEG"/>
+                                            <segue destination="AIR-MAX-VC" kind="show" id="AIR-MAX-SEG"/>
                                         </connections>
                                     </tableViewCell>
                                     <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" accessoryType="detailButton" indentationWidth="10" id="XMi-m7-LLg" customClass="GraphicsBoolCell">
@@ -273,6 +276,238 @@
                                         <connections>
                                             <outlet property="boolLabel" destination="AIR-OSD-LABEL" id="AIR-OSD-conn-label"/>
                                             <outlet property="boolSwitch" destination="AIR-OSD-SWITCH" id="AIR-OSD-conn-switch"/>
+                                        </connections>
+                                    </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" accessoryType="detailButton" indentationWidth="10" id="TRI-BUF-CELL" customClass="GraphicsBoolCell">
+                                        <rect key="frame" x="16" y="228.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="TRI-BUF-CELL" id="TRI-BUF-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="303" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Triple Buffering" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="TRI-BUF-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="222" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" horizontalCompressionResistancePriority="751" contentHorizontalAlignment="center" contentVerticalAlignment="center" on="YES" translatesAutoresizingMaskIntoConstraints="NO" id="TRI-BUF-SWITCH" customClass="DOLUIKitSwitch">
+                                                    <rect key="frame" x="246" y="6.5" width="51" height="31"/>
+                                                </switch>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="TRI-BUF-SWITCH" firstAttribute="centerY" secondItem="TRI-BUF-CONTENT" secondAttribute="centerY" id="tri-center"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="TRI-BUF-SWITCH" secondAttribute="trailing" id="tri-trailing"/>
+                                                <constraint firstItem="TRI-BUF-SWITCH" firstAttribute="leading" secondItem="TRI-BUF-LABEL" secondAttribute="trailing" constant="8" id="tri-leading2"/>
+                                                <constraint firstItem="TRI-BUF-LABEL" firstAttribute="leading" secondItem="TRI-BUF-CONTENT" secondAttribute="leadingMargin" id="tri-leading"/>
+                                                <constraint firstItem="TRI-BUF-LABEL" firstAttribute="top" secondItem="TRI-BUF-CONTENT" secondAttribute="topMargin" id="tri-top"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="TRI-BUF-LABEL" secondAttribute="bottom" id="tri-bottom"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="boolLabel" destination="TRI-BUF-LABEL" id="TRI-BUF-conn-label"/>
+                                            <outlet property="boolSwitch" destination="TRI-BUF-SWITCH" id="TRI-BUF-conn-switch"/>
+                                        </connections>
+                                    </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" accessoryType="detailButton" indentationWidth="10" id="FORCE-SCALE-CELL" customClass="GraphicsBoolCell">
+                                        <rect key="frame" x="16" y="271.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="FORCE-SCALE-CELL" id="FORCE-SCALE-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="303" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Force scale 1.0 on non‑ProMotion" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="FORCE-SCALE-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="222" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" horizontalCompressionResistancePriority="751" contentHorizontalAlignment="center" contentVerticalAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="FORCE-SCALE-SWITCH" customClass="DOLUIKitSwitch">
+                                                    <rect key="frame" x="246" y="6.5" width="51" height="31"/>
+                                                </switch>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="FORCE-SCALE-SWITCH" firstAttribute="centerY" secondItem="FORCE-SCALE-CONTENT" secondAttribute="centerY" id="fs-center"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="FORCE-SCALE-SWITCH" secondAttribute="trailing" id="fs-trailing"/>
+                                                <constraint firstItem="FORCE-SCALE-SWITCH" firstAttribute="leading" secondItem="FORCE-SCALE-LABEL" secondAttribute="trailing" constant="8" id="fs-leading2"/>
+                                                <constraint firstItem="FORCE-SCALE-LABEL" firstAttribute="leading" secondItem="FORCE-SCALE-CONTENT" secondAttribute="leadingMargin" id="fs-leading"/>
+                                                <constraint firstItem="FORCE-SCALE-LABEL" firstAttribute="top" secondItem="FORCE-SCALE-CONTENT" secondAttribute="topMargin" id="fs-top"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="FORCE-SCALE-LABEL" secondAttribute="bottom" id="fs-bottom"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="boolLabel" destination="FORCE-SCALE-LABEL" id="FORCE-SCALE-conn-label"/>
+                                            <outlet property="boolSwitch" destination="FORCE-SCALE-SWITCH" id="FORCE-SCALE-conn-switch"/>
+                                        </connections>
+                                    </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" accessoryType="detailButton" indentationWidth="10" id="ASYNC-PRESENT-CELL" customClass="GraphicsBoolCell">
+                                        <rect key="frame" x="16" y="314.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="ASYNC-PRESENT-CELL" id="ASYNC-PRESENT-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="303" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Asynchronous Present" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="ASYNC-PRESENT-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="222" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" horizontalCompressionResistancePriority="751" contentHorizontalAlignment="center" contentVerticalAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="ASYNC-PRESENT-SWITCH" customClass="DOLUIKitSwitch">
+                                                    <rect key="frame" x="246" y="6.5" width="51" height="31"/>
+                                                </switch>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="ASYNC-PRESENT-SWITCH" firstAttribute="centerY" secondItem="ASYNC-PRESENT-CONTENT" secondAttribute="centerY" id="ap-center"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="ASYNC-PRESENT-SWITCH" secondAttribute="trailing" id="ap-trailing"/>
+                                                <constraint firstItem="ASYNC-PRESENT-SWITCH" firstAttribute="leading" secondItem="ASYNC-PRESENT-LABEL" secondAttribute="trailing" constant="8" id="ap-leading2"/>
+                                                <constraint firstItem="ASYNC-PRESENT-LABEL" firstAttribute="leading" secondItem="ASYNC-PRESENT-CONTENT" secondAttribute="leadingMargin" id="ap-leading"/>
+                                                <constraint firstItem="ASYNC-PRESENT-LABEL" firstAttribute="top" secondItem="ASYNC-PRESENT-CONTENT" secondAttribute="topMargin" id="ap-top"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="ASYNC-PRESENT-LABEL" secondAttribute="bottom" id="ap-bottom"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="boolLabel" destination="ASYNC-PRESENT-LABEL" id="ap-conn-label"/>
+                                            <outlet property="boolSwitch" destination="ASYNC-PRESENT-SWITCH" id="ap-conn-switch"/>
+                                        </connections>
+                                    </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" accessoryType="detailButton" indentationWidth="10" id="AIR-EN-CELL" customClass="GraphicsBoolCell">
+                                        <rect key="frame" x="16" y="314.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="AIR-EN-CELL" id="AIR-EN-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="303" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Enable Auto Internal Resolution" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-EN-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="222" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" horizontalCompressionResistancePriority="751" contentHorizontalAlignment="center" contentVerticalAlignment="center" on="YES" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-EN-SWITCH" customClass="DOLUIKitSwitch">
+                                                    <rect key="frame" x="246" y="6.5" width="51" height="31"/>
+                                                </switch>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="AIR-EN-SWITCH" firstAttribute="centerY" secondItem="AIR-EN-CONTENT" secondAttribute="centerY" id="airen-center"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="AIR-EN-SWITCH" secondAttribute="trailing" id="airen-trailing"/>
+                                                <constraint firstItem="AIR-EN-SWITCH" firstAttribute="leading" secondItem="AIR-EN-LABEL" secondAttribute="trailing" constant="8" id="airen-leading2"/>
+                                                <constraint firstItem="AIR-EN-LABEL" firstAttribute="leading" secondItem="AIR-EN-CONTENT" secondAttribute="leadingMargin" id="airen-leading"/>
+                                                <constraint firstItem="AIR-EN-LABEL" firstAttribute="top" secondItem="AIR-EN-CONTENT" secondAttribute="topMargin" id="airen-top"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="AIR-EN-LABEL" secondAttribute="bottom" id="airen-bottom"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="boolLabel" destination="AIR-EN-LABEL" id="AIR-EN-conn-label"/>
+                                            <outlet property="boolSwitch" destination="AIR-EN-SWITCH" id="AIR-EN-conn-switch"/>
+                                        </connections>
+                                    </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" accessoryType="detailDisclosureButton" indentationWidth="10" id="AIR-TGT-CELL" customClass="GraphicsChoiceCell">
+                                        <rect key="frame" x="16" y="357.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="AIR-TGT-CELL" id="AIR-TGT-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="316.5" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" verticalHuggingPriority="251" horizontalCompressionResistancePriority="751" text="Target FPS" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-TGT-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="217" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="60 FPS" textAlignment="right" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsLetterSpacingToFitWidth="YES" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-TGT-VAL">
+                                                    <rect key="frame" x="241" y="11" width="59.5" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <color key="textColor" white="0.6666666667" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstAttribute="bottomMargin" secondItem="AIR-TGT-LABEL" secondAttribute="bottom" id="AIR-TGT-bottom1"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="AIR-TGT-VAL" secondAttribute="bottom" id="AIR-TGT-bottom2"/>
+                                                <constraint firstItem="AIR-TGT-VAL" firstAttribute="leading" secondItem="AIR-TGT-LABEL" secondAttribute="trailing" constant="8" id="AIR-TGT-leading2"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="AIR-TGT-VAL" secondAttribute="trailing" id="AIR-TGT-trailing"/>
+                                                <constraint firstItem="AIR-TGT-LABEL" firstAttribute="top" secondItem="AIR-TGT-CONTENT" secondAttribute="topMargin" id="AIR-TGT-top1"/>
+                                                <constraint firstItem="AIR-TGT-VAL" firstAttribute="top" secondItem="AIR-TGT-CONTENT" secondAttribute="topMargin" id="AIR-TGT-top2"/>
+                                                <constraint firstItem="AIR-TGT-LABEL" firstAttribute="leading" secondItem="AIR-TGT-CONTENT" secondAttribute="leadingMargin" id="AIR-TGT-leading"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="choiceNameLabel" destination="AIR-TGT-LABEL" id="AIR-TGT-conn-name"/>
+                                            <outlet property="choiceSettingLabel" destination="AIR-TGT-VAL" id="AIR-TGT-conn-val"/>
+                                            <segue destination="AIR-TGT-VC" kind="show" id="AIR-TGT-SEG2"/>
+                                        </connections>
+                                    </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" accessoryType="detailDisclosureButton" indentationWidth="10" id="AIR-MIN-CELL" customClass="GraphicsChoiceCell">
+                                        <rect key="frame" x="16" y="400.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="AIR-MIN-CELL" id="AIR-MIN-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="316.5" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" verticalHuggingPriority="251" horizontalCompressionResistancePriority="751" text="Min Scale" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-MIN-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="217" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="1x" textAlignment="right" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsLetterSpacingToFitWidth="YES" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-MIN-VAL">
+                                                    <rect key="frame" x="241" y="11" width="35.5" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <color key="textColor" white="0.6666666667" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstAttribute="bottomMargin" secondItem="AIR-MIN-LABEL" secondAttribute="bottom" id="AIR-MIN-bottom1"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="AIR-MIN-VAL" secondAttribute="bottom" id="AIR-MIN-bottom2"/>
+                                                <constraint firstItem="AIR-MIN-VAL" firstAttribute="leading" secondItem="AIR-MIN-LABEL" secondAttribute="trailing" constant="8" id="AIR-MIN-leading2"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="AIR-MIN-VAL" secondAttribute="trailing" id="AIR-MIN-trailing"/>
+                                                <constraint firstItem="AIR-MIN-LABEL" firstAttribute="top" secondItem="AIR-MIN-CONTENT" secondAttribute="topMargin" id="AIR-MIN-top1"/>
+                                                <constraint firstItem="AIR-MIN-VAL" firstAttribute="top" secondItem="AIR-MIN-CONTENT" secondAttribute="topMargin" id="AIR-MIN-top2"/>
+                                                <constraint firstItem="AIR-MIN-LABEL" firstAttribute="leading" secondItem="AIR-MIN-CONTENT" secondAttribute="leadingMargin" id="AIR-MIN-leading"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="choiceNameLabel" destination="AIR-MIN-LABEL" id="AIR-MIN-conn-name"/>
+                                            <outlet property="choiceSettingLabel" destination="AIR-MIN-VAL" id="AIR-MIN-conn-val"/>
+                                            <segue destination="AIR-MIN-VC" kind="show" id="AIR-MIN-SEG2"/>
+                                        </connections>
+                                    </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" accessoryType="detailDisclosureButton" indentationWidth="10" id="AIR-MAX-CELL" customClass="GraphicsChoiceCell">
+                                        <rect key="frame" x="16" y="443.5" width="343" height="43.5"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="AIR-MAX-CELL" id="AIR-MAX-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="316.5" height="43.5"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" verticalHuggingPriority="251" horizontalCompressionResistancePriority="751" text="Max Scale" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumScaleFactor="0.5" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-MAX-LABEL">
+                                                    <rect key="frame" x="16" y="11" width="217" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <nil key="textColor"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="2x" textAlignment="right" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsLetterSpacingToFitWidth="YES" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="AIR-MAX-VAL">
+                                                    <rect key="frame" x="241" y="11" width="35.5" height="21.5"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                                    <color key="textColor" white="0.6666666667" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                                    <nil key="highlightedColor"/>
+                                                </label>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstAttribute="bottomMargin" secondItem="AIR-MAX-LABEL" secondAttribute="bottom" id="AIR-MAX-bottom1"/>
+                                                <constraint firstAttribute="bottomMargin" secondItem="AIR-MAX-VAL" secondAttribute="bottom" id="AIR-MAX-bottom2"/>
+                                                <constraint firstItem="AIR-MAX-VAL" firstAttribute="leading" secondItem="AIR-MAX-LABEL" secondAttribute="trailing" constant="8" id="AIR-MAX-leading2"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="AIR-MAX-VAL" secondAttribute="trailing" id="AIR-MAX-trailing"/>
+                                                <constraint firstItem="AIR-MAX-LABEL" firstAttribute="top" secondItem="AIR-MAX-CONTENT" secondAttribute="topMargin" id="AIR-MAX-top1"/>
+                                                <constraint firstItem="AIR-MAX-VAL" firstAttribute="top" secondItem="AIR-MAX-CONTENT" secondAttribute="topMargin" id="AIR-MAX-top2"/>
+                                                <constraint firstItem="AIR-MAX-LABEL" firstAttribute="leading" secondItem="AIR-MAX-CONTENT" secondAttribute="leadingMargin" id="AIR-MAX-leading"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                        <connections>
+                                            <outlet property="choiceNameLabel" destination="AIR-MAX-LABEL" id="AIR-MAX-conn-name"/>
+                                            <outlet property="choiceSettingLabel" destination="AIR-MAX-VAL" id="AIR-MAX-conn-val"/>
+                                            <segue destination="AIR-MAX-VC" kind="show" id="AIR-MAX-SEG2"/>
                                         </connections>
                                     </tableViewCell>
                                 </cells>
@@ -363,11 +598,105 @@
                         <outlet property="shaderCompileCell" destination="Opv-LX-MRN" id="Btc-oi-iaz"/>
                         <outlet property="shaderModeCell" destination="yue-1l-hE1" id="ilc-nY-y8q"/>
                         <outlet property="vsyncCell" destination="XMi-m7-LLg" id="Spv-hl-0ZC"/>
+                        <outlet property="tripleBufferCell" destination="TRI-BUF-CELL" id="tri-conn"/>
+                        <outlet property="forceScaleOneCell" destination="FORCE-SCALE-CELL" id="fs-conn"/>
+                        <outlet property="asyncPresentCell" destination="ASYNC-PRESENT-CELL" id="ap-conn"/>
+                        <outlet property="autoIrEnableCell" destination="AIR-EN-CELL" id="airen-conn"/>
+                        <outlet property="autoIrTargetFpsCell" destination="AIR-TGT-CELL" id="airtgt-conn"/>
+                        <outlet property="autoIrMinScaleCell" destination="AIR-MIN-CELL" id="airmin-conn"/>
+                        <outlet property="autoIrMaxScaleCell" destination="AIR-MAX-CELL" id="airmax-conn"/>
                     </connections>
                 </tableViewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="FuJ-ad-DdL" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="1425" y="-91"/>
+        </scene>
+        <!--Auto IR Target FPS-->
+        <scene sceneID="AIR-TGT-SCENE">
+            <objects>
+                <tableViewController id="AIR-TGT-VC" customClass="GraphicsAutoIrTargetFpsViewController" sceneMemberID="viewController">
+                    <tableView key="view" clipsSubviews="YES" contentMode="scaleToFill" alwaysBounceVertical="YES" dataMode="static" style="insetGrouped" id="AIR-TGT-TABLE">
+                        <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <sections>
+                            <tableViewSection id="AIR-TGT-SECTION">
+                                <cells>
+                                    <tableViewCell id="AIR-TGT-PROTO" clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" indentationWidth="10">
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" id="AIR-TGT-CONTENT-PROTO">
+                                            <autoresizingMask key="autoresizingMask"/>
+                                        </tableViewCellContentView>
+                                    </tableViewCell>
+                                </cells>
+                            </tableViewSection>
+                        </sections>
+                        <connections>
+                            <outlet property="dataSource" destination="AIR-TGT-VC" id="AIR-TGT-ds"/>
+                            <outlet property="delegate" destination="AIR-TGT-VC" id="AIR-TGT-deleg"/>
+                        </connections>
+                    </tableView>
+                    <navigationItem key="navigationItem" title="Target FPS" id="AIR-TGT-NAV"/>
+                </tableViewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="AIR-TGT-FR" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="2900" y="-91"/>
+        </scene>
+        <!--Auto IR Min Scale-->
+        <scene sceneID="AIR-MIN-SCENE">
+            <objects>
+                <tableViewController id="AIR-MIN-VC" customClass="GraphicsAutoIrMinScaleViewController" sceneMemberID="viewController">
+                    <tableView key="view" clipsSubviews="YES" contentMode="scaleToFill" alwaysBounceVertical="YES" dataMode="static" style="insetGrouped" id="AIR-MIN-TABLE">
+                        <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <sections>
+                            <tableViewSection id="AIR-MIN-SECTION">
+                                <cells>
+                                    <tableViewCell id="AIR-MIN-PROTO" clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" indentationWidth="10">
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" id="AIR-MIN-CONTENT-PROTO">
+                                            <autoresizingMask key="autoresizingMask"/>
+                                        </tableViewCellContentView>
+                                    </tableViewCell>
+                                </cells>
+                            </tableViewSection>
+                        </sections>
+                        <connections>
+                            <outlet property="dataSource" destination="AIR-MIN-VC" id="AIR-MIN-ds"/>
+                            <outlet property="delegate" destination="AIR-MIN-VC" id="AIR-MIN-deleg"/>
+                        </connections>
+                    </tableView>
+                    <navigationItem key="navigationItem" title="Min Scale" id="AIR-MIN-NAV"/>
+                </tableViewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="AIR-MIN-FR" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="2900" y="250"/>
+        </scene>
+        <!--Auto IR Max Scale-->
+        <scene sceneID="AIR-MAX-SCENE">
+            <objects>
+                <tableViewController id="AIR-MAX-VC" customClass="GraphicsAutoIrMaxScaleViewController" sceneMemberID="viewController">
+                    <tableView key="view" clipsSubviews="YES" contentMode="scaleToFill" alwaysBounceVertical="YES" dataMode="static" style="insetGrouped" id="AIR-MAX-TABLE">
+                        <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <sections>
+                            <tableViewSection id="AIR-MAX-SECTION">
+                                <cells>
+                                    <tableViewCell id="AIR-MAX-PROTO" clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" indentationWidth="10">
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" id="AIR-MAX-CONTENT-PROTO">
+                                            <autoresizingMask key="autoresizingMask"/>
+                                        </tableViewCellContentView>
+                                    </tableViewCell>
+                                </cells>
+                            </tableViewSection>
+                        </sections>
+                        <connections>
+                            <outlet property="dataSource" destination="AIR-MAX-VC" id="AIR-MAX-ds"/>
+                            <outlet property="delegate" destination="AIR-MAX-VC" id="AIR-MAX-deleg"/>
+                        </connections>
+                    </tableView>
+                    <navigationItem key="navigationItem" title="Max Scale" id="AIR-MAX-NAV"/>
+                </tableViewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="AIR-MAX-FR" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="2900" y="600"/>
         </scene>
         <!--Backend-->
         <scene sceneID="GY4-l0-Tf8">
@@ -2094,6 +2423,72 @@
                                     </tableViewCell>
                                 </cells>
                             </tableViewSection>
+                            <tableViewSection headerTitle="Shader Threads" id="STH-SEC">
+                                <cells>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" indentationWidth="10" id="SCOMP-CELL">
+                                        <rect key="frame" x="16" y="773.5" width="343" height="80"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="SCOMP-CELL" id="SCOMP-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="303" height="60"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" verticalHuggingPriority="251" text="Shader Compiler Threads" translatesAutoresizingMaskIntoConstraints="NO" id="SCOMP-LABEL">
+                                                    <rect key="frame" x="16" y="8" width="200" height="17"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                                </label>
+                                                <slider opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="center" minValue="1" maxValue="8" translatesAutoresizingMaskIntoConstraints="NO" id="SCOMP-SLIDER">
+                                                    <rect key="frame" x="16" y="27" width="255" height="31"/>
+                                                </slider>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" verticalHuggingPriority="251" text="1" translatesAutoresizingMaskIntoConstraints="NO" id="SCOMP-VALUE">
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17" weight="medium"/>
+                                                    <rect key="frame" x="279" y="27" width="24" height="17"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                                </label>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="SCOMP-LABEL" firstAttribute="leading" secondItem="SCOMP-CONTENT" secondAttribute="leadingMargin" id="SCOMP-leading"/>
+                                                <constraint firstItem="SCOMP-LABEL" firstAttribute="top" secondItem="SCOMP-CONTENT" secondAttribute="topMargin" id="SCOMP-top"/>
+                                                <constraint firstItem="SCOMP-SLIDER" firstAttribute="leading" secondItem="SCOMP-CONTENT" secondAttribute="leadingMargin" id="SCOMP-slider-leading"/>
+                                                <constraint firstItem="SCOMP-SLIDER" firstAttribute="top" secondItem="SCOMP-LABEL" secondAttribute="bottom" constant="2" id="SCOMP-slider-top"/>
+                                                <constraint firstItem="SCOMP-VALUE" firstAttribute="leading" secondItem="SCOMP-SLIDER" secondAttribute="trailing" constant="8" id="SCOMP-value-leading"/>
+                                                <constraint firstItem="SCOMP-VALUE" firstAttribute="centerY" secondItem="SCOMP-SLIDER" secondAttribute="centerY" id="SCOMP-value-center"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="SCOMP-VALUE" secondAttribute="trailing" id="SCOMP-value-trailing"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                    </tableViewCell>
+                                    <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" indentationWidth="10" id="SPRE-CELL">
+                                        <rect key="frame" x="16" y="833.5" width="343" height="80"/>
+                                        <autoresizingMask key="autoresizingMask"/>
+                                        <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="SPRE-CELL" id="SPRE-CONTENT">
+                                            <rect key="frame" x="0.0" y="0.0" width="303" height="60"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <subviews>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" verticalHuggingPriority="251" text="Shader Precompiler Threads" translatesAutoresizingMaskIntoConstraints="NO" id="SPRE-LABEL">
+                                                    <rect key="frame" x="16" y="8" width="230" height="17"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                                </label>
+                                                <slider opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="center" minValue="1" maxValue="8" translatesAutoresizingMaskIntoConstraints="NO" id="SPRE-SLIDER">
+                                                    <rect key="frame" x="16" y="27" width="255" height="31"/>
+                                                </slider>
+                                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" verticalHuggingPriority="251" text="1" translatesAutoresizingMaskIntoConstraints="NO" id="SPRE-VALUE">
+                                                    <fontDescription key="fontDescription" type="system" pointSize="17" weight="medium"/>
+                                                    <rect key="frame" x="279" y="27" width="24" height="17"/>
+                                                    <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                                </label>
+                                            </subviews>
+                                            <constraints>
+                                                <constraint firstItem="SPRE-LABEL" firstAttribute="leading" secondItem="SPRE-CONTENT" secondAttribute="leadingMargin" id="SPRE-leading"/>
+                                                <constraint firstItem="SPRE-LABEL" firstAttribute="top" secondItem="SPRE-CONTENT" secondAttribute="topMargin" id="SPRE-top"/>
+                                                <constraint firstItem="SPRE-SLIDER" firstAttribute="leading" secondItem="SPRE-CONTENT" secondAttribute="leadingMargin" id="SPRE-slider-leading"/>
+                                                <constraint firstItem="SPRE-SLIDER" firstAttribute="top" secondItem="SPRE-LABEL" secondAttribute="bottom" constant="2" id="SPRE-slider-top"/>
+                                                <constraint firstItem="SPRE-VALUE" firstAttribute="leading" secondItem="SPRE-SLIDER" secondAttribute="trailing" constant="8" id="SPRE-value-leading"/>
+                                                <constraint firstItem="SPRE-VALUE" firstAttribute="centerY" secondItem="SPRE-SLIDER" secondAttribute="centerY" id="SPRE-value-center"/>
+                                                <constraint firstAttribute="trailingMargin" secondItem="SPRE-VALUE" secondAttribute="trailing" id="SPRE-value-trailing"/>
+                                            </constraints>
+                                        </tableViewCellContentView>
+                                    </tableViewCell>
+                                </cells>
+                            </tableViewSection>
                             <tableViewSection headerTitle="Debugging" id="4Z6-T6-OQZ">
                                 <cells>
                                     <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="none" accessoryType="detailButton" indentationWidth="10" id="Nk4-qe-j1m" customClass="GraphicsBoolCell">
@@ -2530,6 +2925,10 @@
                         <outlet property="prefetchTexturesCell" destination="gps-BV-1Xh" id="oTm-Nj-SHr"/>
                         <outlet property="progressiveScanSwitch" destination="boR-l0-yul" id="PWa-Cb-YZh"/>
                         <outlet property="renderTimeCell" destination="izU-VR-EW5" id="Dse-YA-NYQ"/>
+                        <outlet property="shaderCompilerThreadsLabel" destination="SCOMP-VALUE" id="scCompVal-conn"/>
+                        <outlet property="shaderCompilerThreadsSlider" destination="SCOMP-SLIDER" id="scCompSlider-conn"/>
+                        <outlet property="shaderPrecompilerThreadsLabel" destination="SPRE-VALUE" id="scPreVal-conn"/>
+                        <outlet property="shaderPrecompilerThreadsSlider" destination="SPRE-SLIDER" id="scPreSlider-conn"/>
                         <outlet property="speedCell" destination="AcE-5b-N8t" id="MK6-DK-06U"/>
                         <outlet property="statisticsCell" destination="Nk4-qe-j1m" id="Krw-LJ-n2H"/>
                         <outlet property="vblankTimesCell" destination="shv-De-2tq" id="1gX-55-KtA"/>

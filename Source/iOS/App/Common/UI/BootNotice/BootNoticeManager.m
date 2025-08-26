@@ -30,7 +30,11 @@
     _navigationController = [[BootNoticeNavigationViewController alloc] init];
     _navigationController.navigationBarHidden = true;
     _navigationController.modalInPresentation = true;
+#if !TARGET_OS_TV
     _navigationController.modalPresentationStyle = UIModalPresentationFormSheet;
+#else
+    _navigationController.modalPresentationStyle = UIModalPresentationAutomatic;
+#endif
     
     _hasQueuedNoExitController = false;
   }

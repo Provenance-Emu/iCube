@@ -42,7 +42,7 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
       {
         GCDualSenseGamepad* ds_gamepad = (GCDualSenseGamepad*)gamepad;
         AddInput(new Button(ds_gamepad.touchpadButton, "Touchpad"));
-        
+
         // The user's first finger on the touchpad.
         AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, 1.0f, "Touchpad X+"));
         AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, -1.0f, "Touchpad X-"));
@@ -61,12 +61,12 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
     {
       AddInput(new Button(gamepad.buttonHome, "Home"));
     }
-    
+
     if ([gamepad isKindOfClass:[GCDualShockGamepad class]])
     {
       GCDualShockGamepad* ds_gamepad = (GCDualShockGamepad*)gamepad;
       AddInput(new Button(ds_gamepad.touchpadButton, "Touchpad"));
-      
+
       // The user's first finger on the touchpad.
       AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, 1.0f, "Touchpad X+"));
       AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, -1.0f, "Touchpad X-"));
@@ -144,14 +144,14 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
     {
       motion.sensorsActive = true;
     }
-    
+
     AddInput(new AccelerometerAxis(motion, X, 1.0, "Accel Left"));
     AddInput(new AccelerometerAxis(motion, X, -1.0, "Accel Right"));
     AddInput(new AccelerometerAxis(motion, Y, -1.0, "Accel Forward"));
     AddInput(new AccelerometerAxis(motion, Y, 1.0, "Accel Back"));
     AddInput(new AccelerometerAxis(motion, Z, 1.0, "Accel Up"));
     AddInput(new AccelerometerAxis(motion, Z, -1.0, "Accel Down"));
-    
+
     m_supports_accelerometer = true;
     m_supports_gyroscope = motion.hasRotationRate;
 
@@ -174,7 +174,7 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
   if (haptics != nil)
   {
     CHHapticEngine* engine = [haptics createEngineWithLocality:GCHapticsLocalityDefault];
-    
+
     AddOutput(new Motor(engine, "Rumble"));
   }
 }
@@ -219,7 +219,12 @@ std::string MFiController::Button::GetName() const
 
 ControlState MFiController::Button::GetState() const
 {
-  return [m_input isPressed];
+  const bool pressed = [m_input isPressed];
+  if (pressed)
+  {
+    NSLog(@"[Input][MFi] %@ pressed", [NSString stringWithUTF8String:m_name.c_str()]);
+  }
+  return pressed;
 }
 
 std::string MFiController::PressureSensitiveButton::GetName() const
@@ -229,7 +234,12 @@ std::string MFiController::PressureSensitiveButton::GetName() const
 
 ControlState MFiController::PressureSensitiveButton::GetState() const
 {
-  return [m_input value];
+  const float v = [m_input value];
+  if (v > 0.01f)
+  {
+    NSLog(@"[Input][MFi] %@ value=%.3f", [NSString stringWithUTF8String:m_name.c_str()], v);
+  }
+  return v;
 }
 
 std::string MFiController::Axis::GetName() const
@@ -239,7 +249,12 @@ std::string MFiController::Axis::GetName() const
 
 ControlState MFiController::Axis::GetState() const
 {
-  return [m_input value] * m_multiplier;
+  const float v = [m_input value] * m_multiplier;
+  if (fabsf(v) > 0.01f)
+  {
+    NSLog(@"[Input][MFi] %@ value=%.3f", [NSString stringWithUTF8String:m_name.c_str()], v);
+  }
+  return v;
 }
 
 MFiController::AccelerometerAxis::AccelerometerAxis(GCMotion* motion, MotionPlane plane,
@@ -269,7 +284,7 @@ ControlState MFiController::AccelerometerAxis::GetState() const
   if ([m_motion hasGravityAndUserAcceleration])
   {
     GCAcceleration totalAcceleration = [m_motion acceleration];
-    
+
     switch (m_plane)
     {
     case X:
@@ -280,7 +295,7 @@ ControlState MFiController::AccelerometerAxis::GetState() const
       return totalAcceleration.z * m_multiplier;
     }
   }
-  
+
   GCAcceleration acceleration = [m_motion userAcceleration];
   GCAcceleration gravity = [m_motion gravity];
 

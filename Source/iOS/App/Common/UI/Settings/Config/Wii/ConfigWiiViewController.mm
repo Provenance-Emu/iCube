@@ -37,10 +37,11 @@
   
   self.sdSyncSwitch.on = Config::Get(Config::MAIN_WII_SD_CARD_ENABLE_FOLDER_SYNC);
   [self.sdSyncSwitch addValueChangedTarget:self action:@selector(sdSyncChanged)];
-  
+#if !TARGET_OS_TV
   self.irSlider.value = Config::Get(Config::SYSCONF_SENSOR_BAR_SENSITIVITY);
   
   self.speakerVolumeSlider.value = Config::Get(Config::SYSCONF_SPEAKER_VOLUME);
+#endif
   
   self.rumbleSwitch.on = Config::Get(Config::SYSCONF_WIIMOTE_MOTOR);
   [self.rumbleSwitch addValueChangedTarget:self action:@selector(rumbleChanged)];
@@ -154,13 +155,17 @@
 }
 
 - (IBAction)irChanged:(id)sender {
+#if !TARGET_OS_TV
   Config::SetBase(Config::SYSCONF_SENSOR_BAR_SENSITIVITY, (int)self.irSlider.value);
   self.irSlider.value = (int)self.irSlider.value;
+#endif
 }
 
 - (IBAction)speakerVolumeChanged:(id)sender {
+#if !TARGET_OS_TV
   Config::SetBase(Config::SYSCONF_SPEAKER_VOLUME, (int)self.speakerVolumeSlider.value);
   self.speakerVolumeSlider.value = (int)self.speakerVolumeSlider.value;
+#endif
 }
 
 - (void)rumbleChanged {

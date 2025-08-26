@@ -3,62 +3,62 @@
 
 import UIKit
 
-class UpdateCheckService : UIResponder, UIApplicationDelegate {
+class UpdateCheckService: UIResponder, UIApplicationDelegate {
   func createUpdateRequiredViewController() -> UIViewController {
     return UpdateRequiredNoticeViewController(nibName: "UpdateRequiredNotice", bundle: nil)
   }
-  
-  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+
+  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     let userDefaults = UserDefaults.standard
     let noticeManager = BootNoticeManager.shared()
     let versionManager = VersionManager.shared()
-    
+
     let currentVersion = versionManager.appVersion
-    
+
     let lastVersion = userDefaults.string(forKey: "last_version")
-    if (lastVersion != currentVersion.userFacing) {
+    if lastVersion != currentVersion.userFacing {
       userDefaults.set(currentVersion.userFacing, forKey: "last_version")
       userDefaults.set(false, forKey: "update_required")
     }
-    
+
     let updateRequired = userDefaults.bool(forKey: "update_required")
-    if (updateRequired) {
+    if updateRequired {
       noticeManager.enqueueNoExitViewController(createUpdateRequiredViewController())
-      
+
       return true
     }
-    
+
     let session = URLSession(configuration: URLSessionConfiguration.ephemeral)
     let updateUrl = URL(string: "https://dolphinios.oatmealdome.me/api/v2/update.json")!
-    
-    session.dataTask(with: updateUrl) { (data, response, error) in
-      if (versionManager.appVersion.source != .official) {
+
+    session.dataTask(with: updateUrl) { (data, _, _) in
+      if versionManager.appVersion.source != .official {
         return
       }
-      
+
       guard let unwrappedData = data else {
         return
       }
-      
+
       let possibleJson = try? JSONSerialization.jsonObject(with: unwrappedData)
-      
+
       guard let json = possibleJson as? NSDictionary else {
         return
       }
-      
-      let updateRequiredBuilds = json["kbs"] as! Array<String>
-      
-      if (updateRequiredBuilds.contains(currentVersion.userFacing)) {
+
+      let updateRequiredBuilds = json["kbs"] as! [String]
+
+      if updateRequiredBuilds.contains(currentVersion.userFacing) {
         userDefaults.set(true, forKey: "update_required")
-        
+
         DispatchQueue.main.async {
           noticeManager.enqueueNoExitViewController(self.createUpdateRequiredViewController())
           noticeManager.presentToSceneIfNecessary()
         }
-        
+
         return
       }
-      
+
       var key: String
 #if BETA
 #if NONJAILBROKEN
@@ -73,25 +73,24 @@ class UpdateCheckService : UIResponder, UIApplicationDelegate {
       key = "public"
 #endif
 #endif
-      
-      let versionInfo = json[key] as! Dictionary<AnyHashable, Any>
+
+      let versionInfo = json[key] as! [AnyHashable: Any]
       let newVersionStr = versionInfo["version"] as! String
-      
+
       let newVersion = DOLAppVersion(jsonVersion: newVersionStr)
-      
-      if (newVersion > currentVersion) {
+
+      if newVersion > currentVersion {
         DispatchQueue.main.async {
           let updateController = UpdateNoticeViewController(nibName: "UpdateNotice", bundle: nil)
           updateController.updateInfo = versionInfo
-          
+
           let noticeManager = BootNoticeManager.shared()
           noticeManager.enqueue(updateController)
           noticeManager.presentToSceneIfNecessary()
         }
       }
     }.resume()
-    
+
     return true
   }
 }
-

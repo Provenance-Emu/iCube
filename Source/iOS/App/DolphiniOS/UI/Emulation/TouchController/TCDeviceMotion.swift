@@ -1,46 +1,47 @@
 // Copyright 2022 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#if canImport(CoreMotion)
 import CoreMotion
 import Foundation
 
 @objc public class TCDeviceMotion: NSObject {
   @objc public static let shared = TCDeviceMotion()
-  
+
   private let motionManager = CMMotionManager()
   private let operationQueue = OperationQueue()
-  
+
   private var orientation: UIInterfaceOrientation = .portrait
   private var motionEnabled = false
   private var port = 0
-  
+
   override required init() {
     //
   }
-  
+
   @objc func registerMotionHandlers() {
     // Set our orientation properly
     self.statusBarOrientationChanged()
-    
+
     // Set the sensor update times
     // 200Hz is the Wiimote update interval
     let updateInterval: Double = 1.0 / 200.0
     self.motionManager.accelerometerUpdateInterval = updateInterval
     self.motionManager.gyroUpdateInterval = updateInterval
-    
+
     // Register the handlers
     self.motionManager.startAccelerometerUpdates(to: operationQueue) { (data, error) in
-      if (error != nil) {
+      if error != nil {
         return
       }
-      
+
       // Get the data
       let acceleration = data!.acceleration
-      
+
       var x, y: Double
       var z = acceleration.z
-      
-      switch (self.orientation) {
+
+      switch self.orientation {
       case .portrait, .unknown:
         x = -acceleration.x
         y = -acceleration.y
@@ -56,20 +57,20 @@ import Foundation
       @unknown default:
         return
       }
-      
+
       // CMAccelerationData's units are G's
       let gravity = -9.81
       x *= gravity
       y *= gravity
       z *= gravity
-      
+
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: self.port, value: Float(x))
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: self.port, value: Float(x))
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: self.port, value: Float(y))
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: self.port, value: Float(y))
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: self.port, value: Float(z))
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: self.port, value: Float(z))
-      
+
       TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelLeft.rawValue, controller: self.port, value: Float(x))
       TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelRight.rawValue, controller: self.port, value: Float(x))
       TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelForward.rawValue, controller: self.port, value: Float(y))
@@ -77,19 +78,19 @@ import Foundation
       TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelUp.rawValue, controller: self.port, value: Float(z))
       TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelDown.rawValue, controller: self.port, value: Float(z))
     }
-    
+
     self.motionManager.startGyroUpdates(to: operationQueue) { (data, error) in
-      if (error != nil) {
+      if error != nil {
         return
       }
-      
+
       // Get the data
       let rotation_rate = data!.rotationRate
-      
+
       var x, y: Double
       let z = rotation_rate.z
-      
-      switch (self.orientation) {
+
+      switch self.orientation {
       case .portrait, .unknown:
         x = -rotation_rate.x
         y = -rotation_rate.y
@@ -105,7 +106,7 @@ import Foundation
       @unknown default:
         return
       }
-      
+
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: self.port, value: Float(x))
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: self.port, value: Float(x))
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: self.port, value: Float(y))
@@ -114,28 +115,29 @@ import Foundation
       TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: self.port, value: Float(z))
     }
   }
-  
+
   @objc func setMotionEnabled(_ mode: Bool) {
-    if (self.motionEnabled == mode) {
+    if self.motionEnabled == mode {
       return
     }
-    
+
     self.motionEnabled = mode
-    
-    if (self.motionEnabled) {
+
+    if self.motionEnabled {
       self.registerMotionHandlers()
     } else {
       self.motionManager.stopAccelerometerUpdates()
       self.motionManager.stopGyroUpdates()
     }
   }
-  
+
   @objc func setPort(_ port: Int) {
     self.port = port
   }
-  
+
   // UIApplicationDidChangeStatusBarOrientationNotification is deprecated...
   @objc func statusBarOrientationChanged() {
     self.orientation = UIApplication.shared.statusBarOrientation
   }
 }
+#endif

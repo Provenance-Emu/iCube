@@ -92,7 +92,7 @@ public:
   void SetMousePos(float x, float y);
   void SetMousePress(u32 button_mask);
 
-  int FrameCount() const { return m_frame_count; }
+  uint64_t FrameCount() const { return m_frame_count; }
 
   void DoState(PointerWrap& p);
 

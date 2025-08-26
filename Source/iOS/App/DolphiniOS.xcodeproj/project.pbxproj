@@ -3,17 +3,60 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 55;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
+		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
+		B34ECCF52E569AF300301907 /* PVWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = B34ECCF42E569AF300301907 /* PVWebServer */; };
+		B34ECCF92E56A2EB00301907 /* TVGameItem.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF72E56A2EB00301907 /* TVGameItem.mm */; };
+		B34ECCFB2E56A33E00301907 /* TVLibraryBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCFA2E56A33E00301907 /* TVLibraryBridge.mm */; };
+		B34ECCFE2E56A52C00301907 /* TVLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */; };
+		B34ECD002E56A57A00301907 /* EmulationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */; };
+		B34ECD022E56A68200301907 /* TVEmulationBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34ECD012E56A68200301907 /* TVEmulationBridge.mm */; };
+		B34ECD042E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECD032E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift */; };
+		B34ECD072E5785BD00301907 /* libMoltenVK.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = B3B334452E5674FD002BF20C /* libMoltenVK.dylib */; platformFilter = maccatalyst; };
+		B34ECD082E5785BD00301907 /* libMoltenVK.dylib in CopyFiles */ = {isa = PBXBuildFile; fileRef = B3B334452E5674FD002BF20C /* libMoltenVK.dylib */; platformFilter = maccatalyst; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		B34EDDDD2E57AC9700301907 /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDDB2E57AC9700301907 /* SettingsRootView.swift */; };
+		B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */; };
+		B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */; };
+		B34EE6B32E57D65400301907 /* ShaderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EE6B12E57D65400301907 /* ShaderSettingsView.swift */; };
+		B36B48BE2E5CFD31009A2303 /* PVlibDolphin.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; };
+		B36B48BF2E5CFD31009A2303 /* PVlibDolphin.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B36B48C12E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */; };
+		B36B48C42E5D0056009A2303 /* TVCheatsBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C32E5D0056009A2303 /* TVCheatsBridge.mm */; };
+		B36B48C62E5D0496009A2303 /* TVMultilineTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */; };
+		B36B48C82E5D0749009A2303 /* TVCheatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C72E5D0749009A2303 /* TVCheatListView.swift */; };
+		B36B48CA2E5D07D4009A2303 /* Localized.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C92E5D07D4009A2303 /* Localized.swift */; };
+		B36B48CD2E5D20A6009A2303 /* TVControllerMappingBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B36B48CC2E5D20A6009A2303 /* TVControllerMappingBridge.mm */; };
+		B36B48CF2E5D6AC5009A2303 /* PauseMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */; };
+		B36B48D12E5D6AFB009A2303 /* ControllerExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */; };
+		B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38205FF2E57FF0E00D4853F /* CompiledShader.swift */; };
+		B382060D2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */; };
+		B382060E2E57FF0E00D4853F /* Converters.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206012E57FF0E00D4853F /* Converters.metal */; };
+		B382060F2E57FF0E00D4853F /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206092E57FF0E00D4853F /* Shaders.metal */; };
+		B38206102E57FF0E00D4853F /* ShaderPassSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206072E57FF0E00D4853F /* ShaderPassSemantics.swift */; };
+		B38206112E57FF0E00D4853F /* ShaderPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206082E57FF0E00D4853F /* ShaderPostProcessor.swift */; };
+		B38206122E57FF0E00D4853F /* FilterChain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206022E57FF0E00D4853F /* FilterChain.swift */; };
+		B38206132E57FF0E00D4853F /* CompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */; };
+		B38206142E57FF0E00D4853F /* Matrix.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206042E57FF0E00D4853F /* Matrix.swift */; };
+		B38206152E57FF0E00D4853F /* MTLPixelConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206052E57FF0E00D4853F /* MTLPixelConverter.swift */; };
+		B38206162E57FF0E00D4853F /* ShaderPassBindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206062E57FF0E00D4853F /* ShaderPassBindings.swift */; };
+		B38206182E58002000D4853F /* CompilerEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206172E58002000D4853F /* CompilerEnums.swift */; };
+		B382061A2E58004100D4853F /* PixelBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206192E58004100D4853F /* PixelBuffer.swift */; };
+		B382061C2E58008800D4853F /* ShaderParameter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B382061B2E58008800D4853F /* ShaderParameter.swift */; };
+		B3AA87CD2E57FCAC00CE68FC /* compiled_shaders in Resources */ = {isa = PBXBuildFile; fileRef = B3AA87CC2E57FCA800CE68FC /* compiled_shaders */; };
+		B3B147762E583977009C7049 /* EmuEventVC.m in Sources */ = {isa = PBXBuildFile; fileRef = B3B147752E583977009C7049 /* EmuEventVC.m */; };
+		B3B149542E592F72009C7049 /* TVWiiSystemUpdateViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3B149532E592F72009C7049 /* TVWiiSystemUpdateViewController.mm */; };
+		B3B149572E594A8C009C7049 /* InputOverriderBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3B149562E594A8C009C7049 /* InputOverriderBridge.mm */; };
 		B3B31ABD2E5525A6002BF20C /* AchievementsSettingsViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */; };
-		B900A7A127F255EF000361DD /* libdolphin.dylib in CopyFiles */ = {isa = PBXBuildFile; fileRef = B9476B2427F23FFE009C0A4B /* libdolphin.dylib */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		B3B334442E566EBC002BF20C /* DOLUIKitSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */; };
+		B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = B3D89A742E57DEF700EF1CB1 /* Zip */; };
 		B900A7A727F26F61000361DD /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7A627F26F61000361DD /* AppDelegate.swift */; };
 		B900A7AE27F27F36000361DD /* DolphinCoreService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AD27F27F36000361DD /* DolphinCoreService.mm */; };
 		B900A7B027F2866D000361DD /* UserFolderUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AF27F2866D000361DD /* UserFolderUtil.swift */; };
-		B900A7B527F2D3C0000361DD /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; };
-		B900A7B627F2D3C4000361DD /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B900A7BA27F4CB80000361DD /* DefaultsInitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7B927F4CB80000361DD /* DefaultsInitService.swift */; };
 		B900A7BD27F4CDD3000361DD /* SwiftStringUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7BC27F4CDD3000361DD /* SwiftStringUtil.swift */; };
 		B900A7CA27F4DA97000361DD /* SoftwareListViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7C927F4DA97000361DD /* SoftwareListViewController.mm */; };
@@ -30,12 +73,12 @@
 		B904ACD52885D2C4008B6BE9 /* AnisotropicFilteringViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904ACD42885D2C4008B6BE9 /* AnisotropicFilteringViewController.mm */; };
 		B904ACD92885E7DE008B6BE9 /* GraphicsHacksViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904ACD82885E7DE008B6BE9 /* GraphicsHacksViewController.mm */; };
 		B904ACDD28862941008B6BE9 /* GraphicsAdvancedViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904ACDC28862941008B6BE9 /* GraphicsAdvancedViewController.mm */; };
-		B904ACDE28863119008B6BE9 /* GraphicsSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACE028863119008B6BE9 /* GraphicsSettings.storyboard */; };
-		B904ACE828866E2D008B6BE9 /* ControllersSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACE728866E2D008B6BE9 /* ControllersSettings.storyboard */; };
+		B904ACDE28863119008B6BE9 /* GraphicsSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACE028863119008B6BE9 /* GraphicsSettings.storyboard */; platformFilters = (ios, maccatalyst, ); };
+		B904ACE828866E2D008B6BE9 /* ControllersSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACE728866E2D008B6BE9 /* ControllersSettings.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B904ACEB28866FF4008B6BE9 /* ControllersRootViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904ACEA28866FF4008B6BE9 /* ControllersRootViewController.mm */; };
 		B904ACEE2886701C008B6BE9 /* ControllersRootPortCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904ACED2886701C008B6BE9 /* ControllersRootPortCell.m */; };
 		B904ACF128868E4B008B6BE9 /* ControllersSettingsUtil.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904ACF028868E4B008B6BE9 /* ControllersSettingsUtil.mm */; };
-		B904ACF42886AB06008B6BE9 /* ButtonMapping.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACF32886AB05008B6BE9 /* ButtonMapping.storyboard */; };
+		B904ACF42886AB06008B6BE9 /* ButtonMapping.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACF32886AB05008B6BE9 /* ButtonMapping.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B904ACF82886AC58008B6BE9 /* MappingRootViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904ACF72886AC58008B6BE9 /* MappingRootViewController.mm */; };
 		B904AD012887B9D1008B6BE9 /* ControllersPortViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904AD002887B9D1008B6BE9 /* ControllersPortViewController.mm */; };
 		B904AD082887DAEE008B6BE9 /* ControllersTypeCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD052887D99B008B6BE9 /* ControllersTypeCell.m */; };
@@ -53,10 +96,10 @@
 		B904AD3828890489008B6BE9 /* MappingGroupEditControlCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD3728890489008B6BE9 /* MappingGroupEditControlCell.m */; };
 		B904AD3B288904AC008B6BE9 /* MappingGroupEditBoolCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD3A288904AC008B6BE9 /* MappingGroupEditBoolCell.m */; };
 		B904AD3E288904D9008B6BE9 /* MappingGroupEditDoubleCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD3D288904D9008B6BE9 /* MappingGroupEditDoubleCell.m */; };
-		B9114F972893C5E600B9C57A /* DebugSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9114F962893C5E600B9C57A /* DebugSettings.storyboard */; };
+		B9114F972893C5E600B9C57A /* DebugSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9114F962893C5E600B9C57A /* DebugSettings.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9114F9C2893C6CA00B9C57A /* DebugRootViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9114F9B2893C6CA00B9C57A /* DebugRootViewController.mm */; };
 		B9114FA02893C71E00B9C57A /* VirtualMFiControllerManager.m in Sources */ = {isa = PBXBuildFile; fileRef = B9114F9F2893C71E00B9C57A /* VirtualMFiControllerManager.m */; };
-		B9114FA52894E0C800B9C57A /* NKitWarning.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9114FA42894E0C700B9C57A /* NKitWarning.xib */; };
+		B9114FA52894E0C800B9C57A /* NKitWarning.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9114FA42894E0C700B9C57A /* NKitWarning.xib */; platformFilters = (ios, maccatalyst, ); };
 		B933EDBE27F6A7BF004D7DD7 /* GameFileCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B933EDBD27F6A7BF004D7DD7 /* GameFileCacheService.swift */; };
 		B933EDC127F77D1E004D7DD7 /* GameFilePtrWrapper.mm in Sources */ = {isa = PBXBuildFile; fileRef = B933EDC027F77D1E004D7DD7 /* GameFilePtrWrapper.mm */; };
 		B933EDC327F8E215004D7DD7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B933EDC227F8E215004D7DD7 /* Assets.xcassets */; };
@@ -74,22 +117,21 @@
 		B9447AFD28418D7600BC9110 /* TCButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9447AFC28418D7600BC9110 /* TCButton.swift */; };
 		B9447AFF28418EA100BC9110 /* TCDirectionalPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9447AFE28418EA100BC9110 /* TCDirectionalPad.swift */; };
 		B9447B0128418F2600BC9110 /* TCJoystick.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9447B0028418F2600BC9110 /* TCJoystick.swift */; };
-		B9447B042841901200BC9110 /* TCGameCubePad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9447B022841901200BC9110 /* TCGameCubePad.xib */; };
+		B9447B042841901200BC9110 /* TCGameCubePad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9447B022841901200BC9110 /* TCGameCubePad.xib */; platformFilters = (ios, maccatalyst, ); };
 		B9447B052841901200BC9110 /* TCGameCubePad.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9447B032841901200BC9110 /* TCGameCubePad.swift */; };
 		B9447B072841906000BC9110 /* TCView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9447B062841906000BC9110 /* TCView.swift */; };
 		B9447B09284192FA00BC9110 /* DolphinAssets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9447B08284192FA00BC9110 /* DolphinAssets.xcassets */; };
-		B9476B2527F23FFE009C0A4B /* libdolphin.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = B9476B2427F23FFE009C0A4B /* libdolphin.dylib */; platformFilter = ios; };
 		B950CA942846A13100F45219 /* Sys in Resources */ = {isa = PBXBuildFile; fileRef = B950CA932846A13100F45219 /* Sys */; };
 		B950CFA32961696100197719 /* BootNoticeNavigationViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFA22961696100197719 /* BootNoticeNavigationViewController.m */; };
 		B950CFAA29616B4F00197719 /* MainSceneCoordinator.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFA929616B4F00197719 /* MainSceneCoordinator.m */; };
 		B950CFAD296170BC00197719 /* BootNoticeManager.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFAC296170BC00197719 /* BootNoticeManager.m */; };
 		B950CFB2296179A000197719 /* UnofficialBuildNoticeViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFB1296179A000197719 /* UnofficialBuildNoticeViewController.m */; };
-		B950CFB6296179E000197719 /* UnofficialBuildNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B950CFB5296179E000197719 /* UnofficialBuildNotice.xib */; };
+		B950CFB6296179E000197719 /* UnofficialBuildNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B950CFB5296179E000197719 /* UnofficialBuildNotice.xib */; platformFilters = (ios, maccatalyst, ); };
 		B950CFBA296208A900197719 /* UpdateNoticeViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B950CFB9296208A900197719 /* UpdateNoticeViewController.mm */; };
-		B950CFBD296208D400197719 /* UpdateNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B950CFBC296208D400197719 /* UpdateNotice.xib */; };
+		B950CFBD296208D400197719 /* UpdateNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B950CFBC296208D400197719 /* UpdateNotice.xib */; platformFilters = (ios, maccatalyst, ); };
 		B950CFBF29620C8900197719 /* UpdateCheckService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B950CFBE29620C8900197719 /* UpdateCheckService.swift */; };
 		B950CFC3296219C800197719 /* WiiSystemUpdateViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B950CFC2296219C800197719 /* WiiSystemUpdateViewController.mm */; };
-		B950CFC629621AFC00197719 /* WiiSystemUpdate.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B950CFC529621AFC00197719 /* WiiSystemUpdate.storyboard */; };
+		B950CFC629621AFC00197719 /* WiiSystemUpdate.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B950CFC529621AFC00197719 /* WiiSystemUpdate.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B950CFC92962562200197719 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFC82962562200197719 /* main.m */; };
 		B950CFCC2962590600197719 /* JitManager+PTrace.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFCB2962590600197719 /* JitManager+PTrace.m */; };
 		B95AC52A2D29BA5C0048E48B /* AudioSessionManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = B95AC5292D29BA5C0048E48B /* AudioSessionManager.mm */; };
@@ -107,27 +149,27 @@
 		B974924429603A8A00794509 /* LegacyInputConfigMigrationService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B974924329603A8A00794509 /* LegacyInputConfigMigrationService.mm */; };
 		B97492472960CD2B00794509 /* FirstRunInitializationService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B97492462960CD2B00794509 /* FirstRunInitializationService.mm */; };
 		B97492492960F64300794509 /* DefaultPreferences.plist in Resources */ = {isa = PBXBuildFile; fileRef = B97492482960F64300794509 /* DefaultPreferences.plist */; };
-		B97C49AF297E6CFF00E30877 /* AboutSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B97C49AE297E6CFF00E30877 /* AboutSettings.storyboard */; };
+		B97C49AF297E6CFF00E30877 /* AboutSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B97C49AE297E6CFF00E30877 /* AboutSettings.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B97C49B2297E717D00E30877 /* AboutViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B97C49B1297E717C00E30877 /* AboutViewController.m */; };
 		B97C49B4297E7DB600E30877 /* AnalyticsNoticeViewControllerDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97C49B3297E7DB600E30877 /* AnalyticsNoticeViewControllerDelegate.swift */; };
 		B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B97C49B5297F8B0D00E30877 /* UniformTypeIdentifiers.framework */; };
-		B97E4B492964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */ = {isa = PBXBuildFile; productRef = B97E4B482964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport */; };
-		B97E4B4B2964CBA100B3EE9C /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = B97E4B4A2964CBA100B3EE9C /* FirebaseCrashlytics */; };
+		B97E4B492964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = B97E4B482964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport */; };
+		B97E4B4B2964CBA100B3EE9C /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = B97E4B4A2964CBA100B3EE9C /* FirebaseCrashlytics */; };
 		B97E4B532965011C00B3EE9C /* FirebaseService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B97E4B522965011C00B3EE9C /* FirebaseService.mm */; };
 		B97E4B5629656EC300B3EE9C /* VersionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97E4B5529656EC300B3EE9C /* VersionManager.swift */; };
 		B97E4B58296573E200B3EE9C /* DOLBuildSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97E4B57296573E200B3EE9C /* DOLBuildSource.swift */; };
 		B97E4B5A29657BCB00B3EE9C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = B97E4B5929657BCB00B3EE9C /* GoogleService-Info.plist */; };
-		B97E4B5D2965F9BE00B3EE9C /* AnalyticsNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B97E4B5C2965F9BE00B3EE9C /* AnalyticsNotice.xib */; };
+		B97E4B5D2965F9BE00B3EE9C /* AnalyticsNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B97E4B5C2965F9BE00B3EE9C /* AnalyticsNotice.xib */; platformFilters = (ios, maccatalyst, ); };
 		B97E4B612965FA1B00B3EE9C /* AnalyticsNoticeViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B97E4B602965FA1B00B3EE9C /* AnalyticsNoticeViewController.mm */; };
-		B9809C592A4811B000877579 /* SoftwareProperties.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9809C582A4811B000877579 /* SoftwareProperties.storyboard */; };
+		B9809C592A4811B000877579 /* SoftwareProperties.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9809C582A4811B000877579 /* SoftwareProperties.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9809C5C2A48149B00877579 /* SoftwarePropertiesViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9809C5B2A48149B00877579 /* SoftwarePropertiesViewController.mm */; };
 		B9809C602A48236900877579 /* SoftwarePropertiesInfoViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9809C5F2A48236900877579 /* SoftwarePropertiesInfoViewController.mm */; };
 		B9809C6C2A49705500877579 /* GeckoCodeViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9809C6B2A49705500877579 /* GeckoCodeViewController.mm */; };
 		B9809C6F2A49707900877579 /* CheatCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9809C6E2A49707900877579 /* CheatCell.swift */; };
-		B9809C722A4970A700877579 /* Gecko.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9809C712A4970A700877579 /* Gecko.storyboard */; };
+		B9809C722A4970A700877579 /* Gecko.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9809C712A4970A700877579 /* Gecko.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9809C762A49F78700877579 /* GeckoCodeEditViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9809C752A49F78700877579 /* GeckoCodeEditViewController.mm */; };
 		B9809C792A4A166D00877579 /* DOLSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9809C782A4A166C00877579 /* DOLSwitch.swift */; };
-		B9809C7C2A4A180700877579 /* ActionReplay.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9809C7B2A4A180700877579 /* ActionReplay.storyboard */; };
+		B9809C7C2A4A180700877579 /* ActionReplay.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9809C7B2A4A180700877579 /* ActionReplay.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9809C802A4A190C00877579 /* ActionReplayCodeViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9809C7F2A4A190C00877579 /* ActionReplayCodeViewController.mm */; };
 		B9809C832A4A22EB00877579 /* ActionReplayCodeEditViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9809C822A4A22EB00877579 /* ActionReplayCodeEditViewController.mm */; };
 		B991377C28808D9000588446 /* GameCubeSystemLanguageViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B991377B28808D8F00588446 /* GameCubeSystemLanguageViewController.mm */; };
@@ -140,37 +182,37 @@
 		B99137952881D62C00588446 /* CpuEngineCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B99137942881D62C00588446 /* CpuEngineCell.m */; };
 		B99137982881D68600588446 /* CpuEngineViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B99137972881D68600588446 /* CpuEngineViewController.mm */; };
 		B991379E2881F23A00588446 /* Core.strings in Resources */ = {isa = PBXBuildFile; fileRef = B99137A02881F23A00588446 /* Core.strings */; };
-		B99137AC28827AD200588446 /* SettingsRoot.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137AE28827AD200588446 /* SettingsRoot.storyboard */; };
-		B99137B52882A58000588446 /* SoftwareList.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137B72882A58000588446 /* SoftwareList.storyboard */; };
-		B99137BF288327AC00588446 /* ConfigSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137C1288327AC00588446 /* ConfigSettings.storyboard */; };
+		B99137AC28827AD200588446 /* SettingsRoot.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137AE28827AD200588446 /* SettingsRoot.storyboard */; platformFilters = (ios, maccatalyst, ); };
+		B99137B52882A58000588446 /* SoftwareList.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137B72882A58000588446 /* SoftwareList.storyboard */; platformFilters = (ios, maccatalyst, ); };
+		B99137BF288327AC00588446 /* ConfigSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137C1288327AC00588446 /* ConfigSettings.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B99137C928832A0800588446 /* LocalizationUtil.m in Sources */ = {isa = PBXBuildFile; fileRef = B99137C828832A0800588446 /* LocalizationUtil.m */; };
-		B9B1483829642C75002C4BE7 /* UpdateRequiredNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B1483729642C75002C4BE7 /* UpdateRequiredNotice.xib */; };
+		B9B1483829642C75002C4BE7 /* UpdateRequiredNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B1483729642C75002C4BE7 /* UpdateRequiredNotice.xib */; platformFilters = (ios, maccatalyst, ); };
 		B9B1483C29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B9B1483A29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.m */; };
 		B9B2C5E2288D0A9800CB6569 /* MappingLoadProfileViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C5E1288D0A9800CB6569 /* MappingLoadProfileViewController.mm */; };
 		B9B2C5E5288D0C5500CB6569 /* MappingLoadProfileIniCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C5E4288D0C5500CB6569 /* MappingLoadProfileIniCell.m */; };
 		B9B2C61A288D3A7F00CB6569 /* EmulationiOSViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C619288D3A7F00CB6569 /* EmulationiOSViewController.mm */; };
 		B9B2C620288DB62D00CB6569 /* TCClassicWiiPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C61B288DB62D00CB6569 /* TCClassicWiiPad.swift */; };
-		B9B2C621288DB62D00CB6569 /* TCClassicWiiPad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C61C288DB62D00CB6569 /* TCClassicWiiPad.xib */; };
+		B9B2C621288DB62D00CB6569 /* TCClassicWiiPad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C61C288DB62D00CB6569 /* TCClassicWiiPad.xib */; platformFilters = (ios, maccatalyst, ); };
 		B9B2C622288DB62D00CB6569 /* TCSidewaysWiiPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C61D288DB62D00CB6569 /* TCSidewaysWiiPad.swift */; };
-		B9B2C623288DB62D00CB6569 /* TCSidewaysWiiPad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C61E288DB62D00CB6569 /* TCSidewaysWiiPad.xib */; };
-		B9B2C624288DB62D00CB6569 /* TCWiiPad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C61F288DB62D00CB6569 /* TCWiiPad.xib */; };
+		B9B2C623288DB62D00CB6569 /* TCSidewaysWiiPad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C61E288DB62D00CB6569 /* TCSidewaysWiiPad.xib */; platformFilters = (ios, maccatalyst, ); };
+		B9B2C624288DB62D00CB6569 /* TCWiiPad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C61F288DB62D00CB6569 /* TCWiiPad.xib */; platformFilters = (ios, maccatalyst, ); };
 		B9B2C626288DB64700CB6569 /* TCWiiPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C625288DB64700CB6569 /* TCWiiPad.swift */; };
 		B9B2C64D288E170600CB6569 /* ServiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C64C288E170600CB6569 /* ServiceManager.swift */; };
 		B9B2C64F288E1C4F00CB6569 /* MainDisplaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C64E288E1C4F00CB6569 /* MainDisplaySceneDelegate.swift */; };
 		B9B2C652288E252900CB6569 /* EmulationCoordinator.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C651288E252900CB6569 /* EmulationCoordinator.mm */; };
-		B9B2C654288E400100CB6569 /* ExternalDisplay.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C653288E400100CB6569 /* ExternalDisplay.storyboard */; };
+		B9B2C654288E400100CB6569 /* ExternalDisplay.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C653288E400100CB6569 /* ExternalDisplay.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9B2C65B288E454700CB6569 /* ExternalDisplaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C65A288E454700CB6569 /* ExternalDisplaySceneDelegate.swift */; };
 		B9B2C661288E569E00CB6569 /* ExternalDisplayEmulationViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C660288E569E00CB6569 /* ExternalDisplayEmulationViewController.mm */; };
 		B9D9388C283DD86100B290FC /* EmulationBootParameter.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9D9388B283DD86100B290FC /* EmulationBootParameter.mm */; };
 		B9D9388F283DE3C800B290FC /* EmulationViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9D9388E283DE3C800B290FC /* EmulationViewController.mm */; };
-		B9D93892283DE63800B290FC /* Emulation.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9D93891283DE63800B290FC /* Emulation.storyboard */; };
+		B9D93892283DE63800B290FC /* Emulation.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9D93891283DE63800B290FC /* Emulation.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9D93897283ECE1100B290FC /* DOLUIKitSwitch.m in Sources */ = {isa = PBXBuildFile; fileRef = B9D93896283ECE1100B290FC /* DOLUIKitSwitch.m */; };
 		B9D9389E283EF7AD00B290FC /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D9389D283EF7AD00B290FC /* MetalKit.framework */; };
 		B9D938A1283F23A000B290FC /* TCButtonType.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D938A0283F239F00B290FC /* TCButtonType.swift */; };
 		B9D938A728418AFE00B290FC /* TCManagerInterface.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9D938A628418AFD00B290FC /* TCManagerInterface.mm */; };
-		B9DC3E0427EFBD2D0084DAA4 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9DC3E0227EFBD2D0084DAA4 /* Main.storyboard */; };
+		B9DC3E0427EFBD2D0084DAA4 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9DC3E0227EFBD2D0084DAA4 /* Main.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9DC3E0627EFBD2F0084DAA4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9DC3E0527EFBD2F0084DAA4 /* Assets.xcassets */; };
-		B9DC3E0927EFBD2F0084DAA4 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9DC3E0727EFBD2F0084DAA4 /* LaunchScreen.storyboard */; };
+		B9DC3E0927EFBD2F0084DAA4 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9DC3E0727EFBD2F0084DAA4 /* LaunchScreen.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9DC5FAB28849535004BD94A /* GraphicsRootViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9DC5FAA28849535004BD94A /* GraphicsRootViewController.mm */; };
 		B9DC5FAF28849640004BD94A /* GraphicsTabViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B9DC5FAE28849640004BD94A /* GraphicsTabViewController.m */; };
 		B9DC5FB3288497B0004BD94A /* GraphicsGeneralViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9DC5FB2288497B0004BD94A /* GraphicsGeneralViewController.mm */; };
@@ -184,7 +226,7 @@
 		B9FCB7B9289670830020E233 /* JitManager.m in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7B8289670830020E233 /* JitManager.m */; };
 		B9FCB7BC289672830020E233 /* JitManager+Debugger.m in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7BB289672830020E233 /* JitManager+Debugger.m */; };
 		B9FCB7BE28967C130020E233 /* JitAcquisitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7BD28967C130020E233 /* JitAcquisitionService.swift */; };
-		B9FCB7C828976CE60020E233 /* JitWait.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9FCB7C728976CE60020E233 /* JitWait.xib */; };
+		B9FCB7C828976CE60020E233 /* JitWait.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9FCB7C728976CE60020E233 /* JitWait.xib */; platformFilters = (ios, maccatalyst, ); };
 		B9FCB7CC2897700C0020E233 /* JitWaitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7CB2897700C0020E233 /* JitWaitViewController.swift */; };
 		B9FCB7CE2897998B0020E233 /* JitWaitViewControllerDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7CD2897998B0020E233 /* JitWaitViewControllerDelegate.swift */; };
 		B9FCB7D22897B9D60020E233 /* NKitWarningViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7D12897B9D60020E233 /* NKitWarningViewController.mm */; };
@@ -214,16 +256,67 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				B900A7A127F255EF000361DD /* libdolphin.dylib in CopyFiles */,
-				B900A7B627F2D3C4000361DD /* MoltenVK.xcframework in CopyFiles */,
+				B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */,
+				B36B48BF2E5CFD31009A2303 /* PVlibDolphin.xcframework in CopyFiles */,
+				B34ECD082E5785BD00301907 /* libMoltenVK.dylib in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
+		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
+		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
+		B34ECCF72E56A2EB00301907 /* TVGameItem.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVGameItem.mm; sourceTree = "<group>"; };
+		B34ECCF82E56A2EB00301907 /* TVLibraryBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVLibraryBridge.h; sourceTree = "<group>"; };
+		B34ECCFA2E56A33E00301907 /* TVLibraryBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVLibraryBridge.mm; sourceTree = "<group>"; };
+		B34ECCFC2E56A47B00301907 /* TVEmulationBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVEmulationBridge.h; sourceTree = "<group>"; };
+		B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVLibraryView.swift; sourceTree = "<group>"; };
+		B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulationScreen.swift; sourceTree = "<group>"; };
+		B34ECD012E56A68200301907 /* TVEmulationBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVEmulationBridge.mm; sourceTree = "<group>"; };
+		B34ECD032E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVOSUnofficialBuildNotice.swift; sourceTree = "<group>"; };
+		B34EDDDB2E57AC9700301907 /* SettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
+		B34EDDDE2E57B2E200301907 /* DOLConfigBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLConfigBridge.h; sourceTree = "<group>"; };
+		B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLConfigBridge.mm; sourceTree = "<group>"; };
+		B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSettingsPage.swift; sourceTree = "<group>"; };
+		B34EE6B12E57D65400301907 /* ShaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderSettingsView.swift; sourceTree = "<group>"; };
+		B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PVlibDolphin.xcframework; path = ../../../build/xcframework/PVlibDolphin.xcframework; sourceTree = "<group>"; };
+		B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSoftwarePropertiesView.swift; sourceTree = "<group>"; };
+		B36B48C22E5D0056009A2303 /* TVCheatsBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVCheatsBridge.h; sourceTree = "<group>"; };
+		B36B48C32E5D0056009A2303 /* TVCheatsBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVCheatsBridge.mm; sourceTree = "<group>"; };
+		B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVMultilineTextView.swift; sourceTree = "<group>"; };
+		B36B48C72E5D0749009A2303 /* TVCheatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVCheatListView.swift; sourceTree = "<group>"; };
+		B36B48C92E5D07D4009A2303 /* Localized.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localized.swift; sourceTree = "<group>"; };
+		B36B48CB2E5D20A6009A2303 /* TVControllerMappingBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVControllerMappingBridge.h; sourceTree = "<group>"; };
+		B36B48CC2E5D20A6009A2303 /* TVControllerMappingBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVControllerMappingBridge.mm; sourceTree = "<group>"; };
+		B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseMenuView.swift; sourceTree = "<group>"; };
+		B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerExtensions.swift; sourceTree = "<group>"; };
+		B38205FF2E57FF0E00D4853F /* CompiledShader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShader.swift; sourceTree = "<group>"; };
+		B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShaderContainer.swift; sourceTree = "<group>"; };
+		B38206012E57FF0E00D4853F /* Converters.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Converters.metal; sourceTree = "<group>"; };
+		B38206022E57FF0E00D4853F /* FilterChain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterChain.swift; sourceTree = "<group>"; };
+		B38206042E57FF0E00D4853F /* Matrix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Matrix.swift; sourceTree = "<group>"; };
+		B38206052E57FF0E00D4853F /* MTLPixelConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTLPixelConverter.swift; sourceTree = "<group>"; };
+		B38206062E57FF0E00D4853F /* ShaderPassBindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPassBindings.swift; sourceTree = "<group>"; };
+		B38206072E57FF0E00D4853F /* ShaderPassSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPassSemantics.swift; sourceTree = "<group>"; };
+		B38206082E57FF0E00D4853F /* ShaderPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPostProcessor.swift; sourceTree = "<group>"; };
+		B38206092E57FF0E00D4853F /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
+		B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipCompiledShaderContainer.swift; sourceTree = "<group>"; };
+		B38206172E58002000D4853F /* CompilerEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompilerEnums.swift; sourceTree = "<group>"; };
+		B38206192E58004100D4853F /* PixelBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelBuffer.swift; sourceTree = "<group>"; };
+		B382061B2E58008800D4853F /* ShaderParameter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderParameter.swift; sourceTree = "<group>"; };
+		B3AA87CC2E57FCA800CE68FC /* compiled_shaders */ = {isa = PBXFileReference; lastKnownFileType = folder; path = compiled_shaders; sourceTree = "<group>"; };
+		B3B147742E583977009C7049 /* EmuEventVC.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EmuEventVC.h; sourceTree = "<group>"; };
+		B3B147752E583977009C7049 /* EmuEventVC.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EmuEventVC.m; sourceTree = "<group>"; };
+		B3B149522E592F5D009C7049 /* TVWiiSystemUpdateViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVWiiSystemUpdateViewController.h; sourceTree = "<group>"; };
+		B3B149532E592F72009C7049 /* TVWiiSystemUpdateViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVWiiSystemUpdateViewController.mm; sourceTree = "<group>"; };
+		B3B149552E594A73009C7049 /* InputOverriderBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = InputOverriderBridge.h; sourceTree = "<group>"; };
+		B3B149562E594A8C009C7049 /* InputOverriderBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = InputOverriderBridge.mm; sourceTree = "<group>"; };
 		B3B31ABA2E5525A6002BF20C /* AchievementsSettingsViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AchievementsSettingsViewController.h; sourceTree = "<group>"; };
 		B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AchievementsSettingsViewController.mm; sourceTree = "<group>"; };
+		B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOLUIKitSwitch.swift; sourceTree = "<group>"; };
+		B3B334452E5674FD002BF20C /* libMoltenVK.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libMoltenVK.dylib; path = "../../../Externals/MoltenVK-macOS/libMoltenVK.dylib"; sourceTree = "<group>"; };
 		B900A7A227F25718000361DD /* Common.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Common.xcconfig; sourceTree = "<group>"; };
 		B900A7A627F26F61000361DD /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B900A7AC27F27F36000361DD /* DolphinCoreService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DolphinCoreService.h; sourceTree = "<group>"; };
@@ -358,7 +451,6 @@
 		B9476B1F27F1B1F2009C0A4B /* Beta.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Beta.xcconfig; sourceTree = "<group>"; };
 		B9476B2027F22416009C0A4B /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		B9476B2227F235A0009C0A4B /* BuildCore.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = BuildCore.sh; sourceTree = "<group>"; };
-		B9476B2427F23FFE009C0A4B /* libdolphin.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libdolphin.dylib; path = "../../../build-$(PLATFORM_NAME)-$(DOL_CORE_BUILD_TARGET)/Source/iOS/Library/libdolphin.dylib"; sourceTree = SOURCE_ROOT; };
 		B950CA932846A13100F45219 /* Sys */ = {isa = PBXFileReference; lastKnownFileType = text; name = Sys; path = ../../../Data/Sys; sourceTree = SOURCE_ROOT; };
 		B950CFA12961696100197719 /* BootNoticeNavigationViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BootNoticeNavigationViewController.h; sourceTree = "<group>"; };
 		B950CFA22961696100197719 /* BootNoticeNavigationViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BootNoticeNavigationViewController.m; sourceTree = "<group>"; };
@@ -578,6 +670,15 @@
 		B9FF01E92977DD0000B49B00 /* Release (Beta, TrollStore).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Release (Beta, TrollStore).xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = Core;
+			path = "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/Source/Core";
+			sourceTree = "<absolute>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
 		B96C9A4C2A46C1CE002B5ECF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -590,22 +691,64 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */,
+				B34ECCF52E569AF300301907 /* PVWebServer in Frameworks */,
 				B95AC5302D29C7FD0048E48B /* AVFoundation.framework in Frameworks */,
+				B34ECD072E5785BD00301907 /* libMoltenVK.dylib in Frameworks */,
 				B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */,
 				B9FCB7DE28988E7E0020E233 /* AltKit in Frameworks */,
+				B36B48BE2E5CFD31009A2303 /* PVlibDolphin.xcframework in Frameworks */,
 				B9D9389E283EF7AD00B290FC /* MetalKit.framework in Frameworks */,
 				B9FCB7E62898FAC10020E233 /* GameController.framework in Frameworks */,
-				B9476B2527F23FFE009C0A4B /* libdolphin.dylib in Frameworks */,
 				B97E4B492964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
 				B97E4B4B2964CBA100B3EE9C /* FirebaseCrashlytics in Frameworks */,
-				B900A7B527F2D3C0000361DD /* MoltenVK.xcframework in Frameworks */,
 				B900A7D227F5228B000361DD /* UICollectionViewLeftAlignedLayout in Frameworks */,
+				B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B34EDDDC2E57AC9700301907 /* SwiftUI */ = {
+			isa = PBXGroup;
+			children = (
+				B34EDDDB2E57AC9700301907 /* SettingsRootView.swift */,
+			);
+			path = SwiftUI;
+			sourceTree = "<group>";
+		};
+		B34EDDE02E57B2E200301907 /* Bridging */ = {
+			isa = PBXGroup;
+			children = (
+				B34EDDDE2E57B2E200301907 /* DOLConfigBridge.h */,
+				B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */,
+			);
+			path = Bridging;
+			sourceTree = "<group>";
+		};
+		B34EE6B22E57D65400301907 /* Shaders */ = {
+			isa = PBXGroup;
+			children = (
+				B38206012E57FF0E00D4853F /* Converters.metal */,
+				B38206092E57FF0E00D4853F /* Shaders.metal */,
+				B38205FF2E57FF0E00D4853F /* CompiledShader.swift */,
+				B38206172E58002000D4853F /* CompilerEnums.swift */,
+				B38206192E58004100D4853F /* PixelBuffer.swift */,
+				B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */,
+				B38206022E57FF0E00D4853F /* FilterChain.swift */,
+				B38206042E57FF0E00D4853F /* Matrix.swift */,
+				B38206052E57FF0E00D4853F /* MTLPixelConverter.swift */,
+				B382061B2E58008800D4853F /* ShaderParameter.swift */,
+				B38206062E57FF0E00D4853F /* ShaderPassBindings.swift */,
+				B38206072E57FF0E00D4853F /* ShaderPassSemantics.swift */,
+				B38206082E57FF0E00D4853F /* ShaderPostProcessor.swift */,
+				B34EE6B12E57D65400301907 /* ShaderSettingsView.swift */,
+				B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */,
+			);
+			path = Shaders;
+			sourceTree = "<group>";
+		};
 		B3B31ABC2E5525A6002BF20C /* Achievements */ = {
 			isa = PBXGroup;
 			children = (
@@ -618,7 +761,7 @@
 		B900A7A327F260EF000361DD /* Libraries */ = {
 			isa = PBXGroup;
 			children = (
-				B9476B2427F23FFE009C0A4B /* libdolphin.dylib */,
+				B3B334452E5674FD002BF20C /* libMoltenVK.dylib */,
 				B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */,
 			);
 			path = Libraries;
@@ -628,6 +771,7 @@
 			isa = PBXGroup;
 			children = (
 				B95AC5242D29B9100048E48B /* Audio */,
+				B34EDDE02E57B2E200301907 /* Bridging */,
 				B9B2C65C288E481300CB6569 /* Emulation */,
 				B974923D296035E500794509 /* Fastmem */,
 				B900A7BB27F4CD16000361DD /* FoundationUtil */,
@@ -706,6 +850,10 @@
 				B900A7CE27F4DB9A000361DD /* SoftwareListCell.swift */,
 				B900A7C827F4DA97000361DD /* SoftwareListViewController.h */,
 				B900A7C927F4DA97000361DD /* SoftwareListViewController.mm */,
+				B34ECCF62E56A2EB00301907 /* TVGameItem.h */,
+				B34ECCF72E56A2EB00301907 /* TVGameItem.mm */,
+				B34ECCF82E56A2EB00301907 /* TVLibraryBridge.h */,
+				B34ECCFA2E56A33E00301907 /* TVLibraryBridge.mm */,
 			);
 			path = SoftwareList;
 			sourceTree = "<group>";
@@ -922,8 +1070,20 @@
 		B933EDBB27F6A5C7004D7DD7 /* Swift */ = {
 			isa = PBXGroup;
 			children = (
+				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
+				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
+				B36B48C92E5D07D4009A2303 /* Localized.swift */,
+				B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */,
+				B36B48C72E5D0749009A2303 /* TVCheatListView.swift */,
+				B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */,
+				B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */,
+				B34ECD032E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift */,
+				B34ECCF02E5692C900301907 /* TVRootView.swift */,
+				B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */,
+				B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */,
+				B34EE6B22E57D65400301907 /* Shaders */,
 			);
 			path = Swift;
 			sourceTree = "<group>";
@@ -935,6 +1095,8 @@
 				B9FCB7CF2897B9A90020E233 /* NKitWarning */,
 				B9D9388D283DE3C800B290FC /* EmulationViewController.h */,
 				B9D9388E283DE3C800B290FC /* EmulationViewController.mm */,
+				B3B147742E583977009C7049 /* EmuEventVC.h */,
+				B3B147752E583977009C7049 /* EmuEventVC.m */,
 			);
 			path = Emulation;
 			sourceTree = "<group>";
@@ -956,6 +1118,8 @@
 		B93986F9287F4592008E8E47 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				B34EDDDC2E57AC9700301907 /* SwiftUI */,
+				B93986FA287F45A3008E8E47 /* SettingsRootViewController.swift */,
 				B97C49AC297E6CE400E30877 /* About */,
 				B3B31ABC2E5525A6002BF20C /* Achievements */,
 				B9398700287F98E7008E8E47 /* Config */,
@@ -963,7 +1127,6 @@
 				B9114F982893C69E00B9C57A /* Debug */,
 				B9DC5FA52884945C004BD94A /* Graphics */,
 				B904ACF52886AC2F008B6BE9 /* Mapping */,
-				B93986FA287F45A3008E8E47 /* SettingsRootViewController.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -1064,6 +1227,7 @@
 		B950CA922846A10400F45219 /* Assets */ = {
 			isa = PBXGroup;
 			children = (
+				B3AA87CC2E57FCA800CE68FC /* compiled_shaders */,
 				B9F41C3B2DC53699006D2434 /* cacert.pem */,
 				B97492482960F64300794509 /* DefaultPreferences.plist */,
 				B97E4B5929657BCB00B3EE9C /* GoogleService-Info.plist */,
@@ -1145,6 +1309,8 @@
 		B950CFC0296219B000197719 /* WiiSystemUpdate */ = {
 			isa = PBXGroup;
 			children = (
+				B3B149522E592F5D009C7049 /* TVWiiSystemUpdateViewController.h */,
+				B3B149532E592F72009C7049 /* TVWiiSystemUpdateViewController.mm */,
 				B950CFC1296219C800197719 /* WiiSystemUpdateViewController.h */,
 				B950CFC2296219C800197719 /* WiiSystemUpdateViewController.mm */,
 			);
@@ -1521,11 +1687,19 @@
 		B9B2C65C288E481300CB6569 /* Emulation */ = {
 			isa = PBXGroup;
 			children = (
+				B3B149552E594A73009C7049 /* InputOverriderBridge.h */,
+				B3B149562E594A8C009C7049 /* InputOverriderBridge.mm */,
 				B9D93889283DD83E00B290FC /* EmulationBootType.h */,
 				B9D9388A283DD86100B290FC /* EmulationBootParameter.h */,
 				B9D9388B283DD86100B290FC /* EmulationBootParameter.mm */,
 				B9B2C650288E252900CB6569 /* EmulationCoordinator.h */,
 				B9B2C651288E252900CB6569 /* EmulationCoordinator.mm */,
+				B36B48C22E5D0056009A2303 /* TVCheatsBridge.h */,
+				B36B48C32E5D0056009A2303 /* TVCheatsBridge.mm */,
+				B36B48CB2E5D20A6009A2303 /* TVControllerMappingBridge.h */,
+				B36B48CC2E5D20A6009A2303 /* TVControllerMappingBridge.mm */,
+				B34ECCFC2E56A47B00301907 /* TVEmulationBridge.h */,
+				B34ECD012E56A68200301907 /* TVEmulationBridge.mm */,
 			);
 			path = Emulation;
 			sourceTree = "<group>";
@@ -1558,6 +1732,7 @@
 			children = (
 				B9D93895283ECE1100B290FC /* DOLUIKitSwitch.h */,
 				B9D93896283ECE1100B290FC /* DOLUIKitSwitch.m */,
+				B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */,
 			);
 			path = Controls;
 			sourceTree = "<group>";
@@ -1565,6 +1740,7 @@
 		B9D9389C283EF7AD00B290FC /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */,
 				B95AC52F2D29C7FD0048E48B /* AVFoundation.framework */,
 				B97C49B5297F8B0D00E30877 /* UniformTypeIdentifiers.framework */,
 				B9FCB7E52898FAC10020E233 /* GameController.framework */,
@@ -1600,6 +1776,7 @@
 		B9DC3DED27EFBD2C0084DAA4 = {
 			isa = PBXGroup;
 			children = (
+				B3ABB24B2E53A18600BCDAC5 /* Core */,
 				B96F72CC27F0E6A00024BA7D /* Project */,
 				B900A7A327F260EF000361DD /* Libraries */,
 				B900A7A427F26F17000361DD /* Common */,
@@ -1629,6 +1806,7 @@
 				B9FCB7E72898FB620020E233 /* DolphiniOS.entitlements */,
 				B9DC3E0727EFBD2F0084DAA4 /* LaunchScreen.storyboard */,
 				B9DC3E0A27EFBD2F0084DAA4 /* Info.plist */,
+				B34ECCF22E5693EB00301907 /* Info-TV.plist */,
 			);
 			path = DolphiniOS;
 			sourceTree = "<group>";
@@ -1755,7 +1933,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = B9DC3E0F27EFBD2F0084DAA4 /* Build configuration list for PBXNativeTarget "DolphiniOS" */;
 			buildPhases = (
-				B9A0EBC42DC3E1B500F929BA /* ShellScript */,
+				B9A0EBC42DC3E1B500F929BA /* Setup Python */,
 				B9476B2327F23920009C0A4B /* Build Dolphin Core */,
 				B9DC3DF227EFBD2C0084DAA4 /* Sources */,
 				B9DC3DF327EFBD2C0084DAA4 /* Frameworks */,
@@ -1776,6 +1954,8 @@
 				B9FCB7DD28988E7E0020E233 /* AltKit */,
 				B97E4B482964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport */,
 				B97E4B4A2964CBA100B3EE9C /* FirebaseCrashlytics */,
+				B34ECCF42E569AF300301907 /* PVWebServer */,
+				B3D89A742E57DEF700EF1CB1 /* Zip */,
 			);
 			productName = DolphiniOS;
 			productReference = B9DC3DF627EFBD2C0084DAA4 /* DolphiniOS.app */;
@@ -1788,6 +1968,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
+				CLASSPREFIX = DOL;
 				LastUpgradeCheck = 1330;
 				TargetAttributes = {
 					B96C9A4E2A46C1CE002B5ECF = {
@@ -1802,7 +1983,6 @@
 				};
 			};
 			buildConfigurationList = B9DC3DF127EFBD2C0084DAA4 /* Build configuration list for PBXProject "DolphiniOS" */;
-			compatibilityVersion = "Xcode 13.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -1815,7 +1995,10 @@
 				B900A7D027F5228B000361DD /* XCRemoteSwiftPackageReference "UICollectionViewLeftAlignedLayout" */,
 				B9FCB7DC28988E7E0020E233 /* XCRemoteSwiftPackageReference "AltKit" */,
 				B97E4B472964CBA100B3EE9C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				B34ECCF32E5697FF00301907 /* XCLocalSwiftPackageReference "../PVWebServer" */,
+				B3D89A732E57DEF700EF1CB1 /* XCRemoteSwiftPackageReference "Zip" */,
 			);
+			preferredProjectObjectVersion = 77;
 			productRefGroup = B9DC3DF727EFBD2C0084DAA4 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -1848,6 +2031,7 @@
 				B9809C592A4811B000877579 /* SoftwareProperties.storyboard in Resources */,
 				B99137BF288327AC00588446 /* ConfigSettings.storyboard in Resources */,
 				B9DC3E0927EFBD2F0084DAA4 /* LaunchScreen.storyboard in Resources */,
+				B3AA87CD2E57FCAC00CE68FC /* compiled_shaders in Resources */,
 				B904ACDE28863119008B6BE9 /* GraphicsSettings.storyboard in Resources */,
 				B97E4B5D2965F9BE00B3EE9C /* AnalyticsNotice.xib in Resources */,
 				B99137B52882A58000588446 /* SoftwareList.storyboard in Resources */,
@@ -1893,14 +2077,18 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(SRCROOT)/../../../build-$(PLATFORM_NAME)-$(DOL_CORE_BUILD_TARGET)/Source/iOS/Library/libdolphin.dylib",
+				"$(SRCROOT)/../../../build/xcframework/PVlibDolphin-ios-sim.framework",
+				"$(SRCROOT)/../../../build/xcframework/PVlibDolphin-ios.framework",
+				"$(SRCROOT)/../../../build/xcframework/PVlibDolphin-tvos.framework",
+				"$(SRCROOT)/../../../build/xcframework/PVlibDolphin-tvos-sim.framework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$PROJECT_DIR/Project/Scripts/BuildCore.sh\"\n";
+			shellScript = "set -euo pipefail\n\n# Path to the builder script\nSCRIPT=\"$PROJECT_DIR/../../../BuildiOSXCFramework.py\"\n\n# Map Xcode's PLATFORM_NAME to the builder's platform keys\ncase \"${PLATFORM_NAME}\" in\n  iphoneos)\n    platform=\"OS64\"              # iOS device (arm64)\n    ;;\n  iphonesimulator)\n    platform=\"SIMULATORARM64\"    # iOS Simulator (arm64)\n    ;;\n  appletvos)\n    platform=\"TVOS\"              # tvOS device (arm64)\n    ;;\n  appletvsimulator)\n    platform=\"SIMULATOR_TVOS\"    # tvOS Simulator (arm64)\n    ;;\n  macosx)\n    # Detect Mac Catalyst builds\n    if [[ \"${SUPPORTS_MACCATALYST:-}\" == \"YES\" || \"${EFFECTIVE_PLATFORM_NAME:-}\" == \"-maccatalyst\" ]]; then\n      platform=\"MAC_CATALYST\"    # Mac Catalyst (arm64)\n    else\n      echo \"Error: macOS (non-Catalyst) is not supported by this script.\"\n      exit 1\n    fi\n    ;;\n  *)\n    echo \"Error: Unsupported PLATFORM_NAME: ${PLATFORM_NAME}\"\n    exit 1\n    ;;\nesac\n\necho \"Building PVlibDolphin for platform: ${platform} (CONFIGURATION=${CONFIGURATION})\"\n\n# Run the builder for just the active platform\nexec /usr/bin/python3 \"${SCRIPT}\" -p \"${platform}\" -v\n";
 		};
 		B97E4B622966227B00B3EE9C /* Upload dSYM */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -1921,6 +2109,7 @@
 		};
 		B991379B2881DCAC00588446 /* Update Storyboard Strings */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -1959,6 +2148,7 @@
 		};
 		B99137B428829F1400588446 /* Transfer Core Strings to Storyboard Strings */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -1975,8 +2165,9 @@
 			shellPath = /bin/sh;
 			shellScript = "\"$PROJECT_DIR/venv/bin/python3\" \"$PROJECT_DIR/Project/Scripts/TransferCoreStringsToStoryboard.py\" \"$PROJECT_DIR/DolphiniOS\" \"$PROJECT_DIR/Common/UI/Localization/\"\n";
 		};
-		B9A0EBC42DC3E1B500F929BA /* ShellScript */ = {
+		B9A0EBC42DC3E1B500F929BA /* Setup Python */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -1984,6 +2175,7 @@
 			);
 			inputPaths = (
 			);
+			name = "Setup Python";
 			outputFileListPaths = (
 			);
 			outputPaths = (
@@ -2022,9 +2214,12 @@
 				B9661F362D23190300FB2AAB /* MappingInputDisplayInputCell.m in Sources */,
 				B9FCB7B9289670830020E233 /* JitManager.m in Sources */,
 				B99137882881486200588446 /* WiiSystemLanguageViewController.mm in Sources */,
+				B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */,
 				B900A7CF27F4DB9A000361DD /* SoftwareListCell.swift in Sources */,
+				B3B147762E583977009C7049 /* EmuEventVC.m in Sources */,
 				B939872A28800BA2008E8E47 /* AudioBackendCell.m in Sources */,
 				B9B2C620288DB62D00CB6569 /* TCClassicWiiPad.swift in Sources */,
+				B34ECCFE2E56A52C00301907 /* TVLibraryView.swift in Sources */,
 				B950CFBA296208A900197719 /* UpdateNoticeViewController.mm in Sources */,
 				B904ACCB28854782008B6BE9 /* GraphicsEnhancementsViewController.mm in Sources */,
 				B9B2C61A288D3A7F00CB6569 /* EmulationiOSViewController.mm in Sources */,
@@ -2039,8 +2234,10 @@
 				B95AC52C2D29BA7F0048E48B /* AudioMuteSwitchMode.swift in Sources */,
 				B9FCB7CC2897700C0020E233 /* JitWaitViewController.swift in Sources */,
 				B9809C802A4A190C00877579 /* ActionReplayCodeViewController.mm in Sources */,
+				B34ECCF92E56A2EB00301907 /* TVGameItem.mm in Sources */,
 				B9913781288096A300588446 /* ConfigWiiViewController.mm in Sources */,
 				B97E4B58296573E200B3EE9C /* DOLBuildSource.swift in Sources */,
+				B34ECD002E56A57A00301907 /* EmulationScreen.swift in Sources */,
 				B9398716287FE28F008E8E47 /* FallbackRegionCell.m in Sources */,
 				B939871A287FF135008E8E47 /* ConfigInterfaceViewController.mm in Sources */,
 				B900A7A727F26F61000361DD /* AppDelegate.swift in Sources */,
@@ -2053,12 +2250,16 @@
 				B933EDC127F77D1E004D7DD7 /* GameFilePtrWrapper.mm in Sources */,
 				B933EDBE27F6A7BF004D7DD7 /* GameFileCacheService.swift in Sources */,
 				B9398707287F998C008E8E47 /* ConfigGeneralViewController.mm in Sources */,
+				B382061A2E58004100D4853F /* PixelBuffer.swift in Sources */,
 				B904AD3E288904D9008B6BE9 /* MappingGroupEditDoubleCell.m in Sources */,
 				B93986FB287F45A3008E8E47 /* SettingsRootViewController.swift in Sources */,
+				B38206182E58002000D4853F /* CompilerEnums.swift in Sources */,
 				B9114FA02893C71E00B9C57A /* VirtualMFiControllerManager.m in Sources */,
 				B904ACEE2886701C008B6BE9 /* ControllersRootPortCell.m in Sources */,
+				B3B149572E594A8C009C7049 /* InputOverriderBridge.mm in Sources */,
 				B97E4B612965FA1B00B3EE9C /* AnalyticsNoticeViewController.mm in Sources */,
 				B904AD3528890477008B6BE9 /* MappingGroupEditEnabledCell.m in Sources */,
+				B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */,
 				B9913792288153D000588446 /* ConfigAdvancedViewController.mm in Sources */,
 				B904AD0F28886AF8008B6BE9 /* MappingRootGroupCell.m in Sources */,
 				B9FCB7D22897B9D60020E233 /* NKitWarningViewController.mm in Sources */,
@@ -2066,22 +2267,44 @@
 				B950CFC92962562200197719 /* main.m in Sources */,
 				B9FCB7D42897C7D80020E233 /* NKitWarningViewControllerDelegate.swift in Sources */,
 				B960AFF1295FB45500A246F0 /* TCDeviceMotion.swift in Sources */,
+				B382061C2E58008800D4853F /* ShaderParameter.swift in Sources */,
 				B97C49B2297E717D00E30877 /* AboutViewController.m in Sources */,
 				B939872E2880896D008E8E47 /* ConfigGameCubeViewController.mm in Sources */,
 				B9D93897283ECE1100B290FC /* DOLUIKitSwitch.m in Sources */,
+				B36B48CF2E5D6AC5009A2303 /* PauseMenuView.swift in Sources */,
+				B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */,
+				B382060D2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift in Sources */,
+				B382060E2E57FF0E00D4853F /* Converters.metal in Sources */,
+				B36B48CD2E5D20A6009A2303 /* TVControllerMappingBridge.mm in Sources */,
+				B382060F2E57FF0E00D4853F /* Shaders.metal in Sources */,
+				B38206102E57FF0E00D4853F /* ShaderPassSemantics.swift in Sources */,
+				B3B149542E592F72009C7049 /* TVWiiSystemUpdateViewController.mm in Sources */,
+				B38206112E57FF0E00D4853F /* ShaderPostProcessor.swift in Sources */,
+				B38206122E57FF0E00D4853F /* FilterChain.swift in Sources */,
+				B38206132E57FF0E00D4853F /* CompiledShaderContainer.swift in Sources */,
+				B36B48C82E5D0749009A2303 /* TVCheatListView.swift in Sources */,
+				B38206142E57FF0E00D4853F /* Matrix.swift in Sources */,
+				B38206152E57FF0E00D4853F /* MTLPixelConverter.swift in Sources */,
+				B38206162E57FF0E00D4853F /* ShaderPassBindings.swift in Sources */,
 				B904ACD92885E7DE008B6BE9 /* GraphicsHacksViewController.mm in Sources */,
 				B950CFAD296170BC00197719 /* BootNoticeManager.m in Sources */,
+				B34EDDDD2E57AC9700301907 /* SettingsRootView.swift in Sources */,
+				B34EE6B32E57D65400301907 /* ShaderSettingsView.swift in Sources */,
 				B900A7CA27F4DA97000361DD /* SoftwareListViewController.mm in Sources */,
 				B9DC5FB3288497B0004BD94A /* GraphicsGeneralViewController.mm in Sources */,
 				B939870A287FBB08008E8E47 /* SpeedLimitViewController.mm in Sources */,
 				B9B2C652288E252900CB6569 /* EmulationCoordinator.mm in Sources */,
 				B904ACDD28862941008B6BE9 /* GraphicsAdvancedViewController.mm in Sources */,
+				B34ECCFB2E56A33E00301907 /* TVLibraryBridge.mm in Sources */,
+				B36B48C42E5D0056009A2303 /* TVCheatsBridge.mm in Sources */,
 				B9749240296035F500794509 /* FastmemManager.m in Sources */,
 				B904AD3B288904AC008B6BE9 /* MappingGroupEditBoolCell.m in Sources */,
 				B9809C602A48236900877579 /* SoftwarePropertiesInfoViewController.mm in Sources */,
 				B9809C832A4A22EB00877579 /* ActionReplayCodeEditViewController.mm in Sources */,
 				B3B31ABD2E5525A6002BF20C /* AchievementsSettingsViewController.mm in Sources */,
 				B9B2C64F288E1C4F00CB6569 /* MainDisplaySceneDelegate.swift in Sources */,
+				B36B48C12E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift in Sources */,
+				B34ECD022E56A68200301907 /* TVEmulationBridge.mm in Sources */,
 				B904AD012887B9D1008B6BE9 /* ControllersPortViewController.mm in Sources */,
 				B904AD272888D346008B6BE9 /* MappingUtil.mm in Sources */,
 				B9398713287FDF23008E8E47 /* FallbackRegionViewController.mm in Sources */,
@@ -2091,6 +2314,7 @@
 				B9EC283A2D21DA56000FAE09 /* TCWiiTouchIRMode.swift in Sources */,
 				B991378E28814BCD00588446 /* WiiSensorBarViewController.mm in Sources */,
 				B97492472960CD2B00794509 /* FirstRunInitializationService.mm in Sources */,
+				B36B48D12E5D6AFB009A2303 /* ControllerExtensions.swift in Sources */,
 				B904ACD22885561E008B6BE9 /* InternalResolutionCell.m in Sources */,
 				B9447B052841901200BC9110 /* TCGameCubePad.swift in Sources */,
 				B9B2C5E5288D0C5500CB6569 /* MappingLoadProfileIniCell.m in Sources */,
@@ -2099,6 +2323,7 @@
 				B900A7AE27F27F36000361DD /* DolphinCoreService.mm in Sources */,
 				B900A7D527F61F3A000361DD /* GameFileCacheManager.mm in Sources */,
 				B9DC5FAB28849535004BD94A /* GraphicsRootViewController.mm in Sources */,
+				B36B48CA2E5D07D4009A2303 /* Localized.swift in Sources */,
 				B9447B0128418F2600BC9110 /* TCJoystick.swift in Sources */,
 				B900A7BA27F4CB80000361DD /* DefaultsInitService.swift in Sources */,
 				B950CFC3296219C800197719 /* WiiSystemUpdateViewController.mm in Sources */,
@@ -2114,7 +2339,9 @@
 				B9398724287FFBEC008E8E47 /* ConfigSoundViewController.mm in Sources */,
 				B9447B072841906000BC9110 /* TCView.swift in Sources */,
 				B9809C762A49F78700877579 /* GeckoCodeEditViewController.mm in Sources */,
+				B34ECD042E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift in Sources */,
 				B904AD1D2888AB6B008B6BE9 /* MappingDeviceViewController.mm in Sources */,
+				B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */,
 				B904AD0C28886AE6008B6BE9 /* MappingRootDeviceCell.m in Sources */,
 				B9EC283D2D21DE2F000FAE09 /* ControllersTouchscreenIRModeViewController.mm in Sources */,
 				B96C9A4A2A46501C002B5ECF /* DOLAppVersion.swift in Sources */,
@@ -2126,6 +2353,7 @@
 				B904AD1228886B0D008B6BE9 /* MappingRootExtensionCell.m in Sources */,
 				B99137982881D68600588446 /* CpuEngineViewController.mm in Sources */,
 				B9B2C5E2288D0A9800CB6569 /* MappingLoadProfileViewController.mm in Sources */,
+				B36B48C62E5D0496009A2303 /* TVMultilineTextView.swift in Sources */,
 				B99137C928832A0800588446 /* LocalizationUtil.m in Sources */,
 				B9FCB7DB28988E4C0020E233 /* JitManager+AltServer.m in Sources */,
 				B904AD2B2888D72F008B6BE9 /* MappingExtensionViewController.mm in Sources */,
@@ -2146,6 +2374,7 @@
 				B974923C2960096C00794509 /* ImportFileManager.m in Sources */,
 				B95AC52E2D29C49F0048E48B /* AudioSessionCategoryService.swift in Sources */,
 				B97E4B532965011C00B3EE9C /* FirebaseService.mm in Sources */,
+				B3B334442E566EBC002BF20C /* DOLUIKitSwitch.swift in Sources */,
 				B9398727288009D0008E8E47 /* AudioBackendViewController.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2854,7 +3083,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				EXCLUDED_ARCHS = "i386 armv7";
+				EXCLUDED_ARCHS = "i386 armv7 x86_64";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -2886,24 +3115,36 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
+				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_GCSupportsGameMode = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses the local network to find and communicate with AltServer.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 4.0.0b9;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletvos*]" = "com.joemattiello.DolphiniOS-debug";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-debug";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Debug (Jailbroken)";
 		};
@@ -2946,7 +3187,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				EXCLUDED_ARCHS = "i386 armv7";
+				EXCLUDED_ARCHS = "i386 armv7 x86_64";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -2977,23 +3218,35 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
+				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_GCSupportsGameMode = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses the local network to find and communicate with AltServer.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 4.0.0b9;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletvos*]" = com.joemattiello.DolphiniOS;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.joemattiello.DolphiniOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Jailbroken)";
 		};
@@ -3036,7 +3289,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				EXCLUDED_ARCHS = "i386 armv7";
+				EXCLUDED_ARCHS = "i386 armv7 x86_64";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -3067,23 +3320,35 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
+				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_GCSupportsGameMode = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses the local network to find and communicate with AltServer.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 4.0.0b9;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletvos*]" = "com.joemattiello.DolphiniOS-njb-patreon-beta";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-njb-patreon-beta";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Beta, Non-Jailbroken)";
 		};
@@ -3126,7 +3391,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				EXCLUDED_ARCHS = "i386 armv7";
+				EXCLUDED_ARCHS = "i386 armv7 x86_64";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -3157,23 +3422,35 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
+				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_GCSupportsGameMode = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses the local network to find and communicate with AltServer.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 4.0.0b9;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletvos*]" = "com.joemattiello.DolphiniOS-patreon-beta";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-patreon-beta";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Beta, Jailbroken)";
 		};
@@ -3216,7 +3493,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				EXCLUDED_ARCHS = "i386 armv7";
+				EXCLUDED_ARCHS = "i386 armv7 x86_64";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -3274,7 +3551,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				EXCLUDED_ARCHS = "i386 armv7";
+				EXCLUDED_ARCHS = "i386 armv7 x86_64";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -3305,24 +3582,36 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
+				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_GCSupportsGameMode = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses the local network to find and communicate with AltServer.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 4.0.0b9;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletvos*]" = "com.joemattiello.DolphiniOS-njb-debug";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-njb-debug";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Debug (Non-Jailbroken)";
 		};
@@ -3339,23 +3628,35 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
+				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_GCSupportsGameMode = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses the local network to find and communicate with AltServer.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 4.0.0b9;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletvos*]" = "com.joemattiello.DolphiniOS-njb";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-njb";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Non-Jailbroken)";
 		};
@@ -3398,7 +3699,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				EXCLUDED_ARCHS = "i386 armv7";
+				EXCLUDED_ARCHS = "i386 armv7 x86_64";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -3429,23 +3730,35 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
+				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_GCSupportsGameMode = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses the local network to find and communicate with AltServer.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 4.0.0b9;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletvos*]" = "com.joemattiello.DolphiniOS-ts";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-ts";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (TrollStore)";
 		};
@@ -3488,7 +3801,7 @@
 				ENABLE_BITCODE = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				EXCLUDED_ARCHS = "i386 armv7";
+				EXCLUDED_ARCHS = "i386 armv7 x86_64";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -3519,23 +3832,35 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
+				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_GCSupportsGameMode = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses the local network to find and communicate with AltServer.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 4.0.0b9;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletvos*]" = "com.joemattiello.DolphiniOS-ts-patreon-beta";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-ts-patreon-beta";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Beta, TrollStore)";
 		};
@@ -3589,7 +3914,22 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		B34ECCF32E5697FF00301907 /* XCLocalSwiftPackageReference "../PVWebServer" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../PVWebServer;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
+		B3D89A732E57DEF700EF1CB1 /* XCRemoteSwiftPackageReference "Zip" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/marmelroy/Zip.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.1.2;
+			};
+		};
 		B900A7D027F5228B000361DD /* XCRemoteSwiftPackageReference "UICollectionViewLeftAlignedLayout" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout";
@@ -3617,6 +3957,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		B34ECCF42E569AF300301907 /* PVWebServer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B34ECCF32E5697FF00301907 /* XCLocalSwiftPackageReference "../PVWebServer" */;
+			productName = PVWebServer;
+		};
+		B3D89A742E57DEF700EF1CB1 /* Zip */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B3D89A732E57DEF700EF1CB1 /* XCRemoteSwiftPackageReference "Zip" */;
+			productName = Zip;
+		};
 		B900A7D127F5228B000361DD /* UICollectionViewLeftAlignedLayout */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B900A7D027F5228B000361DD /* XCRemoteSwiftPackageReference "UICollectionViewLeftAlignedLayout" */;

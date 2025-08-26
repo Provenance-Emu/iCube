@@ -66,8 +66,10 @@
   
   [self updateDuplicateFramesEnabled];
   
-  auto samples = Config::Get(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES);
   
+#if !TARGET_OS_TV
+  auto samples = Config::Get(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES);
+
   int sliderPosition;
   switch (samples) {
     case 512:
@@ -90,6 +92,7 @@
     // Custom value
     self.textureAccuracySlider.enabled = false;
   }
+#endif
 }
 
 - (void)updateDeferEnabled {
@@ -116,6 +119,7 @@
 }
 
 - (IBAction)accuracyUpdated:(id)sender {
+#if !TARGET_OS_TV
   if (!self.textureAccuracySlider.enabled) {
     return;
   }
@@ -138,6 +142,7 @@
 
   Config::SetBaseOrCurrent(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES, samples);
   self.textureAccuracySlider.value = sliderPosition;
+#endif
 }
 
 - (IBAction)accuracyHelpPressed:(id)sender {

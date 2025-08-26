@@ -14,7 +14,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic, nullable) id<MappingGroupEditBoolCellDelegate> delegate;
 
 @property (weak, nonatomic) IBOutlet UILabel* nameLabel;
-@property (weak, nonatomic) IBOutlet DOLUIKitSwitch* enabledSwitch;
+@property (weak, nonatomic) IBOutlet DOLSwitch* enabledSwitch;
 
 @end
 

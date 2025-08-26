@@ -50,29 +50,47 @@ void JitInterface::DoState(PointerWrap& p)
 
 CPUCoreBase* JitInterface::InitJitCore(PowerPC::CPUCore core)
 {
+#if defined(_M_ARM_64)
+  constexpr const char* host_arch = "arm64";
+#elif defined(_M_X86_64)
+  constexpr const char* host_arch = "x86_64";
+#else
+  constexpr const char* host_arch = "unknown";
+#endif
+  INFO_LOG_FMT(POWERPC, "InitJitCore: requested core={} on host {}", static_cast<int>(core),
+               host_arch);
+
+  const char* created_core = "";
   switch (core)
   {
 #ifdef _M_X86_64
   case PowerPC::CPUCore::JIT64:
     m_jit = std::make_unique<Jit64>(m_system);
+    created_core = "JIT64";
     break;
 #endif
 #ifdef _M_ARM_64
   case PowerPC::CPUCore::JITARM64:
     m_jit = std::make_unique<JitArm64>(m_system);
+    created_core = "JITARM64";
     break;
 #endif
   case PowerPC::CPUCore::CachedInterpreter:
     m_jit = std::make_unique<CachedInterpreter>(m_system);
+    created_core = "CachedInterpreter";
     break;
 
   default:
     // Under this case the caller overrides the CPU core to the default and logs that
     // it performed the override.
     m_jit.reset();
+    WARN_LOG_FMT(POWERPC, "InitJitCore: core {} not available on host {}, returning nullptr",
+                 static_cast<int>(core), host_arch);
     return nullptr;
   }
+  INFO_LOG_FMT(POWERPC, "InitJitCore: constructed {}", created_core);
   m_jit->Init();
+  INFO_LOG_FMT(POWERPC, "InitJitCore: initialized {}", created_core);
   return m_jit.get();
 }
 

@@ -228,8 +228,10 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
     g_presenter->ResizeSurface();
   }
   
+#if TARGET_OS_IOS
   [[TCDeviceMotion shared] statusBarOrientationChanged];
-  
+#endif
+
   [self updatePointerValuesOnWiiTouchPads];
 }
 
@@ -326,7 +328,8 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   if (_visibleTouchPad == touchPad) {
     return;
   }
-  
+ 
+#if TARGET_OS_IOS
   TCDeviceMotion* motion = [TCDeviceMotion shared];
   
   if (touchPad == DOLEmulationVisibleTouchPadWiimote || touchPad == DOLEmulationVisibleTouchPadSidewaysWiimote || touchPad == DOLEmulationVisibleTouchPadClassic) {
@@ -335,6 +338,7 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   } else {
     [motion setMotionEnabled:false];
   }
+#endif
   
   NSInteger targetIdx = touchPad - 1;
   
@@ -393,7 +397,9 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
     });
   }
   
+#if TARGET_OS_IOS
   [[TCDeviceMotion shared] setMotionEnabled:false];
+#endif
 }
 
 @end

@@ -6,6 +6,7 @@
 #include "Core/AchievementManager.h"
 
 #include <cctype>
+#include <cstring>
 #include <memory>
 
 #include <fmt/format.h>
@@ -66,6 +67,7 @@ void AchievementManager::Init()
     rc_client_enable_logging(m_client, RC_CLIENT_LOG_LEVEL_VERBOSE,
                              [](const char* message, const rc_client_t* client) {
                                INFO_LOG_FMT(ACHIEVEMENTS, "{}", message);
+                               fprintf(stderr, "[RA] %s\n", message);
                              });
     Config::AddConfigChangedCallback([this] { SetHardcoreMode(); });
     SetHardcoreMode();
@@ -1171,10 +1173,37 @@ void AchievementManager::Request(const rc_api_request_t* request,
   AchievementManager::GetInstance().m_queue.EmplaceItem(
       [url = std::move(url), post_data = std::move(post_data), callback = std::move(callback),
        callback_data = std::move(callback_data)] {
-        Common::HttpRequest http_request;
+        Common::HttpRequest http_request(std::chrono::milliseconds{10000});
+        http_request.FollowRedirects(3);
+        std::string host_for_resolve = "retroachievements.org";
+        int port_for_resolve = 443;
+        {
+          const char* u = url.c_str();
+          const char* scheme_end = strstr(u, "://");
+          bool is_https = true;
+          const char* host_start = u;
+          if (scheme_end) {
+            const std::string scheme(u, scheme_end - u);
+            is_https = (scheme == "https");
+            host_start = scheme_end + 3;
+          }
+          port_for_resolve = is_https ? 443 : 80;
+          const char* host_end = host_start;
+          while (*host_end && *host_end != '/' && *host_end != ':') host_end++;
+          host_for_resolve.assign(host_start, host_end - host_start);
+          if (*host_end == ':') {
+            const char* port_start = host_end + 1;
+            const char* port_end = port_start;
+            while (*port_end && isdigit(*port_end)) port_end++;
+            if (port_end > port_start) port_for_resolve = atoi(std::string(port_start, port_end - port_start).c_str());
+          }
+        }
+        http_request.PreResolveHost(host_for_resolve, port_for_resolve);
         Common::HttpRequest::Response http_response;
         INFO_LOG_FMT(ACHIEVEMENTS, "RA Request: method={} url={} body_len={}",
                      post_data.empty() ? "GET" : "POST", url, post_data.size());
+        fprintf(stderr, "[RA] Request %s %s body_len=%zu\n",
+                post_data.empty() ? "GET" : "POST", url.c_str(), post_data.size());
         if (!post_data.empty())
         {
           http_response = http_request.Post(url, post_data, USER_AGENT_HEADER,
@@ -1196,14 +1225,52 @@ void AchievementManager::Request(const rc_api_request_t* request,
           std::string preview(server_response.body, server_response.body + preview_len);
           INFO_LOG_FMT(ACHIEVEMENTS, "RA Response: code={} body[0..{}]={}",
                        server_response.http_status_code, preview_len, preview);
+          fprintf(stderr, "[RA] Response code=%d body[0..%zu]=%.*s\n",
+                  server_response.http_status_code, preview_len, (int)preview_len, server_response.body);
         }
         else
         {
-          static constexpr char error_message[] = "Failed HTTP request.";
-          server_response.body = error_message;
-          server_response.body_length = sizeof(error_message);
-          server_response.http_status_code = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
-          WARN_LOG_FMT(ACHIEVEMENTS, "RA Request failed: no response received");
+          // Fallback attempt without forcing IPv4 (keeping pre-resolve) to allow IPv6/NAT64
+          WARN_LOG_FMT(ACHIEVEMENTS, "RA first attempt failed (curl err={}), retrying without IPv4 (pre-resolve kept)",
+                       http_request.GetLastErrorString());
+          fprintf(stderr, "[RA] First attempt failed (curl err=%s), retrying without IPv4 (pre-resolve kept)\n",
+                  http_request.GetLastErrorString().c_str());
+
+          Common::HttpRequest http_request_v6(std::chrono::milliseconds{10000});
+          http_request_v6.FollowRedirects(3);
+          http_request_v6.PreResolveHost(host_for_resolve, port_for_resolve);
+          Common::HttpRequest::Response http_response_v6;
+          if (!post_data.empty())
+            http_response_v6 = http_request_v6.Post(url, post_data, USER_AGENT_HEADER,
+                                                    Common::HttpRequest::AllowedReturnCodes::All);
+          else
+            http_response_v6 = http_request_v6.Get(url, USER_AGENT_HEADER,
+                                                   Common::HttpRequest::AllowedReturnCodes::All);
+
+          if (http_response_v6.has_value() && http_response_v6->size() > 0)
+          {
+            server_response.body = reinterpret_cast<const char*>(http_response_v6->data());
+            server_response.body_length = http_response_v6->size();
+            server_response.http_status_code = http_request_v6.GetLastResponseCode();
+            const size_t preview_len = std::min<size_t>(server_response.body_length, 256);
+            std::string preview(server_response.body, server_response.body + preview_len);
+            INFO_LOG_FMT(ACHIEVEMENTS, "RA Response(v6): code={} body[0..{}]={}",
+                         server_response.http_status_code, preview_len, preview);
+            fprintf(stderr, "[RA] Response(v6) code=%d body[0..%zu]=%.*s\n",
+                    server_response.http_status_code, preview_len, (int)preview_len, server_response.body);
+          }
+          else
+          {
+            static constexpr char error_message[] = "Failed HTTP request.";
+            server_response.body = error_message;
+            server_response.body_length = sizeof(error_message);
+            server_response.http_status_code = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+            WARN_LOG_FMT(ACHIEVEMENTS,
+                         "RA Request failed: no response received after fallback (curl err={})",
+                         http_request_v6.GetLastErrorString());
+            fprintf(stderr, "[RA] Request failed: no response received after fallback (curl err=%s)\n",
+                    http_request_v6.GetLastErrorString().c_str());
+          }
         }
 
         callback(&server_response, callback_data);

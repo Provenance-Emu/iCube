@@ -281,9 +281,9 @@ void Metal::Util::PopulateBackendInfoFeatures(VideoConfig* config, id<MTLDevice>
         // Apple 4 is the minimum family that guarantees BCn / depth-clamp.
         supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
     } else {
-    #if TARGET_OS_IOS
+    #if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
         supports_apple4 = [device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1];
-    #else // TARGET_OS_TV
+    #else // TARGET_OS_TV or Mac Catalyst
       supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
     #endif
     }

@@ -26,13 +26,16 @@
   self.stretchingSwitch.on = stretchingEnabled;
   [self.stretchingSwitch addValueChangedTarget:self action:@selector(stretchingChanged)];
   
+#if !TARGET_OS_TV
   int volume = Config::Get(Config::MAIN_AUDIO_VOLUME);
   self.volumeSlider.value = volume;
-  
+#endif
   [self updateVolumeLabel];
   
+#if !TARGET_OS_TV
   self.bufferSizeSlider.value = Config::Get(Config::MAIN_AUDIO_STRETCH_LATENCY);
   self.bufferSizeSlider.enabled = stretchingEnabled;
+#endif
   
   [self updateBufferSizeLabel];
   
@@ -51,7 +54,9 @@
 }
 
 - (IBAction)volumeChanged:(id)sender {
+#if !TARGET_OS_TV
   Config::SetBaseOrCurrent(Config::MAIN_AUDIO_VOLUME, (int)self.volumeSlider.value);
+#endif
   
   [self updateVolumeLabel];
 }
@@ -66,15 +71,19 @@
   
   Config::SetBaseOrCurrent(Config::MAIN_AUDIO_STRETCH, stretchingEnabled);
   
+#if !TARGET_OS_TV
   self.bufferSizeSlider.enabled = stretchingEnabled;
   
   // There is a bug on iOS 14+ where a UISlider won't update its appearance when enabled is toggled.
   [self.bufferSizeSlider setNeedsLayout];
   [self.bufferSizeSlider layoutIfNeeded];
+#endif
 }
 
 - (IBAction)bufferSizeChanged:(id)sender {
+#if !TARGET_OS_TV
   Config::SetBaseOrCurrent(Config::MAIN_AUDIO_STRETCH_LATENCY, (int)self.bufferSizeSlider.value);
+#endif
   
   [self updateBufferSizeLabel];
 }
