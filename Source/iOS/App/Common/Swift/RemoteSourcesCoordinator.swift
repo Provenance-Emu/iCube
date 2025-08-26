@@ -3,60 +3,101 @@ import Combine
 
 /// Coordinates multiple remote sources and updates the Dolphin cache with their items.
 @MainActor
-final class RemoteSourcesCoordinator: ObservableObject {
-    @Published private(set) var sources: [RemoteLibrarySource] = []
-    private var tasks: [String: [Task<Void, Never>]] = [:]
-    private var lastItemsBySource: [String: [RemoteLibraryItem]] = [:]
+class RemoteSourcesCoordinator: ObservableObject {
+    @Published var sources: [any RemoteLibrarySource] = []
+    @Published var lastItemsBySource: [String: [RemoteLibraryItem]] = [:]
 
-    /// Adds and starts a source
-    func add(_ source: RemoteLibrarySource) {
-        sources.append(source)
-        start(source)
+    private var tasks: [String: [Task<Void, Never>]] = [:]
+    private var lastUpdateTime: Date = .distantPast
+    private let updateThrottleInterval: TimeInterval = 2.0 // Minimum 2 seconds between updates
+
+    init() {
+        // Listen for refresh requests
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("RefreshRemoteSources"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshAllSources()
+        }
     }
 
-    /// Removes and stops a source
+    func add(source: any RemoteLibrarySource) {
+        print("RemoteSourcesCoordinator: adding source \(source.id) (\(source.name))")
+        sources.append(source)
+        print("RemoteSourcesCoordinator: total sources now: \(sources.count)")
+        start(source: source)
+        print("RemoteSourcesCoordinator: source \(source.id) added and started")
+    }
+
     func remove(id: String) {
-        guard let idx = sources.firstIndex(where: { $0.id == id }) else { return }
-        let s = sources.remove(at: idx)
-        stop(s)
-        lastItemsBySource[id] = []
+        stop(sourceId: id)
+        sources.removeAll { $0.id == id }
+        lastItemsBySource.removeValue(forKey: id)
         pushCacheUpdate()
     }
 
-    func start(_ source: RemoteLibrarySource) {
-        source.start()
-        var ts: [Task<Void, Never>] = []
-        ts.append(Task { [weak self] in
-            for await online in source.onlineStream {
+    private func start(source: any RemoteLibrarySource) {
+        print("RemoteSourcesCoordinator: starting source \(source.id) (\(source.name))")
+
+        let onlineTask = Task {
+            for await isOnline in source.onlineStream {
+                print("RemoteSourcesCoordinator: source \(source.id) online status changed to \(isOnline)")
                 await MainActor.run {
-                    if let self, !online { self.lastItemsBySource[source.id] = [] }
+                    // Trigger UI update when online status changes
+                    self.objectWillChange.send()
+                    pushCacheUpdate()
                 }
-                await self?.pushCacheUpdate()
             }
-        })
-        ts.append(Task { [weak self] in
+        }
+
+        let itemsTask = Task {
             for await items in source.itemsStream {
-                await MainActor.run {
-                    if let self { self.lastItemsBySource[source.id] = items }
+                print("RemoteSourcesCoordinator: received \(items.count) items from source \(source.id)")
+                for (index, item) in items.enumerated() {
+                    print("  [\(index)]: \(item.url.absoluteString)")
                 }
-                await self?.pushCacheUpdate()
+                await MainActor.run {
+                    lastItemsBySource[source.id] = items
+                    pushCacheUpdate()
+                }
             }
-        })
-        tasks[source.id] = ts
+        }
+
+        tasks[source.id] = [onlineTask, itemsTask]
+        source.start()
+        print("RemoteSourcesCoordinator: source \(source.id) start() called")
     }
 
-    func stop(_ source: RemoteLibrarySource) {
-        source.stop()
-        tasks[source.id]?.forEach { $0.cancel() }
-        tasks[source.id] = nil
+    private func stop(sourceId: String) {
+        if let source = sources.first(where: { $0.id == sourceId }) {
+            source.stop()
+        }
+        tasks[sourceId]?.forEach { $0.cancel() }
+        tasks[sourceId] = nil
     }
 
     private func pushCacheUpdate() {
-        var urls: [String] = []
-        for s in sources where s.isOnline {
-            let items = lastItemsBySource[s.id] ?? []
-            urls.append(contentsOf: items.map { $0.url.absoluteString })
+        let allUrls = lastItemsBySource.values.flatMap { $0 }.map { $0.url.absoluteString }
+        print("RemoteSourcesCoordinator: updating cache with \(allUrls.count) URLs")
+        for (index, url) in allUrls.enumerated() {
+            print("  [\(index)]: \(url)")
         }
-        TVLibraryBridge.updateLibrary(withRemotePaths: urls, fetchMetadata: true)
+
+        // Force metadata fetch for remote games to ensure artwork and database lookups work
+        TVLibraryBridge.updateLibrary(withRemotePaths: allUrls, fetchMetadata: true)
+
+        // Notify UI to refresh
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+        }
+    }
+
+    private func refreshAllSources() {
+        for source in sources {
+            // Restart each source to trigger fresh enumeration
+            stop(sourceId: source.id)
+            start(source: source)
+        }
     }
 }

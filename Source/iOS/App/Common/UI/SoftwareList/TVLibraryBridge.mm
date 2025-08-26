@@ -24,12 +24,7 @@
 @implementation TVLibraryBridge
 
 + (NSArray<TVGameItem*>*)currentGames {
-  NSArray<GameFilePtrWrapper*>* wrappers = [[GameFileCacheManager sharedManager] getGames];
-  NSMutableArray<TVGameItem*>* items = [NSMutableArray arrayWithCapacity:wrappers.count];
-  for (GameFilePtrWrapper* w in wrappers) {
-    [items addObject:[[TVGameItem alloc] initWithWrapper:w]];
-  }
-  return items;
+  return [[GameFileCacheManager sharedManager] currentGames];
 }
 
 + (void)rescanAndFetchMetadataWithCompletion:(void(^)(void))completion {

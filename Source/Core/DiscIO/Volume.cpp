@@ -87,15 +87,46 @@ std::map<Language, std::string> Volume::ReadWiiNames(const std::vector<char16_t>
 static std::unique_ptr<VolumeDisc> TryCreateDisc(std::unique_ptr<BlobReader>& reader)
 {
   if (!reader)
+  {
+    INFO_LOG_FMT(DISCIO, "TryCreateDisc: reader is null");
     return nullptr;
+  }
 
-  if (reader->ReadSwapped<u32>(0x18) == WII_DISC_MAGIC)
-    return std::make_unique<VolumeWii>(std::move(reader));
+  INFO_LOG_FMT(DISCIO, "TryCreateDisc: checking magic numbers for disc type");
 
-  if (reader->ReadSwapped<u32>(0x1C) == GAMECUBE_DISC_MAGIC)
-    return std::make_unique<VolumeGC>(std::move(reader));
+  // Check for Wii disc magic at 0x18
+  const auto wii_magic = reader->ReadSwapped<u32>(0x18);
+  if (wii_magic.has_value())
+  {
+    INFO_LOG_FMT(DISCIO, "TryCreateDisc: read magic at 0x18: 0x{:08x}", wii_magic.value());
+    if (wii_magic.value() == WII_DISC_MAGIC)
+    {
+      INFO_LOG_FMT(DISCIO, "TryCreateDisc: detected Wii disc, creating VolumeWii");
+      return std::make_unique<VolumeWii>(std::move(reader));
+    }
+  }
+  else
+  {
+    ERROR_LOG_FMT(DISCIO, "TryCreateDisc: failed to read Wii magic at 0x18");
+  }
 
-  // No known magic words found
+  // Check for GameCube disc magic at 0x1C
+  const auto gc_magic = reader->ReadSwapped<u32>(0x1C);
+  if (gc_magic.has_value())
+  {
+    INFO_LOG_FMT(DISCIO, "TryCreateDisc: read magic at 0x1C: 0x{:08x}", gc_magic.value());
+    if (gc_magic.value() == GAMECUBE_DISC_MAGIC)
+    {
+      INFO_LOG_FMT(DISCIO, "TryCreateDisc: detected GameCube disc, creating VolumeGC");
+      return std::make_unique<VolumeGC>(std::move(reader));
+    }
+  }
+  else
+  {
+    ERROR_LOG_FMT(DISCIO, "TryCreateDisc: failed to read GameCube magic at 0x1C");
+  }
+
+  INFO_LOG_FMT(DISCIO, "TryCreateDisc: no known disc magic found");
   return nullptr;
 }
 
@@ -136,19 +167,37 @@ std::unique_ptr<VolumeWAD> CreateWAD(const std::string& path)
 
 std::unique_ptr<Volume> CreateVolume(std::unique_ptr<BlobReader> reader)
 {
+  INFO_LOG_FMT(DISCIO, "CreateVolume: attempting to create volume from BlobReader");
+
   std::unique_ptr<VolumeDisc> disc = TryCreateDisc(reader);
   if (disc)
+  {
+    INFO_LOG_FMT(DISCIO, "CreateVolume: successfully created disc volume");
     return disc;
+  }
 
+  INFO_LOG_FMT(DISCIO, "CreateVolume: disc creation failed, trying WAD");
   std::unique_ptr<VolumeWAD> wad = TryCreateWAD(reader);
   if (wad)
+  {
+    INFO_LOG_FMT(DISCIO, "CreateVolume: successfully created WAD volume");
     return wad;
+  }
 
+  ERROR_LOG_FMT(DISCIO, "CreateVolume: failed to create any volume type");
   return nullptr;
 }
 
 std::unique_ptr<Volume> CreateVolume(const std::string& path)
 {
-  return CreateVolume(CreateBlobReader(path));
+  INFO_LOG_FMT(DISCIO, "CreateVolume: creating volume from path: {}", path);
+  auto reader = CreateBlobReader(path);
+  if (!reader)
+  {
+    ERROR_LOG_FMT(DISCIO, "CreateVolume: failed to create BlobReader for path: {}", path);
+    return nullptr;
+  }
+  INFO_LOG_FMT(DISCIO, "CreateVolume: BlobReader created successfully for path: {}", path);
+  return CreateVolume(std::move(reader));
 }
 }  // namespace DiscIO

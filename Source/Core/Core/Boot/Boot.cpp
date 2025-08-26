@@ -56,6 +56,7 @@
 
 #include "DiscIO/Enums.h"
 #include "DiscIO/GameModDescriptor.h"
+#include "DiscIO/HttpBlobReader.h"
 #include "DiscIO/RiivolutionParser.h"
 #include "DiscIO/RiivolutionPatcher.h"
 #include "DiscIO/VolumeDisc.h"
@@ -198,10 +199,21 @@ std::unique_ptr<BootParameters> BootParameters::GenerateFromFile(std::vector<std
 
   // Check if the file exist, we may have gotten it from a --elf command line
   // that gave an incorrect file name
-  if (!File::Exists(paths.front()))
+  // For HTTP URLs, skip the existence check since File::Exists might fail due to network issues
+  // but the file could still be accessible during actual loading
+  std::string lower_path = paths.front();
+  Common::ToLower(&lower_path);
+  bool is_http_url = (lower_path.rfind("http://", 0) == 0 || lower_path.rfind("https://", 0) == 0 ||
+                     lower_path.rfind("webdav://", 0) == 0 || lower_path.rfind("webdavs://", 0) == 0);
+
+  if (!is_http_url && !File::Exists(paths.front()))
   {
     PanicAlertFmtT("The specified file \"{0}\" does not exist", paths.front());
     return {};
+  }
+  else if (is_http_url)
+  {
+    INFO_LOG_FMT(BOOT, "Skipping existence check for HTTP URL: {}", paths.front());
   }
 
   std::string folder_path;
@@ -239,25 +251,122 @@ std::unique_ptr<BootParameters> BootParameters::GenerateFromFile(std::vector<std
       {".gcm", ".iso", ".tgc", ".wbfs", ".ciso", ".gcz", ".wia", ".rvz", ".nfs", ".dol", ".elf"}};
   if (disc_image_extensions.contains(extension))
   {
+    INFO_LOG_FMT(BOOT, "Attempting to create disc from path: {}", path);
     std::unique_ptr<DiscIO::VolumeDisc> disc = DiscIO::CreateDisc(path);
     if (disc)
     {
+      INFO_LOG_FMT(BOOT, "Successfully created disc from path: {}", path);
       return std::make_unique<BootParameters>(Disc{std::move(path), std::move(disc), paths},
                                               std::move(boot_session_data_));
+    }
+    else
+    {
+      ERROR_LOG_FMT(BOOT, "Failed to create disc from path: {}", path);
     }
 
     if (extension == ".elf")
     {
-      auto elf_reader = std::make_unique<ElfReader>(path);
-      return std::make_unique<BootParameters>(Executable{std::move(path), std::move(elf_reader)},
-                                              std::move(boot_session_data_));
+      // Check if this is an HTTP URL
+      std::string lower_path = path;
+      Common::ToLower(&lower_path);
+      bool is_http_url = (lower_path.rfind("http://", 0) == 0 || lower_path.rfind("https://", 0) == 0 ||
+                         lower_path.rfind("webdav://", 0) == 0 || lower_path.rfind("webdavs://", 0) == 0);
+
+      if (is_http_url)
+      {
+        INFO_LOG_FMT(BOOT, "Creating HTTP-aware ELF reader for: {}", path);
+
+        // For HTTP URLs, we need to download the entire .elf file first
+        auto http_reader = DiscIO::HttpBlobReader::Create(path);
+        if (!http_reader)
+        {
+          ERROR_LOG_FMT(BOOT, "Failed to create HttpBlobReader for ELF file: {}", path);
+          PanicAlertFmtT("\"{0}\" could not be accessed over HTTP.", path);
+          return {};
+        }
+
+        // Read the entire ELF file into memory
+        const u64 file_size = http_reader->GetRawSize();
+        if (file_size == 0 || file_size > 16 * 1024 * 1024) // Sanity check: ELF files shouldn't be > 16MB
+        {
+          ERROR_LOG_FMT(BOOT, "ELF file size is invalid: {} bytes", file_size);
+          PanicAlertFmtT("\"{0}\" has an invalid size for an ELF file.", path);
+          return {};
+        }
+
+        std::vector<u8> elf_data(file_size);
+        if (!http_reader->Read(0, file_size, elf_data.data()))
+        {
+          ERROR_LOG_FMT(BOOT, "Failed to read ELF file data from HTTP: {}", path);
+          PanicAlertFmtT("\"{0}\" could not be downloaded.", path);
+          return {};
+        }
+
+        INFO_LOG_FMT(BOOT, "Successfully downloaded ELF file: {} bytes", file_size);
+        auto elf_reader = std::make_unique<ElfReader>(std::move(elf_data));
+        return std::make_unique<BootParameters>(Executable{std::move(path), std::move(elf_reader)},
+                                                std::move(boot_session_data_));
+      }
+      else
+      {
+        // Local file - use normal ElfReader
+        auto elf_reader = std::make_unique<ElfReader>(path);
+        return std::make_unique<BootParameters>(Executable{std::move(path), std::move(elf_reader)},
+                                                std::move(boot_session_data_));
+      }
     }
 
     if (extension == ".dol")
     {
-      auto dol_reader = std::make_unique<DolReader>(path);
-      return std::make_unique<BootParameters>(Executable{std::move(path), std::move(dol_reader)},
-                                              std::move(boot_session_data_));
+      // Check if this is an HTTP URL
+      std::string lower_path = path;
+      Common::ToLower(&lower_path);
+      bool is_http_url = (lower_path.rfind("http://", 0) == 0 || lower_path.rfind("https://", 0) == 0 ||
+                         lower_path.rfind("webdav://", 0) == 0 || lower_path.rfind("webdavs://", 0) == 0);
+
+      if (is_http_url)
+      {
+        INFO_LOG_FMT(BOOT, "Creating HTTP-aware DOL reader for: {}", path);
+
+        // For HTTP URLs, we need to download the entire .dol file first
+        // since DolReader needs the complete file in memory
+        auto http_reader = DiscIO::HttpBlobReader::Create(path);
+        if (!http_reader)
+        {
+          ERROR_LOG_FMT(BOOT, "Failed to create HttpBlobReader for DOL file: {}", path);
+          PanicAlertFmtT("\"{0}\" could not be accessed over HTTP.", path);
+          return {};
+        }
+
+        // Read the entire DOL file into memory
+        const u64 file_size = http_reader->GetRawSize();
+        if (file_size == 0 || file_size > 16 * 1024 * 1024) // Sanity check: DOL files shouldn't be > 16MB
+        {
+          ERROR_LOG_FMT(BOOT, "DOL file size is invalid: {} bytes", file_size);
+          PanicAlertFmtT("\"{0}\" has an invalid size for a DOL file.", path);
+          return {};
+        }
+
+        std::vector<u8> dol_data(file_size);
+        if (!http_reader->Read(0, file_size, dol_data.data()))
+        {
+          ERROR_LOG_FMT(BOOT, "Failed to read DOL file data from HTTP: {}", path);
+          PanicAlertFmtT("\"{0}\" could not be downloaded.", path);
+          return {};
+        }
+
+        INFO_LOG_FMT(BOOT, "Successfully downloaded DOL file: {} bytes", file_size);
+        auto dol_reader = std::make_unique<DolReader>(std::move(dol_data));
+        return std::make_unique<BootParameters>(Executable{std::move(path), std::move(dol_reader)},
+                                                std::move(boot_session_data_));
+      }
+      else
+      {
+        // Local file - use normal DolReader
+        auto dol_reader = std::make_unique<DolReader>(path);
+        return std::make_unique<BootParameters>(Executable{std::move(path), std::move(dol_reader)},
+                                                std::move(boot_session_data_));
+      }
     }
 
     PanicAlertFmtT("\"{0}\" is an invalid GCM/ISO file, or is not a GC/Wii ISO.", path);
@@ -265,7 +374,25 @@ std::unique_ptr<BootParameters> BootParameters::GenerateFromFile(std::vector<std
   }
 
   if (extension == ".dff")
-    return std::make_unique<BootParameters>(DFF{std::move(path)}, std::move(boot_session_data_));
+  {
+    // Check if this is an HTTP URL
+    std::string lower_path = path;
+    Common::ToLower(&lower_path);
+    bool is_http_url = (lower_path.rfind("http://", 0) == 0 || lower_path.rfind("https://", 0) == 0 ||
+                       lower_path.rfind("webdav://", 0) == 0 || lower_path.rfind("webdavs://", 0) == 0);
+
+    if (is_http_url)
+    {
+      INFO_LOG_FMT(BOOT, "HTTP DFF files are not yet supported: {}", path);
+      PanicAlertFmtT("DFF files over HTTP are not yet supported.\nPlease download \"{0}\" locally first.", path);
+      return {};
+    }
+    else
+    {
+      // Local file - use normal DFF handling
+      return std::make_unique<BootParameters>(DFF{std::move(path)}, std::move(boot_session_data_));
+    }
+  }
 
   if (extension == ".wad")
   {
@@ -276,7 +403,55 @@ std::unique_ptr<BootParameters> BootParameters::GenerateFromFile(std::vector<std
 
   if (extension == ".json")
   {
-    auto descriptor = DiscIO::ParseGameModDescriptorFile(path);
+    // Check if this is an HTTP URL
+    std::string lower_path = path;
+    Common::ToLower(&lower_path);
+    bool is_http_url = (lower_path.rfind("http://", 0) == 0 || lower_path.rfind("https://", 0) == 0 ||
+                       lower_path.rfind("webdav://", 0) == 0 || lower_path.rfind("webdavs://", 0) == 0);
+
+    std::optional<DiscIO::GameModDescriptor> descriptor;
+
+    if (is_http_url)
+    {
+      INFO_LOG_FMT(BOOT, "Creating HTTP-aware JSON reader for: {}", path);
+
+      // For HTTP URLs, we need to download the entire .json file first
+      auto http_reader = DiscIO::HttpBlobReader::Create(path);
+      if (!http_reader)
+      {
+        ERROR_LOG_FMT(BOOT, "Failed to create HttpBlobReader for JSON file: {}", path);
+        PanicAlertFmtT("\"{0}\" could not be accessed over HTTP.", path);
+        return {};
+      }
+
+      // Read the entire JSON file into memory
+      const u64 file_size = http_reader->GetRawSize();
+      if (file_size == 0 || file_size > 1024 * 1024) // Sanity check: JSON files shouldn't be > 1MB
+      {
+        ERROR_LOG_FMT(BOOT, "JSON file size is invalid: {} bytes", file_size);
+        PanicAlertFmtT("\"{0}\" has an invalid size for a JSON file.", path);
+        return {};
+      }
+
+      std::vector<char> json_data(file_size);
+      if (!http_reader->Read(0, file_size, reinterpret_cast<u8*>(json_data.data())))
+      {
+        ERROR_LOG_FMT(BOOT, "Failed to read JSON file data from HTTP: {}", path);
+        PanicAlertFmtT("\"{0}\" could not be downloaded.", path);
+        return {};
+      }
+
+      INFO_LOG_FMT(BOOT, "Successfully downloaded JSON file: {} bytes", file_size);
+
+      // Parse the JSON data directly from memory
+      descriptor = DiscIO::ParseGameModDescriptorString(std::string_view(json_data.data(), json_data.size()), path);
+    }
+    else
+    {
+      // Local file - use normal JSON handling
+      descriptor = DiscIO::ParseGameModDescriptorFile(path);
+    }
+
     if (descriptor)
     {
       auto boot_params = GenerateFromFile(descriptor->base_file, std::move(boot_session_data_));

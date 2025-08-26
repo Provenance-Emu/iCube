@@ -103,12 +103,15 @@ GameFile::GameFile() = default;
 
 GameFile::GameFile(std::string path) : m_file_path(std::move(path))
 {
+  INFO_LOG_FMT(DISCIO, "GameFile constructor called with path: {}", m_file_path);
   m_file_name = PathToFileName(m_file_path);
 
   {
+    INFO_LOG_FMT(DISCIO, "GameFile: attempting to create volume for {}", m_file_path);
     std::unique_ptr<DiscIO::Volume> volume(DiscIO::CreateVolume(m_file_path));
     if (volume != nullptr)
     {
+      INFO_LOG_FMT(DISCIO, "GameFile: volume created successfully for {}", m_file_path);
       m_platform = volume->GetVolumeType();
 
       m_short_names = volume->GetShortNames();
@@ -138,9 +141,24 @@ GameFile::GameFile(std::string path) : m_file_path(std::move(path))
       m_is_two_disc_game = CheckIfTwoDiscGame(m_game_id);
       m_apploader_date = volume->GetApploaderDate();
 
+      // Log extracted metadata for debugging
+      INFO_LOG_FMT(DISCIO, "GameFile: extracted metadata - gameID='{}', internalName='{}', platform={}",
+                   m_game_id, m_internal_name, static_cast<int>(m_platform));
+      INFO_LOG_FMT(DISCIO, "GameFile: names - short_names.size()={}, long_names.size()={}",
+                   m_short_names.size(), m_long_names.size());
+      if (!m_long_names.empty()) {
+        INFO_LOG_FMT(DISCIO, "GameFile: first long name: '{}'", m_long_names.begin()->second);
+      }
+      INFO_LOG_FMT(DISCIO, "GameFile: disc_number={}, revision={}, file_size={}",
+                   m_disc_number, m_revision, m_file_size);
+
       m_volume_banner.buffer = volume->GetBanner(&m_volume_banner.width, &m_volume_banner.height);
 
       m_valid = true;
+    }
+    else
+    {
+      INFO_LOG_FMT(DISCIO, "GameFile: volume creation failed for {}", m_file_path);
     }
   }
 
@@ -189,12 +207,20 @@ GameFile::~GameFile() = default;
 
 bool GameFile::IsValid() const
 {
+  INFO_LOG_FMT(DISCIO, "GameFile::IsValid called for {}, m_valid={}", m_file_path, m_valid);
   if (!m_valid)
+  {
+    INFO_LOG_FMT(DISCIO, "GameFile::IsValid: returning false because m_valid is false for {}", m_file_path);
     return false;
+  }
 
   if (m_platform == DiscIO::Platform::WiiWAD && !IOS::ES::IsChannel(m_title_id))
+  {
+    INFO_LOG_FMT(DISCIO, "GameFile::IsValid: returning false because WiiWAD is not a channel for {}", m_file_path);
     return false;
+  }
 
+  INFO_LOG_FMT(DISCIO, "GameFile::IsValid: returning true for {}", m_file_path);
   return true;
 }
 
@@ -510,13 +536,20 @@ const std::string& GameFile::GetName(const Core::TitleDatabase& title_database) 
 const std::string& GameFile::GetName(Variant variant) const
 {
   if (variant == Variant::LongAndPossiblyCustom && !m_custom_name.empty())
+  {
+    INFO_LOG_FMT(DISCIO, "GameFile::GetName: using custom name '{}' for {}", m_custom_name, m_file_path);
     return m_custom_name;
+  }
 
   const std::string& name = variant == Variant::ShortAndNotCustom ? GetShortName() : GetLongName();
   if (!name.empty())
+  {
+    INFO_LOG_FMT(DISCIO, "GameFile::GetName: using extracted name '{}' for {}", name, m_file_path);
     return name;
+  }
 
   // No usable name, return filename (better than nothing)
+  INFO_LOG_FMT(DISCIO, "GameFile::GetName: no extracted name, using filename '{}' for {}", m_file_name, m_file_path);
   return m_file_name;
 }
 
