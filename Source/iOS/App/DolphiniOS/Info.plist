@@ -99,6 +99,7 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_altserver._tcp</string>
+		<string>_webdav._tcp</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
