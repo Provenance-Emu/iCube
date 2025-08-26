@@ -136,8 +136,24 @@ struct EmulationScreen: View {
         }
                 .sheet(isPresented: $showSettings) {
             ZStack {
-                Color.black.ignoresSafeArea()
-                SettingsRootView(backgroundView: AnyView(Color.black), isPauseMenuStyle: true, game: game)
+                // Beautiful blurred background like other menus
+                Image(uiImage: game.coverImage)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 25)
+
+                // Elegant gradient overlay
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.85),
+                        Color.black.opacity(0.4),
+                        Color.black.opacity(0.85)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                SettingsRootView(backgroundView: AnyView(Color.clear), isPauseMenuStyle: true, game: game)
             }
         }
                                 .fullScreenCover(isPresented: $showPauseMenu) {

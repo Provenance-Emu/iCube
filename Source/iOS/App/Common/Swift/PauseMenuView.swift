@@ -15,7 +15,7 @@ internal struct PauseMenuView: View {
   let game: TVGameItem
 
   @FocusState private var focused: FocusField?
-      internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, exit, back, slot(Int), save, load, downloadCheats, manageCheats }
+      internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, exit, back, slot(Int), save, load }
     private enum Pane { case main, saves, cheats, controllers }
     @State private var pane: Pane = .main
 
@@ -34,7 +34,7 @@ internal struct PauseMenuView: View {
                 savesMenu
                     .onAppear { NSLog("[PAUSE] Saves menu appeared") }
             case .cheats:
-                cheatsMenu
+                CheatsMenuView(game: game, onBack: { pane = .main })
                     .onAppear { NSLog("[PAUSE] Cheats menu appeared") }
             case .controllers:
                 ControllerMappingView(game: game, onBack: { pane = .main })
@@ -51,7 +51,7 @@ internal struct PauseMenuView: View {
         case .saves:
           focused = .back
         case .cheats:
-          focused = .downloadCheats
+          focused = .back
         case .controllers:
           focused = .back
         }
@@ -508,77 +508,8 @@ internal struct PauseMenuView: View {
     .onExitCommand { pane = .main }
   }
 
-    private var cheatsMenu: some View {
-        ZStack {
-            // Background
-            Image(uiImage: game.coverImage)
-                .resizable()
-                .scaledToFill()
-                .blur(radius: 20)
-                .ignoresSafeArea()
 
-            // Gradient overlay
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.black.opacity(0.8),
-                    Color.black.opacity(0.4),
-                    Color.black.opacity(0.8)
-                ]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            // Content
-            VStack(spacing: 0) {
-                // Header
-                HStack {
-                    Button(action: { pane = .main }) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .semibold))
-                            Text(L("Back to Menu"))
-                                .font(.system(size: 18, weight: .semibold))
-                        }
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(.white.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .focusable()
-                    .focused($focused, equals: .back)
-
-                    Spacer()
-
-                    VStack(spacing: 4) {
-                        Text(L("Cheat Codes"))
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.white)
-                        Text(game.title)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-
-                    Spacer()
-                }
-                .padding(.horizontal, 60)
-                .padding(.top, 60)
-                .padding(.bottom, 20)
-
-                // Real cheat content
-                ModernCheatsContent(game: game, availableHeight: 600)
-
-                Spacer()
-            }
-        }
-        .onExitCommand { pane = .main }
-        .focusSection()
-    }
 }
-
-// MARK: - Modern Cheats Content
 internal struct ModernCheatsContent: View {
     let game: TVGameItem
     let availableHeight: CGFloat
@@ -927,6 +858,68 @@ internal struct ModernEmptyState: View {
             }
         }
         .padding(40)
+    }
+}
+
+// MARK: - Modern Style Card
+internal struct ModernStyleCard: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+    let isLoading: Bool
+    let action: () -> Void
+
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.2))
+                        .frame(width: 50, height: 50)
+
+                    if isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: icon)
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundColor(color)
+                    }
+                }
+
+                // Text
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                    Text(subtitle)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+
+                Spacer()
+
+                // Arrow
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .padding(20)
+            .background(.white.opacity(isFocused ? 0.15 : 0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(color.opacity(isFocused ? 0.6 : 0), lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
+        .focused($isFocused)
+        .disabled(isLoading)
     }
 }
 
@@ -1298,7 +1291,14 @@ private struct ControllerPickerSheet: View {
     NavigationStack {
       List {
         ForEach(Array(controllers.enumerated()), id: \.offset) { idx, c in
-          Button(action: { selection = idx }) {
+          Button(action: {
+            selection = idx
+            // Assign controller immediately when selected
+            if controllers.indices.contains(idx) {
+              TVControllerMappingBridge.assign(controllers[idx], toGCPort: port)
+              NSLog("[CONTROLLER] Immediately assigned controller \(c.vendorName ?? c.productCategory) to port \(port)")
+            }
+          }) {
             HStack {
               VStack(alignment: .leading) {
                 Text(c.vendorName ?? c.productCategory)
@@ -1311,12 +1311,27 @@ private struct ControllerPickerSheet: View {
           .buttonStyle(.plain)
         }
       }
-      .navigationTitle(L("Assign to Player" + "\(port)"))
+      .navigationTitle(L("Assign to Player \(port)"))
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) { Button(L("Cancel")) { onDone(nil); dismiss() } }
-        ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { onDone(selection); dismiss() }.disabled(selection == nil) }
+        ToolbarItem(placement: .topBarLeading) {
+          Button(L("Cancel")) {
+            onDone(nil)
+            dismiss()
+          }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+          Button(L("Done")) {
+            onDone(selection)
+            dismiss()
+          }
+        }
       }
       .onAppear { controllers = GCController.controllers() }
+      .onExitCommand {
+        // When B is pressed, still call onDone to refresh the parent view
+        onDone(selection)
+        dismiss()
+      }
     }
   }
 }
