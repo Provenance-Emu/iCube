@@ -37,6 +37,9 @@
 		B36B51972E5E41C7009A2303 /* RemoteLibrarySource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */; };
 		B36B51982E5E41C7009A2303 /* WebDAVSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51962E5E41C7009A2303 /* WebDAVSource.swift */; };
 		B36B51992E5E41C7009A2303 /* RemoteSourcesCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */; };
+		B36B519B2E5E46AC009A2303 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519A2E5E46AC009A2303 /* KeychainService.swift */; };
+		B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */; };
+		B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519E2E5E4700009A2303 /* SourcesView.swift */; };
 		B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38205FF2E57FF0E00D4853F /* CompiledShader.swift */; };
 		B382060D2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */; };
 		B382060E2E57FF0E00D4853F /* Converters.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206012E57FF0E00D4853F /* Converters.metal */; };
@@ -300,6 +303,9 @@
 		B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLibrarySource.swift; sourceTree = "<group>"; };
 		B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourcesCoordinator.swift; sourceTree = "<group>"; };
 		B36B51962E5E41C7009A2303 /* WebDAVSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVSource.swift; sourceTree = "<group>"; };
+		B36B519A2E5E46AC009A2303 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourcesStore.swift; sourceTree = "<group>"; };
+		B36B519E2E5E4700009A2303 /* SourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesView.swift; sourceTree = "<group>"; };
 		B38205FF2E57FF0E00D4853F /* CompiledShader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShader.swift; sourceTree = "<group>"; };
 		B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShaderContainer.swift; sourceTree = "<group>"; };
 		B38206012E57FF0E00D4853F /* Converters.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Converters.metal; sourceTree = "<group>"; };
@@ -1078,16 +1084,18 @@
 		B933EDBB27F6A5C7004D7DD7 /* Swift */ = {
 			isa = PBXGroup;
 			children = (
-				B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */,
-				B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */,
-				B36B51962E5E41C7009A2303 /* WebDAVSource.swift */,
-				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
-				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
+				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
+				B36B519E2E5E4700009A2303 /* SourcesView.swift */,
+				B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */,
+				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
+				B36B519A2E5E46AC009A2303 /* KeychainService.swift */,
 				B36B48C92E5D07D4009A2303 /* Localized.swift */,
 				B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */,
+				B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */,
+				B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */,
 				B36B48C72E5D0749009A2303 /* TVCheatListView.swift */,
 				B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */,
 				B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */,
@@ -1095,6 +1103,7 @@
 				B34ECCF02E5692C900301907 /* TVRootView.swift */,
 				B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */,
 				B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */,
+				B36B51962E5E41C7009A2303 /* WebDAVSource.swift */,
 				B34EE6B22E57D65400301907 /* Shaders */,
 			);
 			path = Swift;
@@ -2299,6 +2308,7 @@
 				B38206142E57FF0E00D4853F /* Matrix.swift in Sources */,
 				B38206152E57FF0E00D4853F /* MTLPixelConverter.swift in Sources */,
 				B38206162E57FF0E00D4853F /* ShaderPassBindings.swift in Sources */,
+				B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */,
 				B904ACD92885E7DE008B6BE9 /* GraphicsHacksViewController.mm in Sources */,
 				B950CFAD296170BC00197719 /* BootNoticeManager.m in Sources */,
 				B34EDDDD2E57AC9700301907 /* SettingsRootView.swift in Sources */,
@@ -2325,6 +2335,7 @@
 				B9D9388F283DE3C800B290FC /* EmulationViewController.mm in Sources */,
 				B904AD2E2888D75F008B6BE9 /* MappingExtensionCell.m in Sources */,
 				B9EC283A2D21DA56000FAE09 /* TCWiiTouchIRMode.swift in Sources */,
+				B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */,
 				B991378E28814BCD00588446 /* WiiSensorBarViewController.mm in Sources */,
 				B97492472960CD2B00794509 /* FirstRunInitializationService.mm in Sources */,
 				B36B48D12E5D6AFB009A2303 /* ControllerExtensions.swift in Sources */,
@@ -2348,6 +2359,7 @@
 				B97E4B5629656EC300B3EE9C /* VersionManager.swift in Sources */,
 				B904ACC128851C6F008B6BE9 /* GraphicsBackendViewController.mm in Sources */,
 				B904ACCF288555E8008B6BE9 /* InternalResolutionViewController.mm in Sources */,
+				B36B519B2E5E46AC009A2303 /* KeychainService.swift in Sources */,
 				B9FCB7BC289672830020E233 /* JitManager+Debugger.m in Sources */,
 				B9398724287FFBEC008E8E47 /* ConfigSoundViewController.mm in Sources */,
 				B9447B072841906000BC9110 /* TCView.swift in Sources */,

@@ -111,6 +111,7 @@ struct TVLibraryView: View {
     /// Currently focused game's file path to drive zIndex and animations
     @State private var focusedFilePath: String?
     #endif
+    @State private var showSources = false
 
     private enum CheatType { case gecko, ar }
 
@@ -193,6 +194,9 @@ struct TVLibraryView: View {
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
+            Button(action: { showSources = true }) { Image(systemName: "externaldrive.badge.plus") }
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             Button(action: { showSettings = true }) { Image(systemName: "gearshape") }
         }
         #else
@@ -200,6 +204,7 @@ struct TVLibraryView: View {
             Menu {
                 Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
                 Button(L("Perform Online System Update")) { model.performOnlineSystemUpdate() }
+                Button(L("Sources")) { showSources = true }
             } label: { Image(systemName: "ellipsis.circle") }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -326,6 +331,8 @@ struct TVLibraryView: View {
                 TVCheatListView(item: item)
             }
         }
+        // Sources sheet
+        .sheet(isPresented: $showSources) { SourcesView() }
         /// Delete confirmation and action
         .alert(L("Delete Game?"), isPresented: Binding(get: { itemPendingDelete != nil }, set: { if !$0 { itemPendingDelete = nil } })) {
             Button(L("Delete"), role: .destructive) {
