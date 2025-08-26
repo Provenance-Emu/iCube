@@ -64,6 +64,8 @@ add_library(discio
   WiiEncryptionCache.h
   WiiSaveBanner.cpp
   WiiSaveBanner.h
+  HttpBlobReader.cpp
+  HttpBlobReader.h
 )
 
 target_link_libraries(discio

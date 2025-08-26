@@ -34,6 +34,9 @@
 		B36B48CF2E5D6AC5009A2303 /* PauseMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */; };
 		B36B48D12E5D6AFB009A2303 /* ControllerExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */; };
 		B36B51912E5D8760009A2303 /* CheatsMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51902E5D8760009A2303 /* CheatsMenuView.swift */; };
+		B36B51972E5E41C7009A2303 /* RemoteLibrarySource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */; };
+		B36B51982E5E41C7009A2303 /* WebDAVSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51962E5E41C7009A2303 /* WebDAVSource.swift */; };
+		B36B51992E5E41C7009A2303 /* RemoteSourcesCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */; };
 		B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38205FF2E57FF0E00D4853F /* CompiledShader.swift */; };
 		B382060D2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */; };
 		B382060E2E57FF0E00D4853F /* Converters.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206012E57FF0E00D4853F /* Converters.metal */; };
@@ -294,6 +297,9 @@
 		B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseMenuView.swift; sourceTree = "<group>"; };
 		B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerExtensions.swift; sourceTree = "<group>"; };
 		B36B51902E5D8760009A2303 /* CheatsMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheatsMenuView.swift; sourceTree = "<group>"; };
+		B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLibrarySource.swift; sourceTree = "<group>"; };
+		B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourcesCoordinator.swift; sourceTree = "<group>"; };
+		B36B51962E5E41C7009A2303 /* WebDAVSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVSource.swift; sourceTree = "<group>"; };
 		B38205FF2E57FF0E00D4853F /* CompiledShader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShader.swift; sourceTree = "<group>"; };
 		B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShaderContainer.swift; sourceTree = "<group>"; };
 		B38206012E57FF0E00D4853F /* Converters.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Converters.metal; sourceTree = "<group>"; };
@@ -1072,6 +1078,9 @@
 		B933EDBB27F6A5C7004D7DD7 /* Swift */ = {
 			isa = PBXGroup;
 			children = (
+				B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */,
+				B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */,
+				B36B51962E5E41C7009A2303 /* WebDAVSource.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
@@ -2370,6 +2379,9 @@
 				B9FCB7E42898F4D60020E233 /* JitManager+JitStreamer.m in Sources */,
 				B9DC5FB62884A563004BD94A /* GraphicsBoolCell.mm in Sources */,
 				B9D938A728418AFE00B290FC /* TCManagerInterface.mm in Sources */,
+				B36B51972E5E41C7009A2303 /* RemoteLibrarySource.swift in Sources */,
+				B36B51982E5E41C7009A2303 /* WebDAVSource.swift in Sources */,
+				B36B51992E5E41C7009A2303 /* RemoteSourcesCoordinator.swift in Sources */,
 				B9B2C661288E569E00CB6569 /* ExternalDisplayEmulationViewController.mm in Sources */,
 				B950CFA32961696100197719 /* BootNoticeNavigationViewController.m in Sources */,
 				B9EC28382D21D429000FAE09 /* ControllersTouchscreenViewController.mm in Sources */,

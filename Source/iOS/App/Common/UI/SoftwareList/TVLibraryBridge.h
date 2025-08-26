@@ -15,6 +15,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)performOnlineSystemUpdate;
 + (void)performOnlineSystemUpdateWithRegion:(NSString*)regionCode;
 
+/// Merge the provided absolute paths/URLs into the library cache and optionally fetch metadata.
++ (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch;
+
 @end
 
 NS_ASSUME_NONNULL_END

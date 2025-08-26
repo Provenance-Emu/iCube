@@ -23,6 +23,8 @@
 #include "DiscIO/TGCBlob.h"
 #include "DiscIO/WIABlob.h"
 #include "DiscIO/WbfsBlob.h"
+#include "DiscIO/HttpBlobReader.h"
+#include "Common/StringUtil.h"
 
 namespace DiscIO
 {
@@ -215,6 +217,16 @@ u32 SectorReader::ReadChunk(u8* buffer, u64 chunk_num)
 
 std::unique_ptr<BlobReader> CreateBlobReader(const std::string& filename)
 {
+  // Remote URL support: if path looks like http(s)/webdav(s), use HttpBlobReader
+  std::string lower = filename;
+  Common::ToLower(&lower);
+  if (lower.rfind("http://", 0) == 0 || lower.rfind("https://", 0) == 0 ||
+      lower.rfind("webdav://", 0) == 0 || lower.rfind("webdavs://", 0) == 0)
+  {
+    if (auto http = HttpBlobReader::Create(filename))
+      return http;
+  }
+
   File::IOFile file(filename, "rb");
   u32 magic;
   if (!file.ReadArray(&magic, 1))

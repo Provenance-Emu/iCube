@@ -28,6 +28,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSArray<GameFilePtrWrapper*>*)getGames;
 
+/// Updates the cache by merging local scan paths with the provided extra absolute paths (file or URL strings).
+- (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch;
+
 @end
 
 NS_ASSUME_NONNULL_END

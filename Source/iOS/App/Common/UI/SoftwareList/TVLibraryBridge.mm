@@ -80,4 +80,8 @@
 	[self performOnlineSystemUpdate];
 }
 
++ (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {
+  [[GameFileCacheManager sharedManager] updateWithExtraPaths:paths fetchMetadata:fetch];
+}
+
 @end

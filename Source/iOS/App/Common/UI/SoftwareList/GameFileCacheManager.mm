@@ -15,11 +15,11 @@
 + (GameFileCacheManager*)sharedManager {
   static dispatch_once_t _onceToken = 0;
   static GameFileCacheManager* _sharedManager = nil;
-  
+
   dispatch_once(&_onceToken, ^{
     _sharedManager = [[self alloc] init];
   });
-  
+
   return _sharedManager;
 }
 
@@ -28,21 +28,21 @@
     self->_cache = new UICommon::GameFileCache();
     self->_cache->Load();
   }
-  
+
   return self;
 }
 
 - (void)updateCacheWithShouldUpdateMetadata:(bool)updateMetadata {
   NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
-  
+
   std::vector<std::string> scanPaths{ FoundationToCppString(softwareFolder) };
-  
+
   bool cacheUpdated = self->_cache->Update(UICommon::FindAllGamePaths(scanPaths, true));
-  
+
   if (updateMetadata) {
     cacheUpdated |= self->_cache->UpdateAdditionalMetadata();
   }
-  
+
   if (cacheUpdated) {
     self->_cache->Save();
   }
@@ -55,7 +55,7 @@
 - (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     [self updateCacheWithShouldUpdateMetadata:true];
-    
+
     if (completion_handler) {
       completion_handler();
     }
@@ -67,11 +67,33 @@
   self->_cache->ForEach([array](const std::shared_ptr<const UICommon::GameFile>& game) {
     GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
     wrapper.gameFile = game;
-    
+
     [array addObject:wrapper];
   });
-  
+
   return array;
+}
+
+- (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
+  NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
+
+  // Expand only local folders via FindAllGamePaths
+  std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
+  std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+
+  // Append remote URLs or explicit files as-is
+  for (NSString* s in extraPaths) {
+    if (s.length == 0) continue;
+    all.push_back(FoundationToCppString(s));
+  }
+
+  bool updated = self->_cache->Update(all);
+  if (fetch) {
+    updated |= self->_cache->UpdateAdditionalMetadata();
+  }
+  if (updated) {
+    self->_cache->Save();
+  }
 }
 
 @end
