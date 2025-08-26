@@ -189,7 +189,7 @@ struct TVLibraryView: View {
         }
         ToolbarItem(placement: .navigationBarTrailing) {
             Button(action: { model.rescan() }) {
-                if model.isRescanning { ProgressView() } else { Label(L("Rescan"), systemImage: "arrow.clockwise") }
+                if model.isRescanning { ProgressView() } else { Label("", systemImage: "arrow.clockwise") }
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
