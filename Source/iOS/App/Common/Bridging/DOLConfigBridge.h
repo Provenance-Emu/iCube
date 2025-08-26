@@ -332,6 +332,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)gfxCpuCull;
 + (void)setGfxCpuCull:(BOOL)enabled;
 
++ (void)resetAllToDefaults;
++ (void)resetPageToDefaults:(NSInteger)page; // 0=config, 1=graphics, 2=controllers, 3=debug, 4=about
+
 @end
 
 NS_ASSUME_NONNULL_END

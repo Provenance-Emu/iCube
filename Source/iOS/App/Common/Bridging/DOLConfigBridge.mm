@@ -389,4 +389,62 @@
 + (BOOL)gfxHackEfbDeferInvalidation { return Config::Get(Config::GFX_HACK_EFB_DEFER_INVALIDATION); }
 + (void)setGfxHackEfbDeferInvalidation:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_EFB_DEFER_INVALIDATION, (bool)enabled); }
 
++ (void)resetAllToDefaults {
+  // Remove user/game override layers so Base defaults take effect
+  Config::RemoveLayer(Config::LayerType::GlobalGame);
+  Config::RemoveLayer(Config::LayerType::LocalGame);
+  // Clear CurrentRun ephemeral overrides
+  Config::RemoveLayer(Config::LayerType::CurrentRun);
+  // Re-add base if needed and save
+  Config::AddLayer(ConfigLoaders::GenerateBaseConfigLoader());
+  Config::Save();
+}
+
++ (void)resetPageToDefaults:(NSInteger)page {
+  // For now, clear CurrentRun overrides for a coarse reset of the active page group.
+  // This relies on Base layer shipping sane defaults.
+  switch (page) {
+    case 0: // Config (General)
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_THREAD);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_ENABLE_CHEATS);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_OVERRIDE_REGION_SETTINGS);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_AUTO_DISC_CHANGE);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_FAST_DISC_SPEED);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_DSP_THREAD);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_FALLBACK_REGION);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_EMULATION_SPEED);
+      break;
+    case 1: // Graphics
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_GFX_BACKEND);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_VSYNC);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_EFB_SCALE);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_WIDESCREEN_HACK);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_DISABLE_FOG);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_ASYNC_PRESENT);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_ENABLE);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_TARGET_FPS);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_MIN_SCALE);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_MAX_SCALE);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_AUTO_IR_SHOW_OSD);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_SHADER_COMPILATION_MODE);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING);
+      break;
+    case 2: // Controllers
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_INPUT_BACKGROUND_INPUT);
+      for (int p = 1; p <= 4; ++p) {
+        Config::DeleteKey(Config::LayerType::CurrentRun, Config::GetInfoForSIDevice(p));
+        Config::DeleteKey(Config::LayerType::CurrentRun, Config::GetInfoForWiimoteSource(p));
+      }
+      break;
+    case 3: // Debug
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_FASTMEM);
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_SYNC_ON_SKIP_IDLE);
+      break;
+    case 4: // About (no keys)
+    default:
+      break;
+  }
+  Config::Save();
+}
+
 @end

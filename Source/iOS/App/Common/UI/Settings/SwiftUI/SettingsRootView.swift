@@ -248,6 +248,8 @@ private struct SettingsSubMenuView: View {
   let page: SettingsPage
   let game: TVGameItem?
   let onBack: () -> Void
+  @State private var showResetAll = false
+  @State private var showResetPage = false
 
   var body: some View {
     HStack(spacing: 80) {
@@ -276,21 +278,47 @@ private struct SettingsSubMenuView: View {
 
       // Right side - Settings content
       VStack(alignment: .leading, spacing: 32) {
-        // Back button
-        Button(action: onBack) {
-          HStack(spacing: 12) {
-            Image(systemName: "chevron.left")
-              .font(.system(size: 16, weight: .semibold))
-            Text("Back to Settings")
-              .font(.system(size: 18, weight: .semibold))
+        // Back + Reset actions
+        HStack(spacing: 12) {
+          Button(action: onBack) {
+            HStack(spacing: 12) {
+              Image(systemName: "chevron.left")
+                .font(.system(size: 16, weight: .semibold))
+              Text("Back to Settings")
+                .font(.system(size: 18, weight: .semibold))
+            }
+            .foregroundColor(.white.opacity(0.8))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(.white.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
           }
-          .foregroundColor(.white.opacity(0.8))
-          .padding(.horizontal, 20)
-          .padding(.vertical, 12)
-          .background(.white.opacity(0.1))
-          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          .buttonStyle(.plain)
+
+          Spacer()
+
+          Button(action: { showResetPage = true }) {
+            Text(L("Reset Page"))
+              .font(.system(size: 16, weight: .semibold))
+              .foregroundColor(.white)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 10)
+              .background(.orange.opacity(0.3))
+              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+          }
+          .buttonStyle(.plain)
+
+          Button(action: { showResetAll = true }) {
+            Text(L("Reset All"))
+              .font(.system(size: 16, weight: .semibold))
+              .foregroundColor(.white)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 10)
+              .background(.red.opacity(0.3))
+              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+          }
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
 
         // Settings content - ensure NavigationStack for NavigationLink to work, and focus enabled
         NavigationStack { contentForPage(page) }
@@ -309,6 +337,30 @@ private struct SettingsSubMenuView: View {
     .padding(.horizontal, 60)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onExitCommand { onBack() }
+    .alert(L("Reset All Settings"), isPresented: $showResetAll) {
+      Button(L("Cancel"), role: .cancel) {}
+      Button(L("Reset"), role: .destructive) {
+        DOLConfigBridge.resetAllToDefaults()
+      }
+    } message: {
+      Text(L("This will reset all settings to factory defaults. This may require restarting emulation."))
+    }
+    .alert(L("Reset Page"), isPresented: $showResetPage) {
+      Button(L("Cancel"), role: .cancel) {}
+      Button(L("Reset"), role: .destructive) {
+        let index: Int
+        switch page {
+          case .config: index = 0
+          case .graphics: index = 1
+          case .controllers: index = 2
+          case .debug: index = 3
+          case .about: index = 4
+        }
+        DOLConfigBridge.resetPage(toDefaults: index)
+      }
+    } message: {
+      Text(L("This resets only the settings on this page to defaults."))
+    }
   }
 
   private func titleForPage(_ page: SettingsPage) -> String {
