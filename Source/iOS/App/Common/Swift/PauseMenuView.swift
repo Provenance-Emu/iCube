@@ -509,75 +509,68 @@ internal struct PauseMenuView: View {
   }
 
     private var cheatsMenu: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Background
-                Image(uiImage: game.coverImage)
-                    .resizable()
-                    .scaledToFill()
-                    .blur(radius: 20)
-                    .ignoresSafeArea()
-
-                // Gradient overlay
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.black.opacity(0.8),
-                        Color.black.opacity(0.4),
-                        Color.black.opacity(0.8)
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+        ZStack {
+            // Background
+            Image(uiImage: game.coverImage)
+                .resizable()
+                .scaledToFill()
+                .blur(radius: 20)
                 .ignoresSafeArea()
 
-                // Content constrained to screen bounds
-                VStack(spacing: 0) {
-                    // Header section
-                    HStack {
-                        Button(action: { pane = .main }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 16, weight: .semibold))
-                                Text(L("Back to Menu"))
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
-                            .background(.white.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            // Gradient overlay
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.black.opacity(0.8),
+                    Color.black.opacity(0.4),
+                    Color.black.opacity(0.8)
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            // Content
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Button(action: { pane = .main }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text(L("Back to Menu"))
+                                .font(.system(size: 18, weight: .semibold))
                         }
-                        .buttonStyle(.plain)
-                        .focused($focused, equals: .back)
-
-                        Spacer()
-
-                        VStack(spacing: 4) {
-                            Text(L("Cheat Codes"))
-                                .font(.system(size: 28, weight: .bold))
-                                .foregroundColor(.white)
-                            Text(game.title)
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                        }
-
-                        Spacer()
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(.white.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .padding(.horizontal, 60)
-                    .padding(.top, 40)
-                    .frame(height: 120)
+                    .buttonStyle(.plain)
+                    .focusable()
+                    .focused($focused, equals: .back)
 
-                    // Main content area - constrained height
-                    ModernCheatsContent(
-                        game: game,
-                        availableHeight: geometry.size.height - 160 // Reserve space for header
-                    )
-                    .frame(maxHeight: geometry.size.height - 160)
-                    .clipped()
+                    Spacer()
 
-                    Spacer(minLength: 40)
+                    VStack(spacing: 4) {
+                        Text(L("Cheat Codes"))
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.white)
+                        Text(game.title)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+
+                    Spacer()
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
+                .padding(.horizontal, 60)
+                .padding(.top, 60)
+                .padding(.bottom, 20)
+
+                // Real cheat content
+                ModernCheatsContent(game: game, availableHeight: 600)
+
+                Spacer()
             }
         }
         .onExitCommand { pane = .main }
@@ -621,14 +614,12 @@ internal struct ModernCheatsContent: View {
                     loadCheats()
                 }
             }
-            .padding(.horizontal, 60)
 
             // Status Message
             if !statusMessage.isEmpty {
                 Text(statusMessage)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.white.opacity(0.8))
-                    .padding(.horizontal, 60)
             }
 
             // Cheats List - Scrollable
@@ -667,10 +658,9 @@ internal struct ModernCheatsContent: View {
                         ModernEmptyState()
                     }
                 }
-                .padding(.horizontal, 60)
                 .padding(.bottom, 40)
             }
-            .frame(maxHeight: availableHeight - 200) // Reserve space for action cards and status
+            .frame(maxHeight: .infinity)
         }
         .onAppear {
             loadCheats()
@@ -762,6 +752,7 @@ internal struct ModernActionCard: View {
             )
         }
         .buttonStyle(.plain)
+        .focusable()
         .focused($isFocused)
         .disabled(isLoading)
     }
@@ -906,6 +897,7 @@ internal struct ModernCheatCard: View {
             )
         }
         .buttonStyle(.plain)
+        .focusable()
         .focused($isFocused)
     }
 
@@ -1118,6 +1110,7 @@ internal struct ControllerMappingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
           }
           .buttonStyle(.plain)
+          .focusable()
           .focused($focused, equals: .back)
 
           Spacer()
@@ -1138,68 +1131,77 @@ internal struct ControllerMappingView: View {
         // Player cards
         VStack(spacing: 20) {
           ForEach(1...4, id: \.self) { port in
-            HStack(spacing: 20) {
-              // Player icon
-              ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                  .fill(.white.opacity(0.1))
-                  .frame(width: 48, height: 48)
-
-                Image(systemName: "person.fill")
-                  .font(.system(size: 20, weight: .medium))
-                  .foregroundColor(.white)
-              }
-
+            VStack(spacing: 16) {
               // Player info
-              VStack(alignment: .leading, spacing: 4) {
-                Text("Player \(port)")
-                  .font(.system(size: 18, weight: .semibold))
-                  .foregroundColor(.white)
+              HStack(spacing: 20) {
+                // Player icon
+                ZStack {
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.white.opacity(0.1))
+                    .frame(width: 48, height: 48)
 
-                Text((currentQualifiers[port] ?? "").isEmpty ? L("No controller assigned") : (currentQualifiers[port] ?? ""))
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.white.opacity(0.7))
-                  .lineLimit(1)
+                  Image(systemName: "person.fill")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.white)
+                }
+
+                // Player info
+                VStack(alignment: .leading, spacing: 4) {
+                  Text("Player \(port)")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+
+                  Text((currentQualifiers[port] ?? "").isEmpty ? L("No controller assigned") : (currentQualifiers[port] ?? ""))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .lineLimit(1)
+                }
+
+                Spacer()
               }
 
-              Spacer()
-
-              // Action buttons
-              HStack(spacing: 12) {
-                Button(L("Assign")) { showPickerForPort = port }
-                  .font(.system(size: 14, weight: .semibold))
+              // Action buttons - separate row for better focus
+              HStack(spacing: 20) {
+                Button(action: {
+                  NSLog("[CONTROLLER] Assign button pressed for port \(port)")
+                  showPickerForPort = port
+                }) {
+                  HStack(spacing: 8) {
+                    Image(systemName: "plus.circle")
+                    Text(L("Assign"))
+                  }
+                  .font(.system(size: 16, weight: .semibold))
                   .foregroundColor(.white)
-                  .padding(.horizontal, 16)
-                  .padding(.vertical, 8)
-                  .background(.blue.opacity(0.2))
-                  .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                  .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                      .stroke(.blue.opacity(0.4), lineWidth: 1)
-                  )
-                  .buttonStyle(.plain)
-                  .focused($focused, equals: .assign(port))
+                  .frame(maxWidth: .infinity)
+                  .padding(.vertical, 12)
+                  .background(.blue.opacity(0.3))
+                  .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .focused($focused, equals: .assign(port))
 
-                Button(L("Clear")) {
+                Button(action: {
+                  NSLog("[CONTROLLER] Clear button pressed for port \(port)")
                   TVControllerMappingBridge.clearDefaultDevice(forGCPort: port)
                   reload()
+                }) {
+                  HStack(spacing: 8) {
+                    Image(systemName: "xmark.circle")
+                    Text(L("Clear"))
+                  }
+                  .font(.system(size: 16, weight: .semibold))
+                  .foregroundColor(.white.opacity(0.8))
+                  .frame(maxWidth: .infinity)
+                  .padding(.vertical, 12)
+                  .background(.white.opacity(0.2))
+                  .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white.opacity(0.8))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.white.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                  RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.white.opacity(0.2), lineWidth: 1)
-                )
                 .buttonStyle(.plain)
                 .focused($focused, equals: .clear(port))
               }
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.vertical, 20)
             .background(.white.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
           }
