@@ -18,7 +18,8 @@ class RemoteSourcesCoordinator: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshAllSources()
+            // Don't restart sources - they're already running and yielding items correctly
+            // self?.refreshAllSources()
         }
     }
 
@@ -53,10 +54,6 @@ class RemoteSourcesCoordinator: ObservableObject {
 
         let itemsTask = Task {
             for await items in source.itemsStream {
-                print("RemoteSourcesCoordinator: received \(items.count) items from source \(source.id)")
-                for (index, item) in items.enumerated() {
-                    print("  [\(index)]: \(item.url.absoluteString)")
-                }
                 await MainActor.run {
                     lastItemsBySource[source.id] = items
                     pushCacheUpdate()
@@ -80,8 +77,24 @@ class RemoteSourcesCoordinator: ObservableObject {
     private func pushCacheUpdate() {
         let allUrls = lastItemsBySource.values.flatMap { $0 }.map { $0.url.absoluteString }
         print("RemoteSourcesCoordinator: updating cache with \(allUrls.count) URLs")
+
+        // Detailed logging of what URLs we're collecting
+        print("RemoteSourcesCoordinator: detailed URL breakdown:")
+        for (sourceId, items) in lastItemsBySource {
+            print("  Source \(sourceId): \(items.count) items")
+            for (index, item) in items.enumerated() {
+                let fileName = item.url.lastPathComponent
+                let fileExt = item.url.pathExtension.lowercased()
+                print("    [\(index)]: \(fileName) (ext: \(fileExt)) -> \(item.url.absoluteString)")
+            }
+        }
+
+        print("RemoteSourcesCoordinator: final URL list being sent to TVLibraryBridge:")
         for (index, url) in allUrls.enumerated() {
-            print("  [\(index)]: \(url)")
+            let urlObj = URL(string: url)
+            let fileName = urlObj?.lastPathComponent ?? "unknown"
+            let fileExt = urlObj?.pathExtension.lowercased() ?? "unknown"
+            print("  [\(index)]: \(fileName) (ext: \(fileExt)) -> \(url)")
         }
 
         // Force metadata fetch for remote games to ensure artwork and database lookups work
@@ -93,11 +106,5 @@ class RemoteSourcesCoordinator: ObservableObject {
         }
     }
 
-    private func refreshAllSources() {
-        for source in sources {
-            // Restart each source to trigger fresh enumeration
-            stop(sourceId: source.id)
-            start(source: source)
-        }
-    }
+
 }

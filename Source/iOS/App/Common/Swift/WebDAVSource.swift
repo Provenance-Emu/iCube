@@ -202,7 +202,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                 Self.logger.info("  [\(index, privacy: .public)]: \(item.url.absoluteString, privacy: .public)")
             }
             #endif
-            itemsCont?.yield(items)
+                        itemsCont?.yield(items)
             #if canImport(os)
             Self.logger.info("Items yielded to continuation")
             #endif

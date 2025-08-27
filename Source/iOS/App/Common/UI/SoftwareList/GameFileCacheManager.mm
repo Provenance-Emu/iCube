@@ -52,30 +52,16 @@
 - (void)rescan {
   NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
-  // Get current remote URLs from cache to preserve them
-  NSMutableArray<NSString*>* remoteUrls = [[NSMutableArray alloc] init];
-  self->_cache->ForEach([remoteUrls](const std::shared_ptr<const UICommon::GameFile>& game) {
-    std::string path = game->GetFilePath();
-    NSString* pathStr = [NSString stringWithUTF8String:path.c_str()];
-    if ([pathStr hasPrefix:@"http://"] || [pathStr hasPrefix:@"https://"] ||
-        [pathStr hasPrefix:@"webdav://"] || [pathStr hasPrefix:@"webdavs://"]) {
-      [remoteUrls addObject:pathStr];
-    }
-  });
-
-  // Expand local folders via FindAllGamePaths
+  // Only scan local folders - remote URLs will be added via updateWithExtraPaths
   std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
   std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
 
-  // Add preserved remote URLs
-  for (NSString* remoteUrl in remoteUrls) {
-    all.push_back(FoundationToCppString(remoteUrl));
-  }
+  // Update cache
+  self->_cache->Update(all);
 
-  bool updated = self->_cache->Update(all);
-  if (updated) {
-    self->_cache->Save();
-  }
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"GameFileCacheUpdated" object:nil];
+  });
 }
 
 - (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
@@ -148,12 +134,24 @@
 }
 
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
+  NSLog(@"GameFileCacheManager: updateWithExtraPaths called with %lu paths", (unsigned long)extraPaths.count);
+  NSLog(@"GameFileCacheManager: received URLs breakdown:");
+  for (NSUInteger i = 0; i < extraPaths.count; i++) {
+    NSString* urlString = extraPaths[i];
+    NSURL* url = [NSURL URLWithString:urlString];
+    NSString* fileName = url.lastPathComponent ?: @"unknown";
+    NSString* fileExt = [url.pathExtension lowercaseString] ?: @"unknown";
+    NSLog(@"  [%lu]: %@ (ext: %@) -> %@", i, fileName, fileExt, urlString);
+  }
+
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Expand only local folders via FindAllGamePaths
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
     std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+
+    NSLog(@"GameFileCacheManager: processing %lu extraPaths for remote URL filtering", (unsigned long)extraPaths.count);
 
     // Filter and append only accessible remote URLs
     for (NSString* s in extraPaths) {
@@ -166,17 +164,21 @@
         // Only add if we can create a basic URL object
         NSURL* url = [NSURL URLWithString:s];
         if (url && url.host) {
+          NSLog(@"GameFileCacheManager: adding remote URL: %@", s);
           all.push_back(FoundationToCppString(s));
+        } else {
+          NSLog(@"GameFileCacheManager: REJECTED remote URL (invalid): %@", s);
         }
       } else {
         // Local files - add as-is
+        NSLog(@"GameFileCacheManager: adding local file: %@", s);
         all.push_back(FoundationToCppString(s));
       }
     }
 
     bool updated = false;
     @try {
-      NSLog(@"GameFileCacheManager: calling Update with %lu paths", (unsigned long)all.size());
+      NSLog(@"GameFileCacheManager: calling Update with %lu total paths (%lu local + remote)", (unsigned long)all.size(), (unsigned long)extraPaths.count);
       for (size_t i = 0; i < all.size() && i < 20; ++i) {
         NSLog(@"  [%zu]: %s", i, all[i].c_str());
       }
