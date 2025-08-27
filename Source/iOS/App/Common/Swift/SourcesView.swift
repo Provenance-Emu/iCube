@@ -82,7 +82,7 @@ private struct AddWebDAVSourceView: View {
                 Section("Details") {
                     TextField("Name", text: $name)
                     TextField("URL (e.g., http://192.168.1.29:8080)", text: $url)
-                    TextField("Start Path (optional)", text: $startPath)
+                    TextField("Start Path (optional) (`Software` for other DolphiniOS instances)", text: $startPath)
                 }
                 Section("Authentication") {
                     TextField("Username (optional)", text: $username)
@@ -178,7 +178,7 @@ private struct EditWebDAVSourceView: View {
                 Section("Details") {
                     TextField("Name", text: $name)
                     TextField("URL (e.g., http://192.168.1.29:8080)", text: $url)
-                    TextField("Start Path (optional)", text: $startPath)
+                    TextField("Start Path (optional) (`Software` for other DolphiniOS instances)", text: $startPath)
                 }
                 Section("Authentication") {
                     TextField("Username (optional)", text: $username)
