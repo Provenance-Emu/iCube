@@ -4,6 +4,7 @@
 #include "InputCommon/ControllerInterface/iOS/StateManager.h"
 
 #include <vector>
+#include "Common/Logging/Log.h"
 
 namespace ciface::iOS
 {
@@ -198,6 +199,16 @@ float StateManager::GetAxisValue(int controller_id, ButtonType axis) const
 
 void StateManager::SetAxisValue(int controller_id, ButtonType axis, float value)
 {
-  m_controllers[controller_id].m_axes[axis] = value;
+  auto& axes = m_controllers[controller_id].m_axes;
+  const float old = axes[axis];
+  axes[axis] = value;
+  if (controller_id == 4 &&
+      (axis == ButtonType::WIIMOTE_IR_UP || axis == ButtonType::WIIMOTE_IR_DOWN ||
+       axis == ButtonType::WIIMOTE_IR_LEFT || axis == ButtonType::WIIMOTE_IR_RIGHT))
+  {
+    INFO_LOG_FMT(CONTROLLERINTERFACE,
+                 "[INPUT][StateMgr] SetAxis c={} axis={} old={:.3f} new={:.3f}",
+                 controller_id, static_cast<int>(axis), old, value);
+  }
 }
 }  // namespace ciface::iOS

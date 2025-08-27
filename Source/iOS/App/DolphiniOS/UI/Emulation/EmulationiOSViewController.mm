@@ -262,6 +262,9 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 - (bool)isWiimoteTouchPadAttached {
   if (Config::Get(Config::GetInfoForWiimoteSource(0)) != WiimoteSource::Emulated) {
     // Nothing is plugged in to this port.
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+      NSLog(@"[INPUT] WiimoteTouchPadAttached: false (Wiimote 1 source is not Emulated)");
+    }
     return false;
   }
   
@@ -269,9 +272,16 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   
   if (wiimote->GetDefaultDevice().source != "iOS") {
     // A real controller is mapped to this port.
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+      NSString* src = [NSString stringWithUTF8String:wiimote->GetDefaultDevice().source.c_str()];
+      NSLog(@"[INPUT] WiimoteTouchPadAttached: false (default device source=%@)", src);
+    }
     return false;
   }
   
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+    NSLog(@"[INPUT] WiimoteTouchPadAttached: true (default device source=iOS)");
+  }
   return true;
 }
 
@@ -370,7 +380,18 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
     irMode = (TCWiiTouchIRMode)Config::Get(Config::MAIN_TOUCH_PAD_IR_MODE);
     
     ControllerEmu::ControlGroup* group = Wiimote::GetWiimoteGroup(0, WiimoteEmu::WiimoteGroup::IMUPoint);
+    // Disable IMUPoint group when Touch IR Pointer is active (Follow/Drag)
+    // Only enable IMUPoint when mode is None so motion can control pointer.
     group->enabled = irMode == TCWiiTouchIRModeNone;
+
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+      NSLog(@"[INPUT] WiiTouchPad: attached=true irMode=%ld imuPointEnabled=%@", (long)irMode, group->enabled ? @"true" : @"false");
+    }
+  }
+  else {
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+      NSLog(@"[INPUT] WiiTouchPad: attached=false (Wiimote 1 not Emulated or default device not iOS)");
+    }
   }
   
   for (int i = 0; i < [self.touchPads count]; i++) {

@@ -4,6 +4,7 @@
 #import "TCManagerInterface.h"
 
 #import "InputCommon/ControllerInterface/iOS/StateManager.h"
+#import <Foundation/Foundation.h>
 
 @implementation TCManagerInterface
 
@@ -15,6 +16,9 @@
 }
 
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+    NSLog(@"[INPUT][Bridge] setAxis axis=%ld controller=%ld value=%.3f", (long)axis, (long)controllerId, value);
+  }
   ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis, value);
 }
 

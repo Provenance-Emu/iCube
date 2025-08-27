@@ -200,6 +200,14 @@ std::string Touchscreen::Axis::GetName() const
 
 ControlState Touchscreen::Axis::GetState() const
 {
-  return StateManager::GetInstance()->GetAxisValue(m_controller_id, m_index) * m_neg;
+  const float v = StateManager::GetInstance()->GetAxisValue(m_controller_id, m_index) * m_neg;
+  if (m_controller_id == 4 &&
+      (m_index == ButtonType::WIIMOTE_IR_UP || m_index == ButtonType::WIIMOTE_IR_DOWN ||
+       m_index == ButtonType::WIIMOTE_IR_LEFT || m_index == ButtonType::WIIMOTE_IR_RIGHT))
+  {
+    INFO_LOG_FMT(CONTROLLERINTERFACE, "[INPUT][Touchscreen] GetState c={} axis={} val={:.3f}",
+                 m_controller_id, static_cast<int>(m_index), v);
+  }
+  return v;
 }
 }  // namespace ciface::iOS

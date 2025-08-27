@@ -142,6 +142,9 @@ struct EmulationScreen: View {
     @State private var endObserver: NSObjectProtocol?
     #if os(tvOS)
     @State private var exitObserver: NSObjectProtocol?
+    // tvOS-only: periodically sync IMUPoint enabled state based on IR mode
+    @State private var imuSyncTimer: Timer?
+    @State private var lastIRModeApplied: Int = -1
     #endif
 
     // Pause menu state
@@ -191,54 +194,62 @@ struct EmulationScreen: View {
             )
         }
             .onAppear {
-                UserDefaults.standard.set(true, forKey: "input_debug")
+              UserDefaults.standard.set(true, forKey: "input_debug")
               InputOverriderBridge.registerGameCubeOverride(forController: 0)
-                NSLog("[INPUT] tvOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
-                let initialCount = GCController.controllers().count
-                NSLog("[INPUT] tvOS initial controllers count: %d", initialCount)
-                GCController.shouldMonitorBackgroundEvents = true
-                configureAllControllersForTVOS()
-                setupPauseGestureHandlers()
-                logCurrentControllers()
-                if initialCount == 0 {
-                    NSLog("[INPUT] tvOS starting wireless controller discovery")
-                    GCController.startWirelessControllerDiscovery(completionHandler: {
-                        NSLog("[INPUT] tvOS wireless controller discovery completed")
-                    })
-                }
-                NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
-                    if let c = note.object as? GCController {
-                        configureControllerForTVOS(c)
-                        setupPauseGestureHandler(for: c)
-                    }
-                }
-                NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
-                endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
-                    dismiss()
-                }
-                NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
-                    InputOverriderBridge.registerGameCubeOverride(forController: 0)
-                    configureAllControllersForTVOS()
-                }
-                NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
-                    showPauseMenu = true
-                }
-                exitObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil, queue: .main) { _ in
-                    dismiss()
-                }
-            }
-            .onDisappear {
-                if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
-                #if os(tvOS)
-                if let token = exitObserver { NotificationCenter.default.removeObserver(token); exitObserver = nil }
-                #endif
+              NSLog("[INPUT] tvOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
+              let initialCount = GCController.controllers().count
+              NSLog("[INPUT] tvOS initial controllers count: %d", initialCount)
+              GCController.shouldMonitorBackgroundEvents = true
+              configureAllControllersForTVOS()
+              setupPauseGestureHandlers()
+              logCurrentControllers()
+              // Ensure IMUPoint is toggled according to current IR mode
+              syncIMUPointWithIRMode()
+              imuSyncTimer?.invalidate()
+              imuSyncTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                  syncIMUPointWithIRMode()
+              }
+              if initialCount == 0 {
+                  NSLog("[INPUT] tvOS starting wireless controller discovery")
+                  GCController.startWirelessControllerDiscovery(completionHandler: {
+                      NSLog("[INPUT] tvOS wireless controller discovery completed")
+                  })
+              }
+              NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
+                  if let c = note.object as? GCController {
+                      configureControllerForTVOS(c)
+                      setupPauseGestureHandler(for: c)
+                  }
+              }
+              NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
+              endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
+                  dismiss()
+              }
+              NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
+                  InputOverriderBridge.registerGameCubeOverride(forController: 0)
+                  configureAllControllersForTVOS()
+                  syncIMUPointWithIRMode()
+              }
+              NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
+                  showPauseMenu = true
+              }
+              exitObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil, queue: .main) { _ in
+                  dismiss()
+              }
+          }
+          .onDisappear {
+              if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
+              #if os(tvOS)
+              if let token = exitObserver { NotificationCenter.default.removeObserver(token); exitObserver = nil }
+              imuSyncTimer?.invalidate(); imuSyncTimer = nil
+              #endif
               InputOverriderBridge.unregisterGameCubeOverride(forController: 0)
-                for c in GCController.controllers() {
-                    c.extendedGamepad?.valueChangedHandler = nil
-                    c.gamepad?.valueChangedHandler = nil
-                    c.microGamepad?.valueChangedHandler = nil
-                }
-            }
+              for c in GCController.controllers() {
+                  c.extendedGamepad?.valueChangedHandler = nil
+                  c.gamepad?.valueChangedHandler = nil
+                  c.microGamepad?.valueChangedHandler = nil
+              }
+          }
             .onChange(of: showPauseMenu) { visible in
                 NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
             }
@@ -300,6 +311,20 @@ struct EmulationScreen: View {
     private func togglePause() {
         if TVEmulationBridge.isPaused() { TVEmulationBridge.resume() } else { TVEmulationBridge.pause() }
     }
+
+    #if os(tvOS)
+    private func syncIMUPointWithIRMode() {
+        let mode = DOLConfigBridge.mainTouchPadIRMode()
+        if mode != lastIRModeApplied {
+            lastIRModeApplied = mode
+            let enableIMUPoint = (mode == 0) // None
+            TVInputBridge.setWiimoteIMUPointEnabled(enableIMUPoint, forPort: 0)
+            if UserDefaults.standard.bool(forKey: "input_debug") {
+                NSLog("[INPUT] tvOS WiiTouchPad: irMode=%ld -> IMUPoint enabled=%@", mode, enableIMUPoint ? "true" : "false")
+            }
+        }
+    }
+    #endif
 
     /// Sets up pause gesture handlers for all currently connected controllers
     private func setupPauseGestureHandlers() {

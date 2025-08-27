@@ -10,6 +10,9 @@ private final class TouchpadIRState {
     var startY: Float = 0
     var oldX: Float = 0
     var oldY: Float = 0
+    var prevPressed: Bool = false
+    var didAutoRecenter: Bool = false
+    var wasControlling: Bool = false
 }
 
 private var touchpadIRStates: [ObjectIdentifier: TouchpadIRState] = [:]
@@ -171,14 +174,17 @@ func installInputDebugHandlers(_ c: GCController) {
 
             // DualSense/DualShock touchpad -> Wii IR mapping
             if #available(iOS 14.5, tvOS 14.5, *) {
+                let debug = UserDefaults.standard.bool(forKey: "input_debug")
                 let controllerId = ObjectIdentifier(c)
                 let state = touchpadIRStates[controllerId] ?? TouchpadIRState()
                 touchpadIRStates[controllerId] = state
 
                 // Read configured IR mode
                 let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
+                if debug { NSLog("[INPUT] TouchpadIR: modeRaw=%d", modeRaw) }
                 guard let irMode = TCWiiTouchIRMode(rawValue: modeRaw), irMode != .none else {
                     // Reset state when disabled
+                    if debug { NSLog("[INPUT] TouchpadIR: disabled, skipping processing") }
                     state.touching = false
                     state.startX = 0; state.startY = 0
                     // Do not push IR axes when disabled
@@ -191,8 +197,15 @@ func installInputDebugHandlers(_ c: GCController) {
                     // Apple's API typically provides 0..1 for touchpad coordinates; map to -1..1 centered
                     let rawX = xAxis.value
                     let rawY = yAxis.value
-                    let nx = max(-1.0 as Float, min(1.0 as Float, rawX * 2 - 1))
-                    let ny = max(-1.0 as Float, min(1.0 as Float, rawY * 2 - 1))
+                    // Some OS versions/controllers (e.g. DS4) already report [-1,1]. Detect at runtime.
+                    let zeroToOne = (rawX >= 0 && rawX <= 1) && (rawY >= 0 && rawY <= 1)
+                    let nx = zeroToOne ? max(-1.0 as Float, min(1.0 as Float, rawX * 2 - 1))
+                                       : max(-1.0 as Float, min(1.0 as Float, rawX))
+                    let ny = zeroToOne ? max(-1.0 as Float, min(1.0 as Float, rawY * 2 - 1))
+                                       : max(-1.0 as Float, min(1.0 as Float, rawY))
+                    if UserDefaults.standard.bool(forKey: "input_debug") {
+                        NSLog("[INPUT] TouchpadIR: scale=%@", zeroToOne ? "0..1->-1..1" : "passthrough [-1,1]")
+                    }
 
                     let isPressed = button.isPressed
 
@@ -203,7 +216,10 @@ func installInputDebugHandlers(_ c: GCController) {
                     case .follow:
                         // Optionally allow follow without click, controlled by settings
                         let withoutClick = UserDefaults.standard.bool(forKey: "touchpad_ir_follow_without_click")
-                        if !withoutClick && !isPressed { return }
+                        if !withoutClick && !isPressed {
+                            if debug { NSLog("[INPUT] TouchpadIR: follow gated (pressed=%@)", isPressed ? "true" : "false") }
+                            return
+                        }
                         outX = nx
                         outY = ny
                         // When switching back to follow, reset drag state
@@ -215,16 +231,19 @@ func installInputDebugHandlers(_ c: GCController) {
                             state.touching = true
                             state.startX = nx
                             state.startY = ny
+                            if debug { NSLog("[INPUT] TouchpadIR: drag start at nx=%.3f ny=%.3f", nx, ny) }
                         }
                         if isPressed {
                             outX = state.oldX + (nx - state.startX)
                             outY = state.oldY + (ny - state.startY)
+                            if debug { NSLog("[INPUT] TouchpadIR: dragging nx=%.3f ny=%.3f -> outX=%.3f outY=%.3f", nx, ny, outX, outY) }
                         } else {
                             if state.touching {
                                 // Commit accumulated offset when finger lifts
                                 state.oldX = max(-1, min(1, state.oldX + (nx - state.startX)))
                                 state.oldY = max(-1, min(1, state.oldY + (ny - state.startY)))
                                 state.touching = false
+                                if debug { NSLog("[INPUT] TouchpadIR: drag end commit oldX=%.3f oldY=%.3f", state.oldX, state.oldY) }
                             }
                             outX = state.oldX
                             outY = state.oldY
@@ -233,18 +252,74 @@ func installInputDebugHandlers(_ c: GCController) {
                         break
                     }
 
-                    // Push to Wii IR axes: order [Y, Y, X, X] to match TCWiiPad
+                    // Optional: recenter on touchpad button edge (default enabled)
+                    let recenterEnabled = UserDefaults.standard.object(forKey: "touchpad_ir_recenter_on_click") == nil || UserDefaults.standard.bool(forKey: "touchpad_ir_recenter_on_click")
+                    // StateManager layout: 0-3 = GameCube P1..P4, 4-7 = Wiimote 1..4. Wii IR must go to controller_id 4.
+                    let targetPort = 4
+
+                    // Force IR to show and optionally recenter once on first input per controller
+                    if !state.didAutoRecenter {
+                        TCManagerInterface.setButtonStateFor(TCButtonType.wiiInfraredHide.rawValue, controller: targetPort, state: false)
+                        if debug { NSLog("[INPUT] TouchpadIR: forcing IR show (hide=0) on first input (port=%d)", targetPort) }
+                        if recenterEnabled {
+                            TCManagerInterface.setButtonStateFor(TCButtonType.wiiInfraredRecenter.rawValue, controller: targetPort, state: true)
+                            TCManagerInterface.setButtonStateFor(TCButtonType.wiiInfraredRecenter.rawValue, controller: targetPort, state: false)
+                            if debug { NSLog("[INPUT] TouchpadIR: auto recenter pulse on first input (port=%d)", targetPort) }
+                        }
+                        state.didAutoRecenter = true
+                    }
+                    // Keep IR shown while controlling; hide again when not controlling
+                    let followWithoutClick = UserDefaults.standard.bool(forKey: "touchpad_ir_follow_without_click")
+                    let controlling = isPressed || followWithoutClick
+                    if controlling {
+                        TCManagerInterface.setButtonStateFor(TCButtonType.wiiInfraredHide.rawValue, controller: targetPort, state: false)
+                        if debug && !state.wasControlling { NSLog("[INPUT] TouchpadIR: controlling start -> hide=0 (port=%d)", targetPort) }
+                    } else {
+                        // Do not force-hide when control ends; keep cursor visible
+                    }
+                    state.wasControlling = controlling
+
+                    if recenterEnabled && isPressed && !state.prevPressed {
+                        TCManagerInterface.setButtonStateFor(TCButtonType.wiiInfraredRecenter.rawValue, controller: targetPort, state: true)
+                        TCManagerInterface.setButtonStateFor(TCButtonType.wiiInfraredRecenter.rawValue, controller: targetPort, state: false)
+                        if debug { NSLog("[INPUT] TouchpadIR: recenter pulse on touchpad click (port=%d)", targetPort) }
+                    }
+                    state.prevPressed = isPressed
+
+                    // Always keep IR cursor visible while we are feeding IR input
+                    TCManagerInterface.setButtonStateFor(TCButtonType.wiiInfraredHide.rawValue, controller: targetPort, state: false)
+
+                    // Push to Wii IR axes: order [Y, Y, X, X] to match TCWiiPad semantics (signed values)
                     let base = TCButtonType.wiiInfrared.rawValue
-                    let values: [Float] = [outY, outY, outX, outX]
-                    for (i, v) in values.enumerated() {
-                        TCManagerInterface.setAxisValueFor(base + i + 1, controller: 0, value: v)
+                    // Split signed [-1,1] into directional magnitudes [0,1] to avoid cancellation in combiner
+                    let up = max(0.0 as Float, -outY)
+                    let down = max(0.0 as Float, outY)
+                    let left = max(0.0 as Float, -outX)
+                    let right = max(0.0 as Float, outX)
+                    if debug {
+                        NSLog("[INPUT] TouchpadIR: raw=(%.3f,%.3f) norm=(%.3f,%.3f) pressed=%@ out=(%.3f,%.3f) split u/d/l/r=(%.3f,%.3f,%.3f,%.3f) port=%d",
+                              rawX, rawY, nx, ny, isPressed ? "true" : "false", outX, outY, up, down, left, right, targetPort)
+                    }
+                    let splitValues: [Float] = [up, down, left, right]
+                    for (i, v) in splitValues.enumerated() {
+                        TCManagerInterface.setAxisValueFor(base + i + 1, controller: targetPort, value: v)
+                        if debug { NSLog("[INPUT] TouchpadIR: setAxis idx=%d port=%d val=%.3f", base + i + 1, targetPort, v) }
                     }
                 }
 
                 if let ds = gamepad as? GCDualSenseGamepad {
+                    if debug { NSLog("[INPUT] TouchpadIR: using DualSense touchpadPrimary") }
                     process(button: ds.touchpadButton, xAxis: ds.touchpadPrimary.xAxis, yAxis: ds.touchpadPrimary.yAxis)
                 } else if let ds4 = gamepad as? GCDualShockGamepad {
+                    if debug { NSLog("[INPUT] TouchpadIR: using DualShock4 touchpadPrimary") }
                     process(button: ds4.touchpadButton, xAxis: ds4.touchpadPrimary.xAxis, yAxis: ds4.touchpadPrimary.yAxis)
+                } else {
+                    if debug { NSLog("[INPUT] TouchpadIR: extendedGamepad present but not DS4/DS5 class; skipping touchpad mapping") }
+                }
+            }
+            else {
+                if UserDefaults.standard.bool(forKey: "input_debug") {
+                    NSLog("[INPUT] TouchpadIR: requires iOS/tvOS 14.5+, skipping")
                 }
             }
         }

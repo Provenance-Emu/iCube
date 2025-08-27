@@ -698,7 +698,10 @@ struct DebugRootView: View {
           .buttonStyle(.bordered)
         }
         Toggle(L("Input Event Debug"), isOn: $inputDebug)
-          .onChange(of: inputDebug) { UserDefaults.standard.set($0, forKey: "input_debug") }
+          .onChange(of: inputDebug) {
+            UserDefaults.standard.set($0, forKey: "input_debug")
+            UserDefaults.standard.synchronize()
+          }
       }
     }
     .navigationTitle(L("Debug"))

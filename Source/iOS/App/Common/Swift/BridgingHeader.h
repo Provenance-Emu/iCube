@@ -1,4 +1,4 @@
-// Copyright 2022 DolphiniOS Project
+// Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "AudioSessionManager.h"
@@ -22,6 +22,7 @@
 
 #if TARGET_OS_TV
 #import "EmuEventVC.h"
+#import "TVInputBridge.h"
 #import "TCManagerInterface.h"
 #import "InputOverriderBridge.h"
 #endif

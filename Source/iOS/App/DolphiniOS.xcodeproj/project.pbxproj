@@ -72,6 +72,7 @@
 		B3F216742E5F742400AF38F3 /* SaveStatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216732E5F742400AF38F3 /* SaveStatesViewModel.swift */; };
 		B3F216762E5F746600AF38F3 /* SaveStateFilmstripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216752E5F746600AF38F3 /* SaveStateFilmstripView.swift */; };
 		B3F216782E5F748300AF38F3 /* SaveStatesBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216772E5F748300AF38F3 /* SaveStatesBrowserView.swift */; };
+		B3F2167C2E5FA26200AF38F3 /* TVInputBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3F2167B2E5FA26200AF38F3 /* TVInputBridge.mm */; };
 		B900A7A727F26F61000361DD /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7A627F26F61000361DD /* AppDelegate.swift */; };
 		B900A7AE27F27F36000361DD /* DolphinCoreService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AD27F27F36000361DD /* DolphinCoreService.mm */; };
 		B900A7B027F2866D000361DD /* UserFolderUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AF27F2866D000361DD /* UserFolderUtil.swift */; };
@@ -356,6 +357,8 @@
 		B3F216752E5F746600AF38F3 /* SaveStateFilmstripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStateFilmstripView.swift; sourceTree = "<group>"; };
 		B3F216772E5F748300AF38F3 /* SaveStatesBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStatesBrowserView.swift; sourceTree = "<group>"; };
 		B3F216792E5F7F5C00AF38F3 /* TODO.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TODO.md; sourceTree = "<group>"; };
+		B3F2167A2E5FA26200AF38F3 /* TVInputBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVInputBridge.h; sourceTree = "<group>"; };
+		B3F2167B2E5FA26200AF38F3 /* TVInputBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVInputBridge.mm; sourceTree = "<group>"; };
 		B900A7A227F25718000361DD /* Common.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Common.xcconfig; sourceTree = "<group>"; };
 		B900A7A627F26F61000361DD /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B900A7AC27F27F36000361DD /* DolphinCoreService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DolphinCoreService.h; sourceTree = "<group>"; };
@@ -779,6 +782,8 @@
 		B34EDDE02E57B2E200301907 /* Bridging */ = {
 			isa = PBXGroup;
 			children = (
+				B3F2167A2E5FA26200AF38F3 /* TVInputBridge.h */,
+				B3F2167B2E5FA26200AF38F3 /* TVInputBridge.mm */,
 				B3F216682E5F73B900AF38F3 /* DOLPathsBridge.h */,
 				B3F216692E5F73B900AF38F3 /* DOLPathsBridge.mm */,
 				B34EDDDE2E57B2E200301907 /* DOLConfigBridge.h */,
@@ -2416,6 +2421,7 @@
 				B36B48CA2E5D07D4009A2303 /* Localized.swift in Sources */,
 				B9447B0128418F2600BC9110 /* TCJoystick.swift in Sources */,
 				B900A7BA27F4CB80000361DD /* DefaultsInitService.swift in Sources */,
+				B3F2167C2E5FA26200AF38F3 /* TVInputBridge.mm in Sources */,
 				B950CFC3296219C800197719 /* WiiSystemUpdateViewController.mm in Sources */,
 				B9809C6C2A49705500877579 /* GeckoCodeViewController.mm in Sources */,
 				B9661F332D2318D300FB2AAB /* MappingInputDisplayViewController.mm in Sources */,
