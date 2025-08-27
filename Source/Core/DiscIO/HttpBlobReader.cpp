@@ -1465,20 +1465,17 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
 
     INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: chunk {}, offset in stream: {}", chunk_count, offset_in_stream);
 
-    u32 size;
-    std::memcpy(&size, input_ptr, 4);
-    const u32 raw_size = size; // Keep original for debugging (big-endian)
+    u32 be_size;
+    std::memcpy(&be_size, input_ptr, 4);
+    const u32 swapped_size = Common::swap32(be_size);
 
-    // CRITICAL FIX: Check MSB on the big-endian value BEFORE byte-swapping
-    const bool is_junk_data = (raw_size & 0x80000000) != 0;
-
-    // Now convert from big endian to native endian
-    size = Common::swap32(size);
-    const u32 actual_size = size & 0x7FFFFFFF;
+    // Junk/raw flag is the MSB of the first big-endian header byte
+    const bool is_junk_data = (input_ptr[0] & 0x80) != 0;
+    const u32 actual_size = swapped_size & 0x7FFFFFFF;
     input_ptr += 4;
 
-    INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: chunk {}, raw_size=0x{:08x}, swapped_size=0x{:08x}, actual_size={}, is_junk={}",
-                 chunk_count, raw_size, size, actual_size, is_junk_data);
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: chunk {}, be_size=0x{:08x}, swapped_size=0x{:08x}, actual_size={}, is_junk={}",
+                 chunk_count, be_size, swapped_size, actual_size, is_junk_data);
 
     // Critical: Validate size to prevent heap corruption
     if (actual_size > MAX_REASONABLE_SIZE)
@@ -1493,12 +1490,6 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
       ERROR_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: ERROR STATE - chunk_count={}, offset_in_stream={}, remaining_bytes={}",
                     chunk_count, offset_in_stream, static_cast<size_t>(input_end - input_ptr));
 
-      // Verify pointer sanity
-      if (input_ptr < packed_data.data() || input_ptr >= input_end)
-      {
-        ERROR_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: CORRUPTED POINTER - input_ptr is out of bounds!");
-      }
-
       // Show surrounding bytes for debugging
       const size_t debug_start = (offset_in_stream >= 8) ? offset_in_stream - 8 : 0;
       const size_t debug_end = std::min(offset_in_stream + 16, packed_data.size());
@@ -1508,8 +1499,8 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
         char hex_byte[4];
         snprintf(hex_byte, sizeof(hex_byte), "%02x ", packed_data[i]);
         debug_hex += hex_byte;
-        if (i == offset_in_stream - 4) debug_hex += "[";  // Mark where size header starts
-        if (i == offset_in_stream - 1) debug_hex += "] ";  // Mark where size header ends
+        if (i == offset_in_stream) debug_hex += "[";
+        if (i == offset_in_stream + 3) debug_hex += "] ";
       }
       ERROR_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: surrounding bytes: {}", debug_hex);
 
@@ -1530,7 +1521,24 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
                    unpacked_data.size() + actual_size, chunk_size);
     }
 
-    if (is_junk_data)
+    if (!is_junk_data)
+    {
+      // Raw data - copy directly
+      if (input_ptr + actual_size > input_end)
+      {
+        ERROR_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: insufficient data for raw data ({} bytes needed, {} available)",
+                      actual_size, static_cast<u32>(input_end - input_ptr));
+        return false;
+      }
+
+      INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: copying {} bytes of raw data", actual_size);
+
+      // Insert raw data directly (size already validated above)
+      unpacked_data.insert(unpacked_data.end(), input_ptr, input_ptr + actual_size);
+
+      input_ptr += actual_size;
+    }
+    else
     {
       // PRNG-generated junk data
       // Read 68 bytes (17 u32s) of seed data
@@ -1542,7 +1550,6 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
         return false;
       }
 
-      // Generate PRNG data using the RVZ Lagged Fibonacci generator
       INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: generating {} bytes of PRNG junk data using Lagged Fibonacci generator", actual_size);
 
       // Read the 68-byte seed (17 u32 values)
@@ -1609,23 +1616,6 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
       }
 
       input_ptr += SEED_SIZE;
-    }
-    else
-    {
-      // Raw data - copy directly
-      if (input_ptr + actual_size > input_end)
-      {
-        ERROR_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: insufficient data for raw data ({} bytes needed, {} available)",
-                      actual_size, static_cast<u32>(input_end - input_ptr));
-        return false;
-      }
-
-      INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: copying {} bytes of raw data", actual_size);
-
-      // Insert raw data directly (size already validated above)
-      unpacked_data.insert(unpacked_data.end(), input_ptr, input_ptr + actual_size);
-
-      input_ptr += actual_size;
     }
 
     chunk_count++;
@@ -1839,29 +1829,48 @@ bool HttpRVZReader::ReadFromGroups(u64 offset, u64 size, u8* out_ptr, u32 group_
     const u64 group_file_offset = static_cast<u64>(Common::swap32(group.data_offset)) << 2; // data_off4 * 4
     const u32 rvz_packed_size = Common::swap32(group.rvz_packed_size);
 
-    // CRITICAL FIX: Check MSB on the big-endian value BEFORE byte-swapping
-    const bool group_is_compressed = (group.data_size & 0x80000000) != 0;
+    // Determine per-group compression from the first byte of the big-endian size field
+    const u8* size_be_ptr = reinterpret_cast<const u8*>(&group.data_size);
+    const bool group_is_compressed = (size_be_ptr[0] & 0x80) != 0;
 
-    // Now convert from big endian to native endian and remove compression bit
-    u32 raw_data_size = Common::swap32(group.data_size);
-    const u32 compressed_data_size = raw_data_size & 0x7FFFFFFF; // Remove compression bit
+    // Convert data_size to native and clear the compression flag bit for the size
+    const u32 native_data_size = Common::swap32(group.data_size);
+    const u32 compressed_data_size = native_data_size & 0x7FFFFFFF;
 
     INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: group[{}] file_offset={}, compressed_size={}, packed_size={}, is_compressed={}",
                  total_group_index, group_file_offset, compressed_data_size, rvz_packed_size, group_is_compressed);
 
-    // Calculate offset within this specific group
-    const u64 group_data_offset = i * chunk_size;  // This group's start offset in logical space
-    const u64 offset_in_group = logical_offset - group_data_offset;
+    // Calculate offset within this specific group using absolute logical start
+    const u64 this_group_logical_start = i * chunk_size;
 
-    INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: logical_offset={}, group_data_offset={}, offset_in_group={}",
-                 logical_offset, group_data_offset, offset_in_group);
+    // Entry may start at a non-zero offset within the first group
+    const u32 entry_start_mod = static_cast<u32>(data_offset % chunk_size);
+    const u64 base_in_group = (i == start_group_index) ? entry_start_mod : 0;
 
-    // Calculate how much of this chunk we can use
+    const u64 offset_in_group = base_in_group + (logical_offset - this_group_logical_start);
+
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: logical_offset={}, group_data_offset={}, base_in_group={}, offset_in_group={}",
+                 logical_offset, this_group_logical_start, base_in_group, offset_in_group);
+
+    // Calculate how much of this chunk we can use (clamp at end of entry data)
     u32 usable_chunk_size = chunk_size;
-    if (group_data_offset + chunk_size > data_offset + data_size)
-      usable_chunk_size = static_cast<u32>(data_offset + data_size - group_data_offset);
+    if (i == start_group_index)
+    {
+      // First group in this entry starts at entry_start_mod within the chunk
+      if (usable_chunk_size > entry_start_mod)
+        usable_chunk_size -= entry_start_mod;
+      else
+        usable_chunk_size = 0;
+    }
+    if (this_group_logical_start + (i == start_group_index ? (chunk_size - entry_start_mod) : chunk_size) > data_size)
+    {
+      const u64 group_usable_end = std::min<u64>(data_size, this_group_logical_start + (i == start_group_index ? (chunk_size - entry_start_mod) : chunk_size));
+      const u64 group_usable_start = this_group_logical_start;
+      const u64 group_usable_len = (group_usable_end > group_usable_start) ? (group_usable_end - group_usable_start) : 0;
+      usable_chunk_size = static_cast<u32>(group_usable_len);
+    }
 
-    const u64 bytes_to_copy = std::min(remain, static_cast<u64>(usable_chunk_size - offset_in_group));
+    const u64 bytes_to_copy = std::min(remain, static_cast<u64>(usable_chunk_size - (offset_in_group - (i == start_group_index ? entry_start_mod : 0))));
 
     // Special case: data_size == 0 means all zeros
     if (compressed_data_size == 0)
