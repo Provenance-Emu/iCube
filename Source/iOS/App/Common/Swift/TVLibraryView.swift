@@ -435,30 +435,34 @@ struct TVLibraryView: View {
                 for source in RemoteSourcesStore.shared.sources {
                     if let webdavSource = source as? WebDAVSource,
                        webdavSource.isPreCachingEnabled {
-                        let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: 0)
-                        if !webdavSource.isCached(remoteItem) {
-                            // Start background pre-caching with progress tracking
-                            let gameKey = item.filePath
-                            autoPreCacheActive.insert(gameKey)
-                            autoPreCacheProgress[gameKey] = 0.0
+                        // Start background pre-caching with progress tracking
+                        let gameKey = item.filePath
+                        autoPreCacheActive.insert(gameKey)
+                        autoPreCacheProgress[gameKey] = 0.0
 
-                            Task {
-                                do {
+                        Task {
+                            do {
+                                // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
+                                let fileSize = Int64(item.fileSize)
+                                let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: fileSize)
+
+                                // Check if already cached with correct size
+                                if !webdavSource.isCached(remoteItem) {
                                     let _ = try await webdavSource.preCacheItem(remoteItem) { progress in
                                         DispatchQueue.main.async {
                                             autoPreCacheProgress[gameKey] = progress
                                         }
                                     }
-                                    DispatchQueue.main.async {
-                                        autoPreCacheActive.remove(gameKey)
-                                        autoPreCacheProgress.removeValue(forKey: gameKey)
-                                    }
-                                } catch {
-                                    print("Auto pre-cache failed: \(error)")
-                                    DispatchQueue.main.async {
-                                        autoPreCacheActive.remove(gameKey)
-                                        autoPreCacheProgress.removeValue(forKey: gameKey)
-                                    }
+                                }
+                                DispatchQueue.main.async {
+                                    autoPreCacheActive.remove(gameKey)
+                                    autoPreCacheProgress.removeValue(forKey: gameKey)
+                                }
+                            } catch {
+                                print("Auto pre-cache failed: \(error)")
+                                DispatchQueue.main.async {
+                                    autoPreCacheActive.remove(gameKey)
+                                    autoPreCacheProgress.removeValue(forKey: gameKey)
                                 }
                             }
                         }
@@ -820,15 +824,33 @@ private struct GameGridItem: View {
         preCacheProgress = 0.0
         showPreCacheProgress = true
 
-        // Create RemoteLibraryItem from TVGameItem
-        let remoteItem = RemoteLibraryItem(
-            url: url,
-            name: item.title,
-            size: 0 // We don't have size info in TVGameItem
-        )
-
         Task {
             do {
+                // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
+                let fileSize = Int64(item.fileSize)
+                print("Using cached file size for \(item.title): \(fileSize) bytes")
+                print("DEBUG: TVGameItem.fileSize = \(item.fileSize)")
+
+                // Check available storage space
+                let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+                let resourceValues = try cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityKey])
+                let availableSpace = resourceValues.volumeAvailableCapacity ?? 0
+
+                print("DEBUG: Available storage space: \(availableSpace) bytes")
+                print("DEBUG: Required space: \(fileSize) bytes")
+
+                if availableSpace < fileSize {
+                    throw NSError(domain: "WebDAVSource", code: -1,
+                                userInfo: [NSLocalizedDescriptionKey: "Not enough storage space. Available: \(ByteCountFormatter.string(fromByteCount: availableSpace, countStyle: .file)), Required: \(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file))"])
+                }
+
+                // Create RemoteLibraryItem with correct size
+                let remoteItem = RemoteLibraryItem(
+                    url: url,
+                    name: item.title,
+                    size: fileSize
+                )
+
                 let _ = try await source.preCacheItem(remoteItem) { progress in
                     DispatchQueue.main.async {
                         self.preCacheProgress = progress
@@ -838,12 +860,13 @@ private struct GameGridItem: View {
                 DispatchQueue.main.async {
                     self.isPreCaching = false
                     self.showPreCacheProgress = false
+                    print("Pre-cache completed for: \(self.item.title)")
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.isPreCaching = false
                     self.showPreCacheProgress = false
-                    // TODO: Show error alert
+                    print("Pre-cache failed for \(self.item.title): \(error)")
                 }
             }
         }

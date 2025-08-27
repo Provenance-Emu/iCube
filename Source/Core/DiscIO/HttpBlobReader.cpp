@@ -315,14 +315,24 @@ u64 HttpBlobReader::GetDataSize() const
 bool HttpBlobReader::EnsureSize()
 {
   if (m_size_known)
+  {
+    INFO_LOG_FMT(DISCIO, "HttpBlobReader::EnsureSize: size already known for {}: {} bytes", m_url, m_size);
     return true;
+  }
+
+  INFO_LOG_FMT(DISCIO, "HttpBlobReader::EnsureSize: determining size for {}", m_url);
 
 #ifdef __APPLE__
   if (auto sz = GetRemoteSizeIOS(m_url))
   {
     m_size = *sz;
     m_size_known = true;
+    INFO_LOG_FMT(DISCIO, "HttpBlobReader::EnsureSize: got size {} bytes for {}", m_size, m_url);
     return true;
+  }
+  else
+  {
+    ERROR_LOG_FMT(DISCIO, "HttpBlobReader::EnsureSize: GetRemoteSizeIOS failed for {}", m_url);
   }
 #endif
 

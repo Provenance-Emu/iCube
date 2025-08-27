@@ -85,9 +85,15 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
     func start() {
         #if canImport(os)
-        Self.logger.info("Starting source loop for \(self.rootURL.absoluteString, privacy: .public)")
+        Self.logger.info("Starting WebDAV source: \(name)")
         #endif
-        Task { await loop() }
+
+        // Clean up any stale cache entries from old implementation
+        cleanupStaleCache()
+
+        Task {
+            await loop()
+        }
     }
 
     func stop() {
@@ -612,5 +618,34 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         #if canImport(os)
         Self.logger.info("Cleared all cached files")
         #endif
+    }
+
+    /// Clean up stale cache entries with size 0 (from old implementation)
+    func cleanupStaleCache() {
+        var metadata = loadCacheMetadata()
+        var hasChanges = false
+
+        for (key, cachedInfo) in metadata.cachedFiles {
+            if cachedInfo.fileSize == 0 {
+                #if canImport(os)
+                Self.logger.info("Removing stale cache entry with size 0: \(key)")
+                #endif
+
+                // Remove the local file
+                let localURL = cacheDirectory.appendingPathComponent(cachedInfo.localPath)
+                try? FileManager.default.removeItem(at: localURL)
+
+                // Remove from metadata
+                metadata.cachedFiles.removeValue(forKey: key)
+                hasChanges = true
+            }
+        }
+
+        if hasChanges {
+            saveCacheMetadata(metadata)
+            #if canImport(os)
+            Self.logger.info("Cleaned up stale cache entries")
+            #endif
+        }
     }
 }

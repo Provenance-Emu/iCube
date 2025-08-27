@@ -23,6 +23,7 @@
     NSString *_Nullable _apploaderDateString;
     NSString *_Nullable _titleIDHex;
     NSString *_gametdbID;
+    NSUInteger _fileSize;
 }
 
 - (instancetype)initWithWrapper:(GameFilePtrWrapper *)wrapper {
@@ -73,6 +74,11 @@
             _titleIDHex = nil;
         }
         _gametdbID = CppToFoundationString(game.GetGameTDBID());
+        _fileSize = (NSUInteger)game.GetFileSize();
+
+        // Debug logging for file size
+        NSLog(@"TVGameItem: %@ - GameFile.GetFileSize() = %llu, TVGameItem.fileSize = %lu",
+              _title, game.GetFileSize(), (unsigned long)_fileSize);
     }
     return self;
 }
@@ -91,5 +97,6 @@
 - (NSString * _Nullable)apploaderDateString { return _apploaderDateString; }
 - (NSString * _Nullable)titleIDHex { return _titleIDHex; }
 - (NSString *)gametdbID { return _gametdbID; }
+- (NSUInteger)fileSize { return _fileSize; }
 
 @end

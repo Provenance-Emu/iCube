@@ -128,6 +128,10 @@ GameFile::GameFile(std::string path) : m_file_path(std::move(path))
       m_file_size = volume->GetRawSize();
       m_volume_size = volume->GetDataSize();
       m_volume_size_type = volume->GetDataSizeType();
+
+      // Debug logging for file size
+      INFO_LOG_FMT(DISCIO, "GameFile: file_size set to {} bytes for {}", m_file_size, m_file_path);
+
       m_is_datel_disc = volume->IsDatelDisc();
       m_is_nkit = volume->IsNKit();
 

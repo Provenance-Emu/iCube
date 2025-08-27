@@ -24,6 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, nullable) NSString *apploaderDateString;
 @property (nonatomic, readonly, nullable) NSString *titleIDHex;
 @property (nonatomic, readonly) NSString *gametdbID;
+@property (nonatomic, readonly) NSUInteger fileSize;
 
 - (instancetype)initWithWrapper:(GameFilePtrWrapper *)wrapper NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
