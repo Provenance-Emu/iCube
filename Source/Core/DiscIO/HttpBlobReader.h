@@ -7,8 +7,12 @@
 #include <unordered_map>
 
 #include "Common/CommonTypes.h"
+#include "Common/IOFile.h"
 #include "Common/HttpRequest.h"
 #include "DiscIO/Blob.h"
+#include "DiscIO/WIABlob.h"
+
+#include <array>
 
 namespace DiscIO
 {
@@ -108,7 +112,7 @@ private:
   bool m_header_read = false;
 };
 
-// HTTP-backed RVZ reader for RVZ files over HTTP
+// HTTP-based RVZ reader that delegates to the proven WIARVZFileReader implementation
 class HttpRVZReader : public BlobReader
 {
 public:
@@ -116,98 +120,19 @@ public:
 
   BlobType GetBlobType() const override { return BlobType::RVZ; }
   std::unique_ptr<BlobReader> CopyReader() const override;
-
   u64 GetRawSize() const override;
   u64 GetDataSize() const override;
-  DataSizeType GetDataSizeType() const override { return DataSizeType::Accurate; }
-
+  DataSizeType GetDataSizeType() const override;
   u64 GetBlockSize() const override;
-  bool HasFastRandomAccessInBlock() const override { return false; }
+  bool HasFastRandomAccessInBlock() const override;
   std::string GetCompressionMethod() const override;
   std::optional<int> GetCompressionLevel() const override;
-
-  bool Read(u64 offset, u64 size, u8* out_ptr) override;
+  bool Read(u64 offset, u64 nbytes, u8* out_ptr) override;
 
 private:
-  // RVZ structures (simplified from WIABlob.h)
+  explicit HttpRVZReader(std::unique_ptr<RVZFileReader> rvz_reader);
 
-  #pragma pack(push, 1)
-  struct RVZHeader1
-  {
-    u32 magic;
-    u32 version;
-    u32 version_compatible;
-    u32 header_2_size;
-    u8 header_2_hash[20]; // SHA1 hash
-    u64 iso_file_size;
-    u64 wia_file_size;
-    u8 header_1_hash[20]; // SHA1 hash
-  };
-
-  struct RVZHeader2
-  {
-    u32 disc_type;
-    u32 compression_type;
-    s32 compression_level;
-    u32 chunk_size;
-    u8 disc_header[0x80];
-    u32 number_of_partition_entries;
-    u32 partition_entry_size;
-    u64 partition_entries_offset;
-    u8 partition_entries_hash[20];
-    u32 number_of_raw_data_entries;
-    u64 raw_data_entries_offset;
-    u32 raw_data_entries_size;
-    u32 number_of_group_entries;
-    u64 group_entries_offset;
-    u32 group_entries_size;
-    u8 compressor_data_size;
-    u8 compressor_data[7];
-  };
-
-  struct RVZGroupEntry
-  {
-    u32 data_offset;  // >> 2
-    u32 data_size;
-    u32 rvz_packed_size;
-  };
-
-  struct RawDataEntry
-  {
-    u64 data_offset;
-    u64 data_size;
-    u32 group_index;
-    u32 number_of_groups;
-  };
-  #pragma pack(pop)
-
-  static_assert(sizeof(RVZHeader1) == 0x48, "Wrong size for RVZ header 1");
-  static_assert(sizeof(RVZHeader2) == 0xDC, "Wrong size for RVZ header 2");
-  static_assert(sizeof(RVZGroupEntry) == 0x0C, "Wrong size for RVZ group entry");
-  static_assert(sizeof(RawDataEntry) == 0x18, "Wrong size for RVZ raw data entry");
-
-  explicit HttpRVZReader(std::unique_ptr<HttpBlobReader> http_reader);
-  bool ReadHeader();
-  bool ReadFromGroups(u64* offset, u64* size, u8** out_ptr, u64 chunk_size, u32 sector_size,
-                      u64 data_offset, u64 data_size, u32 group_index, u32 number_of_groups);
-
-  std::unique_ptr<HttpBlobReader> m_http_reader;
-  bool m_header_read = false;
-
-  // RVZ headers and data
-  RVZHeader1 m_header_1;
-  RVZHeader2 m_header_2;
-  std::vector<RVZGroupEntry> m_group_entries;
-  std::vector<RawDataEntry> m_raw_data_entries;
-
-  // Compression info
-  u32 m_compression_type = 0;
-  u64 m_iso_file_size = 0;
-  u64 m_chunk_size = 0;
-
-  // Simple block cache for decompressed data
-  mutable std::unordered_map<u64, std::vector<u8>> m_decompressed_cache;
-  static constexpr size_t MAX_CACHED_CHUNKS = 8; // Cache up to 8 decompressed chunks
+  std::unique_ptr<RVZFileReader> m_rvz_reader;  // The real RVZ implementation
 };
 
 // HTTP-backed GCZ reader for compressed GCZ files over HTTP
@@ -396,6 +321,53 @@ private:
   // Simple block cache for decompressed data
   mutable std::unordered_map<u64, std::vector<u8>> m_decompressed_cache;
   static constexpr size_t MAX_CACHED_CHUNKS = 8; // Cache up to 8 decompressed chunks
+};
+
+// HTTP-to-File adapter that makes HTTP data accessible via File::IOFile interface
+// This allows us to reuse the existing, proven WIARVZFileReader implementation
+class HttpIOFile
+{
+public:
+  explicit HttpIOFile(std::unique_ptr<HttpBlobReader> http_reader);
+  ~HttpIOFile() = default;
+
+  // File::IOFile interface methods
+  bool Seek(s64 offset, File::SeekOrigin origin);
+  u64 Tell() const;
+  u64 GetSize() const;
+  bool IsOpen() const { return m_http_reader != nullptr; }
+  bool IsGood() const { return m_good; }
+  explicit operator bool() const { return IsGood() && IsOpen(); }
+
+  template <typename T>
+  bool ReadArray(T* elements, size_t count, size_t* num_read = nullptr)
+  {
+    const size_t bytes_to_read = count * sizeof(T);
+    if (!IsOpen() || !m_http_reader->Read(m_position, bytes_to_read, reinterpret_cast<u8*>(elements)))
+    {
+      m_good = false;
+      if (num_read) *num_read = 0;
+      return false;
+    }
+
+    m_position += bytes_to_read;
+    if (num_read) *num_read = count;
+    return true;
+  }
+
+  bool ReadBytes(void* data, size_t length)
+  {
+    return ReadArray(reinterpret_cast<char*>(data), length);
+  }
+
+  // Not needed for RVZ reading
+  HttpIOFile Duplicate(const char openmode[]) const { return HttpIOFile(nullptr); }
+  void ClearError() { m_good = true; }
+
+private:
+  std::unique_ptr<HttpBlobReader> m_http_reader;
+  u64 m_position = 0;
+  bool m_good = true;
 };
 
 }  // namespace DiscIO
