@@ -3,6 +3,17 @@
 
 import GameController
 
+// Track per-controller state for touchpad-based Wii IR drag mode
+private final class TouchpadIRState {
+    var touching: Bool = false
+    var startX: Float = 0
+    var startY: Float = 0
+    var oldX: Float = 0
+    var oldY: Float = 0
+}
+
+private var touchpadIRStates: [ObjectIdentifier: TouchpadIRState] = [:]
+
 func configureControllerForTVOS(_ c: GCController) {
     if let mg = c.microGamepad {
         mg.reportsAbsoluteDpadValues = true
@@ -156,6 +167,85 @@ func installInputDebugHandlers(_ c: GCController) {
             let current = DOLConfigBridge.mainEmulationSpeedPercent()
             if current != targetPercent {
                 DOLConfigBridge.setMainEmulationSpeedPercent(targetPercent)
+            }
+
+            // DualSense/DualShock touchpad -> Wii IR mapping
+            if #available(iOS 14.5, tvOS 14.5, *) {
+                let controllerId = ObjectIdentifier(c)
+                let state = touchpadIRStates[controllerId] ?? TouchpadIRState()
+                touchpadIRStates[controllerId] = state
+
+                // Read configured IR mode
+                let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
+                guard let irMode = TCWiiTouchIRMode(rawValue: modeRaw), irMode != .none else {
+                    // Reset state when disabled
+                    state.touching = false
+                    state.startX = 0; state.startY = 0
+                    // Do not push IR axes when disabled
+                    // Note: IMUPoint enable/disable handled elsewhere (EmulationiOSViewController)
+                    return
+                }
+
+                // Helper to process a specific touchpad provider
+                func process(button: GCControllerButtonInput, xAxis: GCControllerAxisInput, yAxis: GCControllerAxisInput) {
+                    // Apple's API typically provides 0..1 for touchpad coordinates; map to -1..1 centered
+                    let rawX = xAxis.value
+                    let rawY = yAxis.value
+                    let nx = max(-1.0 as Float, min(1.0 as Float, rawX * 2 - 1))
+                    let ny = max(-1.0 as Float, min(1.0 as Float, rawY * 2 - 1))
+
+                    let isPressed = button.isPressed
+
+                    var outX: Float = 0
+                    var outY: Float = 0
+
+                    switch irMode {
+                    case .follow:
+                        // Optionally allow follow without click, controlled by settings
+                        let withoutClick = UserDefaults.standard.bool(forKey: "touchpad_ir_follow_without_click")
+                        if !withoutClick && !isPressed { return }
+                        outX = nx
+                        outY = ny
+                        // When switching back to follow, reset drag state
+                        state.touching = false
+                        state.startX = 0; state.startY = 0
+                        state.oldX = 0; state.oldY = 0
+                    case .drag:
+                        if isPressed && !state.touching {
+                            state.touching = true
+                            state.startX = nx
+                            state.startY = ny
+                        }
+                        if isPressed {
+                            outX = state.oldX + (nx - state.startX)
+                            outY = state.oldY + (ny - state.startY)
+                        } else {
+                            if state.touching {
+                                // Commit accumulated offset when finger lifts
+                                state.oldX = max(-1, min(1, state.oldX + (nx - state.startX)))
+                                state.oldY = max(-1, min(1, state.oldY + (ny - state.startY)))
+                                state.touching = false
+                            }
+                            outX = state.oldX
+                            outY = state.oldY
+                        }
+                    default:
+                        break
+                    }
+
+                    // Push to Wii IR axes: order [Y, Y, X, X] to match TCWiiPad
+                    let base = TCButtonType.wiiInfrared.rawValue
+                    let values: [Float] = [outY, outY, outX, outX]
+                    for (i, v) in values.enumerated() {
+                        TCManagerInterface.setAxisValueFor(base + i + 1, controller: 0, value: v)
+                    }
+                }
+
+                if let ds = gamepad as? GCDualSenseGamepad {
+                    process(button: ds.touchpadButton, xAxis: ds.touchpadPrimary.xAxis, yAxis: ds.touchpadPrimary.yAxis)
+                } else if let ds4 = gamepad as? GCDualShockGamepad {
+                    process(button: ds4.touchpadButton, xAxis: ds4.touchpadPrimary.xAxis, yAxis: ds4.touchpadPrimary.yAxis)
+                }
             }
         }
     }

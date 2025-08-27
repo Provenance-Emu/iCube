@@ -1332,6 +1332,7 @@ struct ConfigWiiView: View {
   @State private var sensorBarSens: Int = 2
   @State private var speakerVol: Int = 4
   @State private var wiimoteRumble: Bool = true
+  @State private var touchpadIRFollowWithoutClick: Bool = false
 
   var body: some View {
     List {
@@ -1374,6 +1375,8 @@ struct ConfigWiiView: View {
         }
         .onChange(of: speakerVol) { DOLConfigBridge.setSysconfSpeakerVolume($0) }
         Toggle(L("Rumble"), isOn: $wiimoteRumble).onChange(of: wiimoteRumble) { DOLConfigBridge.setSysconfWiimoteMotor($0) }
+        Toggle(L("Allow Touchpad IR Follow Without Click"), isOn: $touchpadIRFollowWithoutClick)
+          .onChange(of: touchpadIRFollowWithoutClick) { UserDefaults.standard.set($0, forKey: "touchpad_ir_follow_without_click") }
       }
 
       Section(header: Text(L("USB / SD"))) {
@@ -1398,6 +1401,7 @@ struct ConfigWiiView: View {
     sensorBarSens = DOLConfigBridge.sysconfSensorBarSensitivity()
     speakerVol = DOLConfigBridge.sysconfSpeakerVolume()
     wiimoteRumble = DOLConfigBridge.sysconfWiimoteMotor()
+    touchpadIRFollowWithoutClick = UserDefaults.standard.bool(forKey: "touchpad_ir_follow_without_click")
     keyboard = DOLConfigBridge.mainWiiKeyboard()
     wiilink = DOLConfigBridge.mainWiiWiiLinkEnable()
     sdCard = DOLConfigBridge.mainWiiSDCard()

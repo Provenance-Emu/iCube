@@ -23,6 +23,7 @@
 ## All Platforms
 
 - [ ] FF / Pause menu gestures are wrong / conflicting
+- [ ] Remove extra logging when done
 
 ### New Feature?
 
