@@ -61,7 +61,7 @@ final class TVLibraryViewModel: ObservableObject {
         let items = TVLibraryBridge.currentGames()
         print("TVLibraryViewModel.load(): got \(items.count) items from bridge")
         for (index, item) in items.enumerated() {
-            let isRemote = item.filePath.hasPrefix("http")
+            let isRemote = TVLibraryView.isRemoteURL(item.filePath)
             print("  [\(index)]: \(item.title) - \(isRemote ? "REMOTE" : "LOCAL") - \(item.filePath)")
         }
         groupAndDedup(items: items)
@@ -188,6 +188,15 @@ struct TVLibraryView: View {
     @State private var autoPreCacheActive: Set<String> = []
 
     private enum CheatType { case gecko, ar }
+
+    /// Helper function to check if a URL is a remote URL (HTTP/HTTPS/WebDAV)
+    static func isRemoteURL(_ urlString: String) -> Bool {
+        let lower = urlString.lowercased()
+        return lower.hasPrefix("http://") ||
+               lower.hasPrefix("https://") ||
+               lower.hasPrefix("webdav://") ||
+               lower.hasPrefix("webdavs://")
+    }
 
     private enum Constants {
         static let gridVerticalSpacing: CGFloat = 32
@@ -421,7 +430,7 @@ struct TVLibraryView: View {
 
             // Auto pre-cache if enabled and not already cached
             if let url = URL(string: item.filePath),
-               url.scheme?.lowercased().hasPrefix("http") == true {
+               Self.isRemoteURL(item.filePath) {
                 // This is a remote game - check for auto pre-caching
                 for source in RemoteSourcesStore.shared.sources {
                     if let webdavSource = source as? WebDAVSource,
