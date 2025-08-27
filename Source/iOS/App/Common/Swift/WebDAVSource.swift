@@ -530,7 +530,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         }
     }
 
-    /// Download a file to cache
+        /// Download a file to cache
     private func downloadFile(item: RemoteLibraryItem, progressCallback: @escaping (Double) -> Void) async throws {
         let fileName = item.url.lastPathComponent
         let localURL = cacheDirectory.appendingPathComponent(fileName)
@@ -548,35 +548,52 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             request.setValue("Basic \(base64Credentials)", forHTTPHeaderField: "Authorization")
         }
 
-        // Download with progress tracking
-        let (tempURL, response) = try await URLSession.shared.download(for: request)
+        // Create a continuation to bridge the delegate callbacks with async/await
+        return try await withCheckedThrowingContinuation { continuation in
+            let delegate = DownloadProgressDelegate(
+                progressCallback: progressCallback,
+                completion: { result in
+                    switch result {
+                    case .success(let tempURL):
+                        do {
+                            // Move to final location
+                            try FileManager.default.moveItem(at: tempURL, to: localURL)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw NSError(domain: "WebDAVSource", code: 2, userInfo: [NSLocalizedDescriptionKey: "Download failed"])
+                            // Update cache metadata
+                            var metadata = self.loadCacheMetadata()
+                            let cachedInfo = CacheMetadata.CachedFileInfo(
+                                originalURL: item.url.absoluteString,
+                                localPath: fileName,
+                                fileSize: item.sizeBytes ?? 0,
+                                cachedDate: Date(),
+                                etag: item.etag,
+                                lastModified: item.lastModified
+                            )
+                            metadata.cachedFiles[item.url.absoluteString] = cachedInfo
+                            self.saveCacheMetadata(metadata)
+
+                            // Final progress callback
+                            progressCallback(1.0)
+
+                            #if canImport(os)
+                            Self.logger.info("Successfully cached \(item.displayName)")
+                            #endif
+
+                            continuation.resume()
+                        } catch {
+                            continuation.resume(throwing: error)
+                        }
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            )
+
+            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+            let task = session.downloadTask(with: request)
+            delegate.task = task
+            task.resume()
         }
-
-        // Move to final location
-        try FileManager.default.moveItem(at: tempURL, to: localURL)
-
-        // Update cache metadata
-        var metadata = loadCacheMetadata()
-        let cachedInfo = CacheMetadata.CachedFileInfo(
-            originalURL: item.url.absoluteString,
-            localPath: fileName,
-            fileSize: item.sizeBytes ?? 0,
-            cachedDate: Date(),
-            etag: item.etag,
-            lastModified: item.lastModified
-        )
-        metadata.cachedFiles[item.url.absoluteString] = cachedInfo
-        saveCacheMetadata(metadata)
-
-        progressCallback(1.0)
-
-        #if canImport(os)
-        Self.logger.info("Successfully cached \(item.displayName)")
-        #endif
     }
 
     /// Cancel pre-caching for an item
@@ -670,5 +687,55 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         let metadata = loadCacheMetadata()
         let key = item.url.absoluteString
         return metadata.cachedFiles[key]
+    }
+}
+
+// MARK: - Download Progress Delegate
+
+/// URLSession delegate to track download progress
+private class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+    private let progressCallback: (Double) -> Void
+    private let completion: (Result<URL, Error>) -> Void
+    weak var task: URLSessionDownloadTask?
+
+    init(progressCallback: @escaping (Double) -> Void, completion: @escaping (Result<URL, Error>) -> Void) {
+        self.progressCallback = progressCallback
+        self.completion = completion
+        super.init()
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        #if canImport(os)
+        print("DownloadProgressDelegate: Download completed to: \(location)")
+        #endif
+        completion(.success(location))
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        guard totalBytesExpectedToWrite > 0 else {
+            #if canImport(os)
+            print("DownloadProgressDelegate: No expected bytes, skipping progress update")
+            #endif
+            return
+        }
+
+        let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        #if canImport(os)
+        print("DownloadProgressDelegate: Progress update: \(Int(progress * 100))% (\(totalBytesWritten)/\(totalBytesExpectedToWrite) bytes)")
+        #endif
+
+        DispatchQueue.main.async {
+            self.progressCallback(progress)
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error = error {
+            #if canImport(os)
+            print("DownloadProgressDelegate: Download failed with error: \(error)")
+            #endif
+            completion(.failure(error))
+        }
+        // Note: Success case is handled in didFinishDownloadingTo
     }
 }
