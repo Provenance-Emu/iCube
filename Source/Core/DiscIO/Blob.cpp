@@ -39,35 +39,20 @@ static std::string CheckForCachedFile(const std::string& http_url)
   // Cache files are stored in ~/Library/Caches/RemoteCache/{sourceId}/
 
 #ifdef __APPLE__
-  // Extract the base URL to identify the source
+  // Only handle WebDAV URLs for now
   std::string lower_url = http_url;
   Common::ToLower(&lower_url);
-
-  // Only handle WebDAV URLs for now
   if (lower_url.find("http://") != 0 && lower_url.find("https://") != 0)
   {
     return "";
   }
 
-  // Parse URL to extract host and path
-  size_t protocol_end = lower_url.find("://");
-  if (protocol_end == std::string::npos)
-    return "";
-
-  size_t host_start = protocol_end + 3;
-  size_t path_start = lower_url.find('/', host_start);
-  if (path_start == std::string::npos)
-    return "";
-
-  std::string host = lower_url.substr(host_start, path_start - host_start);
-  std::string path = http_url.substr(path_start); // Keep original case for path
-
-  // Extract filename from path
-  size_t filename_start = path.find_last_of('/');
+  // Extract filename from URL path
+  size_t filename_start = http_url.find_last_of('/');
   if (filename_start == std::string::npos)
     return "";
 
-  std::string filename = path.substr(filename_start + 1);
+  std::string filename = http_url.substr(filename_start + 1);
 
   // URL decode the filename
   std::string decoded_filename;
@@ -97,12 +82,42 @@ static std::string CheckForCachedFile(const std::string& http_url)
     }
   }
 
-  // Generate a source ID based on the host (simplified)
-  std::string source_id = host;
+    // Parse URL to extract host and port for consistent ID generation (matches Swift logic)
+  size_t protocol_end = lower_url.find("://");
+  if (protocol_end == std::string::npos)
+    return "";
+
+  size_t host_start = protocol_end + 3;
+  size_t path_start = lower_url.find('/', host_start);
+  if (path_start == std::string::npos)
+    path_start = lower_url.length();
+
+  std::string host_port_part = lower_url.substr(host_start, path_start - host_start);
+
+  // Extract host and port
+  std::string host;
+  int port = 80; // Default port
+  size_t port_pos = host_port_part.find(':');
+  if (port_pos != std::string::npos)
+  {
+    host = host_port_part.substr(0, port_pos);
+    port = std::stoi(host_port_part.substr(port_pos + 1));
+  }
+  else
+  {
+    host = host_port_part;
+    // Determine default port based on scheme
+    if (lower_url.find("https://") == 0)
+      port = 443;
+  }
+
+  // Generate consistent ID (matches Swift logic exactly)
+  std::string host_with_port = host + ":" + std::to_string(port);
+  std::string source_id = host_with_port;
   std::replace(source_id.begin(), source_id.end(), '.', '_');
   std::replace(source_id.begin(), source_id.end(), ':', '_');
 
-  // Check for cached file in the expected location
+  // Check for cached file using consistent source ID
   // ~/Library/Caches/RemoteCache/{sourceId}/{filename}
   std::string home_dir = getenv("HOME") ? getenv("HOME") : "";
   if (home_dir.empty())
@@ -117,7 +132,7 @@ static std::string CheckForCachedFile(const std::string& http_url)
     return cache_path;
   }
 
-  INFO_LOG_FMT(DISCIO, "CheckForCachedFile: no cached file found for: {}", decoded_filename);
+  INFO_LOG_FMT(DISCIO, "CheckForCachedFile: no cached file found for: {} (source_id: {})", decoded_filename, source_id);
 #endif
 
   return ""; // No cached file found

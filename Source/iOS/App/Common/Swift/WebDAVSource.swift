@@ -43,6 +43,20 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     private static let logger = Logger(subsystem: "org.dolphin-emu.dolphinios", category: "WebDAV")
     #endif
 
+    /// Generate consistent ID based on host (matches C++ logic)
+    private static func generateConsistentId(for url: URL) -> String {
+        guard let host = url.host else {
+            return "unknown_host"
+        }
+
+        let port = url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
+        let hostWithPort = "\(host):\(port)"
+
+        // Replace dots and colons with underscores (same as C++ code)
+        return hostWithPort.replacingOccurrences(of: ".", with: "_")
+                          .replacingOccurrences(of: ":", with: "_")
+    }
+
     /// RFC1123 HTTP-date formatter used by WebDAV getlastmodified
     private static let httpDateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -56,7 +70,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     }
 
     init(id: String = UUID().uuidString, name: String, url: URL, username: String?, password: String?, recursive: Bool, interval: TimeInterval = 900, startPath: String? = nil, enablePreCaching: Bool = false) {
-        self.id = id
+        // Generate consistent ID based on host (same as C++ code)
+        let consistentId = Self.generateConsistentId(for: url)
+        self.id = consistentId
         self.name = name
         self.baseURL = url
         self.username = username
@@ -66,9 +82,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         self.startPath = startPath
         self.enablePreCaching = enablePreCaching
 
-        // Create cache directory
+        // Create cache directory using consistent ID
         let cachesPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        self.cacheDirectory = cachesPath.appendingPathComponent("RemoteCache").appendingPathComponent(id)
+        self.cacheDirectory = cachesPath.appendingPathComponent("RemoteCache").appendingPathComponent(consistentId)
         self.cacheMetadataFile = cacheDirectory.appendingPathComponent("cache_metadata.json")
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
 
