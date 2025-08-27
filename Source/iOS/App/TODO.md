@@ -4,12 +4,13 @@
 
 ### Bugs
 
-- [/] If multiple sources found, and click cancle, still tries to boot game
+- [X] If multiple sources found, and click cancle, still tries to boot game
+- [ ] Crash in Settings > Controllers > GameCube/Wii > Configure on tvOS (Could not find a storyboard named 'ButtonMapping' in bundle NSBundle)
 
 ### WebDav
 
-- [ ] RVZ over network broken import
-- [ ] RVZ over network broken playing
+- [X] RVZ over network broken import
+- [X] RVZ over network broken playing
 
 ### Save States
 
