@@ -338,9 +338,9 @@ struct TVLibraryView: View {
                 if model.isRescanning { ProgressView() } else { Label("", systemImage: "arrow.clockwise") }
             }
         }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { showSaveStatesBrowser = true }) { Image(systemName: "film") }
-        }
+//        ToolbarItem(placement: .navigationBarTrailing) {
+//            Button(action: { showSaveStatesBrowser = true }) { Image(systemName: "film") }
+//        }
         ToolbarItem(placement: .navigationBarTrailing) {
             Button(action: { showSources = true }) { Image(systemName: "externaldrive.badge.plus") }
         }
@@ -353,7 +353,7 @@ struct TVLibraryView: View {
                 Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
                 Button(L("Perform Online System Update")) { model.performOnlineSystemUpdate() }
                 Button(L("Sources")) { showSources = true }
-                Button(L("Save States")) { showSaveStatesBrowser = true }
+//                Button(L("Save States")) { showSaveStatesBrowser = true }
             } label: { Image(systemName: "ellipsis.circle") }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -856,7 +856,7 @@ private struct GameGridItem: View {
         .onPlayPauseCommand { select(item) }
         .contextMenu {
             Button(L("Properties")) { showProperties(item) }
-            Button(L("View Save States")) { showSaveStates(item) }
+//            Button(L("View Save States")) { showSaveStates(item) }
             Menu(L("Cheats")) {
                 Button(L("Manage...")) { showCheatList(item) }
                 Button(L("Download Codes")) { downloadGeckoAction(item) }
