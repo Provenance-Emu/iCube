@@ -130,6 +130,8 @@ public:
 
 private:
   // RVZ structures (simplified from WIABlob.h)
+
+  #pragma pack(push, 1)
   struct RVZHeader1
   {
     u32 magic;
@@ -177,6 +179,12 @@ private:
     u32 group_index;
     u32 number_of_groups;
   };
+  #pragma pack(pop)
+
+  static_assert(sizeof(RVZHeader1) == 0x48, "Wrong size for RVZ header 1");
+  static_assert(sizeof(RVZHeader2) == 0xDC, "Wrong size for RVZ header 2");
+  static_assert(sizeof(RVZGroupEntry) == 0x0C, "Wrong size for RVZ group entry");
+  static_assert(sizeof(RawDataEntry) == 0x18, "Wrong size for RVZ raw data entry");
 
   explicit HttpRVZReader(std::unique_ptr<HttpBlobReader> http_reader);
   bool ReadHeader();

@@ -103,14 +103,29 @@ GameFile::GameFile() = default;
 
 GameFile::GameFile(std::string path) : m_file_path(std::move(path))
 {
+  printf("DEBUG: GameFile constructor called with path: %s\n", m_file_path.c_str());
+
+  // Check if this is an RVZ file
+  std::string lower = m_file_path;
+  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+  bool is_rvz = (lower.find(".rvz") != std::string::npos);
+  bool is_remote = (lower.find("http://") == 0 || lower.find("https://") == 0 ||
+                   lower.find("webdav://") == 0 || lower.find("webdavs://") == 0);
+
+  if (is_rvz) {
+    printf("DEBUG: This is an RVZ file! is_remote=%s\n", is_remote ? "true" : "false");
+  }
+
   INFO_LOG_FMT(DISCIO, "GameFile constructor called with path: {}", m_file_path);
   m_file_name = PathToFileName(m_file_path);
 
   {
+    printf("DEBUG: GameFile attempting to create volume for: %s\n", m_file_path.c_str());
     INFO_LOG_FMT(DISCIO, "GameFile: attempting to create volume for {}", m_file_path);
     std::unique_ptr<DiscIO::Volume> volume(DiscIO::CreateVolume(m_file_path));
     if (volume != nullptr)
     {
+      printf("DEBUG: Volume created successfully for: %s\n", m_file_path.c_str());
       INFO_LOG_FMT(DISCIO, "GameFile: volume created successfully for {}", m_file_path);
       m_platform = volume->GetVolumeType();
 
@@ -162,7 +177,18 @@ GameFile::GameFile(std::string path) : m_file_path(std::move(path))
     }
     else
     {
-      INFO_LOG_FMT(DISCIO, "GameFile: volume creation failed for {}", m_file_path);
+      printf("DEBUG: Volume creation FAILED for: %s\n", m_file_path.c_str());
+      ERROR_LOG_FMT(DISCIO, "GameFile: volume creation failed for {}", m_file_path);
+
+      // Check if this is an RVZ file over HTTP/WebDAV
+      std::string lower = m_file_path;
+      std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+      if ((lower.find("http://") == 0 || lower.find("https://") == 0 ||
+           lower.find("webdav://") == 0 || lower.find("webdavs://") == 0) &&
+          (lower.find(".rvz") != std::string::npos)) {
+        printf("DEBUG: RVZ file over HTTP FAILED to create volume - HttpRVZReader failure!\n");
+        ERROR_LOG_FMT(DISCIO, "GameFile: RVZ file over HTTP failed to create volume - this indicates HttpRVZReader failure");
+      }
     }
   }
 
@@ -211,9 +237,11 @@ GameFile::~GameFile() = default;
 
 bool GameFile::IsValid() const
 {
+  printf("DEBUG: GameFile::IsValid called for: %s, m_valid=%s\n", m_file_path.c_str(), m_valid ? "true" : "false");
   INFO_LOG_FMT(DISCIO, "GameFile::IsValid called for {}, m_valid={}", m_file_path, m_valid);
   if (!m_valid)
   {
+    printf("DEBUG: GameFile::IsValid returning FALSE for: %s\n", m_file_path.c_str());
     INFO_LOG_FMT(DISCIO, "GameFile::IsValid: returning false because m_valid is false for {}", m_file_path);
     return false;
   }
@@ -224,6 +252,7 @@ bool GameFile::IsValid() const
     return false;
   }
 
+  printf("DEBUG: GameFile::IsValid returning TRUE for: %s\n", m_file_path.c_str());
   INFO_LOG_FMT(DISCIO, "GameFile::IsValid: returning true for {}", m_file_path);
   return true;
 }

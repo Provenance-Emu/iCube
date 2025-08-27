@@ -148,16 +148,29 @@
 }
 
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
+  printf("DEBUG CACHE MGR: updateWithExtraPaths called with %lu extra paths\n", (unsigned long)extraPaths.count);
+  for (NSUInteger i = 0; i < extraPaths.count; i++) {
+    printf("DEBUG CACHE MGR:   input[%lu]: %s\n", (unsigned long)i, [extraPaths[i] UTF8String]);
+  }
+
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Expand only local folders via FindAllGamePaths
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
     std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+    printf("DEBUG CACHE MGR: Found %lu local paths\n", (unsigned long)all.size());
 
     // Filter and append only accessible remote URLs
+    printf("DEBUG CACHE MGR: Processing %lu extra paths\n", (unsigned long)extraPaths.count);
+    NSUInteger acceptedCount = 0, rejectedCount = 0;
     for (NSString* s in extraPaths) {
-      if (s.length == 0) continue;
+      if (s.length == 0) {
+        printf("DEBUG CACHE MGR: SKIPPED empty string\n");
+        continue;
+      }
+
+      printf("DEBUG CACHE MGR: Processing path: %s\n", [s UTF8String]);
 
       // Check if it's a remote URL
       if ([s hasPrefix:@"http://"] || [s hasPrefix:@"https://"] ||
@@ -166,23 +179,32 @@
         // Only add if we can create a basic URL object
         NSURL* url = [NSURL URLWithString:s];
         if (url && url.host) {
+          printf("DEBUG CACHE MGR: ACCEPTED remote URL: %s\n", [s UTF8String]);
           all.push_back(FoundationToCppString(s));
+          acceptedCount++;
+        } else {
+          printf("DEBUG CACHE MGR: REJECTED remote URL (invalid): %s\n", [s UTF8String]);
+          rejectedCount++;
         }
       } else {
+        printf("DEBUG CACHE MGR: ACCEPTED local path: %s\n", [s UTF8String]);
         // Local files - add as-is
         all.push_back(FoundationToCppString(s));
+        acceptedCount++;
       }
     }
+    printf("DEBUG CACHE MGR: *** FILTER RESULTS: %lu accepted, %lu rejected ***\n", (unsigned long)acceptedCount, (unsigned long)rejectedCount);
 
     bool updated = false;
     @try {
-      NSLog(@"GameFileCacheManager: calling Update with %lu paths", (unsigned long)all.size());
-      for (size_t i = 0; i < all.size() && i < 20; ++i) {
-        NSLog(@"  [%zu]: %s", i, all[i].c_str());
+      printf("DEBUG CACHE MGR: *** CALLING C++ GameFileCache::Update with %lu TOTAL paths ***\n", (unsigned long)all.size());
+      for (size_t i = 0; i < all.size(); ++i) {
+        printf("DEBUG CACHE MGR:   final[%zu]: %s\n", i, all[i].c_str());
       }
 
+      printf("DEBUG CACHE MGR: About to call self->_cache->Update(all)\n");
       updated = self->_cache->Update(all);
-      NSLog(@"GameFileCacheManager: Update returned %s", updated ? "true" : "false");
+      printf("DEBUG CACHE MGR: C++ Update returned %s\n", updated ? "true" : "false");
 
       if (fetch) {
         updated |= self->_cache->UpdateAdditionalMetadata();
@@ -190,6 +212,9 @@
       if (updated) {
         self->_cache->Save();
         NSLog(@"GameFileCacheManager: Cache saved");
+        dispatch_async(dispatch_get_main_queue(), ^{
+          [[NSNotificationCenter defaultCenter] postNotificationName:@"RemoteLibraryUpdated" object:nil];
+        });
       }
     } @catch (NSException* exception) {
       NSLog(@"GameFileCache update failed: %@", exception);

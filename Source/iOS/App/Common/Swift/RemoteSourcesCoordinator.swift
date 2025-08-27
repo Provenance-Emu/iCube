@@ -105,6 +105,12 @@ class RemoteSourcesCoordinator: ObservableObject {
             print("DEBUG PUSH:   [\(index)]: \(url)")
         }
 
+        // Avoid nuking the cache with an empty remote list during startup/refresh
+        guard !allUrls.isEmpty else {
+            print("DEBUG PUSH: Skipping updateLibrary because URL list is empty")
+            return
+        }
+
         print("DEBUG PUSH: Calling TVLibraryBridge.updateLibrary with \(allUrls.count) URLs")
         // Force metadata fetch for remote games to ensure artwork and database lookups work
         TVLibraryBridge.updateLibrary(withRemotePaths: allUrls, fetchMetadata: true)

@@ -76,7 +76,13 @@
 }
 
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {
+  printf("DEBUG BRIDGE: TVLibraryBridge received %lu remote paths\n", (unsigned long)paths.count);
+  for (NSUInteger i = 0; i < paths.count; i++) {
+    printf("DEBUG BRIDGE:   [%lu]: %s\n", (unsigned long)i, [paths[i] UTF8String]);
+  }
+  printf("DEBUG BRIDGE: Calling GameFileCacheManager updateWithExtraPaths\n");
   [[GameFileCacheManager sharedManager] updateWithExtraPaths:paths fetchMetadata:fetch];
+  printf("DEBUG BRIDGE: GameFileCacheManager updateWithExtraPaths completed\n");
 }
 
 @end

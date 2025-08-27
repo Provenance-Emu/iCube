@@ -1176,11 +1176,14 @@ bool HttpRVZReader::ReadHeader()
     return false;
   }
 
-  // Validate magic
-  INFO_LOG_FMT(DISCIO, "HttpRVZReader: validating magic number: 0x{:08x}", m_header_1.magic);
-  if (m_header_1.magic != 0x015A5652) // RVZ_MAGIC
+  // Validate magic: RVZ_MAGIC is defined as byteswapped-to-little-endian (0x015A5652).
+  // Compare raw first; also accept swapped for robustness.
+  const u32 raw_magic = m_header_1.magic;
+  const u32 swapped_magic = Common::swap32(raw_magic);
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader: validating magic raw=0x{:08x} swapped=0x{:08x}", raw_magic, swapped_magic);
+  if (!(raw_magic == 0x015A5652 || swapped_magic == 0x015A5652))
   {
-    ERROR_LOG_FMT(DISCIO, "HttpRVZReader: invalid RVZ magic: 0x{:08x}", m_header_1.magic);
+    ERROR_LOG_FMT(DISCIO, "HttpRVZReader: invalid RVZ magic raw=0x{:08x} swapped=0x{:08x} (expected: 0x015A5652)", raw_magic, swapped_magic);
     return false;
   }
 
