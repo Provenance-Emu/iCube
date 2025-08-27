@@ -40,7 +40,7 @@ static bool IsHttpUrl(const std::string& path)
 {
   const std::string lower = LowerCopy(path);
   return lower.starts_with("http://") || lower.starts_with("https://") ||
-         lower.starts_with("webdav://") || lower.starts_with("webdavs://");
+  lower.starts_with("webdav://") || lower.starts_with("webdavs://");
 }
 
 static std::string ToHttpUrl(const std::string& path)
@@ -482,7 +482,7 @@ bool HttpBlobReader::Read(u64 offset, u64 size, u8* out_ptr)
 
   // Detect sequential access pattern
   const bool is_sequential = (offset == m_last_read_offset ||
-                             (offset > m_last_read_offset && offset - m_last_read_offset <= 65536));
+                              (offset > m_last_read_offset && offset - m_last_read_offset <= 65536));
   if (is_sequential)
   {
     m_sequential_reads++;
@@ -747,9 +747,9 @@ void HttpBlobReader::EvictOldCacheEntries()
   while (m_cache.size() >= MAX_CACHE_ENTRIES)
   {
     auto oldest_it = std::min_element(m_cache.begin(), m_cache.end(),
-      [](const auto& a, const auto& b) {
-        return a.second.last_access_time < b.second.last_access_time;
-      });
+                                      [](const auto& a, const auto& b) {
+      return a.second.last_access_time < b.second.last_access_time;
+    });
 
     if (oldest_it != m_cache.end())
     {
@@ -787,7 +787,7 @@ std::unique_ptr<HttpCISOReader> HttpCISOReader::Create(const std::string& url)
 }
 
 HttpCISOReader::HttpCISOReader(std::unique_ptr<HttpBlobReader> http_reader)
-    : m_http_reader(std::move(http_reader))
+: m_http_reader(std::move(http_reader))
 {
 }
 
@@ -930,7 +930,7 @@ std::unique_ptr<HttpGCZReader> HttpGCZReader::Create(const std::string& url)
 }
 
 HttpGCZReader::HttpGCZReader(std::unique_ptr<HttpBlobReader> http_reader)
-    : m_http_reader(std::move(http_reader))
+: m_http_reader(std::move(http_reader))
 {
 }
 
@@ -982,7 +982,7 @@ bool HttpGCZReader::ReadHeader()
   m_block_pointers.resize(num_blocks);
   const u64 pointers_offset = sizeof(header);
   if (!m_http_reader->Read(pointers_offset, num_blocks * sizeof(u64),
-                          reinterpret_cast<u8*>(m_block_pointers.data())))
+                           reinterpret_cast<u8*>(m_block_pointers.data())))
   {
     ERROR_LOG_FMT(DISCIO, "HttpGCZReader: failed to read GCZ block pointers");
     return false;
@@ -1152,7 +1152,7 @@ std::unique_ptr<HttpRVZReader> HttpRVZReader::Create(const std::string& url)
 }
 
 HttpRVZReader::HttpRVZReader(std::unique_ptr<HttpBlobReader> http_reader)
-    : m_http_reader(std::move(http_reader))
+: m_http_reader(std::move(http_reader))
 {
 }
 
@@ -1232,13 +1232,13 @@ bool HttpRVZReader::ReadHeader()
     if (number_of_raw_data_entries > 10000 || raw_data_entries_size > 1000000)
     {
       ERROR_LOG_FMT(DISCIO, "HttpRVZReader: invalid raw data entries parameters - count: {}, size: {}",
-                   number_of_raw_data_entries, raw_data_entries_size);
+                    number_of_raw_data_entries, raw_data_entries_size);
       return false;
     }
 
     m_raw_data_entries.resize(number_of_raw_data_entries);
     if (!m_http_reader->Read(raw_data_entries_offset, raw_data_entries_size,
-                            reinterpret_cast<u8*>(m_raw_data_entries.data())))
+                             reinterpret_cast<u8*>(m_raw_data_entries.data())))
     {
       ERROR_LOG_FMT(DISCIO, "HttpRVZReader: failed to read raw data entries");
       return false;
@@ -1260,13 +1260,13 @@ bool HttpRVZReader::ReadHeader()
     if (number_of_group_entries > 100000 || group_entries_size > 10000000)
     {
       ERROR_LOG_FMT(DISCIO, "HttpRVZReader: invalid group entries parameters - count: {}, size: {}",
-                   number_of_group_entries, group_entries_size);
+                    number_of_group_entries, group_entries_size);
       return false;
     }
 
     m_group_entries.resize(number_of_group_entries);
     if (!m_http_reader->Read(group_entries_offset, group_entries_size,
-                            reinterpret_cast<u8*>(m_group_entries.data())))
+                             reinterpret_cast<u8*>(m_group_entries.data())))
     {
       ERROR_LOG_FMT(DISCIO, "HttpRVZReader: failed to read group entries");
       return false;
@@ -1276,6 +1276,18 @@ bool HttpRVZReader::ReadHeader()
 
   INFO_LOG_FMT(DISCIO, "HttpRVZReader: loaded {} raw data entries, {} group entries",
                number_of_raw_data_entries, number_of_group_entries);
+
+  // Debug: Log the actual raw data entry values
+  for (size_t i = 0; i < m_raw_data_entries.size(); ++i)
+  {
+    const u64 data_offset = Common::swap64(m_raw_data_entries[i].data_offset);
+    const u64 data_size = Common::swap64(m_raw_data_entries[i].data_size);
+    const u32 group_index = Common::swap32(m_raw_data_entries[i].group_index);
+    const u32 number_of_groups = Common::swap32(m_raw_data_entries[i].number_of_groups);
+
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader: Raw data entry {}: offset=0x{:x}, size=0x{:x}, group_index={}, num_groups={}",
+                 i, data_offset, data_size, group_index, number_of_groups);
+  }
 
   m_header_read = true;
   INFO_LOG_FMT(DISCIO, "HttpRVZReader: ReadHeader completed successfully");
@@ -1301,13 +1313,13 @@ std::string HttpRVZReader::GetCompressionMethod() const
 {
   switch (m_compression_type)
   {
-  case 0: return "None";
-  case 1: return "Purge";
-  case 2: return "Bzip2";
-  case 3: return "LZMA";
-  case 4: return "LZMA2";
-  case 5: return "Zstd";
-  default: return "Unknown";
+    case 0: return "None";
+    case 1: return "Purge";
+    case 2: return "Bzip2";
+    case 3: return "LZMA";
+    case 4: return "LZMA2";
+    case 5: return "Zstd";
+    default: return "Unknown";
   }
 }
 
@@ -1321,27 +1333,80 @@ bool HttpRVZReader::Read(u64 offset, u64 size, u8* out_ptr)
   if (!m_header_read && !ReadHeader())
     return false;
 
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: offset=0x{:x}, size=0x{:x}", offset, size);
+
+  // Debug: Flag any suspiciously large reads
+  if (size > 0x1000000) // >16MB
+  {
+    ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: SUSPICIOUS LARGE READ - offset=0x{:x}, size=0x{:x} ({} MB)",
+                  offset, size, size / (1024*1024));
+    ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: This is likely a corrupted size field or endianness issue");
+
+    // Show size as different interpretations
+    u32 size_be = static_cast<u32>(size);
+    u32 size_le = Common::swap32(size_be);
+    ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: Size interpretations - BE: 0x{:08x}, LE: 0x{:08x}", size_be, size_le);
+  }
+
+  // Enhanced debugging for apploader header reads
+  if (offset >= 0x2450 && offset <= 0x2500)
+  {
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: APPLOADER HEADER READ - offset=0x{:x}, size=0x{:x}", offset, size);
+  }
+
+  // Special debugging for game metadata reads
+  bool is_metadata_read = (offset <= 0x10) || (offset == 0x458);
+
+  // Handle zero-size reads
+  if (size == 0)
+  {
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: zero-size read, returning true");
+    return true;
+  }
+
   if (offset + size > m_iso_file_size)
   {
     ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: request beyond file size");
     return false;
   }
 
+  // Create local copies for manipulation
+  u64 current_offset = offset;
+  u64 remaining_size = size;
+  u8* current_out_ptr = out_ptr;
+
   // Handle disc header reads
-  if (offset < sizeof(m_header_2.disc_header))
+  if (current_offset < sizeof(m_header_2.disc_header))
   {
-    const u64 bytes_to_read = std::min(sizeof(m_header_2.disc_header) - offset, size);
-    std::memcpy(out_ptr, m_header_2.disc_header + offset, bytes_to_read);
-    offset += bytes_to_read;
-    size -= bytes_to_read;
-    out_ptr += bytes_to_read;
+    const u64 bytes_to_read = std::min(sizeof(m_header_2.disc_header) - current_offset, remaining_size);
+    std::memcpy(current_out_ptr, m_header_2.disc_header + current_offset, bytes_to_read);
+
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: disc header read - offset=0x{:x}, size=0x{:x}", current_offset, bytes_to_read);
+
+    // Debug: Show first few bytes if reading enough data
+    if (bytes_to_read >= 4)
+    {
+      const u32* data_ptr = reinterpret_cast<const u32*>(current_out_ptr);
+      INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: header data preview: 0x{:08x}", Common::swap32(data_ptr[0]));
+
+      // Special debugging for region offset
+      if (current_offset == 0x458 - sizeof(m_header_2.disc_header))
+      {
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: DISC HEADER REGION CHECK - this should not happen! Region at 0x458 is beyond disc header size");
+      }
+    }
+
+    current_offset += bytes_to_read;
+    remaining_size -= bytes_to_read;
+    current_out_ptr += bytes_to_read;
   }
 
   // Process raw data entries
-  while (size > 0)
+  while (remaining_size > 0)
   {
     bool found_data = false;
 
+    // First, try to find data in raw data entries
     for (const auto& raw_data : m_raw_data_entries)
     {
       const u64 data_offset = Common::swap64(raw_data.data_offset);
@@ -1349,10 +1414,27 @@ bool HttpRVZReader::Read(u64 offset, u64 size, u8* out_ptr)
       const u32 group_index = Common::swap32(raw_data.group_index);
       const u32 number_of_groups = Common::swap32(raw_data.number_of_groups);
 
-      if (offset >= data_offset && offset < data_offset + data_size)
+      // According to WIA/RVZ spec: round down raw_data_off to previous multiple of 0x8000
+      // and add the equivalent amount to the size so that the end offset stays the same
+      const u64 aligned_offset = data_offset & ~0x7FFF; // Round down to previous 0x8000
+      const u64 aligned_size = data_size + (data_offset - aligned_offset);
+
+      INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: raw data - original offset=0x{:x}, size=0x{:x}, aligned offset=0x{:x}, aligned size=0x{:x}",
+                   data_offset, data_size, aligned_offset, aligned_size);
+
+      if (current_offset >= aligned_offset && current_offset < aligned_offset + aligned_size)
       {
-        if (!ReadFromGroups(&offset, &size, &out_ptr, m_chunk_size, 0x8000, // VolumeWii::BLOCK_TOTAL_SIZE
-                           data_offset, data_size, group_index, number_of_groups))
+        // Special debugging for region reads
+        if (offset == 0x458)
+        {
+          INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: REGION READ DEBUG");
+          INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: - Reading region from group data at ISO offset 0x458");
+          INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: - Raw data covers: 0x{:x} to 0x{:x}", aligned_offset, aligned_offset + aligned_size);
+          INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: - This should be reading from group 0");
+        }
+
+        if (!ReadFromGroups(&current_offset, &remaining_size, &current_out_ptr, m_chunk_size, 0x8000, // VolumeWii::BLOCK_TOTAL_SIZE
+                           aligned_offset, aligned_size, group_index, number_of_groups))
         {
           ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: ReadFromGroups failed");
           return false;
@@ -1362,10 +1444,76 @@ bool HttpRVZReader::Read(u64 offset, u64 size, u8* out_ptr)
       }
     }
 
+    // If not found in raw data entries, treat the entire disc as one compressed data region
     if (!found_data)
     {
-      ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: no data found for offset {}", offset);
+      // For GameCube discs, most data is stored in compressed groups starting from the first group
+      // We need to calculate which group covers this offset
+      if (m_group_entries.empty())
+      {
+        ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: no group entries available for offset 0x{:x}", current_offset);
+        return false;
+      }
+
+      // Calculate the total number of groups in the main compressed data region
+      u32 total_groups = static_cast<u32>(m_group_entries.size());
+
+      // For raw data entries, subtract the groups they use
+      for (const auto& raw_data : m_raw_data_entries)
+      {
+        total_groups -= Common::swap32(raw_data.number_of_groups);
+      }
+
+      // The main disc data starts after the disc header and uses the remaining groups
+      const u64 main_data_offset = sizeof(m_header_2.disc_header);
+      const u64 main_data_size = m_iso_file_size - main_data_offset;
+
+      if (current_offset >= main_data_offset)
+      {
+        // Use groups starting from index 0 (after any raw data groups)
+        u32 main_group_index = 0;
+        for (const auto& raw_data : m_raw_data_entries)
+        {
+          main_group_index += Common::swap32(raw_data.number_of_groups);
+        }
+
+        if (!ReadFromGroups(&current_offset, &remaining_size, &current_out_ptr, m_chunk_size, 0x8000,
+                            main_data_offset, main_data_size, main_group_index, total_groups))
+        {
+          ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: ReadFromGroups failed for main data region");
+          return false;
+        }
+        found_data = true;
+      }
+    }
+
+    if (!found_data)
+    {
+      ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Read: no data found for offset 0x{:x}", current_offset);
       return false;
+    }
+  }
+
+  // Special debugging for game metadata reads
+  if (is_metadata_read && remaining_size == 0)
+  {
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: METADATA READ COMPLETE - offset=0x{:x}, size=0x{:x}", offset, size);
+    if (size >= 4)
+    {
+      const u32* data_ptr = reinterpret_cast<const u32*>(out_ptr);
+      if (offset == 0) // Game ID
+      {
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: Game ID data: {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}",
+                     out_ptr[0], out_ptr[1], out_ptr[2], out_ptr[3], out_ptr[4], out_ptr[5]);
+      }
+      else if (offset == 0x458) // Region
+      {
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: Region data: 0x{:08x}", Common::swap32(data_ptr[0]));
+      }
+      else
+      {
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: Metadata data: 0x{:08x}", Common::swap32(data_ptr[0]));
+      }
     }
   }
 
@@ -1375,41 +1523,140 @@ bool HttpRVZReader::Read(u64 offset, u64 size, u8* out_ptr)
 bool HttpRVZReader::ReadFromGroups(u64* offset, u64* size, u8** out_ptr, u64 chunk_size, u32 sector_size,
                                    u64 data_offset, u64 data_size, u32 group_index, u32 number_of_groups)
 {
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: offset=0x{:x}, size=0x{:x}, data_offset=0x{:x}, data_size=0x{:x}, group_index={}, num_groups={}",
+               *offset, *size, data_offset, data_size, group_index, number_of_groups);
+
   if (data_offset + data_size <= *offset)
     return true;
 
   if (*offset < data_offset)
     return false;
 
-  const u64 start_group_index = (*offset - data_offset) / chunk_size;
+  // Save original parameters for proper calculation
+  const u64 original_offset = *offset;
+  const u64 original_size = *size;
+  u64 bytes_read_total = 0;
 
-  for (u64 i = start_group_index; i < number_of_groups && (*size) > 0; ++i)
+  // Calculate cumulative data sizes to find starting group
+  u64 cumulative_data_size = 0;
+  u32 start_group = group_index;
+
+  for (u32 i = 0; i < number_of_groups; ++i)
   {
-    const u64 total_group_index = group_index + i;
+    const u32 total_group_index = group_index + i;
+    if (total_group_index >= m_group_entries.size())
+      break;
+
+    const RVZGroupEntry& group = m_group_entries[total_group_index];
+    u32 group_data_size = Common::swap32(group.data_size);
+    group_data_size &= 0x7FFFFFFF; // Remove compression flag
+
+    // Calculate actual group size in the decompressed data
+    const u64 actual_group_size = (group_data_size == 0) ? chunk_size : chunk_size;
+
+    // Check if our starting offset falls in this group
+    if (original_offset >= data_offset + cumulative_data_size &&
+        original_offset < data_offset + cumulative_data_size + actual_group_size)
+    {
+      start_group = total_group_index;
+      break;
+    }
+
+    cumulative_data_size += actual_group_size;
+  }
+
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: start_group={}, cumulative_offset=0x{:x}",
+               start_group, cumulative_data_size);
+
+  // Check if this read might span multiple groups (potential issue)
+  const u64 read_end_offset = original_offset + original_size;
+  const u64 data_end_offset = data_offset + data_size;
+
+  if (read_end_offset > data_end_offset)
+  {
+    WARN_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: READ SPANS BEYOND DATA RANGE - read_end=0x{:x}, data_end=0x{:x}",
+                  read_end_offset, data_end_offset);
+    WARN_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: This might require reading from multiple raw data entries");
+  }
+
+  // Check if read will likely span multiple groups within this data range
+  if (original_size > chunk_size)
+  {
+    WARN_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: LARGE READ spans multiple groups - size=0x{:x}, chunk_size=0x{:x}",
+                  original_size, chunk_size);
+  }
+
+  // Reset cumulative size to start from the beginning again
+  cumulative_data_size = 0;
+  for (u32 i = 0; i < start_group - group_index; ++i)
+  {
+    const u32 total_group_index = group_index + i;
+    if (total_group_index >= m_group_entries.size())
+      break;
+
+    const RVZGroupEntry& group = m_group_entries[total_group_index];
+    u32 group_data_size = Common::swap32(group.data_size);
+    group_data_size &= 0x7FFFFFFF;
+
+    const u64 actual_group_size = (group_data_size == 0) ? chunk_size : chunk_size;
+    cumulative_data_size += actual_group_size;
+  }
+
+  // Process groups starting from start_group
+  for (u32 i = start_group - group_index; i < number_of_groups; ++i)
+  {
+    if (bytes_read_total >= original_size)
+      break;
+
+    const u32 total_group_index = group_index + i;
     if (total_group_index >= m_group_entries.size())
     {
-      ERROR_LOG_FMT(DISCIO, "HttpRVZReader: group index {} out of range", total_group_index);
+      ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: group index {} out of range", total_group_index);
       return false;
     }
 
     const RVZGroupEntry& group = m_group_entries[total_group_index];
-    const u64 group_offset_in_data = i * chunk_size;
-    const u64 offset_in_group = *offset - group_offset_in_data - data_offset;
 
-    chunk_size = std::min(chunk_size, data_size - group_offset_in_data);
-    const u64 bytes_to_read = std::min(chunk_size - offset_in_group, *size);
+    // Calculate the current position we're reading from
+    const u64 current_read_offset = original_offset + bytes_read_total;
+    const u64 group_start_offset = data_offset + cumulative_data_size;
+
+    // CRITICAL FIX: Group data has a 4-byte header, so actual ISO data starts at +4
+    const u64 offset_in_group = (current_read_offset - group_start_offset) + 4;
+
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: group calculations - group_start=0x{:x}, current_read=0x{:x}, offset_in_group=0x{:x} (with +4 header fix)",
+                 group_start_offset, current_read_offset, offset_in_group);
 
     u32 group_data_size = Common::swap32(group.data_size);
-    const u32 rvz_packed_size = Common::swap32(group.rvz_packed_size);
-
-    // Check if group is compressed
     bool is_compressed = (group_data_size & 0x80000000) != 0;
     group_data_size &= 0x7FFFFFFF;
 
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: processing group {}, group_data_size=0x{:x}, is_compressed={}, compression_type={}",
+                 total_group_index, group_data_size, is_compressed, m_compression_type);
+
+    // Calculate actual group size and how much we can read from this group
+    const u64 actual_group_size = (group_data_size == 0) ? chunk_size : chunk_size;
+
+    // Account for the 4-byte header when calculating available space
+    const u64 group_data_with_header = (group_data_size == 0) ? chunk_size : (group_data_size + 4);
+    const u64 remaining_in_group = (offset_in_group < group_data_with_header) ? (group_data_with_header - offset_in_group) : 0;
+    const u64 bytes_to_read_from_group = std::min(remaining_in_group, original_size - bytes_read_total);
+
+    if (bytes_to_read_from_group == 0)
+    {
+      // Move to next group
+      cumulative_data_size += actual_group_size;
+      continue;
+    }
+
     if (group_data_size == 0)
     {
-      // Zero-filled group
-      std::memset(*out_ptr, 0, bytes_to_read);
+      // Special case: all zeros
+      std::memset(*out_ptr + bytes_read_total, 0, bytes_to_read_from_group);
+      bytes_read_total += bytes_to_read_from_group;
+
+      INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: filled 0x{:x} bytes with zeros for group {}",
+                   bytes_to_read_from_group, total_group_index);
     }
     else
     {
@@ -1419,13 +1666,63 @@ bool HttpRVZReader::ReadFromGroups(u64* offset, u64* size, u8** out_ptr, u64 chu
       {
         // Cache hit
         const auto& cached_data = cache_it->second;
-        if (offset_in_group + bytes_to_read <= cached_data.size())
+
+        if (offset_in_group < cached_data.size() && bytes_to_read_from_group > 0 &&
+            offset_in_group + bytes_to_read_from_group <= cached_data.size())
         {
-          std::memcpy(*out_ptr, cached_data.data() + offset_in_group, bytes_to_read);
+          std::memcpy(*out_ptr + bytes_read_total, cached_data.data() + offset_in_group, bytes_to_read_from_group);
+          bytes_read_total += bytes_to_read_from_group;
+
+          INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: copied 0x{:x} bytes from cached group {} at offset 0x{:x}",
+                       bytes_to_read_from_group, total_group_index, offset_in_group);
+
+          // Debug: Show first few bytes of data being read
+          if (bytes_to_read_from_group >= 4)
+          {
+            const u32* data_ptr = reinterpret_cast<const u32*>(*out_ptr + bytes_read_total - bytes_to_read_from_group);
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: data preview: 0x{:08x} 0x{:08x}",
+                         Common::swap32(data_ptr[0]), bytes_to_read_from_group >= 8 ? Common::swap32(data_ptr[1]) : 0);
+
+            // Special debug for apploader reads
+            if (current_read_offset >= 0x2450 && current_read_offset <= 0x2500)
+            {
+              INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: APPLOADER READ - ISO offset 0x{:x}, group offset 0x{:x}, data: 0x{:08x}",
+                           current_read_offset, offset_in_group, Common::swap32(data_ptr[0]));
+
+              // Enhanced debugging for apploader header fields
+              if (current_read_offset == 0x2450)
+              {
+                INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: APPLOADER ENTRY POINT = 0x{:08x}", Common::swap32(data_ptr[0]));
+              }
+              else if (current_read_offset == 0x2454)
+              {
+                u32 apploader_size = Common::swap32(data_ptr[0]);
+                INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: APPLOADER SIZE = 0x{:08x} ({} bytes, {} KB)",
+                             apploader_size, apploader_size, apploader_size / 1024);
+
+                // Show bytes in different interpretations
+                const u8* bytes = reinterpret_cast<const u8*>(data_ptr);
+                INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: SIZE BYTES = [{:02x} {:02x} {:02x} {:02x}]",
+                             bytes[0], bytes[1], bytes[2], bytes[3]);
+              }
+              else if (current_read_offset == 0x2458)
+              {
+                u32 trailer_size = Common::swap32(data_ptr[0]);
+                INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: APPLOADER TRAILER SIZE = 0x{:08x} ({} bytes, {} KB)",
+                             trailer_size, trailer_size, trailer_size / 1024);
+              }
+            }
+          }
         }
         else
         {
-          ERROR_LOG_FMT(DISCIO, "HttpRVZReader: cached data too small");
+          ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: cached data bounds check failed for group {} (offset=0x{:x}, size=0x{:x}, cached_size=0x{:x})",
+                        total_group_index, offset_in_group, bytes_to_read_from_group, cached_data.size());
+          ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: DIAGNOSTIC INFO - group_data_size=0x{:x}, actual_group_size=0x{:x}, chunk_size=0x{:x}",
+                        group_data_size, actual_group_size, chunk_size);
+          ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: DIAGNOSTIC INFO - original_offset=0x{:x}, original_size=0x{:x}, current_read_offset=0x{:x}",
+                        original_offset, original_size, current_read_offset);
+          ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: This suggests the requested size is corrupted or calculated incorrectly");
           return false;
         }
       }
@@ -1434,149 +1731,160 @@ bool HttpRVZReader::ReadFromGroups(u64* offset, u64* size, u8** out_ptr, u64 chu
         // Cache miss - need to decompress the group
         const u64 group_offset_in_file = static_cast<u64>(Common::swap32(group.data_offset)) << 2;
 
-        // Read compressed data
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: reading group {} from file offset 0x{:x}, size 0x{:x}",
+                     total_group_index, group_offset_in_file, group_data_size);
+
+        // Read and decompress the group (same as before)
         std::vector<u8> compressed_data(group_data_size);
         if (!m_http_reader->Read(group_offset_in_file, group_data_size, compressed_data.data()))
         {
-          ERROR_LOG_FMT(DISCIO, "HttpRVZReader: failed to read compressed group data");
+          ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: failed to read group data");
           return false;
         }
 
-        // Decompress based on compression type and whether this group is compressed
         std::vector<u8> decompressed_data;
-        if (!is_compressed)
+        if (m_compression_type == 0 || !is_compressed)
         {
-          // Uncompressed group
           decompressed_data = std::move(compressed_data);
         }
         else
         {
-          // Compressed group - decompress based on global compression type
-          decompressed_data.resize(chunk_size);
+          // Decompression logic (same as before)
+          DecompressionBuffer in_buffer;
+          in_buffer.data = std::move(compressed_data);
+          in_buffer.bytes_written = in_buffer.data.size();
 
-          if (m_compression_type == 5) // Zstd
+          DecompressionBuffer out_buffer;
+          out_buffer.data.resize(chunk_size);
+
+          size_t in_bytes_read = 0;
+          bool success = false;
+
+          if (m_compression_type == 2) // BZIP2
           {
-            const size_t result = ZSTD_decompress(decompressed_data.data(), chunk_size,
-                                                 compressed_data.data(), group_data_size);
-            if (ZSTD_isError(result))
-            {
-              ERROR_LOG_FMT(DISCIO, "HttpRVZReader: Zstd decompression failed: {}", ZSTD_getErrorName(result));
-              return false;
-            }
-            decompressed_data.resize(result);
-          }
-          else if (m_compression_type == 4) // LZMA2
-          {
-            // Create LZMA2 decompressor
-            auto lzma_decompressor = std::make_unique<LZMADecompressor>(true, m_header_2.compressor_data,
-                                                                       m_header_2.compressor_data_size);
-
-            // Set up decompression buffers
-            DecompressionBuffer in_buffer;
-            in_buffer.data = std::move(compressed_data);
-            in_buffer.bytes_written = in_buffer.data.size();
-
-            DecompressionBuffer out_buffer;
-            out_buffer.data.resize(chunk_size);
-
-            // Decompress using LZMA2
-            size_t in_bytes_read = 0;
-            if (!lzma_decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read))
-            {
-              ERROR_LOG_FMT(DISCIO, "HttpRVZReader: LZMA2 decompression failed");
-              return false;
-            }
-
-            // Extract decompressed data
-            out_buffer.data.resize(out_buffer.bytes_written);
-            decompressed_data = std::move(out_buffer.data);
+            auto decompressor = std::make_unique<Bzip2Decompressor>();
+            success = decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read);
           }
           else if (m_compression_type == 3) // LZMA
           {
-            // Create LZMA decompressor
-            auto lzma_decompressor = std::make_unique<LZMADecompressor>(false, m_header_2.compressor_data,
-                                                                       m_header_2.compressor_data_size);
-
-            // Set up decompression buffers
-            DecompressionBuffer in_buffer;
-            in_buffer.data = std::move(compressed_data);
-            in_buffer.bytes_written = in_buffer.data.size();
-
-            DecompressionBuffer out_buffer;
-            out_buffer.data.resize(chunk_size);
-
-            // Decompress using LZMA
-            size_t in_bytes_read = 0;
-            if (!lzma_decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read))
-            {
-              ERROR_LOG_FMT(DISCIO, "HttpRVZReader: LZMA decompression failed");
-              return false;
-            }
-
-            // Extract decompressed data
-            out_buffer.data.resize(out_buffer.bytes_written);
-            decompressed_data = std::move(out_buffer.data);
+            auto decompressor = std::make_unique<LZMADecompressor>(false, nullptr, 0);
+            success = decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read);
           }
-          else if (m_compression_type == 2) // Bzip2
+          else if (m_compression_type == 4) // LZMA2
           {
-            // Create Bzip2 decompressor
-            auto bzip2_decompressor = std::make_unique<Bzip2Decompressor>();
-
-            // Set up decompression buffers
-            DecompressionBuffer in_buffer;
-            in_buffer.data = std::move(compressed_data);
-            in_buffer.bytes_written = in_buffer.data.size();
-
-            DecompressionBuffer out_buffer;
-            out_buffer.data.resize(chunk_size);
-
-            // Decompress using Bzip2
-            size_t in_bytes_read = 0;
-            if (!bzip2_decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read))
-            {
-              ERROR_LOG_FMT(DISCIO, "HttpRVZReader: Bzip2 decompression failed");
-              return false;
-            }
-
-            // Extract decompressed data
-            out_buffer.data.resize(out_buffer.bytes_written);
-            decompressed_data = std::move(out_buffer.data);
+            auto decompressor = std::make_unique<LZMADecompressor>(true, nullptr, 0);
+            success = decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read);
           }
           else
           {
-            ERROR_LOG_FMT(DISCIO, "HttpRVZReader: unsupported compression type {} for HTTP", m_compression_type);
+            ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: unsupported compression type {}", m_compression_type);
             return false;
+          }
+
+          if (!success)
+          {
+            ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: decompression failed");
+            return false;
+          }
+
+          out_buffer.data.resize(out_buffer.bytes_written);
+          decompressed_data = std::move(out_buffer.data);
+        }
+
+        // Cache the decompressed data
+        if (m_decompressed_cache.size() >= MAX_CACHED_CHUNKS)
+        {
+          m_decompressed_cache.clear();
+        }
+        auto [cache_iter, inserted] = m_decompressed_cache.emplace(total_group_index, std::move(decompressed_data));
+
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: cached new group {} with size 0x{:x}",
+                     total_group_index, cache_iter->second.size());
+
+        // Debug: Show detailed group data layout for group 0
+        if (total_group_index == 0)
+        {
+          const auto& group_data = cache_iter->second;
+          INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: GROUP 0 LAYOUT ANALYSIS");
+
+          // Show data at key offsets
+          if (group_data.size() >= 0x460)
+          {
+            // Game ID area (should be at 0x0)
+            const u32* data_0x0 = reinterpret_cast<const u32*>(group_data.data());
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: Group0[0x0]: 0x{:08x} ({})",
+                         Common::swap32(data_0x0[0]),
+                         std::string(reinterpret_cast<const char*>(&data_0x0[0]), 4));
+
+            const u32* data_0x4 = reinterpret_cast<const u32*>(group_data.data() + 4);
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: Group0[0x4]: 0x{:08x} ({})",
+                         Common::swap32(data_0x4[0]),
+                         std::string(reinterpret_cast<const char*>(&data_0x4[0]), 4));
+
+            // Region area (should be at 0x458)
+            const u32* data_region = reinterpret_cast<const u32*>(group_data.data() + 0x458);
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: Group0[0x458] (region): 0x{:08x}",
+                         Common::swap32(data_region[0]));
+
+            // Apploader area (should be around 0x2450)
+            if (group_data.size() > 0x2450)
+            {
+              const u32* data_apploader = reinterpret_cast<const u32*>(group_data.data() + 0x2450);
+              INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: Group0[0x2450] (apploader): 0x{:08x}",
+                           Common::swap32(data_apploader[0]));
+            }
+
+            // Show what the disc header actually contains for comparison
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: DISC HEADER COMPARISON");
+            const u32* header_0x0 = reinterpret_cast<const u32*>(m_header_2.disc_header);
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: Header[0x0]: 0x{:08x} ({})",
+                         Common::swap32(header_0x0[0]),
+                         std::string(reinterpret_cast<const char*>(&header_0x0[0]), 4));
+
+            const u32* header_0x4 = reinterpret_cast<const u32*>(m_header_2.disc_header + 4);
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: Header[0x4]: 0x{:08x} ({})",
+                         Common::swap32(header_0x4[0]),
+                         std::string(reinterpret_cast<const char*>(&header_0x4[0]), 4));
           }
         }
 
-        // Add to cache (with LRU eviction)
-        if (m_decompressed_cache.size() >= MAX_CACHED_CHUNKS)
-        {
-          // Simple eviction: remove first entry
-          m_decompressed_cache.erase(m_decompressed_cache.begin());
-        }
-
-        auto [cache_iter, inserted] = m_decompressed_cache.emplace(total_group_index, std::move(decompressed_data));
-
         // Copy requested data
         const auto& cached_data = cache_iter->second;
-        if (offset_in_group + bytes_to_read <= cached_data.size())
+
+        if (offset_in_group + bytes_to_read_from_group <= cached_data.size())
         {
-          std::memcpy(*out_ptr, cached_data.data() + offset_in_group, bytes_to_read);
+          std::memcpy(*out_ptr + bytes_read_total, cached_data.data() + offset_in_group, bytes_to_read_from_group);
+          bytes_read_total += bytes_to_read_from_group;
+
+          INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: copied 0x{:x} bytes from new group {} at offset 0x{:x}",
+                       bytes_to_read_from_group, total_group_index, offset_in_group);
+
+          // Debug: Show first few bytes of data being read
+          if (bytes_to_read_from_group >= 4)
+          {
+            const u32* data_ptr = reinterpret_cast<const u32*>(*out_ptr + bytes_read_total - bytes_to_read_from_group);
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: data preview: 0x{:08x} 0x{:08x}",
+                         Common::swap32(data_ptr[0]), bytes_to_read_from_group >= 8 ? Common::swap32(data_ptr[1]) : 0);
+          }
         }
         else
         {
-          ERROR_LOG_FMT(DISCIO, "HttpRVZReader: decompressed data too small");
+          ERROR_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: decompressed data too small for group {}", total_group_index);
           return false;
         }
       }
     }
 
-    *offset += bytes_to_read;
-    *size -= bytes_to_read;
-    *out_ptr += bytes_to_read;
+    // Update cumulative size for next group
+    cumulative_data_size += actual_group_size;
   }
 
+  // Update the original parameters
+  *offset += bytes_read_total;
+  *size -= bytes_read_total;
+  *out_ptr += bytes_read_total;
+
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: completed, read 0x{:x} bytes total", bytes_read_total);
   return true;
 }
 
@@ -1604,7 +1912,7 @@ std::unique_ptr<HttpWBFSReader> HttpWBFSReader::Create(const std::string& url)
 }
 
 HttpWBFSReader::HttpWBFSReader(std::unique_ptr<HttpBlobReader> http_reader)
-    : m_http_reader(std::move(http_reader))
+: m_http_reader(std::move(http_reader))
 {
 }
 
@@ -1704,7 +2012,7 @@ std::unique_ptr<HttpTGCReader> HttpTGCReader::Create(const std::string& url)
 }
 
 HttpTGCReader::HttpTGCReader(std::unique_ptr<HttpBlobReader> http_reader)
-    : m_http_reader(std::move(http_reader))
+: m_http_reader(std::move(http_reader))
 {
 }
 
@@ -1922,12 +2230,12 @@ bool HttpWIAReader::ReadRawDataEntries()
     }
     else if (m_compression_type == 3) // LZMA
     {
-      auto decompressor = std::make_unique<LZMADecompressor>(false, m_disc_header.compr_data, m_disc_header.compr_data_len);
+      auto decompressor = std::make_unique<LZMADecompressor>(false, nullptr, 0);
       success = decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read);
     }
     else if (m_compression_type == 4) // LZMA2
     {
-      auto decompressor = std::make_unique<LZMADecompressor>(true, m_disc_header.compr_data, m_disc_header.compr_data_len);
+      auto decompressor = std::make_unique<LZMADecompressor>(true, nullptr, 0);
       success = decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read);
     }
     else
@@ -2013,12 +2321,12 @@ bool HttpWIAReader::ReadGroupEntries()
     }
     else if (m_compression_type == 3) // LZMA
     {
-      auto decompressor = std::make_unique<LZMADecompressor>(false, m_disc_header.compr_data, m_disc_header.compr_data_len);
+      auto decompressor = std::make_unique<LZMADecompressor>(false, nullptr, 0);
       success = decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read);
     }
     else if (m_compression_type == 4) // LZMA2
     {
-      auto decompressor = std::make_unique<LZMADecompressor>(true, m_disc_header.compr_data, m_disc_header.compr_data_len);
+      auto decompressor = std::make_unique<LZMADecompressor>(true, nullptr, 0);
       success = decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read);
     }
     else
@@ -2220,7 +2528,7 @@ bool HttpWIAReader::ReadFromGroups(u64 offset, u64 size, u8* out_ptr)
             DecompressionBuffer out_buffer;
             out_buffer.data.resize(m_chunk_size);
 
-            auto lzma_decompressor = std::make_unique<LZMADecompressor>(false, m_disc_header.compr_data, m_disc_header.compr_data_len);
+            auto lzma_decompressor = std::make_unique<LZMADecompressor>(false, nullptr, 0);
             size_t in_bytes_read = 0;
             if (!lzma_decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read))
             {
@@ -2239,7 +2547,7 @@ bool HttpWIAReader::ReadFromGroups(u64 offset, u64 size, u8* out_ptr)
             DecompressionBuffer out_buffer;
             out_buffer.data.resize(m_chunk_size);
 
-            auto lzma_decompressor = std::make_unique<LZMADecompressor>(true, m_disc_header.compr_data, m_disc_header.compr_data_len);
+            auto lzma_decompressor = std::make_unique<LZMADecompressor>(true, nullptr, 0);
             size_t in_bytes_read = 0;
             if (!lzma_decompressor->Decompress(in_buffer, &out_buffer, &in_bytes_read))
             {
