@@ -341,7 +341,22 @@ static bool IsMainDolForNonGamePartition(const std::string& path)
 
 bool ShouldHideFromGameList(const std::string& volume_path)
 {
-  return IsInFilesDirectory(volume_path) || IsMainDolForNonGamePartition(volume_path);
+  // Don't hide HTTP URLs from the game list
+  std::string lower_path = volume_path;
+  std::transform(lower_path.begin(), lower_path.end(), lower_path.begin(), ::tolower);
+  if (lower_path.find("http://") == 0 || lower_path.find("https://") == 0 ||
+      lower_path.find("webdav://") == 0 || lower_path.find("webdavs://") == 0)
+  {
+    INFO_LOG_FMT(DISCIO, "ShouldHideFromGameList: allowing HTTP URL: {}", volume_path);
+    return false;
+  }
+
+  bool should_hide = IsInFilesDirectory(volume_path) || IsMainDolForNonGamePartition(volume_path);
+  if (should_hide)
+  {
+    INFO_LOG_FMT(DISCIO, "ShouldHideFromGameList: hiding path: {}", volume_path);
+  }
+  return should_hide;
 }
 
 std::unique_ptr<DirectoryBlobReader> DirectoryBlobReader::Create(const std::string& dol_path)

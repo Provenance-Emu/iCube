@@ -92,8 +92,8 @@ public:
 
   u64 GetBlockSize() const override;
   bool HasFastRandomAccessInBlock() const override { return true; }
-  std::string GetCompressionMethod() const override { return "Deflate"; }
-  std::optional<int> GetCompressionLevel() const override { return {}; }
+  std::string GetCompressionMethod() const override { return {}; }
+  std::optional<int> GetCompressionLevel() const override { return std::nullopt; }
 
   bool Read(u64 offset, u64 size, u8* out_ptr) override;
 
@@ -103,13 +103,9 @@ private:
 
   std::unique_ptr<HttpBlobReader> m_http_reader;
   u32 m_block_size = 0;
-  u32 m_ciso_map[0x40000]; // Same as CISOFileReader
+  u16 m_ciso_map[32764]; // CISO_MAP_SIZE from CISOBlob.h (0x8000 - 4 - 4 = 32764)
   u64 m_size = 0;
   bool m_header_read = false;
-
-  // Simple block cache for decompressed data
-  mutable std::unordered_map<u64, std::vector<u8>> m_block_cache;
-  static constexpr size_t MAX_CACHED_BLOCKS = 16; // Cache up to 16 decompressed blocks
 };
 
 // HTTP-backed RVZ reader for RVZ files over HTTP

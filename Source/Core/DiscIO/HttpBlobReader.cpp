@@ -23,6 +23,11 @@
 namespace DiscIO
 {
 
+// CISO constants (from CISOBlob.h)
+static constexpr u32 CISO_HEADER_SIZE = 0x8000;
+static constexpr u32 CISO_MAP_SIZE = CISO_HEADER_SIZE - sizeof(u32) - sizeof(char) * 4;
+static constexpr u16 UNUSED_BLOCK_ID = UINT16_MAX;
+
 namespace
 {
 static inline std::string LowerCopy(std::string s)
@@ -802,12 +807,8 @@ bool HttpCISOReader::ReadHeader()
   struct CISOHeader
   {
     u32 magic;
-    u32 header_size;
-    u64 total_bytes;
     u32 block_size;
-    u8 version;
-    u8 align;
-    u8 reserved[2];
+    u8 map[CISO_MAP_SIZE];
   };
 
   CISOHeader header;
@@ -824,23 +825,26 @@ bool HttpCISOReader::ReadHeader()
     return false;
   }
 
+  // CISO block_size is stored in little endian, but on iOS (little endian) no conversion needed
   m_block_size = header.block_size;
-  m_size = header.total_bytes;
 
-  INFO_LOG_FMT(DISCIO, "HttpCISOReader: CISO header - block_size: {}, total_bytes: {}", m_block_size, m_size);
-
-  // Read block map
-  const u32 map_size = (m_size + m_block_size - 1) / m_block_size;
-  if (map_size > sizeof(m_ciso_map) / sizeof(m_ciso_map[0]))
+  // Calculate total size from the map
+  u32 used_blocks = 0;
+  for (u32 i = 0; i < CISO_MAP_SIZE; ++i)
   {
-    ERROR_LOG_FMT(DISCIO, "HttpCISOReader: CISO map too large: {}", map_size);
-    return false;
+    if (header.map[i] == 1)
+      used_blocks++;
   }
+  m_size = static_cast<u64>(CISO_MAP_SIZE) * m_block_size;
 
-  if (!m_http_reader->Read(sizeof(header), map_size * sizeof(u32), reinterpret_cast<u8*>(m_ciso_map)))
+  INFO_LOG_FMT(DISCIO, "HttpCISOReader: CISO header - block_size: {}, total_bytes: {}, used_blocks: {}",
+               m_block_size, m_size, used_blocks);
+
+  // Copy the map
+  u16 count = 0;
+  for (u32 i = 0; i < CISO_MAP_SIZE; ++i)
   {
-    ERROR_LOG_FMT(DISCIO, "HttpCISOReader: failed to read CISO block map");
-    return false;
+    m_ciso_map[i] = (header.map[i] == 1) ? count++ : UNUSED_BLOCK_ID;
   }
 
   INFO_LOG_FMT(DISCIO, "HttpCISOReader: successfully read CISO header and block map");
@@ -871,64 +875,26 @@ bool HttpCISOReader::Read(u64 offset, u64 nbytes, u8* out_ptr)
   if (offset + nbytes > GetDataSize())
     return false;
 
-  INFO_LOG_FMT(DISCIO, "HttpCISOReader::Read: offset {} size {}", offset, nbytes);
-
   while (nbytes != 0)
   {
     const u64 block = offset / m_block_size;
     const u64 data_offset = offset % m_block_size;
     const u64 bytes_to_read = std::min(m_block_size - data_offset, nbytes);
 
-    const u32 UNUSED_BLOCK_ID = 0xFFFFFFFF;
-    const u32 CISO_MAP_SIZE = sizeof(m_ciso_map) / sizeof(m_ciso_map[0]);
-
     if (block < CISO_MAP_SIZE && UNUSED_BLOCK_ID != m_ciso_map[block])
     {
-      // Check if block is already cached
-      auto cache_it = m_block_cache.find(block);
-      if (cache_it != m_block_cache.end())
+      // Calculate the base address in the CISO file
+      const u64 file_off = CISO_HEADER_SIZE + m_ciso_map[block] * static_cast<u64>(m_block_size) + data_offset;
+
+      if (!m_http_reader->Read(file_off, bytes_to_read, out_ptr))
       {
-        INFO_LOG_FMT(DISCIO, "HttpCISOReader: using cached decompressed block {}", block);
-        const auto& cached_block = cache_it->second;
-        const u64 copy_size = std::min(bytes_to_read, static_cast<u64>(cached_block.size() - data_offset));
-        std::memcpy(out_ptr, cached_block.data() + data_offset, copy_size);
-      }
-      else
-      {
-        // Calculate the base address in the compressed file
-        const u32 CISO_HEADER_SIZE = 0x8000; // Same as CISOFileReader
-        const u64 file_off = CISO_HEADER_SIZE + m_ciso_map[block] * static_cast<u64>(m_block_size) + data_offset;
-
-        INFO_LOG_FMT(DISCIO, "HttpCISOReader: reading compressed block {} at file offset {}", block, file_off);
-
-        if (!m_http_reader->Read(file_off, bytes_to_read, out_ptr))
-        {
-          ERROR_LOG_FMT(DISCIO, "HttpCISOReader: failed to read compressed data at offset {}", file_off);
-          return false;
-        }
-
-        // For full block reads, cache the decompressed data
-        if (data_offset == 0 && bytes_to_read == m_block_size)
-        {
-          std::vector<u8> block_data(out_ptr, out_ptr + bytes_to_read);
-
-          // Evict old blocks if cache is full
-          if (m_block_cache.size() >= MAX_CACHED_BLOCKS)
-          {
-            auto oldest_it = m_block_cache.begin();
-            INFO_LOG_FMT(DISCIO, "HttpCISOReader: evicting cached block {}", oldest_it->first);
-            m_block_cache.erase(oldest_it);
-          }
-
-          m_block_cache[block] = std::move(block_data);
-          INFO_LOG_FMT(DISCIO, "HttpCISOReader: cached decompressed block {} (cache size: {})", block, m_block_cache.size());
-        }
+        ERROR_LOG_FMT(DISCIO, "HttpCISOReader: failed to read data at offset {}", file_off);
+        return false;
       }
     }
     else
     {
       // Unused block - fill with zeros
-      INFO_LOG_FMT(DISCIO, "HttpCISOReader: unused block {}, filling with zeros", block);
       std::fill_n(out_ptr, bytes_to_read, 0);
     }
 
@@ -1171,7 +1137,10 @@ std::unique_ptr<HttpRVZReader> HttpRVZReader::Create(const std::string& url)
     return nullptr;
   }
 
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader::Create: HttpBlobReader created successfully, creating RVZ reader");
   auto rvz_reader = std::unique_ptr<HttpRVZReader>(new HttpRVZReader(std::move(http_reader)));
+
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader::Create: calling ReadHeader()");
   if (!rvz_reader->ReadHeader())
   {
     ERROR_LOG_FMT(DISCIO, "HttpRVZReader::Create: failed to read RVZ header");
@@ -1200,6 +1169,7 @@ bool HttpRVZReader::ReadHeader()
   INFO_LOG_FMT(DISCIO, "HttpRVZReader: reading RVZ headers");
 
   // Read RVZ Header 1
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader: reading header 1 (size: {})", sizeof(m_header_1));
   if (!m_http_reader->Read(0, sizeof(m_header_1), reinterpret_cast<u8*>(&m_header_1)))
   {
     ERROR_LOG_FMT(DISCIO, "HttpRVZReader: failed to read RVZ header 1");
@@ -1207,6 +1177,7 @@ bool HttpRVZReader::ReadHeader()
   }
 
   // Validate magic
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader: validating magic number: 0x{:08x}", m_header_1.magic);
   if (m_header_1.magic != 0x015A5652) // RVZ_MAGIC
   {
     ERROR_LOG_FMT(DISCIO, "HttpRVZReader: invalid RVZ magic: 0x{:08x}", m_header_1.magic);
@@ -1215,6 +1186,15 @@ bool HttpRVZReader::ReadHeader()
 
   // Read RVZ Header 2
   const u32 header_2_size = Common::swap32(m_header_1.header_2_size);
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader: header 2 size: {}", header_2_size);
+
+  // Validate header 2 size is reasonable (should be less than 64KB)
+  if (header_2_size == 0 || header_2_size > 65536)
+  {
+    ERROR_LOG_FMT(DISCIO, "HttpRVZReader: invalid header 2 size: {}", header_2_size);
+    return false;
+  }
+
   std::vector<u8> header_2_data(header_2_size);
   if (!m_http_reader->Read(sizeof(m_header_1), header_2_size, header_2_data.data()))
   {
@@ -1224,6 +1204,7 @@ bool HttpRVZReader::ReadHeader()
 
   // Copy header 2 data
   const size_t copy_size = std::min(header_2_size, static_cast<u32>(sizeof(m_header_2)));
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader: copying {} bytes of header 2 data", copy_size);
   std::memcpy(&m_header_2, header_2_data.data(), copy_size);
 
   // Extract key information
@@ -1239,8 +1220,19 @@ bool HttpRVZReader::ReadHeader()
   const u64 raw_data_entries_offset = Common::swap64(m_header_2.raw_data_entries_offset);
   const u32 raw_data_entries_size = Common::swap32(m_header_2.raw_data_entries_size);
 
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader: raw data entries - count: {}, offset: {}, size: {}",
+               number_of_raw_data_entries, raw_data_entries_offset, raw_data_entries_size);
+
   if (number_of_raw_data_entries > 0)
   {
+    // Validate parameters are reasonable
+    if (number_of_raw_data_entries > 10000 || raw_data_entries_size > 1000000)
+    {
+      ERROR_LOG_FMT(DISCIO, "HttpRVZReader: invalid raw data entries parameters - count: {}, size: {}",
+                   number_of_raw_data_entries, raw_data_entries_size);
+      return false;
+    }
+
     m_raw_data_entries.resize(number_of_raw_data_entries);
     if (!m_http_reader->Read(raw_data_entries_offset, raw_data_entries_size,
                             reinterpret_cast<u8*>(m_raw_data_entries.data())))
@@ -1248,6 +1240,7 @@ bool HttpRVZReader::ReadHeader()
       ERROR_LOG_FMT(DISCIO, "HttpRVZReader: failed to read raw data entries");
       return false;
     }
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader: successfully read raw data entries");
   }
 
   // Read group entries
@@ -1255,8 +1248,19 @@ bool HttpRVZReader::ReadHeader()
   const u64 group_entries_offset = Common::swap64(m_header_2.group_entries_offset);
   const u32 group_entries_size = Common::swap32(m_header_2.group_entries_size);
 
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader: group entries - count: {}, offset: {}, size: {}",
+               number_of_group_entries, group_entries_offset, group_entries_size);
+
   if (number_of_group_entries > 0)
   {
+    // Validate parameters are reasonable
+    if (number_of_group_entries > 100000 || group_entries_size > 10000000)
+    {
+      ERROR_LOG_FMT(DISCIO, "HttpRVZReader: invalid group entries parameters - count: {}, size: {}",
+                   number_of_group_entries, group_entries_size);
+      return false;
+    }
+
     m_group_entries.resize(number_of_group_entries);
     if (!m_http_reader->Read(group_entries_offset, group_entries_size,
                             reinterpret_cast<u8*>(m_group_entries.data())))
@@ -1264,12 +1268,14 @@ bool HttpRVZReader::ReadHeader()
       ERROR_LOG_FMT(DISCIO, "HttpRVZReader: failed to read group entries");
       return false;
     }
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader: successfully read group entries");
   }
 
   INFO_LOG_FMT(DISCIO, "HttpRVZReader: loaded {} raw data entries, {} group entries",
                number_of_raw_data_entries, number_of_group_entries);
 
   m_header_read = true;
+  INFO_LOG_FMT(DISCIO, "HttpRVZReader: ReadHeader completed successfully");
   return true;
 }
 

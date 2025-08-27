@@ -359,27 +359,63 @@ std::unique_ptr<BlobReader> CreateBlobReader(const std::string& filename)
     {
     case CISO_MAGIC:
       INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected CISO format in HTTP stream, creating HttpCISOReader");
-      return HttpCISOReader::Create(filename);
+      {
+        auto reader = HttpCISOReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpCISOReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
 
     case RVZ_MAGIC:
       INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected RVZ format in HTTP stream, creating HttpRVZReader");
-      return HttpRVZReader::Create(filename);
+      {
+        auto reader = HttpRVZReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpRVZReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
 
     case GCZ_MAGIC:
       INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected GCZ format in HTTP stream, creating HttpGCZReader");
-      return HttpGCZReader::Create(filename);
+      {
+        auto reader = HttpGCZReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpGCZReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
 
     case 0x01414957: // WIA_MAGIC
       INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected WIA format in HTTP stream, creating HttpWIAReader");
-      return HttpWIAReader::Create(filename);
+      {
+        auto reader = HttpWIAReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpWIAReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
 
     case 0xA2380FAE: // TGC_MAGIC
       INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected TGC format in HTTP stream, creating HttpTGCReader");
-      return HttpTGCReader::Create(filename);
+      {
+        auto reader = HttpTGCReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpTGCReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
 
     case 0x53464257: // WBFS_MAGIC
       INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected WBFS format in HTTP stream, creating HttpWBFSReader");
-      return HttpWBFSReader::Create(filename);
+      {
+        auto reader = HttpWBFSReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpWBFSReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
 
     default:
       // Uncompressed format - return the HttpBlobReader
