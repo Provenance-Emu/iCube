@@ -1,52 +1,47 @@
 import Foundation
 import GameController
 
-/// Tracks timing-based pause gestures for controllers without dedicated Menu/Start buttons
+/// Tracks shoulder + menu/start gestures
+///
+/// Rules:
+/// - While holding all four shoulder buttons (L1, L2, R1, R2): fast-forward is ACTIVE
+/// - While holding all four shoulder buttons AND pressing Menu/Start: show the pause menu
+/// - No long-hold gesture on shoulders alone
 final class PauseGestureTracker {
     static let shared = PauseGestureTracker()
-    
-    private var shoulderHoldTimer: Timer?
-    private var shoulderHoldStartTime: Date?
-    private let requiredHoldDuration: TimeInterval = 2.0
-    
-    private init() {}
-    
-    /// Updates the state of all four shoulder buttons being pressed
-    /// - Parameter allPressed: true if L1, R1, L2, R2 are all currently pressed
-    func updateShoulderState(allPressed: Bool) {
-        if allPressed {
-            // Start tracking if not already tracking
-            if shoulderHoldStartTime == nil {
-                shoulderHoldStartTime = Date()
-                
-                // Set up timer to fire after required duration
-                shoulderHoldTimer?.invalidate()
-                shoulderHoldTimer = Timer.scheduledTimer(withTimeInterval: requiredHoldDuration, repeats: false) { [weak self] _ in
-                    self?.triggerPauseMenu()
-                }
+
+    /// Notification posted when fast forward active state changes.
+    /// userInfo: ["active": Bool]
+    static let fastForwardDidChangeNotification = Notification.Name("DOLFastForwardDidChange")
+
+    /// True when all four shoulder buttons are currently held down.
+    private(set) var isAllShouldersHeld: Bool = false {
+        didSet {
+            if oldValue != isAllShouldersHeld {
+                NotificationCenter.default.post(
+                    name: Self.fastForwardDidChangeNotification,
+                    object: nil,
+                    userInfo: ["active": isAllShouldersHeld]
+                )
             }
-        } else {
-            // Reset tracking when buttons are released
-            shoulderHoldTimer?.invalidate()
-            shoulderHoldTimer = nil
-            shoulderHoldStartTime = nil
         }
     }
-    
-    private func triggerPauseMenu() {
-        // Clean up timer state
-        shoulderHoldTimer?.invalidate()
-        shoulderHoldTimer = nil
-        shoulderHoldStartTime = nil
-        
-        // Trigger pause menu
+
+    private init() {}
+
+    /// Call whenever the current state of the four shoulder buttons changes.
+    /// - Parameter allPressed: true if L1, R1, L2, R2 are all currently pressed.
+    func updateShoulderState(allPressed: Bool) {
+        isAllShouldersHeld = allPressed
+    }
+
+    /// Call when Menu or Start is pressed.
+    /// If all shoulders are currently held, this will show the pause menu.
+    func menuOrStartPressed() {
+        guard isAllShouldersHeld else { return }
         DispatchQueue.main.async {
             TVEmulationBridge.pause()
             NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
         }
-    }
-    
-    deinit {
-        shoulderHoldTimer?.invalidate()
     }
 }

@@ -52,25 +52,12 @@
 - (void)rescan {
   NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
-  // Get current remote URLs from cache to preserve them
-  NSMutableArray<NSString*>* remoteUrls = [[NSMutableArray alloc] init];
-  self->_cache->ForEach([remoteUrls](const std::shared_ptr<const UICommon::GameFile>& game) {
-    std::string path = game->GetFilePath();
-    NSString* pathStr = [NSString stringWithUTF8String:path.c_str()];
-    if ([pathStr hasPrefix:@"http://"] || [pathStr hasPrefix:@"https://"] ||
-        [pathStr hasPrefix:@"webdav://"] || [pathStr hasPrefix:@"webdavs://"]) {
-      [remoteUrls addObject:pathStr];
-    }
-  });
-
-  // Expand local folders via FindAllGamePaths
+  // Only scan local folders during rescan - don't preserve old remote URLs
+  // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
   std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
   std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
 
-  // Add preserved remote URLs
-  for (NSString* remoteUrl in remoteUrls) {
-    all.push_back(FoundationToCppString(remoteUrl));
-  }
+  printf("DEBUG CACHE MGR: rescan() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
 
   bool updated = self->_cache->Update(all);
   if (updated) {
@@ -82,10 +69,39 @@
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
-    // Get current remote URLs from cache to preserve them
+    // Only scan local folders - don't preserve old remote URLs during refresh
+    // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
+    std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
+    std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+
+    printf("DEBUG CACHE MGR: rescanAndFetchMetadata() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
+
+    bool updated = self->_cache->Update(all);
+    updated |= self->_cache->UpdateAdditionalMetadata();
+
+    if (updated) {
+      self->_cache->Save();
+    }
+
+    if (completion_handler) {
+      completion_handler();
+    }
+  });
+}
+
+- (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
+
+    // During refresh: preserve existing remote URLs and only add/update local files
+    // This provides better UX - remote files stay visible until WebDAV updates arrive
     NSMutableArray<NSString*>* remoteUrls = [[NSMutableArray alloc] init];
     self->_cache->ForEach([remoteUrls](const std::shared_ptr<const UICommon::GameFile>& game) {
       std::string path = game->GetFilePath();
+      if (path.empty()) {
+        printf("DEBUG CACHE MGR: SKIPPED empty path from cached GameFile\n");
+        return;
+      }
       NSString* pathStr = [NSString stringWithUTF8String:path.c_str()];
       if ([pathStr hasPrefix:@"http://"] || [pathStr hasPrefix:@"https://"] ||
           [pathStr hasPrefix:@"webdav://"] || [pathStr hasPrefix:@"webdavs://"]) {
@@ -93,14 +109,21 @@
       }
     });
 
-    // Expand local folders via FindAllGamePaths
+    // Scan local folders
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
     std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
 
-    // Add preserved remote URLs
+    // Preserve existing remote URLs during refresh for better UX
     for (NSString* remoteUrl in remoteUrls) {
-      all.push_back(FoundationToCppString(remoteUrl));
+      if (remoteUrl.length > 0) {
+        all.push_back(FoundationToCppString(remoteUrl));
+      } else {
+        printf("DEBUG CACHE MGR: SKIPPED empty remote URL from cache\n");
+      }
     }
+
+    printf("DEBUG CACHE MGR: rescanLocalAndFetchMetadata() - using %lu local paths + %lu preserved remote URLs\n",
+           (unsigned long)(all.size() - remoteUrls.count), (unsigned long)remoteUrls.count);
 
     bool updated = self->_cache->Update(all);
     updated |= self->_cache->UpdateAdditionalMetadata();
@@ -132,6 +155,18 @@
   size_t count = 0;
 
   self->_cache->ForEach([items, &count](const std::shared_ptr<const UICommon::GameFile>& game) {
+    // Protect against null GameFile shared_ptr in cache
+    if (!game) {
+      printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
+      return;
+    }
+
+    // Additional safety check - ensure GameFile is valid
+    if (!game->IsValid()) {
+      printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
+      return;
+    }
+
     GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
     wrapper.gameFile = game;
     TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];

@@ -160,9 +160,14 @@ std::array<u8, 20> VolumeGC::GetSyncHash() const
 
 VolumeGC::ConvertedGCBanner VolumeGC::LoadBannerFile() const
 {
+  DEBUG_LOG_FMT(DISCIO, "VolumeGC::LoadBannerFile: attempting to load banner file 'opening.bnr'");
+
   GCBanner banner_file;
   const u64 file_size = ReadFile(*this, PARTITION_NONE, "opening.bnr",
                                  reinterpret_cast<u8*>(&banner_file), sizeof(GCBanner));
+
+  DEBUG_LOG_FMT(DISCIO, "VolumeGC::LoadBannerFile: ReadFile returned size: {}", file_size);
+
   if (file_size < 4)
   {
     WARN_LOG_FMT(DISCIO, "Could not read opening.bnr.");

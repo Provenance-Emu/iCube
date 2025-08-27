@@ -33,6 +33,12 @@
   }];
 }
 
++ (void)rescanLocalAndFetchMetadata:(void(^)(void))completion {
+  [[GameFileCacheManager sharedManager] rescanLocalAndFetchMetadataWithCompletionHandler:^{
+    if (completion) completion();
+  }];
+}
+
 + (void)loadGameCubeMainMenu {
   EmulationBootParameter* p = [EmulationBootParameter new];
   p.bootType = EmulationBootTypeGCIPL;

@@ -46,7 +46,17 @@ class RemoteSourcesStore: ObservableObject {
         if let password = password {
             KeychainService.setPassword(password, for: id)
         }
-        let source = WebDAVSource(id: id, name: name, url: url, username: username, password: password, recursive: recursive, interval: interval, startPath: startPath, enablePreCaching: enablePreCaching)
+        let source = RemoteSourceFactory.webdavSource(
+            id: id,
+            name: name,
+            url: url,
+            username: username,
+            password: password,
+            recursive: recursive,
+            interval: interval,
+            startPath: startPath,
+            enablePreCaching: enablePreCaching
+        )
         coordinator.add(source: source)
         persist()
     }
@@ -75,7 +85,17 @@ class RemoteSourcesStore: ObservableObject {
                 continue
             }
             let password = KeychainService.getPassword(for: p.id)
-            let src = WebDAVSource(id: p.id, name: p.name, url: url, username: p.username, password: password, recursive: p.recursive, interval: p.interval, startPath: p.startPath, enablePreCaching: p.enablePreCaching)
+            let src = RemoteSourceFactory.webdavSource(
+                id: p.id,
+                name: p.name,
+                url: url,
+                username: p.username,
+                password: password,
+                recursive: p.recursive,
+                interval: p.interval,
+                startPath: p.startPath,
+                enablePreCaching: p.enablePreCaching
+            )
             print("RemoteSourcesStore: adding source to coordinator: \(src.name)")
             coordinator.add(source: src)
         }

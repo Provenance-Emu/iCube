@@ -31,9 +31,35 @@
     if (self) {
         _wrapper = wrapper;
 
+        // Critical safety check - ensure GameFile shared_ptr is not null
+        if (!wrapper.gameFile) {
+            NSLog(@"TVGameItem: ERROR - null GameFile shared_ptr in wrapper, creating invalid item");
+            _title = @"<null GameFile>";
+            _filePath = @"<null>";
+            _id = @"<null>";
+            return self;
+        }
+
         const UICommon::GameFile &game = *wrapper.gameFile;
-        _title = CppToFoundationString(game.GetName(UICommon::GameFile::Variant::LongAndPossiblyCustom));
-        _filePath = CppToFoundationString(game.GetFilePath());
+
+        // Protect against invalid GameFile objects that can crash string conversion
+        std::string gameName;
+        std::string gamePath;
+
+        try {
+            gameName = game.GetName(UICommon::GameFile::Variant::LongAndPossiblyCustom);
+            gamePath = game.GetFilePath();
+        } catch (...) {
+            gameName = "<error>";
+            gamePath = "<error>";
+        }
+
+        // Ensure non-empty strings for Foundation conversion
+        if (gameName.empty()) gameName = "<unknown>";
+        if (gamePath.empty()) gamePath = "<unknown>";
+
+        _title = CppToFoundationString(gameName);
+        _filePath = CppToFoundationString(gamePath);
         _id = _filePath; // Use filePath as unique identifier
         _isNKit = game.IsNKit();
 
@@ -57,12 +83,22 @@
 
         _coverImage = result;
 
-        _gameID = CppToFoundationString(game.GetGameID());
+        // Protected string conversions for all GameFile properties
+        std::string gameID = game.GetGameID();
+        std::string countryName = DiscIO::GetName(game.GetCountry(), true);
+        std::string makerLong = game.GetMaker(UICommon::GameFile::Variant::LongAndNotCustom);
+        std::string apploaderDate = game.GetApploaderDate();
+
+        if (gameID.empty()) gameID = "<unknown>";
+        if (countryName.empty()) countryName = "<unknown>";
+        if (makerLong.empty()) makerLong = "<unknown>";
+
+        _gameID = CppToFoundationString(gameID);
         _discNumber = (NSInteger)game.GetDiscNumber();
         _revision = (NSInteger)game.GetRevision();
-        _countryName = CppToFoundationString(DiscIO::GetName(game.GetCountry(), true));
-        _makerLong = CppToFoundationString(game.GetMaker(UICommon::GameFile::Variant::LongAndNotCustom));
-        const std::string apploaderDate = game.GetApploaderDate();
+        _countryName = CppToFoundationString(countryName);
+        _makerLong = CppToFoundationString(makerLong);
+
         if (!apploaderDate.empty()) {
             _apploaderDateString = CppToFoundationString(apploaderDate);
         } else {
@@ -73,7 +109,11 @@
         } else {
             _titleIDHex = nil;
         }
-        _gametdbID = CppToFoundationString(game.GetGameTDBID());
+
+        std::string gametdbID = game.GetGameTDBID();
+        if (gametdbID.empty()) gametdbID = "<unknown>";
+        _gametdbID = CppToFoundationString(gametdbID);
+
         _fileSize = (NSUInteger)game.GetFileSize();
 
         // Debug logging for file size

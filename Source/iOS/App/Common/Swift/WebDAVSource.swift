@@ -6,14 +6,14 @@ import os
 /// Minimal WebDAV implementation that pings root and emits base URL as an item container.
 final class WebDAVSource: RemoteLibrarySource, Identifiable {
     let id: String
-    let name: String
+    var name: String
     let baseURL: URL
-    private let username: String?
-    private let password: String?
-    private let recursive: Bool
-    private let interval: TimeInterval
+    private var username: String?
+    private var password: String?
+    private var recursive: Bool
+    private var interval: TimeInterval
     private let startPath: String?
-    let enablePreCaching: Bool
+    var enablePreCaching: Bool
 
     var isRecursive: Bool { recursive }
     var refreshInterval: TimeInterval { interval }
@@ -36,8 +36,8 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     private let cacheDirectory: URL
     private let cacheMetadataFile: URL
 
-    let onlineStream: AsyncStream<Bool>
-    let itemsStream: AsyncStream<[RemoteLibraryItem]>
+    var onlineStream: AsyncStream<Bool>
+    var itemsStream: AsyncStream<[RemoteLibraryItem]>
 
     #if canImport(os)
     private static let logger = Logger(subsystem: "org.dolphin-emu.dolphinios", category: "WebDAV")
@@ -47,7 +47,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     private var loopTask: Task<Void, Never>?
 
     /// Generate consistent ID based on host (matches C++ logic)
-    private static func generateConsistentId(for url: URL) -> String {
+    static func generateConsistentId(for url: URL) -> String {
         guard let host = url.host else {
             return "unknown_host"
         }
@@ -102,6 +102,27 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         #endif
     }
 
+    /// Update configuration of existing source (used by factory)
+    func updateConfiguration(
+        name: String,
+        username: String?,
+        password: String?,
+        recursive: Bool,
+        interval: TimeInterval,
+        enablePreCaching: Bool
+    ) {
+        self.name = name
+        self.username = username
+        self.password = password
+        self.recursive = recursive
+        self.interval = interval
+        self.enablePreCaching = enablePreCaching
+
+        #if canImport(os)
+        Self.logger.info("Updated WebDAVSource configuration: \(self.name)")
+        #endif
+    }
+
     func start() {
         #if canImport(os)
         Self.logger.info("Starting WebDAV source: \(self.name)")
@@ -109,6 +130,18 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
         // Clean up any stale cache entries from old implementation
         cleanupStaleCache()
+
+        // Create fresh streams and continuations for restart
+        var oc: AsyncStream<Bool>.Continuation!
+        self.onlineStream = AsyncStream<Bool> { c in oc = c }
+        self.onlineCont = oc
+        var ic: AsyncStream<[RemoteLibraryItem]>.Continuation!
+        self.itemsStream = AsyncStream<[RemoteLibraryItem]> { c in ic = c }
+        self.itemsCont = ic
+
+        #if canImport(os)
+        Self.logger.info("Created fresh streams for WebDAV source: \(self.name)")
+        #endif
 
         // Cancel any previous loop and start a fresh one
         loopTask?.cancel()
@@ -122,9 +155,20 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         #if canImport(os)
         Self.logger.info("Stopping source loop for \(self.rootURL.absoluteString, privacy: .public)")
         #endif
-        // Only cancel the loop task; keep streams alive
+
+        // Cancel the loop task
         loopTask?.cancel()
         loopTask = nil
+
+        // Finish the current streams to properly end them
+        onlineCont?.finish()
+        itemsCont?.finish()
+        onlineCont = nil
+        itemsCont = nil
+
+        #if canImport(os)
+        Self.logger.info("WebDAV source stopped, streams finished and will be recreated on restart")
+        #endif
     }
 
     private func loop() async {
@@ -215,10 +259,16 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                 Self.logger.info("  [\(index, privacy: .public)]: \(item.url.absoluteString, privacy: .public)")
             }
             #endif
-            itemsCont?.yield(items)
-            #if canImport(os)
-            Self.logger.info("Items yielded to continuation")
-            #endif
+            if let itemsCont = itemsCont {
+                itemsCont.yield(items)
+                #if canImport(os)
+                Self.logger.info("Items yielded to continuation successfully")
+                #endif
+            } else {
+                #if canImport(os)
+                Self.logger.error("ERROR: itemsCont is nil, cannot yield items!")
+                #endif
+            }
         } catch {
             #if canImport(os)
             Self.logger.error("Enumeration error at \(self.rootURL.absoluteString, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -335,8 +385,11 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         var seen: Set<URL> = []
         while let current = queue.first {
             queue.removeFirst()
-            if seen.contains(current) { continue }
-            seen.insert(current)
+            // Normalize URL by removing trailing slash for comparison
+            let normalizedCurrentString = current.absoluteString.hasSuffix("/") ? String(current.absoluteString.dropLast()) : current.absoluteString
+            let normalizedCurrent = URL(string: normalizedCurrentString)!
+            if seen.contains(normalizedCurrent) { continue }
+            seen.insert(normalizedCurrent)
             #if canImport(os)
             Self.logger.debug("Processing directory: \(current.absoluteString, privacy: .public)")
             #endif
@@ -356,9 +409,12 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                 #endif
                 if n.isCollection {
                     if recursive {
-                        queue.append(resolved)
+                        // Normalize resolved URL by removing trailing slash before adding to queue
+                        let normalizedResolvedString = resolved.absoluteString.hasSuffix("/") ? String(resolved.absoluteString.dropLast()) : resolved.absoluteString
+                        let normalizedResolved = URL(string: normalizedResolvedString)!
+                        queue.append(normalizedResolved)
                         #if canImport(os)
-                        Self.logger.debug("Added directory to queue: \(resolved.absoluteString, privacy: .public)")
+                        Self.logger.debug("Added directory to queue: \(normalizedResolved.absoluteString, privacy: .public)")
                         #endif
                     }
                 } else if hasSupportedExtension(resolved) {

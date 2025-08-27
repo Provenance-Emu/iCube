@@ -12,19 +12,29 @@ class RemoteSourcesCoordinator: ObservableObject {
     private let updateThrottleInterval: TimeInterval = 2.0 // Minimum 2 seconds between updates
 
     init() {
-        // Listen for refresh requests (do not restart sources; just push current cache state)
+        // Listen for refresh requests - clear caches and fetch fresh directory listings
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("RefreshRemoteSources"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            self.pushCacheUpdate()
+            print("DEBUG REFRESH: RefreshRemoteSources notification received - clearing caches and rescanning")
+            Task { @MainActor in
+                self.clearCachesAndRefresh()
+            }
         }
     }
 
     func add(source: any RemoteLibrarySource) {
         print("RemoteSourcesCoordinator: adding source \(source.id) (\(source.name))")
+
+        // Check if we already have this source
+        if sources.contains(where: { $0.id == source.id }) {
+            print("RemoteSourcesCoordinator: source \(source.id) already exists, skipping add")
+            return
+        }
+
         sources.append(source)
         print("RemoteSourcesCoordinator: total sources now: \(sources.count)")
         start(source: source)
@@ -43,10 +53,14 @@ class RemoteSourcesCoordinator: ObservableObject {
 
         sources.removeAll { $0.id == id }
         lastItemsBySource.removeValue(forKey: id)
+
+        // Remove from factory to clean up singleton instance
+        RemoteSourceFactory.removeSource(id: id)
+
         pushCacheUpdate(forceUpdate: true) // Force update to clean up games from deleted source
     }
 
-    private func start(source: any RemoteLibrarySource) {
+        private func start(source: any RemoteLibrarySource) {
         print("RemoteSourcesCoordinator: starting source \(source.id) (\(source.name))")
 
         // Stop any existing tasks for this source to prevent conflicts
@@ -57,6 +71,10 @@ class RemoteSourcesCoordinator: ObservableObject {
             }
             tasks[source.id] = nil
         }
+
+        // Start the source FIRST so fresh streams are created
+        source.start()
+        print("RemoteSourcesCoordinator: source \(source.id) start() called, now creating tasks for fresh streams")
 
         let onlineTask = Task {
             for await isOnline in source.onlineStream {
@@ -70,26 +88,32 @@ class RemoteSourcesCoordinator: ObservableObject {
         }
 
         let itemsTask = Task {
-            print("DEBUG COORDINATOR: Starting items task for source \(source.id)")
+            print("DEBUG COORDINATOR: Starting NEW items task for source \(source.id), stream=\(source.itemsStream)")
+            print("DEBUG COORDINATOR: About to iterate over itemsStream for source \(source.id)")
             for await items in source.itemsStream {
                 print("DEBUG COORDINATOR: *** RECEIVED \(items.count) ITEMS FROM SOURCE \(source.id) ***")
                 for (index, item) in items.enumerated() {
                     print("DEBUG COORDINATOR:   [\(index)]: \(item.url.absoluteString)")
                 }
-                await MainActor.run {
-                    print("DEBUG COORDINATOR: Setting lastItemsBySource[\(source.id)] = \(items.count) items")
-                    lastItemsBySource[source.id] = items
-                    print("DEBUG COORDINATOR: About to call pushCacheUpdate()")
-                    pushCacheUpdate()
-                    print("DEBUG COORDINATOR: pushCacheUpdate() completed")
-                }
+                                    await MainActor.run {
+                        print("DEBUG COORDINATOR: Setting lastItemsBySource[\(source.id)] = \(items.count) items")
+                        lastItemsBySource[source.id] = items
+                        print("DEBUG COORDINATOR: About to call pushCacheUpdate()")
+
+                        // Force immediate cache update for better UX - don't wait for throttling
+                        pushCacheUpdate(forceUpdate: true)
+                        print("DEBUG COORDINATOR: pushCacheUpdate() completed")
+
+                        // Trigger UI reload after WebDAV update for better UX
+                        NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+                        print("DEBUG COORDINATOR: Posted RemoteLibraryUpdated notification")
+                    }
             }
-            print("DEBUG COORDINATOR: Items task ended for source \(source.id)")
+            print("DEBUG COORDINATOR: Items task ended normally (stream finished) for source \(source.id)")
         }
 
         tasks[source.id] = [onlineTask, itemsTask]
-        source.start()
-        print("RemoteSourcesCoordinator: source \(source.id) start() called")
+        print("RemoteSourcesCoordinator: tasks created and stored for source \(source.id)")
     }
 
     private func stop(sourceId: String) {
@@ -100,6 +124,19 @@ class RemoteSourcesCoordinator: ObservableObject {
         tasks[sourceId] = nil
     }
 
+    /// Clear cached directory listings and force fresh scans from all sources
+    private func clearCachesAndRefresh() {
+        print("DEBUG REFRESH: Clearing lastItemsBySource cache (had \(lastItemsBySource.count) sources)")
+        lastItemsBySource.removeAll() // Clear cached directory listings
+
+        print("DEBUG REFRESH: Restarting all \(sources.count) sources to fetch fresh listings")
+        for source in sources {
+            print("DEBUG REFRESH: Restarting source \(source.id) (\(source.name))")
+            stop(sourceId: source.id) // Stop existing tasks
+            start(source: source)     // Start fresh scan
+        }
+    }
+
     private func pushCacheUpdate(forceUpdate: Bool = false) {
         print("DEBUG PUSH: pushCacheUpdate() called")
         print("DEBUG PUSH: lastItemsBySource has \(lastItemsBySource.count) sources")
@@ -107,8 +144,15 @@ class RemoteSourcesCoordinator: ObservableObject {
             print("DEBUG PUSH:   source \(sourceId): \(items.count) items")
         }
 
-        let allUrls = lastItemsBySource.values.flatMap { $0 }.map { $0.url.absoluteString }
-        print("DEBUG PUSH: *** FLATTENED TO \(allUrls.count) TOTAL URLs ***")
+        let allUrls = lastItemsBySource.values.flatMap { $0 }.compactMap { item -> String? in
+            let urlString = item.url.absoluteString
+            if urlString.isEmpty {
+                print("DEBUG PUSH: WARNING - found empty URL string for item: \(item)")
+                return nil
+            }
+            return urlString
+        }
+        print("DEBUG PUSH: *** FLATTENED TO \(allUrls.count) TOTAL URLs (after filtering empty) ***")
         for (index, url) in allUrls.enumerated() {
             print("DEBUG PUSH:   [\(index)]: \(url)")
         }

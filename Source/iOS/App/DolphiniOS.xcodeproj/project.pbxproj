@@ -62,6 +62,16 @@
 		B3B334442E566EBC002BF20C /* DOLUIKitSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */; };
 		B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = B3D89A742E57DEF700EF1CB1 /* Zip */; };
 		B3F20D912E5E6A9F00AF38F3 /* PauseGestureTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */; };
+		B3F216652E5F5EA100AF38F3 /* RegionFlagMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216642E5F5EA100AF38F3 /* RegionFlagMapper.swift */; };
+		B3F216672E5F6DEC00AF38F3 /* RemoteSourceFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216662E5F6DEC00AF38F3 /* RemoteSourceFactory.swift */; };
+		B3F2166A2E5F73B900AF38F3 /* DOLPathsBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3F216692E5F73B900AF38F3 /* DOLPathsBridge.mm */; };
+		B3F2166F2E5F741B00AF38F3 /* SaveStateInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F2166E2E5F741B00AF38F3 /* SaveStateInfo.swift */; };
+		B3F216702E5F741B00AF38F3 /* DolphinPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */; };
+		B3F216712E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */; };
+		B3F216722E5F741B00AF38F3 /* SaveStateCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F2166D2E5F741B00AF38F3 /* SaveStateCardView.swift */; };
+		B3F216742E5F742400AF38F3 /* SaveStatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216732E5F742400AF38F3 /* SaveStatesViewModel.swift */; };
+		B3F216762E5F746600AF38F3 /* SaveStateFilmstripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216752E5F746600AF38F3 /* SaveStateFilmstripView.swift */; };
+		B3F216782E5F748300AF38F3 /* SaveStatesBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216772E5F748300AF38F3 /* SaveStatesBrowserView.swift */; };
 		B900A7A727F26F61000361DD /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7A627F26F61000361DD /* AppDelegate.swift */; };
 		B900A7AE27F27F36000361DD /* DolphinCoreService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AD27F27F36000361DD /* DolphinCoreService.mm */; };
 		B900A7B027F2866D000361DD /* UserFolderUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7AF27F2866D000361DD /* UserFolderUtil.swift */; };
@@ -334,6 +344,18 @@
 		B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOLUIKitSwitch.swift; sourceTree = "<group>"; };
 		B3B334452E5674FD002BF20C /* libMoltenVK.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libMoltenVK.dylib; path = "../../../Externals/MoltenVK-macOS/libMoltenVK.dylib"; sourceTree = "<group>"; };
 		B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseGestureTracker.swift; sourceTree = "<group>"; };
+		B3F216642E5F5EA100AF38F3 /* RegionFlagMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegionFlagMapper.swift; sourceTree = "<group>"; };
+		B3F216662E5F6DEC00AF38F3 /* RemoteSourceFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourceFactory.swift; sourceTree = "<group>"; };
+		B3F216682E5F73B900AF38F3 /* DOLPathsBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLPathsBridge.h; sourceTree = "<group>"; };
+		B3F216692E5F73B900AF38F3 /* DOLPathsBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLPathsBridge.mm; sourceTree = "<group>"; };
+		B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DolphinPaths.swift; sourceTree = "<group>"; };
+		B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesystemSaveStateProvider.swift; sourceTree = "<group>"; };
+		B3F2166D2E5F741B00AF38F3 /* SaveStateCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStateCardView.swift; sourceTree = "<group>"; };
+		B3F2166E2E5F741B00AF38F3 /* SaveStateInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStateInfo.swift; sourceTree = "<group>"; };
+		B3F216732E5F742400AF38F3 /* SaveStatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStatesViewModel.swift; sourceTree = "<group>"; };
+		B3F216752E5F746600AF38F3 /* SaveStateFilmstripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStateFilmstripView.swift; sourceTree = "<group>"; };
+		B3F216772E5F748300AF38F3 /* SaveStatesBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStatesBrowserView.swift; sourceTree = "<group>"; };
+		B3F216792E5F7F5C00AF38F3 /* TODO.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TODO.md; sourceTree = "<group>"; };
 		B900A7A227F25718000361DD /* Common.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Common.xcconfig; sourceTree = "<group>"; };
 		B900A7A627F26F61000361DD /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B900A7AC27F27F36000361DD /* DolphinCoreService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DolphinCoreService.h; sourceTree = "<group>"; };
@@ -757,6 +779,8 @@
 		B34EDDE02E57B2E200301907 /* Bridging */ = {
 			isa = PBXGroup;
 			children = (
+				B3F216682E5F73B900AF38F3 /* DOLPathsBridge.h */,
+				B3F216692E5F73B900AF38F3 /* DOLPathsBridge.mm */,
 				B34EDDDE2E57B2E200301907 /* DOLConfigBridge.h */,
 				B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */,
 			);
@@ -1111,15 +1135,24 @@
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
-				B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */,
-				B36B519E2E5E4700009A2303 /* SourcesView.swift */,
-				B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */,
+				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
+				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
 				B36B519A2E5E46AC009A2303 /* KeychainService.swift */,
 				B36B48C92E5D07D4009A2303 /* Localized.swift */,
+				B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */,
 				B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */,
+				B3F216642E5F5EA100AF38F3 /* RegionFlagMapper.swift */,
 				B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */,
+				B3F216662E5F6DEC00AF38F3 /* RemoteSourceFactory.swift */,
 				B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */,
+				B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */,
+				B3F2166D2E5F741B00AF38F3 /* SaveStateCardView.swift */,
+				B3F216752E5F746600AF38F3 /* SaveStateFilmstripView.swift */,
+				B3F2166E2E5F741B00AF38F3 /* SaveStateInfo.swift */,
+				B3F216772E5F748300AF38F3 /* SaveStatesBrowserView.swift */,
+				B3F216732E5F742400AF38F3 /* SaveStatesViewModel.swift */,
+				B36B519E2E5E4700009A2303 /* SourcesView.swift */,
 				B36B48C72E5D0749009A2303 /* TVCheatListView.swift */,
 				B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */,
 				B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */,
@@ -1822,6 +1855,7 @@
 		B9DC3DED27EFBD2C0084DAA4 = {
 			isa = PBXGroup;
 			children = (
+				B3F216792E5F7F5C00AF38F3 /* TODO.md */,
 				B3ABB24B2E53A18600BCDAC5 /* Core */,
 				B96F72CC27F0E6A00024BA7D /* Project */,
 				B900A7A327F260EF000361DD /* Libraries */,
@@ -2265,6 +2299,7 @@
 				B9661F362D23190300FB2AAB /* MappingInputDisplayInputCell.m in Sources */,
 				B9FCB7B9289670830020E233 /* JitManager.m in Sources */,
 				B99137882881486200588446 /* WiiSystemLanguageViewController.mm in Sources */,
+				B3F216672E5F6DEC00AF38F3 /* RemoteSourceFactory.swift in Sources */,
 				B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */,
 				B900A7CF27F4DB9A000361DD /* SoftwareListCell.swift in Sources */,
 				B3B147762E583977009C7049 /* EmuEventVC.m in Sources */,
@@ -2371,11 +2406,13 @@
 				B904ACD22885561E008B6BE9 /* InternalResolutionCell.m in Sources */,
 				B9447B052841901200BC9110 /* TCGameCubePad.swift in Sources */,
 				B9B2C5E5288D0C5500CB6569 /* MappingLoadProfileIniCell.m in Sources */,
+				B3F2166A2E5F73B900AF38F3 /* DOLPathsBridge.mm in Sources */,
 				B904ACEB28866FF4008B6BE9 /* ControllersRootViewController.mm in Sources */,
 				B904AD3828890489008B6BE9 /* MappingGroupEditControlCell.m in Sources */,
 				B900A7AE27F27F36000361DD /* DolphinCoreService.mm in Sources */,
 				B900A7D527F61F3A000361DD /* GameFileCacheManager.mm in Sources */,
 				B9DC5FAB28849535004BD94A /* GraphicsRootViewController.mm in Sources */,
+				B3F216742E5F742400AF38F3 /* SaveStatesViewModel.swift in Sources */,
 				B36B48CA2E5D07D4009A2303 /* Localized.swift in Sources */,
 				B9447B0128418F2600BC9110 /* TCJoystick.swift in Sources */,
 				B900A7BA27F4CB80000361DD /* DefaultsInitService.swift in Sources */,
@@ -2385,6 +2422,7 @@
 				B9DC5FAF28849640004BD94A /* GraphicsTabViewController.m in Sources */,
 				B904ACD52885D2C4008B6BE9 /* AnisotropicFilteringViewController.mm in Sources */,
 				B9B2C65B288E454700CB6569 /* ExternalDisplaySceneDelegate.swift in Sources */,
+				B3F216762E5F746600AF38F3 /* SaveStateFilmstripView.swift in Sources */,
 				B97E4B5629656EC300B3EE9C /* VersionManager.swift in Sources */,
 				B904ACC128851C6F008B6BE9 /* GraphicsBackendViewController.mm in Sources */,
 				B904ACCF288555E8008B6BE9 /* InternalResolutionViewController.mm in Sources */,
@@ -2415,13 +2453,19 @@
 				B9447AFD28418D7600BC9110 /* TCButton.swift in Sources */,
 				B9D938A1283F23A000B290FC /* TCButtonType.swift in Sources */,
 				B904ACF128868E4B008B6BE9 /* ControllersSettingsUtil.mm in Sources */,
+				B3F216782E5F748300AF38F3 /* SaveStatesBrowserView.swift in Sources */,
 				B99137952881D62C00588446 /* CpuEngineCell.m in Sources */,
 				B904ACC4288524D9008B6BE9 /* GraphicsAspectRatioViewController.mm in Sources */,
+				B3F216652E5F5EA100AF38F3 /* RegionFlagMapper.swift in Sources */,
 				B9FCB7E42898F4D60020E233 /* JitManager+JitStreamer.m in Sources */,
 				B9DC5FB62884A563004BD94A /* GraphicsBoolCell.mm in Sources */,
 				B9D938A728418AFE00B290FC /* TCManagerInterface.mm in Sources */,
 				B36B51972E5E41C7009A2303 /* RemoteLibrarySource.swift in Sources */,
 				B36B51982E5E41C7009A2303 /* WebDAVSource.swift in Sources */,
+				B3F2166F2E5F741B00AF38F3 /* SaveStateInfo.swift in Sources */,
+				B3F216702E5F741B00AF38F3 /* DolphinPaths.swift in Sources */,
+				B3F216712E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift in Sources */,
+				B3F216722E5F741B00AF38F3 /* SaveStateCardView.swift in Sources */,
 				B36B51992E5E41C7009A2303 /* RemoteSourcesCoordinator.swift in Sources */,
 				B9B2C661288E569E00CB6569 /* ExternalDisplayEmulationViewController.mm in Sources */,
 				B950CFA32961696100197719 /* BootNoticeNavigationViewController.m in Sources */,
@@ -3200,7 +3244,7 @@
 				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Debug (Jailbroken)";
@@ -3267,6 +3311,7 @@
 			baseConfigurationReference = B96F72D127F0FC1A0024BA7D /* Release (Jailbroken).xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -3302,7 +3347,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Jailbroken)";
@@ -3369,6 +3414,7 @@
 			baseConfigurationReference = B96F72D227F0FC420024BA7D /* Release (Beta, Non-Jailbroken).xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -3404,7 +3450,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Beta, Non-Jailbroken)";
@@ -3471,6 +3517,7 @@
 			baseConfigurationReference = B96F72D327F0FC520024BA7D /* Release (Beta, Jailbroken).xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -3506,7 +3553,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Beta, Jailbroken)";
@@ -3631,6 +3678,7 @@
 			baseConfigurationReference = B96F72CE27F0E8BD0024BA7D /* Debug (Non-Jailbroken).xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -3667,7 +3715,7 @@
 				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Debug (Non-Jailbroken)";
@@ -3677,6 +3725,7 @@
 			baseConfigurationReference = B96F72D027F0FC020024BA7D /* Release (Non-Jailbroken).xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -3712,7 +3761,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Non-Jailbroken)";
@@ -3779,6 +3828,7 @@
 			baseConfigurationReference = B9FF01E82977DCF700B49B00 /* Release (TrollStore).xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -3814,7 +3864,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (TrollStore)";
@@ -3881,6 +3931,7 @@
 			baseConfigurationReference = B9FF01E92977DD0000B49B00 /* Release (Beta, TrollStore).xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -3916,7 +3967,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
 			};
 			name = "Release (Beta, TrollStore)";

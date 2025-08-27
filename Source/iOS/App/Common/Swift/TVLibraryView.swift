@@ -73,14 +73,15 @@ final class TVLibraryViewModel: ObservableObject {
         guard !isRescanning else { return }
         isRescanning = true
 
-        // Trigger refresh of remote sources first
+        // Trigger refresh of remote sources first - they will update the cache when ready
         NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
 
-        // Perform local rescan and fetch metadata
-        TVLibraryBridge.rescanAndFetchMetadata { [weak self] in
+        // For refresh, don't clear remote cache immediately - let WebDAV results drive updates
+        // Only rescan local files to update metadata
+        TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
             DispatchQueue.main.async {
                 self?.isRescanning = false
-                // Reload after both local and remote sources are updated
+                // Remote sources will trigger additional reloads as they complete
                 self?.load()
             }
         }
@@ -90,7 +91,12 @@ final class TVLibraryViewModel: ObservableObject {
     func kickoffInitialMetadataIfNeeded() {
         guard !didKickoffInitialMetadata, !isRescanning else { return }
         didKickoffInitialMetadata = true
-        rescan()
+        // On boot, preserve remote URLs while WebDAV sources are starting up
+        TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+            DispatchQueue.main.async {
+                self?.load()
+            }
+        }
     }
 
     func loadGameCubeMainMenu() {
@@ -191,6 +197,11 @@ struct TVLibraryView: View {
     @State private var storageAlertMessage = ""
     @State private var itemPendingLaunch: TVGameItem?
 
+    // Navigation to Save States views
+    private struct GameIDRoute: Identifiable, Hashable { let id: String }
+    @State private var navigateToSaveStates: GameIDRoute?
+    @State private var showSaveStatesBrowser: Bool = false
+
     /// Separate alert states (SwiftUI works better with simple booleans)
     @State private var showStorageErrorAlert = false
     @State private var showLowStorageWarning = false
@@ -288,6 +299,12 @@ struct TVLibraryView: View {
                         showCacheInfo: { item in
                             showCacheInfoFor = item
                         },
+                        showSaveStates: { item in
+                            let gid = item.gameID
+                            if !gid.isEmpty {
+                                navigateToSaveStates = GameIDRoute(id: gid)
+                            }
+                        },
                         autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
                         isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
                     )
@@ -322,6 +339,9 @@ struct TVLibraryView: View {
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
+            Button(action: { showSaveStatesBrowser = true }) { Image(systemName: "film") }
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             Button(action: { showSources = true }) { Image(systemName: "externaldrive.badge.plus") }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -333,6 +353,7 @@ struct TVLibraryView: View {
                 Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
                 Button(L("Perform Online System Update")) { model.performOnlineSystemUpdate() }
                 Button(L("Sources")) { showSources = true }
+                Button(L("Save States")) { showSaveStatesBrowser = true }
             } label: { Image(systemName: "ellipsis.circle") }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -349,12 +370,18 @@ struct TVLibraryView: View {
     var body: some View {
         NavigationStack {
             mainContent
+            .navigationDestination(item: $navigateToSaveStates) { route in
+                SaveStateFilmstripView(gameID: route.id)
+            }
             .navigationDestination(item: $navigateTo) { item in
                 EmulationScreen(game: item)
                 .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
             }
             .navigationTitle("DolphiniOS Library")
             .toolbar { libraryToolbar }
+        }
+        .sheet(isPresented: $showSaveStatesBrowser) {
+            NavigationStack { SaveStatesBrowserView() }
         }
         .onAppear {
             // Initialize shared remote sources store to start querying immediately
@@ -383,9 +410,22 @@ struct TVLibraryView: View {
                 model.load()
                 print("TVLibraryView: after reload, library has \(model.games.count) games")
             }
+
+            // Listen for async metadata updates (covers/banners)
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name("GameFileMetadataUpdated"),
+                object: nil,
+                queue: .main
+            ) { notification in
+                if let filePath = notification.userInfo?["filePath"] as? String {
+                    print("TVLibraryView: received GameFileMetadataUpdated for: \(filePath)")
+                    model.load() // Refresh UI to show updated covers/banners
+                }
+            }
         }
         .onDisappear {
             NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+            NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
         }
         .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
         #if os(tvOS)
@@ -595,6 +635,7 @@ private struct GameGridItem: View {
     let requestDelete: (TVGameItem) -> Void
     let showStorageAlert: (String) -> Void
     let showCacheInfo: (TVGameItem) -> Void
+    let showSaveStates: (TVGameItem) -> Void
     let autoPreCacheProgress: Double
     let isAutoPreCaching: Bool
 
@@ -761,6 +802,17 @@ private struct GameGridItem: View {
                     .background(.ultraThinMaterial, in: Circle())
                     .padding(8)
                 }
+
+                // Region flag badge (top-left), styled like the cloud indicator
+                if !item.countryName.isEmpty {
+                    Text(RegionFlagMapper.compactFlag(for: item.countryName))
+                        .font(.system(size: 18))
+                        .padding(8)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .padding(8)
+                        .frame(width: 260, height: 390, alignment: .topLeading)
+                        .allowsHitTesting(false)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -771,6 +823,7 @@ private struct GameGridItem: View {
                     .foregroundColor(.primary)
 
                 HStack {
+                    // Game ID only (flag moved to artwork overlay)
                     Text(item.gameID)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -803,6 +856,7 @@ private struct GameGridItem: View {
         .onPlayPauseCommand { select(item) }
         .contextMenu {
             Button(L("Properties")) { showProperties(item) }
+            Button(L("View Save States")) { showSaveStates(item) }
             Menu(L("Cheats")) {
                 Button(L("Manage...")) { showCheatList(item) }
                 Button(L("Download Codes")) { downloadGeckoAction(item) }
@@ -893,6 +947,7 @@ private struct GameGridItem: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
 
+                    // Game ID only (flag moved to artwork overlay)
                     Text(item.gameID)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -1047,6 +1102,7 @@ private struct GameGridItem: View {
 private struct SourcePickerView: View {
     let items: [TVGameItem]
     let onPick: (TVGameItem) -> Void
+    @Environment(\.dismiss) private var dismiss
 
     private func label(for item: TVGameItem) -> String {
         if let scheme = URL(string: item.filePath)?.scheme?.lowercased() {
@@ -1082,7 +1138,13 @@ private struct SourcePickerView: View {
                 }
             }
             .navigationTitle(L("Select Source"))
-            .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Cancel")) { onPick(items[0]) } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L("Cancel"), role: .cancel) {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }

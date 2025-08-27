@@ -2,3 +2,4 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 DOL_APP_ICON_ASSET_NAME = AppIcon
+DOL_APP_ICON_ASSET_NAME_TV = tvOS Icons

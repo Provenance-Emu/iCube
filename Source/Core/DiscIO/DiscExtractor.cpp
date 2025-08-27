@@ -43,12 +43,29 @@ u64 ReadFile(const Volume& volume, const Partition& partition, const FileInfo* f
 u64 ReadFile(const Volume& volume, const Partition& partition, std::string_view path, u8* buffer,
              u64 max_buffer_size, u64 offset_in_file)
 {
+  DEBUG_LOG_FMT(DISCIO, "ReadFile: attempting to read file '{}' from volume", path);
+
   const FileSystem* file_system = volume.GetFileSystem(partition);
   if (!file_system)
+  {
+    ERROR_LOG_FMT(DISCIO, "ReadFile: GetFileSystem returned null for path '{}' - filesystem creation failed", path);
     return 0;
+  }
 
-  return ReadFile(volume, partition, file_system->FindFileInfo(path).get(), buffer, max_buffer_size,
-                  offset_in_file);
+  DEBUG_LOG_FMT(DISCIO, "ReadFile: filesystem obtained successfully for path '{}'", path);
+
+  DEBUG_LOG_FMT(DISCIO, "ReadFile: filesystem obtained, looking for file '{}'", path);
+
+  auto file_info = file_system->FindFileInfo(path);
+  if (!file_info)
+  {
+    ERROR_LOG_FMT(DISCIO, "ReadFile: FindFileInfo returned null for path '{}' - file not found in filesystem", path);
+    return 0;
+  }
+
+  DEBUG_LOG_FMT(DISCIO, "ReadFile: file '{}' found successfully! Size: {} bytes, Offset: 0x{:x}", path, file_info->GetSize(), file_info->GetOffset());
+
+  return ReadFile(volume, partition, file_info.get(), buffer, max_buffer_size, offset_in_file);
 }
 
 bool ExportData(const Volume& volume, const Partition& partition, u64 offset, u64 size,

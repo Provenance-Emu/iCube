@@ -35,5 +35,6 @@
 #import "TVLibraryBridge.h"
 #import "TVEmulationBridge.h"
 #import "DOLConfigBridge.h"
+#import "DOLPathsBridge.h"
 #import "TVCheatsBridge.h"
 #import "TVControllerMappingBridge.h"

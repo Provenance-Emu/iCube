@@ -103,34 +103,44 @@ GameFile::GameFile() = default;
 
 GameFile::GameFile(std::string path) : m_file_path(std::move(path))
 {
-  printf("DEBUG: GameFile constructor called with path: %s\n", m_file_path.c_str());
+  INFO_LOG_FMT(DISCIO, "GameFile constructor called with path: {}", m_file_path);
 
-  // Check if this is an RVZ file
+  // Protect against empty paths that can crash string conversion
+  if (m_file_path.empty())
+  {
+    ERROR_LOG_FMT(DISCIO, "GameFile constructor: empty path provided, creating invalid GameFile");
+    m_file_name = "<invalid>";
+    m_valid = false;
+    return;
+  }
+
+  m_file_name = PathToFileName(m_file_path);
+
+  // Check if this is a remote RVZ file
   std::string lower = m_file_path;
   std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
   bool is_rvz = (lower.find(".rvz") != std::string::npos);
   bool is_remote = (lower.find("http://") == 0 || lower.find("https://") == 0 ||
                    lower.find("webdav://") == 0 || lower.find("webdavs://") == 0);
 
-  if (is_rvz) {
-    printf("DEBUG: This is an RVZ file! is_remote=%s\n", is_remote ? "true" : "false");
+  if (is_rvz && is_remote) {
+    INFO_LOG_FMT(DISCIO, "GameFile: processing remote RVZ file: {}", m_file_path);
   }
 
-  INFO_LOG_FMT(DISCIO, "GameFile constructor called with path: {}", m_file_path);
-  m_file_name = PathToFileName(m_file_path);
-
   {
-    printf("DEBUG: GameFile attempting to create volume for: %s\n", m_file_path.c_str());
     INFO_LOG_FMT(DISCIO, "GameFile: attempting to create volume for {}", m_file_path);
     std::unique_ptr<DiscIO::Volume> volume(DiscIO::CreateVolume(m_file_path));
     if (volume != nullptr)
     {
-      printf("DEBUG: Volume created successfully for: %s\n", m_file_path.c_str());
       INFO_LOG_FMT(DISCIO, "GameFile: volume created successfully for {}", m_file_path);
       m_platform = volume->GetVolumeType();
 
       m_short_names = volume->GetShortNames();
       m_long_names = volume->GetLongNames();
+
+      INFO_LOG_FMT(DISCIO, "GameFile: extracted names - short_names.size()={}, long_names.size()={}",
+                   m_short_names.size(), m_long_names.size());
+
       m_short_makers = volume->GetShortMakers();
       m_long_makers = volume->GetLongMakers();
       m_descriptions = volume->GetDescriptions();
@@ -177,17 +187,11 @@ GameFile::GameFile(std::string path) : m_file_path(std::move(path))
     }
     else
     {
-      printf("DEBUG: Volume creation FAILED for: %s\n", m_file_path.c_str());
       ERROR_LOG_FMT(DISCIO, "GameFile: volume creation failed for {}", m_file_path);
 
-      // Check if this is an RVZ file over HTTP/WebDAV
-      std::string lower = m_file_path;
-      std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-      if ((lower.find("http://") == 0 || lower.find("https://") == 0 ||
-           lower.find("webdav://") == 0 || lower.find("webdavs://") == 0) &&
-          (lower.find(".rvz") != std::string::npos)) {
-        printf("DEBUG: RVZ file over HTTP FAILED to create volume - HttpRVZReader failure!\n");
-        ERROR_LOG_FMT(DISCIO, "GameFile: RVZ file over HTTP failed to create volume - this indicates HttpRVZReader failure");
+      // Check if this is a remote RVZ file that failed volume creation
+      if (is_rvz && is_remote) {
+        ERROR_LOG_FMT(DISCIO, "GameFile: Remote RVZ file failed volume creation - this indicates HttpRVZReader may need debugging");
       }
     }
   }
@@ -237,12 +241,10 @@ GameFile::~GameFile() = default;
 
 bool GameFile::IsValid() const
 {
-  printf("DEBUG: GameFile::IsValid called for: %s, m_valid=%s\n", m_file_path.c_str(), m_valid ? "true" : "false");
   INFO_LOG_FMT(DISCIO, "GameFile::IsValid called for {}, m_valid={}", m_file_path, m_valid);
   if (!m_valid)
   {
-    printf("DEBUG: GameFile::IsValid returning FALSE for: %s\n", m_file_path.c_str());
-    INFO_LOG_FMT(DISCIO, "GameFile::IsValid: returning false because m_valid is false for {}", m_file_path);
+    ERROR_LOG_FMT(DISCIO, "GameFile::IsValid: returning false because m_valid is false for {}", m_file_path);
     return false;
   }
 
@@ -252,8 +254,7 @@ bool GameFile::IsValid() const
     return false;
   }
 
-  printf("DEBUG: GameFile::IsValid returning TRUE for: %s\n", m_file_path.c_str());
-  INFO_LOG_FMT(DISCIO, "GameFile::IsValid: returning true for {}", m_file_path);
+  INFO_LOG_FMT(DISCIO, "GameFile::IsValid returning TRUE for: {}", m_file_path);
   return true;
 }
 
@@ -261,6 +262,8 @@ bool GameFile::CustomCoverChanged()
 {
   if (!m_custom_cover.buffer.empty() || !UseGameCovers())
     return false;
+
+    // Remote files are now handled by UpdateAdditionalMetadata scheduling async loading
 
   std::string path, name;
   SplitPath(m_file_path, &path, &name, nullptr);
@@ -288,6 +291,8 @@ void GameFile::DownloadDefaultCover()
 {
   if (!m_default_cover.buffer.empty() || !UseGameCovers() || m_gametdb_id.empty())
     return;
+
+    // Remote files are now handled by UpdateAdditionalMetadata scheduling async loading
 
   const auto cover_path = File::GetUserPath(D_COVERCACHE_IDX) + DIR_SEP;
   const auto png_path = cover_path + m_gametdb_id + ".png";
@@ -437,6 +442,8 @@ bool GameFile::ReadXMLMetadata(const std::string& path)
 
 bool GameFile::XMLMetadataChanged()
 {
+    // Remote files are now handled by UpdateAdditionalMetadata scheduling async loading
+
   std::string path, name;
   SplitPath(m_file_path, &path, &name, nullptr);
 
@@ -528,6 +535,8 @@ bool GameFile::TryLoadGameModDescriptorBanner()
 
 bool GameFile::CustomBannerChanged()
 {
+    // Remote files are now handled by UpdateAdditionalMetadata scheduling async loading
+
   std::string path, name;
   SplitPath(m_file_path, &path, &name, nullptr);
 
@@ -583,6 +592,14 @@ const std::string& GameFile::GetName(Variant variant) const
 
   // No usable name, return filename (better than nothing)
   INFO_LOG_FMT(DISCIO, "GameFile::GetName: no extracted name, using filename '{}' for {}", m_file_name, m_file_path);
+
+  // Protect against empty filename that can crash string conversion
+  if (m_file_name.empty())
+  {
+    WARN_LOG_FMT(DISCIO, "GameFile::GetName: filename is empty for path '{}', using fallback", m_file_path);
+    return m_file_path.empty() ? "<unknown>" : m_file_path;
+  }
+
   return m_file_name;
 }
 

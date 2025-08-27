@@ -226,19 +226,37 @@ bool FileInfoGCWii::IsValid(u64 fst_size, const FileInfoGCWii& parent_directory)
 FileSystemGCWii::FileSystemGCWii(const VolumeDisc* volume, const Partition& partition)
     : m_valid(false), m_root(nullptr, 0, 0, 0)
 {
+  DEBUG_LOG_FMT(DISCIO, "FileSystemGCWii: initializing filesystem for volume");
+
   u8 offset_shift;
   // Check if this is a GameCube or Wii disc
   if (volume->ReadSwapped<u32>(0x18, partition) == WII_DISC_MAGIC)
+  {
     offset_shift = 2;  // Wii file system
+    DEBUG_LOG_FMT(DISCIO, "FileSystemGCWii: detected Wii disc");
+  }
   else if (volume->ReadSwapped<u32>(0x1c, partition) == GAMECUBE_DISC_MAGIC)
+  {
     offset_shift = 0;  // GameCube file system
+    DEBUG_LOG_FMT(DISCIO, "FileSystemGCWii: detected GameCube disc");
+  }
   else
+  {
+    ERROR_LOG_FMT(DISCIO, "FileSystemGCWii: invalid disc magic - not GameCube or Wii");
     return;  // Invalid partition (maybe someone removed its data but not its partition table entry)
+  }
 
   const std::optional<u64> fst_offset = GetFSTOffset(*volume, partition);
   const std::optional<u64> fst_size = GetFSTSize(*volume, partition);
   if (!fst_offset || !fst_size)
+  {
+    ERROR_LOG_FMT(DISCIO, "FileSystemGCWii: failed to get FST offset/size - offset: {}, size: {}",
+                  fst_offset ? *fst_offset : 0, fst_size ? *fst_size : 0);
     return;
+  }
+
+  DEBUG_LOG_FMT(DISCIO, "FileSystemGCWii: FST offset: {:#x}, size: {:#x}", *fst_offset, *fst_size);
+
   if (*fst_size < FST_ENTRY_SIZE)
   {
     ERROR_LOG_FMT(DISCIO, "File system is too small");
@@ -259,11 +277,15 @@ FileSystemGCWii::FileSystemGCWii(const VolumeDisc* volume, const Partition& part
 
   // Read the whole FST
   m_file_system_table.resize(*fst_size);
+  DEBUG_LOG_FMT(DISCIO, "FileSystemGCWii: attempting to read FST from offset {:#x}, size {:#x}", *fst_offset, *fst_size);
+
   if (!volume->Read(*fst_offset, *fst_size, m_file_system_table.data(), partition))
   {
     ERROR_LOG_FMT(DISCIO, "Couldn't read file system table");
     return;
   }
+
+  DEBUG_LOG_FMT(DISCIO, "FileSystemGCWii: successfully read FST, creating root object");
 
   // Create the root object
   m_root = FileInfoGCWii(m_file_system_table.data(), offset_shift);
@@ -286,7 +308,13 @@ FileSystemGCWii::FileSystemGCWii(const VolumeDisc* volume, const Partition& part
     return;
   }
 
+  DEBUG_LOG_FMT(DISCIO, "FileSystemGCWii: all validation passed, marking filesystem as valid");
   m_valid = m_root.IsValid(*fst_size, m_root);
+
+  if (m_valid)
+    DEBUG_LOG_FMT(DISCIO, "FileSystemGCWii: filesystem successfully initialized");
+  else
+    ERROR_LOG_FMT(DISCIO, "FileSystemGCWii: root validation failed, filesystem invalid");
 }
 
 FileSystemGCWii::~FileSystemGCWii() = default;

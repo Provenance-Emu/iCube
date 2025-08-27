@@ -10,9 +10,14 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#ifdef __OBJC__
+#import <Foundation/Foundation.h>
+#endif
 
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
@@ -46,7 +51,15 @@ GameFileCache::GameFileCache() : m_path(File::GetUserPath(D_CACHE_IDX) + "gameli
 void GameFileCache::ForEach(const ForEachFn& f) const
 {
   for (const std::shared_ptr<GameFile>& item : m_cached_files)
+  {
+    // Critical safety check - skip null GameFile shared_ptrs in cache
+    if (!item)
+    {
+      ERROR_LOG_FMT(DISCIO, "GameFileCache::ForEach: found null GameFile shared_ptr in cache, skipping");
+      continue;
+    }
     f(item);
+  }
 }
 
 size_t GameFileCache::GetSize() const
@@ -71,6 +84,13 @@ std::shared_ptr<const GameFile> GameFileCache::AddOrGet(const std::string& path,
   const bool found = it != m_cached_files.cend();
   if (!found)
   {
+    // Protect against empty paths in AddOrGet
+    if (path.empty())
+    {
+      WARN_LOG_FMT(DISCIO, "GameFileCache::AddOrGet: empty path provided, returning nullptr");
+      return nullptr;
+    }
+
     std::shared_ptr<UICommon::GameFile> game = std::make_shared<GameFile>(path);
     if (!game->IsValid())
       return nullptr;
@@ -90,11 +110,11 @@ bool GameFileCache::Update(std::span<const std::string> all_game_paths,
 {
   INFO_LOG_FMT(DISCIO, "GameFileCache::Update called with {} paths", all_game_paths.size());
 
-  // Copy game paths into a set, except ones that match DiscIO::ShouldHideFromGameList.
-  // TODO: Prevent DoFileSearch from looking inside /files/ directories of DirectoryBlobs at all?
-  // TODO: Make DoFileSearch support filter predicates so we don't have remove things afterwards?
+  // Filter valid game paths during iteration (addresses TODO about filter predicates)
   std::unordered_set<std::string> game_paths;
   game_paths.reserve(all_game_paths.size());
+  size_t hidden_count = 0;
+
   for (const std::string& path : all_game_paths)
   {
     if (!DiscIO::ShouldHideFromGameList(path))
@@ -104,11 +124,13 @@ bool GameFileCache::Update(std::span<const std::string> all_game_paths,
     }
     else
     {
+      hidden_count++;
       INFO_LOG_FMT(DISCIO, "GameFileCache::Update: path hidden from game list: {}", path);
     }
   }
 
-  INFO_LOG_FMT(DISCIO, "GameFileCache::Update: processing {} valid paths", game_paths.size());
+  INFO_LOG_FMT(DISCIO, "GameFileCache::Update: processing {} valid paths ({} hidden)",
+               game_paths.size(), hidden_count);
   bool cache_changed = false;
 
   // Delete paths that aren't in game_paths from m_cached_files,
@@ -122,14 +144,45 @@ bool GameFileCache::Update(std::span<const std::string> all_game_paths,
       if (processing_halted)
         break;
 
-      if (game_paths.erase((*it)->GetFilePath()))
+      const std::string& cached_path = (*it)->GetFilePath();
+      if (game_paths.erase(cached_path))
       {
-        ++it;
+        // Check if this is a remote RVZ file that failed title extraction and needs re-processing
+        bool is_rvz = cached_path.find(".rvz") != std::string::npos;
+        bool is_remote = (cached_path.find("http://") == 0 || cached_path.find("https://") == 0 ||
+                         cached_path.find("webdav://") == 0 || cached_path.find("webdavs://") == 0);
+        bool no_title = (*it)->GetLongName().empty() && (*it)->GetShortName().empty();
+
+        if (is_rvz && is_remote && no_title && (*it)->IsValid())
+        {
+          INFO_LOG_FMT(DISCIO, "GameFileCache::Update: Remote RVZ file '{}' has no extracted title (gameID: '{}'), re-processing with HttpRVZReader",
+                      cached_path, (*it)->GetGameID());
+
+          // Remove from cache so it gets re-processed with the new HttpRVZReader
+          if (game_removed_from_cache)
+            game_removed_from_cache(cached_path);
+
+          // Re-add to game_paths for re-processing
+          game_paths.insert(cached_path);
+
+          cache_changed = true;
+          --end;
+          *it = std::move(*end);
+        }
+        else
+        {
+          if (is_rvz && is_remote && !no_title)
+          {
+            INFO_LOG_FMT(DISCIO, "GameFileCache::Update: Remote RVZ file '{}' already has title '{}', keeping cached version",
+                        cached_path, (*it)->GetLongName().empty() ? (*it)->GetShortName() : (*it)->GetLongName());
+          }
+          ++it;
+        }
       }
       else
       {
         if (game_removed_from_cache)
-          game_removed_from_cache((*it)->GetFilePath());
+          game_removed_from_cache(cached_path);
 
         cache_changed = true;
         --end;
@@ -145,6 +198,13 @@ bool GameFileCache::Update(std::span<const std::string> all_game_paths,
   {
     if (processing_halted)
       break;
+
+    // Skip empty or invalid paths to prevent crashes
+    if (path.empty())
+    {
+      WARN_LOG_FMT(DISCIO, "GameFileCache::Update: skipping empty path");
+      continue;
+    }
 
     INFO_LOG_FMT(DISCIO, "GameFileCache::Update: creating GameFile for path: {}", path);
     auto file = std::make_shared<GameFile>(path);
@@ -186,8 +246,61 @@ bool GameFileCache::UpdateAdditionalMetadata(const GameUpdatedFn& game_updated,
   return cache_changed;
 }
 
+void GameFileCache::LoadRemoteMetadataAsync(const std::string& file_path)
+{
+  // Schedule async loading of covers/banners for remote files
+  // This runs on a background thread to avoid blocking the UI
+  std::thread([this, file_path]() {
+    // Find the game file in cache
+    auto it = std::find_if(
+        m_cached_files.begin(), m_cached_files.end(),
+        [&file_path](const std::shared_ptr<GameFile>& file) { return file->GetFilePath() == file_path; });
+
+    if (it != m_cached_files.end())
+    {
+      INFO_LOG_FMT(DISCIO, "GameFileCache::LoadRemoteMetadataAsync: loading metadata for {}", file_path);
+      std::shared_ptr<GameFile> game_file = *it;
+      // Force update metadata on background thread
+      UpdateAdditionalMetadata(&game_file);
+
+      // Replace the cached version with updated one
+      *it = game_file;
+
+            INFO_LOG_FMT(DISCIO, "GameFileCache::LoadRemoteMetadataAsync: completed for {}", file_path);
+
+      // Notify UI that metadata has been updated (iOS/macOS specific)
+#ifdef __OBJC__
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"GameFileMetadataUpdated"
+                                                            object:nil
+                                                          userInfo:@{@"filePath": [NSString stringWithUTF8String:file_path.c_str()]}];
+      });
+#endif
+    }
+  }).detach();
+}
+
 bool GameFileCache::UpdateAdditionalMetadata(std::shared_ptr<GameFile>* game_file)
 {
+  // Check if this is a remote file that might need async metadata loading
+  const std::string& file_path = (*game_file)->GetFilePath();
+  bool is_remote = (file_path.find("http://") == 0 || file_path.find("https://") == 0 ||
+                    file_path.find("webdav://") == 0 || file_path.find("webdavs://") == 0);
+
+#ifdef __OBJC__
+  bool is_main_thread = [NSThread isMainThread];
+#else
+  bool is_main_thread = false; // Assume not main thread on non-Apple platforms
+#endif
+
+  // If we're on main thread with a remote file, schedule async loading and return
+  if (is_remote && is_main_thread)
+  {
+    INFO_LOG_FMT(DISCIO, "GameFileCache::UpdateAdditionalMetadata: scheduling async metadata loading for remote file: {}", file_path);
+    LoadRemoteMetadataAsync(file_path);
+    return false; // No immediate changes to cache
+  }
+
   const bool xml_metadata_changed = (*game_file)->XMLMetadataChanged();
   const bool wii_banner_changed = (*game_file)->WiiBannerChanged();
   const bool custom_banner_changed = (*game_file)->CustomBannerChanged();
@@ -295,8 +408,18 @@ void GameFileCache::DoState(PointerWrap* p, u64 size)
   }
   p->DoEachElement(m_cached_files, [](PointerWrap& state, std::shared_ptr<GameFile>& elem) {
     if (state.IsReadMode())
+    {
       elem = std::make_shared<GameFile>();
+    }
     elem->DoState(state);
+
+    // Safety check: verify loaded GameFile is valid and has non-empty path
+    if (state.IsReadMode() && (!elem->IsValid() || elem->GetFilePath().empty()))
+    {
+      ERROR_LOG_FMT(DISCIO, "GameFileCache: loaded invalid GameFile from cache, path: '{}', setting to null",
+                    elem->GetFilePath());
+      elem.reset(); // Set to null to be filtered out by ForEach
+    }
   });
 }
 

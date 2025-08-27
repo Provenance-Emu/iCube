@@ -26,6 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)rescan;
 - (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)(void))completion_handler;
+- (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)(void))completion_handler;
 
 - (NSArray<GameFilePtrWrapper*>*)getGames;
 - (NSArray<TVGameItem*>*)currentGames;

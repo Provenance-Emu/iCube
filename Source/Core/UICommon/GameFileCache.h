@@ -54,6 +54,9 @@ public:
   bool UpdateAdditionalMetadata(const GameUpdatedFn& game_updated = {},
                                 const std::atomic_bool& processing_halted = false);
 
+  // Async loading of covers/banners for remote files to avoid blocking main thread
+  void LoadRemoteMetadataAsync(const std::string& file_path);
+
   bool Load();
   bool Save();
 
