@@ -12,13 +12,14 @@ class RemoteSourcesCoordinator: ObservableObject {
     private let updateThrottleInterval: TimeInterval = 2.0 // Minimum 2 seconds between updates
 
     init() {
-        // Listen for refresh requests
+        // Listen for refresh requests (do not restart sources; just push current cache state)
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("RefreshRemoteSources"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.refreshAllSources()
+            guard let self else { return }
+            self.pushCacheUpdate()
         }
     }
 
@@ -40,6 +41,15 @@ class RemoteSourcesCoordinator: ObservableObject {
     private func start(source: any RemoteLibrarySource) {
         print("RemoteSourcesCoordinator: starting source \(source.id) (\(source.name))")
 
+        // Stop any existing tasks for this source to prevent conflicts
+        if let existingTasks = tasks[source.id] {
+            print("RemoteSourcesCoordinator: stopping existing tasks for source \(source.id)")
+            for task in existingTasks {
+                task.cancel()
+            }
+            tasks[source.id] = nil
+        }
+
         let onlineTask = Task {
             for await isOnline in source.onlineStream {
                 print("RemoteSourcesCoordinator: source \(source.id) online status changed to \(isOnline)")
@@ -52,16 +62,21 @@ class RemoteSourcesCoordinator: ObservableObject {
         }
 
         let itemsTask = Task {
+            print("DEBUG COORDINATOR: Starting items task for source \(source.id)")
             for await items in source.itemsStream {
-                print("RemoteSourcesCoordinator: received \(items.count) items from source \(source.id)")
+                print("DEBUG COORDINATOR: *** RECEIVED \(items.count) ITEMS FROM SOURCE \(source.id) ***")
                 for (index, item) in items.enumerated() {
-                    print("  [\(index)]: \(item.url.absoluteString)")
+                    print("DEBUG COORDINATOR:   [\(index)]: \(item.url.absoluteString)")
                 }
                 await MainActor.run {
+                    print("DEBUG COORDINATOR: Setting lastItemsBySource[\(source.id)] = \(items.count) items")
                     lastItemsBySource[source.id] = items
+                    print("DEBUG COORDINATOR: About to call pushCacheUpdate()")
                     pushCacheUpdate()
+                    print("DEBUG COORDINATOR: pushCacheUpdate() completed")
                 }
             }
+            print("DEBUG COORDINATOR: Items task ended for source \(source.id)")
         }
 
         tasks[source.id] = [onlineTask, itemsTask]
@@ -78,19 +93,28 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     private func pushCacheUpdate() {
-        let allUrls = lastItemsBySource.values.flatMap { $0 }.map { $0.url.absoluteString }
-        print("RemoteSourcesCoordinator: updating cache with \(allUrls.count) URLs")
-        for (index, url) in allUrls.enumerated() {
-            print("  [\(index)]: \(url)")
+        print("DEBUG PUSH: pushCacheUpdate() called")
+        print("DEBUG PUSH: lastItemsBySource has \(lastItemsBySource.count) sources")
+        for (sourceId, items) in lastItemsBySource {
+            print("DEBUG PUSH:   source \(sourceId): \(items.count) items")
         }
 
+        let allUrls = lastItemsBySource.values.flatMap { $0 }.map { $0.url.absoluteString }
+        print("DEBUG PUSH: *** FLATTENED TO \(allUrls.count) TOTAL URLs ***")
+        for (index, url) in allUrls.enumerated() {
+            print("DEBUG PUSH:   [\(index)]: \(url)")
+        }
+
+        print("DEBUG PUSH: Calling TVLibraryBridge.updateLibrary with \(allUrls.count) URLs")
         // Force metadata fetch for remote games to ensure artwork and database lookups work
         TVLibraryBridge.updateLibrary(withRemotePaths: allUrls, fetchMetadata: true)
+        print("DEBUG PUSH: TVLibraryBridge.updateLibrary completed")
 
         // Notify UI to refresh
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
         }
+        print("DEBUG PUSH: pushCacheUpdate() finished")
     }
 
     private func refreshAllSources() {

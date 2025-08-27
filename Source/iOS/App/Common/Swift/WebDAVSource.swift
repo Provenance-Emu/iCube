@@ -43,6 +43,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     private static let logger = Logger(subsystem: "org.dolphin-emu.dolphinios", category: "WebDAV")
     #endif
 
+    // Cancellable loop task; do not finish streams on stop()
+    private var loopTask: Task<Void, Never>?
+
     /// Generate consistent ID based on host (matches C++ logic)
     private static func generateConsistentId(for url: URL) -> String {
         guard let host = url.host else {
@@ -107,8 +110,11 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         // Clean up any stale cache entries from old implementation
         cleanupStaleCache()
 
-        Task {
-            await loop()
+        // Cancel any previous loop and start a fresh one
+        loopTask?.cancel()
+        loopTask = Task { [weak self] in
+            guard let self else { return }
+            await self.loop()
         }
     }
 
@@ -116,8 +122,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         #if canImport(os)
         Self.logger.info("Stopping source loop for \(self.rootURL.absoluteString, privacy: .public)")
         #endif
-        onlineCont?.finish()
-        itemsCont?.finish()
+        // Only cancel the loop task; keep streams alive
+        loopTask?.cancel()
+        loopTask = nil
     }
 
     private func loop() async {
@@ -125,10 +132,12 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         Self.logger.info("Starting WebDAV loop for \(self.rootURL.absoluteString, privacy: .public)")
         #endif
         while true {
+            if Task.isCancelled { break }
             #if canImport(os)
             Self.logger.debug("Loop iteration: pinging \(self.rootURL.absoluteString, privacy: .public)")
             #endif
             await ping()
+            if Task.isCancelled { break }
             if isOnline {
                 #if canImport(os)
                 Self.logger.debug("Source is online, starting enumeration")
@@ -142,7 +151,11 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             #if canImport(os)
             Self.logger.debug("Sleeping for \(self.interval, privacy: .public) seconds")
             #endif
-            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            do {
+                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            } catch {
+                break
+            }
         }
     }
 
@@ -402,7 +415,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         struct CachedFileInfo: Codable {
             let originalURL: String
             let localPath: String
-            let fileSize: Int64
+            var fileSize: Int64
             let cachedDate: Date
             let etag: String?
             let lastModified: Date?
@@ -458,36 +471,31 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     /// Check if an item is cached locally (internal implementation)
     private func isCachedWithPath(_ item: RemoteLibraryItem) -> (Bool, String?) {
         let metadata = loadCacheMetadata()
-        let key = item.url.absoluteString
-
-        guard let cachedInfo = metadata.cachedFiles[key] else {
-            return (false, nil)
-        }
-
-        let localURL = cacheDirectory.appendingPathComponent(cachedInfo.localPath)
-        guard FileManager.default.fileExists(atPath: localURL.path) else {
-            // File was deleted, remove from metadata
-            var updatedMetadata = metadata
-            updatedMetadata.cachedFiles.removeValue(forKey: key)
-            saveCacheMetadata(updatedMetadata)
-            return (false, nil)
-        }
-
-        // Check if file size matches
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: localURL.path)
-            let fileSize = attributes[.size] as? Int64 ?? 0
-            if fileSize != cachedInfo.fileSize {
-                #if canImport(os)
-                Self.logger.info("Cached file size mismatch for \(item.displayName): expected \(cachedInfo.fileSize), got \(fileSize)")
-                #endif
+        if let cachedInfo = metadata.cachedFiles[item.url.absoluteString] {
+            let localURL = cacheDirectory.appendingPathComponent(cachedInfo.localPath)
+            do {
+                let attrs = try FileManager.default.attributesOfItem(atPath: localURL.path)
+                let fileSize = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+                if fileSize != cachedInfo.fileSize {
+                    #if canImport(os)
+                    Self.logger.info("Cached file size mismatch for \(item.displayName): expected \(cachedInfo.fileSize), got \(fileSize)")
+                    #endif
+                    // If a file exists but recorded size was wrong (e.g., 0), trust the file and update metadata
+                    var updated = metadata
+                    var newInfo = cachedInfo
+                    newInfo.fileSize = fileSize
+                    updated.cachedFiles[item.url.absoluteString] = newInfo
+                    saveCacheMetadata(updated)
+                    return (true, localURL.path)
+                }
+            } catch {
                 return (false, nil)
             }
-        } catch {
-            return (false, nil)
+
+            return (true, localURL.path)
         }
 
-        return (true, localURL.path)
+        return (false, nil)
     }
 
     /// Pre-cache a specific item to local storage
@@ -530,7 +538,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         }
     }
 
-        /// Download a file to cache
+    /// Download a file to cache
     private func downloadFile(item: RemoteLibraryItem, progressCallback: @escaping (Double) -> Void) async throws {
         let fileName = item.url.lastPathComponent
         let localURL = cacheDirectory.appendingPathComponent(fileName)
@@ -556,15 +564,22 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                     switch result {
                     case .success(let tempURL):
                         do {
-                            // Move to final location
+                            // Move to final location (replace if exists)
+                            if FileManager.default.fileExists(atPath: localURL.path) {
+                                try FileManager.default.removeItem(at: localURL)
+                            }
                             try FileManager.default.moveItem(at: tempURL, to: localURL)
 
-                            // Update cache metadata
+                            // Determine actual file size on disk
+                            let attrs = try FileManager.default.attributesOfItem(atPath: localURL.path)
+                            let actualSize = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+
+                            // Update cache metadata with actual size
                             var metadata = self.loadCacheMetadata()
                             let cachedInfo = CacheMetadata.CachedFileInfo(
                                 originalURL: item.url.absoluteString,
                                 localPath: fileName,
-                                fileSize: item.sizeBytes ?? 0,
+                                fileSize: actualSize,
                                 cachedDate: Date(),
                                 etag: item.etag,
                                 lastModified: item.lastModified
@@ -718,15 +733,8 @@ private class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
             #endif
             return
         }
-
         let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-        #if canImport(os)
-        print("DownloadProgressDelegate: Progress update: \(Int(progress * 100))% (\(totalBytesWritten)/\(totalBytesExpectedToWrite) bytes)")
-        #endif
-
-        DispatchQueue.main.async {
-            self.progressCallback(progress)
-        }
+        progressCallback(progress)
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
