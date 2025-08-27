@@ -194,6 +194,7 @@ struct TVLibraryView: View {
     /// Separate alert states (SwiftUI works better with simple booleans)
     @State private var showStorageErrorAlert = false
     @State private var showLowStorageWarning = false
+    @State private var showCacheInfoFor: TVGameItem?
 
     /// Storage space management
     static let STORAGE_BUFFER_MB: Int64 = 100 * 1024 * 1024 // 100MB buffer
@@ -283,6 +284,9 @@ struct TVLibraryView: View {
                         showStorageAlert: { message in
                             storageAlertMessage = message
                             showStorageErrorAlert = true
+                        },
+                        showCacheInfo: { item in
+                            showCacheInfoFor = item
                         },
                         autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
                         isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
@@ -447,6 +451,9 @@ struct TVLibraryView: View {
             }
             Button(L("Cancel"), role: .cancel) {}
         } message: { Text(storageAlertMessage) }
+        .sheet(item: $showCacheInfoFor) { item in
+            CacheInfoView(item: item)
+        }
     }
 
     #if os(tvOS)
@@ -587,6 +594,7 @@ private struct GameGridItem: View {
     let presentCheatAR: (TVGameItem) -> Void
     let requestDelete: (TVGameItem) -> Void
     let showStorageAlert: (String) -> Void
+    let showCacheInfo: (TVGameItem) -> Void
     let autoPreCacheProgress: Double
     let isAutoPreCaching: Bool
 
@@ -808,7 +816,7 @@ private struct GameGridItem: View {
                         Button(action: { removeCachedFile() }) {
                             Label(L("Remove from Cache"), systemImage: "trash")
                         }
-                        Button(action: { /* Show cache info */ }) {
+                        Button(action: { showCacheInfo(item) }) {
                             Label(L("Cache Info"), systemImage: "info.circle")
                         }
                     } else {
@@ -1081,3 +1089,162 @@ private struct SourcePickerView: View {
 
 // MARK: - Unified Game Card
 // Both iOS and tvOS now use the same clean implementation in GameGridItem
+
+/// View showing cache information for a remote game
+private struct CacheInfoView: View {
+    let item: TVGameItem
+    @Environment(\.dismiss) private var dismiss
+    @State private var cacheInfo: CacheInfo?
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    private struct CacheInfo {
+        let localPath: String
+        let fileSize: Int64
+        let cachedDate: Date
+        let originalURL: String
+        let etag: String?
+        let lastModified: Date?
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 16) {
+                if isLoading {
+                    VStack {
+                        ProgressView()
+                        Text("Loading cache information...")
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage = errorMessage {
+                    VStack {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundColor(.orange)
+                        Text(errorMessage)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let info = cacheInfo {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Cache Information")
+                                .font(.title2)
+                                .fontWeight(.bold)
+
+                            InfoRow(label: "Game", value: item.title)
+                            InfoRow(label: "File Size", value: TVLibraryView.formatStorageSpace(info.fileSize))
+                            InfoRow(label: "Cached Date", value: DateFormatter.localizedString(from: info.cachedDate, dateStyle: .medium, timeStyle: .short))
+                            InfoRow(label: "Original URL", value: info.originalURL)
+
+                            if let etag = info.etag {
+                                InfoRow(label: "ETag", value: etag)
+                            }
+
+                            if let lastModified = info.lastModified {
+                                InfoRow(label: "Last Modified", value: DateFormatter.localizedString(from: lastModified, dateStyle: .medium, timeStyle: .short))
+                            }
+
+                            InfoRow(label: "Local Path", value: info.localPath)
+                        }
+                        .padding()
+                    }
+                } else {
+                    VStack {
+                        Image(systemName: "questionmark.circle")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                        Text("No cache information available")
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .navigationTitle("Cache Info")
+            #if !os(tvOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .onAppear {
+            loadCacheInfo()
+        }
+    }
+
+    private func loadCacheInfo() {
+        // Find the WebDAV source for this item
+        guard let url = URL(string: item.filePath) else {
+            errorMessage = "Invalid file path"
+            isLoading = false
+            return
+        }
+
+        var foundSource = false
+        for source in RemoteSourcesStore.shared.sources {
+            if let webdavSource = source as? WebDAVSource {
+                foundSource = true
+                let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
+
+                // Check if cached and get info
+                Task {
+                    let info = await getCacheInfo(from: webdavSource, for: remoteItem)
+                    await MainActor.run {
+                        self.cacheInfo = info
+                        self.isLoading = false
+                        if info == nil {
+                            self.errorMessage = "This game is not currently cached"
+                        }
+                    }
+                }
+                break
+            }
+        }
+
+        if !foundSource {
+            errorMessage = "No WebDAV source found for this game"
+            isLoading = false
+        }
+    }
+
+    private func getCacheInfo(from source: WebDAVSource, for item: RemoteLibraryItem) async -> CacheInfo? {
+        // Get actual cache information from the WebDAV source
+        guard let cachedFileInfo = source.getCacheInfo(for: item) else {
+            return nil
+        }
+
+        return CacheInfo(
+            localPath: cachedFileInfo.localPath,
+            fileSize: cachedFileInfo.fileSize,
+            cachedDate: cachedFileInfo.cachedDate,
+            originalURL: cachedFileInfo.originalURL,
+            etag: cachedFileInfo.etag,
+            lastModified: cachedFileInfo.lastModified
+        )
+    }
+}
+
+/// Helper view for displaying info rows
+private struct InfoRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+            Text(value)
+                .font(.body)
+                #if !os(tvOS)
+                .textSelection(.enabled)
+                #endif
+        }
+    }
+}

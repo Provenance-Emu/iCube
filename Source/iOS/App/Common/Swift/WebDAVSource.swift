@@ -380,7 +380,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     // MARK: - Pre-caching Support
 
     /// Cache metadata for tracking cached files
-    private struct CacheMetadata: Codable {
+    struct CacheMetadata: Codable {
         var cachedFiles: [String: CachedFileInfo] = [:]
 
         struct CachedFileInfo: Codable {
@@ -647,5 +647,12 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             Self.logger.info("Cleaned up stale cache entries")
             #endif
         }
+    }
+
+    /// Get cache information for a specific item
+    func getCacheInfo(for item: RemoteLibraryItem) -> CacheMetadata.CachedFileInfo? {
+        let metadata = loadCacheMetadata()
+        let key = item.url.absoluteString
+        return metadata.cachedFiles[key]
     }
 }
