@@ -183,6 +183,9 @@ struct TVLibraryView: View {
     @State private var showSources = false
     /// Source picker modal state
     @State private var sourcePickerItems: [TVGameItem]? = nil
+    /// Auto pre-cache progress state
+    @State private var autoPreCacheProgress: [String: Double] = [:]
+    @State private var autoPreCacheActive: Set<String> = []
 
     private enum CheatType { case gecko, ar }
 
@@ -214,20 +217,19 @@ struct TVLibraryView: View {
         ScrollView {
             LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
                 ForEach(model.games, id: \.filePath) { item in
-                    GameGridItem(item: item, select: selectGame, focusedFilePath: $focusedFilePath)
-                    #if os(tvOS)
-                    .contextMenu {
-                        Button(L("Properties")) { showPropertiesFor = item }
-                        Menu(L("Cheats")) {
-                            Button(L("Manage...")) { showCheatListFor = item }
-                            Button(L("Download Codes")) { downloadGecko(for: item) }
-                            Divider()
-                            Menu(L("Gecko")) { Button(L("Add...")) { presentCheatInput(for: item, type: .gecko) } }
-                            Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatInput(for: item, type: .ar) } }
-                        }
-                        Button(role: .destructive) { itemPendingDelete = item } label: { Text(L("Delete")) }
-                    }
-                    #endif
+                    GameGridItem(
+                        item: item,
+                        select: selectGame,
+                        focusedFilePath: $focusedFilePath,
+                        showProperties: { showPropertiesFor = $0 },
+                        showCheatList: { showCheatListFor = $0 },
+                        downloadGeckoAction: { downloadGecko(for: $0) },
+                        presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
+                        presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
+                        requestDelete: { itemPendingDelete = $0 },
+                        autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
+                        isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
+                    )
                 }
             }
             .padding(.horizontal, Constants.gridHorizontalPadding)
@@ -353,6 +355,7 @@ struct TVLibraryView: View {
             Button(L("Cancel")) { }
         } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
         .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0) }
+        .sheet(item: $showCheatListFor) { TVCheatListView(item: $0) }
         .sheet(isPresented: Binding(get: { sourcePickerItems != nil }, set: { if !$0 { sourcePickerItems = nil } })) {
             if let items = sourcePickerItems {
                 SourcePickerView(items: items) { chosen in
@@ -415,6 +418,46 @@ struct TVLibraryView: View {
             model.showReplaceAlert = true
         } else {
             NSLog("[INPUT] TVLibraryView selecting game: %@", item.title)
+
+            // Auto pre-cache if enabled and not already cached
+            if let url = URL(string: item.filePath),
+               url.scheme?.lowercased().hasPrefix("http") == true {
+                // This is a remote game - check for auto pre-caching
+                for source in RemoteSourcesStore.shared.sources {
+                    if let webdavSource = source as? WebDAVSource,
+                       webdavSource.isPreCachingEnabled {
+                        let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: 0)
+                        if !webdavSource.isCached(remoteItem) {
+                            // Start background pre-caching with progress tracking
+                            let gameKey = item.filePath
+                            autoPreCacheActive.insert(gameKey)
+                            autoPreCacheProgress[gameKey] = 0.0
+
+                            Task {
+                                do {
+                                    let _ = try await webdavSource.preCacheItem(remoteItem) { progress in
+                                        DispatchQueue.main.async {
+                                            autoPreCacheProgress[gameKey] = progress
+                                        }
+                                    }
+                                    DispatchQueue.main.async {
+                                        autoPreCacheActive.remove(gameKey)
+                                        autoPreCacheProgress.removeValue(forKey: gameKey)
+                                    }
+                                } catch {
+                                    print("Auto pre-cache failed: \(error)")
+                                    DispatchQueue.main.async {
+                                        autoPreCacheActive.remove(gameKey)
+                                        autoPreCacheProgress.removeValue(forKey: gameKey)
+                                    }
+                                }
+                            }
+                        }
+                        break
+                    }
+                }
+            }
+
             model.currentGame = item
             navigateTo = item
         }
@@ -427,6 +470,16 @@ private struct GameGridItem: View {
     let item: TVGameItem
     let select: (TVGameItem) -> Void
     @Binding var focusedFilePath: String?
+
+    // Context menu action closures provided by parent view
+    let showProperties: (TVGameItem) -> Void
+    let showCheatList: (TVGameItem) -> Void
+    let downloadGeckoAction: (TVGameItem) -> Void
+    let presentCheatGecko: (TVGameItem) -> Void
+    let presentCheatAR: (TVGameItem) -> Void
+    let requestDelete: (TVGameItem) -> Void
+    let autoPreCacheProgress: Double
+    let isAutoPreCaching: Bool
 
     @State private var showPreCacheProgress = false
     @State private var preCacheProgress: Double = 0.0
@@ -448,22 +501,63 @@ private struct GameGridItem: View {
 
     /// Check if this is a remote game
     private var isRemoteGame: Bool {
-        return remoteIconName != nil
+        let result = remoteIconName != nil
+        print("DEBUG: isRemoteGame for '\(item.title)' (path: '\(item.filePath)') = \(result)")
+        return result
     }
 
     /// Get the WebDAV source for this game (if any)
     private func getWebDAVSource() -> WebDAVSource? {
-        guard isRemoteGame, let url = URL(string: item.filePath) else { return nil }
+        guard isRemoteGame, let url = URL(string: item.filePath) else {
+            print("DEBUG: getWebDAVSource early return - isRemoteGame: \(isRemoteGame), url valid: \(URL(string: item.filePath) != nil)")
+            return nil
+        }
 
-        // Find the WebDAV source that matches this URL
-        for source in RemoteSourcesStore.shared.sources {
-            if let webdavSource = source as? WebDAVSource {
-                if item.filePath.hasPrefix(webdavSource.baseURL.absoluteString) {
-                    return webdavSource
-                }
+        func defaultPort(for scheme: String?) -> Int {
+            switch (scheme?.lowercased()) {
+            case "https", "webdavs": return 443
+            default: return 80
             }
         }
-        return nil
+
+        guard let urlHost = url.host?.lowercased() else {
+            print("DEBUG: getWebDAVSource no host for URL: \(url)")
+            return nil
+        }
+        let urlPort = url.port ?? defaultPort(for: url.scheme)
+        let urlPath = url.path
+
+        print("DEBUG: Looking for WebDAV source matching host: \(urlHost), port: \(urlPort), path: \(urlPath)")
+        print("DEBUG: Available sources: \(RemoteSourcesStore.shared.sources.count)")
+
+        var bestMatch: (source: WebDAVSource, score: Int)? = nil
+
+        for (index, source) in RemoteSourcesStore.shared.sources.enumerated() {
+            print("DEBUG: Source \(index): \(type(of: source))")
+            guard let webdavSource = source as? WebDAVSource else { continue }
+            let base = webdavSource.baseURL
+            print("DEBUG: WebDAV source base URL: \(base)")
+            guard let baseHost = base.host?.lowercased() else { continue }
+            let basePort = base.port ?? defaultPort(for: base.scheme)
+            print("DEBUG: Comparing - base host: \(baseHost), port: \(basePort) vs url host: \(urlHost), port: \(urlPort)")
+            guard urlHost == baseHost && urlPort == basePort else { continue }
+
+            // Prefer the source with the longest base path prefix match
+            let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
+            let score: Int
+            if basePath == "/" { score = 1 }
+            else if urlPath.hasPrefix(basePath) { score = max(2, basePath.count) }
+            else { score = 1 } // host/port match only
+
+            print("DEBUG: Found matching source with score \(score), basePath: '\(basePath)', isPreCachingEnabled: \(webdavSource.isPreCachingEnabled)")
+            if bestMatch == nil || score > bestMatch!.score {
+                bestMatch = (webdavSource, score)
+            }
+        }
+
+        let result = bestMatch?.source
+        print("DEBUG: getWebDAVSource result: \(result != nil ? "found" : "nil"), final isPreCachingEnabled: \(result?.isPreCachingEnabled ?? false)")
+        return result
     }
 
     /// Check if this remote game is cached locally
@@ -516,7 +610,7 @@ private struct GameGridItem: View {
                 if let icon = remoteIconName {
                     ZStack {
                         if isPreCaching {
-                            // Show progress indicator
+                            // Show manual pre-cache progress indicator
                             Circle()
                                 .stroke(Color.white.opacity(0.3), lineWidth: 2)
                                 .frame(width: 24, height: 24)
@@ -559,9 +653,24 @@ private struct GameGridItem: View {
                     .minimumScaleFactor(0.75)
                     .foregroundColor(.primary)
 
-                Text(item.gameID)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack {
+                    Text(item.gameID)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    // Auto pre-cache progress indicator
+                    if isAutoPreCaching {
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                            Text("\(Int(autoPreCacheProgress * 100))%")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
             }
         }
         .frame(width: 260)
@@ -576,28 +685,40 @@ private struct GameGridItem: View {
         .onTapGesture { select(item) }
         .onPlayPauseCommand { select(item) }
         .contextMenu {
-            if isRemoteGame, let source = getWebDAVSource(), source.isPreCachingEnabled {
-                if isCached {
-                    Button(action: { removeCachedFile() }) {
-                        Label("Remove from Cache", systemImage: "trash")
-                    }
+            Button(L("Properties")) { showProperties(item) }
+            Menu(L("Cheats")) {
+                Button(L("Manage...")) { showCheatList(item) }
+                Button(L("Download Codes")) { downloadGeckoAction(item) }
+                Divider()
+                Menu(L("Gecko")) { Button(L("Add...")) { presentCheatGecko(item) } }
+                Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatAR(item) } }
+            }
+            if isRemoteGame {
+                if let source = getWebDAVSource() {
+                    if isCached {
+                        Button(action: { removeCachedFile() }) {
+                            Label(L("Remove from Cache"), systemImage: "trash")
+                        }
+                        Button(action: { /* Show cache info */ }) {
+                            Label(L("Cache Info"), systemImage: "info.circle")
+                        }
+                    } else {
+                        Button(action: { startPreCache() }) {
+                            Label(L("Download to Cache"), systemImage: "arrow.down.circle")
+                        }
+                        .disabled(isPreCaching)
 
-                    Button(action: { /* Show cache info */ }) {
-                        Label("Cache Info", systemImage: "info.circle")
-                    }
-                } else {
-                    Button(action: { startPreCache() }) {
-                        Label("Download to Cache", systemImage: "arrow.down.circle")
-                    }
-                    .disabled(isPreCaching)
-
-                    if isPreCaching {
-                        Button(action: { cancelPreCache() }) {
-                            Label("Cancel Download", systemImage: "xmark.circle")
+                        if isPreCaching {
+                            Button(action: { cancelPreCache() }) {
+                                Label(L("Cancel Download"), systemImage: "xmark.circle")
+                            }
                         }
                     }
+                } else {
+                    Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
                 }
             }
+            Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
         }
         .zIndex(isFocused ? 1 : 0)
         #else
