@@ -45,6 +45,9 @@ protocol RemoteLibrarySource {
     /// Stop monitoring this source
     func stop()
 
+    /// Trigger an immediate refresh/enumeration
+    func refresh()
+
     /// Pre-cache a specific item to local storage
     func preCacheItem(_ item: RemoteLibraryItem, progressCallback: @escaping (Double) -> Void) async throws -> String
 

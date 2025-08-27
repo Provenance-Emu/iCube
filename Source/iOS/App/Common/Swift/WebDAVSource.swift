@@ -28,6 +28,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
     private var onlineCont: AsyncStream<Bool>.Continuation?
     private var itemsCont: AsyncStream<[RemoteLibraryItem]>.Continuation?
+    private var isRunning: Bool = false
+    private var streamsCreated: Bool = false
+    private var loopTask: Task<Void, Never>?
 
     private(set) var isOnline: Bool = false { didSet { onlineCont?.yield(isOnline) } }
 
@@ -72,12 +75,20 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         self.cacheMetadataFile = cacheDirectory.appendingPathComponent("cache_metadata.json")
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
 
-        var oc: AsyncStream<Bool>.Continuation!
-        self.onlineStream = AsyncStream<Bool> { c in oc = c }
-        self.onlineCont = oc
-        var ic: AsyncStream<[RemoteLibraryItem]>.Continuation!
-        self.itemsStream = AsyncStream<[RemoteLibraryItem]> { c in ic = c }
-        self.itemsCont = ic
+        // Create async streams for online status and items
+        var onlineContinuation: AsyncStream<Bool>.Continuation!
+        onlineStream = AsyncStream<Bool> { continuation in
+            onlineContinuation = continuation
+        }
+        onlineCont = onlineContinuation
+
+        var itemsContinuation: AsyncStream<[RemoteLibraryItem]>.Continuation!
+        itemsStream = AsyncStream<[RemoteLibraryItem]> { continuation in
+            itemsContinuation = continuation
+        }
+        itemsCont = itemsContinuation
+
+        streamsCreated = true
         #if canImport(os)
         Self.logger.info("Initialized WebDAVSource name=\(self.name, privacy: .public) url=\(self.baseURL.absoluteString, privacy: .public) root=\(self.rootURL.absoluteString, privacy: .public) preCache=\(self.enablePreCaching)")
         #endif
@@ -88,11 +99,34 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         Self.logger.info("Starting WebDAV source: \(self.name)")
         #endif
 
+        // Prevent multiple concurrent loops
+        guard !isRunning else {
+            #if canImport(os)
+            Self.logger.info("WebDAV source \(self.name) is already running, skipping start")
+            #endif
+            return
+        }
+
+        // Ensure streams are created (should already be done in init, but safety check)
+        guard streamsCreated else {
+            #if canImport(os)
+            Self.logger.error("WebDAV source \(self.name) streams not created, cannot start")
+            #endif
+            return
+        }
+
+        isRunning = true
+
         // Clean up any stale cache entries from old implementation
         cleanupStaleCache()
 
-        Task {
+        // Cancel any existing loop task
+        loopTask?.cancel()
+
+        loopTask = Task {
             await loop()
+            // Mark as not running when loop completes
+            self.isRunning = false
         }
     }
 
@@ -100,22 +134,44 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         #if canImport(os)
         Self.logger.info("Stopping source loop for \(self.rootURL.absoluteString, privacy: .public)")
         #endif
-        onlineCont?.finish()
-        itemsCont?.finish()
+        isRunning = false
+        loopTask?.cancel()
+        loopTask = nil
+        // Don't finish the continuations here - let them remain active for the coordinator
+        // onlineCont?.finish()
+        // itemsCont?.finish()
+    }
+
+    /// Trigger an immediate enumeration without restarting the loop
+    func refresh() {
+        guard isRunning else { return }
+
+        #if canImport(os)
+        Self.logger.info("Triggering immediate refresh for \(self.name)")
+        #endif
+
+        Task {
+            await ping()
+            onlineCont?.yield(isOnline)
+            if isOnline {
+                await enumerateAndEmit()
+            }
+        }
     }
 
     private func loop() async {
         #if canImport(os)
         Self.logger.info("Starting WebDAV loop for \(self.rootURL.absoluteString, privacy: .public)")
         #endif
-        while true {
+        while isRunning && !Task.isCancelled {
             #if canImport(os)
             Self.logger.debug("Loop iteration: pinging \(self.rootURL.absoluteString, privacy: .public)")
             #endif
             await ping()
+            onlineCont?.yield(isOnline)
             if isOnline {
                 #if canImport(os)
-                Self.logger.debug("Source is online, starting enumeration")
+                Self.logger.info("Source is online, starting enumeration")
                 #endif
                 await enumerateAndEmit()
             } else {
@@ -123,11 +179,18 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                 Self.logger.debug("Source is offline, skipping enumeration")
                 #endif
             }
+
+            // Check for cancellation before sleeping
+            guard isRunning && !Task.isCancelled else { break }
+
             #if canImport(os)
             Self.logger.debug("Sleeping for \(self.interval, privacy: .public) seconds")
             #endif
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
+        #if canImport(os)
+        Self.logger.info("WebDAV loop ended for \(self.rootURL.absoluteString, privacy: .public)")
+        #endif
     }
 
     private func request(_ method: String, url: URL, headers: [String: String] = [:], body: Data? = nil) async throws -> (Int, Data, HTTPURLResponse) {
@@ -186,7 +249,10 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                 Self.logger.info("  [\(index, privacy: .public)]: \(item.url.absoluteString, privacy: .public)")
             }
             #endif
+            print("WebDAVSource: about to yield \(items.count) items to continuation")
+            print("WebDAVSource: itemsCont is \(itemsCont != nil ? "valid" : "nil")")
             itemsCont?.yield(items)
+            print("WebDAVSource: yield completed")
             #if canImport(os)
             Self.logger.info("Items yielded to continuation")
             #endif

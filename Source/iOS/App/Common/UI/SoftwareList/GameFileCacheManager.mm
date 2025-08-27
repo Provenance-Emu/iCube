@@ -128,17 +128,38 @@
 }
 
 - (NSArray<TVGameItem*>*)currentGames {
+  // Ensure we're on the main thread to avoid race conditions with cache updates
+  if (![NSThread isMainThread]) {
+    __block NSArray<TVGameItem*>* result = nil;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+      result = [self currentGames];
+    });
+    return result;
+  }
+
   NSMutableArray<TVGameItem*>* items = [[NSMutableArray alloc] init];
   size_t count = 0;
 
   self->_cache->ForEach([items, &count](const std::shared_ptr<const UICommon::GameFile>& game) {
+    // Skip null or invalid game files
+    if (!game) {
+      NSLog(@"GameFileCacheManager: skipping null GameFile at index %zu", count);
+      return;
+    }
+
     GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
     wrapper.gameFile = game;
     TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];
-    [items addObject:item];
 
-    if (count < 20) {
-      NSLog(@"  [%zu]: %s (isRemote: %s)", count, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
+    // Double-check that the item was created successfully
+    if (item) {
+      [items addObject:item];
+
+      if (count < 20) {
+        NSLog(@"  [%zu]: %s (isRemote: %s)", count, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
+      }
+    } else {
+      NSLog(@"GameFileCacheManager: failed to create TVGameItem for GameFile at index %zu", count);
     }
     count++;
   });
@@ -174,26 +195,35 @@
       }
     }
 
-    bool updated = false;
-    @try {
-      NSLog(@"GameFileCacheManager: calling Update with %lu paths", (unsigned long)all.size());
-      for (size_t i = 0; i < all.size() && i < 20; ++i) {
-        NSLog(@"  [%zu]: %s", i, all[i].c_str());
-      }
+    // Perform cache update on main thread to avoid race conditions
+    dispatch_async(dispatch_get_main_queue(), ^{
+      bool updated = false;
+      @try {
+        NSLog(@"GameFileCacheManager: calling Update with %lu paths", (unsigned long)all.size());
+        for (size_t i = 0; i < all.size() && i < 20; ++i) {
+          NSLog(@"  [%zu]: %s", i, all[i].c_str());
+        }
 
-      updated = self->_cache->Update(all);
-      NSLog(@"GameFileCacheManager: Update returned %s", updated ? "true" : "false");
+        // Ensure cache is valid before updating
+        if (!self->_cache) {
+          NSLog(@"GameFileCacheManager: ERROR - cache is null, cannot update");
+          return;
+        }
 
-      if (fetch) {
-        updated |= self->_cache->UpdateAdditionalMetadata();
+        updated = self->_cache->Update(all);
+        NSLog(@"GameFileCacheManager: Update returned %s", updated ? "true" : "false");
+
+        if (fetch) {
+          updated |= self->_cache->UpdateAdditionalMetadata();
+        }
+        if (updated) {
+          self->_cache->Save();
+          NSLog(@"GameFileCacheManager: Cache saved");
+        }
+      } @catch (NSException* exception) {
+        NSLog(@"GameFileCache update failed: %@", exception);
       }
-      if (updated) {
-        self->_cache->Save();
-        NSLog(@"GameFileCacheManager: Cache saved");
-      }
-    } @catch (NSException* exception) {
-      NSLog(@"GameFileCache update failed: %@", exception);
-    }
+    });
   });
 }
 

@@ -31,6 +31,12 @@
     if (self) {
         _wrapper = wrapper;
 
+        // Safety check for null GameFile
+        if (!wrapper.gameFile) {
+            NSLog(@"TVGameItem: ERROR - wrapper.gameFile is null, returning nil");
+            return nil;
+        }
+
         const UICommon::GameFile &game = *wrapper.gameFile;
         _title = CppToFoundationString(game.GetName(UICommon::GameFile::Variant::LongAndPossiblyCustom));
         _filePath = CppToFoundationString(game.GetFilePath());
