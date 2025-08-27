@@ -85,7 +85,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
     func start() {
         #if canImport(os)
-        Self.logger.info("Starting WebDAV source: \(name)")
+        Self.logger.info("Starting WebDAV source: \(self.name)")
         #endif
 
         // Clean up any stale cache entries from old implementation

@@ -187,6 +187,50 @@ struct TVLibraryView: View {
     @State private var autoPreCacheProgress: [String: Double] = [:]
     @State private var autoPreCacheActive: Set<String> = []
 
+    /// Storage alerts
+    @State private var storageAlertMessage = ""
+    @State private var itemPendingLaunch: TVGameItem?
+
+    /// Separate alert states (SwiftUI works better with simple booleans)
+    @State private var showStorageErrorAlert = false
+    @State private var showLowStorageWarning = false
+
+    /// Storage space management
+    static let STORAGE_BUFFER_MB: Int64 = 100 * 1024 * 1024 // 100MB buffer
+    static let LOW_STORAGE_THRESHOLD_MB: Int64 = 100 * 1024 * 1024 // 100MB warning threshold
+
+    /// Check available storage space
+    static func getAvailableStorageSpace() -> Int64 {
+        guard let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            return 0
+        }
+
+        do {
+            let resourceValues = try cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityKey])
+            return Int64(resourceValues.volumeAvailableCapacity ?? 0)
+        } catch {
+            print("Error getting storage space: \(error)")
+            return 0
+        }
+    }
+
+    /// Check if there's enough space for pre-caching (file size + 100MB buffer)
+    static func hasEnoughSpaceForPreCache(fileSize: Int64) -> Bool {
+        let availableSpace = getAvailableStorageSpace()
+        let requiredSpace = fileSize + STORAGE_BUFFER_MB
+        return availableSpace >= requiredSpace
+    }
+
+    /// Check if storage is critically low (< 100MB)
+    static func isStorageCriticallyLow() -> Bool {
+        return getAvailableStorageSpace() < LOW_STORAGE_THRESHOLD_MB
+    }
+
+    /// Format storage space for user display
+    static func formatStorageSpace(_ bytes: Int64) -> String {
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
     private enum CheatType { case gecko, ar }
 
     /// Helper function to check if a URL is a remote URL (HTTP/HTTPS/WebDAV)
@@ -236,6 +280,10 @@ struct TVLibraryView: View {
                         presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
                         presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
                         requestDelete: { itemPendingDelete = $0 },
+                        showStorageAlert: { message in
+                            storageAlertMessage = message
+                            showStorageErrorAlert = true
+                        },
                         autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
                         isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
                     )
@@ -386,6 +434,19 @@ struct TVLibraryView: View {
             }
             Button(L("Cancel"), role: .cancel) { itemPendingDelete = nil }
         } message: { if let item = itemPendingDelete { Text(L("This will delete \(item.title). This action cannot be undone.")) } }
+        // Storage error alert
+        .alert(L("Storage Error"), isPresented: $showStorageErrorAlert) {
+            Button(L("OK")) {}
+        } message: { Text(storageAlertMessage) }
+        // Low storage warning - using confirmationDialog instead of alert to avoid conflicts
+        .confirmationDialog(L("Low Storage Warning"), isPresented: $showLowStorageWarning, titleVisibility: .visible) {
+            Button(L("Continue Anyway")) {
+                if let item = itemPendingLaunch {
+                    proceedWithGameLaunch(item)
+                }
+            }
+            Button(L("Cancel"), role: .cancel) {}
+        } message: { Text(storageAlertMessage) }
     }
 
     #if os(tvOS)
@@ -422,6 +483,28 @@ struct TVLibraryView: View {
     }
 
     private func launchGame(_ item: TVGameItem) {
+        // Check for critically low storage before launching any game
+        if TVLibraryView.isStorageCriticallyLow() {
+            let availableSpace = TVLibraryView.getAvailableStorageSpace()
+            itemPendingLaunch = item
+            storageAlertMessage = """
+            Warning: Low Storage Space
+
+            Available space: \(TVLibraryView.formatStorageSpace(availableSpace))
+
+            The emulator may act erratically with low storage space. Consider freeing up some space before playing.
+
+            Do you want to continue anyway?
+            """
+            showLowStorageWarning = true
+            return
+        }
+
+        proceedWithGameLaunch(item)
+    }
+
+    /// Actually launch the game (called after low storage warning is dismissed)
+    private func proceedWithGameLaunch(_ item: TVGameItem) {
         if TVEmulationBridge.isRunning() {
             model.pendingSelection = item
             model.showReplaceAlert = true
@@ -444,6 +527,18 @@ struct TVLibraryView: View {
                             do {
                                 // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
                                 let fileSize = Int64(item.fileSize)
+
+                                // Skip auto pre-cache if insufficient storage space
+                                if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
+                                    let availableSpace = TVLibraryView.getAvailableStorageSpace()
+                                    print("Auto pre-cache skipped for \(item.title): insufficient space. Available: \(TVLibraryView.formatStorageSpace(availableSpace)), Required: \(TVLibraryView.formatStorageSpace(fileSize + TVLibraryView.STORAGE_BUFFER_MB))")
+                                    DispatchQueue.main.async {
+                                        autoPreCacheActive.remove(gameKey)
+                                        autoPreCacheProgress.removeValue(forKey: gameKey)
+                                    }
+                                    return
+                                }
+
                                 let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: fileSize)
 
                                 // Check if already cached with correct size
@@ -491,6 +586,7 @@ private struct GameGridItem: View {
     let presentCheatGecko: (TVGameItem) -> Void
     let presentCheatAR: (TVGameItem) -> Void
     let requestDelete: (TVGameItem) -> Void
+    let showStorageAlert: (String) -> Void
     let autoPreCacheProgress: Double
     let isAutoPreCaching: Bool
 
@@ -831,17 +927,25 @@ private struct GameGridItem: View {
                 print("Using cached file size for \(item.title): \(fileSize) bytes")
                 print("DEBUG: TVGameItem.fileSize = \(item.fileSize)")
 
-                // Check available storage space
-                let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-                let resourceValues = try cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityKey])
-                let availableSpace = resourceValues.volumeAvailableCapacity ?? 0
+                // Check if we have enough storage space (file size + 100MB buffer)
+                if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
+                    let availableSpace = TVLibraryView.getAvailableStorageSpace()
+                    let requiredSpace = fileSize + TVLibraryView.STORAGE_BUFFER_MB
 
-                print("DEBUG: Available storage space: \(availableSpace) bytes")
-                print("DEBUG: Required space: \(fileSize) bytes")
+                    DispatchQueue.main.async {
+                        self.isPreCaching = false
+                        self.showPreCacheProgress = false
+                        let message = """
+                        Not enough storage space to download \(self.item.title).
 
-                if availableSpace < fileSize {
-                    throw NSError(domain: "WebDAVSource", code: -1,
-                                userInfo: [NSLocalizedDescriptionKey: "Not enough storage space. Available: \(ByteCountFormatter.string(fromByteCount: availableSpace, countStyle: .file)), Required: \(ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file))"])
+                        Available: \(TVLibraryView.formatStorageSpace(availableSpace))
+                        Required: \(TVLibraryView.formatStorageSpace(requiredSpace))
+
+                        Please free up some space and try again.
+                        """
+                        self.showStorageAlert(message)
+                    }
+                    return
                 }
 
                 // Create RemoteLibraryItem with correct size
@@ -866,6 +970,24 @@ private struct GameGridItem: View {
                 DispatchQueue.main.async {
                     self.isPreCaching = false
                     self.showPreCacheProgress = false
+
+                    // Show user-friendly error message
+                    let message: String
+                    if let nsError = error as NSError?, nsError.domain == NSPOSIXErrorDomain && nsError.code == 28 {
+                        message = """
+                        Download failed: Not enough storage space.
+
+                        The device ran out of space while downloading \(self.item.title).
+                        Please free up some space and try again.
+                        """
+                    } else {
+                        message = """
+                        Download failed: \(error.localizedDescription)
+
+                        Unable to download \(self.item.title) to cache.
+                        """
+                    }
+                    self.showStorageAlert(message)
                     print("Pre-cache failed for \(self.item.title): \(error)")
                 }
             }
