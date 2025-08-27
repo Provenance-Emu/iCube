@@ -33,9 +33,17 @@ class RemoteSourcesCoordinator: ObservableObject {
 
     func remove(id: String) {
         stop(sourceId: id)
+
+        // Clean up cached files for WebDAV sources
+        if let webdavSource = sources.first(where: { $0.id == id }) as? WebDAVSource {
+            Task {
+                try? await webdavSource.clearCache()
+            }
+        }
+
         sources.removeAll { $0.id == id }
         lastItemsBySource.removeValue(forKey: id)
-        pushCacheUpdate()
+        pushCacheUpdate(forceUpdate: true) // Force update to clean up games from deleted source
     }
 
     private func start(source: any RemoteLibrarySource) {
@@ -92,7 +100,7 @@ class RemoteSourcesCoordinator: ObservableObject {
         tasks[sourceId] = nil
     }
 
-    private func pushCacheUpdate() {
+    private func pushCacheUpdate(forceUpdate: Bool = false) {
         print("DEBUG PUSH: pushCacheUpdate() called")
         print("DEBUG PUSH: lastItemsBySource has \(lastItemsBySource.count) sources")
         for (sourceId, items) in lastItemsBySource {
@@ -106,14 +114,19 @@ class RemoteSourcesCoordinator: ObservableObject {
         }
 
         // Avoid nuking the cache with an empty remote list during startup/refresh
-        guard !allUrls.isEmpty else {
-            print("DEBUG PUSH: Skipping updateLibrary because URL list is empty")
+        guard !allUrls.isEmpty || forceUpdate else {
+            print("DEBUG PUSH: Skipping updateLibrary because URL list is empty and not forced")
             return
         }
 
         print("DEBUG PUSH: Calling TVLibraryBridge.updateLibrary with \(allUrls.count) URLs")
         // Force metadata fetch for remote games to ensure artwork and database lookups work
         TVLibraryBridge.updateLibrary(withRemotePaths: allUrls, fetchMetadata: true)
+
+        if forceUpdate && allUrls.isEmpty {
+            print("DEBUG PUSH: *** FORCE UPDATE: Cleaned up library after source deletion ***")
+        }
+
         print("DEBUG PUSH: TVLibraryBridge.updateLibrary completed")
 
         // Notify UI to refresh
