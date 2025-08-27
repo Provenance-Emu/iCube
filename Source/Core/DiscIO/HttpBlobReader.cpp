@@ -1323,7 +1323,7 @@ bool HttpRVZReader::ReadHeaders()
         INFO_LOG_FMT(DISCIO, "HttpRVZReader: group[{}] raw_data_off4=0x{:08x}, raw_data_size=0x{:08x}, raw_packed_size=0x{:08x}",
                      i, entry.data_offset, entry.data_size, entry.rvz_packed_size);
         INFO_LOG_FMT(DISCIO, "HttpRVZReader: group[{}] swapped_data_off4={}, swapped_data_size={}, swapped_packed_size={}",
-                     i, Common::swap32(entry.data_offset), Common::swap32(entry.data_size), Common::swap32(entry.rvz_packed_size));
+                     i, Common::swap32(entry.data_offset), Common::swap32(entry.data_size & 0x7FFFFFFF), Common::swap32(entry.rvz_packed_size));
 
         // Calculate actual file offset (data_off4 * 4)
         const u64 actual_offset = static_cast<u64>(Common::swap32(entry.data_offset)) << 2;
@@ -1447,7 +1447,7 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
   constexpr u32 MAX_TOTAL_OUTPUT = 32 * 1024 * 1024;   // 32MB total max
 
   u32 chunk_count = 0;
-  while (input_ptr < input_end)
+  while (unpacked_data.size() < chunk_size && input_ptr < input_end)
   {
     // Log detailed pointer state at start of each loop iteration
     const size_t offset_in_stream = input_ptr - packed_data.data();
@@ -1469,16 +1469,14 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
     std::memcpy(&size, input_ptr, 4);
     const u32 raw_size = size; // Keep original for debugging (big-endian)
 
-    // CRITICAL FIX: Check MSB on the big-endian value BEFORE byte-swapping
-    const bool is_junk_data = (raw_size & 0x80000000) != 0;
-
-    // Now convert from big endian to native endian
-    size = Common::swap32(size);
-    const u32 actual_size = size & 0x7FFFFFFF;
+    // CRITICAL FIX: Byte-swap FIRST, then check MSB on native endian value
+    const u32 swapped_size = Common::swap32(raw_size);
+    const bool is_junk_data = (swapped_size & 0x80000000) != 0;
+    const u32 actual_size = swapped_size & 0x7FFFFFFF;
     input_ptr += 4;
 
-    INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: chunk {}, raw_size=0x{:08x}, swapped_size=0x{:08x}, actual_size={}, is_junk={}",
-                 chunk_count, raw_size, size, actual_size, is_junk_data);
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: chunk {}, raw_size=0x{:08x}, swapped=0x{:08x}, actual_size={}, is_junk={}",
+                 chunk_count, raw_size, swapped_size, actual_size, is_junk_data);
 
     // Critical: Validate size to prevent heap corruption
     if (actual_size > MAX_REASONABLE_SIZE)
@@ -1638,6 +1636,16 @@ bool HttpRVZReader::UnpackRVZData(const std::vector<u8>& packed_data, u32 chunk_
     }
   }
 
+  // Log why the loop terminated
+  if (unpacked_data.size() >= chunk_size)
+  {
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: stopped after reaching expected size ({} bytes)", chunk_size);
+  }
+  else if (input_ptr >= input_end)
+  {
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: stopped after reaching end of input data");
+  }
+
   INFO_LOG_FMT(DISCIO, "HttpRVZReader::UnpackRVZData: successfully unpacked to {} bytes", unpacked_data.size());
 
   // Debug: Show first 32 bytes of unpacked data
@@ -1754,6 +1762,8 @@ bool HttpRVZReader::Read(u64 offset, u64 nbytes, u8* out_ptr)
     if (offset >= data_offset && offset < data_offset + data_size)
     {
       INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: offset {} found in entry[{}]", offset, i);
+      INFO_LOG_FMT(DISCIO, "HttpRVZReader::Read: Found raw data entry for offset 0x{:08x}: index={}, raw_data_offset=0x{:016x}, raw_data_size=0x{:016x}",
+                   offset, i, data_offset, data_size);
       const u64 entry_offset = offset - data_offset;
       const u64 entry_bytes = std::min(nbytes, data_size - entry_offset);
 
@@ -1839,12 +1849,14 @@ bool HttpRVZReader::ReadFromGroups(u64 offset, u64 size, u8* out_ptr, u32 group_
     const u64 group_file_offset = static_cast<u64>(Common::swap32(group.data_offset)) << 2; // data_off4 * 4
     const u32 rvz_packed_size = Common::swap32(group.rvz_packed_size);
 
-    // CRITICAL FIX: Check MSB on the big-endian value BEFORE byte-swapping
-    const bool group_is_compressed = (group.data_size & 0x80000000) != 0;
+    // CRITICAL FIX: Byte-swap FIRST, then check MSB on native endian value
+    const u32 raw_data_size_value = group.data_size;
+    const u32 swapped_data_size = Common::swap32(raw_data_size_value);
+    const bool group_is_compressed = (swapped_data_size & 0x80000000) != 0;
+    const u32 compressed_data_size = swapped_data_size & 0x7FFFFFFF;
 
-    // Now convert from big endian to native endian and remove compression bit
-    u32 raw_data_size = Common::swap32(group.data_size);
-    const u32 compressed_data_size = raw_data_size & 0x7FFFFFFF; // Remove compression bit
+    INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: DEBUG group[{}] raw_data_size=0x{:08x}, swapped=0x{:08x}, final_size={}",
+                 total_group_index, raw_data_size_value, swapped_data_size, compressed_data_size);
 
     INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: group[{}] file_offset={}, compressed_size={}, packed_size={}, is_compressed={}",
                  total_group_index, group_file_offset, compressed_data_size, rvz_packed_size, group_is_compressed);
@@ -1912,12 +1924,59 @@ bool HttpRVZReader::ReadFromGroups(u64 offset, u64 size, u8* out_ptr, u32 group_
           WARN_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: Zstd decompressed size {} doesn't match expected size {} for group {}",
                        result, decompressed_data.size(), total_group_index);
 
-          // Resize decompressed_data to actual decompressed size to prevent UnpackRVZData from reading garbage
-          decompressed_data.resize(result);
+          if (result < decompressed_data.size())
+          {
+            // Pad with zeros to expected size instead of truncating
+            WARN_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: padding group {} from {} to {} bytes with zeros",
+                         total_group_index, result, decompressed_data.size());
+            std::memset(decompressed_data.data() + result, 0, decompressed_data.size() - result);
+          }
+          else
+          {
+            // Actual size is larger, resize to actual size
+            decompressed_data.resize(result);
+          }
         }
 
         INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: successfully decompressed group {} ({} -> {} bytes)",
                      total_group_index, compressed_data.size(), result);
+
+        // Debug: Show key header locations for group 0 (disc header)
+        if (total_group_index == 0 && decompressed_data.size() >= 1064)
+        {
+          // Check FST offset (at position 0x424 - 0x80 = 932 within group 0)
+          const u32 fst_offset_pos = 0x424 - 0x80;  // 932
+          const u32 fst_size_pos = 0x428 - 0x80;    // 936
+
+          if (fst_offset_pos < decompressed_data.size() && fst_size_pos + 4 <= decompressed_data.size())
+          {
+            u32 fst_offset_raw, fst_size_raw;
+            std::memcpy(&fst_offset_raw, decompressed_data.data() + fst_offset_pos, 4);
+            std::memcpy(&fst_size_raw, decompressed_data.data() + fst_size_pos, 4);
+
+            const u32 fst_offset = Common::swap32(fst_offset_raw);
+            const u32 fst_size = Common::swap32(fst_size_raw);
+
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: group 0 FST info - offset=0x{:08x} ({}), size=0x{:08x} ({})",
+                         fst_offset, fst_offset, fst_size, fst_size);
+
+            // Show raw bytes around FST offset/size positions
+            std::string fst_offset_hex, fst_size_hex;
+            for (int i = -4; i <= 7; ++i)
+            {
+              if (fst_offset_pos + i >= 0 && fst_offset_pos + i < decompressed_data.size())
+                fst_offset_hex += fmt::format("{:02x} ", decompressed_data[fst_offset_pos + i]);
+            }
+            for (int i = -4; i <= 7; ++i)
+            {
+              if (fst_size_pos + i >= 0 && fst_size_pos + i < decompressed_data.size())
+                fst_size_hex += fmt::format("{:02x} ", decompressed_data[fst_size_pos + i]);
+            }
+
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: FST offset area (pos {}): {}", fst_offset_pos, fst_offset_hex);
+            INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: FST size area (pos {}): {}", fst_size_pos, fst_size_hex);
+          }
+        }
       }
       else
       {
@@ -1969,6 +2028,43 @@ bool HttpRVZReader::ReadFromGroups(u64 offset, u64 size, u8* out_ptr, u32 group_
     {
       // No RVZ packing, use decompressed data directly
       final_data = std::move(decompressed_data);
+    }
+
+    // Debug: Check FST info after RVZ unpacking for group 0
+    if (total_group_index == 0 && final_data.size() >= 1064)
+    {
+      // Check FST offset (at position 0x424 - 0x80 = 932 within group 0)
+      const u32 fst_offset_pos = 0x424 - 0x80;  // 932
+      const u32 fst_size_pos = 0x428 - 0x80;    // 936
+
+      if (fst_offset_pos < final_data.size() && fst_size_pos + 4 <= final_data.size())
+      {
+        u32 fst_offset_raw, fst_size_raw;
+        std::memcpy(&fst_offset_raw, final_data.data() + fst_offset_pos, 4);
+        std::memcpy(&fst_size_raw, final_data.data() + fst_size_pos, 4);
+
+        const u32 fst_offset = Common::swap32(fst_offset_raw);
+        const u32 fst_size = Common::swap32(fst_size_raw);
+
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: AFTER RVZ unpacking - group 0 FST info - offset=0x{:08x} ({}), size=0x{:08x} ({})",
+                     fst_offset, fst_offset, fst_size, fst_size);
+
+        // Show raw bytes around FST offset/size positions
+        std::string fst_offset_hex, fst_size_hex;
+        for (int i = -4; i <= 7; ++i)
+        {
+          if (fst_offset_pos + i >= 0 && fst_offset_pos + i < final_data.size())
+            fst_offset_hex += fmt::format("{:02x} ", final_data[fst_offset_pos + i]);
+        }
+        for (int i = -4; i <= 7; ++i)
+        {
+          if (fst_size_pos + i >= 0 && fst_size_pos + i < final_data.size())
+            fst_size_hex += fmt::format("{:02x} ", final_data[fst_size_pos + i]);
+        }
+
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: AFTER RVZ unpacking - FST offset area (pos {}): {}", fst_offset_pos, fst_offset_hex);
+        INFO_LOG_FMT(DISCIO, "HttpRVZReader::ReadFromGroups: AFTER RVZ unpacking - FST size area (pos {}): {}", fst_size_pos, fst_size_hex);
+      }
     }
 
     // Verify we have enough data in the group
