@@ -336,7 +336,9 @@ private struct SettingsSubMenuView: View {
     }
     .padding(.horizontal, 60)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+#if os(tvOS)
     .onExitCommand { onBack() }
+#endif
     .alert(L("Reset All Settings"), isPresented: $showResetAll) {
       Button(L("Cancel"), role: .cancel) {}
       Button(L("Reset"), role: .destructive) {

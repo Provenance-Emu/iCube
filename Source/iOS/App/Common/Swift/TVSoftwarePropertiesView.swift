@@ -91,9 +91,11 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                 .buttonStyle(.borderedProminent)
                 .padding(24)
         }
+      #if os(tvOS)
         .onExitCommand {
             dismiss()
         }
+      #endif
     }
 
     private var internalName: String {

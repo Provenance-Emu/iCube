@@ -43,7 +43,9 @@ internal struct PauseMenuView: View {
             }
     }
     .onAppear { NSLog("[PAUSE] PauseMenuView appeared") }
+    #if os(tvOS)
     .focusSection()
+    #endif
     .onChange(of: pane) { p in
       DispatchQueue.main.async {
         switch p {
@@ -58,6 +60,7 @@ internal struct PauseMenuView: View {
         }
       }
     }
+    #if os(tvOS)
     .onExitCommand {
       if pane == .main {
         onClose()
@@ -65,6 +68,7 @@ internal struct PauseMenuView: View {
         pane = .main
       }
     }
+    #endif
     .defaultFocus($focused, .resume)
   }
 
@@ -523,7 +527,9 @@ internal struct PauseMenuView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .zIndex(100)
     }
+#if os(tvOS)
     .onExitCommand { pane = .main }
+#endif
   }
 
 
@@ -1280,10 +1286,12 @@ internal struct ControllerMappingView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .zIndex(100)
     }
-    .focusSection()
     .defaultFocus($focused, .back)
     .onAppear { reload() }
+#if os(tvOS)
+    .focusSection()
     .onExitCommand { onBack() }
+#endif
     .sheet(isPresented: Binding(get: { showPickerForPort != nil }, set: { if !$0 { showPickerForPort = nil } })) {
       if let port = showPickerForPort {
         ControllerPickerSheet(game: game, port: port) { selected in
@@ -1448,10 +1456,12 @@ private struct ControllerPickerSheet: View {
       }
       .padding(.horizontal, 60)
     }
+#if os(tvOS)
     .focusSection()
+    .onExitCommand { onDone(selection); dismiss() }
+#endif
     .defaultFocus($focused, .back)
     .onAppear { controllers = GCController.controllers() }
-    .onExitCommand { onDone(selection); dismiss() }
   }
 }
 

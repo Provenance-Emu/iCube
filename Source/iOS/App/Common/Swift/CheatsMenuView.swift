@@ -194,8 +194,10 @@ struct CheatsMenuView: View {
             }
             .padding(.horizontal, 60)
         }
+      #if os(tvOS)
         .onExitCommand { onBack() }
         .focusSection()
+      #endif
         .defaultFocus($focused, .back)
         .onAppear { loadCheats() }
     }

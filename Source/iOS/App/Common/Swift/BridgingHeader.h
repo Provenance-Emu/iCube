@@ -20,18 +20,16 @@
 #import "UpdateRequiredNoticeViewController.h"
 #import "FastmemManager.h"
 
-#if TARGET_OS_TV
 #import "EmuEventVC.h"
-#import "TCManagerInterface.h"
 #import "InputOverriderBridge.h"
-#endif
+#import "TCManagerInterface.h"
+#import "TVGameItem.h"
 
 #if TARGET_OS_IOS
 #import "DOLUIKitSwitch.h"
 #endif
 
 // SwiftUI tvOS bridges
-#import "TVGameItem.h"
 #import "TVLibraryBridge.h"
 #import "TVEmulationBridge.h"
 #import "DOLConfigBridge.h"

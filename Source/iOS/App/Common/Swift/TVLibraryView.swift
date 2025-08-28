@@ -182,10 +182,10 @@ struct TVLibraryView: View {
     @State private var showCheatError: String?
     /// Cheat list modal state
     @State private var showCheatListFor: TVGameItem?
-    #if os(tvOS)
+
     /// Currently focused game's file path to drive zIndex and animations
     @State private var focusedFilePath: String?
-    #endif
+    
     @State private var showSources = false
     /// Source picker modal state
     @State private var sourcePickerItems: [TVGameItem]? = nil
@@ -496,13 +496,11 @@ struct TVLibraryView: View {
         }
     }
 
-    #if os(tvOS)
     private func downloadGecko(for item: TVGameItem) {
         TVCheatsBridge.downloadGeckoCodes(forGameId: item.gameID, revision: item.revision, gametdbId: item.gametdbID) { success, _, _ in
             if !success { showCheatError = L("Failed to download Gecko codes.") }
         }
     }
-    #endif
 
     private func presentCheatInput(for item: TVGameItem, type: CheatType) {
         cheatName = ""; cheatCreator = ""; cheatBody = ""; cheatNotes = ""
