@@ -124,7 +124,7 @@ struct ShaderSettingsView: View {
 		presetPath = UserDefaults.standard.string(forKey: "shader_preset_path")
 		dbgBypass = UserDefaults.standard.bool(forKey: "shader_bypass")
 		dbgChecker = UserDefaults.standard.bool(forKey: "shader_debug_checker")
-		dbgFlip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? true
+		        dbgFlip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
 		dbgShowPass = UserDefaults.standard.bool(forKey: "shader_debug_show_pass_enabled")
 		dbgPassIndex = (UserDefaults.standard.object(forKey: "shader_debug_show_pass") as? NSNumber)?.intValue ?? 0
 	}

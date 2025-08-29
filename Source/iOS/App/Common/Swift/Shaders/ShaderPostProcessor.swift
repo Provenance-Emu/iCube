@@ -285,9 +285,10 @@ import MetalKit
 			}
 		}
 
-		// Invoke the filter
-		let flip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? true
-		filter.render(sourceTexture: source, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip)
-		print("[Shaders] Swift: render end (flip=\(flip))")
+		        // Invoke the filter
+        /// Default to no vertical flip to match OpenEmu orientation assumptions
+        let flip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
+        filter.render(sourceTexture: source, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip)
+        print("[Shaders] Swift: render end (flip=\(flip))")
 	}
 }

@@ -753,22 +753,28 @@ public final class FilterChain {
 
             let width = Int(passSize.width)
             let height = Int(passSize.height)
-            let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: fmt,
-                                                              width: width,
-                                                              height: height,
-                                                              mipmapped: false)
-            td.storageMode = .private
-            td.usage = [.shaderRead, .renderTarget]
-            initTexture(&self.pass[i].renderTarget, withDescriptor: td)
-            // textures should be cleared before first use
-            if let view = self.pass[i].renderTarget.view { _clearTextures.append(view) }
+            // If last pass fully matches the output viewport and BGRA8, render directly to final target
+            if i == lastPassIndex && passSize == viewportSize && fmt == .bgra8Unorm {
+                self.pass[i].renderTarget.size = .init(width: width, height: height)
+                self.pass[i].renderTarget.view = nil
+            } else {
+                let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: fmt,
+                                                                  width: width,
+                                                                  height: height,
+                                                                  mipmapped: false)
+                td.storageMode = .private
+                td.usage = [.shaderRead, .renderTarget]
+                initTexture(&self.pass[i].renderTarget, withDescriptor: td)
+                // textures should be cleared before first use
+                if let view = self.pass[i].renderTarget.view { _clearTextures.append(view) }
 
-            let label = String(format: "Pass %02d Output", i)
-            self.pass[i].renderTarget.view?.label = label
-            if self.pass[i].hasFeedback {
-                initTexture(&self.pass[i].feedbackTarget, withDescriptor: td)
-                self.pass[i].feedbackTarget.view?.label = label
-                if let fb = self.pass[i].feedbackTarget.view { _clearTextures.append(fb) }
+                let label = String(format: "Pass %02d Output", i)
+                self.pass[i].renderTarget.view?.label = label
+                if self.pass[i].hasFeedback {
+                    initTexture(&self.pass[i].feedbackTarget, withDescriptor: td)
+                    self.pass[i].feedbackTarget.view?.label = label
+                    if let fb = self.pass[i].feedbackTarget.view { _clearTextures.append(fb) }
+                }
             }
         }
 
