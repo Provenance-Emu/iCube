@@ -646,6 +646,8 @@ void Metal::Gfx::PresentBackbuffer()
             id mgr = ((id(*)(id, SEL))[C methodForSelector:@selector(shared)])(C, @selector(shared));
             if (mgr && [mgr respondsToSelector:@selector(configureWithDevice:)])
               ((void(*)(id, SEL, id))[mgr methodForSelector:@selector(configureWithDevice:)])(mgr, @selector(configureWithDevice:), g_device);
+            if (mgr && [mgr respondsToSelector:@selector(reloadShadersNow)])
+              ((void(*)(id, SEL))[mgr methodForSelector:@selector(reloadShadersNow)])(mgr, @selector(reloadShadersNow));
             if (mgr && [mgr respondsToSelector:@selector(renderSource:commandBuffer:drawable:)])
             {
               // Minimal diagnostics about formats and sizes

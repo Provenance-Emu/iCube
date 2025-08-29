@@ -4,13 +4,40 @@ import MetalKit
 
 @objc final class DOLShaderPostProcessor: NSObject {
 	@objc static let shared = DOLShaderPostProcessor()
-	private override init() {}
+	private override init() {
+		super.init()
+		NotificationCenter.default.addObserver(self, selector: #selector(_shaderSettingsChanged(_:)), name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+	}
 	private var device: MTLDevice?
 	private var filter: FilterChain?
 	private var library: CompiledShaderContainer?
 	private var cachedPresetPath: String?
 	private var lastDrawableSize: CGSize = .zero
+	private var needsReload: Bool = false
 	private var debugChecker: MTLTexture?
+
+	@objc private func _shaderSettingsChanged(_ note: Notification) {
+		// Flag a reload for the next frame to avoid mutating while GPU encoders are active
+		needsReload = true
+	}
+
+	/// Public API for C++/ObjC callers to force a reload at runtime
+	@objc func reloadShadersNow() {
+		needsReload = true
+	}
+
+	/// Apply a new preset path immediately and flag a reload (accepts bundle-relative or absolute)
+	@objc func applyPresetPath(_ path: String?) {
+		if let p = path, !p.isEmpty {
+			UserDefaults.standard.set(p, forKey: "shader_preset_path")
+		} else {
+			UserDefaults.standard.removeObject(forKey: "shader_preset_path")
+		}
+		library = nil
+		cachedPresetPath = nil
+		filter?.hasShader = false
+		needsReload = true
+	}
 
 	@objc func configureWithDevice(_ device: MTLDevice) {
 		if self.device?.registryID != device.registryID {
@@ -37,7 +64,7 @@ import MetalKit
 			if absolutePath.hasPrefix(bundlePath), let range = absolutePath.range(of: ".app/") {
 				let suffix = String(absolutePath[range.upperBound...])
 				UserDefaults.standard.set(suffix, forKey: "shader_preset_path")
-				print("[Shaders] Swift: normalized preset path -> relative='\(suffix)'")
+				// print("[Shaders] Swift: normalized preset path -> relative='\(suffix)'")
 			}
 		}
 
@@ -54,7 +81,7 @@ import MetalKit
 				let rebuilt = bundleURL.appendingPathComponent(suffix)
 				if fm.fileExists(atPath: rebuilt.path) {
 					UserDefaults.standard.set(suffix, forKey: "shader_preset_path")
-					print("[Shaders] Swift: rebuilt preset path from old bundle -> 'file://\(rebuilt.path)'")
+					// print("[Shaders] Swift: rebuilt preset path from old bundle -> 'file://\(rebuilt.path)'")
 					return rebuilt
 				}
 			}
@@ -71,7 +98,7 @@ import MetalKit
 				let rebuilt = bundleURL.appendingPathComponent(suffix)
 				if fm.fileExists(atPath: rebuilt.path) {
 					UserDefaults.standard.set(suffix, forKey: "shader_preset_path")
-					print("[Shaders] Swift: rebuilt preset path from old bundle -> 'file://\(rebuilt.path)'")
+					// print("[Shaders] Swift: rebuilt preset path from old bundle -> 'file://\(rebuilt.path)'")
 					return rebuilt
 				}
 			}
@@ -94,21 +121,21 @@ import MetalKit
 	private func ensurePresetLoaded() {
 		guard let filter else { return }
 		let enabled = UserDefaults.standard.bool(forKey: "shader_enabled")
-		print("[Shaders] Swift: ensurePresetLoaded enabled=\(enabled)")
+		// print("[Shaders] Swift: ensurePresetLoaded enabled=\(enabled)")
 		guard enabled else {
 			filter.hasShader = false
 			library = nil
 			cachedPresetPath = nil
-			print("[Shaders] Swift: disabled -> clearing")
+			// print("[Shaders] Swift: disabled -> clearing")
 			return
 		}
 		let p = UserDefaults.standard.string(forKey: "shader_preset_path") ?? ""
-		print("[Shaders] Swift: preset path='\(p)'")
+		// print("[Shaders] Swift: preset path='\(p)'")
 		guard !p.isEmpty else {
 			filter.hasShader = false
 			library = nil
 			cachedPresetPath = nil
-			print("[Shaders] Swift: no preset path set")
+			// print("[Shaders] Swift: no preset path set")
 			return
 		}
 		// Reload if path changed OR we currently have no shader loaded
@@ -119,38 +146,38 @@ import MetalKit
 			filter.hasShader = false
 			library = nil
 			cachedPresetPath = nil
-			print("[Shaders] Swift: failed to resolve preset path for current bundle")
+			// print("[Shaders] Swift: failed to resolve preset path for current bundle")
 			return
 		}
 		let exists = FileManager.default.fileExists(atPath: url.path)
-		print("[Shaders] Swift: preset exists=\(exists)")
+		// print("[Shaders] Swift: preset exists=\(exists)")
 		do {
 			let data = try Data(contentsOf: url)
-			print("[Shaders] Swift: loading container from data, bytes=\(data.count)")
+			// print("[Shaders] Swift: loading container from data, bytes=\(data.count)")
 			let container = try ZipCompiledShaderContainer.Decoder(data: data)
 			library = container
 			try filter.setCompiledShader(container)
 			filter.hasShader = true
 			cachedPresetPath = p
-			print("[Shaders] Swift: loaded preset OK, hasShader=\(filter.hasShader)")
+			// print("[Shaders] Swift: loaded preset OK, hasShader=\(filter.hasShader)")
 			return
 		} catch {
-			print("[Shaders] Swift: data decode failed: \(error)")
+			// print("[Shaders] Swift: data decode failed: \(error)")
 		}
 		do {
-			print("[Shaders] Swift: trying url decode fallback")
+			// print("[Shaders] Swift: trying url decode fallback")
 			let container = try ZipCompiledShaderContainer.Decoder(url: url)
 			library = container
 			try filter.setCompiledShader(container)
 			filter.hasShader = true
 			cachedPresetPath = p
-			print("[Shaders] Swift: loaded preset via url OK, hasShader=\(filter.hasShader)")
+			// print("[Shaders] Swift: loaded preset via url OK, hasShader=\(filter.hasShader)")
 			return
 		} catch {
 			filter.hasShader = false
 			library = nil
 			cachedPresetPath = nil
-			print("[Shaders] Swift: failed to load preset: \(error)")
+			// print("[Shaders] Swift: failed to load preset: \(error)")
 		}
 	}
 
@@ -184,22 +211,29 @@ import MetalKit
 	@objc func renderSource(_ source: MTLTexture, commandBuffer cb: MTLCommandBuffer, drawable: CAMetalDrawable) {
 		guard let device else { return }
 		configureWithDevice(device)
+		if needsReload {
+			// Clear cached state so ensurePresetLoaded() will load fresh
+			library = nil
+			cachedPresetPath = nil
+			filter?.hasShader = false
+			needsReload = false
+		}
 		ensurePresetLoaded()
 		guard let filter else {
 			// No filter: blit copy
 			if let blit = cb.makeBlitCommandEncoder() {
-				print("[Shaders] Swift: no FilterChain; blit copy")
+				// print("[Shaders] Swift: no FilterChain; blit copy")
 				blit.copy(from: source, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x: 0, y: 0, z: 0), sourceSize: .init(width: source.width, height: source.height, depth: 1), to: drawable.texture, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init(x: 0, y: 0, z: 0))
 				blit.endEncoding()
 			}
 			return
 		}
-		print("[Shaders] Swift: FilterChain ready: hasShader=\(filter.hasShader)")
+		// print("[Shaders] Swift: FilterChain ready: hasShader=\(filter.hasShader)")
 
 		let dst = drawable.texture
 		let srcSize = CGSize(width: source.width, height: source.height)
 		let dstSize = CGSize(width: dst.width, height: dst.height)
-		print("[Shaders] Swift: render begin hasShader=\(filter.hasShader) src=\(Int(srcSize.width))x\(Int(srcSize.height)) dst=\(Int(dstSize.width))x\(Int(dstSize.height)) fmt src=\(source.pixelFormat.rawValue) dst=\(dst.pixelFormat.rawValue)")
+		// print("[Shaders] Swift: render begin hasShader=\(filter.hasShader) src=\(Int(srcSize.width))x\(Int(srcSize.height)) dst=\(Int(dstSize.width))x\(Int(dstSize.height)) fmt src=\(source.pixelFormat.rawValue) dst=\(dst.pixelFormat.rawValue)")
 
 		// Debug checkerboard: bypass compiled shader and draw a known pattern
 		if UserDefaults.standard.bool(forKey: "shader_debug_checker") {
@@ -219,19 +253,19 @@ import MetalKit
 			if applied, filter.hasShader {
 				// Run full pipeline over checkerboard
 				filter.render(sourceTexture: tex, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: false)
-				print("[Shaders] Swift: checker with shader applied")
+				// print("[Shaders] Swift: checker with shader applied")
 			} else {
 				// Show checker alone
 				filter.hasShader = false
 				filter.render(sourceTexture: tex, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: false)
-				print("[Shaders] Swift: debug checker drawn")
+				// print("[Shaders] Swift: debug checker drawn")
 			}
 			return
 		}
 
 		guard filter.hasShader else {
 			if let blit = cb.makeBlitCommandEncoder() {
-				print("[Shaders] Swift: no active shader; blit copy")
+				// print("[Shaders] Swift: no active shader; blit copy")
 				blit.copy(from: source, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x: 0, y: 0, z: 0), sourceSize: .init(width: source.width, height: source.height, depth: 1), to: dst, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init(x: 0, y: 0, z: 0))
 				blit.endEncoding()
 			}
@@ -251,7 +285,7 @@ import MetalKit
 
 		// Debug bypass: show the source without applying the compiled shader
 		if UserDefaults.standard.bool(forKey: "shader_bypass") {
-			print("[Shaders] Swift: bypass enabled -> showing source only")
+			// print("[Shaders] Swift: bypass enabled -> showing source only")
 			return
 		}
 
@@ -265,7 +299,7 @@ import MetalKit
 			if let enc = cb.makeRenderCommandEncoder(descriptor: dbg) {
 				enc.endEncoding()
 			}
-			print("[Shaders] Swift: debug fill applied")
+			// print("[Shaders] Swift: debug fill applied")
 		}
 
 		// Pipe sizes/pixelFormat into the filter
@@ -278,10 +312,10 @@ import MetalKit
 		   let idx = UserDefaults.standard.object(forKey: "shader_debug_show_pass") as? NSNumber {
 			let passIndex = idx.intValue
 			if filter.debugRenderPass(index: Int(passIndex), commandBuffer: cb, renderPassDescriptor: rpd) {
-				print("[Shaders] Swift: showing pass #\(passIndex) / count=\(filter.debugPassCount)")
+				// print("[Shaders] Swift: showing pass #\(passIndex) / count=\(filter.debugPassCount)")
 				return
 			} else {
-				print("[Shaders] Swift: invalid pass index #\(passIndex) (count=\(filter.debugPassCount))")
+				// print("[Shaders] Swift: invalid pass index #\(passIndex) (count=\(filter.debugPassCount))")
 			}
 		}
 
@@ -289,6 +323,6 @@ import MetalKit
         /// Default to no vertical flip to match OpenEmu orientation assumptions
         let flip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
         filter.render(sourceTexture: source, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip)
-        print("[Shaders] Swift: render end (flip=\(flip))")
+        // print("[Shaders] Swift: render end (flip=\(flip))")
 	}
 }

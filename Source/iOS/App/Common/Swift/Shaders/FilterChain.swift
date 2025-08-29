@@ -125,6 +125,9 @@ public final class FilterChain {
     private var pass = [Pass](repeating: .init(), count: Constants.maxShaderPasses)
     private var luts = [Texture](repeating: .init(), count: Constants.maxTextures)
 
+    // Expected texture bindings (binding index, semantic name) per pass, built at load time for diagnostics
+    private var expectedTextureBindingsPerPass: [[(Int, String)]] = []
+
     private var renderTargetsNeedResize = true
     private var historyNeedsInit = false
 
@@ -144,6 +147,9 @@ public final class FilterChain {
 
     private var uniforms = Uniforms.empty
     private var uniformsNoRotate = Uniforms.empty
+
+    // One-shot logging guard
+    private var didLogOnce: Bool = false
 
     /// Used as a fallback image when a look-up texture cannot be loaded.
     private lazy var checkers: MTLTexture = {
@@ -183,6 +189,7 @@ public final class FilterChain {
     private var parametersMap = [String: Int]()
 
     public init(device: MTLDevice) throws {
+        self.didLogOnce = false
         self.device = device
 #if os(macOS)
         if #available(macOS 10.15, iOS 11, *) {
@@ -545,6 +552,32 @@ public final class FilterChain {
                        flipVertically: Bool = false) {
         renderOffscreenPasses(sourceTexture: sourceTexture, commandBuffer: commandBuffer)
         if let rce = commandBuffer.makeRenderCommandEncoder(descriptor: rpd) {
+            if !didLogOnce {
+                // Log a compact summary only once per load
+                var missingTotals = [Int](repeating: 0, count: passCount)
+                var missingDetail: [String] = []
+                for i in 0..<passCount {
+                    var present: Set<Int> = []
+                    let expected = (i < expectedTextureBindingsPerPass.count) ? expectedTextureBindingsPerPass[i] : []
+                    if let texs = pass[i].bindings?.textures {
+                        for t in texs { present.insert(Int(t.binding)) }
+                    }
+                    var m = 0
+                    var names: [String] = []
+                    for (b, n) in expected {
+                        if !present.contains(Int(b)) { m += 1; names.append(n) }
+                    }
+                    missingTotals[i] = m
+                    if m > 0 {
+                        missingDetail.append("p\(i): \(names.joined(separator: ","))")
+                    }
+                }
+                os_log("[Shaders] First render: drawable=%dx%d src=%dx%d fmt out=%d src=%d missing=%{public}@ details=%{public}@", log: .default, type: .info,
+                       Int(outputFrame.outputSize.x), Int(outputFrame.outputSize.y), sourceTexture.width, sourceTexture.height,
+                       outputColorPixelFormat.rawValue, sourceTexture.pixelFormat.rawValue, String(describing: missingTotals),
+                       missingDetail.joined(separator: " | "))
+                didLogOnce = true
+            }
             renderFinalPass(withCommandEncoder: rce, flipVertically: flipVertically)
             rce.endEncoding()
         }
@@ -651,9 +684,9 @@ public final class FilterChain {
                 missing += 1
             }
         }
-        if missing > 0 {
-            os_log("pass %d: substituted %d missing textures with checker", log: .default, type: .debug, i, missing)
-        }
+//        if missing > 0 {
+//            os_log("pass %d: substituted %d missing textures with checker", log: .default, type: .debug, i, missing)
+//        }
 
         // Debug: force binding 0 to checkerboard for pass 0 to validate sampling
         if i == 0 && UserDefaults.standard.bool(forKey: "shader_debug_binding0_checker") {
@@ -733,7 +766,7 @@ public final class FilterChain {
 
             sourceSize = passSize // capture source size for next pass
 
-            os_log("pass %d, render target size %0.0f x %0.0f", log: .default, type: .debug, i, passSize.width, passSize.height)
+            // os_log("pass %d, render target size %0.0f x %0.0f", log: .default, type: .debug, i, passSize.width, passSize.height)
 
             let fmt = self.pass[i].format
             if let tex = self.pass[i].renderTarget.view,
@@ -813,6 +846,18 @@ public final class FilterChain {
         let texStride = MemoryLayout<Texture>.stride
         let texViewOffset = MemoryLayout<Texture>.offset(of: \.view)!
         let texSizeOffset = MemoryLayout<Texture>.offset(of: \.size)!
+
+        // Determine required frame history from usage to avoid under-allocation by containers missing historyCount metadata
+        var requiredHistory = 0
+        for pass in ss.passes {
+            for t in pass.textures where t.semantic == .originalHistory {
+                let needed = Int(t.index) + 1
+                if needed > requiredHistory { requiredHistory = needed }
+            }
+        }
+
+        // Prepare expected texture bindings map for diagnostics
+        expectedTextureBindingsPerPass = Array(repeating: [], count: passCount)
 
         for passNumber in 0..<passCount {
             let sem = ShaderPassSemantics()
@@ -895,6 +940,8 @@ public final class FilterChain {
 
             let bindings = ShaderPassBindings()
             let pass = ss.passes[passNumber]
+            // Capture expected bindings for diagnostics (binding index and semantic name)
+            self.expectedTextureBindingsPerPass[passNumber] = pass.textures.map { (Int($0.binding), $0.name) }
             updateBindings(passBindings: bindings,
                            forPassNumber: passNumber,
                            passSemantics: sem,
@@ -982,18 +1029,27 @@ public final class FilterChain {
         }
 
         // finalise remaining state
-        historyCount = ss.historyCount
+        historyCount = max(ss.historyCount, requiredHistory)
         for pass in ss.passes {
             self.pass[pass.index].hasFeedback = pass.isFeedback
         }
 
-        let end = CACurrentMediaTime() - start
-        os_log("Shader load completed in %{xcode:interval}f seconds", log: .default, type: .debug, end)
+//        let end = CACurrentMediaTime() - start
+//        os_log("Shader load completed in %{xcode:interval}f seconds", log: .default, type: .debug, end)
 
         loadLuts(container)
         hasShader = true
         renderTargetsNeedResize = true
         historyNeedsInit = true
+
+        if historyCount > 0 && historyTextures.count < (historyCount + 1) {
+            historyTextures = .init(repeating: .init(), count: Constants.maxFrameHistory + 1)
+        }
+
+        if !didLogOnce {
+            let lutsCount = container.shader.luts.count
+            os_log("[Shaders] Loaded: passes=%d history=%d luts=%d", log: .default, type: .info, passCount, historyCount, lutsCount)
+        }
     }
 
     private func loadLuts(_ cc: CompiledShaderContainer) {
