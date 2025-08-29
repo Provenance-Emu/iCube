@@ -41,16 +41,62 @@ struct ShaderPickerView: View {
 	@State private var presets: [ShaderPreset] = []
 
 	var body: some View {
-		List {
-			SelectRow(label: L("None"), checked: selectedPresetPath == nil) { selectedPresetPath = nil }
-			ForEach(presets) { preset in
-				SelectRow(label: preset.name, checked: selectedPresetPath == preset.id.path) {
-					selectedPresetPath = preset.id.path
+		ScrollViewReader { proxy in
+			List {
+				SelectRow(label: L("None"), checked: selectedPresetPath == nil) {
+					selectedPresetPath = nil
+					UserDefaults.standard.removeObject(forKey: "shader_preset_path")
+					NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+				}
+				.id("NONE")
+				ForEach(presets) { preset in
+					Group {
+						let absPath = preset.id.path
+						let bundleBase = Bundle.main.bundleURL.path
+						let normalized: String = {
+							if absPath.hasPrefix(bundleBase), let dotApp = absPath.range(of: ".app/") {
+								return String(absPath[dotApp.upperBound...])
+							} else {
+								return absPath
+							}
+						}()
+						SelectRow(label: preset.name, checked: (selectedPresetPath == normalized) || (selectedPresetPath == absPath)) {
+							selectedPresetPath = normalized
+							NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+							// Immediate apply while running
+							DOLShaderPostProcessor.shared.applyPresetPath(normalized)
+						}
+						.id(preset.id)
+					}
+				}
+			}
+			.navigationTitle(L("Shaders"))
+			.onAppear {
+				presets = ShaderLibrary.discoverPresets()
+				/// Auto-scroll to the currently selected shader (or None)
+				DispatchQueue.main.async {
+					scrollToSelected(proxy: proxy)
 				}
 			}
 		}
-		.navigationTitle(L("Shaders"))
-		.onAppear { presets = ShaderLibrary.discoverPresets() }
+	}
+
+	/// Scrolls to the selected preset if present; otherwise to None
+	private func scrollToSelected(proxy: ScrollViewProxy) {
+		let bundleBase = Bundle.main.bundleURL.path
+		let targetId: AnyHashable
+		if let sel = selectedPresetPath {
+			let abs: String
+			if sel.hasPrefix(bundleBase) { abs = sel } else { abs = Bundle.main.bundleURL.appendingPathComponent(sel).path }
+			if let match = presets.first(where: { $0.id.path == abs }) {
+				targetId = match.id
+			} else {
+				targetId = "NONE"
+			}
+		} else {
+			targetId = "NONE"
+		}
+		proxy.scrollTo(targetId, anchor: .center)
 	}
 }
 
@@ -67,8 +113,11 @@ struct ShaderSettingsView: View {
 	var body: some View {
 		List {
 			Section(header: Text(L("Post-Processing Shader"))) {
-				Toggle(L("Enable Shader"), isOn: $enabled)
-					.onChange(of: enabled) { UserDefaults.standard.set($0, forKey: "shader_enabled") }
+				                Toggle(L("Enable Shader"), isOn: $enabled)
+                    .onChange(of: enabled) {
+                        UserDefaults.standard.set($0, forKey: "shader_enabled")
+                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+                    }
 				NavigationLink(destination: ShaderPickerView(selectedPresetPath: $presetPath)) {
 					HStack {
 						Text(L("Preset"))
@@ -81,19 +130,31 @@ struct ShaderSettingsView: View {
 			}
 
 			Section(header: Text(L("Debug"))) {
-				Toggle(L("Bypass (show source)"), isOn: $dbgBypass)
-					.onChange(of: dbgBypass) { UserDefaults.standard.set($0, forKey: "shader_bypass") }
-				Toggle(L("Show checkerboard"), isOn: $dbgChecker)
-					.onChange(of: dbgChecker) { UserDefaults.standard.set($0, forKey: "shader_debug_checker") }
+				                Toggle(L("Bypass (show source)"), isOn: $dbgBypass)
+                    .onChange(of: dbgBypass) {
+                        UserDefaults.standard.set($0, forKey: "shader_bypass")
+                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+                    }
+				                Toggle(L("Show checkerboard"), isOn: $dbgChecker)
+                    .onChange(of: dbgChecker) {
+                        UserDefaults.standard.set($0, forKey: "shader_debug_checker")
+                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+                    }
 				Toggle(L("Apply shader over checkerboard"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_checker_apply") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_checker_apply") }))
-				Toggle(L("Flip vertically"), isOn: $dbgFlip)
-					.onChange(of: dbgFlip) { UserDefaults.standard.set($0, forKey: "shader_flip_vertical") }
+				                Toggle(L("Flip vertically"), isOn: $dbgFlip)
+                    .onChange(of: dbgFlip) {
+                        UserDefaults.standard.set($0, forKey: "shader_flip_vertical")
+                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+                    }
 				Toggle(L("Force binding 0 = checker (pass 0)"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_binding0_checker") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_binding0_checker") }))
 				Toggle(L("Force all bindings = checker"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_force_all_checker") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_force_all_checker") }))
 				Toggle(L("Force BGRA8 formats"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_force_bgra8") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_force_bgra8") }))
 				Toggle(L("Vertex positions at buffer index 0"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_positions_index0") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_positions_index0") }))
-				Toggle(L("Preview intermediate pass"), isOn: $dbgShowPass)
-					.onChange(of: dbgShowPass) { UserDefaults.standard.set($0, forKey: "shader_debug_show_pass_enabled") }
+				                Toggle(L("Preview intermediate pass"), isOn: $dbgShowPass)
+                    .onChange(of: dbgShowPass) {
+                        UserDefaults.standard.set($0, forKey: "shader_debug_show_pass_enabled")
+                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+                    }
 				HStack {
 					Text(L("Pass index"))
 					Spacer()
@@ -105,12 +166,32 @@ struct ShaderSettingsView: View {
 					}
 					#endif
 				}
-				.onChange(of: dbgPassIndex) { UserDefaults.standard.set($0, forKey: "shader_debug_show_pass") }
+				                .onChange(of: dbgPassIndex) {
+                    UserDefaults.standard.set($0, forKey: "shader_debug_show_pass")
+                    NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+                }
 			}
 		}
 		.navigationTitle(L("Shaders"))
 		.onAppear { sync() }
-		.onChange(of: presetPath) { p in UserDefaults.standard.set(p, forKey: "shader_preset_path") }
+		.onChange(of: presetPath) { p in
+			if let p {
+				let bundleBase = Bundle.main.bundleURL.path
+				let pathToStore: String
+				if p.hasPrefix(bundleBase), let dotApp = p.range(of: ".app/") {
+					let suffix = String(p[dotApp.upperBound...])
+					pathToStore = suffix
+				} else {
+					pathToStore = p
+				}
+				UserDefaults.standard.set(pathToStore, forKey: "shader_preset_path")
+			} else {
+				UserDefaults.standard.removeObject(forKey: "shader_preset_path")
+			}
+			NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+			// Immediate apply while running
+			DOLShaderPostProcessor.shared.applyPresetPath(p)
+		}
 	}
 
 	private var presetLabel: String {
