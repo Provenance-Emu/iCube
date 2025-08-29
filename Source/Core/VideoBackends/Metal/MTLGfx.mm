@@ -651,9 +651,9 @@ void Metal::Gfx::PresentBackbuffer()
             if (mgr && [mgr respondsToSelector:@selector(renderSource:commandBuffer:drawable:)])
             {
               // Minimal diagnostics about formats and sizes
-              fprintf(stderr, "[Shaders] Post: src %ux%u fmt=%lu -> dst %ux%u fmt=%lu\n",
-                      (unsigned)source.width, (unsigned)source.height, (unsigned long)source.pixelFormat,
-                      (unsigned)dst.width, (unsigned)dst.height, (unsigned long)dst.pixelFormat);
+//              fprintf(stderr, "[Shaders] Post: src %ux%u fmt=%lu -> dst %ux%u fmt=%lu\n",
+//                      (unsigned)source.width, (unsigned)source.height, (unsigned long)source.pixelFormat,
+//                      (unsigned)dst.width, (unsigned)dst.height, (unsigned long)dst.pixelFormat);
 
               ((void(*)(id, SEL, id, id, id))[mgr methodForSelector:@selector(renderSource:commandBuffer:drawable:)])(mgr, @selector(renderSource:commandBuffer:drawable:), source, cb, m_drawable);
             }
