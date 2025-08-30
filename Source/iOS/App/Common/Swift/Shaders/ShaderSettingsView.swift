@@ -110,14 +110,28 @@ struct ShaderSettingsView: View {
 	@State private var dbgShowPass: Bool = false
 	@State private var dbgPassIndex: Int = 0
 
+	// Persisted toggles using @AppStorage for immediate UI updates
+	@AppStorage("shader_debug_checker_apply") private var dbgCheckerApply: Bool = false
+	@AppStorage("shader_debug_binding0_checker") private var dbgBinding0Checker: Bool = false
+	@AppStorage("shader_debug_force_all_checker") private var dbgForceAllChecker: Bool = false
+	@AppStorage("shader_debug_force_bgra8") private var dbgForceBGRA8: Bool = false
+	@AppStorage("shader_debug_positions_index0") private var dbgPositionsIndex0: Bool = false
+	@AppStorage("shader_debug_log_once") private var dbgLogOnce: Bool = true
+	@AppStorage("shader_debug_force_offscreen_last") private var dbgOffscreenLast: Bool = false
+	@AppStorage("shader_debug_disable_precopy") private var dbgDisablePreCopy: Bool = false
+	@AppStorage("shader_debug_force_source_binding0") private var dbgForceSourceBinding0: Bool = false
+	@AppStorage("shader_debug_force_prev_output_binding0") private var dbgForcePrevOutputBinding0: Bool = false
+	@AppStorage("shader_debug_map_source_semantics") private var dbgMapSourceSemantics: Bool = false
+	@AppStorage("shader_debug_clear_passes") private var dbgClearPasses: Bool = false
+
 	var body: some View {
 		List {
 			Section(header: Text(L("Post-Processing Shader"))) {
-				                Toggle(L("Enable Shader"), isOn: $enabled)
-                    .onChange(of: enabled) {
-                        UserDefaults.standard.set($0, forKey: "shader_enabled")
-                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-                    }
+				Toggle(L("Enable Shader"), isOn: $enabled)
+					.onChange(of: enabled) {
+						UserDefaults.standard.set($0, forKey: "shader_enabled")
+						NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+					}
 				NavigationLink(destination: ShaderPickerView(selectedPresetPath: $presetPath)) {
 					HStack {
 						Text(L("Preset"))
@@ -130,31 +144,38 @@ struct ShaderSettingsView: View {
 			}
 
 			Section(header: Text(L("Debug"))) {
-				                Toggle(L("Bypass (show source)"), isOn: $dbgBypass)
-                    .onChange(of: dbgBypass) {
-                        UserDefaults.standard.set($0, forKey: "shader_bypass")
-                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-                    }
-				                Toggle(L("Show checkerboard"), isOn: $dbgChecker)
-                    .onChange(of: dbgChecker) {
-                        UserDefaults.standard.set($0, forKey: "shader_debug_checker")
-                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-                    }
-				Toggle(L("Apply shader over checkerboard"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_checker_apply") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_checker_apply") }))
-				                Toggle(L("Flip vertically"), isOn: $dbgFlip)
-                    .onChange(of: dbgFlip) {
-                        UserDefaults.standard.set($0, forKey: "shader_flip_vertical")
-                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-                    }
-				Toggle(L("Force binding 0 = checker (pass 0)"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_binding0_checker") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_binding0_checker") }))
-				Toggle(L("Force all bindings = checker"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_force_all_checker") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_force_all_checker") }))
-				Toggle(L("Force BGRA8 formats"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_force_bgra8") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_force_bgra8") }))
-				Toggle(L("Vertex positions at buffer index 0"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "shader_debug_positions_index0") }, set: { UserDefaults.standard.set($0, forKey: "shader_debug_positions_index0") }))
-				                Toggle(L("Preview intermediate pass"), isOn: $dbgShowPass)
-                    .onChange(of: dbgShowPass) {
-                        UserDefaults.standard.set($0, forKey: "shader_debug_show_pass_enabled")
-                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-                    }
+				Toggle(L("Bypass (show source)"), isOn: $dbgBypass)
+					.onChange(of: dbgBypass) {
+						UserDefaults.standard.set($0, forKey: "shader_bypass")
+						NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+					}
+				Toggle(L("Show checkerboard"), isOn: $dbgChecker)
+					.onChange(of: dbgChecker) {
+						UserDefaults.standard.set($0, forKey: "shader_debug_checker")
+						NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+					}
+				Toggle(L("Apply shader over checkerboard"), isOn: $dbgCheckerApply)
+				Toggle(L("Flip vertically"), isOn: $dbgFlip)
+					.onChange(of: dbgFlip) {
+						UserDefaults.standard.set($0, forKey: "shader_flip_vertical")
+						NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+					}
+				Toggle(L("Force binding 0 = checker (pass 0)"), isOn: $dbgBinding0Checker)
+				Toggle(L("Force all bindings = checker"), isOn: $dbgForceAllChecker)
+				Toggle(L("Force BGRA8 formats"), isOn: $dbgForceBGRA8)
+				Toggle(L("Vertex positions at buffer index 0"), isOn: $dbgPositionsIndex0)
+				Toggle(L("One-shot diagnostics"), isOn: $dbgLogOnce)
+				Toggle(L("Force last pass offscreen"), isOn: $dbgOffscreenLast)
+				Toggle(L("Disable pre-copy (debug)"), isOn: $dbgDisablePreCopy)
+				Toggle(L("Force pass 0 Source at binding 0"), isOn: $dbgForceSourceBinding0)
+				Toggle(L("Force prev pass output at binding 0"), isOn: $dbgForcePrevOutputBinding0)
+				Toggle(L("Map 'source' semantics to expected binding"), isOn: $dbgMapSourceSemantics)
+				Toggle(L("Clear each pass (debug)"), isOn: $dbgClearPasses)
+				Toggle(L("Preview intermediate pass"), isOn: $dbgShowPass)
+					.onChange(of: dbgShowPass) {
+						UserDefaults.standard.set($0, forKey: "shader_debug_show_pass_enabled")
+						NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+					}
 				HStack {
 					Text(L("Pass index"))
 					Spacer()
@@ -166,10 +187,10 @@ struct ShaderSettingsView: View {
 					}
 					#endif
 				}
-				                .onChange(of: dbgPassIndex) {
-                    UserDefaults.standard.set($0, forKey: "shader_debug_show_pass")
-                    NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-                }
+				.onChange(of: dbgPassIndex) {
+					UserDefaults.standard.set($0, forKey: "shader_debug_show_pass")
+					NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+				}
 			}
 		}
 		.navigationTitle(L("Shaders"))

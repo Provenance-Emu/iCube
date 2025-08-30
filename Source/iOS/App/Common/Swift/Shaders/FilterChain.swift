@@ -554,8 +554,9 @@ public final class FilterChain {
         if let rce = commandBuffer.makeRenderCommandEncoder(descriptor: rpd) {
             if !didLogOnce {
                 // Log a compact summary only once per load
-                var missingTotals = [Int](repeating: 0, count: passCount)
-                var missingDetail: [String] = []
+                if (UserDefaults.standard.object(forKey: "shader_debug_log_once") as? Bool ?? true) {
+                    var missingTotals = [Int](repeating: 0, count: passCount)
+                    var missingDetail: [String] = []
                 for i in 0..<passCount {
                     var present: Set<Int> = []
                     let expected = (i < expectedTextureBindingsPerPass.count) ? expectedTextureBindingsPerPass[i] : []
@@ -572,10 +573,11 @@ public final class FilterChain {
                         missingDetail.append("p\(i): \(names.joined(separator: ","))")
                     }
                 }
-                os_log("[Shaders] First render: drawable=%dx%d src=%dx%d fmt out=%d src=%d missing=%{public}@ details=%{public}@", log: .default, type: .info,
-                       Int(outputFrame.outputSize.x), Int(outputFrame.outputSize.y), sourceTexture.width, sourceTexture.height,
-                       outputColorPixelFormat.rawValue, sourceTexture.pixelFormat.rawValue, String(describing: missingTotals),
-                       missingDetail.joined(separator: " | "))
+                    os_log("[Shaders] First render: drawable=%dx%d src=%dx%d fmt out=%d src=%d missing=%{public}@ details=%{public}@", log: .default, type: .info,
+                           Int(outputFrame.outputSize.x), Int(outputFrame.outputSize.y), sourceTexture.width, sourceTexture.height,
+                           outputColorPixelFormat.rawValue, sourceTexture.pixelFormat.rawValue, String(describing: missingTotals),
+                           missingDetail.joined(separator: " | "))
+                }
                 didLogOnce = true
             }
             renderFinalPass(withCommandEncoder: rce, flipVertically: flipVertically)
@@ -676,6 +678,56 @@ public final class FilterChain {
             _renderSamplers[binding] = samplers[bind.filter][bind.wrap]
         }
 
+        // Debug: force previous pass output at binding 0 (for passes > 0)
+        if i > 0 && UserDefaults.standard.bool(forKey: "shader_debug_force_prev_output_binding0") {
+            if let prev = pass[i - 1].renderTarget.view {
+                _renderTextures[0] = prev
+                if _renderSamplers[0] == nil { _renderSamplers[0] = samplers[.nearest][.edge] }
+            }
+        }
+
+        // Debug: targeted mapping of 'source' semantics to expected binding
+        if UserDefaults.standard.bool(forKey: "shader_debug_map_source_semantics") {
+            let expected = (i < expectedTextureBindingsPerPass.count) ? expectedTextureBindingsPerPass[i] : []
+            var targetBindings: [Int] = []
+            for (b, n) in expected {
+                let lower = n.lowercased()
+                if lower.contains("source") || (i == 0 && lower.contains("original")) {
+                    targetBindings.append(b)
+                }
+            }
+            if !targetBindings.isEmpty {
+                if i == 0 {
+                    if let src = historyTextures[0].view {
+                        for b in targetBindings {
+                            _renderTextures[b] = src
+                            if _renderSamplers[b] == nil { _renderSamplers[b] = samplers[.nearest][.edge] }
+                        }
+                    }
+                } else {
+                    if let prev = pass[i - 1].renderTarget.view {
+                        for b in targetBindings {
+                            _renderTextures[b] = prev
+                            if _renderSamplers[b] == nil { _renderSamplers[b] = samplers[.nearest][.edge] }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Compatibility fallback: ensure binding 0 carries a valid source
+        let compatPass0 = (UserDefaults.standard.object(forKey: "shader_compat_pass0_source_b0") as? Bool) ?? true
+        let compatPrev = (UserDefaults.standard.object(forKey: "shader_compat_prev_output_b0") as? Bool) ?? true
+        if _renderTextures[0] == nil {
+            if i == 0 && compatPass0 {
+                if let src = historyTextures[0].view { _renderTextures[0] = src }
+                if _renderSamplers[0] == nil { _renderSamplers[0] = samplers[.nearest][.edge] }
+            } else if i > 0 && compatPrev {
+                if let prev = pass[i - 1].renderTarget.view { _renderTextures[0] = prev }
+                if _renderSamplers[0] == nil { _renderSamplers[0] = samplers[.nearest][.edge] }
+            }
+        }
+
         // Substitute missing textures with a known pattern for stability
         var missing = 0
         for idx in 0..<Constants.maxShaderBindings {
@@ -765,6 +817,14 @@ public final class FilterChain {
             }
 
             sourceSize = passSize // capture source size for next pass
+
+            // Ensure per-pass viewport matches the render target size
+            self.pass[i].viewport = MTLViewport(originX: 0,
+                                                originY: 0,
+                                                width: passSize.width,
+                                                height: passSize.height,
+                                                znear: 0,
+                                                zfar: 1)
 
             // os_log("pass %d, render target size %0.0f x %0.0f", log: .default, type: .debug, i, passSize.width, passSize.height)
 
@@ -1047,8 +1107,10 @@ public final class FilterChain {
         }
 
         if !didLogOnce {
-            let lutsCount = container.shader.luts.count
-            os_log("[Shaders] Loaded: passes=%d history=%d luts=%d", log: .default, type: .info, passCount, historyCount, lutsCount)
+            if (UserDefaults.standard.object(forKey: "shader_debug_log_once") as? Bool ?? true) {
+                let lutsCount = container.shader.luts.count
+                os_log("[Shaders] Loaded: passes=%d history=%d luts=%d", log: .default, type: .info, passCount, historyCount, lutsCount)
+            }
         }
     }
 

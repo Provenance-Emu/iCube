@@ -277,11 +277,13 @@ import MetalKit
 		rpd.colorAttachments[0].loadAction = .load
 		rpd.colorAttachments[0].storeAction = .store
 
-		// If the filter doesn't draw anything, ensure we copy src->dst so the screen isn't black
-		let preMarker = cb.makeBlitCommandEncoder()
-		preMarker?.label = "PostProcess preCopy"
-		preMarker?.copy(from: source, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x: 0, y: 0, z: 0), sourceSize: .init(width: source.width, height: source.height, depth: 1), to: dst, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init(x: 0, y: 0, z: 0))
-		preMarker?.endEncoding()
+		// If the filter doesn't draw anything, ensure we copy src->dst so the screen isn't black (can be disabled for debug)
+		if !(UserDefaults.standard.bool(forKey: "shader_debug_disable_precopy")) {
+			let preMarker = cb.makeBlitCommandEncoder()
+			preMarker?.label = "PostProcess preCopy"
+			preMarker?.copy(from: source, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x: 0, y: 0, z: 0), sourceSize: .init(width: source.width, height: source.height, depth: 1), to: dst, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init(x: 0, y: 0, z: 0))
+			preMarker?.endEncoding()
+		}
 
 		// Debug bypass: show the source without applying the compiled shader
 		if UserDefaults.standard.bool(forKey: "shader_bypass") {
