@@ -79,7 +79,7 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
     }
 
     public func thumbnail(for state: SaveStateInfo) async -> UIImage? {
-        if let url = state.thumbnailURL, let data = try? Data(contentsOf: url), let img = UIImage(data: data, scale: UIScreen.main.scale) {
+        if let url = state.thumbnailURL, let data = try? Data(contentsOf: url), let img = await UIImage(data: data, scale: UIScreen.main.scale) {
             return img
         }
         return nil
