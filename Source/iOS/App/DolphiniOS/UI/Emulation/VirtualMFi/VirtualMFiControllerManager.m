@@ -20,7 +20,7 @@
 @end
 
 @implementation VirtualMFiControllerManager {
-#if !TARGET_OS_TV
+#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
   GCVirtualController* _controller API_AVAILABLE(ios(15.0));
 #endif
   bool _isControllerConnected;
@@ -40,7 +40,7 @@
 - (id)init {
   if (self = [super init]) {
     if (@available(iOS 15.0, *)) {
-#if !TARGET_OS_TV
+#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
       GCVirtualControllerConfiguration* configuration = [[GCVirtualControllerConfiguration alloc] init];
       configuration.elements = [NSSet setWithArray:@[
         GCInputButtonA,
@@ -66,7 +66,7 @@
 - (void)connectControllerToView:(UIView*)superview {
   // Yes, this is a gigantic hack. Unfortunately, GCVirtualController likes to attach to the wrong view (UITabBarController),
   // so we need to manually override that by adding it to the requesting controller.
-#if !TARGET_OS_TV
+#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
   UIView* controllerView = [_controller valueForKey:@"_controllerView"];
 
   if (_isControllerConnected) {
@@ -88,7 +88,7 @@
 }
 
 - (void)disconnectController {
-#if !TARGET_OS_TV
+#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
   if (_controller == nil || !_isControllerConnected) {
     return;
   }

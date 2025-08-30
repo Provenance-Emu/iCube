@@ -36,3 +36,5 @@
 #import "DOLPathsBridge.h"
 #import "TVCheatsBridge.h"
 #import "TVControllerMappingBridge.h"
+#import "NANDImportManager.h"
+#import "ImportFileManager.h"

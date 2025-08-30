@@ -185,7 +185,7 @@ struct TVLibraryView: View {
 
     /// Currently focused game's file path to drive zIndex and animations
     @State private var focusedFilePath: String?
-    
+
     @State private var showSources = false
     /// Source picker modal state
     @State private var sourcePickerItems: [TVGameItem]? = nil
@@ -206,6 +206,14 @@ struct TVLibraryView: View {
     @State private var showStorageErrorAlert = false
     @State private var showLowStorageWarning = false
     @State private var showCacheInfoFor: TVGameItem?
+
+    /// iOS document pickers
+    #if os(iOS)
+    @State private var showImportSoftwarePicker = false
+    @State private var showImportNANDPicker = false
+    /// Navigate to settings as a push on iOS
+    @State private var navigateToSettings = false
+    #endif
 
     /// Storage space management
     static let STORAGE_BUFFER_MB: Int64 = 100 * 1024 * 1024 // 100MB buffer
@@ -255,14 +263,45 @@ struct TVLibraryView: View {
     }
 
     private enum Constants {
-        static let gridVerticalSpacing: CGFloat = 32
-        static let gridHorizontalSpacing: CGFloat = 48
+        static let gridVerticalSpacing: CGFloat = {
+            #if os(tvOS)
+            return 32
+            #else
+            return 16
+            #endif
+        }()
+        static let gridHorizontalSpacing: CGFloat = {
+            #if os(tvOS)
+            return 48
+            #else
+            return 12
+            #endif
+        }()
+        #if os(tvOS)
         static let gridNumberOfColumns = 6
-        static let gridHorizontalPadding: CGFloat = 64
-        static let gridVerticalPadding: CGFloat = 80  // Increased for focus scale effect
+        #endif
+        static let gridHorizontalPadding: CGFloat = {
+            #if os(tvOS)
+            return 64
+            #else
+            return 16
+            #endif
+        }()
+        static let gridVerticalPadding: CGFloat = {
+            #if os(tvOS)
+            return 80
+            #else
+            return 16
+            #endif
+        }()  // Increased for focus scale effect
         static var columns: [GridItem] {
+            #if os(tvOS)
             let count = gridNumberOfColumns
             return Array(repeating: GridItem(.flexible(), spacing: gridHorizontalSpacing), count: count)
+            #else
+            // Adaptive columns for iOS; card width ~140
+            return [GridItem(.adaptive(minimum: 130, maximum: 170), spacing: gridHorizontalSpacing)]
+            #endif
         }
     }
 
@@ -352,6 +391,11 @@ struct TVLibraryView: View {
             Menu {
                 Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
                 Button(L("Perform Online System Update")) { model.performOnlineSystemUpdate() }
+                Button(L("Import BootMii NAND Backup…")) {
+                    #if os(iOS)
+                    showImportNANDPicker = true
+                    #endif
+                }
                 Button(L("Sources")) { showSources = true }
 //                Button(L("Save States")) { showSaveStatesBrowser = true }
             } label: { Image(systemName: "ellipsis.circle") }
@@ -362,7 +406,19 @@ struct TVLibraryView: View {
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { showSettings = true }) { Image(systemName: "gearshape") }
+            Button(action: {
+                #if os(iOS)
+                showImportSoftwarePicker = true
+                #endif
+            }) { Image(systemName: "plus") }
+            .help(L("Import Game"))
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button(action: {
+                #if os(iOS)
+                navigateToSettings = true
+                #endif
+            }) { Image(systemName: "gearshape") }
         }
         #endif
     }
@@ -379,6 +435,12 @@ struct TVLibraryView: View {
             }
             .navigationTitle("DolphiniOS Library")
             .toolbar { libraryToolbar }
+            #if os(iOS)
+            .navigationDestination(isPresented: $navigateToSettings) {
+                TVSettingsPage()
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+            #endif
         }
         .sheet(isPresented: $showSaveStatesBrowser) {
             NavigationStack { SaveStatesBrowserView() }
@@ -427,7 +489,9 @@ struct TVLibraryView: View {
             NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
             NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
         }
+        #if os(tvOS)
         .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
+        #endif
         #if os(tvOS)
         .confirmationDialog(L("More"), isPresented: $showMoreMenu, titleVisibility: .visible) {
             Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
@@ -467,6 +531,31 @@ struct TVLibraryView: View {
         }
         // Sources sheet
         .sheet(isPresented: $showSources) { SourcesView() }
+        #if os(iOS)
+        // iOS Document Pickers
+        .sheet(isPresented: $showImportSoftwarePicker) {
+            NavigationStack {
+                DocumentPickerView(
+                    contentTypes: DocumentPickerView.softwareContentTypes,
+                    onPick: { url in
+                      ImportFileManager.shared().importFile(atUrl: url)
+                    }
+                )
+                .navigationTitle(L("Import Game"))
+            }
+        }
+        .sheet(isPresented: $showImportNANDPicker) {
+            NavigationStack {
+                DocumentPickerView(
+                    contentTypes: [DocumentPickerView.binType],
+                    onPick: { url in
+                        NANDImportManager.importNAND(from: url)
+                    }
+                )
+                .navigationTitle(L("Import BootMii NAND Backup"))
+            }
+        }
+        #endif
         /// Delete confirmation and action
         .alert(L("Delete Game?"), isPresented: Binding(get: { itemPendingDelete != nil }, set: { if !$0 { itemPendingDelete = nil } })) {
             Button(L("Delete"), role: .destructive) {
@@ -619,6 +708,16 @@ struct TVLibraryView: View {
 
 // MARK: - Game Grid Item with Focus Management
 
+private enum Layout {
+    static var cardSize: CGSize {
+        #if os(tvOS)
+        return CGSize(width: 260, height: 390)
+        #else
+        return CGSize(width: 140, height: 210)
+        #endif
+    }
+}
+
 private struct GameGridItem: View {
     let item: TVGameItem
     let select: (TVGameItem) -> Void
@@ -734,7 +833,7 @@ private struct GameGridItem: View {
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: 260, height: 390)
+                    .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -759,7 +858,7 @@ private struct GameGridItem: View {
                 if isFocused {
                     VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center); Spacer() }
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .frame(width: 260, height: 390)
+                        .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
                         .allowsHitTesting(false)
                 }
 
@@ -808,7 +907,7 @@ private struct GameGridItem: View {
                         .padding(8)
                         .background(.ultraThinMaterial, in: Circle())
                         .padding(8)
-                        .frame(width: 260, height: 390, alignment: .topLeading)
+                        .frame(width: Layout.cardSize.width, height: Layout.cardSize.height, alignment: .topLeading)
                         .allowsHitTesting(false)
                 }
             }
@@ -841,7 +940,7 @@ private struct GameGridItem: View {
                 }
             }
         }
-        .frame(width: 260)
+        .frame(width: Layout.cardSize.width)
         .scaleEffect(isFocused ? 1.08 : 1.0)
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isFocused)
         .focusable(true) { focused in
@@ -897,7 +996,7 @@ private struct GameGridItem: View {
                     Image(uiImage: item.coverImage)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
-                        .frame(width: 260, height: 390)
+                        .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                     if let icon = remoteIconName {
@@ -951,22 +1050,46 @@ private struct GameGridItem: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .frame(width: 260)
+            .frame(width: Layout.cardSize.width)
         }
         .buttonStyle(.plain)
         .contextMenu {
-            if isRemoteGame, let source = getWebDAVSource(), source.isPreCachingEnabled {
-                Button(action: { startPreCache() }) {
-                    Label("Download to Cache", systemImage: "arrow.down.circle")
-                }
-                .disabled(isPreCaching)
+            // Align with tvOS context menu
+            Button(L("Properties")) { showProperties(item) }
+//            Button(L("View Save States")) { showSaveStates(item) }
+            Menu(L("Cheats")) {
+                Button(L("Manage...")) { showCheatList(item) }
+                Button(L("Download Codes")) { downloadGeckoAction(item) }
+                Divider()
+                Menu(L("Gecko")) { Button(L("Add...")) { presentCheatGecko(item) } }
+                Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatAR(item) } }
+            }
+            if isRemoteGame {
+                if let _ = getWebDAVSource() {
+                    if isCached {
+                        Button(action: { removeCachedFile() }) {
+                            Label(L("Remove from Cache"), systemImage: "trash")
+                        }
+                        Button(action: { showCacheInfo(item) }) {
+                            Label(L("Cache Info"), systemImage: "info.circle")
+                        }
+                    } else {
+                        Button(action: { startPreCache() }) {
+                            Label(L("Download to Cache"), systemImage: "arrow.down.circle")
+                        }
+                        .disabled(isPreCaching)
 
-                if isPreCaching {
-                    Button(action: { cancelPreCache() }) {
-                        Label("Cancel Download", systemImage: "xmark.circle")
+                        if isPreCaching {
+                            Button(action: { cancelPreCache() }) {
+                                Label(L("Cancel Download"), systemImage: "xmark.circle")
+                            }
+                        }
                     }
+                } else {
+                    Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
                 }
             }
+            Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
         }
         #endif
     }

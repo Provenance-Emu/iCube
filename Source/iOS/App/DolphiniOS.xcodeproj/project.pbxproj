@@ -7,7 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		B31E53A92E63B2500036EE31 /* AppConsts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E53A82E63B2500036EE31 /* AppConsts.swift */; };
+		B31E6DBD2E63C0240036EE31 /* DocumentPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */; };
+		B31E6DC32E63C08F0036EE31 /* NANDImportManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = B31E6DC22E63C08F0036EE31 /* NANDImportManager.mm */; };
+		B31E6DC52E63C0CD0036EE31 /* AppConsts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E6DC42E63C0CD0036EE31 /* AppConsts.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -284,7 +286,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		B31E53A82E63B2500036EE31 /* AppConsts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConsts.swift; sourceTree = "<group>"; };
+		B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerView.swift; sourceTree = "<group>"; };
+		B31E6DC12E63C08F0036EE31 /* NANDImportManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NANDImportManager.h; sourceTree = "<group>"; };
+		B31E6DC22E63C08F0036EE31 /* NANDImportManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NANDImportManager.mm; sourceTree = "<group>"; };
+		B31E6DC42E63C0CD0036EE31 /* AppConsts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConsts.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -712,6 +717,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		B31E6DBF2E63C0500036EE31 /* Bridging */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Bridging;
+			sourceTree = "<group>";
+		};
 		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = Core;
@@ -825,7 +835,7 @@
 				B900A7BF27F4D2E4000361DD /* UI */,
 				B97E4B5429656E8600B3EE9C /* Version */,
 				B900A7A627F26F61000361DD /* AppDelegate.swift */,
-				B31E53A82E63B2500036EE31 /* AppConsts.swift */,
+				B31E6DC42E63C0CD0036EE31 /* AppConsts.swift */,
 				B933EDC227F8E215004D7DD7 /* Assets.xcassets */,
 				B9447B08284192FA00BC9110 /* DolphinAssets.xcassets */,
 				B9B2C65A288E454700CB6569 /* ExternalDisplaySceneDelegate.swift */,
@@ -1114,12 +1124,14 @@
 		B933EDBB27F6A5C7004D7DD7 /* Swift */ = {
 			isa = PBXGroup;
 			children = (
+				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
+				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
 				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
 				B36B519A2E5E46AC009A2303 /* KeychainService.swift */,
 				B36B48C92E5D07D4009A2303 /* Localized.swift */,
@@ -1486,6 +1498,8 @@
 			children = (
 				B974923A2960096C00794509 /* ImportFileManager.h */,
 				B974923B2960096C00794509 /* ImportFileManager.m */,
+				B31E6DC12E63C08F0036EE31 /* NANDImportManager.h */,
+				B31E6DC22E63C08F0036EE31 /* NANDImportManager.mm */,
 			);
 			path = Import;
 			sourceTree = "<group>";
@@ -2011,6 +2025,9 @@
 			);
 			dependencies = (
 			);
+			fileSystemSynchronizedGroups = (
+				B31E6DBF2E63C0500036EE31 /* Bridging */,
+			);
 			name = DolphiniOS;
 			packageProductDependencies = (
 				B900A7D127F5228B000361DD /* UICollectionViewLeftAlignedLayout */,
@@ -2147,7 +2164,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\n\n# Path to the builder script\nSCRIPT=\"$PROJECT_DIR/../../../BuildiOSXCFramework.py\"\n\n# Map Xcode's PLATFORM_NAME to the builder's platform keys\ncase \"${PLATFORM_NAME}\" in\n  iphoneos)\n    platform=\"OS64\"              # iOS device (arm64)\n    ;;\n  iphonesimulator)\n    platform=\"SIMULATORARM64\"    # iOS Simulator (arm64)\n    ;;\n  appletvos)\n    platform=\"TVOS\"              # tvOS device (arm64)\n    ;;\n  appletvsimulator)\n    platform=\"SIMULATOR_TVOS\"    # tvOS Simulator (arm64)\n    ;;\n  macosx)\n    # Detect Mac Catalyst builds\n    if [[ \"${SUPPORTS_MACCATALYST:-}\" == \"YES\" || \"${EFFECTIVE_PLATFORM_NAME:-}\" == \"-maccatalyst\" ]]; then\n      platform=\"MAC_CATALYST\"    # Mac Catalyst (arm64)\n    else\n      echo \"Error: macOS (non-Catalyst) is not supported by this script.\"\n      exit 1\n    fi\n    ;;\n  *)\n    echo \"Error: Unsupported PLATFORM_NAME: ${PLATFORM_NAME}\"\n    exit 1\n    ;;\nesac\n\necho \"Building PVlibDolphin for platform: ${platform} (CONFIGURATION=${CONFIGURATION})\"\n\n# Run the builder for just the active platform\nexec /usr/bin/python3 \"${SCRIPT}\" -p \"${platform}\" -v\n";
+			shellScript = "set -euo pipefail\n\n# Path to the builder script\nSCRIPT=\"$PROJECT_DIR/../../../BuildiOSXCFramework.py\"\n\n# Map Xcode's PLATFORM_NAME to the builder's platform keys\ncase \"${PLATFORM_NAME}\" in\n  iphoneos)\n    platform=\"OS64\"              # iOS device (arm64)\n    ;;\n  iphonesimulator)\n    platform=\"SIMULATORARM64\"    # iOS Simulator (arm64)\n    ;;\n  appletvos)\n    platform=\"TVOS\"              # tvOS device (arm64)\n    ;;\n  appletvsimulator)\n    platform=\"SIMULATOR_TVOS\"    # tvOS Simulator (arm64)\n    ;;\n  macosx)\n    # Detect Mac Catalyst builds\n    if [[ \"${SUPPORTS_MACCATALYST:-}\" == \"YES\" || \"${EFFECTIVE_PLATFORM_NAME:-}\" == \"-maccatalyst\" ]]; then\n      platform=\"MAC_CATALYST\"    # Mac Catalyst (arm64)\n    else\n      echo \"Error: macOS (non-Catalyst) is not supported by this script.\"\n      exit 1\n    fi\n    ;;\n  *)\n    echo \"Error: Unsupported PLATFORM_NAME: ${PLATFORM_NAME}\"\n    exit 1\n    ;;\nesac\n\necho \"Building PVlibDolphin for platform: ${platform} (CONFIGURATION=${CONFIGURATION})\"\n\n# Run the builder for just the active platform\n# exec /usr/bin/python3 \"${SCRIPT}\" -p \"${platform}\" -v\n";
 		};
 		B97E4B622966227B00B3EE9C /* Upload dSYM */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -2327,7 +2344,6 @@
 				B904AD3528890477008B6BE9 /* MappingGroupEditEnabledCell.m in Sources */,
 				B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */,
 				B9913792288153D000588446 /* ConfigAdvancedViewController.mm in Sources */,
-				B31E53A92E63B2500036EE31 /* AppConsts.swift in Sources */,
 				B904AD0F28886AF8008B6BE9 /* MappingRootGroupCell.m in Sources */,
 				B9FCB7D22897B9D60020E233 /* NKitWarningViewController.mm in Sources */,
 				B904ACBE28851C5C008B6BE9 /* GraphicsBackendCell.m in Sources */,
@@ -2354,6 +2370,7 @@
 				B38206152E57FF0E00D4853F /* MTLPixelConverter.swift in Sources */,
 				B38206162E57FF0E00D4853F /* ShaderPassBindings.swift in Sources */,
 				B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */,
+				B31E6DBD2E63C0240036EE31 /* DocumentPickerView.swift in Sources */,
 				B904ACD92885E7DE008B6BE9 /* GraphicsHacksViewController.mm in Sources */,
 				B950CFAD296170BC00197719 /* BootNoticeManager.m in Sources */,
 				B34EDDDD2E57AC9700301907 /* SettingsRootView.swift in Sources */,
@@ -2402,6 +2419,7 @@
 				B9661F332D2318D300FB2AAB /* MappingInputDisplayViewController.mm in Sources */,
 				B9DC5FAF28849640004BD94A /* GraphicsTabViewController.m in Sources */,
 				B904ACD52885D2C4008B6BE9 /* AnisotropicFilteringViewController.mm in Sources */,
+				B31E6DC52E63C0CD0036EE31 /* AppConsts.swift in Sources */,
 				B9B2C65B288E454700CB6569 /* ExternalDisplaySceneDelegate.swift in Sources */,
 				B3F216762E5F746600AF38F3 /* SaveStateFilmstripView.swift in Sources */,
 				B97E4B5629656EC300B3EE9C /* VersionManager.swift in Sources */,
@@ -2431,6 +2449,7 @@
 				B9FCB7DB28988E4C0020E233 /* JitManager+AltServer.m in Sources */,
 				B904AD2B2888D72F008B6BE9 /* MappingExtensionViewController.mm in Sources */,
 				B9FCB7E12898D1E80020E233 /* SwiftLocalizationUtil.swift in Sources */,
+				B31E6DC32E63C08F0036EE31 /* NANDImportManager.mm in Sources */,
 				B9447AFD28418D7600BC9110 /* TCButton.swift in Sources */,
 				B9D938A1283F23A000B290FC /* TCButtonType.swift in Sources */,
 				B904ACF128868E4B008B6BE9 /* ControllersSettingsUtil.mm in Sources */,
