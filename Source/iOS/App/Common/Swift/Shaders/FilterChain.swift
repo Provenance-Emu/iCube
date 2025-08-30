@@ -857,6 +857,8 @@ public final class FilterChain {
                                                                   mipmapped: false)
                 td.storageMode = .private
                 td.usage = [.shaderRead, .renderTarget]
+                td.resourceOptions = .storageModePrivate
+                td.allowGPUOptimizedContents = true
                 initTexture(&self.pass[i].renderTarget, withDescriptor: td)
                 // textures should be cleared before first use
                 if let view = self.pass[i].renderTarget.view { _clearTextures.append(view) }
@@ -1116,8 +1118,8 @@ public final class FilterChain {
 
     private func loadLuts(_ cc: CompiledShaderContainer) {
         let opts: [MTKTextureLoader.Option: Any] = [
-            .generateMipmaps: true,
-            .allocateMipmaps: true,
+            .generateMipmaps: false,
+            .allocateMipmaps: false,
             .SRGB: false,
             .textureStorageMode: MTLStorageMode.private.rawValue
         ]
