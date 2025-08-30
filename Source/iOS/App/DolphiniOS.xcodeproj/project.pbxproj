@@ -709,26 +709,7 @@
 		B9FF01E92977DD0000B49B00 /* Release (Beta, TrollStore).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Release (Beta, TrollStore).xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		B36B63282E5E6443009A2303 /* Exceptions for "Metal" folder in "DolphiniOS" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Filters/MasterShader.metal.disabled,
-				Filters/SameBoy.metal.disabled,
-			);
-			target = B9DC3DF527EFBD2C0084DAA4 /* DolphiniOS */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B36B63182E5E6435009A2303 /* Metal */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B36B63282E5E6443009A2303 /* Exceptions for "Metal" folder in "DolphiniOS" target */,
-			);
-			path = Metal;
-			sourceTree = "<group>";
-		};
 		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = Core;
@@ -790,7 +771,6 @@
 		B34EE6B22E57D65400301907 /* Shaders */ = {
 			isa = PBXGroup;
 			children = (
-				B36B63182E5E6435009A2303 /* Metal */,
 				B38206012E57FF0E00D4853F /* Converters.metal */,
 				B38206092E57FF0E00D4853F /* Shaders.metal */,
 				B38205FF2E57FF0E00D4853F /* CompiledShader.swift */,
@@ -2027,9 +2007,6 @@
 			buildRules = (
 			);
 			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				B36B63182E5E6435009A2303 /* Metal */,
 			);
 			name = DolphiniOS;
 			packageProductDependencies = (
