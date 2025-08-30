@@ -16,5 +16,10 @@
     <true/>
     <key>com.apple.security.cs.debugger</key>
     <true/>
+    <!-- Additional entitlements for macOS Sequoia JIT compatibility -->
+    <key>com.apple.security.cs.disable-executable-page-protection</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
 </dict>
 </plist>
