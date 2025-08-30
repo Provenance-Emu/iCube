@@ -15,10 +15,11 @@ internal struct PauseMenuView: View {
   let game: TVGameItem
 
   @FocusState private var focused: FocusField?
-      internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, exit, back, slot(Int), save, load }
+      internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, shaders, exit, back, slot(Int), save, load }
     private enum Pane { case main, saves, cheats, controllers }
     @State private var pane: Pane = .main
     @State private var showExitDialog: Bool = false
+    @State private var showShaders: Bool = false
 
   var body: some View {
     ZStack {
@@ -70,6 +71,15 @@ internal struct PauseMenuView: View {
     }
     #endif
     .defaultFocus($focused, .resume)
+          .sheet(isPresented: $showShaders) {
+        NavigationStack {
+          ShaderSettingsView()
+            .navigationTitle(L("Shaders"))
+        }
+        #if os(tvOS)
+        .focusSection()
+        #endif
+      }
   }
 
   private var mainMenu: some View {
@@ -266,6 +276,46 @@ internal struct PauseMenuView: View {
             }
             .buttonStyle(.plain)
             .focused($focused, equals: .mapping)
+
+            // Shaders
+            Button(action: { showShaders = true }) {
+              HStack(spacing: 20) {
+                // Icon with background
+                ZStack {
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.white.opacity(0.1))
+                    .frame(width: 48, height: 48)
+
+                  Image(systemName: "wand.and.stars")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.white)
+                }
+
+                // Text content
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(L("Shaders"))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+
+                  Text(L("Post-processing"))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                }
+
+                Spacer()
+
+                // Chevron
+                Image(systemName: "chevron.right")
+                  .font(.system(size: 14, weight: .medium))
+                  .foregroundColor(.white.opacity(0.5))
+              }
+              .padding(.horizontal, 24)
+              .padding(.vertical, 16)
+              .background(.white.opacity(0.05))
+              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .focused($focused, equals: .shaders)
 
             // Settings
             Button(action: { onShowSettings() }) {

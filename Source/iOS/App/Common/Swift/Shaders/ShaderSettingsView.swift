@@ -109,6 +109,7 @@ struct ShaderSettingsView: View {
 	@State private var dbgFlip: Bool = true
 	@State private var dbgShowPass: Bool = false
 	@State private var dbgPassIndex: Int = 0
+	@AppStorage("shader_precopy_enabled") private var compatPreCopyEnabled: Bool = false
 
 	// Persisted toggles using @AppStorage for immediate UI updates
 	@AppStorage("shader_debug_checker_apply") private var dbgCheckerApply: Bool = false
@@ -167,6 +168,7 @@ struct ShaderSettingsView: View {
 				Toggle(L("One-shot diagnostics"), isOn: $dbgLogOnce)
 				Toggle(L("Force last pass offscreen"), isOn: $dbgOffscreenLast)
 				Toggle(L("Disable pre-copy (debug)"), isOn: $dbgDisablePreCopy)
+				Toggle(L("Enable pre-copy (compat)"), isOn: $compatPreCopyEnabled)
 				Toggle(L("Force pass 0 Source at binding 0"), isOn: $dbgForceSourceBinding0)
 				Toggle(L("Force prev pass output at binding 0"), isOn: $dbgForcePrevOutputBinding0)
 				Toggle(L("Map 'source' semantics to expected binding"), isOn: $dbgMapSourceSemantics)
