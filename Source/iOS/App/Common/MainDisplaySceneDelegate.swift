@@ -11,14 +11,14 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     MainSceneCoordinator.shared().mainScene = scene as? UIWindowScene
 
     // On tvOS, we do not use storyboards. Create the window and root UI programmatically using SwiftUI.
-    #if os(tvOS)
-    guard let windowScene = scene as? UIWindowScene else { return }
-    let window = UIWindow(windowScene: windowScene)
-    let rootView = TVRootView()
-    window.rootViewController = UIHostingController(rootView: rootView)
-    self.window = window
-    window.makeKeyAndVisible()
-    #endif
+    if AppConsts.useSwiftUI {
+      guard let windowScene = scene as? UIWindowScene else { return }
+      let window = UIWindow(windowScene: windowScene)
+      let rootView = TVRootView()
+      window.rootViewController = UIHostingController(rootView: rootView)
+      self.window = window
+      window.makeKeyAndVisible()
+    }
   }
 
   func sceneDidDisconnect(_ scene: UIScene) {

@@ -124,13 +124,13 @@ private struct EmulationProgrammaticHost: UIViewControllerRepresentable {
     let gamePath: String
 
     func makeUIViewController(context: Context) -> UIViewController {
-        #if os(tvOS)
+      if AppConsts.useSwiftUI {
         return UIViewController()
-        #else
+      } else {
         TVEmulationBridge.launchGame(atPath: gamePath)
         let sb = UIStoryboard(name: "Emulation", bundle: .main)
         return sb.instantiateInitialViewController()!
-        #endif
+      }
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) { }

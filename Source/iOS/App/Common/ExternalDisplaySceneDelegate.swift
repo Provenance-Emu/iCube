@@ -11,14 +11,14 @@ class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     EmulationCoordinator.shared().isExternalDisplayConnected = true
 
     // On tvOS, create an empty window programmatically to avoid storyboard requirements.
-    #if os(tvOS)
-    guard let windowScene = scene as? UIWindowScene else { return }
-    let window = UIWindow(windowScene: windowScene)
-    // Placeholder content for external display on tvOS
-    window.rootViewController = UIHostingController(rootView: Color.black)
-    self.window = window
-    window.makeKeyAndVisible()
-    #endif
+    if AppConsts.useSwiftUI {
+      guard let windowScene = scene as? UIWindowScene else { return }
+      let window = UIWindow(windowScene: windowScene)
+      // Placeholder content for external display on tvOS
+      window.rootViewController = UIHostingController(rootView: Color.black)
+      self.window = window
+      window.makeKeyAndVisible()
+    }
   }
 
   func sceneDidDisconnect(_ scene: UIScene) {

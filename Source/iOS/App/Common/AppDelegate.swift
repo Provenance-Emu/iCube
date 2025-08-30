@@ -4,6 +4,7 @@
 import UIKit
 
 class AppDelegate: UIResponder, UIApplicationDelegate {
+  
   var window: UIWindow?
 
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -25,19 +26,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
     // For tvOS, override any storyboard-based scene configuration and provide a programmatic scene.
     // This prevents crashes due to missing storyboards and enables a SwiftUI-based root.
-    #if os(tvOS)
-    let role = connectingSceneSession.role
-    let config = UISceneConfiguration(name: "Default Configuration", sessionRole: role)
-    if role == .windowExternalDisplayNonInteractive {
-      config.delegateClass = ExternalDisplaySceneDelegate.self
+    if AppConsts.useSwiftUI {
+      let role = connectingSceneSession.role
+      let config = UISceneConfiguration(name: "Default Configuration", sessionRole: role)
+      if role == .windowExternalDisplayNonInteractive {
+        config.delegateClass = ExternalDisplaySceneDelegate.self
+      } else {
+        config.delegateClass = MainDisplaySceneDelegate.self
+      }
+      config.storyboard = nil
+      return config
     } else {
-      config.delegateClass = MainDisplaySceneDelegate.self
+      return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
     }
-    config.storyboard = nil
-    return config
-    #else
-    return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
-    #endif
   }
 
   func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
