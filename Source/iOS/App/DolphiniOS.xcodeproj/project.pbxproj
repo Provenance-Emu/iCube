@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B31E53A92E63B2500036EE31 /* AppConsts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E53A82E63B2500036EE31 /* AppConsts.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -283,6 +284,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B31E53A82E63B2500036EE31 /* AppConsts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConsts.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -823,6 +825,7 @@
 				B900A7BF27F4D2E4000361DD /* UI */,
 				B97E4B5429656E8600B3EE9C /* Version */,
 				B900A7A627F26F61000361DD /* AppDelegate.swift */,
+				B31E53A82E63B2500036EE31 /* AppConsts.swift */,
 				B933EDC227F8E215004D7DD7 /* Assets.xcassets */,
 				B9447B08284192FA00BC9110 /* DolphinAssets.xcassets */,
 				B9B2C65A288E454700CB6569 /* ExternalDisplaySceneDelegate.swift */,
@@ -2324,6 +2327,7 @@
 				B904AD3528890477008B6BE9 /* MappingGroupEditEnabledCell.m in Sources */,
 				B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */,
 				B9913792288153D000588446 /* ConfigAdvancedViewController.mm in Sources */,
+				B31E53A92E63B2500036EE31 /* AppConsts.swift in Sources */,
 				B904AD0F28886AF8008B6BE9 /* MappingRootGroupCell.m in Sources */,
 				B9FCB7D22897B9D60020E233 /* NKitWarningViewController.mm in Sources */,
 				B904ACBE28851C5C008B6BE9 /* GraphicsBackendCell.m in Sources */,
