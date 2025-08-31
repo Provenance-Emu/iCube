@@ -264,6 +264,7 @@ struct EmulationScreen: View {
 #else
     NavigationStack {
         ZStack {
+            Color.black.ignoresSafeArea()
             GeometryReader { proxy in
                 let isPortrait = proxy.size.height > proxy.size.width
                 if isPortrait {
