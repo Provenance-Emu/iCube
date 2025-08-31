@@ -28,6 +28,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
     private var onlineCont: AsyncStream<Bool>.Continuation?
     private var itemsCont: AsyncStream<[RemoteLibraryItem]>.Continuation?
+    var scanningProgressStream: AsyncStream<Double>? { scanningProgress }
+    private var scanningProgress: AsyncStream<Double>?
+    private var scanningProgressCont: AsyncStream<Double>.Continuation?
 
     private(set) var isOnline: Bool = false { didSet { onlineCont?.yield(isOnline) } }
 
@@ -97,6 +100,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         var ic: AsyncStream<[RemoteLibraryItem]>.Continuation!
         self.itemsStream = AsyncStream<[RemoteLibraryItem]> { c in ic = c }
         self.itemsCont = ic
+        var pc: AsyncStream<Double>.Continuation!
+        self.scanningProgressStream = AsyncStream<Double> { c in pc = c }
+        self.scanningProgressCont = pc
         #if canImport(os)
         Self.logger.info("Initialized WebDAVSource name=\(self.name, privacy: .public) url=\(self.baseURL.absoluteString, privacy: .public) root=\(self.rootURL.absoluteString, privacy: .public) preCache=\(self.enablePreCaching)")
         #endif
@@ -138,6 +144,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         var ic: AsyncStream<[RemoteLibraryItem]>.Continuation!
         self.itemsStream = AsyncStream<[RemoteLibraryItem]> { c in ic = c }
         self.itemsCont = ic
+        var pc: AsyncStream<Double>.Continuation!
+        self.scanningProgressStream = AsyncStream<Double> { c in pc = c }
+        self.scanningProgressCont = pc
 
         #if canImport(os)
         Self.logger.info("Created fresh streams for WebDAV source: \(self.name)")
@@ -177,8 +186,10 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         // Finish the current streams to properly end them
         onlineCont?.finish()
         itemsCont?.finish()
+        scanningProgressCont?.finish()
         onlineCont = nil
         itemsCont = nil
+        scanningProgressCont = nil
 
         #if canImport(os)
         Self.logger.info("WebDAV source stopped, streams finished and will be recreated on restart")
@@ -273,6 +284,8 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             var queue: [URL] = [rootURL]
             var seen: Set<URL> = []
             var processedDirs = 0
+            var discoveredFiles = 0
+            var totalNodesEstimated = 0
             while let current = queue.first {
                 if Task.isCancelled { break }
                 queue.removeFirst()
@@ -288,6 +301,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                 #if canImport(os)
                 Self.logger.debug("Found \(nodes.count, privacy: .public) nodes in \(current.absoluteString, privacy: .public)")
                 #endif
+                totalNodesEstimated += nodes.count
                 var addedInThisDir = 0
                 for n in nodes {
                     guard let resolved = resolve(href: n.href, relativeTo: current) else { continue }
@@ -301,6 +315,14 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                         let item = RemoteLibraryItem(url: resolved, displayName: n.displayName ?? resolved.lastPathComponent, sizeBytes: n.contentLength, etag: n.etag, lastModified: n.lastModified)
                         cumulative.append(item)
                         addedInThisDir += 1
+                        discoveredFiles += 1
+                        // Yield individual additions for faster UI updates
+                        itemsCont?.yield(cumulative)
+                        // Update progress as we discover files (best-effort)
+                        if totalNodesEstimated > 0 {
+                            let progress = min(1.0, Double(discoveredFiles) / Double(max(1, totalNodesEstimated)))
+                            scanningProgressCont?.yield(progress)
+                        }
                     }
                 }
                 processedDirs += 1
@@ -311,6 +333,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             }
             // Final yield to ensure consumers have the complete list
             itemsCont?.yield(cumulative)
+            scanningProgressCont?.yield(1.0)
         } catch {
             #if canImport(os)
             Self.logger.error("Enumeration error at \(self.rootURL.absoluteString, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -529,6 +552,27 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     /// Get cache directory for this source
     func getCacheDirectory() -> URL {
         return cacheDirectory
+    }
+
+    /// Convert a WebDAV item URL to an HTTP(S) URL usable by Dolphin's HTTP readers.
+    /// If credentials are configured, they are embedded in the URL userinfo.
+    func httpURL(for original: URL) -> String {
+        var comps = URLComponents(url: original, resolvingAgainstBaseURL: false) ?? URLComponents()
+        let baseScheme = baseURL.scheme?.lowercased()
+        let targetScheme: String
+        if baseScheme == "webdavs" || baseScheme == "https" {
+            targetScheme = "https"
+        } else {
+            targetScheme = "http"
+        }
+        comps.scheme = targetScheme
+        if let username = username, !username.isEmpty {
+            comps.user = username
+        }
+        if let password = password, !password.isEmpty {
+            comps.password = password
+        }
+        return comps.string ?? original.absoluteString.replacingOccurrences(of: "webdavs", with: "https").replacingOccurrences(of: "webdav", with: "http")
     }
 
     /// Load cache metadata from disk

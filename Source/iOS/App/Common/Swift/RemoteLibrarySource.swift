@@ -39,6 +39,9 @@ protocol RemoteLibrarySource {
     /// Stream of discovered items
     var itemsStream: AsyncStream<[RemoteLibraryItem]> { get }
 
+    /// Optional stream of scanning progress (0.0...1.0)
+    var scanningProgressStream: AsyncStream<Double>? { get }
+
     /// Start monitoring this source
     func start()
 

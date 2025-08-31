@@ -6,6 +6,9 @@ import Combine
 class RemoteSourcesCoordinator: ObservableObject {
     @Published var sources: [any RemoteLibrarySource] = []
     @Published var lastItemsBySource: [String: [RemoteLibraryItem]] = [:]
+    @Published var scanningProgressBySource: [String: Double] = [:]
+    @Published var isScanning: Bool = false
+    @Published var scanningProgress: Double = 0.0
 
     private var tasks: [String: [Task<Void, Never>]] = [:]
     private var lastUpdateTime: Date = .distantPast
@@ -133,7 +136,39 @@ class RemoteSourcesCoordinator: ObservableObject {
             print("DEBUG COORDINATOR: Items task ended normally (stream finished) for source \(source.id)")
         }
 
-        tasks[source.id] = [onlineTask, itemsTask]
+        var progressTask: Task<Void, Never>?
+        if let progressStream = source.scanningProgressStream {
+            progressTask = Task { [weak self] in
+                guard let self else { return }
+                for await p in progressStream {
+                    await MainActor.run {
+                        self.scanningProgressBySource[source.id] = p
+                        // Compute aggregate progress as mean of active sources with entries
+                        let values = Array(self.scanningProgressBySource.values)
+                        if !values.isEmpty {
+                            self.scanningProgress = values.reduce(0, +) / Double(values.count)
+                            self.isScanning = self.scanningProgress < 1.0
+                        } else {
+                            self.scanningProgress = 0
+                            self.isScanning = false
+                        }
+                    }
+                }
+                await MainActor.run {
+                    self.scanningProgressBySource[source.id] = 1.0
+                    let values = Array(self.scanningProgressBySource.values)
+                    if !values.isEmpty {
+                        self.scanningProgress = values.reduce(0, +) / Double(values.count)
+                        self.isScanning = self.scanningProgress < 1.0
+                    } else {
+                        self.scanningProgress = 0
+                        self.isScanning = false
+                    }
+                }
+            }
+        }
+
+        tasks[source.id] = [onlineTask, itemsTask].compactMap { $0 } + (progressTask != nil ? [progressTask!] : [])
         print("RemoteSourcesCoordinator: tasks created and stored for source \(source.id)")
     }
 
@@ -143,6 +178,15 @@ class RemoteSourcesCoordinator: ObservableObject {
         }
         tasks[sourceId]?.forEach { $0.cancel() }
         tasks[sourceId] = nil
+        scanningProgressBySource.removeValue(forKey: sourceId)
+        let values = Array(scanningProgressBySource.values)
+        if !values.isEmpty {
+            scanningProgress = values.reduce(0, +) / Double(values.count)
+            isScanning = scanningProgress < 1.0
+        } else {
+            scanningProgress = 0
+            isScanning = false
+        }
     }
 
     /// Clear cached directory listings and force fresh scans from all sources

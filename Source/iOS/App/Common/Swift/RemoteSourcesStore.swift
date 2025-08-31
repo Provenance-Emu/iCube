@@ -23,6 +23,10 @@ class RemoteSourcesStore: ObservableObject {
         coordinator.sources
     }
 
+    /// Scanning state forwarded from coordinator
+    var isScanning: Bool { coordinator.isScanning }
+    var scanningProgress: Double { coordinator.scanningProgress }
+
     private let coordinator = RemoteSourcesCoordinator()
     private let defaultsKey = "RemoteSourcesStore.sources"
     private var cancellables = Set<AnyCancellable>()

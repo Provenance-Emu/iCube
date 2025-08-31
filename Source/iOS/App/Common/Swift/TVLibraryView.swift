@@ -478,6 +478,7 @@ struct TVLibraryView: View {
             }
             .navigationTitle("DolphiniOS Library")
             .toolbar { libraryToolbar }
+            .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
             #if os(iOS)
             .navigationDestination(isPresented: $navigateToSettings) {
                 TVSettingsPage()
