@@ -7,6 +7,9 @@
 
 #include "Common/Config/Config.h"
 #include "VideoCommon/VideoConfig.h"
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 namespace Config
 {
@@ -99,10 +102,20 @@ const Info<int> GFX_COMMAND_BUFFER_EXECUTE_INTERVAL{
     {System::GFX, "Settings", "CommandBufferExecuteInterval"}, 100};
 
 const Info<bool> GFX_SHADER_CACHE{{System::GFX, "Settings", "ShaderCache"}, true};
-const Info<bool> GFX_WAIT_FOR_SHADERS_BEFORE_STARTING{
-    {System::GFX, "Settings", "WaitForShadersBeforeStarting"}, false};
-const Info<ShaderCompilationMode> GFX_SHADER_COMPILATION_MODE{
-    {System::GFX, "Settings", "ShaderCompilationMode"}, ShaderCompilationMode::Synchronous};
+const Info<bool> GFX_WAIT_FOR_SHADERS_BEFORE_STARTING{{System::GFX, "Settings", "WaitForShadersBeforeStarting"},
+#if defined(__APPLE__) && (TARGET_OS_IPHONE || TARGET_OS_TV)
+    true
+#else
+    false
+#endif
+};
+const Info<ShaderCompilationMode> GFX_SHADER_COMPILATION_MODE{{System::GFX, "Settings", "ShaderCompilationMode"},
+#if defined(__APPLE__) && (TARGET_OS_IPHONE || TARGET_OS_TV)
+    ShaderCompilationMode::AsynchronousUberShaders
+#else
+    ShaderCompilationMode::Synchronous
+#endif
+};
 const Info<int> GFX_SHADER_COMPILER_THREADS{{System::GFX, "Settings", "ShaderCompilerThreads"}, 1};
 const Info<int> GFX_SHADER_PRECOMPILER_THREADS{
     {System::GFX, "Settings", "ShaderPrecompilerThreads"}, -1};
