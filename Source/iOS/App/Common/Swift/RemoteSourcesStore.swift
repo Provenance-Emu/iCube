@@ -42,7 +42,7 @@ class RemoteSourcesStore: ObservableObject {
     }
 
     func addWebDAV(name: String, url: URL, username: String?, password: String?, recursive: Bool, interval: TimeInterval, startPath: String?, enablePreCaching: Bool = false) {
-        let id = UUID().uuidString
+        let id = WebDAVSource.generateConsistentId(for: url)
         if let password = password {
             _ = KeychainService.setPassword(password, for: id)
         }
