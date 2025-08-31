@@ -31,7 +31,11 @@ class RemoteSourcesCoordinator: ObservableObject {
 
         // Check if we already have this source
         if sources.contains(where: { $0.id == source.id }) {
-            print("RemoteSourcesCoordinator: source \(source.id) already exists, skipping add")
+            print("RemoteSourcesCoordinator: source \(source.id) already exists, updating and restarting")
+            // Replace existing instance reference to avoid duplicates in array
+            sources.removeAll { $0.id == source.id }
+            sources.append(source)
+            start(source: source)
             return
         }
 
@@ -43,7 +47,11 @@ class RemoteSourcesCoordinator: ObservableObject {
                 let existingRoot = w.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
                 return existingRoot == newRoot && w.name.caseInsensitiveCompare(webdav.name) == .orderedSame
             }) {
-                print("RemoteSourcesCoordinator: duplicate WebDAV source detected for root=\(newRoot); skipping add")
+                print("RemoteSourcesCoordinator: duplicate WebDAV source detected for root=\(newRoot); restarting existing")
+                // Restart the existing one; do not append a new one
+                if let existing = sources.first(where: { ($0 as? WebDAVSource)?.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() == newRoot }) {
+                    start(source: existing)
+                }
                 return
             }
         }

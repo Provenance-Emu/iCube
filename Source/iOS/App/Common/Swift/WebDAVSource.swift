@@ -143,6 +143,20 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         Self.logger.info("Created fresh streams for WebDAV source: \(self.name)")
         #endif
 
+        // Emit any already cached items immediately to improve perceived performance
+        Task { @MainActor in
+            let metadata = loadCacheMetadata()
+            if !metadata.cachedFiles.isEmpty {
+                let items: [RemoteLibraryItem] = metadata.cachedFiles.values.compactMap { info in
+                    guard let u = URL(string: info.originalURL) else { return nil }
+                    return RemoteLibraryItem(url: u, displayName: URL(string: info.originalURL)?.lastPathComponent ?? u.lastPathComponent, sizeBytes: info.fileSize, etag: info.etag, lastModified: info.lastModified)
+                }
+                if !items.isEmpty {
+                    itemsCont?.yield(items)
+                }
+            }
+        }
+
         // Cancel any previous loop and start a fresh one
         loopTask?.cancel()
         loopTask = Task { [weak self] in

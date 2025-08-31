@@ -90,7 +90,7 @@ private struct AddWebDAVSourceView: View {
                 }
                 Section("Options") {
                     Toggle("Recursive", isOn: $recursive)
-                    Toggle("Enable Pre-caching", isOn: $enablePreCaching)
+                    Toggle("Automatic Pre-cache", isOn: $enablePreCaching)
                     #if os(tvOS)
                     TVIntStepper(value: $intervalMinutes, range: 1...60, step: 1)
                     Text("Refresh every \(intervalMinutes) min")
@@ -100,8 +100,8 @@ private struct AddWebDAVSourceView: View {
                 }
 
                 if enablePreCaching {
-                    Section("Pre-caching") {
-                        Text("When enabled, games can be downloaded to local storage for faster access and offline play.")
+                    Section("Automatic Pre-cache") {
+                        Text("When enabled, newly browsed games will begin downloading to local storage in the background for faster access and offline play.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -186,7 +186,7 @@ private struct EditWebDAVSourceView: View {
                 }
                 Section("Options") {
                     Toggle("Recursive", isOn: $recursive)
-                    Toggle("Enable Pre-caching", isOn: $enablePreCaching)
+                    Toggle("Automatic Pre-cache", isOn: $enablePreCaching)
                     #if os(tvOS)
                     TVIntStepper(value: $intervalMinutes, range: 1...60, step: 1)
                     Text("Refresh every \(intervalMinutes) min")
@@ -196,8 +196,8 @@ private struct EditWebDAVSourceView: View {
                 }
 
                 if enablePreCaching {
-                    Section("Pre-caching") {
-                        Text("When enabled, games can be downloaded to local storage for faster access and offline play.")
+                    Section("Automatic Pre-cache") {
+                        Text("When enabled, newly browsed games will begin downloading to local storage in the background for faster access and offline play.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
