@@ -526,9 +526,35 @@ struct TVLibraryView: View {
                 guard let gameID = note.userInfo?["gameID"] as? String else { return }
                 let match = model.games.first { $0.gameID == gameID }
                     ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
-                if let item = match {
-                    navigateTo = item
+                guard let item = match else { return }
+                // If remote and source has auto-precache, ensure cache before navigating
+                if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
+                    if let webdav = getMatchingWebDAVSource(for: url), webdav.isPreCachingEnabled {
+                        let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
+                        if !webdav.isCached(remoteItem) {
+                            blockingPrecacheItem = item
+                            blockingPrecacheProgress = 0
+                            Task {
+                                do {
+                                    let _ = try await webdav.preCacheItem(remoteItem) { progress in
+                                        DispatchQueue.main.async { blockingPrecacheProgress = progress }
+                                    }
+                                    DispatchQueue.main.async {
+                                        blockingPrecacheItem = nil
+                                        navigateTo = item
+                                    }
+                                } catch {
+                                    DispatchQueue.main.async {
+                                        blockingPrecacheItem = nil
+                                        navigateTo = item // fallback to stream
+                                    }
+                                }
+                            }
+                            return
+                        }
+                    }
                 }
+                navigateTo = item
             }
 
             // Listen for async metadata updates (covers/banners)
@@ -1334,6 +1360,20 @@ private struct GameGridItem: View {
 }
 
 // MARK: - Source Picker
+
+private func getMatchingWebDAVSource(for url: URL) -> WebDAVSource? {
+    func defaultPort(for scheme: String?) -> Int { (scheme?.lowercased() == "https" || scheme?.lowercased() == "webdavs") ? 443 : 80 }
+    guard let urlHost = url.host?.lowercased() else { return nil }
+    let urlPort = url.port ?? defaultPort(for: url.scheme)
+    for source in RemoteSourcesStore.shared.sources {
+        guard let w = source as? WebDAVSource else { continue }
+        let base = w.baseURL
+        guard let baseHost = base.host?.lowercased() else { continue }
+        let basePort = base.port ?? defaultPort(for: base.scheme)
+        if baseHost == urlHost && basePort == urlPort { return w }
+    }
+    return nil
+}
 
 private struct SourcePickerView: View {
     let items: [TVGameItem]
