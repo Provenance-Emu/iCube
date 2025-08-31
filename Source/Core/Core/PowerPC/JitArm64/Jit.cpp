@@ -36,6 +36,28 @@
 #include "Core/PowerPC/JitInterface.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
+#include "Common/MemoryUtil.h"
+
+namespace {
+struct BatchJitWriteScope {
+  Arm64Gen::ARM64XEmitter& near_emit;
+  Arm64Gen::ARM64XEmitter& far_emit;
+  Common::ScopedJITPageWriteAndNoExecute write_scope;
+  u8* near_start;
+  u8* far_start;
+  explicit BatchJitWriteScope(Arm64Gen::ARM64XEmitter& near_emitter,
+                              Arm64Gen::ARM64XEmitter& far_emitter,
+                              u8* region_ptr)
+      : near_emit(near_emitter), far_emit(far_emitter), write_scope(region_ptr) {
+    near_start = near_emit.GetWritableCodePtr();
+    far_start = far_emit.GetWritableCodePtr();
+  }
+  ~BatchJitWriteScope() {
+    near_emit.FlushIcache();
+    far_emit.FlushIcache();
+  }
+};
+}
 
 using namespace Arm64Gen;
 
@@ -959,7 +981,7 @@ void JitArm64::Jit(u32 em_address, bool clear_cache_and_retry_on_failure)
     ClearCache();
   FreeRanges();
 
-  const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr());
+  BatchJitWriteScope batch_scope(*this, m_far_code, GetRegionPtr());
 
   std::size_t block_size = m_code_buffer.size();
 
@@ -1395,8 +1417,7 @@ bool JitArm64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
     return false;
   }
 
-  FlushIcache();
-  m_far_code.FlushIcache();
+  // Flush happens in BatchJitWriteScope destructor
 
   return true;
 }
