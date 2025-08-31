@@ -41,6 +41,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 // System Detection
 + (BOOL)isCurrentSystemWii;
++ (float)currentDrawAspectRatio;
 
 @end
 

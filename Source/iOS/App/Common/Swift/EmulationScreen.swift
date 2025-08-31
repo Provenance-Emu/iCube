@@ -187,6 +187,8 @@ struct EmulationScreen: View {
   @State private var hasTopBarInteraction: Bool = false
   @State private var autoHideScheduled: Bool = false
   @State private var autoHideToken = UUID()
+  // Touch pad refresh coordination to avoid system detection races
+  @State private var touchPadsRefreshToken = UUID()
 #endif
 
   var body: some View {
@@ -379,6 +381,20 @@ struct EmulationScreen: View {
                                     }
                                 }
                             }
+                            #if os(iOS)
+                            Menu("Touch Cursor Mode") {
+                                Button("Absolute") {
+                                    hasTopBarInteraction = true
+                                    DOLConfigBridge.setMainTouchPadIRMode(1)
+                                    touchPadsRefreshToken = UUID()
+                                }
+                                Button("Drag") {
+                                    hasTopBarInteraction = true
+                                    DOLConfigBridge.setMainTouchPadIRMode(2)
+                                    touchPadsRefreshToken = UUID()
+                                }
+                            }
+                            #endif
                         } label: {
                             Image(systemName: "square.stack.3d.up").font(.title2)
                         }
@@ -398,6 +414,7 @@ struct EmulationScreen: View {
             // Legacy touch pads
             if isTouchControlsActive {
                 TouchPadsContainer()
+                    .id(touchPadsRefreshToken)
                     .ignoresSafeArea()
                     .transition(.opacity)
             }
@@ -426,13 +443,19 @@ struct EmulationScreen: View {
         for c in GCController.controllers() { installInputDebugHandlers(c) }
         obsGCConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
             if let c = note.object as? GCController { installInputDebugHandlers(c) }
+            touchPadsRefreshToken = UUID()
         }
-        obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
+        obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in
+            touchPadsRefreshToken = UUID()
+        }
         endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
             dismiss()
         }
         obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
             showPauseMenu = true
+        }
+        NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
+            touchPadsRefreshToken = UUID()
         }
         NotificationCenter.default.addObserver(forName: Notification.Name("DOLFastForwardToggled"), object: nil, queue: .main) { note in
             if let enabled = (note.userInfo?["enabled"] as? NSNumber)?.boolValue {
@@ -454,6 +477,8 @@ struct EmulationScreen: View {
         if let t = obsGCDisconnect { NotificationCenter.default.removeObserver(t); obsGCDisconnect = nil }
         if let t = obsShowPause { NotificationCenter.default.removeObserver(t); obsShowPause = nil }
         NotificationCenter.default.removeObserver(self, name: Notification.Name("DOLFastForwardToggled"), object: nil)
+        // Disable motion when leaving screen
+        TCDeviceMotion.shared.setMotionEnabled(false)
     }
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
         // Ask the renderer to resize/reconfigure
@@ -573,10 +598,21 @@ struct EmulationScreen: View {
 
       // Decide which pad to show based on current system/controller config
       if shouldShowWiiPad() {
-        if let wiiPad = loadPad(named: "TCWiiPad") {
+        if let wiiPad = loadPad(named: "TCWiiPad") as? TCWiiPad {
           wiiPad.frame = host.bounds
           wiiPad.autoresizingMask = [.flexibleWidth, .flexibleHeight]
           host.addSubview(wiiPad)
+          // Configure motion and IR mode, recalc pointer using current aspect ratio
+          let motion = TCDeviceMotion.shared
+          motion.setMotionEnabled(true)
+          motion.setPort(4)
+          let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
+          if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) {
+            wiiPad.setTouchIRMode(mode)
+          }
+          wiiPad.resetPointer()
+          let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+          wiiPad.recalculatePointerValues(new_rect: host.bounds, game_aspect: ar)
         }
       } else if shouldShowGameCubePad() {
         if let gcPad = loadPad(named: "TCGameCubePad") {

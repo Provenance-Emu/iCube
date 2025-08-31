@@ -119,4 +119,10 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   return Core::System::GetInstance().IsWii();
 }
 
++ (float)currentDrawAspectRatio {
+  if (g_presenter)
+    return (float)g_presenter->CalculateDrawAspectRatio();
+  return 4.0f / 3.0f;
+}
+
 @end

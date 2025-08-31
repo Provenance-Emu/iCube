@@ -86,30 +86,6 @@
   for (NSUInteger i = 0; i < paths.count; i++) {
     printf("DEBUG BRIDGE:   [%lu]: %s\n", (unsigned long)i, [paths[i] UTF8String]);
   }
-  static inline NSString* MapWebDAVToHTTP(NSString* path) {
-    if (!path) return path;
-    // Convert webdav(s) scheme to http(s) so Core's Http* readers are used (supports WBFS/GCZ/etc.)
-    if ([path hasPrefix:@"webdavs://"]) {
-      return [path stringByReplacingOccurrencesOfString:@"webdavs://" withString:@"https://"];
-    }
-    if ([path hasPrefix:@"webdav://"]) {
-      return [path stringByReplacingOccurrencesOfString:@"webdav://" withString:@"http://"];
-    }
-    return path;
-  }
-  static inline NSString* InjectBasicAuthIfPresent(NSString* url) {
-    // If the URL already contains userinfo, keep as is
-    if ([url containsString:@"@"] && [url containsString:@"://"]) return url;
-    // Try to look up a configured WebDAV source to get credentials based on host:port
-    // Minimal: rely on URL already containing credentials if needed.
-    return url;
-  }
-  NSMutableArray<NSString*>* mapped = [NSMutableArray arrayWithCapacity:paths.count];
-  for (NSString* p in paths) {
-    NSString* http = MapWebDAVToHTTP(p);
-    [mapped addObject:InjectBasicAuthIfPresent(http)];
-  }
-  paths = mapped;
   printf("DEBUG BRIDGE: Calling GameFileCacheManager updateWithExtraPaths\n");
   [[GameFileCacheManager sharedManager] updateWithExtraPaths:paths fetchMetadata:fetch];
   printf("DEBUG BRIDGE: GameFileCacheManager updateWithExtraPaths completed\n");

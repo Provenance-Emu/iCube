@@ -1531,3 +1531,15 @@ private struct InfoRow: View {
         }
     }
 }
+
+// MARK: - Remote scan progress view (toolbar)
+private struct RemoteScanProgressView: View {
+    @StateObject private var store = RemoteSourcesStore.shared
+    var body: some View {
+        if store.isScanning {
+            ProgressView(value: store.scanningProgress)
+                .progressViewStyle(.linear)
+                .frame(maxWidth: .infinity)
+        }
+    }
+}

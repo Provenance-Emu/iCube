@@ -101,7 +101,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         self.itemsStream = AsyncStream<[RemoteLibraryItem]> { c in ic = c }
         self.itemsCont = ic
         var pc: AsyncStream<Double>.Continuation!
-        self.scanningProgressStream = AsyncStream<Double> { c in pc = c }
+        self.scanningProgress = AsyncStream<Double> { c in pc = c }
         self.scanningProgressCont = pc
         #if canImport(os)
         Self.logger.info("Initialized WebDAVSource name=\(self.name, privacy: .public) url=\(self.baseURL.absoluteString, privacy: .public) root=\(self.rootURL.absoluteString, privacy: .public) preCache=\(self.enablePreCaching)")
@@ -145,7 +145,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         self.itemsStream = AsyncStream<[RemoteLibraryItem]> { c in ic = c }
         self.itemsCont = ic
         var pc: AsyncStream<Double>.Continuation!
-        self.scanningProgressStream = AsyncStream<Double> { c in pc = c }
+        self.scanningProgress = AsyncStream<Double> { c in pc = c }
         self.scanningProgressCont = pc
 
         #if canImport(os)
@@ -251,6 +251,13 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             #if canImport(os)
             Self.logger.info("HTTP resp \(code, privacy: .public) for \(method, privacy: .public) \(url.absoluteString, privacy: .public) length=\(data.count, privacy: .public)")
             #endif
+            // Some servers do not support HEAD; for existence checks, retry with a ranged GET
+            if method == "HEAD", !(200...399).contains(code), (code == 405 || code == 403 || code == 401) {
+                var hdrs = headers
+                hdrs["Range"] = "bytes=0-0"
+                let (gcode, gdata, gresp) = try await request("GET", url: url, headers: hdrs, body: nil)
+                return (gcode, gdata, gresp)
+            }
             return (code, data, resp as! HTTPURLResponse)
         } catch {
             #if canImport(os)
