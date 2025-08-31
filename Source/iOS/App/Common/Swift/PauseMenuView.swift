@@ -115,15 +115,15 @@ internal struct PauseMenuView: View {
       Image(uiImage: game.coverImage)
         .resizable()
         .scaledToFill()
-        .blur(radius: 20)
-        .opacity(0.6)
+        .blur(radius: 24)
+        .opacity(0.5)
         .ignoresSafeArea()
 
       LinearGradient(
         colors: [
-          Color.black.opacity(0.85),
+          Color.black.opacity(0.9),
           Color.black.opacity(0.4),
-          Color.black.opacity(0.85)
+          Color.black.opacity(0.9)
         ],
         startPoint: .top,
         endPoint: .bottom
@@ -131,10 +131,12 @@ internal struct PauseMenuView: View {
       .ignoresSafeArea()
 
       GeometryReader { geo in
-        let hInset = max(12.0, max(geo.safeAreaInsets.leading, geo.safeAreaInsets.trailing))
-        let cap = max(0.0, min(520.0, geo.size.width - (hInset * 2.0)))
+        let hInset = max(16.0, max(geo.safeAreaInsets.leading, geo.safeAreaInsets.trailing))
+        let maxCol = max(0.0, min(400.0, geo.size.width - (hInset * 2.0)))
+        let topPad = geo.safeAreaInsets.top + 12
+
         ScrollView {
-          VStack(alignment: .leading, spacing: 12) {
+          VStack(spacing: 16) {
             HStack {
               Button(L("Close")) { onClose() }
                 .buttonStyle(.borderedProminent)
@@ -145,23 +147,24 @@ internal struct PauseMenuView: View {
               Image(uiImage: game.coverImage)
                 .resizable()
                 .aspectRatio(2.0/3.0, contentMode: .fit)
-                .frame(width: 100)
+                .frame(width: 96)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
 
-              VStack(alignment: .leading, spacing: 4) {
+              VStack(alignment: .leading, spacing: 6) {
                 Text(game.title)
-                  .font(.system(size: 20, weight: .bold))
+                  .font(.system(size: 22, weight: .bold))
                   .foregroundColor(.white)
                   .lineLimit(2)
                   .minimumScaleFactor(0.85)
                 Text(game.gameID)
-                  .font(.system(size: 13, weight: .medium))
+                  .font(.system(size: 14, weight: .medium))
                   .foregroundColor(.white.opacity(0.7))
               }
+              Spacer(minLength: 0)
             }
 
-            VStack(spacing: 10) {
+            VStack(spacing: 12) {
               Button(action: { TVEmulationBridge.resume(); onClose() }) {
                 labelRow(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue)
               }
@@ -203,20 +206,18 @@ internal struct PauseMenuView: View {
               }
               .buttonStyle(.plain)
             }
-            .padding(.bottom, 16)
           }
+          .padding(.top, topPad)
           .padding(.horizontal, hInset)
-          .padding(.top, 12)
-          .frame(maxWidth: cap)
+          .frame(maxWidth: maxCol)
           .frame(maxWidth: .infinity, alignment: .top)
-          .frame(minWidth: 0, maxWidth: .infinity)
+          .contentShape(Rectangle())
         }
       }
-      .safeAreaInset(edge: .bottom) { Spacer().frame(height: 4) }
-      .gesture(DragGesture().onEnded { value in
-        if value.translation.height > 60 && value.startLocation.y < 120 { onClose() }
-      })
     }
+    .gesture(DragGesture().onEnded { value in
+      if value.translation.height > 60 && value.startLocation.y < 120 { onClose() }
+    })
     .alert(L("Exit Game"), isPresented: $showExitDialog) {
       Button(L("Cancel"), role: .cancel) { showExitDialog = false }
       Button(L("Quit"), role: .destructive) {
