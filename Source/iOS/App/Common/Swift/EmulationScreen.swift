@@ -157,6 +157,11 @@ struct EmulationScreen: View {
     @State private var obsGCConnect: NSObjectProtocol?
     @State private var obsGCDisconnect: NSObjectProtocol?
     @State private var obsShowPause: NSObjectProtocol?
+    @State private var showExitConfirm = false
+    // Auto-hide coordination
+    @State private var hasTopBarInteraction: Bool = false
+    @State private var autoHideScheduled: Bool = false
+    @State private var autoHideToken = UUID()
     #endif
 
     var body: some View {
@@ -256,9 +261,27 @@ struct EmulationScreen: View {
             .onPlayPauseCommand { }
         #else
         ZStack {
-            EmulationSurfaceController(gamePath: game.filePath)
-                .ignoresSafeArea()
-                .onTapGesture { toggleTopBar() }
+            GeometryReader { proxy in
+                let isPortrait = proxy.size.height > proxy.size.width
+                if isPortrait {
+                    VStack(spacing: 0) {
+                        EmulationSurfaceController(gamePath: game.filePath)
+                            .frame(width: proxy.size.width, height: proxy.size.height * 0.66)
+                            .ignoresSafeArea()
+                            .onTapGesture { toggleTopBar() }
+                        Spacer()
+                    }
+                } else {
+                    let targetHeight = min(proxy.size.height, proxy.size.width * 9.0 / 16.0)
+                    VStack(spacing: 0) {
+                        Spacer()
+                        EmulationSurfaceController(gamePath: game.filePath)
+                            .frame(width: proxy.size.width, height: targetHeight)
+                            .onTapGesture { toggleTopBar() }
+                        Spacer()
+                    }
+                }
+            }
 
             // Top hit area: tap near status bar to reveal overlay (active only when hidden)
             if !showTopBar {
@@ -277,23 +300,45 @@ struct EmulationScreen: View {
             if showTopBar {
                 VStack {
                     HStack(spacing: 16) {
-                        Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
+                        Button {
+                            hasTopBarInteraction = true
+                            TVEmulationBridge.pause()
+                            showExitConfirm = true
+                        } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
                         Spacer()
                         // Touch Controls toggle (uses TC* pads)
                         Button {
+                            hasTopBarInteraction = true
                             toggleTouchControls()
                         } label: {
                             Image(systemName: isTouchControlsActive ? "hand.draw.fill" : "hand.draw")
                                 .font(.title2)
                         }
                         Button {
+                            hasTopBarInteraction = true
                             fastForwardEnabled = TVEmulationBridge.toggleFastForward()
                         } label: {
                             Image(systemName: fastForwardEnabled ? "forward.fill" : "forward")
                                 .font(.title2)
                         }
-                        Button { showPauseMenu = true } label: { Image(systemName: "pause.fill").font(.title2) }
-                        Button { hideTopBar(now: true) } label: { Image(systemName: "chevron.up.circle.fill").font(.title2) }
+                        Menu {
+                            ForEach(1...10, id: \.self) { slot in
+                                Button("Save Slot \(slot)") {
+                                    hasTopBarInteraction = true
+                                    selectedSlot = slot
+                                    TVEmulationBridge.saveState(toSlot: slot, wait: true)
+                                }
+                                Button("Load Slot \(slot)") {
+                                    hasTopBarInteraction = true
+                                    selectedSlot = slot
+                                    TVEmulationBridge.loadState(fromSlot: slot)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "square.stack.3d.up").font(.title2)
+                        }
+                        Button { hasTopBarInteraction = true; showPauseMenu = true } label: { Image(systemName: "list.bullet.rectangle").font(.title2) }
+                        Button { hasTopBarInteraction = true; hideTopBar(now: true) } label: { Image(systemName: "chevron.up.circle.fill").font(.title2) }
                     }
                     .padding(.horizontal)
                     .padding(.top, 12)
@@ -341,9 +386,10 @@ struct EmulationScreen: View {
             }
             // Default touch controls: enabled when no controllers are connected
             isTouchControlsActive = GCController.controllers().isEmpty
-            // Briefly show bar on appear then hide
+            // Show bar on appear and schedule one-time auto-hide
             showTopBar = true
-            scheduleAutoHide()
+            hasTopBarInteraction = false
+            if !autoHideScheduled { autoHideScheduled = true; scheduleAutoHide() }
         }
         .onDisappear {
             if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
@@ -357,6 +403,24 @@ struct EmulationScreen: View {
         }
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .statusBar(hidden: true)
+        .alert("Exit Game?", isPresented: $showExitConfirm) {
+            Button("Save & Quit") {
+                TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
+                TVEmulationBridge.stop()
+                NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+            }
+            Button("Quit", role: .destructive) {
+                TVEmulationBridge.stop()
+                NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+            }
+            Button("Continue", role: .cancel) {
+                TVEmulationBridge.resume()
+                withAnimation { showTopBar = false }
+            }
+        } message: {
+            Text("Do you want to stop the current game and return to the library?")
+        }
         #endif
     }
 
@@ -368,7 +432,7 @@ struct EmulationScreen: View {
     }
 
     private func toggleTopBar() {
-        if showTopBar { hideTopBar() } else { showTopBar = true; scheduleAutoHide() }
+        if showTopBar { hideTopBar() } else { showTopBar = true }
     }
 
     private func hideTopBar(now: Bool = false) {
@@ -383,7 +447,13 @@ struct EmulationScreen: View {
 
     private func scheduleAutoHide() {
         hideBarWorkItem?.cancel()
-        let work = DispatchWorkItem { withAnimation { self.showTopBar = false } }
+        let token = UUID()
+        autoHideToken = token
+        let work = DispatchWorkItem {
+            if token == autoHideToken && !hasTopBarInteraction {
+                withAnimation { self.showTopBar = false }
+            }
+        }
         hideBarWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
     }

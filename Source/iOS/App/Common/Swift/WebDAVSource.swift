@@ -177,6 +177,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         #endif
         while true {
             if Task.isCancelled { break }
+            // Defer work while emulation is active to avoid contention
+            await waitWhileEmulationActive()
+            if Task.isCancelled { break }
             #if canImport(os)
             Self.logger.debug("Loop iteration: pinging \(self.rootURL.absoluteString, privacy: .public)")
             #endif
@@ -252,23 +255,48 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         Self.logger.info("Enumerating WebDAV at \(self.rootURL.absoluteString, privacy: .public) recursive=\(self.recursive, privacy: .public)")
         #endif
         do {
-            let items = try await enumerateWebDAV()
-            #if canImport(os)
-            Self.logger.info("Enumeration successful: \(items.count, privacy: .public) items found")
-            for (index, item) in items.enumerated() {
-                Self.logger.info("  [\(index, privacy: .public)]: \(item.url.absoluteString, privacy: .public)")
-            }
-            #endif
-            if let itemsCont = itemsCont {
-                itemsCont.yield(items)
+            var cumulative: [RemoteLibraryItem] = []
+            var queue: [URL] = [rootURL]
+            var seen: Set<URL> = []
+            var processedDirs = 0
+            while let current = queue.first {
+                if Task.isCancelled { break }
+                queue.removeFirst()
+                // Normalize URL by removing trailing slash for comparison
+                let normalizedCurrentString = current.absoluteString.hasSuffix("/") ? String(current.absoluteString.dropLast()) : current.absoluteString
+                let normalizedCurrent = URL(string: normalizedCurrentString)!
+                if seen.contains(normalizedCurrent) { continue }
+                seen.insert(normalizedCurrent)
                 #if canImport(os)
-                Self.logger.info("Items yielded to continuation successfully")
+                Self.logger.debug("Processing directory: \(current.absoluteString, privacy: .public)")
                 #endif
-            } else {
+                let nodes = try await propfind(url: current, depth: recursive ? "1" : "0")
                 #if canImport(os)
-                Self.logger.error("ERROR: itemsCont is nil, cannot yield items!")
+                Self.logger.debug("Found \(nodes.count, privacy: .public) nodes in \(current.absoluteString, privacy: .public)")
                 #endif
+                var addedInThisDir = 0
+                for n in nodes {
+                    guard let resolved = resolve(href: n.href, relativeTo: current) else { continue }
+                    if n.isCollection {
+                        if recursive {
+                            let normalizedResolvedString = resolved.absoluteString.hasSuffix("/") ? String(resolved.absoluteString.dropLast()) : resolved.absoluteString
+                            let normalizedResolved = URL(string: normalizedResolvedString)!
+                            queue.append(normalizedResolved)
+                        }
+                    } else if hasSupportedExtension(resolved) {
+                        let item = RemoteLibraryItem(url: resolved, displayName: n.displayName ?? resolved.lastPathComponent, sizeBytes: n.contentLength, etag: n.etag, lastModified: n.lastModified)
+                        cumulative.append(item)
+                        addedInThisDir += 1
+                    }
+                }
+                processedDirs += 1
+                // Yield progressively after each directory or after a reasonable batch
+                if addedInThisDir > 0 || processedDirs % 5 == 0 {
+                    itemsCont?.yield(cumulative)
+                }
             }
+            // Final yield to ensure consumers have the complete list
+            itemsCont?.yield(cumulative)
         } catch {
             #if canImport(os)
             Self.logger.error("Enumeration error at \(self.rootURL.absoluteString, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -603,6 +631,10 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         Self.logger.info("Starting download of \(item.displayName) to cache")
         #endif
 
+        // Avoid heavy network/disk work while emulation is running
+        await waitWhileEmulationActive()
+        if Task.isCancelled { return }
+
         // Create URL request
         var request = URLRequest(url: item.url)
         if let username = username, let password = password {
@@ -758,6 +790,29 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         let metadata = loadCacheMetadata()
         let key = item.url.absoluteString
         return metadata.cachedFiles[key]
+    }
+
+    // MARK: - Emulation coordination
+    private func emulationIsRunning() -> Bool {
+        #if os(iOS) || os(tvOS)
+        return TVEmulationBridge.isRunning()
+        #else
+        return false
+        #endif
+    }
+
+    private func waitWhileEmulationActive() async {
+        while emulationIsRunning() {
+            if Task.isCancelled { break }
+            #if canImport(os)
+            Self.logger.info("Emulation active; deferring WebDAV activity")
+            #endif
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            } catch {
+                break
+            }
+        }
     }
 }
 

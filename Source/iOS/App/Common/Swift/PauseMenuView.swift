@@ -20,6 +20,7 @@ internal struct PauseMenuView: View {
   @State private var pane: Pane = .main
   @State private var showExitDialog: Bool = false
   @State private var showShaders: Bool = false
+  @State private var showSettingsSheet: Bool = false
 
   var body: some View {
     ZStack {
@@ -88,6 +89,17 @@ internal struct PauseMenuView: View {
     }
   }
 
+  // Add pull-down to dismiss for iOS
+  #if os(iOS)
+  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowSettings: @escaping () -> Void, platform: PlatformKind, game: TVGameItem) {
+    self._selectedSlot = selectedSlot
+    self.onClose = onClose
+    self.onShowSettings = onShowSettings
+    self.platform = platform
+    self.game = game
+  }
+  #endif
+
   @ViewBuilder
   private var mainMenu: some View {
     if platform == .ios {
@@ -118,87 +130,92 @@ internal struct PauseMenuView: View {
       )
       .ignoresSafeArea()
 
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-          HStack {
-            Button(L("Close")) { onClose() }
-              .buttonStyle(.borderedProminent)
-            Spacer()
+      GeometryReader { geo in
+        let hInset = max(12.0, max(geo.safeAreaInsets.leading, geo.safeAreaInsets.trailing))
+        let cap = max(0.0, min(520.0, geo.size.width - (hInset * 2.0)))
+        ScrollView {
+          VStack(alignment: .leading, spacing: 12) {
+            HStack {
+              Button(L("Close")) { onClose() }
+                .buttonStyle(.borderedProminent)
+              Spacer()
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+              Image(uiImage: game.coverImage)
+                .resizable()
+                .aspectRatio(2.0/3.0, contentMode: .fit)
+                .frame(width: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
+
+              VStack(alignment: .leading, spacing: 4) {
+                Text(game.title)
+                  .font(.system(size: 20, weight: .bold))
+                  .foregroundColor(.white)
+                  .lineLimit(2)
+                  .minimumScaleFactor(0.85)
+                Text(game.gameID)
+                  .font(.system(size: 13, weight: .medium))
+                  .foregroundColor(.white.opacity(0.7))
+              }
+            }
+
+            VStack(spacing: 10) {
+              Button(action: { TVEmulationBridge.resume(); onClose() }) {
+                labelRow(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue)
+              }
+              .buttonStyle(.plain)
+
+              Button(action: { pane = .saves }) {
+                labelRow(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple)
+              }
+              .buttonStyle(.plain)
+
+              Button(action: { pane = .cheats }) {
+                labelRow(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow)
+              }
+              .buttonStyle(.plain)
+
+              Button(action: { pane = .controllers }) {
+                labelRow(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green)
+              }
+              .buttonStyle(.plain)
+
+              Button(action: { showShaders = true }) {
+                labelRow(title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange)
+              }
+              .buttonStyle(.plain)
+
+              Button(action: {
+                TVEmulationBridge.pause()
+                onClose()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                  onShowSettings()
+                }
+              }) {
+                labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
+              }
+              .buttonStyle(.plain)
+
+              Button(role: .destructive, action: { showExitDialog = true }) {
+                labelRow(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red)
+              }
+              .buttonStyle(.plain)
+            }
+            .padding(.bottom, 16)
           }
-
-          HStack(alignment: .top, spacing: 16) {
-            Image(uiImage: game.coverImage)
-              .resizable()
-              .aspectRatio(2.0/3.0, contentMode: .fit)
-              .frame(width: 120)
-              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-              .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 6)
-
-            VStack(alignment: .leading, spacing: 6) {
-              Text(game.title)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-              Text(game.gameID)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
-            }
-          }
-          .padding(.horizontal, 16)
-          .padding(.top, 16)
-
-          VStack(spacing: 12) {
-            // Resume
-            Button(action: { TVEmulationBridge.resume(); onClose() }) {
-              labelRow(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue)
-            }
-            .buttonStyle(.plain)
-
-            // Save States
-            Button(action: { pane = .saves }) {
-              labelRow(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple)
-            }
-            .buttonStyle(.plain)
-
-            // Cheats
-            Button(action: { pane = .cheats }) {
-              labelRow(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow)
-            }
-            .buttonStyle(.plain)
-
-            // Controllers
-            Button(action: { pane = .controllers }) {
-              labelRow(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green)
-            }
-            .buttonStyle(.plain)
-
-            // Shaders
-            Button(action: { showShaders = true }) {
-              labelRow(title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange)
-            }
-            .buttonStyle(.plain)
-
-            // Settings
-            Button(action: { onShowSettings() }) {
-              labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
-            }
-            .buttonStyle(.plain)
-
-            // Exit
-            Button(role: .destructive, action: { showExitDialog = true }) {
-              labelRow(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red)
-            }
-            .buttonStyle(.plain)
-          }
-          .padding(.horizontal, 16)
-          .padding(.bottom, 24)
+          .padding(.horizontal, hInset)
+          .padding(.top, 12)
+          .frame(maxWidth: cap)
+          .frame(maxWidth: .infinity, alignment: .top)
+          .frame(minWidth: 0, maxWidth: .infinity)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .frame(maxWidth: 600)
-        .frame(maxWidth: .infinity, alignment: .top)
       }
-      .safeAreaInset(edge: .bottom) { Spacer().frame(height: 8) }
+      .safeAreaInset(edge: .bottom) { Spacer().frame(height: 4) }
+      .gesture(DragGesture().onEnded { value in
+        if value.translation.height > 60 && value.startLocation.y < 120 { onClose() }
+      })
     }
     .alert(L("Exit Game"), isPresented: $showExitDialog) {
       Button(L("Cancel"), role: .cancel) { showExitDialog = false }

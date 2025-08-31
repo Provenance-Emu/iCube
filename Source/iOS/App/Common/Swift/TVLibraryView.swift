@@ -279,29 +279,25 @@ struct TVLibraryView: View {
         }()
         #if os(tvOS)
         static let gridNumberOfColumns = 6
+        #else
+        static let gridNumberOfColumns = 3
         #endif
         static let gridHorizontalPadding: CGFloat = {
             #if os(tvOS)
             return 64
             #else
-            return 16
+            return 24
             #endif
         }()
         static let gridVerticalPadding: CGFloat = {
             #if os(tvOS)
             return 80
             #else
-            return 16
+            return 24
             #endif
         }()  // Increased for focus scale effect
         static var columns: [GridItem] {
-            #if os(tvOS)
-            let count = gridNumberOfColumns
-            return Array(repeating: GridItem(.flexible(), spacing: gridHorizontalSpacing), count: count)
-            #else
-            // Adaptive columns for iOS; card width ~140
-            return [GridItem(.adaptive(minimum: 130, maximum: 170), spacing: gridHorizontalSpacing)]
-            #endif
+            return Array(repeating: GridItem(.flexible(), spacing: gridHorizontalSpacing), count: gridNumberOfColumns)
         }
     }
 
@@ -318,6 +314,50 @@ struct TVLibraryView: View {
 
     @ViewBuilder
     private var libraryView: some View {
+        #if os(iOS)
+        GeometryReader { proxy in
+            let paddingH = Constants.gridHorizontalPadding
+            let spacingH = Constants.gridHorizontalSpacing
+            let cardW = Layout.cardSize.width
+            let available = max(0, proxy.size.width - (paddingH * 2))
+            let count = max(2, Int((available + spacingH) / (cardW + spacingH)))
+            let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
+                    ForEach(model.games, id: \.filePath) { item in
+                        GameGridItem(
+                            item: item,
+                            select: selectGame,
+                            focusedFilePath: $focusedFilePath,
+                            showProperties: { showPropertiesFor = $0 },
+                            showCheatList: { showCheatListFor = $0 },
+                            downloadGeckoAction: { downloadGecko(for: $0) },
+                            presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
+                            presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
+                            requestDelete: { itemPendingDelete = $0 },
+                            showStorageAlert: { message in
+                                storageAlertMessage = message
+                                showStorageErrorAlert = true
+                            },
+                            showCacheInfo: { item in
+                                showCacheInfoFor = item
+                            },
+                            showSaveStates: { item in
+                                let gid = item.gameID
+                                if !gid.isEmpty {
+                                    navigateToSaveStates = GameIDRoute(id: gid)
+                                }
+                            },
+                            autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
+                            isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
+                        )
+                    }
+                }
+                .padding(.horizontal, paddingH)
+                .padding(.vertical, Constants.gridVerticalPadding)
+            }
+        }
+        #else
         ScrollView {
             LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
                 ForEach(model.games, id: \.filePath) { item in
@@ -352,6 +392,7 @@ struct TVLibraryView: View {
             .padding(.horizontal, Constants.gridHorizontalPadding)
             .padding(.vertical, Constants.gridVerticalPadding)
         }
+        #endif
     }
 
     @ViewBuilder
