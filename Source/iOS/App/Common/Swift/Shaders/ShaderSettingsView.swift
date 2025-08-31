@@ -234,6 +234,94 @@ struct ShaderSettingsView: View {
 	}
 }
 
+// MARK: - Live Parameter Editor
+struct ShaderParameterEditor: View {
+    @State private var params: [Compiled.Parameter] = []
+    @State private var values: [Int: CGFloat] = [:]
+    @State private var currentPresetPath: String? = UserDefaults.standard.string(forKey: "shader_preset_path")
+
+    var body: some View {
+        List {
+            if params.isEmpty {
+                Text(L("No adjustable parameters in the current shader")).foregroundStyle(.secondary)
+            } else {
+                ForEach(params, id: \.index) { p in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(p.desc)
+                            Spacer()
+                            Text(String(format: "%.3f", values[p.index] ?? p.initialCGFloat))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Slider(value: Binding(
+                            get: { values[p.index] ?? p.initialCGFloat },
+                            set: { newVal in
+                                values[p.index] = newVal
+                                DOLShaderPostProcessor.shared.setValue(newVal, forParameterIndex: p.index)
+                            }
+                        ), in: p.minimumCGFloat...p.maximumCGFloat, step: p.stepCGFloat)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .onAppear { load() }
+        .navigationBarTitleDisplayMode(.inline)
+        .background(Color.clear)
+        .scrollContentBackground(.hidden)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button(L("None")) {
+                        currentPresetPath = nil
+                        UserDefaults.standard.removeObject(forKey: "shader_preset_path")
+                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+                        DOLShaderPostProcessor.shared.applyPresetPath(nil)
+                        load()
+                    }
+                    let presets = ShaderLibrary.discoverPresets()
+                    ForEach(presets, id: \.id) { preset in
+                        Button(preset.name) {
+                            let absPath = preset.id.path
+                            let bundleBase = Bundle.main.bundleURL.path
+                            let normalized: String = {
+                                if absPath.hasPrefix(bundleBase), let dotApp = absPath.range(of: ".app/") {
+                                    return String(absPath[dotApp.upperBound...])
+                                } else { return absPath }
+                            }()
+                            currentPresetPath = normalized
+                            UserDefaults.standard.set(normalized, forKey: "shader_preset_path")
+                            NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+                            DOLShaderPostProcessor.shared.applyPresetPath(normalized)
+                            load()
+                        }
+                    }
+                } label: {
+                    Label(L("Preset"), systemImage: "square.grid.2x2")
+                }
+            }
+        }
+    }
+
+    private func load() {
+        let ps = DOLShaderPostProcessor.shared.currentParameters()
+        self.params = ps
+        var map: [Int: CGFloat] = [:]
+        for p in ps {
+            map[p.index] = DOLShaderPostProcessor.shared.currentValueForParameter(index: p.index)
+        }
+        self.values = map
+    }
+}
+
+private extension Compiled.Parameter {
+    var initialCGFloat: CGFloat { (initial as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: initial as NSDecimalNumber) : 0 }
+    var minimumCGFloat: CGFloat { (minimum as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: minimum as NSDecimalNumber) : 0 }
+    var maximumCGFloat: CGFloat { (maximum as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: maximum as NSDecimalNumber) : 1 }
+    var stepCGFloat: CGFloat { (step as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: step as NSDecimalNumber) : 0.01 }
+}
+
 // tvOS-friendly selectable row (duplicate of SettingsRootView's private helper)
 private struct SelectRow: View {
 	let label: String

@@ -159,6 +159,8 @@ import MetalKit
 			try filter.setCompiledShader(container)
 			filter.hasShader = true
 			cachedPresetPath = p
+			// Restore persisted parameter values for this preset
+			restorePersistedParameters(forPresetPath: p)
 			// print("[Shaders] Swift: loaded preset OK, hasShader=\(filter.hasShader)")
 			return
 		} catch {
@@ -171,6 +173,8 @@ import MetalKit
 			try filter.setCompiledShader(container)
 			filter.hasShader = true
 			cachedPresetPath = p
+			// Restore persisted parameter values for this preset
+			restorePersistedParameters(forPresetPath: p)
 			// print("[Shaders] Swift: loaded preset via url OK, hasShader=\(filter.hasShader)")
 			return
 		} catch {
@@ -178,6 +182,21 @@ import MetalKit
 			library = nil
 			cachedPresetPath = nil
 			// print("[Shaders] Swift: failed to load preset: \(error)")
+		}
+	}
+
+	private func persistenceKey(for presetPath: String, index: Int) -> String {
+		return "shader_param_\(presetPath)_\(index)"
+	}
+
+	private func restorePersistedParameters(forPresetPath path: String) {
+		guard let f = filter, let lib = library else { return }
+		let params = lib.shader.parameters
+		for p in params {
+			let key = persistenceKey(for: path, index: p.index)
+			if let saved = UserDefaults.standard.object(forKey: key) as? NSNumber {
+				f.setValue(CGFloat(truncating: saved), forParameterIndex: p.index)
+			}
 		}
 	}
 
@@ -327,5 +346,24 @@ import MetalKit
         let flip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
         filter.render(sourceTexture: source, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip)
         // print("[Shaders] Swift: render end (flip=\(flip))")
+	}
+
+	/// Expose compiled parameter metadata for UI
+	func currentParameters() -> [Compiled.Parameter] {
+		guard let lib = library else { return [] }
+		return lib.shader.parameters
+	}
+	/// Read the current parameter value by index
+	@objc func currentValueForParameter(index: Int) -> CGFloat {
+		guard let f = filter else { return 0 }
+		return f.getValue(forParameterIndex: index)
+	}
+	/// Update parameter by index and apply immediately
+	@objc func setValue(_ value: CGFloat, forParameterIndex index: Int) {
+		filter?.setValue(value, forParameterIndex: index)
+		if let path = cachedPresetPath {
+			let key = persistenceKey(for: path, index: index)
+			UserDefaults.standard.set(value, forKey: key)
+		}
 	}
 }

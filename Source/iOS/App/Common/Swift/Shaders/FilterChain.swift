@@ -1210,6 +1210,13 @@ public final class FilterChain {
         }
     }
 
+    public func getValue(forParameterIndex index: Int) -> CGFloat {
+        if case 0..<parametersCount = index {
+            return CGFloat(parameters[index])
+        }
+        return 0
+    }
+
     typealias SamplerWrapArray<Element> = [Element]
     typealias SamplerFilterArray<Element> = [SamplerWrapArray<Element>]
 }

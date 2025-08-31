@@ -35,6 +35,19 @@ class RemoteSourcesCoordinator: ObservableObject {
             return
         }
 
+        // Also check for duplicates by normalized URL and name (handles regenerated IDs)
+        if let webdav = source as? WebDAVSource {
+            let newRoot = webdav.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            if sources.contains(where: { s in
+                guard let w = s as? WebDAVSource else { return false }
+                let existingRoot = w.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+                return existingRoot == newRoot && w.name.caseInsensitiveCompare(webdav.name) == .orderedSame
+            }) {
+                print("RemoteSourcesCoordinator: duplicate WebDAV source detected for root=\(newRoot); skipping add")
+                return
+            }
+        }
+
         sources.append(source)
         print("RemoteSourcesCoordinator: total sources now: \(sources.count)")
         start(source: source)
