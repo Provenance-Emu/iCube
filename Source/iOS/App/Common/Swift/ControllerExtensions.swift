@@ -169,6 +169,22 @@ func installInputDebugHandlers(_ c: GCController) {
                 DOLConfigBridge.setMainEmulationSpeedPercent(targetPercent)
             }
 
+            #if os(iOS)
+            // Quick actions: Share/Options → quick menu; L1 → toggle touch cursor mode
+            if #available(iOS 14.0, *) {
+                if let options = gamepad.buttonOptions, options.isPressed {
+                    TVEmulationBridge.pause()
+                    NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+                }
+            }
+            if gamepad.leftShoulder.isPressed {
+                let mode = DOLConfigBridge.mainTouchPadIRMode()
+                let next = (mode == 1) ? 2 : 1
+                DOLConfigBridge.setMainTouchPadIRMode(next)
+                NotificationCenter.default.post(name: Notification.Name("DOLTouchCursorModeChanged"), object: nil)
+            }
+            #endif
+
             // DualSense/DualShock touchpad -> Wii IR mapping
             if #available(iOS 14.5, tvOS 14.5, *) {
                 let controllerId = ObjectIdentifier(c)

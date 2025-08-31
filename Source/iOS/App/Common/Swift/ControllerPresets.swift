@@ -1,6 +1,6 @@
 import Foundation
 
-enum ControllerAction: String { case confirm, cancel, start, menu, pause }
+enum ControllerAction: String { case confirm, cancel, start, menu, pause, quickMenu, l1Aux }
 
 struct ControllerPreset {
     let glyphSet: ControllerGlyphSet
@@ -15,7 +15,9 @@ struct ControllerPresetLibrary {
             .cancel: "gcPadB",
             .start: "gcPadStart",
             .menu: "menu",
-            .pause: "pause"
+            .pause: "pause",
+            .quickMenu: "quick_menu",
+            .l1Aux: "toggle_touch_cursor"
         ]
     )
     static let xbox = ControllerPreset(
@@ -25,7 +27,9 @@ struct ControllerPresetLibrary {
             .cancel: "gcPadB",
             .start: "gcPadStart",
             .menu: "menu",
-            .pause: "pause"
+            .pause: "pause",
+            .quickMenu: "quick_menu",
+            .l1Aux: "toggle_touch_cursor"
         ]
     )
     static let nintendo = ControllerPreset(
@@ -35,7 +39,9 @@ struct ControllerPresetLibrary {
             .cancel: "gcPadB",
             .start: "gcPadStart",
             .menu: "menu",
-            .pause: "pause"
+            .pause: "pause",
+            .quickMenu: "quick_menu",
+            .l1Aux: "toggle_touch_cursor"
         ]
     )
     static let generic = ControllerPreset(
@@ -45,7 +51,9 @@ struct ControllerPresetLibrary {
             .cancel: "gcPadB",
             .start: "gcPadStart",
             .menu: "menu",
-            .pause: "pause"
+            .pause: "pause",
+            .quickMenu: "quick_menu",
+            .l1Aux: "toggle_touch_cursor"
         ]
     )
 

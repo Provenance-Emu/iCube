@@ -620,7 +620,11 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     /// Check if an item is cached locally (internal implementation)
     private func isCachedWithPath(_ item: RemoteLibraryItem) -> (Bool, String?) {
         let metadata = loadCacheMetadata()
-        if let cachedInfo = metadata.cachedFiles[item.url.absoluteString] {
+        // Host-agnostic keying: use lastPathComponent as primary match, then full URL as fallback
+        let filename = item.url.lastPathComponent
+        let byFilename = metadata.cachedFiles.first { URL(string: $0.key)?.lastPathComponent == filename }
+        let cachedInfo = byFilename?.value ?? metadata.cachedFiles[item.url.absoluteString]
+        if let cachedInfo {
             let localURL = cacheDirectory.appendingPathComponent(cachedInfo.localPath)
             do {
                 let attrs = try FileManager.default.attributesOfItem(atPath: localURL.path)
@@ -633,6 +637,8 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                     var updated = metadata
                     var newInfo = cachedInfo
                     newInfo.fileSize = fileSize
+                    // Update both the previous key and current full URL key
+                    if let prevKey = byFilename?.key { updated.cachedFiles[prevKey] = newInfo }
                     updated.cachedFiles[item.url.absoluteString] = newInfo
                     saveCacheMetadata(updated)
                     return (true, localURL.path)
@@ -737,7 +743,12 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                                 etag: item.etag,
                                 lastModified: item.lastModified
                             )
+                            // Save under full URL key
                             metadata.cachedFiles[item.url.absoluteString] = cachedInfo
+                            // Also save under a synthetic key with just filename to allow host changes
+                            if let synthetic = URL(string: fileName) {
+                                metadata.cachedFiles[synthetic.absoluteString] = cachedInfo
+                            }
                             self.saveCacheMetadata(metadata)
 
                             // Final progress callback
@@ -854,7 +865,13 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     func getCacheInfo(for item: RemoteLibraryItem) -> CacheMetadata.CachedFileInfo? {
         let metadata = loadCacheMetadata()
         let key = item.url.absoluteString
-        return metadata.cachedFiles[key]
+        if let info = metadata.cachedFiles[key] { return info }
+        // Fallback to filename-based lookup
+        let filename = item.url.lastPathComponent
+        if let entry = metadata.cachedFiles.first(where: { URL(string: $0.key)?.lastPathComponent == filename }) {
+            return entry.value
+        }
+        return nil
     }
 
     // MARK: - Emulation coordination

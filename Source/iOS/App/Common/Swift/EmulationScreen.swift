@@ -436,8 +436,14 @@ struct EmulationScreen: View {
                     .id(touchPadsRefreshToken)
                     .ignoresSafeArea()
                     .transition(.opacity)
-                    .onAppear { TVEmulationBridge.setWiiIMUPointEnabled(false) }
-                    .onDisappear { TVEmulationBridge.setWiiIMUPointEnabled(true) }
+                    .onAppear {
+                        TVEmulationBridge.setWiiIMUPointEnabled(false)
+                        // Ensure touch input is always a valid IR source
+                        TCDeviceMotion.shared.setMotionEnabled(true)
+                    }
+                    .onDisappear {
+                        TVEmulationBridge.setWiiIMUPointEnabled(true)
+                    }
             }
         }
         .navigationDestination(isPresented: $showSettings) {

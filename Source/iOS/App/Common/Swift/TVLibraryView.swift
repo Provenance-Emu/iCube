@@ -216,6 +216,9 @@ struct TVLibraryView: View {
     @State private var showImportNANDPicker = false
     /// Navigate to settings as a push on iOS
     @State private var navigateToSettings = false
+    /// Controller navigation repeat throttle
+    @State private var lastNavMoveTime: TimeInterval = 0
+    @State private var navRepeatInterval: TimeInterval = 0.12
     #endif
 
     /// Storage space management
@@ -370,7 +373,16 @@ struct TVLibraryView: View {
                 .padding(.vertical, Constants.gridVerticalPadding)
             }
             .onAppear { setupControllerNavigation(columns: count) }
-            .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in setupControllerNavigation(columns: count) }
+            .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+                ControllerStyleManager.shared.refreshDetection()
+                ControllerStyleManager.shared.applyPresetDefaults()
+                setupControllerNavigation(columns: count)
+            }
+            .onChange(of: model.games.count) { _, newCount in
+                if newCount > 0 && focusedFilePath == nil {
+                    DispatchQueue.main.async { focusedFilePath = model.games.first?.filePath }
+                }
+            }
         }
         #else
         ScrollView {
@@ -890,41 +902,66 @@ struct TVLibraryView: View {
         GCController.shouldMonitorBackgroundEvents = false
         for c in GCController.controllers() {
             c.controllerPausedHandler = { _ in /* swallow to avoid Game Center */ }
-            guard let gamepad = c.microGamepad ?? c.extendedGamepad else { continue }
-            gamepad.valueChangedHandler = { [weak self] _, element in
-                guard let self else { return }
-                guard !model.games.isEmpty else { return }
-                let index: Int = {
-                    if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
-                    return 0
-                }()
-                func move(_ delta: Int) {
-                    let newIndex = max(0, min(index + delta, model.games.count - 1))
-                    focusedFilePath = model.games[newIndex].filePath
-                }
-                if let dpad = (gamepad as? GCExtendedGamepad)?.dpad {
-                    if element == dpad.up, dpad.up.isPressed { move(-columns) }
-                    if element == dpad.down, dpad.down.isPressed { move(columns) }
-                    if element == dpad.left, dpad.left.isPressed { move(-1) }
-                    if element == dpad.right, dpad.right.isPressed { move(1) }
-                } else if let mgp = (gamepad as? GCMicroGamepad) {
-                    if element == mgp.dpad {
-                        let vx = mgp.dpad.xAxis.value, vy = mgp.dpad.yAxis.value
-                        if vy < -0.5 { move(-columns) }
-                        if vy > 0.5 { move(columns) }
-                        if vx < -0.5 { move(-1) }
-                        if vx > 0.5 { move(1) }
+            if let egp = c.extendedGamepad {
+                egp.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
+                    guard !model.games.isEmpty else { return }
+                    let index: Int = {
+                        if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
+                        return 0
+                    }()
+                    func move(_ delta: Int, dir: String) {
+                        let now = Date().timeIntervalSince1970
+                        if now - lastNavMoveTime < navRepeatInterval { return }
+                        lastNavMoveTime = now
+                        let newIndex = max(0, min(index + delta, model.games.count - 1))
+                        DispatchQueue.main.async { focusedFilePath = model.games[newIndex].filePath }
                     }
-                }
-                if let egp = gamepad as? GCExtendedGamepad {
-                    if element == egp.buttonA, egp.buttonA.isPressed {
-                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
+                    let dpad = gamepad.dpad
+                    if element == dpad.up, dpad.up.isPressed { move(-columns, dir: "up") }
+                    if element == dpad.down, dpad.down.isPressed { move(columns, dir: "down") }
+                    if element == dpad.left, dpad.left.isPressed { move(-1, dir: "left") }
+                    if element == dpad.right, dpad.right.isPressed { move(1, dir: "right") }
+                    // Left thumbstick support
+                    let lx = gamepad.leftThumbstick.xAxis.value
+                    let ly = gamepad.leftThumbstick.yAxis.value
+                    if element == gamepad.leftThumbstick {
+                        if ly < -0.6 { move(-columns, dir: "up") }
+                        if ly > 0.6 { move(columns, dir: "down") }
+                        if lx < -0.6 { move(-1, dir: "left") }
+                        if lx > 0.6 { move(1, dir: "right") }
+                    }
+                    if element == gamepad.buttonA, gamepad.buttonA.isPressed {
+                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { DispatchQueue.main.async { selectGame(item) } }
                         let gen = UIImpactFeedbackGenerator(style: .medium)
                         gen.impactOccurred()
                     }
-                } else if let mgp = gamepad as? GCMicroGamepad {
-                    if element == mgp.buttonA, mgp.buttonA.isPressed {
-                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
+                }
+            }
+            if let mgp = c.microGamepad {
+                mgp.reportsAbsoluteDpadValues = true
+                mgp.allowsRotation = true
+                mgp.valueChangedHandler = {(gamepad: GCMicroGamepad, element: GCControllerElement) in
+                    guard !model.games.isEmpty else { return }
+                    let index: Int = {
+                        if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
+                        return 0
+                    }()
+                    func move(_ delta: Int, dir: String) {
+                        let now = Date().timeIntervalSince1970
+                        if now - lastNavMoveTime < navRepeatInterval { return }
+                        lastNavMoveTime = now
+                        let newIndex = max(0, min(index + delta, model.games.count - 1))
+                        DispatchQueue.main.async { focusedFilePath = model.games[newIndex].filePath }
+                    }
+                    if element == gamepad.dpad {
+                        let vx = gamepad.dpad.xAxis.value, vy = gamepad.dpad.yAxis.value
+                        if vy < -0.5 { move(-columns, dir: "up") }
+                        if vy > 0.5 { move(columns, dir: "down") }
+                        if vx < -0.5 { move(-1, dir: "left") }
+                        if vx > 0.5 { move(1, dir: "right") }
+                    }
+                    if element == gamepad.buttonA, gamepad.buttonA.isPressed {
+                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { DispatchQueue.main.async { selectGame(item) } }
                         let gen = UIImpactFeedbackGenerator(style: .medium)
                         gen.impactOccurred()
                     }
