@@ -24,13 +24,11 @@
 #include "Core/PowerPC/MMU.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
-#include "Common/JITMemoryTracker.h"
 
 using namespace Arm64Gen;
 
 void JitArm64::GenerateAsm()
 {
-  Common::JITMemoryTracker::EnterThreadWriteScope();
   BatchJitWriteScope batch_scope(*this, m_far_code, GetRegionPtr());
 
   const bool enable_debugging = Config::IsDebuggingEnabled();
@@ -241,7 +239,6 @@ void JitArm64::GenerateAsm()
   GenerateCommonAsm();
 
   // Flushed by BatchJitWriteScope
-  Common::JITMemoryTracker::ExitThreadWriteScope();
 }
 
 void JitArm64::GenerateCommonAsm()

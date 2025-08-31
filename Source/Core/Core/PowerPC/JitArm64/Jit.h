@@ -64,22 +64,16 @@ public:
     Arm64Gen::ARM64XEmitter& near_emit;
     Arm64Gen::ARM64XEmitter& far_emit;
     Common::ScopedJITPageWriteAndNoExecute write_scope;
-    u8* near_start = nullptr;
-    u8* far_start = nullptr;
     BatchJitWriteScope(Arm64Gen::ARM64XEmitter& near_emitter,
                        Arm64Gen::ARM64XEmitter& far_emitter,
                        u8* region_ptr)
         : near_emit(near_emitter), far_emit(far_emitter), write_scope(region_ptr)
     {
-      near_start = near_emit.GetWritableCodePtr();
-      far_start = far_emit.GetWritableCodePtr();
     }
     ~BatchJitWriteScope()
     {
-      if (near_emit.GetWritableCodePtr() != near_start)
-        near_emit.FlushIcache();
-      if (far_emit.GetWritableCodePtr() != far_start)
-        far_emit.FlushIcache();
+      near_emit.FlushIcache();
+      far_emit.FlushIcache();
     }
   };
 
@@ -272,26 +266,6 @@ protected:
     Auto,
   };
 
-  struct SlowThunkKey
-  {
-    u32 flags;
-    bool memcheck;
-    bool operator==(const SlowThunkKey& other) const
-    {
-      return flags == other.flags && memcheck == other.memcheck;
-    }
-  };
-
-  struct SlowThunkKeyHash
-  {
-    std::size_t operator()(const SlowThunkKey& k) const
-    {
-      return std::hash<u32>{}(k.flags) ^ (std::hash<u32>{}(k.memcheck ? 0x9e3779b9u : 0) << 1);
-    }
-  };
-
-  const u8* GetOrCreateSlowPathThunk(u32 flags, bool memcheck, bool emitting_routine);
-
   // This is the core routine for accessing emulated memory, with support for
   // many different kinds of loads and stores as well as fastmem/backpatching.
   //
@@ -475,7 +449,4 @@ protected:
   HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges_far_1;
 
   std::unique_ptr<HostDisassembler> m_disassembler;
-
-  // Interned slow-path thunks keyed by flag shape and memcheck, pointing into far code.
-  std::unordered_map<SlowThunkKey, const u8*, SlowThunkKeyHash> m_slow_thunk_cache;
 };
