@@ -14,8 +14,9 @@ struct DocumentPickerView: UIViewControllerRepresentable {
             UTType("me.oatmealdome.dolphinios.generic-software")!,
             UTType("me.oatmealdome.dolphinios.gamecube-software")!,
             UTType("me.oatmealdome.dolphinios.wii-software")!,
-            UTType(importedAs: "public.iso-image") ?? UTType(filenameExtension: "iso") ?? .data, // ISO images
+            (UTType(importedAs: "public.iso-image")).self, // ISO images
             UTType("me.oatmealdome.dolphinios.rvz-image")!,
+
             UTType("me.oatmealdome.dolphinios.dol-executable")!,
             UTType("me.oatmealdome.dolphinios.elf-executable")!,
             UTType.archive,
@@ -28,9 +29,10 @@ struct DocumentPickerView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let controller: UIDocumentPickerViewController
         if #available(iOS 14.0, *) {
-            controller = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes, asCopy: true)
+            // Request security-scoped access to the original file; ImportFileManager handles copy/move
+            controller = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes, asCopy: false)
         } else {
-            controller = UIDocumentPickerViewController(documentTypes: contentTypes.map { $0.identifier }, in: .import)
+            controller = UIDocumentPickerViewController(documentTypes: contentTypes.map { $0.identifier }, in: .open)
         }
         controller.delegate = context.coordinator
         controller.allowsMultipleSelection = false

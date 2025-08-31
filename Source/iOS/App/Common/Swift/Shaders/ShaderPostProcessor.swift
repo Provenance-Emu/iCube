@@ -149,8 +149,8 @@ import MetalKit
 			// print("[Shaders] Swift: failed to resolve preset path for current bundle")
 			return
 		}
-		let exists = FileManager.default.fileExists(atPath: url.path)
-		// print("[Shaders] Swift: preset exists=\(exists)")
+		_ = FileManager.default.fileExists(atPath: url.path)
+		// print("[Shaders] Swift: preset exists checked")
 		do {
 			let data = try Data(contentsOf: url)
 			// print("[Shaders] Swift: loading container from data, bytes=\(data.count)")

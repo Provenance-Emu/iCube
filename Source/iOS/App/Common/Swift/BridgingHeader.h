@@ -24,6 +24,7 @@
 #import "InputOverriderBridge.h"
 #import "TCManagerInterface.h"
 #import "TVGameItem.h"
+#import "VirtualMFiControllerManager.h"
 
 #if TARGET_OS_IOS
 #import "DOLUIKitSwitch.h"

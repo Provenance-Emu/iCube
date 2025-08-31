@@ -538,7 +538,7 @@ struct TVLibraryView: View {
                 DocumentPickerView(
                     contentTypes: DocumentPickerView.softwareContentTypes,
                     onPick: { url in
-                      ImportFileManager.shared().importFile(atUrl: url)
+                      ImportFileManager.shared().importFile(at: url)
                     }
                 )
                 .navigationTitle(L("Import Game"))

@@ -14,6 +14,13 @@
 #include "Core/Core.h"
 #include "Core/System.h"
 #include "Core/State.h"
+#include "Core/Config/MainSettings.h"
+#include "VideoCommon/Present.h"
+#include "VideoCommon/FramebufferManager.h"
+#include "VideoCommon/PostProcessing.h"
+
+extern std::unique_ptr<VideoCommon::Presenter> g_presenter;
+extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 
 @implementation TVEmulationBridge
 
@@ -65,6 +72,43 @@
   Core::QueueHostJob([s](Core::System& system) {
     State::Load(system, s);
   });
+}
+
+// Display / Orientation helpers
++ (void)resizeSurfaceNow {
+  if (g_presenter) {
+    g_presenter->ResizeSurface();
+  }
+}
+
++ (void)reloadShadersNow {
+  if (g_framebuffer_manager) {
+    g_framebuffer_manager->RecompileShaders();
+  }
+}
+
+// Fast-forward (temporary throttler disable)
++ (BOOL)toggleFastForward {
+  const bool enableTurbo = !Core::GetIsThrottlerTempDisabled();
+  Core::SetIsThrottlerTempDisabled(enableTurbo);
+
+  if (enableTurbo) {
+    if (!Config::Get(Config::MAIN_AUDIO_MUTED) &&
+        Config::Get(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT)) {
+      Config::SetCurrent(Config::MAIN_AUDIO_MUTED, true);
+    }
+  } else {
+    if (Config::Get(Config::MAIN_AUDIO_MUTED) &&
+        Config::GetActiveLayerForConfig(Config::MAIN_AUDIO_MUTED) == Config::LayerType::CurrentRun) {
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_AUDIO_MUTED);
+    }
+  }
+
+  return Core::GetIsThrottlerTempDisabled();
+}
+
++ (BOOL)isFastForwardEnabled {
+  return Core::GetIsThrottlerTempDisabled();
 }
 
 @end

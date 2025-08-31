@@ -148,6 +148,16 @@ struct EmulationScreen: View {
     @State private var showPauseMenu = false
     @State private var selectedSlot = 1
     @State private var showSettings = false
+    // iOS top overlay
+    #if os(iOS)
+    @State private var showTopBar = false
+    @State private var fastForwardEnabled = false
+    @State private var hideBarWorkItem: DispatchWorkItem?
+    // iOS observer tokens to avoid leaks
+    @State private var obsGCConnect: NSObjectProtocol?
+    @State private var obsGCDisconnect: NSObjectProtocol?
+    @State private var obsShowPause: NSObjectProtocol?
+    #endif
 
     var body: some View {
         #if os(tvOS)
@@ -245,57 +255,139 @@ struct EmulationScreen: View {
             .onExitCommand { if showPauseMenu { TVEmulationBridge.resume(); showPauseMenu = false } }
             .onPlayPauseCommand { }
         #else
-        VStack(spacing: 0) {
-            // iOS top bar
-            HStack {
-                Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
-                Spacer()
-                Button { togglePause() } label: { Image(systemName: TVEmulationBridge.isPaused() ? "play.fill" : "pause.fill") }
-                Spacer()
-                Menu {
-                    Picker("Slot", selection: $selectedSlot) {
-                        ForEach(1...10, id: \.self) { Text("Slot \($0)").tag($0) }
-                    }
-                    Button("Save State") { TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true) }
-                    Button("Load State") { TVEmulationBridge.loadState(fromSlot: selectedSlot) }
-                    Divider()
-                    Button("Settings…") { showSettings = true }
-                    #if !os(tvOS)
-                    Divider()
-                    // Touch controls settings entry (iOS only)
-                    Button("Touch Controls…") { NotificationCenter.default.post(name: Notification.Name("DOLShowTouchSettings"), object: nil) }
-                    #endif
-                } label: {
-                    Image(systemName: "tray.and.arrow.down.fill")
-                }
-            }
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-
-            EmulationProgrammaticHost(gamePath: game.filePath)
+        ZStack {
+            EmulationSurfaceController(gamePath: game.filePath)
                 .ignoresSafeArea()
+                .onTapGesture { toggleTopBar() }
+
+            // Top hit area: tap near status bar to reveal overlay (active only when hidden)
+            if !showTopBar {
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: 80)
+                        .contentShape(Rectangle())
+                        .onTapGesture { toggleTopBar() }
+                    Spacer()
+                }
+                .ignoresSafeArea(edges: .top)
+                .zIndex(1)
+                .allowsHitTesting(true)
+            }
+
+            if showTopBar {
+                VStack {
+                    HStack(spacing: 16) {
+                        Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
+                        Spacer()
+                        // Touch Controls toggle (uses TC* pads)
+                        Button {
+                            toggleTouchControls()
+                        } label: {
+                            Image(systemName: isTouchControlsActive ? "hand.draw.fill" : "hand.draw")
+                                .font(.title2)
+                        }
+                        Button {
+                            fastForwardEnabled = TVEmulationBridge.toggleFastForward()
+                        } label: {
+                            Image(systemName: fastForwardEnabled ? "forward.fill" : "forward")
+                                .font(.title2)
+                        }
+                        Button { showPauseMenu = true } label: { Image(systemName: "pause.fill").font(.title2) }
+                        Button { hideTopBar(now: true) } label: { Image(systemName: "chevron.up.circle.fill").font(.title2) }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+                    .background(.ultraThinMaterial)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(2)
+            }
+
+            // Legacy touch pads
+            if isTouchControlsActive {
+                TouchPadsContainer()
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+            }
         }
-            .sheet(isPresented: $showSettings) { SettingsRootView() }
-            .onAppear {
-                NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
-                NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
-                GCController.shouldMonitorBackgroundEvents = true
-                logCurrentControllers()
-                for c in GCController.controllers() { installInputDebugHandlers(c) }
-                NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
-                    if let c = note.object as? GCController { installInputDebugHandlers(c) }
-                }
-                NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
-                endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
-                    dismiss()
-                }
+        .fullScreenCover(isPresented: $showPauseMenu) {
+            PauseMenuView(
+                selectedSlot: $selectedSlot,
+                onClose: { showPauseMenu = false },
+                onShowSettings: { showSettings = true },
+                platform: .ios,
+                game: game
+            )
+        }
+        .sheet(isPresented: $showSettings) { SettingsRootView() }
+        .onAppear {
+            NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
+            NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
+            GCController.shouldMonitorBackgroundEvents = true
+            logCurrentControllers()
+            fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
+            for c in GCController.controllers() { installInputDebugHandlers(c) }
+            obsGCConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
+                if let c = note.object as? GCController { installInputDebugHandlers(c) }
             }
-            .onDisappear {
-                if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
+            obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
+            endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
+                dismiss()
             }
+            obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
+                showPauseMenu = true
+            }
+            // Default touch controls: enabled when no controllers are connected
+            isTouchControlsActive = GCController.controllers().isEmpty
+            // Briefly show bar on appear then hide
+            showTopBar = true
+            scheduleAutoHide()
+        }
+        .onDisappear {
+            if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
+            if let t = obsGCConnect { NotificationCenter.default.removeObserver(t); obsGCConnect = nil }
+            if let t = obsGCDisconnect { NotificationCenter.default.removeObserver(t); obsGCDisconnect = nil }
+            if let t = obsShowPause { NotificationCenter.default.removeObserver(t); obsShowPause = nil }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            // Ask the renderer to resize/reconfigure
+            TVEmulationBridge.resizeSurfaceNow()
+        }
+        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         #endif
     }
+
+    #if os(iOS)
+    @State private var isTouchControlsActive = false
+
+    private func toggleTouchControls() {
+        withAnimation { isTouchControlsActive.toggle() }
+    }
+
+    private func toggleTopBar() {
+        if showTopBar { hideTopBar() } else { showTopBar = true; scheduleAutoHide() }
+    }
+
+    private func hideTopBar(now: Bool = false) {
+        if now {
+            withAnimation { showTopBar = false }
+            hideBarWorkItem?.cancel()
+            hideBarWorkItem = nil
+        } else {
+            withAnimation { showTopBar = false }
+        }
+    }
+
+    private func scheduleAutoHide() {
+        hideBarWorkItem?.cancel()
+        let work = DispatchWorkItem { withAnimation { self.showTopBar = false } }
+        hideBarWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
+    }
+    #endif
 
     private func togglePause() {
         if TVEmulationBridge.isPaused() { TVEmulationBridge.resume() } else { TVEmulationBridge.pause() }
@@ -334,6 +426,53 @@ struct EmulationScreen: View {
         }
     }
 }
+
+#if os(iOS)
+private struct TouchPadsContainer: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let host = UIView()
+        host.backgroundColor = .clear
+
+        // Decide which pad to show based on current system/controller config
+        if shouldShowWiiPad() {
+            if let wiiPad = loadPad(named: "TCWiiPad") {
+                wiiPad.frame = host.bounds
+                wiiPad.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                host.addSubview(wiiPad)
+            }
+        } else if shouldShowGameCubePad() {
+            if let gcPad = loadPad(named: "TCGameCubePad") {
+                gcPad.frame = host.bounds
+                gcPad.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                host.addSubview(gcPad)
+            }
+        }
+        return host
+    }
+    func updateUIView(_ uiView: UIView, context: Context) { }
+
+    // MARK: - Decision Logic (mirrors EmulationiOSViewController)
+    private func shouldShowGameCubePad() -> Bool {
+        // Heuristic: default device qualifier for GC Port 1 is the iOS Touchscreen, and no external controllers override it
+        let qualifier = TVControllerMappingBridge.defaultDevice(forGCPort: 1)
+        let isTouchscreen = qualifier.contains("Touchscreen") || qualifier.contains("iOS")
+        let hasExternal = !GCController.controllers().isEmpty
+        return isTouchscreen && !hasExternal
+    }
+
+    private func shouldShowWiiPad() -> Bool {
+        // If GC pad isn’t selected, prefer Wii pad; the UIKit VC will handle precise modes
+        return !shouldShowGameCubePad()
+    }
+
+    private func loadPad(named name: String) -> UIView? {
+        let bundle = Bundle(for: TCView.self)
+        let nib = UINib(nibName: name, bundle: bundle)
+        let objects = nib.instantiate(withOwner: nil, options: nil)
+        return objects.first as? UIView
+    }
+}
+#endif
 
 private func logCurrentControllers() {
     guard UserDefaults.standard.bool(forKey: "input_debug") else { return }

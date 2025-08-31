@@ -67,23 +67,22 @@
   // Yes, this is a gigantic hack. Unfortunately, GCVirtualController likes to attach to the wrong view (UITabBarController),
   // so we need to manually override that by adding it to the requesting controller.
 #if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
-  UIView* controllerView = [_controller valueForKey:@"_controllerView"];
-
   if (_isControllerConnected) {
-    [controllerView removeFromSuperview];
-    [superview addSubview:controllerView];
-  } else {
-    [_controller connectWithReplyHandler:^(NSError* error) {
-      if (error != nil) {
-        NSLog(@"Failed to connect GCVirtualController with error: %@", [error localizedDescription]);
-      } else {
-        [controllerView removeFromSuperview];
-        [superview addSubview:controllerView];
-
-        self->_isControllerConnected = true;
-      }
-    }];
+    return;
   }
+
+  if (_controller == nil) {
+    NSLog(@"VirtualMFiControllerManager: GCVirtualController unavailable (requires iOS 15.0)");
+    return;
+  }
+
+  [_controller connectWithReplyHandler:^(NSError* error) {
+    if (error != nil) {
+      NSLog(@"Failed to connect GCVirtualController with error: %@", [error localizedDescription]);
+    } else {
+      self->_isControllerConnected = true;
+    }
+  }];
 #endif
 }
 

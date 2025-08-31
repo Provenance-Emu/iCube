@@ -137,6 +137,12 @@ import Foundation
 
   // UIApplicationDidChangeStatusBarOrientationNotification is deprecated...
   @objc func statusBarOrientationChanged() {
+    if #available(iOS 13.0, *) {
+      if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+        self.orientation = scene.interfaceOrientation
+        return
+      }
+    }
     self.orientation = UIApplication.shared.statusBarOrientation
   }
 }

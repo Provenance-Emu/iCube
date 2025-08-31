@@ -15,11 +15,11 @@ internal struct PauseMenuView: View {
   let game: TVGameItem
 
   @FocusState private var focused: FocusField?
-      internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, shaders, exit, back, slot(Int), save, load }
-    private enum Pane { case main, saves, cheats, controllers }
-    @State private var pane: Pane = .main
-    @State private var showExitDialog: Bool = false
-    @State private var showShaders: Bool = false
+  internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, shaders, exit, back, slot(Int), save, load }
+  private enum Pane { case main, saves, cheats, controllers }
+  @State private var pane: Pane = .main
+  @State private var showExitDialog: Bool = false
+  @State private var showShaders: Bool = false
 
   var body: some View {
     ZStack {
@@ -28,25 +28,31 @@ internal struct PauseMenuView: View {
         .ignoresSafeArea()
 
 
-                  switch pane {
-            case .main:
-                mainMenu
-                    .onAppear { NSLog("[PAUSE] Main menu appeared") }
-            case .saves:
-                savesMenu
-                    .onAppear { NSLog("[PAUSE] Saves menu appeared") }
-            case .cheats:
-                CheatsMenuView(game: game, onBack: { pane = .main })
-                    .onAppear { NSLog("[PAUSE] Cheats menu appeared") }
-            case .controllers:
-                ControllerMappingView(game: game, onBack: { pane = .main })
-                    .onAppear { NSLog("[PAUSE] Controller mapping menu appeared") }
-            }
+      switch pane {
+      case .main:
+        mainMenu
+          .onAppear { NSLog("[PAUSE] Main menu appeared") }
+      case .saves:
+        savesMenu
+          .onAppear { NSLog("[PAUSE] Saves menu appeared") }
+      case .cheats:
+        CheatsMenuView(game: game, onBack: { pane = .main })
+          .onAppear { NSLog("[PAUSE] Cheats menu appeared") }
+      case .controllers:
+        ControllerMappingView(game: game, onBack: { pane = .main })
+          .onAppear { NSLog("[PAUSE] Controller mapping menu appeared") }
+      }
     }
-    .onAppear { NSLog("[PAUSE] PauseMenuView appeared") }
-    #if os(tvOS)
+    .onAppear {
+      NSLog("[PAUSE] PauseMenuView appeared")
+      TVEmulationBridge.pause()
+    }
+    .onDisappear {
+      if TVEmulationBridge.isRunning() && TVEmulationBridge.isPaused() { TVEmulationBridge.resume() }
+    }
+#if os(tvOS)
     .focusSection()
-    #endif
+#endif
     .onChange(of: pane) { p in
       DispatchQueue.main.async {
         switch p {
@@ -61,7 +67,7 @@ internal struct PauseMenuView: View {
         }
       }
     }
-    #if os(tvOS)
+#if os(tvOS)
     .onExitCommand {
       if pane == .main {
         onClose()
@@ -69,20 +75,179 @@ internal struct PauseMenuView: View {
         pane = .main
       }
     }
-    #endif
+#endif
     .defaultFocus($focused, .resume)
-          .sheet(isPresented: $showShaders) {
-        NavigationStack {
-          ShaderSettingsView()
-            .navigationTitle(L("Shaders"))
-        }
-        #if os(tvOS)
-        .focusSection()
-        #endif
+    .sheet(isPresented: $showShaders) {
+      NavigationStack {
+        ShaderSettingsView()
+          .navigationTitle(L("Shaders"))
       }
+#if os(tvOS)
+      .focusSection()
+#endif
+    }
   }
 
+  @ViewBuilder
   private var mainMenu: some View {
+    if platform == .ios {
+      iosMainMenu
+    } else {
+      tvMainMenu
+    }
+  }
+
+  // iOS: compact, single-column, scrollable layout
+  private var iosMainMenu: some View {
+    ZStack {
+      Image(uiImage: game.coverImage)
+        .resizable()
+        .scaledToFill()
+        .blur(radius: 20)
+        .opacity(0.6)
+        .ignoresSafeArea()
+
+      LinearGradient(
+        colors: [
+          Color.black.opacity(0.85),
+          Color.black.opacity(0.4),
+          Color.black.opacity(0.85)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      .ignoresSafeArea()
+
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          HStack {
+            Button(L("Close")) { onClose() }
+              .buttonStyle(.borderedProminent)
+            Spacer()
+          }
+
+          HStack(alignment: .top, spacing: 16) {
+            Image(uiImage: game.coverImage)
+              .resizable()
+              .aspectRatio(2.0/3.0, contentMode: .fit)
+              .frame(width: 120)
+              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+              .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 6)
+
+            VStack(alignment: .leading, spacing: 6) {
+              Text(game.title)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+              Text(game.gameID)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white.opacity(0.7))
+            }
+          }
+          .padding(.horizontal, 16)
+          .padding(.top, 16)
+
+          VStack(spacing: 12) {
+            // Resume
+            Button(action: { TVEmulationBridge.resume(); onClose() }) {
+              labelRow(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue)
+            }
+            .buttonStyle(.plain)
+
+            // Save States
+            Button(action: { pane = .saves }) {
+              labelRow(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple)
+            }
+            .buttonStyle(.plain)
+
+            // Cheats
+            Button(action: { pane = .cheats }) {
+              labelRow(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow)
+            }
+            .buttonStyle(.plain)
+
+            // Controllers
+            Button(action: { pane = .controllers }) {
+              labelRow(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green)
+            }
+            .buttonStyle(.plain)
+
+            // Shaders
+            Button(action: { showShaders = true }) {
+              labelRow(title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange)
+            }
+            .buttonStyle(.plain)
+
+            // Settings
+            Button(action: { onShowSettings() }) {
+              labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
+            }
+            .buttonStyle(.plain)
+
+            // Exit
+            Button(role: .destructive, action: { showExitDialog = true }) {
+              labelRow(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red)
+            }
+            .buttonStyle(.plain)
+          }
+          .padding(.horizontal, 16)
+          .padding(.bottom, 24)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .frame(maxWidth: 600)
+        .frame(maxWidth: .infinity, alignment: .top)
+      }
+      .safeAreaInset(edge: .bottom) { Spacer().frame(height: 8) }
+    }
+    .alert(L("Exit Game"), isPresented: $showExitDialog) {
+      Button(L("Cancel"), role: .cancel) { showExitDialog = false }
+      Button(L("Quit"), role: .destructive) {
+        TVEmulationBridge.stop()
+        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+      }
+      Button(L("Save & Quit")) {
+        TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
+        TVEmulationBridge.stop()
+        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+      }
+    } message: {
+      Text(L("Do you want to quit the game? Unsaved progress will be lost."))
+    }
+  }
+
+  // Reusable row styling for iOS menu
+  private func labelRow(title: String, subtitle: String, icon: String, tint: Color) -> some View {
+    HStack(spacing: 14) {
+      ZStack {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .fill(tint.opacity(0.2))
+          .frame(width: 44, height: 44)
+        Image(systemName: icon)
+          .font(.system(size: 18, weight: .semibold))
+          .foregroundColor(tint)
+      }
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundColor(.white)
+        Text(subtitle)
+          .font(.system(size: 13, weight: .medium))
+          .foregroundColor(.white.opacity(0.7))
+      }
+      Spacer()
+      Image(systemName: "chevron.right")
+        .font(.system(size: 12, weight: .medium))
+        .foregroundColor(.white.opacity(0.5))
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 12)
+    .background(.white.opacity(0.08))
+    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+  }
+
+  // tvOS: original layout preserved
+  private var tvMainMenu: some View {
     ZStack {
       // Beautiful blurred background
       Image(uiImage: game.coverImage)
@@ -585,416 +750,416 @@ internal struct PauseMenuView: View {
 
 }
 internal struct ModernCheatsContent: View {
-    let game: TVGameItem
-    let availableHeight: CGFloat
+  let game: TVGameItem
+  let availableHeight: CGFloat
 
-    @State private var geckoCodeList: [TVGeckoCodeInfo] = []
-    @State private var actionReplayCodeList: [TVActionReplayCodeInfo] = []
-    @State private var statusMessage = ""
-    @State private var isLoading = false
+  @State private var geckoCodeList: [TVGeckoCodeInfo] = []
+  @State private var actionReplayCodeList: [TVActionReplayCodeInfo] = []
+  @State private var statusMessage = ""
+  @State private var isLoading = false
 
-    var body: some View {
-        VStack(spacing: 24) {
-            // Action Cards Section
-            HStack(spacing: 24) {
-                // Download Card
-                ModernActionCard(
-                    title: L("Download Cheats"),
-                    subtitle: L("Get latest codes"),
-                    icon: "arrow.down.circle.fill",
-                    color: .blue,
-                    isLoading: isLoading
-                ) {
-                    downloadCheats()
-                }
-
-                // Refresh Card
-                ModernActionCard(
-                    title: L("Refresh List"),
-                    subtitle: L("Reload codes"),
-                    icon: "arrow.clockwise.circle.fill",
-                    color: .green,
-                    isLoading: isLoading
-                ) {
-                    loadCheats()
-                }
-            }
-
-            // Status Message
-            if !statusMessage.isEmpty {
-                Text(statusMessage)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-            }
-
-            // Cheats List - Scrollable
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 16) {
-                    // Gecko Codes Section
-                    if !geckoCodeList.isEmpty {
-                        ModernCheatSection(
-                            title: L("Gecko Codes"),
-                            codes: geckoCodeList.map { ModernCheatItem.gecko($0) },
-                            onToggle: { index, enabled in
-                                let success = TVCheatsBridge.setGeckoCodeEnabled(enabled, at: index, forGameId: game.gameID, revision: game.revision)
-                                if success {
-                                    geckoCodeList[index].enabled = enabled
-                                }
-                            }
-                        )
-                    }
-
-                    // Action Replay Codes Section
-                    if !actionReplayCodeList.isEmpty {
-                        ModernCheatSection(
-                            title: L("Action Replay"),
-                            codes: actionReplayCodeList.map { ModernCheatItem.actionReplay($0) },
-                            onToggle: { index, enabled in
-                                let success = TVCheatsBridge.setActionReplayCodeEnabled(enabled, at: index, forGameId: game.gameID, revision: game.revision)
-                                if success {
-                                    actionReplayCodeList[index].enabled = enabled
-                                }
-                            }
-                        )
-                    }
-
-                    // Empty State
-                    if geckoCodeList.isEmpty && actionReplayCodeList.isEmpty && !isLoading {
-                        ModernEmptyState()
-                    }
-                }
-                .padding(.bottom, 40)
-            }
-            .frame(maxHeight: .infinity)
+  var body: some View {
+    VStack(spacing: 24) {
+      // Action Cards Section
+      HStack(spacing: 24) {
+        // Download Card
+        ModernActionCard(
+          title: L("Download Cheats"),
+          subtitle: L("Get latest codes"),
+          icon: "arrow.down.circle.fill",
+          color: .blue,
+          isLoading: isLoading
+        ) {
+          downloadCheats()
         }
-        .onAppear {
-            loadCheats()
+
+        // Refresh Card
+        ModernActionCard(
+          title: L("Refresh List"),
+          subtitle: L("Reload codes"),
+          icon: "arrow.clockwise.circle.fill",
+          color: .green,
+          isLoading: isLoading
+        ) {
+          loadCheats()
         }
-    }
+      }
 
-    private func downloadCheats() {
-        isLoading = true
-        statusMessage = L("Downloading cheats") + "..."
+      // Status Message
+      if !statusMessage.isEmpty {
+        Text(statusMessage)
+          .font(.system(size: 16, weight: .medium))
+          .foregroundColor(.white.opacity(0.8))
+      }
 
-        TVCheatsBridge.downloadGeckoCodes(forGameId: game.gameID, revision: game.revision, gametdbId: game.gametdbID) { success, downloadedCount, addedCount in
-            DispatchQueue.main.async {
-                isLoading = false
+      // Cheats List - Scrollable
+      ScrollView(.vertical, showsIndicators: false) {
+        LazyVStack(spacing: 16) {
+          // Gecko Codes Section
+          if !geckoCodeList.isEmpty {
+            ModernCheatSection(
+              title: L("Gecko Codes"),
+              codes: geckoCodeList.map { ModernCheatItem.gecko($0) },
+              onToggle: { index, enabled in
+                let success = TVCheatsBridge.setGeckoCodeEnabled(enabled, at: index, forGameId: game.gameID, revision: game.revision)
                 if success {
-                    statusMessage = "✓" + " " + L("Downloaded") + "\(downloadedCount)" + L("cheats, added") + "\(addedCount)" + L("new")
-                    loadCheats()
-                } else {
-                    statusMessage = L("✗") + " " + L("Failed to download cheats")
+                  geckoCodeList[index].enabled = enabled
                 }
+              }
+            )
+          }
 
-                // Clear status after delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    statusMessage = ""
+          // Action Replay Codes Section
+          if !actionReplayCodeList.isEmpty {
+            ModernCheatSection(
+              title: L("Action Replay"),
+              codes: actionReplayCodeList.map { ModernCheatItem.actionReplay($0) },
+              onToggle: { index, enabled in
+                let success = TVCheatsBridge.setActionReplayCodeEnabled(enabled, at: index, forGameId: game.gameID, revision: game.revision)
+                if success {
+                  actionReplayCodeList[index].enabled = enabled
                 }
-            }
+              }
+            )
+          }
+
+          // Empty State
+          if geckoCodeList.isEmpty && actionReplayCodeList.isEmpty && !isLoading {
+            ModernEmptyState()
+          }
         }
+        .padding(.bottom, 40)
+      }
+      .frame(maxHeight: .infinity)
     }
+    .onAppear {
+      loadCheats()
+    }
+  }
 
-    private func loadCheats() {
-        geckoCodeList = TVCheatsBridge.geckoCodes(forGameId: game.gameID, revision: game.revision)
-        actionReplayCodeList = TVCheatsBridge.actionReplayCodes(forGameId: game.gameID, revision: game.revision)
+  private func downloadCheats() {
+    isLoading = true
+    statusMessage = L("Downloading cheats") + "..."
+
+    TVCheatsBridge.downloadGeckoCodes(forGameId: game.gameID, revision: game.revision, gametdbId: game.gametdbID) { success, downloadedCount, addedCount in
+      DispatchQueue.main.async {
+        isLoading = false
+        if success {
+          statusMessage = "✓" + " " + L("Downloaded") + "\(downloadedCount)" + L("cheats, added") + "\(addedCount)" + L("new")
+          loadCheats()
+        } else {
+          statusMessage = L("✗") + " " + L("Failed to download cheats")
+        }
+
+        // Clear status after delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+          statusMessage = ""
+        }
+      }
     }
+  }
+
+  private func loadCheats() {
+    geckoCodeList = TVCheatsBridge.geckoCodes(forGameId: game.gameID, revision: game.revision)
+    actionReplayCodeList = TVCheatsBridge.actionReplayCodes(forGameId: game.gameID, revision: game.revision)
+  }
 }
 
 // MARK: - Modern Action Card
 internal struct ModernActionCard: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let color: Color
-    let isLoading: Bool
-    let action: () -> Void
+  let title: String
+  let subtitle: String
+  let icon: String
+  let color: Color
+  let isLoading: Bool
+  let action: () -> Void
 
-    @FocusState private var isFocused: Bool
+  @FocusState private var isFocused: Bool
 
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                // Icon
-                ZStack {
-                    Circle()
-                        .fill(color.opacity(0.2))
-                        .frame(width: 50, height: 50)
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 16) {
+        // Icon
+        ZStack {
+          Circle()
+            .fill(color.opacity(0.2))
+            .frame(width: 50, height: 50)
 
-                    if isLoading && isFocused {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: icon)
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundColor(color)
-                    }
-                }
-
-                // Text
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                    Text(subtitle)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Arrow
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.5))
-            }
-            .padding(20)
-            .background(.white.opacity(isFocused ? 0.15 : 0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(color.opacity(isFocused ? 0.6 : 0), lineWidth: 2)
-            )
+          if isLoading && isFocused {
+            ProgressView()
+              .progressViewStyle(CircularProgressViewStyle(tint: .white))
+              .scaleEffect(0.8)
+          } else {
+            Image(systemName: icon)
+              .font(.system(size: 24, weight: .semibold))
+              .foregroundColor(color)
+          }
         }
-        .buttonStyle(.plain)
-        .focusable()
-        .focused($isFocused)
-        .disabled(isLoading)
+
+        // Text
+        VStack(alignment: .leading, spacing: 4) {
+          Text(title)
+            .font(.system(size: 18, weight: .bold))
+            .foregroundColor(.white)
+          Text(subtitle)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.white.opacity(0.7))
+        }
+
+        Spacer()
+
+        // Arrow
+        Image(systemName: "chevron.right")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundColor(.white.opacity(0.5))
+      }
+      .padding(20)
+      .background(.white.opacity(isFocused ? 0.15 : 0.08))
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .stroke(color.opacity(isFocused ? 0.6 : 0), lineWidth: 2)
+      )
     }
+    .buttonStyle(.plain)
+    .focusable()
+    .focused($isFocused)
+    .disabled(isLoading)
+  }
 }
 
 // MARK: - Modern Cheat Section
 internal struct ModernCheatSection: View {
-    let title: String
-    let codes: [ModernCheatItem]
-    let onToggle: (Int, Bool) -> Void
+  let title: String
+  let codes: [ModernCheatItem]
+  let onToggle: (Int, Bool) -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Section Header
-            HStack {
-                Text(title)
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(.white)
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      // Section Header
+      HStack {
+        Text(title)
+          .font(.system(size: 22, weight: .bold))
+          .foregroundColor(.white)
 
-                Spacer()
+        Spacer()
 
-                Text("\(codes.count)" + " " + L("codes"))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
+        Text("\(codes.count)" + " " + L("codes"))
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(.white.opacity(0.6))
+      }
+
+      // Codes Grid
+      LazyVGrid(columns: [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
+      ], spacing: 16) {
+        ForEach(Array(codes.enumerated()), id: \.offset) { index, code in
+          ModernCheatCard(
+            item: code,
+            index: index,
+            onToggle: { enabled in
+              onToggle(index, enabled)
             }
-
-            // Codes Grid
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 16),
-                GridItem(.flexible(), spacing: 16)
-            ], spacing: 16) {
-                ForEach(Array(codes.enumerated()), id: \.offset) { index, code in
-                    ModernCheatCard(
-                        item: code,
-                        index: index,
-                        onToggle: { enabled in
-                            onToggle(index, enabled)
-                        }
-                    )
-                }
-            }
+          )
         }
+      }
     }
+  }
 }
 
 // MARK: - Modern Cheat Item
 internal enum ModernCheatItem {
-    case gecko(TVGeckoCodeInfo)
-    case actionReplay(TVActionReplayCodeInfo)
+  case gecko(TVGeckoCodeInfo)
+  case actionReplay(TVActionReplayCodeInfo)
 
-    var name: String {
-        switch self {
-        case .gecko(let code): return code.name
-        case .actionReplay(let code): return code.name
-        }
+  var name: String {
+    switch self {
+    case .gecko(let code): return code.name
+    case .actionReplay(let code): return code.name
     }
+  }
 
-    var isEnabled: Bool {
-        switch self {
-        case .gecko(let code): return code.enabled
-        case .actionReplay(let code): return code.enabled
-        }
+  var isEnabled: Bool {
+    switch self {
+    case .gecko(let code): return code.enabled
+    case .actionReplay(let code): return code.enabled
     }
+  }
 
-    var type: String {
-        switch self {
-        case .gecko: return "GECKO"
-        case .actionReplay: return "AR"
-        }
+  var type: String {
+    switch self {
+    case .gecko: return "GECKO"
+    case .actionReplay: return "AR"
     }
+  }
 
-    var typeColor: Color {
-        switch self {
-        case .gecko: return .blue
-        case .actionReplay: return .orange
-        }
+  var typeColor: Color {
+    switch self {
+    case .gecko: return .blue
+    case .actionReplay: return .orange
     }
+  }
 }
 
 // MARK: - Modern Cheat Card
 internal struct ModernCheatCard: View {
-    let item: ModernCheatItem
-    let index: Int
-    let onToggle: (Bool) -> Void
+  let item: ModernCheatItem
+  let index: Int
+  let onToggle: (Bool) -> Void
 
-    @State private var isEnabled: Bool
-    @FocusState private var isFocused: Bool
+  @State private var isEnabled: Bool
+  @FocusState private var isFocused: Bool
 
-    init(item: ModernCheatItem, index: Int, onToggle: @escaping (Bool) -> Void) {
-        self.item = item
-        self.index = index
-        self.onToggle = onToggle
-        self._isEnabled = State(initialValue: item.isEnabled)
-    }
+  init(item: ModernCheatItem, index: Int, onToggle: @escaping (Bool) -> Void) {
+    self.item = item
+    self.index = index
+    self.onToggle = onToggle
+    self._isEnabled = State(initialValue: item.isEnabled)
+  }
 
-    var body: some View {
-        Button(action: { toggleCheat() }) {
-            VStack(alignment: .leading, spacing: 12) {
-                // Header
-                HStack {
-                    // Type Badge
-                    Text(item.type)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(item.typeColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+  var body: some View {
+    Button(action: { toggleCheat() }) {
+      VStack(alignment: .leading, spacing: 12) {
+        // Header
+        HStack {
+          // Type Badge
+          Text(item.type)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(item.typeColor)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
 
-                    Spacer()
+          Spacer()
 
-                    // Toggle
-                    ZStack {
-                        Circle()
-                            .fill(isEnabled ? .green : .white.opacity(0.3))
-                            .frame(width: 20, height: 20)
+          // Toggle
+          ZStack {
+            Circle()
+              .fill(isEnabled ? .green : .white.opacity(0.3))
+              .frame(width: 20, height: 20)
 
-                        if isEnabled {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                    }
-                }
-
-                // Name
-                Text(item.name)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(3)
-
-                Spacer()
+            if isEnabled {
+              Image(systemName: "checkmark")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.white)
             }
-            .padding(16)
-            .frame(height: 120)
-            .background(.white.opacity(isFocused ? 0.15 : 0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.white.opacity(isFocused ? 0.3 : 0), lineWidth: 1)
-            )
+          }
         }
-        .buttonStyle(.plain)
-        .focusable()
-        .focused($isFocused)
-    }
 
-    private func toggleCheat() {
-        let newState = !isEnabled
-        onToggle(newState)
-        isEnabled = newState
+        // Name
+        Text(item.name)
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundColor(.white)
+          .multilineTextAlignment(.leading)
+          .lineLimit(3)
+
+        Spacer()
+      }
+      .padding(16)
+      .frame(height: 120)
+      .background(.white.opacity(isFocused ? 0.15 : 0.08))
+      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .stroke(.white.opacity(isFocused ? 0.3 : 0), lineWidth: 1)
+      )
     }
+    .buttonStyle(.plain)
+    .focusable()
+    .focused($isFocused)
+  }
+
+  private func toggleCheat() {
+    let newState = !isEnabled
+    onToggle(newState)
+    isEnabled = newState
+  }
 }
 
 // MARK: - Modern Empty State
 internal struct ModernEmptyState: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "gamecontroller")
-                .font(.system(size: 48, weight: .light))
-                .foregroundColor(.white.opacity(0.4))
+  var body: some View {
+    VStack(spacing: 20) {
+      Image(systemName: "gamecontroller")
+        .font(.system(size: 48, weight: .light))
+        .foregroundColor(.white.opacity(0.4))
 
-            VStack(spacing: 8) {
-                Text(L("No Cheats Available"))
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.white)
+      VStack(spacing: 8) {
+        Text(L("No Cheats Available"))
+          .font(.system(size: 20, weight: .semibold))
+          .foregroundColor(.white)
 
-                Text(L("Download cheats to get started"))
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-        }
-        .padding(40)
+        Text(L("Download cheats to get started"))
+          .font(.system(size: 16, weight: .medium))
+          .foregroundColor(.white.opacity(0.6))
+      }
     }
+    .padding(40)
+  }
 }
 
 // MARK: - Modern Style Card
 internal struct ModernStyleCard: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let color: Color
-    let isLoading: Bool
-    let action: () -> Void
+  let title: String
+  let subtitle: String
+  let icon: String
+  let color: Color
+  let isLoading: Bool
+  let action: () -> Void
 
-    @FocusState private var isFocused: Bool
+  @FocusState private var isFocused: Bool
 
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                // Icon
-                ZStack {
-                    Circle()
-                        .fill(color.opacity(0.2))
-                        .frame(width: 50, height: 50)
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 16) {
+        // Icon
+        ZStack {
+          Circle()
+            .fill(color.opacity(0.2))
+            .frame(width: 50, height: 50)
 
-                    if isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: icon)
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundColor(color)
-                    }
-                }
-
-                // Text
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                    Text(subtitle)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Arrow
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.5))
-            }
-            .padding(20)
-            .background(.white.opacity(isFocused ? 0.15 : 0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(color.opacity(isFocused ? 0.6 : 0), lineWidth: 2)
-            )
+          if isLoading {
+            ProgressView()
+              .progressViewStyle(CircularProgressViewStyle(tint: .white))
+              .scaleEffect(0.8)
+          } else {
+            Image(systemName: icon)
+              .font(.system(size: 24, weight: .semibold))
+              .foregroundColor(color)
+          }
         }
-        .buttonStyle(.plain)
-        .focused($isFocused)
-        .disabled(isLoading)
+
+        // Text
+        VStack(alignment: .leading, spacing: 4) {
+          Text(title)
+            .font(.system(size: 18, weight: .bold))
+            .foregroundColor(.white)
+          Text(subtitle)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.white.opacity(0.7))
+        }
+
+        Spacer()
+
+        // Arrow
+        Image(systemName: "chevron.right")
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundColor(.white.opacity(0.5))
+      }
+      .padding(20)
+      .background(.white.opacity(isFocused ? 0.15 : 0.08))
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .stroke(color.opacity(isFocused ? 0.6 : 0), lineWidth: 2)
+      )
     }
+    .buttonStyle(.plain)
+    .focused($isFocused)
+    .disabled(isLoading)
+  }
 }
 
 // Pause menu row component matching SettingsMenuRow styling

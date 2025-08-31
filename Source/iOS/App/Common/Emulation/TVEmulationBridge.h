@@ -29,6 +29,16 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait;
 + (void)loadStateFromSlot:(NSInteger)slot;
 
+// Speed / Fast-forward
+// Toggle temporary throttler disable (turbo). Returns the new state.
+// Display / Orientation
++ (void)resizeSurfaceNow;
++ (void)reloadShadersNow;
+// Speed / Fast-forward
+// Toggle temporary throttler disable (turbo). Returns the new state.
++ (BOOL)toggleFastForward;
++ (BOOL)isFastForwardEnabled;
+
 @end
 
 NS_ASSUME_NONNULL_END

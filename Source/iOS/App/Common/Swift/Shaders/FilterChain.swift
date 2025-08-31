@@ -894,7 +894,7 @@ public final class FilterChain {
     public func setCompiledShader(_ container: CompiledShaderContainer) throws {
         freeShaderResources()
 
-        let start = CACurrentMediaTime()
+        _ = CACurrentMediaTime()
 
         let ss = container.shader
 
