@@ -10,6 +10,13 @@
 		B31E6DBD2E63C0240036EE31 /* DocumentPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */; };
 		B31E6DC32E63C08F0036EE31 /* NANDImportManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = B31E6DC22E63C08F0036EE31 /* NANDImportManager.mm */; };
 		B31E6DC52E63C0CD0036EE31 /* AppConsts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E6DC42E63C0CD0036EE31 /* AppConsts.swift */; };
+		B31E6DC62E6409F90036EE31 /* PVlibDolphin.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; };
+		B31E6DC72E6409F90036EE31 /* PVlibDolphin.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B31E804C2E64FCA50036EE31 /* SpotlightIndexService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804B2E64FCA50036EE31 /* SpotlightIndexService.swift */; };
+		B31E80502E6504940036EE31 /* ControllerGlyphs.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */; };
+		B31E80512E6504940036EE31 /* ControllerPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804E2E6504940036EE31 /* ControllerPresets.swift */; };
+		B31E80522E6504940036EE31 /* GameProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804F2E6504940036EE31 /* GameProfiles.swift */; };
+		B31E80542E65051F0036EE31 /* ControllerStyleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -41,8 +48,6 @@
 		B36B519B2E5E46AC009A2303 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519A2E5E46AC009A2303 /* KeychainService.swift */; };
 		B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */; };
 		B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519E2E5E4700009A2303 /* SourcesView.swift */; };
-		B36B63032E5E588C009A2303 /* PVlibDolphin.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; };
-		B36B63042E5E588C009A2303 /* PVlibDolphin.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38205FF2E57FF0E00D4853F /* CompiledShader.swift */; };
 		B382060D2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */; };
 		B382060E2E57FF0E00D4853F /* Converters.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206012E57FF0E00D4853F /* Converters.metal */; };
@@ -278,7 +283,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */,
-				B36B63042E5E588C009A2303 /* PVlibDolphin.xcframework in CopyFiles */,
+				B31E6DC72E6409F90036EE31 /* PVlibDolphin.xcframework in CopyFiles */,
 				B34ECD082E5785BD00301907 /* libMoltenVK.dylib in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -290,6 +295,11 @@
 		B31E6DC12E63C08F0036EE31 /* NANDImportManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NANDImportManager.h; sourceTree = "<group>"; };
 		B31E6DC22E63C08F0036EE31 /* NANDImportManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NANDImportManager.mm; sourceTree = "<group>"; };
 		B31E6DC42E63C0CD0036EE31 /* AppConsts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConsts.swift; sourceTree = "<group>"; };
+		B31E804B2E64FCA50036EE31 /* SpotlightIndexService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightIndexService.swift; sourceTree = "<group>"; };
+		B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerGlyphs.swift; sourceTree = "<group>"; };
+		B31E804E2E6504940036EE31 /* ControllerPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerPresets.swift; sourceTree = "<group>"; };
+		B31E804F2E6504940036EE31 /* GameProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameProfiles.swift; sourceTree = "<group>"; };
+		B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerStyleManager.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -748,7 +758,7 @@
 				B34ECD072E5785BD00301907 /* libMoltenVK.dylib in Frameworks */,
 				B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */,
 				B9FCB7DE28988E7E0020E233 /* AltKit in Frameworks */,
-				B36B63032E5E588C009A2303 /* PVlibDolphin.xcframework in Frameworks */,
+				B31E6DC62E6409F90036EE31 /* PVlibDolphin.xcframework in Frameworks */,
 				B9D9389E283EF7AD00B290FC /* MetalKit.framework in Frameworks */,
 				B9FCB7E62898FAC10020E233 /* GameController.framework in Frameworks */,
 				B97E4B492964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
@@ -858,6 +868,7 @@
 				B97492452960CD2B00794509 /* FirstRunInitializationService.h */,
 				B97492462960CD2B00794509 /* FirstRunInitializationService.mm */,
 				B933EDBD27F6A7BF004D7DD7 /* GameFileCacheService.swift */,
+				B31E804B2E64FCA50036EE31 /* SpotlightIndexService.swift */,
 				B9FCB7BD28967C130020E233 /* JitAcquisitionService.swift */,
 				B974924229603A8A00794509 /* LegacyInputConfigMigrationService.h */,
 				B974924329603A8A00794509 /* LegacyInputConfigMigrationService.mm */,
@@ -1127,7 +1138,11 @@
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
+				B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
+				B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */,
+				B31E804E2E6504940036EE31 /* ControllerPresets.swift */,
+				B31E804F2E6504940036EE31 /* GameProfiles.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
@@ -2330,6 +2345,7 @@
 				B950CFCC2962590600197719 /* JitManager+PTrace.m in Sources */,
 				B9398710287FBB80008E8E47 /* SpeedLimitCell.m in Sources */,
 				B9B2C622288DB62D00CB6569 /* TCSidewaysWiiPad.swift in Sources */,
+				B31E80542E65051F0036EE31 /* ControllerStyleManager.swift in Sources */,
 				B933EDC127F77D1E004D7DD7 /* GameFilePtrWrapper.mm in Sources */,
 				B933EDBE27F6A7BF004D7DD7 /* GameFileCacheService.swift in Sources */,
 				B9398707287F998C008E8E47 /* ConfigGeneralViewController.mm in Sources */,
@@ -2436,6 +2452,10 @@
 				B904AD0C28886AE6008B6BE9 /* MappingRootDeviceCell.m in Sources */,
 				B9EC283D2D21DE2F000FAE09 /* ControllersTouchscreenIRModeViewController.mm in Sources */,
 				B96C9A4A2A46501C002B5ECF /* DOLAppVersion.swift in Sources */,
+				B31E804C2E64FCA50036EE31 /* SpotlightIndexService.swift in Sources */,
+				B31E80502E6504940036EE31 /* ControllerGlyphs.swift in Sources */,
+				B31E80512E6504940036EE31 /* ControllerPresets.swift in Sources */,
+				B31E80522E6504940036EE31 /* GameProfiles.swift in Sources */,
 				B904AD1A2888AB5E008B6BE9 /* MappingDeviceCell.m in Sources */,
 				B900A7BD27F4CDD3000361DD /* SwiftStringUtil.swift in Sources */,
 				B9D9388C283DD86100B290FC /* EmulationBootParameter.mm in Sources */,

@@ -10,6 +10,7 @@
 #import "Core/HW/GCPad.h"
 #import "Core/HW/Wiimote.h"
 #import "Core/PowerPC/PowerPC.h" // for PowerPC::CPUCore enum
+#include "Common/Config/Config.h"
 
 #import "InputCommon/ControllerEmu/ControllerEmu.h"
 #import "InputCommon/InputConfig.h"
@@ -52,7 +53,11 @@
     [self importDefaultProfileForInputConfig:Pad::GetConfig()];
     [self importDefaultProfileForInputConfig:Wiimote::GetConfig()];
 
-    Config::SetBase(Config::MAIN_GFX_BACKEND, "Metal");
+    if (Config::GetActiveLayerForConfig(Config::MAIN_GFX_BACKEND) == Config::LayerType::Base) {
+      Config::SetBase(Config::MAIN_GFX_BACKEND, "Metal");
+    } else {
+      NSLog(@"[Config] Skipping Base default MAIN_GFX_BACKEND because higher layer is active");
+    }
 
 #if TARGET_OS_TV
     // Default CPU core on tvOS: prefer CachedInterpreter on newer systems (major >= 26),

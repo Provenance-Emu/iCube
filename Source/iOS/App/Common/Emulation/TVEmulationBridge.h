@@ -42,6 +42,7 @@ NS_ASSUME_NONNULL_BEGIN
 // System Detection
 + (BOOL)isCurrentSystemWii;
 + (float)currentDrawAspectRatio;
++ (void)setWiiIMUPointEnabled:(BOOL)enabled;
 
 @end
 

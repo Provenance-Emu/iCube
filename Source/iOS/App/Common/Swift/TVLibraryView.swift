@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import GameController
 
 // MARK: - Retro UI Helpers
 
@@ -353,11 +354,23 @@ struct TVLibraryView: View {
                             autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
                             isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
                         )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(focusedFilePath == item.filePath ? Color.accentColor : Color.clear, lineWidth: 3)
+                        )
+                        .onChange(of: focusedFilePath) { _, newVal in
+                            if newVal == item.filePath {
+                                let gen = UIImpactFeedbackGenerator(style: .light)
+                                gen.impactOccurred()
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, paddingH)
                 .padding(.vertical, Constants.gridVerticalPadding)
             }
+            .onAppear { setupControllerNavigation(columns: count) }
+            .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in setupControllerNavigation(columns: count) }
         }
         #else
         ScrollView {
@@ -444,6 +457,21 @@ struct TVLibraryView: View {
             } label: { Image(systemName: "ellipsis.circle") }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
+            let store = RemoteSourcesStore.shared
+            if store.isScanning {
+                Button(action: { showSources = true }) {
+                    HStack(spacing: 6) {
+                        ProgressView(value: store.scanningProgress).frame(width: 60)
+                        Text("\(Int(store.scanningProgress * 100))%")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
+                }
+            }
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             Button(action: { model.rescan() }) {
                 if model.isRescanning { ProgressView() } else { Label(L("Rescan"), systemImage: "arrow.clockwise") }
             }
@@ -524,37 +552,7 @@ struct TVLibraryView: View {
                 queue: .main
             ) { note in
                 guard let gameID = note.userInfo?["gameID"] as? String else { return }
-                let match = model.games.first { $0.gameID == gameID }
-                    ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
-                guard let item = match else { return }
-                // If remote and source has auto-precache, ensure cache before navigating
-                if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
-                    if let webdav = getMatchingWebDAVSource(for: url), webdav.isPreCachingEnabled {
-                        let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
-                        if !webdav.isCached(remoteItem) {
-                            blockingPrecacheItem = item
-                            blockingPrecacheProgress = 0
-                            Task {
-                                do {
-                                    let _ = try await webdav.preCacheItem(remoteItem) { progress in
-                                        DispatchQueue.main.async { blockingPrecacheProgress = progress }
-                                    }
-                                    DispatchQueue.main.async {
-                                        blockingPrecacheItem = nil
-                                        navigateTo = item
-                                    }
-                                } catch {
-                                    DispatchQueue.main.async {
-                                        blockingPrecacheItem = nil
-                                        navigateTo = item // fallback to stream
-                                    }
-                                }
-                            }
-                            return
-                        }
-                    }
-                }
-                navigateTo = item
+                spotlightLaunchByGameID(gameID, attempts: 10)
             }
 
             // Listen for async metadata updates (covers/banners)
@@ -780,6 +778,7 @@ struct TVLibraryView: View {
 
     /// Actually launch the game (called after low storage warning is dismissed)
     private func proceedWithGameLaunch(_ item: TVGameItem) {
+        GameProfiles.shared.applyProfileIfAvailable(for: item)
         if TVEmulationBridge.isRunning() {
             model.pendingSelection = item
             model.showReplaceAlert = true
@@ -843,6 +842,94 @@ struct TVLibraryView: View {
 
             model.currentGame = item
             navigateTo = item
+        }
+    }
+
+    private func spotlightLaunchByGameID(_ gameID: String, attempts: Int) {
+        let match = model.games.first { $0.gameID == gameID }
+            ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
+        guard let item = match else {
+            if attempts > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    spotlightLaunchByGameID(gameID, attempts: attempts - 1)
+                }
+            }
+            return
+        }
+        GameProfiles.shared.applyProfileIfAvailable(for: item)
+        if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
+            if let webdav = getMatchingWebDAVSource(for: url), webdav.isPreCachingEnabled {
+                let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
+                if !webdav.isCached(remoteItem) {
+                    blockingPrecacheItem = item
+                    blockingPrecacheProgress = 0
+                    Task {
+                        do {
+                            let _ = try await webdav.preCacheItem(remoteItem) { progress in
+                                DispatchQueue.main.async { blockingPrecacheProgress = progress }
+                            }
+                            DispatchQueue.main.async {
+                                blockingPrecacheItem = nil
+                                navigateTo = item
+                            }
+                        } catch {
+                            DispatchQueue.main.async {
+                                blockingPrecacheItem = nil
+                                navigateTo = item // fallback to stream
+                            }
+                        }
+                    }
+                    return
+                }
+            }
+        }
+        navigateTo = item
+    }
+
+    private func setupControllerNavigation(columns: Int) {
+        GCController.shouldMonitorBackgroundEvents = false
+        for c in GCController.controllers() {
+            c.controllerPausedHandler = { _ in /* swallow to avoid Game Center */ }
+            guard let gamepad = c.microGamepad ?? c.extendedGamepad else { continue }
+            gamepad.valueChangedHandler = { [weak self] _, element in
+                guard let self else { return }
+                guard !model.games.isEmpty else { return }
+                let index: Int = {
+                    if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
+                    return 0
+                }()
+                func move(_ delta: Int) {
+                    let newIndex = max(0, min(index + delta, model.games.count - 1))
+                    focusedFilePath = model.games[newIndex].filePath
+                }
+                if let dpad = (gamepad as? GCExtendedGamepad)?.dpad {
+                    if element == dpad.up, dpad.up.isPressed { move(-columns) }
+                    if element == dpad.down, dpad.down.isPressed { move(columns) }
+                    if element == dpad.left, dpad.left.isPressed { move(-1) }
+                    if element == dpad.right, dpad.right.isPressed { move(1) }
+                } else if let mgp = (gamepad as? GCMicroGamepad) {
+                    if element == mgp.dpad {
+                        let vx = mgp.dpad.xAxis.value, vy = mgp.dpad.yAxis.value
+                        if vy < -0.5 { move(-columns) }
+                        if vy > 0.5 { move(columns) }
+                        if vx < -0.5 { move(-1) }
+                        if vx > 0.5 { move(1) }
+                    }
+                }
+                if let egp = gamepad as? GCExtendedGamepad {
+                    if element == egp.buttonA, egp.buttonA.isPressed {
+                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
+                        let gen = UIImpactFeedbackGenerator(style: .medium)
+                        gen.impactOccurred()
+                    }
+                } else if let mgp = gamepad as? GCMicroGamepad {
+                    if element == mgp.buttonA, mgp.buttonA.isPressed {
+                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
+                        let gen = UIImpactFeedbackGenerator(style: .medium)
+                        gen.impactOccurred()
+                    }
+                }
+            }
         }
     }
 }
@@ -1361,6 +1448,7 @@ private struct GameGridItem: View {
 
 // MARK: - Source Picker
 
+@MainActor
 private func getMatchingWebDAVSource(for url: URL) -> WebDAVSource? {
     func defaultPort(for scheme: String?) -> Int { (scheme?.lowercased() == "https" || scheme?.lowercased() == "webdavs") ? 443 : 80 }
     guard let urlHost = url.host?.lowercased() else { return nil }
@@ -1374,6 +1462,7 @@ private func getMatchingWebDAVSource(for url: URL) -> WebDAVSource? {
     }
     return nil
 }
+
 
 private struct SourcePickerView: View {
     let items: [TVGameItem]
@@ -1424,6 +1513,7 @@ private struct SourcePickerView: View {
         }
     }
 }
+
 
 // MARK: - Unified Game Card
 // Both iOS and tvOS now use the same clean implementation in GameGridItem

@@ -30,6 +30,16 @@
 #import "HostQueue.h"
 #import "LocalizationUtil.h"
 #import "MsgAlertManager.h"
+#include "Common/Config/Config.h"
+
+namespace {
+template <typename T>
+static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& value)
+{
+  if (Config::GetActiveLayerForConfig(info) == Config::LayerType::Base)
+    Config::SetBase(info, value);
+}
+}
 
 @implementation DolphinCoreService
 
@@ -100,29 +110,29 @@
     return FoundationToCppString(DOLCoreLocalizedString(CToFoundationString(text)));
   });
 
-  Config::SetBase(Config::MAIN_USE_GAME_COVERS, true);
+  SetBaseIfUnspecified(Config::MAIN_USE_GAME_COVERS, true);
 
   const bool fastmemAvailable = [FastmemManager shared].fastmemAvailable;
-  Config::SetBase(Config::MAIN_FASTMEM, fastmemAvailable);
-  Config::SetBase(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
-  Config::SetBase(Config::MAIN_FAST_DISC_SPEED, true);
-  Config::SetBase(Config::MAIN_DSP_THREAD, true);
+  SetBaseIfUnspecified(Config::MAIN_FASTMEM, fastmemAvailable);
+  SetBaseIfUnspecified(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
+  SetBaseIfUnspecified(Config::MAIN_FAST_DISC_SPEED, true);
+  SetBaseIfUnspecified(Config::MAIN_DSP_THREAD, true);
   // Speed-first video/CPU defaults
-  Config::SetBaseOrCurrent(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
-  Config::SetBaseOrCurrent(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
-  Config::SetBaseOrCurrent(Config::GFX_HACK_IMMEDIATE_XFB, true);
-  Config::SetBaseOrCurrent(Config::GFX_HACK_VI_SKIP, true);
-  Config::SetBaseOrCurrent(Config::MAIN_ACCURATE_NANS, false);
-  Config::SetBaseOrCurrent(Config::MAIN_SYNC_GPU, false);
+  SetBaseIfUnspecified(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
+  SetBaseIfUnspecified(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
+  SetBaseIfUnspecified(Config::GFX_HACK_IMMEDIATE_XFB, true);
+  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP, true);
+  SetBaseIfUnspecified(Config::MAIN_ACCURATE_NANS, false);
+  SetBaseIfUnspecified(Config::MAIN_SYNC_GPU, false);
 
   // Enforce safe shader compiler limits
   const int hw = (int)[[NSProcessInfo processInfo] processorCount];
   const int threads = std::max(1, std::min(2, hw - 1));
-  Config::SetBaseOrCurrent(Config::GFX_SHADER_COMPILER_THREADS, threads);
-  Config::SetBaseOrCurrent(Config::GFX_SHADER_PRECOMPILER_THREADS, threads);
+  SetBaseIfUnspecified(Config::GFX_SHADER_COMPILER_THREADS, threads);
+  SetBaseIfUnspecified(Config::GFX_SHADER_PRECOMPILER_THREADS, threads);
 
   // Prefer asynchronous present on iOS/tvOS by default (can be toggled in UI)
-  Config::SetBaseOrCurrent(Config::GFX_ASYNC_PRESENT, true);
+  SetBaseIfUnspecified(Config::GFX_ASYNC_PRESENT, true);
 
   WindowSystemInfo wsi;
   wsi.type = WindowSystemType::iOS;

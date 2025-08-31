@@ -187,6 +187,9 @@ struct EmulationScreen: View {
   @State private var hasTopBarInteraction: Bool = false
   @State private var autoHideScheduled: Bool = false
   @State private var autoHideToken = UUID()
+  // AR stabilization
+  @State private var stableAR: CGFloat?
+  @State private var arPollTask: Task<Void, Never>?
   // Touch pad refresh coordination to avoid system detection races
   @State private var touchPadsRefreshToken = UUID()
 #endif
@@ -280,6 +283,7 @@ struct EmulationScreen: View {
         c.gamepad?.valueChangedHandler = nil
         c.microGamepad?.valueChangedHandler = nil
       }
+      arPollTask?.cancel(); arPollTask = nil
     }
     .onChange(of: showPauseMenu) { visible in
       NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
@@ -292,16 +296,22 @@ struct EmulationScreen: View {
             Color.black.ignoresSafeArea()
             GeometryReader { proxy in
                 let isPortrait = proxy.size.height > proxy.size.width
+                let gameAR = stableAR ?? (proxy.size.width / max(proxy.size.height, 1))
                 if isPortrait {
                     VStack(spacing: 0) {
+                        let topInset = proxy.safeAreaInsets.top
+                        if topInset > 0 {
+                            Color.clear.frame(height: topInset)
+                        }
+                        let availableHeight = proxy.size.height - topInset
+                        let desiredHeight = min(availableHeight * 0.66, proxy.size.width / max(gameAR, 0.0001))
                         EmulationSurfaceController(gamePath: game.filePath)
-                            .frame(width: proxy.size.width, height: proxy.size.height * 0.66)
-                            .ignoresSafeArea()
+                            .frame(width: proxy.size.width, height: desiredHeight)
                             .onTapGesture { toggleTopBar() }
                         Spacer()
                     }
                 } else {
-                    let targetHeight = min(proxy.size.height, proxy.size.width * 9.0 / 16.0)
+                    let targetHeight = min(proxy.size.height, proxy.size.width / max(gameAR, 0.0001))
                     VStack(spacing: 0) {
                         Spacer()
                         EmulationSurfaceController(gamePath: game.filePath)
@@ -310,6 +320,10 @@ struct EmulationScreen: View {
                         Spacer()
                     }
                 }
+            }
+            .onChange(of: UIDevice.current.orientation) { _ in
+                TVEmulationBridge.resizeSurfaceNow()
+                scheduleARPoll()
             }
 
             // Top hit area: tap near status bar to reveal overlay (active only when hidden)
@@ -383,15 +397,20 @@ struct EmulationScreen: View {
                             }
                             #if os(iOS)
                             Menu("Touch Cursor Mode") {
-                                Button("Absolute") {
+                                let currentIR = DOLConfigBridge.mainTouchPadIRMode()
+                                Button {
                                     hasTopBarInteraction = true
                                     DOLConfigBridge.setMainTouchPadIRMode(1)
                                     touchPadsRefreshToken = UUID()
+                                } label: {
+                                    Label("Absolute", systemImage: currentIR == 1 ? "checkmark" : "")
                                 }
-                                Button("Drag") {
+                                Button {
                                     hasTopBarInteraction = true
                                     DOLConfigBridge.setMainTouchPadIRMode(2)
                                     touchPadsRefreshToken = UUID()
+                                } label: {
+                                    Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "")
                                 }
                             }
                             #endif
@@ -413,10 +432,12 @@ struct EmulationScreen: View {
 
             // Legacy touch pads
             if isTouchControlsActive {
-                TouchPadsContainer()
+                TouchPadsContainer(forceVisible: true)
                     .id(touchPadsRefreshToken)
                     .ignoresSafeArea()
                     .transition(.opacity)
+                    .onAppear { TVEmulationBridge.setWiiIMUPointEnabled(false) }
+                    .onDisappear { TVEmulationBridge.setWiiIMUPointEnabled(true) }
             }
         }
         .navigationDestination(isPresented: $showSettings) {
@@ -438,15 +459,31 @@ struct EmulationScreen: View {
         NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
         // On iOS, do not hand controller button presses to the system while in-game
         GCController.shouldMonitorBackgroundEvents = false
+        for c in GCController.controllers() {
+            c.controllerPausedHandler = { _ in }
+            if let gp = c.extendedGamepad {
+                if #available(iOS 14.0, *) {
+                    gp.buttonMenu.preferredSystemGestureState = .alwaysReceive
+                    gp.buttonOptions?.preferredSystemGestureState = .disabled
+                }
+            }
+        }
         logCurrentControllers()
         fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
         for c in GCController.controllers() { installInputDebugHandlers(c) }
         obsGCConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
             if let c = note.object as? GCController { installInputDebugHandlers(c) }
             touchPadsRefreshToken = UUID()
+            ControllerStyleManager.shared.refreshDetection()
+            // Persist logical action defaults for UI hints based on the connected controller
+            ControllerStyleManager.shared.applyPresetDefaults()
+            if let c = note.object as? GCController {
+                c.controllerPausedHandler = { _ in }
+            }
         }
         obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in
             touchPadsRefreshToken = UUID()
+            ControllerStyleManager.shared.refreshDetection()
         }
         endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
             dismiss()
@@ -454,14 +491,22 @@ struct EmulationScreen: View {
         obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
             showPauseMenu = true
         }
-        NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
-            touchPadsRefreshToken = UUID()
-        }
         NotificationCenter.default.addObserver(forName: Notification.Name("DOLFastForwardToggled"), object: nil, queue: .main) { note in
             if let enabled = (note.userInfo?["enabled"] as? NSNumber)?.boolValue {
                 fastForwardEnabled = enabled
             } else {
                 fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
+            }
+        }
+        // Re-fetch AR soon after appear to avoid tiny first layout
+        scheduleARPoll()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { TVEmulationBridge.resizeSurfaceNow() }
+        // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
+        let currentIR = DOLConfigBridge.mainTouchPadIRMode()
+        if currentIR == 0 { // None
+            DOLConfigBridge.setMainTouchPadIRMode(1) // Absolute
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                TVEmulationBridge.resizeSurfaceNow()
             }
         }
         // Default touch controls: enabled when no controllers are connected
@@ -479,6 +524,7 @@ struct EmulationScreen: View {
         NotificationCenter.default.removeObserver(self, name: Notification.Name("DOLFastForwardToggled"), object: nil)
         // Disable motion when leaving screen
         TCDeviceMotion.shared.setMotionEnabled(false)
+        arPollTask?.cancel(); arPollTask = nil
     }
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
         // Ask the renderer to resize/reconfigure
@@ -526,7 +572,10 @@ struct EmulationScreen: View {
   }
 
   private func toggleTopBar() {
-    if showTopBar { hideTopBar() } else { showTopBar = true }
+    withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+      showTopBar.toggle()
+    }
+    if showTopBar { scheduleAutoHide() }
   }
 
   private func hideTopBar(now: Bool = false) {
@@ -550,6 +599,21 @@ struct EmulationScreen: View {
     }
     hideBarWorkItem = work
     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
+  }
+
+  private func scheduleARPoll() {
+    arPollTask?.cancel()
+    arPollTask = Task { @MainActor in
+      for _ in 0..<20 {
+        let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+        if ar.isFinite && ar > 0.4 && ar < 3.5 {
+          stableAR = ar
+          TVEmulationBridge.resizeSurfaceNow()
+          break
+        }
+        try? await Task.sleep(nanoseconds: 120_000_000)
+      }
+    }
   }
 #endif
 
@@ -592,9 +656,11 @@ struct EmulationScreen: View {
 
 #if os(iOS)
   private struct TouchPadsContainer: UIViewRepresentable {
+    let forceVisible: Bool
     func makeUIView(context: Context) -> UIView {
       let host = UIView()
       host.backgroundColor = .clear
+      host.isUserInteractionEnabled = true
 
       // Decide which pad to show based on current system/controller config
       if shouldShowWiiPad() {
@@ -606,6 +672,7 @@ struct EmulationScreen: View {
           let motion = TCDeviceMotion.shared
           motion.setMotionEnabled(true)
           motion.setPort(4)
+          motion.statusBarOrientationChanged()
           let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
           if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) {
             wiiPad.setTouchIRMode(mode)
@@ -613,26 +680,37 @@ struct EmulationScreen: View {
           wiiPad.resetPointer()
           let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
           wiiPad.recalculatePointerValues(new_rect: host.bounds, game_aspect: ar)
+          // Ensure visible according to settings
+          wiiPad.alpha = CGFloat(DOLConfigBridge.mainTouchPadOpacity())
         }
       } else if shouldShowGameCubePad() {
         if let gcPad = loadPad(named: "TCGameCubePad") {
           gcPad.frame = host.bounds
           gcPad.autoresizingMask = [.flexibleWidth, .flexibleHeight]
           host.addSubview(gcPad)
+          gcPad.alpha = CGFloat(DOLConfigBridge.mainTouchPadOpacity())
         }
       }
       return host
     }
-    func updateUIView(_ uiView: UIView, context: Context) { }
+    func updateUIView(_ uiView: UIView, context: Context) {
+      // Recalculate Wii pointer values on layout/updates
+      for sub in uiView.subviews {
+        if let wiiPad = sub as? TCWiiPad {
+          let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+          wiiPad.recalculatePointerValues(new_rect: uiView.bounds, game_aspect: ar)
+          // Keep alpha in sync with setting
+          wiiPad.alpha = CGFloat(DOLConfigBridge.mainTouchPadOpacity())
+        } else if let gcPad = sub as? UIView {
+          gcPad.alpha = CGFloat(DOLConfigBridge.mainTouchPadOpacity())
+        }
+      }
+    }
 
     // MARK: - Decision Logic (mirrors EmulationiOSViewController)
     private func shouldShowGameCubePad() -> Bool {
-      // Don't show any touch controls if external controllers are connected
       let hasExternal = !GCController.controllers().isEmpty
-      if hasExternal {
-        NSLog("[TOUCH] Not showing GameCube pad - external controllers connected")
-        return false
-      }
+      if hasExternal && !forceVisible { return false }
 
       // Show GameCube pad only if the current system is GameCube (not Wii)
       let isWii = TVEmulationBridge.isCurrentSystemWii()
@@ -642,12 +720,8 @@ struct EmulationScreen: View {
     }
 
     private func shouldShowWiiPad() -> Bool {
-      // Don't show any touch controls if external controllers are connected
       let hasExternal = !GCController.controllers().isEmpty
-      if hasExternal {
-        NSLog("[TOUCH] Not showing Wii pad - external controllers connected")
-        return false
-      }
+      if hasExternal && !forceVisible { return false }
 
       // Show Wii pad only if the current system is Wii
       let isWii = TVEmulationBridge.isCurrentSystemWii()

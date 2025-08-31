@@ -18,6 +18,11 @@
 #include "VideoCommon/Present.h"
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/PostProcessing.h"
+#include "WiimoteEmu/WiimoteEmu.h"
+#import "Core/Config/WiimoteSettings.h"
+#import "Core/HW/GCPad.h"
+#import "Core/HW/SI/SI_Device.h"
+#import "Core/HW/Wiimote.h"
 
 extern std::unique_ptr<VideoCommon::Presenter> g_presenter;
 extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
@@ -123,6 +128,15 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   if (g_presenter)
     return (float)g_presenter->CalculateDrawAspectRatio();
   return 4.0f / 3.0f;
+}
+
++ (void)setWiiIMUPointEnabled:(BOOL)enabled {
+  // Enable/disable Wiimote IMUPoint group to avoid fighting with touch IR
+  auto& system = Core::System::GetInstance();
+  Core::RunOnCPUThread(system, [enabled]() {
+    auto* group = Wiimote::GetWiimoteGroup(0, WiimoteEmu::WiimoteGroup::IMUPoint);
+    if (group) group->enabled = enabled;
+  }, true);
 }
 
 @end

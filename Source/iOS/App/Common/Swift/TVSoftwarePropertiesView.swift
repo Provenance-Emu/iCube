@@ -63,6 +63,38 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                             PropertyCard(title: "Apploader Date", value: item.apploaderDateString ?? "-")
                             PropertyCard(title: "File Size", value: fileSizeText)
                         }
+
+                        // Profiles (MVP)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Profiles").font(.headline)
+                            HStack(spacing: 12) {
+                                Button("Apply Recommended") {
+                                    if let rec = GameProfiles.shared.profile(for: item.gameID) {
+                                        GameProfiles.shared.setProfile(rec, for: item.gameID)
+                                        GameProfiles.shared.applyProfileIfAvailable(for: item)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                Toggle("Widescreen Hack", isOn: Binding(get: { DOLConfigBridge.gfxWidescreenHack() }, set: { DOLConfigBridge.setGfxWidescreenHack($0) }))
+                            }
+                            HStack(spacing: 12) {
+                                Picker("IR Mode", selection: Binding(get: { DOLConfigBridge.mainTouchPadIRMode() }, set: { DOLConfigBridge.setMainTouchPadIRMode($0) })) {
+                                    Text("None").tag(0)
+                                    Text("Absolute").tag(1)
+                                    Text("Drag").tag(2)
+                                }
+                                .pickerStyle(.segmented)
+                            }
+                            HStack {
+                                NavigationLink(destination: ShaderPickerView(selectedPresetPath: Binding(get: { UserDefaults.standard.string(forKey: "shader_preset_path") }, set: { UserDefaults.standard.set($0, forKey: "shader_preset_path"); NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil) }))) {
+                                    Text("Shader Preset")
+                                    Spacer()
+                                    Text(UserDefaults.standard.string(forKey: "shader_preset_path")?.split(separator: "/").last.map(String.init) ?? L("None")).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(12)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .padding(16)
                 }
