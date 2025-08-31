@@ -120,14 +120,15 @@ private struct EmulationSurfaceController: UIViewControllerRepresentable {
   func updateUIViewController(_ uiViewController: EmuContainerViewController, context: Context) { }
 }
 
-private func resolveCachedPathIfAvailable(_ path: String) -> String {
+  @MainActor
+  private func resolveCachedPathIfAvailable(_ path: String) -> String {
     guard let url = URL(string: path), let scheme = url.scheme?.lowercased(), ["http","https","webdav","webdavs"].contains(scheme) else {
         return path
     }
     func defaultPort(_ scheme: String?) -> Int { (scheme?.lowercased() == "https" || scheme?.lowercased() == "webdavs") ? 443 : 80 }
     guard let host = url.host?.lowercased() else { return path }
     let port = url.port ?? defaultPort(url.scheme)
-    let remoteItem = RemoteLibraryItem(url: url, name: url.lastPathComponent, sizeBytes: nil, etag: nil, lastModified: nil)
+    let remoteItem = RemoteLibraryItem(url: url, displayName: url.lastPathComponent, sizeBytes: nil, etag: nil, lastModified: nil)
     for src in RemoteSourcesStore.shared.sources {
         guard let webdav = src as? WebDAVSource else { continue }
         let base = webdav.baseURL
@@ -418,7 +419,8 @@ struct EmulationScreen: View {
     .onAppear {
         NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
         NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
-        GCController.shouldMonitorBackgroundEvents = true
+        // On iOS, do not hand controller button presses to the system while in-game
+        GCController.shouldMonitorBackgroundEvents = false
         logCurrentControllers()
         fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
         for c in GCController.controllers() { installInputDebugHandlers(c) }
@@ -589,16 +591,32 @@ struct EmulationScreen: View {
 
     // MARK: - Decision Logic (mirrors EmulationiOSViewController)
     private func shouldShowGameCubePad() -> Bool {
-      // Heuristic: default device qualifier for GC Port 1 is the iOS Touchscreen, and no external controllers override it
-      let qualifier = TVControllerMappingBridge.defaultDevice(forGCPort: 1)
-      let isTouchscreen = qualifier.contains("Touchscreen") || qualifier.contains("iOS")
+      // Don't show any touch controls if external controllers are connected
       let hasExternal = !GCController.controllers().isEmpty
-      return isTouchscreen && !hasExternal
+      if hasExternal {
+        NSLog("[TOUCH] Not showing GameCube pad - external controllers connected")
+        return false
+      }
+
+      // Show GameCube pad only if the current system is GameCube (not Wii)
+      let isWii = TVEmulationBridge.isCurrentSystemWii()
+      let shouldShow = !isWii
+      NSLog("[TOUCH] GameCube pad decision: isWii=\(isWii), shouldShow=\(shouldShow)")
+      return shouldShow
     }
 
     private func shouldShowWiiPad() -> Bool {
-      // If GC pad isn’t selected, prefer Wii pad; the UIKit VC will handle precise modes
-      return !shouldShowGameCubePad()
+      // Don't show any touch controls if external controllers are connected
+      let hasExternal = !GCController.controllers().isEmpty
+      if hasExternal {
+        NSLog("[TOUCH] Not showing Wii pad - external controllers connected")
+        return false
+      }
+
+      // Show Wii pad only if the current system is Wii
+      let isWii = TVEmulationBridge.isCurrentSystemWii()
+      NSLog("[TOUCH] Wii pad decision: isWii=\(isWii), shouldShow=\(isWii)")
+      return isWii
     }
 
     private func loadPad(named name: String) -> UIView? {

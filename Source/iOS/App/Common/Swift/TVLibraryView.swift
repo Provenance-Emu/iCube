@@ -706,7 +706,7 @@ struct TVLibraryView: View {
         if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
             for source in RemoteSourcesStore.shared.sources {
                 if let webdav = source as? WebDAVSource, webdav.isPreCachingEnabled {
-                    let remoteItem = RemoteLibraryItem(url: url, name: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
+                    let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
                     if !webdav.isCached(remoteItem) {
                         blockingPrecacheItem = item
                         blockingPrecacheProgress = 0
@@ -716,11 +716,8 @@ struct TVLibraryView: View {
                                     DispatchQueue.main.async { blockingPrecacheProgress = progress }
                                 }
                                 DispatchQueue.main.async {
-                                    let cachedPath = webdav.getCacheDirectory().appendingPathComponent(webdav.getCacheInfo(for: remoteItem)?.localPath ?? "").path
-                                    var resolved = item
-                                    resolved.filePath = cachedPath
                                     blockingPrecacheItem = nil
-                                    proceedWithGameLaunch(resolved)
+                                    proceedWithGameLaunch(item)
                                 }
                             } catch {
                                 DispatchQueue.main.async {

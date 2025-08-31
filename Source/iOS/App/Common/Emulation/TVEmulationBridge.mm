@@ -115,4 +115,8 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   return Core::GetIsThrottlerTempDisabled();
 }
 
++ (BOOL)isCurrentSystemWii {
+  return Core::System::GetInstance().IsWii();
+}
+
 @end

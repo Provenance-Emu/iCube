@@ -39,6 +39,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)toggleFastForward;
 + (BOOL)isFastForwardEnabled;
 
+// System Detection
++ (BOOL)isCurrentSystemWii;
+
 @end
 
 NS_ASSUME_NONNULL_END
