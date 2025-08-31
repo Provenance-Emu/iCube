@@ -31,6 +31,16 @@ func configureControllerForTVOS(_ c: GCController) {
             eg.buttonMenu.preferredSystemGestureState = .alwaysReceive
             eg.buttonOptions?.preferredSystemGestureState = .disabled
         }
+        // Map Start: prefer buttonMenu; fall back to Options when present
+        if #available(iOS 14.0, tvOS 14.0, *) {
+            let setStart: (Bool) -> Void = { pressed in
+                InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: pressed ? 1.0 : 0.0)
+            }
+            eg.buttonMenu.pressedChangedHandler = { _, _, pressed in setStart(pressed) }
+            if let options = eg.buttonOptions {
+                options.pressedChangedHandler = { _, _, pressed in setStart(pressed) }
+            }
+        }
     }
     installInputDebugHandlers(c)
 }
@@ -71,6 +81,9 @@ func installInputDebugHandlers(_ c: GCController) {
                     InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: 1.0)
                 } else {
                     InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: 0.0)
+                }
+                if let options = gamepad.buttonOptions, options.isPressed {
+                    InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: 1.0)
                 }
             }
             // Multiple pause gesture options for different controller types (tvOS)
@@ -259,27 +272,15 @@ func installInputDebugHandlers(_ c: GCController) {
             prev?(micro, element)
             InputOverriderBridge.setControl(.gcPadA, controller: 0, value: micro.buttonA.isPressed ? 1.0 : 0.0)
             InputOverriderBridge.setControl(.gcPadB, controller: 0, value: micro.buttonX.isPressed ? 1.0 : 0.0)
+            // Map microGamepad Menu to Start for controllers without dedicated Start
             if #available(tvOS 14.0, *) {
-                let menu = micro.buttonMenu
-                if menu.isPressed {
-                    InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: 1.0)
-                } else {
-                    InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: 0.0)
-                }
+                InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: micro.buttonMenu.isPressed ? 1.0 : 0.0)
             }
             let dx = micro.dpad.xAxis.value
             let dy = micro.dpad.yAxis.value
-            InputOverriderBridge.setControl(.gcPadDpadLeft, controller: 0, value: dx < -0.5 ? 1.0 : 0.0)
-            InputOverriderBridge.setControl(.gcPadDpadRight, controller: 0, value: dx > 0.5 ? 1.0 : 0.0)
-            InputOverriderBridge.setControl(.gcPadDpadDown, controller: 0, value: dy < -0.5 ? 1.0 : 0.0)
-            InputOverriderBridge.setControl(.gcPadDpadUp, controller: 0, value: dy > 0.5 ? 1.0 : 0.0)
-            // also StateManager
-            TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonA.rawValue, controller: 0, state: micro.buttonA.isPressed)
-            TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonB.rawValue, controller: 0, state: micro.buttonX.isPressed)
-            TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonLeft.rawValue, controller: 0, state: dx < -0.5)
-            TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonRight.rawValue, controller: 0, state: dx > 0.5)
-            TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonDown.rawValue, controller: 0, state: dy < -0.5)
-            TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonUp.rawValue, controller: 0, state: dy > 0.5)
+            InputOverriderBridge.setControl(.gcPadMainStickX, controller: 0, value: Double(dx))
+            // Map Y to up/down with signed axis expected by core (-1..1)
+            InputOverriderBridge.setControl(.gcPadMainStickY, controller: 0, value: Double(dy))
         }
     }
 }
