@@ -38,26 +38,7 @@
 #include "Core/System.h"
 #include "Common/MemoryUtil.h"
 
-namespace {
-struct BatchJitWriteScope {
-  Arm64Gen::ARM64XEmitter& near_emit;
-  Arm64Gen::ARM64XEmitter& far_emit;
-  Common::ScopedJITPageWriteAndNoExecute write_scope;
-  u8* near_start;
-  u8* far_start;
-  explicit BatchJitWriteScope(Arm64Gen::ARM64XEmitter& near_emitter,
-                              Arm64Gen::ARM64XEmitter& far_emitter,
-                              u8* region_ptr)
-      : near_emit(near_emitter), far_emit(far_emitter), write_scope(region_ptr) {
-    near_start = near_emit.GetWritableCodePtr();
-    far_start = far_emit.GetWritableCodePtr();
-  }
-  ~BatchJitWriteScope() {
-    near_emit.FlushIcache();
-    far_emit.FlushIcache();
-  }
-};
-}
+// BatchJitWriteScope is declared in Jit.h as a nested type.
 
 using namespace Arm64Gen;
 

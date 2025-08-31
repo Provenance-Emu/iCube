@@ -29,7 +29,7 @@ using namespace Arm64Gen;
 
 void JitArm64::GenerateAsm()
 {
-  const Common::ScopedJITPageWriteAndNoExecute enable_jit_page_writes(GetRegionPtr());
+  BatchJitWriteScope batch_scope(*this, m_far_code, GetRegionPtr());
 
   const bool enable_debugging = Config::IsDebuggingEnabled();
 
@@ -238,7 +238,7 @@ void JitArm64::GenerateAsm()
 
   GenerateCommonAsm();
 
-  FlushIcache();
+  // Flushed by BatchJitWriteScope
 }
 
 void JitArm64::GenerateCommonAsm()

@@ -19,6 +19,7 @@
 #include "Core/PowerPC/JitCommon/JitAsmCommon.h"
 #include "Core/PowerPC/JitCommon/JitBase.h"
 #include "Core/PowerPC/PPCAnalyst.h"
+#include "Common/MemoryUtil.h"
 
 class HostDisassembler;
 
@@ -57,6 +58,24 @@ public:
   std::size_t DisassembleFarCode(const JitBlock& block, std::ostream& stream) const override;
 
   const char* GetName() const override { return "JITARM64"; }
+
+  struct BatchJitWriteScope
+  {
+    Arm64Gen::ARM64XEmitter& near_emit;
+    Arm64Gen::ARM64XEmitter& far_emit;
+    Common::ScopedJITPageWriteAndNoExecute write_scope;
+    BatchJitWriteScope(Arm64Gen::ARM64XEmitter& near_emitter,
+                       Arm64Gen::ARM64XEmitter& far_emitter,
+                       u8* region_ptr)
+        : near_emit(near_emitter), far_emit(far_emitter), write_scope(region_ptr)
+    {
+    }
+    ~BatchJitWriteScope()
+    {
+      near_emit.FlushIcache();
+      far_emit.FlushIcache();
+    }
+  };
 
   // OPCODES
   using Instruction = void (JitArm64::*)(UGeckoInstruction);
