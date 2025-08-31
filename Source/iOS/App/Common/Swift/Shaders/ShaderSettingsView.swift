@@ -242,6 +242,7 @@ struct ShaderParameterEditor: View {
     @State private var isLoadingPreset: Bool = false
     @State private var groups: [(id: String, title: String, indices: [Int])] = []
     @State private var selectedGroup: String = "ALL"
+    @State private var lastLoadedPresetToken: String?
 
     var body: some View {
         List {
@@ -286,7 +287,8 @@ struct ShaderParameterEditor: View {
         .onAppear { load() }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLShaderPresetDidLoad"))) { _ in
             self.isLoadingPreset = false
-            load()
+            let token = currentPresetSignature()
+            if token != lastLoadedPresetToken { load() }
         }
         .navigationBarTitleDisplayMode(.inline)
         .background(Color.clear)
@@ -296,8 +298,6 @@ struct ShaderParameterEditor: View {
                 Menu {
                     Button(L("None")) {
                         currentPresetPath = nil
-                        UserDefaults.standard.removeObject(forKey: "shader_preset_path")
-                        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
                         DOLShaderPostProcessor.shared.applyPresetPath(nil)
                         isLoadingPreset = true
                     }
@@ -312,8 +312,6 @@ struct ShaderParameterEditor: View {
                                 } else { return absPath }
                             }()
                             currentPresetPath = normalized
-                            UserDefaults.standard.set(normalized, forKey: "shader_preset_path")
-                            NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
                             DOLShaderPostProcessor.shared.applyPresetPath(normalized)
                             isLoadingPreset = true
                         }
@@ -344,6 +342,12 @@ struct ShaderParameterEditor: View {
         self.values = map
         self.groups = buildGroups(params: ps)
         if !groups.contains(where: { $0.id == selectedGroup }) { selectedGroup = groups.first?.id ?? "ALL" }
+        self.lastLoadedPresetToken = currentPresetSignature()
+    }
+
+    private func currentPresetSignature() -> String? {
+        let path = UserDefaults.standard.string(forKey: "shader_preset_path") ?? "(none)"
+        return "\(path)|\(params.count)"
     }
 
     private func buildGroups(params: [Compiled.Parameter]) -> [(id: String, title: String, indices: [Int])] {
