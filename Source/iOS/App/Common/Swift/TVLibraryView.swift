@@ -517,6 +517,20 @@ struct TVLibraryView: View {
                 print("TVLibraryView: after reload, library has \(model.games.count) games")
             }
 
+            // Deep link from Spotlight: launch by GameID
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name("DOLLaunchGameByGameID"),
+                object: nil,
+                queue: .main
+            ) { note in
+                guard let gameID = note.userInfo?["gameID"] as? String else { return }
+                let match = model.games.first { $0.gameID == gameID }
+                    ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
+                if let item = match {
+                    navigateTo = item
+                }
+            }
+
             // Listen for async metadata updates (covers/banners)
             NotificationCenter.default.addObserver(
                 forName: NSNotification.Name("GameFileMetadataUpdated"),
@@ -531,6 +545,7 @@ struct TVLibraryView: View {
         }
         .onDisappear {
             NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+            NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
             NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
         }
         #if os(tvOS)

@@ -39,6 +39,31 @@ final class ShaderLibrary {
 struct ShaderPickerView: View {
 	@Binding var selectedPresetPath: String?
 	@State private var presets: [ShaderPreset] = []
+	@State private var favorites: [String] = UserDefaults.standard.stringArray(forKey: "shader_favorites") ?? []
+	@State private var mru: [String] = UserDefaults.standard.stringArray(forKey: "shader_mru") ?? []
+
+	private func normalizedPath(_ absPath: String) -> String {
+		let bundleBase = Bundle.main.bundleURL.path
+		if absPath.hasPrefix(bundleBase), let dotApp = absPath.range(of: ".app/") {
+			return String(absPath[dotApp.upperBound...])
+		}
+		return absPath
+	}
+
+	private func toggleFavorite(_ norm: String) {
+		var set = Set(favorites)
+		if set.contains(norm) { set.remove(norm) } else { set.insert(norm) }
+		favorites = Array(set)
+		UserDefaults.standard.set(favorites, forKey: "shader_favorites")
+	}
+
+	private func pushMRU(_ norm: String) {
+		var list = mru.filter { $0 != norm }
+		list.insert(norm, at: 0)
+		if list.count > 10 { list = Array(list.prefix(10)) }
+		mru = list
+		UserDefaults.standard.set(mru, forKey: "shader_mru")
+	}
 
 	var body: some View {
 		ScrollViewReader { proxy in
@@ -49,6 +74,48 @@ struct ShaderPickerView: View {
 					NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
 				}
 				.id("NONE")
+				// Favorites
+				if !favorites.isEmpty {
+					Section(header: Text(L("Favorites"))) {
+						ForEach(presets.filter { favorites.contains(normalizedPath($0.id.path)) }) { preset in
+							let absPath = preset.id.path
+							let normalized = normalizedPath(absPath)
+							HStack {
+								SelectRow(label: preset.name, checked: (selectedPresetPath == normalized) || (selectedPresetPath == absPath)) {
+									selectedPresetPath = normalized
+									NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+									DOLShaderPostProcessor.shared.applyPresetPath(normalized)
+									pushMRU(normalized)
+								}
+								Spacer()
+								Button(action: { toggleFavorite(normalized) }) {
+									Image(systemName: "star.fill").foregroundColor(.yellow)
+								}
+							}
+						}
+					}
+				}
+				// Recently used
+				if !mru.isEmpty {
+					Section(header: Text(L("Recently Used"))) {
+						ForEach(presets.filter { mru.contains(normalizedPath($0.id.path)) }) { preset in
+							let absPath = preset.id.path
+							let normalized = normalizedPath(absPath)
+							HStack {
+								SelectRow(label: preset.name, checked: (selectedPresetPath == normalized) || (selectedPresetPath == absPath)) {
+									selectedPresetPath = normalized
+									NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+									DOLShaderPostProcessor.shared.applyPresetPath(normalized)
+									pushMRU(normalized)
+								}
+								Spacer()
+								Button(action: { toggleFavorite(normalized) }) {
+									Image(systemName: favorites.contains(normalized) ? "star.fill" : "star").foregroundColor(.yellow)
+								}
+							}
+						}
+					}
+				}
 				ForEach(presets) { preset in
 					Group {
 						let absPath = preset.id.path
@@ -60,11 +127,19 @@ struct ShaderPickerView: View {
 								return absPath
 							}
 						}()
-						SelectRow(label: preset.name, checked: (selectedPresetPath == normalized) || (selectedPresetPath == absPath)) {
-							selectedPresetPath = normalized
-							NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-							// Immediate apply while running
-							DOLShaderPostProcessor.shared.applyPresetPath(normalized)
+						HStack {
+							SelectRow(label: preset.name, checked: (selectedPresetPath == normalized) || (selectedPresetPath == absPath)) {
+								selectedPresetPath = normalized
+								NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+								// Immediate apply while running
+								DOLShaderPostProcessor.shared.applyPresetPath(normalized)
+								pushMRU(normalized)
+							}
+							Spacer()
+							Button(action: { toggleFavorite(normalized) }) {
+								Image(systemName: favorites.contains(normalized) ? "star.fill" : "star")
+									.foregroundColor(.yellow)
+							}
 						}
 						.id(preset.id)
 					}
@@ -73,6 +148,8 @@ struct ShaderPickerView: View {
 			.navigationTitle(L("Shaders"))
 			.onAppear {
 				presets = ShaderLibrary.discoverPresets()
+				favorites = UserDefaults.standard.stringArray(forKey: "shader_favorites") ?? []
+				mru = UserDefaults.standard.stringArray(forKey: "shader_mru") ?? []
 				/// Auto-scroll to the currently selected shader (or None)
 				DispatchQueue.main.async {
 					scrollToSelected(proxy: proxy)
@@ -314,6 +391,12 @@ struct ShaderParameterEditor: View {
                             currentPresetPath = normalized
                             DOLShaderPostProcessor.shared.applyPresetPath(normalized)
                             isLoadingPreset = true
+                            // Update MRU on quick change
+                            var list = UserDefaults.standard.stringArray(forKey: "shader_mru") ?? []
+                            list.removeAll(where: { $0 == normalized })
+                            list.insert(normalized, at: 0)
+                            if list.count > 10 { list = Array(list.prefix(10)) }
+                            UserDefaults.standard.set(list, forKey: "shader_mru")
                         }
                     }
                 } label: {

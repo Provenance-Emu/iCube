@@ -444,7 +444,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     }
 
     private func hasSupportedExtension(_ url: URL) -> Bool {
-        let exts = ["dol","iso","zip","nkit","cso","img","rvz","wia","gcz","wad","elf","gcm","tgc","wbfs","ciso"]
+        let exts = ["dol","iso","zip","nkit","cso","img","rvz","wia","gcz","wad","elf","gcm","tgc","wbfs","ciso","png","jpg"]
         return exts.contains(url.pathExtension.lowercased())
     }
 

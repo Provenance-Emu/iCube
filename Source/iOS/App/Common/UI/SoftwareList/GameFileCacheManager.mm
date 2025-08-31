@@ -16,9 +16,11 @@
 + (GameFileCacheManager*)sharedManager {
   static dispatch_once_t _onceToken = 0;
   static GameFileCacheManager* _sharedManager = nil;
+  static dispatch_queue_t _cacheQueue = nil;
 
   dispatch_once(&_onceToken, ^{
     _sharedManager = [[self alloc] init];
+    _cacheQueue = dispatch_queue_create("org.dolphin-ios.gamefilecache", DISPATCH_QUEUE_SERIAL);
   });
 
   return _sharedManager;
@@ -66,7 +68,7 @@
 }
 
 - (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
-  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+  dispatch_async(dispatch_queue_create("org.dolphin-ios.gamefilecache.rescan", DISPATCH_QUEUE_SERIAL), ^{
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Only scan local folders - don't preserve old remote URLs during refresh
@@ -76,8 +78,19 @@
 
     printf("DEBUG CACHE MGR: rescanAndFetchMetadata() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
 
-    bool updated = self->_cache->Update(all);
-    updated |= self->_cache->UpdateAdditionalMetadata();
+    bool updated = false;
+    @try {
+      updated = self->_cache->Update(all);
+      try {
+        updated |= self->_cache->UpdateAdditionalMetadata();
+      } catch (const std::exception& e) {
+        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s", e.what());
+      } catch (...) {
+        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception");
+      }
+    } @catch (NSException* ex) {
+      NSLog(@"GameFileCache rescan exception: %@", ex);
+    }
 
     if (updated) {
       self->_cache->Save();
@@ -90,7 +103,7 @@
 }
 
 - (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
-  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+  dispatch_async(dispatch_queue_create("org.dolphin-ios.gamefilecache.rescanlocal", DISPATCH_QUEUE_SERIAL), ^{
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // During refresh: preserve existing remote URLs and only add/update local files
@@ -125,8 +138,19 @@
     printf("DEBUG CACHE MGR: rescanLocalAndFetchMetadata() - using %lu local paths + %lu preserved remote URLs\n",
            (unsigned long)(all.size() - remoteUrls.count), (unsigned long)remoteUrls.count);
 
-    bool updated = self->_cache->Update(all);
-    updated |= self->_cache->UpdateAdditionalMetadata();
+    bool updated = false;
+    @try {
+      updated = self->_cache->Update(all);
+      try {
+        updated |= self->_cache->UpdateAdditionalMetadata();
+      } catch (const std::exception& e) {
+        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s", e.what());
+      } catch (...) {
+        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception");
+      }
+    } @catch (NSException* ex) {
+      NSLog(@"GameFileCache rescanLocal exception: %@", ex);
+    }
 
     if (updated) {
       self->_cache->Save();
@@ -188,7 +212,10 @@
     printf("DEBUG CACHE MGR:   input[%lu]: %s\n", (unsigned long)i, [extraPaths[i] UTF8String]);
   }
 
-  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+  static dispatch_queue_t _updateQueue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{ _updateQueue = dispatch_queue_create("org.dolphin-ios.gamefilecache.update", DISPATCH_QUEUE_SERIAL); });
+  dispatch_async(_updateQueue, ^{
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Expand only local folders via FindAllGamePaths
@@ -242,7 +269,13 @@
       printf("DEBUG CACHE MGR: C++ Update returned %s\n", updated ? "true" : "false");
 
       if (fetch) {
-        updated |= self->_cache->UpdateAdditionalMetadata();
+        try {
+          updated |= self->_cache->UpdateAdditionalMetadata();
+        } catch (const std::exception& e) {
+          NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s", e.what());
+        } catch (...) {
+          NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception");
+        }
       }
       if (updated) {
         self->_cache->Save();

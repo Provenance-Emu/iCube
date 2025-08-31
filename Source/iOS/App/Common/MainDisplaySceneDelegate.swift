@@ -3,6 +3,7 @@
 
 import UIKit
 import SwiftUI
+import CoreSpotlight
 
 class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
@@ -41,5 +42,14 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func sceneDidEnterBackground(_ scene: UIScene) {
     ServiceManager.shared.applicationDidEnterBackground()
+  }
+
+  func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    if userActivity.activityType == CSSearchableItemActionType,
+       let identifier = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+       identifier.hasPrefix("dios.game.") {
+      let gameID = String(identifier.dropFirst("dios.game.".count))
+      NotificationCenter.default.post(name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil, userInfo: ["gameID": gameID])
+    }
   }
 }
