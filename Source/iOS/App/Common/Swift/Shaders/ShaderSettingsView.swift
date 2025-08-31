@@ -239,13 +239,29 @@ struct ShaderParameterEditor: View {
     @State private var params: [Compiled.Parameter] = []
     @State private var values: [Int: CGFloat] = [:]
     @State private var currentPresetPath: String? = UserDefaults.standard.string(forKey: "shader_preset_path")
+    @State private var isLoadingPreset: Bool = false
+    @State private var groups: [(id: String, title: String, indices: [Int])] = []
+    @State private var selectedGroup: String = "ALL"
 
     var body: some View {
         List {
             if params.isEmpty {
-                Text(L("No adjustable parameters in the current shader")).foregroundStyle(.secondary)
+                if isLoadingPreset {
+                    HStack { ProgressView(); Text(L("Loading preset…")).foregroundStyle(.secondary) }
+                } else {
+                    Text(L("No adjustable parameters in the current shader")).foregroundStyle(.secondary)
+                }
             } else {
+                if groups.count > 1 {
+                    Picker(L("Group"), selection: $selectedGroup) {
+                        ForEach(groups, id: \.id) { g in
+                            Text(g.title).tag(g.id)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
                 ForEach(params, id: \.index) { p in
+                    if shouldShowParam(p.index) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text(p.desc)
@@ -263,10 +279,15 @@ struct ShaderParameterEditor: View {
                         ), in: p.minimumCGFloat...p.maximumCGFloat, step: p.stepCGFloat)
                     }
                     .padding(.vertical, 4)
+                    }
                 }
             }
         }
         .onAppear { load() }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLShaderPresetDidLoad"))) { _ in
+            self.isLoadingPreset = false
+            load()
+        }
         .navigationBarTitleDisplayMode(.inline)
         .background(Color.clear)
         .scrollContentBackground(.hidden)
@@ -278,7 +299,7 @@ struct ShaderParameterEditor: View {
                         UserDefaults.standard.removeObject(forKey: "shader_preset_path")
                         NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
                         DOLShaderPostProcessor.shared.applyPresetPath(nil)
-                        load()
+                        isLoadingPreset = true
                     }
                     let presets = ShaderLibrary.discoverPresets()
                     ForEach(presets, id: \.id) { preset in
@@ -294,11 +315,20 @@ struct ShaderParameterEditor: View {
                             UserDefaults.standard.set(normalized, forKey: "shader_preset_path")
                             NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
                             DOLShaderPostProcessor.shared.applyPresetPath(normalized)
-                            load()
+                            isLoadingPreset = true
                         }
                     }
                 } label: {
                     Label(L("Preset"), systemImage: "square.grid.2x2")
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(L("Reset All")) {
+                    for p in params {
+                        let v = p.initialCGFloat
+                        values[p.index] = v
+                        DOLShaderPostProcessor.shared.setValue(v, forParameterIndex: p.index)
+                    }
                 }
             }
         }
@@ -312,6 +342,39 @@ struct ShaderParameterEditor: View {
             map[p.index] = DOLShaderPostProcessor.shared.currentValueForParameter(index: p.index)
         }
         self.values = map
+        self.groups = buildGroups(params: ps)
+        if !groups.contains(where: { $0.id == selectedGroup }) { selectedGroup = groups.first?.id ?? "ALL" }
+    }
+
+    private func buildGroups(params: [Compiled.Parameter]) -> [(id: String, title: String, indices: [Int])] {
+        // We don’t have per-param pass/alias in the parameter itself, so group all under ALL for now
+        // Future: if parameter naming convention includes pass aliases (e.g., "Bloom:Intensity"), split by prefix
+        // Try to derive groups from name prefix before ':'
+        var buckets: [String: [Int]] = [:]
+        for p in params {
+            let comps = p.name.split(separator: ":", maxSplits: 1).map(String.init)
+            let key = comps.count > 1 ? comps[0] : "ALL"
+            buckets[key, default: []].append(p.index)
+        }
+        var result: [(id: String, title: String, indices: [Int])] = []
+        for (k, idxs) in buckets {
+            let title = (k == "ALL") ? L("All") : k
+            result.append((id: k, title: title, indices: idxs.sorted()))
+        }
+        // Ensure ALL appears first
+        return result.sorted(by: { (a: (id: String, title: String, indices: [Int]), b: (id: String, title: String, indices: [Int])) -> Bool in
+            if a.id == "ALL" { return true }
+            if b.id == "ALL" { return false }
+            return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+        })
+    }
+
+    private func shouldShowParam(_ index: Int) -> Bool {
+        if selectedGroup == "ALL" { return true }
+        if let grp = groups.first(where: { $0.id == selectedGroup }) {
+            return grp.indices.contains(index)
+        }
+        return true
     }
 }
 

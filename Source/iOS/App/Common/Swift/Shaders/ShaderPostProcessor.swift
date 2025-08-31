@@ -161,6 +161,9 @@ import MetalKit
 			cachedPresetPath = p
 			// Restore persisted parameter values for this preset
 			restorePersistedParameters(forPresetPath: p)
+			DispatchQueue.main.async {
+				NotificationCenter.default.post(name: Notification.Name("DOLShaderPresetDidLoad"), object: nil)
+			}
 			// print("[Shaders] Swift: loaded preset OK, hasShader=\(filter.hasShader)")
 			return
 		} catch {
@@ -175,6 +178,9 @@ import MetalKit
 			cachedPresetPath = p
 			// Restore persisted parameter values for this preset
 			restorePersistedParameters(forPresetPath: p)
+			DispatchQueue.main.async {
+				NotificationCenter.default.post(name: Notification.Name("DOLShaderPresetDidLoad"), object: nil)
+			}
 			// print("[Shaders] Swift: loaded preset via url OK, hasShader=\(filter.hasShader)")
 			return
 		} catch {
