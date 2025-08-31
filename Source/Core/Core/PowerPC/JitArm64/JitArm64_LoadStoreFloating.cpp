@@ -175,13 +175,11 @@ void JitArm64::lfXX(UGeckoInstruction inst)
     fprs_in_use[DecodeReg(VD)] = 0;
 
   if (is_immediate && m_mmu.IsOptimizableRAMAddress(imm_addr, BackPatchInfo::GetFlagSize(flags)))
-  {
     EmitBackpatchRoutine(flags, MemAccessMode::AlwaysFastAccess, VD, XA, regs_in_use, fprs_in_use);
-  }
+  else if (is_immediate)
+    EmitBackpatchRoutine(flags, MemAccessMode::AlwaysSlowAccess, VD, XA, regs_in_use, fprs_in_use);
   else
-  {
     EmitBackpatchRoutine(flags, MemAccessMode::Auto, VD, XA, regs_in_use, fprs_in_use);
-  }
 
   const ARM64Reg VD_again = fpr.RW(inst.FD, type, true);
   ASSERT(VD == VD_again);

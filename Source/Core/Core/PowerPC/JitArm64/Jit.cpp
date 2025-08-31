@@ -37,6 +37,7 @@
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
 #include "Common/MemoryUtil.h"
+#include "Common/JITMemoryTracker.h"
 
 // BatchJitWriteScope is declared in Jit.h as a nested type.
 
@@ -114,12 +115,18 @@ void JitArm64::SetOptimizationEnabled(bool enabled)
     analyzer.SetOption(PPCAnalyst::PPCAnalyzer::OPTION_CONDITIONAL_CONTINUE);
     analyzer.SetOption(PPCAnalyst::PPCAnalyzer::OPTION_CARRY_MERGE);
     analyzer.SetOption(PPCAnalyst::PPCAnalyzer::OPTION_BRANCH_FOLLOW);
+#if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || (defined(TARGET_OS_TV) && TARGET_OS_TV)
+    analyzer.SetOption(PPCAnalyst::PPCAnalyzer::OPTION_BRANCH_MERGE);
+#endif
   }
   else
   {
     analyzer.ClearOption(PPCAnalyst::PPCAnalyzer::OPTION_CONDITIONAL_CONTINUE);
     analyzer.ClearOption(PPCAnalyst::PPCAnalyzer::OPTION_CARRY_MERGE);
     analyzer.ClearOption(PPCAnalyst::PPCAnalyzer::OPTION_BRANCH_FOLLOW);
+#if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || (defined(TARGET_OS_TV) && TARGET_OS_TV)
+    analyzer.ClearOption(PPCAnalyst::PPCAnalyzer::OPTION_BRANCH_MERGE);
+#endif
   }
 }
 
@@ -962,6 +969,7 @@ void JitArm64::Jit(u32 em_address, bool clear_cache_and_retry_on_failure)
     ClearCache();
   FreeRanges();
 
+  Common::JITMemoryTracker::EnterThreadWriteScope();
   BatchJitWriteScope batch_scope(*this, m_far_code, GetRegionPtr());
 
   std::size_t block_size = m_code_buffer.size();
@@ -1399,6 +1407,7 @@ bool JitArm64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   }
 
   // Flush happens in BatchJitWriteScope destructor
+  Common::JITMemoryTracker::ExitThreadWriteScope();
 
   return true;
 }

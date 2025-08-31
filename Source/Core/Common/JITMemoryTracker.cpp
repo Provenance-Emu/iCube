@@ -35,6 +35,25 @@ namespace Common
 {
 JITMemoryTracker::JITMemoryTracker() = default;
 
+static thread_local int s_thread_write_scope_nest = 0;
+
+void JITMemoryTracker::EnterThreadWriteScope()
+{
+  s_thread_write_scope_nest++;
+}
+
+void JITMemoryTracker::ExitThreadWriteScope()
+{
+  s_thread_write_scope_nest--;
+  if (s_thread_write_scope_nest < 0)
+    s_thread_write_scope_nest = 0;
+}
+
+bool JITMemoryTracker::IsThreadWriteScopeActive()
+{
+  return s_thread_write_scope_nest > 0;
+}
+
 void JITMemoryTracker::RegisterJITRegion(void* ptr, size_t size)
 {
   std::scoped_lock lk(m_mutex);
@@ -85,6 +104,13 @@ void JITMemoryTracker::JITRegionWriteEnableExecuteDisable(void* ptr)
     return;
   }
 
+  if (IsThreadWriteScopeActive())
+  {
+    // Suppress toggles within a higher-level thread scope; rely on outer scope.
+    info->nest_counter++;
+    return;
+  }
+
   if (info->nest_counter == 0)
   {
 #if defined(__APPLE__) && defined(_M_ARM_64)
@@ -124,7 +150,7 @@ void JITMemoryTracker::JITRegionWriteDisableExecuteEnable(void* ptr)
   {
     PanicAlertFmt("JITMemoryTracker: Nest counter underflow for region {}", ptr);
   }
-  else if (info->nest_counter == 0)
+  else if (info->nest_counter == 0 && !IsThreadWriteScopeActive())
   {
 #if defined(__APPLE__) && defined(_M_ARM_64)
     if (AppleHasJitToggle())

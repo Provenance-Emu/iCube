@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <map>
 #include <mutex>
+#include <unordered_map>
 
 namespace Common
 {
@@ -19,6 +20,10 @@ public:
 
   void JITRegionWriteEnableExecuteDisable(void* ptr);
   void JITRegionWriteDisableExecuteEnable(void* ptr);
+  // Indicates a high-level JIT write scope is active on this thread; suppress nested toggles.
+  static void EnterThreadWriteScope();
+  static void ExitThreadWriteScope();
+  static bool IsThreadWriteScopeActive();
 
 private:
   struct JITRegionInfo

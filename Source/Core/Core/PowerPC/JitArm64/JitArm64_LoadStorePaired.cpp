@@ -94,9 +94,27 @@ void JitArm64::psq_lXX(UGeckoInstruction inst)
     u32 flags = BackPatchInfo::FLAG_LOAD | BackPatchInfo::FLAG_FLOAT | BackPatchInfo::FLAG_SIZE_32;
     if (!w)
       flags |= BackPatchInfo::FLAG_PAIR;
-
-    EmitBackpatchRoutine(flags, MemAccessMode::Auto, VS, EncodeRegTo64(addr_reg), gprs_in_use,
-                         fprs_in_use);
+    // If the address is purely an immediate (no base register), and is safe, force fast access.
+    const bool address_is_immediate = (!inst.RA && !indexed && !update);
+    if (address_is_immediate)
+    {
+      const u32 imm_addr = static_cast<u32>(static_cast<s32>(offset));
+      if (m_mmu.IsOptimizableRAMAddress(imm_addr, BackPatchInfo::GetFlagSize(flags)))
+      {
+        EmitBackpatchRoutine(flags, MemAccessMode::AlwaysFastAccess, VS, EncodeRegTo64(addr_reg),
+                             gprs_in_use, fprs_in_use);
+      }
+      else
+      {
+        EmitBackpatchRoutine(flags, MemAccessMode::AlwaysSlowAccess, VS, EncodeRegTo64(addr_reg),
+                             gprs_in_use, fprs_in_use);
+      }
+    }
+    else
+    {
+      EmitBackpatchRoutine(flags, MemAccessMode::Auto, VS, EncodeRegTo64(addr_reg), gprs_in_use,
+                           fprs_in_use);
+    }
   }
   else
   {

@@ -24,6 +24,39 @@
 
 using namespace Arm64Gen;
 
+const u8* JitArm64::GetOrCreateSlowPathThunk(u32 flags, bool memcheck, bool emitting_routine)
+{
+  SlowThunkKey key{flags, memcheck};
+  auto it = m_slow_thunk_cache.find(key);
+  if (it != m_slow_thunk_cache.end())
+    return it->second;
+
+  // Emit in far code
+  const bool was_in_far = IsInFarCode();
+  if (!was_in_far)
+    SwitchToFarCode();
+
+  const u8* entry = GetCodePtr();
+
+  // Re-emit the slow path body for this shape, minimal wrapper: we rely on the same
+  // body that EmitBackpatchRoutine would generate in the slow path section.
+  // We simulate the same environment: RS in W1/D0 when needed and addr in W1 already
+  // will be set by the caller-side before the branch to thunk.
+
+  // Construct minimal masks for pushes; gprs/fprs sets empty for canonical thunk.
+  BitSet32 gprs_to_push{};
+  BitSet32 fprs_to_push{};
+  EmitBackpatchRoutine(flags, MemAccessMode::AlwaysSlowAccess, ARM64Reg::W1, ARM64Reg::W1,
+                       gprs_to_push, fprs_to_push, /*emitting_routine=*/emitting_routine);
+
+  const u8* exit = GetCodePtr();
+  if (!was_in_far)
+    SwitchToNearCode();
+
+  m_slow_thunk_cache.emplace(key, entry);
+  return entry;
+}
+
 void JitArm64::DoBacktrace(uintptr_t access_address, SContext* ctx)
 {
   for (int i = 0; i < 30; i += 2)
@@ -162,142 +195,18 @@ void JitArm64::EmitBackpatchRoutine(u32 flags, MemAccessMode mode, ARM64Reg RS, 
       {
         FastmemArea* fastmem_area = &m_fault_to_handler[fast_access_end];
         fastmem_area->fast_access_code = fast_access_start;
-        fastmem_area->slow_access_code = GetCodePtr();
+        // Instead of inlining a fresh slow path, branch to an interned thunk for this shape.
+        const u8* thunk = GetOrCreateSlowPathThunk(flags, memcheck, /*emitting_routine=*/false);
+        fastmem_area->slow_access_code = thunk;
       }
     }
 
     if (slow_access_fixup)
       SetJumpTarget(*slow_access_fixup);
 
-    const ARM64Reg temp_gpr = ARM64Reg::W1;
-    const int temp_gpr_index = DecodeReg(temp_gpr);
-
-    BitSet32 gprs_to_push_early = {};
-    if (memcheck)
-      gprs_to_push_early[temp_gpr_index] = true;
-    if (flags & BackPatchInfo::FLAG_LOAD)
-      gprs_to_push_early[0] = true;
-
-    // If we're already pushing one register in the first PushRegisters call, we can push a
-    // second one for free. Let's do so, since it might save one instruction in the second
-    // PushRegisters call. (Do not do this for caller-saved registers which may be in the register
-    // cache, or WriteConditionalExceptionExit won't be able to flush the register cache correctly!)
-    if ((gprs_to_push & gprs_to_push_early).Count() & 1)
-      gprs_to_push_early[30] = true;
-
-    ABI_PushRegisters(gprs_to_push & gprs_to_push_early);
-    ABI_PushRegisters(gprs_to_push & ~gprs_to_push_early);
-    m_float_emit.ABI_PushRegisters(fprs_to_push, ARM64Reg::X30);
-
-    // PC is used by memory watchpoints (if enabled), profiling where to insert gather pipe
-    // interrupt checks, and printing accurate PC locations in debug logs.
-    //
-    // In the case of JitAsm routines, we don't know the PC here,
-    // so the caller has to store the PC themselves.
-    if (!emitting_routine)
-    {
-      MOVI2R(ARM64Reg::W30, js.compilerPC);
-      STR(IndexType::Unsigned, ARM64Reg::W30, PPC_REG, PPCSTATE_OFF(pc));
-    }
-
-    if (flags & BackPatchInfo::FLAG_STORE)
-    {
-      ARM64Reg src_reg = RS;
-      const ARM64Reg dst_reg = access_size == 64 ? ARM64Reg::X1 : ARM64Reg::W1;
-
-      if (flags & BackPatchInfo::FLAG_FLOAT)
-      {
-        if (access_size == 64)
-          m_float_emit.FMOV(dst_reg, EncodeRegToDouble(RS));
-        else
-          m_float_emit.FMOV(dst_reg, EncodeRegToSingle(RS));
-
-        src_reg = dst_reg;
-      }
-
-      if (flags & BackPatchInfo::FLAG_PAIR)
-      {
-        // Compensate for the Write_ functions swapping the whole write instead of each pair
-        SwapPairs(this, dst_reg, src_reg, flags);
-        src_reg = dst_reg;
-      }
-
-      const bool reverse = (flags & BackPatchInfo::FLAG_REVERSE) != 0;
-
-      if (access_size == 64)
-      {
-        ABI_CallFunction(reverse ? &PowerPC::WriteU64SwapFromJit : &PowerPC::WriteU64FromJit,
-                         &m_mmu, src_reg, ARM64Reg::W2);
-      }
-      else if (access_size == 32)
-      {
-        ABI_CallFunction(reverse ? &PowerPC::WriteU32SwapFromJit : &PowerPC::WriteU32FromJit,
-                         &m_mmu, src_reg, ARM64Reg::W2);
-      }
-      else if (access_size == 16)
-      {
-        ABI_CallFunction(reverse ? &PowerPC::WriteU16SwapFromJit : &PowerPC::WriteU16FromJit,
-                         &m_mmu, src_reg, ARM64Reg::W2);
-      }
-      else
-      {
-        ABI_CallFunction(&PowerPC::WriteU8FromJit, &m_mmu, src_reg, ARM64Reg::W2);
-      }
-    }
-    else if (flags & BackPatchInfo::FLAG_ZERO_256)
-    {
-      ABI_CallFunction(&PowerPC::ClearDCacheLineFromJit, &m_mmu, ARM64Reg::W1);
-    }
-    else
-    {
-      if (access_size == 64)
-        ABI_CallFunction(&PowerPC::ReadU64FromJit, &m_mmu, ARM64Reg::W1);
-      else if (access_size == 32)
-        ABI_CallFunction(&PowerPC::ReadU32FromJit, &m_mmu, ARM64Reg::W1);
-      else if (access_size == 16)
-        ABI_CallFunction(&PowerPC::ReadU16FromJit, &m_mmu, ARM64Reg::W1);
-      else
-        ABI_CallFunction(&PowerPC::ReadU8FromJit, &m_mmu, ARM64Reg::W1);
-    }
-
-    m_float_emit.ABI_PopRegisters(fprs_to_push, ARM64Reg::X30);
-    ABI_PopRegisters(gprs_to_push & ~gprs_to_push_early);
-
-    if (memcheck)
-    {
-      const ARM64Reg temp_fpr = fprs_to_push[0] ? ARM64Reg::INVALID_REG : ARM64Reg::Q0;
-      const u64 early_push_count = (gprs_to_push & gprs_to_push_early).Count();
-      const u64 early_push_size = Common::AlignUp(early_push_count, 2) * 8;
-
-      WriteConditionalExceptionExit(EXCEPTION_DSI, temp_gpr, temp_fpr, early_push_size);
-    }
-
-    if (flags & BackPatchInfo::FLAG_LOAD)
-    {
-      ARM64Reg src_reg = access_size == 64 ? ARM64Reg::X0 : ARM64Reg::W0;
-
-      if (flags & BackPatchInfo::FLAG_PAIR)
-      {
-        // Compensate for the Read_ functions swapping the whole read instead of each pair
-        const ARM64Reg dst_reg = flags & BackPatchInfo::FLAG_FLOAT ? src_reg : RS;
-        SwapPairs(this, dst_reg, src_reg, flags);
-        src_reg = dst_reg;
-      }
-
-      if (flags & BackPatchInfo::FLAG_FLOAT)
-      {
-        if (access_size == 64)
-          m_float_emit.FMOV(EncodeRegToDouble(RS), src_reg);
-        else
-          m_float_emit.FMOV(EncodeRegToSingle(RS), src_reg);
-
-        src_reg = RS;
-      }
-
-      ByteswapAfterLoad(this, &m_float_emit, RS, src_reg, flags, false, false);
-    }
-
-    ABI_PopRegisters(gprs_to_push & gprs_to_push_early);
+    // Call the canonical slow-path thunk and then return to near code.
+    const u8* thunk_call = GetOrCreateSlowPathThunk(flags, memcheck, /*emitting_routine=*/false);
+    BL(thunk_call);
   }
 
   if (in_far_code)
