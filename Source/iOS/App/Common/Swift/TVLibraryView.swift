@@ -206,6 +206,8 @@ struct TVLibraryView: View {
     @State private var showStorageErrorAlert = false
     @State private var showLowStorageWarning = false
     @State private var showCacheInfoFor: TVGameItem?
+    @State private var blockingPrecacheItem: TVGameItem?
+    @State private var blockingPrecacheProgress: Double = 0
 
     /// iOS document pickers
     #if os(iOS)
@@ -624,6 +626,31 @@ struct TVLibraryView: View {
         .sheet(item: $showCacheInfoFor) { item in
             CacheInfoView(item: item)
         }
+        .overlay(blockingPrecacheOverlay)
+    }
+
+    @ViewBuilder
+    private var blockingPrecacheOverlay: some View {
+        if let current = blockingPrecacheItem {
+            ZStack {
+                Color.black.opacity(0.6).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    ProgressView(value: blockingPrecacheProgress)
+                        .progressViewStyle(.linear)
+                        .frame(maxWidth: 320)
+                    Text(L("Downloading to cache…"))
+                        .foregroundStyle(.white)
+                    Text(current.title)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(20)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .transition(.opacity)
+            .zIndex(10)
+        }
     }
 
     private func downloadGecko(for item: TVGameItem) {
@@ -673,6 +700,40 @@ struct TVLibraryView: View {
             """
             showLowStorageWarning = true
             return
+        }
+
+        // If remote and auto-precache enabled, ensure cache exists before launch
+        if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
+            for source in RemoteSourcesStore.shared.sources {
+                if let webdav = source as? WebDAVSource, webdav.isPreCachingEnabled {
+                    let remoteItem = RemoteLibraryItem(url: url, name: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
+                    if !webdav.isCached(remoteItem) {
+                        blockingPrecacheItem = item
+                        blockingPrecacheProgress = 0
+                        Task {
+                            do {
+                                let _ = try await webdav.preCacheItem(remoteItem) { progress in
+                                    DispatchQueue.main.async { blockingPrecacheProgress = progress }
+                                }
+                                DispatchQueue.main.async {
+                                    let cachedPath = webdav.getCacheDirectory().appendingPathComponent(webdav.getCacheInfo(for: remoteItem)?.localPath ?? "").path
+                                    var resolved = item
+                                    resolved.filePath = cachedPath
+                                    blockingPrecacheItem = nil
+                                    proceedWithGameLaunch(resolved)
+                                }
+                            } catch {
+                                DispatchQueue.main.async {
+                                    blockingPrecacheItem = nil
+                                    proceedWithGameLaunch(item) // fallback
+                                }
+                            }
+                        }
+                        return
+                    }
+                    break
+                }
+            }
         }
 
         proceedWithGameLaunch(item)

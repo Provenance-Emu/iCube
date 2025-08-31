@@ -114,10 +114,32 @@ private struct EmulationSurfaceController: UIViewControllerRepresentable {
   let gamePath: String
   func makeUIViewController(context: Context) -> EmuContainerViewController {
     let vc = EmuContainerViewController()
-    vc.gamePath = gamePath
+    vc.gamePath = resolveCachedPathIfAvailable(gamePath)
     return vc
   }
   func updateUIViewController(_ uiViewController: EmuContainerViewController, context: Context) { }
+}
+
+private func resolveCachedPathIfAvailable(_ path: String) -> String {
+    guard let url = URL(string: path), let scheme = url.scheme?.lowercased(), ["http","https","webdav","webdavs"].contains(scheme) else {
+        return path
+    }
+    func defaultPort(_ scheme: String?) -> Int { (scheme?.lowercased() == "https" || scheme?.lowercased() == "webdavs") ? 443 : 80 }
+    guard let host = url.host?.lowercased() else { return path }
+    let port = url.port ?? defaultPort(url.scheme)
+    let remoteItem = RemoteLibraryItem(url: url, name: url.lastPathComponent, sizeBytes: nil, etag: nil, lastModified: nil)
+    for src in RemoteSourcesStore.shared.sources {
+        guard let webdav = src as? WebDAVSource else { continue }
+        let base = webdav.baseURL
+        let baseHost = base.host?.lowercased() ?? ""
+        let basePort = base.port ?? defaultPort(base.scheme)
+        if baseHost == host && basePort == port {
+            if let info = webdav.getCacheInfo(for: remoteItem) {
+                return webdav.getCacheDirectory().appendingPathComponent(info.localPath).path
+            }
+        }
+    }
+    return path
 }
 
 private struct EmulationProgrammaticHost: UIViewControllerRepresentable {
