@@ -89,26 +89,26 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 
 // Fast-forward (temporary throttler disable)
 + (BOOL)toggleFastForward {
-  __block BOOL new_state = NO;
-  Core::RunAsCPUThread([&]() {
-    const bool enableTurbo = !Core::GetIsThrottlerTempDisabled();
-    Core::SetIsThrottlerTempDisabled(enableTurbo);
+  const bool enableTurbo = !Core::GetIsThrottlerTempDisabled();
+  Core::SetIsThrottlerTempDisabled(enableTurbo);
 
-    if (enableTurbo) {
-      if (!Config::Get(Config::MAIN_AUDIO_MUTED) &&
-          Config::Get(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT)) {
-        Config::SetCurrent(Config::MAIN_AUDIO_MUTED, true);
-      }
-    } else {
-      if (Config::Get(Config::MAIN_AUDIO_MUTED) &&
-          Config::GetActiveLayerForConfig(Config::MAIN_AUDIO_MUTED) == Config::LayerType::CurrentRun) {
-        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_AUDIO_MUTED);
-      }
+  if (enableTurbo) {
+    if (!Config::Get(Config::MAIN_AUDIO_MUTED) &&
+        Config::Get(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT)) {
+      Config::SetCurrent(Config::MAIN_AUDIO_MUTED, true);
     }
+  } else {
+    if (Config::Get(Config::MAIN_AUDIO_MUTED) &&
+        Config::GetActiveLayerForConfig(Config::MAIN_AUDIO_MUTED) == Config::LayerType::CurrentRun) {
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_AUDIO_MUTED);
+    }
+  }
 
-    new_state = Core::GetIsThrottlerTempDisabled();
+  const BOOL enabled = Core::GetIsThrottlerTempDisabled() ? YES : NO;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLFastForwardToggled" object:nil userInfo:@{ @"enabled": @(enabled) }];
   });
-  return new_state;
+  return enabled;
 }
 
 + (BOOL)isFastForwardEnabled {
