@@ -478,7 +478,7 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
       }
       m_drawable = MRCRetain(next);
       // If shaders are enabled via app preferences, render to an offscreen texture,
-      // then post-process into the drawable before present.
+      // then post-process into the drawable before present. Otherwise render directly.
       bool use_post = false;
       @try {
         use_post = [[NSUserDefaults standardUserDefaults] boolForKey:@"shader_enabled"];
@@ -512,6 +512,12 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
       {
         m_backbuffer->UpdateBackbufferTexture([m_drawable texture]);
       }
+      // Ensure the viewport matches the current render target size exactly.
+      {
+        id<MTLTexture> rt = [m_backbuffer->PassDesc() colorAttachments][0].texture;
+        if (rt)
+          g_state_tracker->SetViewport(0.0f, 0.0f, (float)rt.width, (float)rt.height, 0.0f, 1.0f);
+      }
       SetAndClearFramebuffer(m_backbuffer.get(), clear_color);
       return m_drawable != nullptr;
     }
@@ -532,9 +538,9 @@ void Metal::Gfx::PresentBackbuffer()
       // Use the pass descriptor's bound color attachment (offscreen when shaders enabled) as source
       id<MTLTexture> source = [m_backbuffer->PassDesc() colorAttachments][0].texture;
       id<MTLTexture> dst = [m_drawable texture];
-      // Copy from the drawable only when we rendered directly into it
+      // Copy from the drawable only when we rendered directly into it AND we need to sample it (post)
       static id<MTLTexture> s_src_copy = nil;
-      if (dst && source == dst)
+      if (use_post && dst && source == dst)
       {
         if (s_src_copy == nil || s_src_copy.width != dst.width || s_src_copy.height != dst.height || s_src_copy.pixelFormat != dst.pixelFormat)
         {
@@ -577,9 +583,9 @@ void Metal::Gfx::PresentBackbuffer()
         if (s_post_src == nil || s_post_src.width != source.width || s_post_src.height != source.height || s_post_src.pixelFormat != source.pixelFormat)
         {
           MTLTextureDescriptor* desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:source.pixelFormat
-                                                                                           width:source.width
-                                                                                          height:source.height
-                                                                                       mipmapped:NO];
+                                                                                        width:source.width
+                                                                                       height:source.height
+                                                                                    mipmapped:NO];
           desc.storageMode = MTLStorageModePrivate;
 #if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
           desc.usage = MTLTextureUsageShaderRead | (MTLTextureUsage) (1 << 3);
@@ -735,9 +741,8 @@ SurfaceInfo Metal::Gfx::GetSurfaceInfo() const
   if (!m_layer)  // Headless
     return {};
 
-  CGSize size = [m_layer bounds].size;
+  const CGSize drawable = [m_layer drawableSize];
   const float scale = [m_layer contentsScale];
-
-  return {static_cast<u32>(size.width * scale), static_cast<u32>(size.height * scale), scale,
+  return {static_cast<u32>(drawable.width), static_cast<u32>(drawable.height), scale,
           Util::ToAbstract([m_layer pixelFormat])};
 }

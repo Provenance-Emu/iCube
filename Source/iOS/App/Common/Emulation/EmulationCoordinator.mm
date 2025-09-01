@@ -66,6 +66,7 @@
   dispatch_source_t _inputPumpTimer;
   float _adaptiveVI;
   float _adaptiveCPU;
+  CGSize _lastDrawableSize;
 }
 
 @synthesize userRequestedPause = _userRequestedPause;
@@ -125,6 +126,7 @@
     ((RenderHostView*)_renderHost).onLayout = ^{ [self updateMetalLayerFrame]; };
 
     self.isExternalDisplayConnected = false;
+    _lastDrawableSize = CGSizeZero;
   }
 
   return self;
@@ -183,7 +185,14 @@
   _metalLayer.frame = _renderHost.layer.bounds;
   const CGFloat scale = [self currentRenderSurfaceScale];
   _metalLayer.contentsScale = scale;
-  _metalLayer.drawableSize = CGSizeMake(size.width * scale, size.height * scale);
+  const CGSize newDrawable = CGSizeMake(size.width * scale, size.height * scale);
+  const bool changed = !CGSizeEqualToSize(_lastDrawableSize, newDrawable);
+  _metalLayer.drawableSize = newDrawable;
+  if (changed && g_presenter)
+  {
+    _lastDrawableSize = newDrawable;
+    g_presenter->ResizeSurface();
+  }
 }
 
 - (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter {
