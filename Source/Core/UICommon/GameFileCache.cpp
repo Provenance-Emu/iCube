@@ -237,11 +237,19 @@ bool GameFileCache::UpdateAdditionalMetadata(const GameUpdatedFn& game_updated,
     if (processing_halted)
       break;
 
+    // Guard against null entries that may exist after cache load
+    if (!file)
+      continue;
+
     const bool updated = UpdateAdditionalMetadata(&file);
     cache_changed |= updated;
     if (game_updated && updated)
       game_updated(file);
   }
+
+  // Compact any null entries that may remain to avoid future crashes
+  m_cached_files.erase(std::remove(m_cached_files.begin(), m_cached_files.end(), nullptr),
+                       m_cached_files.end());
 
   return cache_changed;
 }
@@ -282,6 +290,10 @@ void GameFileCache::LoadRemoteMetadataAsync(const std::string& file_path)
 
 bool GameFileCache::UpdateAdditionalMetadata(std::shared_ptr<GameFile>* game_file)
 {
+  // Safety guards against null pointers
+  if (!game_file || !(*game_file))
+    return false;
+
   // Check if this is a remote file that might need async metadata loading
   const std::string& file_path = (*game_file)->GetFilePath();
   bool is_remote = (file_path.find("http://") == 0 || file_path.find("https://") == 0 ||
@@ -296,7 +308,7 @@ bool GameFileCache::UpdateAdditionalMetadata(std::shared_ptr<GameFile>* game_fil
   // If we're on main thread with a remote file, schedule async loading and return
   if (is_remote && is_main_thread)
   {
-    INFO_LOG_FMT(DISCIO, "GameFileCache::UpdateAdditionalMetadata: scheduling async metadata loading for remote file: {}", file_path);
+    INFO_LOG_FMT(DISCIO, "GameFileCache::UpdateAdditionalMetadata: scheduling async metadata loading for {}", file_path);
     LoadRemoteMetadataAsync(file_path);
     return false; // No immediate changes to cache
   }
