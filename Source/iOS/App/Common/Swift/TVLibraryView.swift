@@ -2,6 +2,55 @@ import SwiftUI
 import UIKit
 import GameController
 
+#if os(iOS)
+private struct KeyCommandHostView: UIViewRepresentable {
+    let onLeft: () -> Void
+    let onRight: () -> Void
+    let onUp: () -> Void
+    let onDown: () -> Void
+    let onEnter: () -> Void
+    let onSpace: () -> Void
+    func makeUIView(context: Context) -> KeyInputView {
+        let v = KeyInputView()
+        v.onLeft = onLeft
+        v.onRight = onRight
+        v.onUp = onUp
+        v.onDown = onDown
+        v.onEnter = onEnter
+        v.onSpace = onSpace
+        DispatchQueue.main.async { _ = v.becomeFirstResponder() }
+        return v
+    }
+    func updateUIView(_ uiView: KeyInputView, context: Context) { }
+}
+
+private final class KeyInputView: UIView {
+    var onLeft: (() -> Void)?
+    var onRight: (() -> Void)?
+    var onUp: (() -> Void)?
+    var onDown: (() -> Void)?
+    var onEnter: (() -> Void)?
+    var onSpace: (() -> Void)?
+    override var canBecomeFirstResponder: Bool { true }
+    override var keyCommands: [UIKeyCommand]? {
+        return [
+            UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [], action: #selector(handleLeft)),
+            UIKeyCommand(input: UIKeyCommand.inputRightArrow, modifierFlags: [], action: #selector(handleRight)),
+            UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(handleUp)),
+            UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(handleDown)),
+            UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(handleEnter)),
+            UIKeyCommand(input: " ", modifierFlags: [], action: #selector(handleSpace))
+        ]
+    }
+    @objc private func handleLeft() { onLeft?() }
+    @objc private func handleRight() { onRight?() }
+    @objc private func handleUp() { onUp?() }
+    @objc private func handleDown() { onDown?() }
+    @objc private func handleEnter() { onEnter?() }
+    @objc private func handleSpace() { onSpace?() }
+}
+#endif
+
 // MARK: - Retro UI Helpers
 
 extension TVGameItem: Identifiable {}
@@ -219,6 +268,13 @@ struct TVLibraryView: View {
     /// Controller navigation repeat throttle
     @State private var lastNavMoveTime: TimeInterval = 0
     @State private var navRepeatInterval: TimeInterval = 0.12
+    /// Whether emulation is currently running (disables library input)
+    @State private var emulationRunning = false
+    @State private var emuStartObs: NSObjectProtocol?
+    @State private var emuEndObs: NSObjectProtocol?
+    /// Previous controller handlers to restore on teardown
+    @State private var prevEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
+    @State private var prevMGPHandlers: [ObjectIdentifier: (GCMicroGamepad, GCControllerElement) -> Void] = [:]
     #endif
 
     /// Storage space management
@@ -372,7 +428,39 @@ struct TVLibraryView: View {
                 .padding(.horizontal, paddingH)
                 .padding(.vertical, Constants.gridVerticalPadding)
             }
-            .onAppear { setupControllerNavigation(columns: count) }
+            .background((!emulationRunning) ? AnyView(KeyCommandHostView(
+                    onLeft: {
+                        let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+                        let newIndex = max(0, idx - 1)
+                        focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.first?.filePath
+                    },
+                    onRight: {
+                        let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+                        let newIndex = min(model.games.count - 1, idx + 1)
+                        focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.last?.filePath
+                    },
+                    onUp: {
+                        let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+                        let newIndex = max(0, idx - count)
+                        focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.first?.filePath
+                    },
+                    onDown: {
+                        let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+                        let newIndex = min(model.games.count - 1, idx + count)
+                        focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.last?.filePath
+                    },
+                    onEnter: {
+                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
+                    },
+                    onSpace: {
+                        showSources = true
+                    }
+                )) : AnyView(EmptyView()))
+            .onAppear {
+                setupControllerNavigation(columns: count)
+                emuStartObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in emulationRunning = true }
+                emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
                 ControllerStyleManager.shared.refreshDetection()
                 ControllerStyleManager.shared.applyPresetDefaults()
@@ -382,6 +470,11 @@ struct TVLibraryView: View {
                 if newCount > 0 && focusedFilePath == nil {
                     DispatchQueue.main.async { focusedFilePath = model.games.first?.filePath }
                 }
+            }
+            .onDisappear {
+                if let t = emuStartObs { NotificationCenter.default.removeObserver(t); emuStartObs = nil }
+                if let t = emuEndObs { NotificationCenter.default.removeObserver(t); emuEndObs = nil }
+                teardownControllerNavigation()
             }
         }
         #else
@@ -903,7 +996,10 @@ struct TVLibraryView: View {
         for c in GCController.controllers() {
             c.controllerPausedHandler = { _ in /* swallow to avoid Game Center */ }
             if let egp = c.extendedGamepad {
+                let cid = ObjectIdentifier(c)
+                if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
                 egp.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
+                    if emulationRunning { return }
                     guard !model.games.isEmpty else { return }
                     let index: Int = {
                         if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
@@ -940,7 +1036,10 @@ struct TVLibraryView: View {
             if let mgp = c.microGamepad {
                 mgp.reportsAbsoluteDpadValues = true
                 mgp.allowsRotation = true
+                let cid = ObjectIdentifier(c)
+                if prevMGPHandlers[cid] == nil { prevMGPHandlers[cid] = mgp.valueChangedHandler }
                 mgp.valueChangedHandler = {(gamepad: GCMicroGamepad, element: GCControllerElement) in
+                    if emulationRunning { return }
                     guard !model.games.isEmpty else { return }
                     let index: Int = {
                         if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
@@ -967,6 +1066,29 @@ struct TVLibraryView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func teardownControllerNavigation() {
+        for c in GCController.controllers() {
+            let cid = ObjectIdentifier(c)
+            if let egp = c.extendedGamepad {
+                if let prev = prevEGPHandlers[cid] {
+                    egp.valueChangedHandler = prev
+                } else {
+                    egp.valueChangedHandler = nil
+                }
+            }
+            if let mgp = c.microGamepad {
+                if let prev = prevMGPHandlers[cid] {
+                    mgp.valueChangedHandler = prev
+                } else {
+                    mgp.valueChangedHandler = nil
+                }
+            }
+            c.controllerPausedHandler = nil
+            prevEGPHandlers.removeValue(forKey: cid)
+            prevMGPHandlers.removeValue(forKey: cid)
         }
     }
 }
@@ -1723,5 +1845,12 @@ private struct RemoteScanProgressView: View {
                 .progressViewStyle(.linear)
                 .frame(maxWidth: .infinity)
         }
+    }
+}
+
+// MARK: - Safe index helper
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        return indices.contains(index) ? self[index] : nil
     }
 }
