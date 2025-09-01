@@ -275,7 +275,7 @@ struct EmulationScreen: View {
       }
       // Live Activity start
       #if canImport(ActivityKit)
-      GameActivityManager.start(game: game)
+      GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
       #endif
       // Start elapsed timer
       timer?.invalidate()

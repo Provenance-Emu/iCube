@@ -4,24 +4,32 @@ import ActivityKit
 #endif
 
 #if canImport(ActivityKit)
-struct GameActivityAttributes: ActivityAttributes {
+public struct GameActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
-        let title: String
-        let subtitle: String?
-        let isPaused: Bool
-        let elapsedSeconds: Int
+        public let title: String
+        public let subtitle: String?
+        public let isPaused: Bool
+        public let elapsedSeconds: Int
+        public init(title: String, subtitle: String?, isPaused: Bool, elapsedSeconds: Int) {
+            self.title = title
+            self.subtitle = subtitle
+            self.isPaused = isPaused
+            self.elapsedSeconds = elapsedSeconds
+        }
     }
-    let gameId: String
+    public let gameId: String
+    public init(gameId: String) { self.gameId = gameId }
 }
 
 enum GameActivityManager {
-    static func start(game: TVGameItem) {
+    /// Start a Live Activity for a game. Supply plain values to avoid cross-target dependencies.
+    static func start(gameId: String, title: String, subtitle: String?, isPaused: Bool) {
         if #available(iOS 16.1, *), ActivityAuthorizationInfo().areActivitiesEnabled {
-            let attributes = GameActivityAttributes(gameId: game.gameID)
+            let attributes = GameActivityAttributes(gameId: gameId)
             let state = GameActivityAttributes.ContentState(
-                title: game.title,
-                subtitle: game.makerLong,
-                isPaused: TVEmulationBridge.isPaused(),
+                title: title,
+                subtitle: subtitle,
+                isPaused: isPaused,
                 elapsedSeconds: 0
             )
             _ = try? Activity<GameActivityAttributes>.request(attributes: attributes, contentState: state, pushType: nil)
