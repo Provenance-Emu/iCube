@@ -14,23 +14,54 @@ class RemoteSourcesCoordinator: ObservableObject {
     private var tasks: [String: [Task<Void, Never>]] = [:]
     private var lastUpdateTime: Date = .distantPast
     private let updateThrottleInterval: TimeInterval = 0.5 // Minimum 0.5 seconds between updates
+    private var lastPushTime: Date = .distantPast
+    private var lastPushedURLs: Set<String> = []
+    private let debounceInterval: TimeInterval = 0.25
+    private let smallDeltaThreshold: Int = 6
 
     // Reachability (nonisolated backing)
     private let pathMonitor = NWPathMonitor()
     private let pathQueue = DispatchQueue(label: "net.dolphinios.remotesources.reachability")
     private var lastPathSatisfied: Bool = false
 
+    // MARK: - Disk cache
+    private var cacheDirURL: URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let dir = base.appendingPathComponent("RemoteSourcesCache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+    private func cacheFileURL(for sourceId: String) -> URL {
+        cacheDirURL.appendingPathComponent("\(sourceId).json")
+    }
+    private struct PersistedListing: Codable { let urls: [String] }
+    private func loadCachedListing(for sourceId: String) -> [RemoteLibraryItem] {
+        let url = cacheFileURL(for: sourceId)
+        guard let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(PersistedListing.self, from: data) else { return [] }
+        return decoded.urls.compactMap { s in
+            guard let u = URL(string: s) else { return nil }
+            return RemoteLibraryItem(url: u, displayName: u.lastPathComponent, sizeBytes: nil, etag: nil, lastModified: nil)
+        }
+    }
+    private func saveCachedListing(for sourceId: String, items: [RemoteLibraryItem]) {
+        let urls = items.map { $0.url.absoluteString }
+        let payload = PersistedListing(urls: urls)
+        if let data = try? JSONEncoder().encode(payload) {
+            try? data.write(to: cacheFileURL(for: sourceId), options: .atomic)
+        }
+    }
+
     init() {
-        // Listen for refresh requests - clear caches and fetch fresh directory listings
+        // Listen for refresh requests - keep cached listings and fetch fresh directory listings
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("RefreshRemoteSources"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            print("DEBUG REFRESH: RefreshRemoteSources notification received - clearing caches and rescanning")
+            print("DEBUG REFRESH: RefreshRemoteSources notification received - refreshing sources without clearing cached listings")
             Task { @MainActor in
-                self.clearCachesAndRefresh()
+                self.refreshAllSources()
             }
         }
 
@@ -48,7 +79,7 @@ class RemoteSourcesCoordinator: ObservableObject {
                     self.lastPathSatisfied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
                         print("Reachability: Online detected, refreshing remote sources")
-                        self.clearCachesAndRefresh()
+                        self.refreshAllSources()
                         NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
                     }
                 }
@@ -72,6 +103,9 @@ class RemoteSourcesCoordinator: ObservableObject {
             sources.removeAll { $0.id == source.id }
             sources.append(source)
             start(source: source)
+            // Load cached listing for smoother UX
+            let cached = loadCachedListing(for: source.id)
+            if !cached.isEmpty { lastItemsBySource[source.id] = cached; pushCacheUpdate() }
             return
         }
 
@@ -87,6 +121,8 @@ class RemoteSourcesCoordinator: ObservableObject {
                 // Restart the existing one; do not append a new one
                 if let existing = sources.first(where: { ($0 as? WebDAVSource)?.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() == newRoot }) {
                     start(source: existing)
+                    let cached = loadCachedListing(for: existing.id)
+                    if !cached.isEmpty { lastItemsBySource[existing.id] = cached; pushCacheUpdate() }
                 }
                 return
             }
@@ -96,6 +132,9 @@ class RemoteSourcesCoordinator: ObservableObject {
         print("RemoteSourcesCoordinator: total sources now: \(sources.count)")
         start(source: source)
         print("RemoteSourcesCoordinator: source \(source.id) added and started")
+        // Load cached listing immediately
+        let cached = loadCachedListing(for: source.id)
+        if !cached.isEmpty { lastItemsBySource[source.id] = cached; pushCacheUpdate() }
     }
 
     func remove(id: String) {
@@ -115,6 +154,8 @@ class RemoteSourcesCoordinator: ObservableObject {
         RemoteSourceFactory.removeSource(id: id)
 
         pushCacheUpdate(forceUpdate: true) // Force update to clean up games from deleted source
+        // Remove persisted listing
+        try? FileManager.default.removeItem(at: cacheFileURL(for: id))
     }
 
         private func start(source: any RemoteLibrarySource) {
@@ -139,7 +180,7 @@ class RemoteSourcesCoordinator: ObservableObject {
                 await MainActor.run {
                     // Trigger UI update when online status changes
                     self.objectWillChange.send()
-                    pushCacheUpdate()
+                    // Do not clear listings here; keep cache while toggling
                 }
             }
         }
@@ -149,22 +190,33 @@ class RemoteSourcesCoordinator: ObservableObject {
             print("DEBUG COORDINATOR: About to iterate over itemsStream for source \(source.id)")
             for await items in source.itemsStream {
                 print("DEBUG COORDINATOR: *** RECEIVED \(items.count) ITEMS FROM SOURCE \(source.id) ***")
-                for (index, item) in items.enumerated() {
-                    print("DEBUG COORDINATOR:   [\(index)]: \(item.url.absoluteString)")
-                }
-                                    await MainActor.run {
-                        print("DEBUG COORDINATOR: Setting lastItemsBySource[\(source.id)] = \(items.count) items")
-                        lastItemsBySource[source.id] = items
-                        print("DEBUG COORDINATOR: About to call pushCacheUpdate()")
+                await MainActor.run {
+                    let prev = self.lastItemsBySource[source.id] ?? []
+                    let prevSet = Set(prev.map { $0.url.absoluteString })
+                    let newSet = Set(items.map { $0.url.absoluteString })
+                    let removed = prevSet.subtracting(newSet)
+                    let added = newSet.subtracting(prevSet)
+                    print("DEBUG COORDINATOR: source \(source.id) removed=\(removed.count), added=\(added.count)")
 
-                        // Force immediate cache update for better UX - don't wait for throttling
-                        pushCacheUpdate(forceUpdate: true)
-                        print("DEBUG COORDINATOR: pushCacheUpdate() completed")
-
-                        // Trigger UI reload after WebDAV update for better UX
-                        NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
-                        print("DEBUG COORDINATOR: Posted RemoteLibraryUpdated notification")
+                    // Guard: ignore empty emissions mid-scan to avoid flicker
+                    let progress = self.scanningProgressBySource[source.id] ?? 0.0
+                    if items.isEmpty && !prev.isEmpty && progress < 1.0 {
+                        print("DEBUG COORDINATOR: Ignoring empty emission mid-scan for \(source.id)")
+                        return
                     }
+
+                    // Replace in-memory list with new snapshot (stable union across sources prevents full clear)
+                    self.lastItemsBySource[source.id] = items
+
+                    // Persist per-source for next launch
+                    self.saveCachedListing(for: source.id, items: items)
+
+                    // Push a full union update (without clearing other sources), debounced inside
+                    self.pushCacheUpdate()
+
+                    // Notify UI to soft refresh
+                    NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+                }
             }
             print("DEBUG COORDINATOR: Items task ended normally (stream finished) for source \(source.id)")
         }
@@ -222,17 +274,19 @@ class RemoteSourcesCoordinator: ObservableObject {
         }
     }
 
-    /// Clear cached directory listings and force fresh scans from all sources
-    private func clearCachesAndRefresh() {
-        print("DEBUG REFRESH: Clearing lastItemsBySource cache (had \(lastItemsBySource.count) sources)")
-        lastItemsBySource.removeAll() // Clear cached directory listings
-
-        print("DEBUG REFRESH: Restarting all \(sources.count) sources to fetch fresh listings")
+    /// Keep cached directory listings and force fresh scans from all sources
+    private func refreshAllSources() {
+        print("DEBUG REFRESH: Restarting all \(sources.count) sources to fetch fresh listings without clearing cache")
         for source in sources {
             print("DEBUG REFRESH: Restarting source \(source.id) (\(source.name))")
             stop(sourceId: source.id) // Stop existing tasks
             start(source: source)     // Start fresh scan
+            // Load persisted snapshot if available (guard against momentary emptiness)
+            let cached = loadCachedListing(for: source.id)
+            if !cached.isEmpty { lastItemsBySource[source.id] = cached }
         }
+        // Maintain current union in library until new items flow in
+        pushCacheUpdate()
     }
 
     private func pushCacheUpdate(forceUpdate: Bool = false) {
@@ -282,6 +336,17 @@ class RemoteSourcesCoordinator: ObservableObject {
             return
         }
 
+        // Debounce small deltas to coalesce frequent updates
+        let newSet = Set(allUrls)
+        let added = newSet.subtracting(lastPushedURLs)
+        let removed = lastPushedURLs.subtracting(newSet)
+        let deltaCount = added.count + removed.count
+        let elapsed = Date().timeIntervalSince(lastPushTime)
+        if !forceUpdate && deltaCount <= smallDeltaThreshold && elapsed < debounceInterval {
+            print("DEBUG PUSH: Debounced small delta (\(deltaCount)) within \(elapsed)s")
+            return
+        }
+
         print("DEBUG PUSH: Calling TVLibraryBridge.updateLibrary with \(allUrls.count) URLs")
         // Force metadata fetch for remote games to ensure artwork and database lookups work
         TVLibraryBridge.updateLibrary(withRemotePaths: allUrls, fetchMetadata: true)
@@ -297,13 +362,9 @@ class RemoteSourcesCoordinator: ObservableObject {
             NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
         }
         print("DEBUG PUSH: pushCacheUpdate() finished")
-    }
 
-    private func refreshAllSources() {
-        for source in sources {
-            // Restart each source to trigger fresh enumeration
-            stop(sourceId: source.id)
-            start(source: source)
-        }
+        // Update debounce state
+        lastPushedURLs = newSet
+        lastPushTime = Date()
     }
 }
