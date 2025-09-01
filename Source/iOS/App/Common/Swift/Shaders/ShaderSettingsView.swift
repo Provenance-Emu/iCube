@@ -350,12 +350,42 @@ struct ShaderParameterEditor: View {
                         }
 #if os(iOS)
                         Slider(value: Binding(
-                            get: { values[p.index] ?? p.initialCGFloat },
+                            get: {
+                                let rawMin = p.minimumCGFloat
+                                let rawMax = p.maximumCGFloat
+                                let minVal = rawMin.isFinite ? rawMin : 0
+                                var maxVal = rawMax.isFinite ? rawMax : (minVal + 1)
+                                if maxVal <= minVal { maxVal = minVal + 0.0001 }
+                                let v = values[p.index] ?? p.initialCGFloat
+                                return max(min(v, maxVal), minVal)
+                            },
                             set: { newVal in
-                                values[p.index] = newVal
-                                DOLShaderPostProcessor.shared.setValue(newVal, forParameterIndex: p.index)
+                                let rawMin = p.minimumCGFloat
+                                let rawMax = p.maximumCGFloat
+                                let minVal = rawMin.isFinite ? rawMin : 0
+                                var maxVal = rawMax.isFinite ? rawMax : (minVal + 1)
+                                if maxVal <= minVal { maxVal = minVal + 0.0001 }
+                                let clamped = max(min(newVal, maxVal), minVal)
+                                values[p.index] = clamped
+                                DOLShaderPostProcessor.shared.setValue(clamped, forParameterIndex: p.index)
                             }
-                        ), in: p.minimumCGFloat...p.maximumCGFloat, step: p.stepCGFloat)
+                        ), in: { () -> ClosedRange<CGFloat> in
+                            let rawMin = p.minimumCGFloat
+                            let rawMax = p.maximumCGFloat
+                            let minVal = rawMin.isFinite ? rawMin : 0
+                            var maxVal = rawMax.isFinite ? rawMax : (minVal + 1)
+                            if maxVal <= minVal { maxVal = minVal + 0.0001 }
+                            return minVal...maxVal
+                        }(), step: { () -> CGFloat in
+                            let rawMin = p.minimumCGFloat
+                            let rawMax = p.maximumCGFloat
+                            let minVal = rawMin.isFinite ? rawMin : 0
+                            var maxVal = rawMax.isFinite ? rawMax : (minVal + 1)
+                            if maxVal <= minVal { maxVal = minVal + 0.0001 }
+                            let rawStep = p.stepCGFloat
+                            let computed = (rawStep.isFinite && rawStep > 0) ? rawStep : (maxVal - minVal) / 100
+                            return computed > 0 ? computed : 0.0001
+                        }())
 #else
                         // tvOS: Use TVFloatStepper for better UX
                         TVFloatStepper(
