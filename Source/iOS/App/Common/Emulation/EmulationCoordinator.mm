@@ -251,16 +251,7 @@
 
     auto& system = Core::System::GetInstance();
 
-    BOOL isiOSOnMac = NO;
-    if ([[NSProcessInfo processInfo] respondsToSelector:@selector(isiOSAppOnMac)]) {
-      isiOSOnMac = [[NSProcessInfo processInfo] isiOSAppOnMac];
-    }
-
-    if (isiOSOnMac) {
-      system.SetJitAvailable(false);
-    } else {
-      system.SetJitAvailable([JitManager shared].acquiredJit);
-    }
+    system.SetJitAvailable([JitManager shared].acquiredJit);
 
     // Clear any lingering per-run CPU core override so we honor current availability/config
     Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
@@ -269,7 +260,7 @@
     {
       const PowerPC::CPUCore current_core = Config::Get(Config::MAIN_CPU_CORE);
       const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter;
-      if ((isiOSOnMac || ![JitManager shared].acquiredJit) && !is_interpreter_core)
+      if (![JitManager shared].acquiredJit && !is_interpreter_core)
       {
         Config::Set(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
       }
