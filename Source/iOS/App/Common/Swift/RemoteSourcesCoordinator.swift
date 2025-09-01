@@ -12,7 +12,7 @@ class RemoteSourcesCoordinator: ObservableObject {
 
     private var tasks: [String: [Task<Void, Never>]] = [:]
     private var lastUpdateTime: Date = .distantPast
-    private let updateThrottleInterval: TimeInterval = 2.0 // Minimum 2 seconds between updates
+    private let updateThrottleInterval: TimeInterval = 0.5 // Minimum 0.5 seconds between updates
 
     init() {
         // Listen for refresh requests - clear caches and fetch fresh directory listings
