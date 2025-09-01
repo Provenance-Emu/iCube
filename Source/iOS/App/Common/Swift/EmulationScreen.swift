@@ -541,8 +541,25 @@ struct EmulationScreen: View {
                 TVEmulationBridge.resizeSurfaceNow()
             }
         }
-        // Default touch controls: enabled when no controllers are connected
-        isTouchControlsActive = GCController.controllers().isEmpty
+        // Default touch controls: enabled when no controllers are connected (only if not user-overridden)
+        if !userOverrideTouchControls {
+            isTouchControlsActive = GCController.controllers().isEmpty
+        }
+        // Observe controller connect/disconnect to recompute default only when no override is set
+        if obsGCConnect == nil {
+            obsGCConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { _ in
+                if !userOverrideTouchControls {
+                    isTouchControlsActive = GCController.controllers().isEmpty
+                }
+            }
+        }
+        if obsGCDisconnect == nil {
+            obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in
+                if !userOverrideTouchControls {
+                    isTouchControlsActive = GCController.controllers().isEmpty
+                }
+            }
+        }
         // Show bar on appear and schedule one-time auto-hide
         showTopBar = true
         hasTopBarInteraction = false
@@ -607,9 +624,13 @@ struct EmulationScreen: View {
 
 #if os(iOS)
   @State private var isTouchControlsActive = false
+  @State private var userOverrideTouchControls = false
 
   private func toggleTouchControls() {
-    withAnimation { isTouchControlsActive.toggle() }
+    withAnimation {
+      isTouchControlsActive.toggle()
+      userOverrideTouchControls = true
+    }
   }
 
   private func toggleTopBar() {
