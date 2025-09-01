@@ -68,8 +68,15 @@
         if (cover.buffer.empty()) {
             result = [UIImage imageNamed:@"NoCover"];
         } else {
-            NSData *data = [NSData dataWithBytes:cover.buffer.data() length:cover.buffer.size()];
-            result = [UIImage imageWithData:data];
+            const size_t maxCoverBytes = 32 * 1024 * 1024; // 32MB sanity cap
+            const size_t len = cover.buffer.size();
+            if (len > 0 && len <= maxCoverBytes) {
+                NSData *data = [NSData dataWithBytes:cover.buffer.data() length:len];
+                result = [UIImage imageWithData:data];
+            } else {
+                NSLog(@"TVGameItem: cover size invalid (%zu), using placeholder", len);
+                result = [UIImage imageNamed:@"NoCover"];
+            }
         }
 
         if (!result) {
