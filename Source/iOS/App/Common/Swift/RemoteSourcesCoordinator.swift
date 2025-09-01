@@ -52,16 +52,21 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     init() {
-        // Listen for refresh requests - keep cached listings and fetch fresh directory listings
+        // Listen for refresh requests - trigger in-place refresh on sources without resetting streams
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("RefreshRemoteSources"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            print("DEBUG REFRESH: RefreshRemoteSources notification received - refreshing sources without clearing cached listings")
-            Task { @MainActor in
-                self.refreshAllSources()
+            print("DEBUG REFRESH: RefreshRemoteSources notification received - in-place refresh")
+            for src in self.sources {
+                if let w = src as? WebDAVSource {
+                    w.requestRefresh()
+                } else {
+                    // For non-WebDAV, fall back to start() if needed
+                    src.start()
+                }
             }
         }
 
@@ -79,7 +84,9 @@ class RemoteSourcesCoordinator: ObservableObject {
                     self.lastPathSatisfied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
                         print("Reachability: Online detected, refreshing remote sources")
-                        self.refreshAllSources()
+                        for src in self.sources {
+                            if let w = src as? WebDAVSource { w.requestRefresh() }
+                        }
                         NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
                     }
                 }
@@ -117,10 +124,9 @@ class RemoteSourcesCoordinator: ObservableObject {
                 let existingRoot = w.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
                 return existingRoot == newRoot && w.name.caseInsensitiveCompare(webdav.name) == .orderedSame
             }) {
-                print("RemoteSourcesCoordinator: duplicate WebDAV source detected for root=\(newRoot); restarting existing")
-                // Restart the existing one; do not append a new one
+                print("RemoteSourcesCoordinator: duplicate WebDAV source detected for root=\(newRoot); requesting refresh on existing")
                 if let existing = sources.first(where: { ($0 as? WebDAVSource)?.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() == newRoot }) {
-                    start(source: existing)
+                    (existing as? WebDAVSource)?.requestRefresh()
                     let cached = loadCachedListing(for: existing.id)
                     if !cached.isEmpty { lastItemsBySource[existing.id] = cached; pushCacheUpdate() }
                 }
@@ -158,15 +164,13 @@ class RemoteSourcesCoordinator: ObservableObject {
         try? FileManager.default.removeItem(at: cacheFileURL(for: id))
     }
 
-        private func start(source: any RemoteLibrarySource) {
+    private func start(source: any RemoteLibrarySource) {
         print("RemoteSourcesCoordinator: starting source \(source.id) (\(source.name))")
 
         // Stop any existing tasks for this source to prevent conflicts
         if let existingTasks = tasks[source.id] {
             print("RemoteSourcesCoordinator: stopping existing tasks for source \(source.id)")
-            for task in existingTasks {
-                task.cancel()
-            }
+            for task in existingTasks { task.cancel() }
             tasks[source.id] = nil
         }
 
@@ -178,9 +182,7 @@ class RemoteSourcesCoordinator: ObservableObject {
             for await isOnline in source.onlineStream {
                 print("RemoteSourcesCoordinator: source \(source.id) online status changed to \(isOnline)")
                 await MainActor.run {
-                    // Trigger UI update when online status changes
                     self.objectWillChange.send()
-                    // Do not clear listings here; keep cache while toggling
                 }
             }
         }
@@ -274,16 +276,13 @@ class RemoteSourcesCoordinator: ObservableObject {
         }
     }
 
-    /// Keep cached directory listings and force fresh scans from all sources
+    /// Keep cached directory listings and force fresh scans from all sources (in-place)
     private func refreshAllSources() {
-        print("DEBUG REFRESH: Restarting all \(sources.count) sources to fetch fresh listings without clearing cache")
+        print("DEBUG REFRESH: In-place refresh for all \(sources.count) sources")
         for source in sources {
-            print("DEBUG REFRESH: Restarting source \(source.id) (\(source.name))")
-            stop(sourceId: source.id) // Stop existing tasks
-            start(source: source)     // Start fresh scan
-            // Load persisted snapshot if available (guard against momentary emptiness)
-            let cached = loadCachedListing(for: source.id)
-            if !cached.isEmpty { lastItemsBySource[source.id] = cached }
+            if let w = source as? WebDAVSource {
+                w.requestRefresh()
+            }
         }
         // Maintain current union in library until new items flow in
         pushCacheUpdate()
