@@ -426,10 +426,17 @@ struct EmulationScreen: View {
                                 let currentIR = DOLConfigBridge.mainTouchPadIRMode()
                                 Button {
                                     hasTopBarInteraction = true
+                                    DOLConfigBridge.setMainTouchPadIRMode(0)
+                                    touchPadsRefreshToken = UUID()
+                                } label: {
+                                    Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "")
+                                }
+                                Button {
+                                    hasTopBarInteraction = true
                                     DOLConfigBridge.setMainTouchPadIRMode(1)
                                     touchPadsRefreshToken = UUID()
                                 } label: {
-                                    Label("Absolute", systemImage: currentIR == 1 ? "checkmark" : "")
+                                    Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "")
                                 }
                                 Button {
                                     hasTopBarInteraction = true
