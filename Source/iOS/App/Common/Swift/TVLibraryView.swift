@@ -458,13 +458,16 @@ struct TVLibraryView: View {
                 )) : AnyView(EmptyView()))
             .onAppear {
                 setupControllerNavigation(columns: count)
-                emuStartObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in emulationRunning = true }
+                emuStartObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
+                    emulationRunning = true
+                    teardownControllerNavigation()
+                }
                 emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
             }
             .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
                 ControllerStyleManager.shared.refreshDetection()
                 ControllerStyleManager.shared.applyPresetDefaults()
-                setupControllerNavigation(columns: count)
+                if !emulationRunning { setupControllerNavigation(columns: count) }
             }
             .onChange(of: model.games.count) { _, newCount in
                 if newCount > 0 && focusedFilePath == nil {
@@ -779,19 +782,69 @@ struct TVLibraryView: View {
         if let current = blockingPrecacheItem {
             ZStack {
                 Color.black.opacity(0.6).ignoresSafeArea()
-                VStack(spacing: 16) {
-                    ProgressView(value: blockingPrecacheProgress)
-                        .progressViewStyle(.linear)
-                        .frame(maxWidth: 320)
-                    Text(L("Downloading to cache…"))
+                VStack(spacing: 14) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 44, weight: .semibold))
                         .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 2)
+
+                    Text(L("Preparing cache"))
+                        .font(.title3).fontWeight(.semibold)
+                        .foregroundStyle(.white)
+
                     Text(current.title)
-                        .foregroundStyle(.white.opacity(0.8))
-                        .lineLimit(2)
+                        .font(.callout)
+                        .foregroundStyle(.white.opacity(0.85))
                         .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .frame(maxWidth: 280)
+
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 8))
+                            .frame(width: 64, height: 64)
+                        Circle()
+                            .trim(from: 0, to: CGFloat(blockingPrecacheProgress))
+                            .stroke(Color.white, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 64, height: 64)
+                            .animation(.easeInOut(duration: 0.2), value: blockingPrecacheProgress)
+                    }
+                    .padding(.top, 6)
+
+                    Text("\(Int(blockingPrecacheProgress * 100))%")
+                        .font(.footnote).fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+
+                    HStack(spacing: 12) {
+                        Button(role: .cancel) {
+                            if let url = URL(string: current.filePath), let source = getMatchingWebDAVSource(for: url) {
+                                let remoteItem = RemoteLibraryItem(url: url, name: current.title, size: Int64(current.fileSize))
+                                Task { await source.cancelPreCache(remoteItem) }
+                            }
+                            blockingPrecacheItem = nil
+                            blockingPrecacheProgress = 0
+                        } label: {
+                            Text(L("Cancel"))
+                                .font(.callout).fontWeight(.semibold)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .background(Color.white.opacity(0.15), in: Capsule())
+                        }
+                    }
+                    .padding(.top, 4)
                 }
-                .padding(20)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.vertical, 22)
+                .padding(.horizontal, 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .shadow(color: .black.opacity(0.25), radius: 18, x: 0, y: 10)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
             }
             .transition(.opacity)
             .zIndex(10)
@@ -826,6 +879,8 @@ struct TVLibraryView: View {
             sourcePickerItems = sources
             return
         }
+        emulationRunning = true
+        teardownControllerNavigation()
         launchGame(item)
     }
 
