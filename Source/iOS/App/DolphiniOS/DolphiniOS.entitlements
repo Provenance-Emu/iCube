@@ -48,5 +48,15 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<key>com.apple.security.iokit-user-client-class</key>
+	<array>
+		<string>IOSurfaceRootUserClient</string>
+		<string>AGXDeviceUserClient</string>
+		<string>AGXSharedUserClient</string>
+		<string>AGXCommandQueue</string>
+		<string>AGXDevice</string>
+	</array>
+	<key>get-task-allow</key>
+	<true/>
 </dict>
 </plist>
