@@ -21,10 +21,16 @@
 
 - [X] UI need improvements
 
+## iOS
+
+- [ ] touch cursor control doesn't work
+
 ## All Platforms
 
-- [ ] FF / Pause menu gestures are wrong / conflicting
+- [X] FF / Pause menu gestures are wrong / conflicting
 - [ ] Remove extra logging when done
+- [ ] Excessive webdav refreshes
+- [ ] Re-test all 4 paddels fast forward
 
 ### New Feature?
 
