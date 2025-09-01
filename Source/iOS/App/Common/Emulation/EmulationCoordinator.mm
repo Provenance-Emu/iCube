@@ -31,6 +31,18 @@
 #import "HostNotifications.h"
 #import "HostQueue.h"
 #import "JitManager.h"
+#import "EmulationBootType.h"
+
+// C++ Core host messaging
+#include "Core/Host.h"
+#include "Core/Core.h"
+#include "Core/System.h"
+#include "Core/State.h"
+#include "Core/Config/MainSettings.h"
+#include "VideoCommon/Present.h"
+#include "VideoCommon/FramebufferManager.h"
+#include "VideoCommon/PostProcessing.h"
+#include "Common/JITMemoryTracker.h"
 
 // A lightweight host view that notifies us when its bounds change so we can
 // update the CAMetalLayer frame and drawableSize.
@@ -251,7 +263,30 @@
 
     auto& system = Core::System::GetInstance();
 
-    system.SetJitAvailable([JitManager shared].acquiredJit);
+    BOOL isCatalyst = NO;
+#if TARGET_OS_MACCATALYST
+    isCatalyst = YES;
+#else
+    if ([[NSProcessInfo processInfo] respondsToSelector:@selector(isMacCatalystApp)]) {
+      isCatalyst = [[NSProcessInfo processInfo] isMacCatalystApp];
+    }
+#endif
+
+    BOOL isiOSOnMac = NO;
+    if ([[NSProcessInfo processInfo] respondsToSelector:@selector(isiOSAppOnMac)]) {
+      isiOSOnMac = [[NSProcessInfo processInfo] isiOSAppOnMac];
+    }
+
+    if (isCatalyst) {
+      // Under Mac Catalyst, JIT is permitted with proper entitlements on macOS
+      system.SetJitAvailable([JitManager shared].acquiredJit);
+    } else if (isiOSOnMac) {
+      // iPad apps on macOS (non-Catalyst) generally cannot use JIT toggle; use page protections fallback
+      Common::JITMemoryTracker::SetThreadToggleAllowed(false);
+      system.SetJitAvailable([JitManager shared].acquiredJit);
+    } else {
+      system.SetJitAvailable([JitManager shared].acquiredJit);
+    }
 
     // Clear any lingering per-run CPU core override so we honor current availability/config
     Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
