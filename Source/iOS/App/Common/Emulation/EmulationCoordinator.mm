@@ -297,6 +297,7 @@ static void EnsurePad1DefaultsToTouchscreen()
     }
     pad0->SetDefaultDevice(dq_touch);
     // Load stock Touchscreen profile if present
+    bool loaded_profile_pad = false;
     {
       const std::string sysDir = pad0->GetConfig()->GetSysProfileDirectoryPath();
       const std::string userDir = pad0->GetConfig()->GetUserProfileDirectoryPath();
@@ -306,13 +307,18 @@ static void EnsurePad1DefaultsToTouchscreen()
       if (File::Exists(userProfile) && ini.Load(userProfile))
       {
         pad0->LoadConfig(ini.GetOrCreateSection("Profile"));
+        loaded_profile_pad = true;
       }
       else if (File::Exists(sysProfile) && ini.Load(sysProfile))
       {
         pad0->LoadConfig(ini.GetOrCreateSection("Profile"));
+        loaded_profile_pad = true;
       }
     }
-    pad0->LoadDefaults(g_controller_interface);
+    if (!loaded_profile_pad)
+    {
+      pad0->LoadDefaults(g_controller_interface);
+    }
     pad0->UpdateReferences(g_controller_interface);
     Pad::GetConfig()->SaveConfig();
     NSLog(@"[DolphiniOS][Input] Ensured Pad1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
@@ -339,6 +345,7 @@ after_pad1:
 
       wm0->SetDefaultDevice(dq_touch);
       // Load stock touchscreen profile if present
+      bool loaded_profile_wm = false;
       {
         const std::string sysDirWM = wm0->GetConfig()->GetSysProfileDirectoryPath();
         const std::string userDirWM = wm0->GetConfig()->GetUserProfileDirectoryPath();
@@ -348,13 +355,18 @@ after_pad1:
         if (File::Exists(userProfileWM) && iniWM.Load(userProfileWM))
         {
           wm0->LoadConfig(iniWM.GetOrCreateSection("Profile"));
+          loaded_profile_wm = true;
         }
         else if (File::Exists(sysProfileWM) && iniWM.Load(sysProfileWM))
         {
           wm0->LoadConfig(iniWM.GetOrCreateSection("Profile"));
+          loaded_profile_wm = true;
         }
       }
-      wm0->LoadDefaults(g_controller_interface);
+      if (!loaded_profile_wm)
+      {
+        wm0->LoadDefaults(g_controller_interface);
+      }
       wm0->UpdateReferences(g_controller_interface);
       Wiimote::GetConfig()->SaveConfig();
       NSLog(@"[DolphiniOS][Input] Ensured Wiimote1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());

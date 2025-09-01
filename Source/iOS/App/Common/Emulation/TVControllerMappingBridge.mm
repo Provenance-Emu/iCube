@@ -10,6 +10,8 @@
 #include "InputCommon/InputConfig.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "Core/ConfigManager.h"
+#include "Common/FileUtil.h"
+#include "Common/IniFile.h"
 #include <unordered_set>
 
 @implementation TVControllerMappingBridge
@@ -143,6 +145,60 @@
       break;
     }
   }
+}
+
++ (void)assignTouchscreenToGCPort:(NSInteger)portOneBased
+{
+  if (portOneBased < 1 || portOneBased > 4)
+    return;
+  auto* cfg = Pad::GetConfig();
+  if (!cfg)
+    return;
+  const auto devices = g_controller_interface.GetAllDevices();
+  std::shared_ptr<ciface::Core::Device> touchscreen_dev;
+  for (const auto& dev : devices)
+  {
+    if (dev && dev->GetSource() == std::string("iOS") && dev->GetName() == std::string("Touchscreen"))
+    {
+      touchscreen_dev = dev; break;
+    }
+  }
+  if (!touchscreen_dev)
+    return;
+  ciface::Core::DeviceQualifier dq; dq.FromDevice(touchscreen_dev.get());
+  const int port = (int)portOneBased - 1;
+  auto* pad = cfg->GetController(port);
+  if (!pad) return;
+  pad->SetDefaultDevice(dq);
+  bool loaded_profile = false;
+  {
+    const std::string sysDir = pad->GetConfig()->GetSysProfileDirectoryPath();
+    const std::string userDir = pad->GetConfig()->GetUserProfileDirectoryPath();
+    const std::string sysProfile = sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+    const std::string userProfile = userDir + (userDir.empty() || userDir.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+
+    Common::IniFile ini;
+    if (File::Exists(userProfile) && ini.Load(userProfile))
+    {
+      pad->LoadConfig(ini.GetOrCreateSection("Profile"));
+      loaded_profile = true;
+    }
+    else if (File::Exists(sysProfile) && ini.Load(sysProfile))
+    {
+      pad->LoadConfig(ini.GetOrCreateSection("Profile"));
+      loaded_profile = true;
+    }
+  }
+
+  if (!loaded_profile)
+  {
+    // Fallback to defaults, then ensure Touchscreen stays the default device
+    pad->LoadDefaults(g_controller_interface);
+    pad->SetDefaultDevice(dq);
+  }
+
+  pad->UpdateReferences(g_controller_interface);
+  Pad::GetConfig()->SaveConfig();
 }
 
 @end

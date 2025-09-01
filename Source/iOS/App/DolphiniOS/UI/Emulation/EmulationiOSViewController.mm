@@ -113,8 +113,13 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   [TVControllerMappingBridge reconcileAssignments];
   [EmulationCoordinator autoAssignNewestExternalControllerToFirstAvailableSlot];
   dispatch_async(dispatch_get_main_queue(), ^{
+    // Prefer reported system; if ambiguous or Wiimote pad not available, default to GameCube
     if (Core::System::GetInstance().IsWii()) {
-      [self updateVisibleTouchPadToWii];
+      if ([self isWiimoteTouchPadAttached]) {
+        [self updateVisibleTouchPadToWii];
+      } else {
+        [self updateVisibleTouchPadToGameCube];
+      }
     } else {
       [self updateVisibleTouchPadToGameCube];
     }
@@ -122,15 +127,16 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 }
 
 - (void)onGCControllerDidDisconnect:(NSNotification*)note {
-  // Re-ensure Pad 1 has input if we lost a controller
-  [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
-  dispatch_async(dispatch_get_main_queue(), ^{
-    if (Core::System::GetInstance().IsWii()) {
+  // On disconnect, ensure Pad1 touch fallback and prefer GC when ambiguous
+  if (Core::System::GetInstance().IsWii()) {
+    if ([self isWiimoteTouchPadAttached]) {
       [self updateVisibleTouchPadToWii];
     } else {
       [self updateVisibleTouchPadToGameCube];
     }
-  });
+  } else {
+    [self updateVisibleTouchPadToGameCube];
+  }
 }
 
 - (void)recreateMenu {
@@ -385,8 +391,11 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
     // Keep existing behavior; if GC pad missing do nothing
     if (![self isGameCubeTouchPadAttached]) { return; }
   }
-  // System-driven selection: GameCube -> GameCube pad; if not attached, do nothing
+  // System-driven selection: GameCube -> GameCube pad; if not attached, try Wii else fallback no-op
   if (![self isGameCubeTouchPadAttached]) {
+    if (Core::System::GetInstance().IsWii() && [self isWiimoteTouchPadAttached]) {
+      [self updateVisibleTouchPadToWii];
+    }
     return;
   }
 

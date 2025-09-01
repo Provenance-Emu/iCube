@@ -13,6 +13,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString*)defaultDeviceForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(defaultDevice(forGCPort:));
 + (void)clearDefaultDeviceForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(clearDefaultDevice(forGCPort:));
 
+/// Assign the iOS Touchscreen virtual device as the default device for a GC port.
++ (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
+
 /// Reconciles default devices against currently connected controllers, removing phantom devices
 /// and reassigning Player 1 to a connected controller when possible.
 + (void)reconcileAssignments;
