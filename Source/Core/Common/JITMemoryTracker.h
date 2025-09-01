@@ -9,7 +9,7 @@
 
 namespace Common
 {
-class JITMemoryTracker final
+class JITMemoryTracker
 {
 public:
   JITMemoryTracker();
@@ -19,6 +19,11 @@ public:
 
   void JITRegionWriteEnableExecuteDisable(void* ptr);
   void JITRegionWriteDisableExecuteEnable(void* ptr);
+
+  // Allows higher level (ObjC) to disable per-thread JIT toggling on platforms
+  // where pthread_jit_write_protect_np exists but is not permitted (iPad-on-Mac).
+  static void SetThreadToggleAllowed(bool allowed) { s_thread_toggle_allowed = allowed; }
+  static bool GetThreadToggleAllowed() { return s_thread_toggle_allowed; }
 
 private:
   struct JITRegionInfo
@@ -32,5 +37,7 @@ private:
 
   std::map<void*, JITRegionInfo> m_jit_regions;
   std::mutex m_mutex;
+
+  inline static bool s_thread_toggle_allowed = true;
 };
-}
+}  // namespace Common

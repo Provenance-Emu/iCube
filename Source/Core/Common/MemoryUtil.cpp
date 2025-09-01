@@ -50,6 +50,14 @@ static inline bool AppleHasJitToggle()
 {
   return AppleGetJitToggle() != nullptr;
 }
+static inline bool AppleJitToggleSupported()
+{
+  using SupportFn = int (*)();
+  static SupportFn sfn_cached = (SupportFn)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_supported_np");
+  if (sfn_cached)
+    return sfn_cached() != 0;
+  return false;
+}
 static inline void AppleToggleJitWriteProtect(bool enable)
 {
   if (ToggleFn fn = AppleGetJitToggle())
@@ -96,11 +104,13 @@ void* AllocateExecutableMemory(size_t size)
   // Prefer RWX if pthread_jit_write_protect_np cannot be resolved at runtime,
   // since MAP_JIT mappings require per-thread toggling to execute.
   const bool have_toggle = AppleHasJitToggle();
+  const bool toggle_supported = AppleJitToggleSupported();
 #if defined(TARGET_OS_TV) && TARGET_OS_TV
   // tvOS: default to RWX due to MAP_JIT instability; env can still override for testing
   const bool force_rwx = true;
 #else
-  const bool force_rwx = ForceRWXMode() || !have_toggle;
+  // On iPad-on-Mac, toggle may exist but not be supported; force RWX in that case
+  const bool force_rwx = ForceRWXMode() || !have_toggle || !toggle_supported;
 #endif
   if (!force_rwx)
   {

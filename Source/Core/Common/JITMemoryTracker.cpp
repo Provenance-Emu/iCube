@@ -26,9 +26,19 @@ static inline bool AppleHasJitToggle()
   static ToggleFn fn = (ToggleFn)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");
   return fn != nullptr;
 }
+static inline bool AppleJitToggleSupported()
+{
+  using SupportFn = int (*)();
+  static SupportFn sfn = (SupportFn)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_supported_np");
+  if (sfn)
+    return sfn() != 0;
+  // If unknown, be conservative and report unsupported to avoid traps
+  return false;
+}
 #else
 static inline void AppleToggleJitWriteProtect(bool) {}
 static inline bool AppleHasJitToggle() { return false; }
+static inline bool AppleJitToggleSupported() { return false; }
 #endif
 
 namespace Common
@@ -88,7 +98,7 @@ void JITMemoryTracker::JITRegionWriteEnableExecuteDisable(void* ptr)
   if (info->nest_counter == 0)
   {
 #if defined(__APPLE__) && defined(_M_ARM_64)
-    if (AppleHasJitToggle())
+    if (Common::JITMemoryTracker::GetThreadToggleAllowed() && AppleHasJitToggle() && AppleJitToggleSupported())
     {
       // On Apple ARM64 platforms with per-thread toggle, switch to write mode.
       AppleToggleJitWriteProtect(false);
@@ -127,7 +137,7 @@ void JITMemoryTracker::JITRegionWriteDisableExecuteEnable(void* ptr)
   else if (info->nest_counter == 0)
   {
 #if defined(__APPLE__) && defined(_M_ARM_64)
-    if (AppleHasJitToggle())
+    if (Common::JITMemoryTracker::GetThreadToggleAllowed() && AppleHasJitToggle() && AppleJitToggleSupported())
     {
       // Restore execute mode for this thread.
       AppleToggleJitWriteProtect(true);
