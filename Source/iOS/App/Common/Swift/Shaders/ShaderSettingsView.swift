@@ -354,18 +354,26 @@ struct ShaderParameterEditor: View {
                                 let rawMin = p.minimumCGFloat
                                 let rawMax = p.maximumCGFloat
                                 let minVal = rawMin.isFinite ? rawMin : 0
-                                var maxVal = rawMax.isFinite ? rawMax : (minVal + 1)
-                                if maxVal <= minVal { maxVal = minVal + 0.0001 }
-                                let v = values[p.index] ?? p.initialCGFloat
+                                var width = (rawMax.isFinite ? rawMax : minVal) - minVal
+                                if !width.isFinite { width = 0 }
+                                // Ensure strictly positive width
+                                let minWidth: CGFloat = 0.01
+                                if width <= 0 { width = minWidth }
+                                let maxVal = minVal + width
+                                var v = values[p.index] ?? p.initialCGFloat
+                                if !v.isFinite { v = minVal }
                                 return max(min(v, maxVal), minVal)
                             },
                             set: { newVal in
                                 let rawMin = p.minimumCGFloat
                                 let rawMax = p.maximumCGFloat
                                 let minVal = rawMin.isFinite ? rawMin : 0
-                                var maxVal = rawMax.isFinite ? rawMax : (minVal + 1)
-                                if maxVal <= minVal { maxVal = minVal + 0.0001 }
-                                let clamped = max(min(newVal, maxVal), minVal)
+                                var width = (rawMax.isFinite ? rawMax : minVal) - minVal
+                                if !width.isFinite { width = 0 }
+                                let minWidth: CGFloat = 0.01
+                                if width <= 0 { width = minWidth }
+                                let maxVal = minVal + width
+                                let clamped = max(min(newVal.isFinite ? newVal : minVal, maxVal), minVal)
                                 values[p.index] = clamped
                                 DOLShaderPostProcessor.shared.setValue(clamped, forParameterIndex: p.index)
                             }
@@ -373,18 +381,28 @@ struct ShaderParameterEditor: View {
                             let rawMin = p.minimumCGFloat
                             let rawMax = p.maximumCGFloat
                             let minVal = rawMin.isFinite ? rawMin : 0
-                            var maxVal = rawMax.isFinite ? rawMax : (minVal + 1)
-                            if maxVal <= minVal { maxVal = minVal + 0.0001 }
+                            var width = (rawMax.isFinite ? rawMax : minVal) - minVal
+                            if !width.isFinite { width = 0 }
+                            let minWidth: CGFloat = 0.01
+                            if width <= 0 { width = minWidth }
+                            let maxVal = minVal + width
                             return minVal...maxVal
                         }(), step: { () -> CGFloat in
                             let rawMin = p.minimumCGFloat
                             let rawMax = p.maximumCGFloat
                             let minVal = rawMin.isFinite ? rawMin : 0
-                            var maxVal = rawMax.isFinite ? rawMax : (minVal + 1)
-                            if maxVal <= minVal { maxVal = minVal + 0.0001 }
+                            var width = (rawMax.isFinite ? rawMax : minVal) - minVal
+                            if !width.isFinite { width = 0 }
+                            let minWidth: CGFloat = 0.01
+                            if width <= 0 { width = minWidth }
                             let rawStep = p.stepCGFloat
-                            let computed = (rawStep.isFinite && rawStep > 0) ? rawStep : (maxVal - minVal) / 100
-                            return computed > 0 ? computed : 0.0001
+                            var step = (rawStep.isFinite && rawStep > 0) ? rawStep : (width / 100)
+                            let minStep = width / 1000
+                            if !step.isFinite || step <= 0 { step = minStep }
+                            // Cap overly large steps to keep at least two steps in range
+                            if step >= width { step = width / 100 }
+                            // Final guard
+                            return max(step, minStep)
                         }())
 #else
                         // tvOS: Use TVFloatStepper for better UX
