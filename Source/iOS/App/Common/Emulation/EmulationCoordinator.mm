@@ -254,7 +254,9 @@
     system.SetJitAvailable([JitManager shared].acquiredJit);
 
     // Clear any lingering per-run CPU core override so we honor current availability/config
-    Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
+    if (Config::GetLayer(Config::LayerType::CurrentRun)) {
+      Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
+    }
 
     // Enforce CPU-core fallback when JIT is not available for this run
     {
