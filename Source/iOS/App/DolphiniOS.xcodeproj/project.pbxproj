@@ -21,6 +21,7 @@
 		B31E805C2E6544430036EE31 /* TVFloatStepper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E805B2E6544430036EE31 /* TVFloatStepper.swift */; };
 		B31E80662E6563540036EE31 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80652E6563530036EE31 /* WidgetKit.framework */; };
 		B31E80682E6563540036EE31 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80672E6563540036EE31 /* SwiftUI.framework */; };
+		B31E921B2E665F530036EE31 /* ControllerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E921A2E665F530036EE31 /* ControllerManager.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -307,6 +308,7 @@
 		B31E80652E6563530036EE31 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		B31E80672E6563540036EE31 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B31E807A2E6563550036EE31 /* Live ActivityExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Live ActivityExtension.entitlements"; sourceTree = "<group>"; };
+		B31E921A2E665F530036EE31 /* ControllerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerManager.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -1189,6 +1191,7 @@
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */,
+				B31E921A2E665F530036EE31 /* ControllerManager.swift */,
 				B31E804E2E6504940036EE31 /* ControllerPresets.swift */,
 				B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */,
 				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
@@ -2435,6 +2438,7 @@
 				B9913781288096A300588446 /* ConfigWiiViewController.mm in Sources */,
 				B97E4B58296573E200B3EE9C /* DOLBuildSource.swift in Sources */,
 				B34ECD002E56A57A00301907 /* EmulationScreen.swift in Sources */,
+				B31E921B2E665F530036EE31 /* ControllerManager.swift in Sources */,
 				B9398716287FE28F008E8E47 /* FallbackRegionCell.m in Sources */,
 				B31E805C2E6544430036EE31 /* TVFloatStepper.swift in Sources */,
 				B939871A287FF135008E8E47 /* ConfigInterfaceViewController.mm in Sources */,

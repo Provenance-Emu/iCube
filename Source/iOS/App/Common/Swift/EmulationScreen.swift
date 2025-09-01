@@ -427,6 +427,8 @@ struct EmulationScreen: View {
                                 Button {
                                     hasTopBarInteraction = true
                                     DOLConfigBridge.setMainTouchPadIRMode(0)
+                                    isTouchControlsActive = true
+                                    userOverrideTouchControls = true
                                     touchPadsRefreshToken = UUID()
                                 } label: {
                                     Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "")
@@ -434,6 +436,8 @@ struct EmulationScreen: View {
                                 Button {
                                     hasTopBarInteraction = true
                                     DOLConfigBridge.setMainTouchPadIRMode(1)
+                                    isTouchControlsActive = true
+                                    userOverrideTouchControls = true
                                     touchPadsRefreshToken = UUID()
                                 } label: {
                                     Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "")
@@ -441,6 +445,8 @@ struct EmulationScreen: View {
                                 Button {
                                     hasTopBarInteraction = true
                                     DOLConfigBridge.setMainTouchPadIRMode(2)
+                                    isTouchControlsActive = true
+                                    userOverrideTouchControls = true
                                     touchPadsRefreshToken = UUID()
                                 } label: {
                                     Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "")
@@ -519,6 +525,9 @@ struct EmulationScreen: View {
             if let c = note.object as? GCController {
                 c.controllerPausedHandler = { _ in }
             }
+        }
+        NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
+            touchPadsRefreshToken = UUID()
         }
         obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in
             touchPadsRefreshToken = UUID()

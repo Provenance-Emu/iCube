@@ -90,12 +90,15 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(receiveRequestRenderWindowSizeNotificationiOS) name:DOLHostRequestRenderWindowSizeNotification object:nil];
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(receiveEmulationEndNotificationiOS) name:DOLEmulationDidEndNotification object:nil];
 
+  // Refresh touch pad visibility when assignments change via unified manager
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onControllerAssignmentsChanged) name:@"ControllerAssignmentsChanged" object:nil];
+
   // Physical controller connect/disconnect
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onGCControllerDidConnect:) name:GCControllerDidConnectNotification object:nil];
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onGCControllerDidDisconnect:) name:GCControllerDidDisconnectNotification object:nil];
 
   // Reconcile at view appearance to fix phantom controllers after game start
-  [TVControllerMappingBridge reconcileAssignments];
+  [[ControllerManager shared] reconcile];
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -106,11 +109,12 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   [[NSNotificationCenter defaultCenter] removeObserver:self name:DOLEmulationDidEndNotification object:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self name:GCControllerDidConnectNotification object:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self name:GCControllerDidDisconnectNotification object:nil];
+  [[NSNotificationCenter defaultCenter] removeObserver:self name:@"ControllerAssignmentsChanged" object:nil];
 }
 
 // MARK: - Physical controller observers
 - (void)onGCControllerDidConnect:(NSNotification*)note {
-  [TVControllerMappingBridge reconcileAssignments];
+  [[ControllerManager shared] reconcile];
   [EmulationCoordinator autoAssignNewestExternalControllerToFirstAvailableSlot];
   dispatch_async(dispatch_get_main_queue(), ^{
     // Prefer reported system; if ambiguous or Wiimote pad not available, default to GameCube
@@ -137,6 +141,18 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   } else {
     [self updateVisibleTouchPadToGameCube];
   }
+}
+
+- (void)onControllerAssignmentsChanged {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+    if (Core::System::GetInstance().IsWii()) {
+      [self updateVisibleTouchPadToWii];
+    } else {
+      [self updateVisibleTouchPadToGameCube];
+    }
+    [self recreateMenu];
+  });
 }
 
 - (void)recreateMenu {

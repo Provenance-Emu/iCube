@@ -38,6 +38,7 @@
 #import "TVControllerMappingBridge.h"
 #import "LocalizationUtil.h"
 #import "VirtualMFiControllerManager.h"
+#import "DolphiniOS-Swift.h"
 #include "Core/Config/WiimoteSettings.h"
 
 // A lightweight host view that notifies us when its bounds change so we can
@@ -387,7 +388,7 @@ static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev
       return;
 
     // Reconcile any stale phantom assignments first
-    [TVControllerMappingBridge reconcileAssignments];
+    [[ControllerManager shared] reconcile];
 
     // Gather connected physical devices (exclude Touchscreen)
     const auto devices = g_controller_interface.GetAllDevices();
