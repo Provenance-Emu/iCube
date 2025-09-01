@@ -1967,6 +1967,11 @@ private struct CacheInfoView: View {
   @State private var isWorking = false
   @State private var redownloadProgress: Double = 0
   @State private var showCopiedToast: Bool = false
+  @State private var shareURL: URL?
+  @State private var toastText: String?
+  @State private var showAlert = false
+  @State private var alertTitle = ""
+  @State private var alertMessage = ""
 
   private struct CacheInfo {
     let localPath: String
@@ -2053,10 +2058,63 @@ private struct CacheInfoView: View {
                 .padding(16)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))
+
+                // Actions grid (fits better than toolbar on small widths)
+                let gridCols: [GridItem] = {
+                  if proxy.size.width < 370 { return [GridItem(.flexible(), spacing: 12)] }
+                  if proxy.size.width < 700 { return [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)] }
+                  return [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+                }()
+                if let info = cacheInfo {
+                  LazyVGrid(columns: gridCols, spacing: 12) {
+                    Button(role: .destructive) { performRemove() } label: {
+                      HStack { Image(systemName: "trash"); Text(L("Remove")) }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .disabled(isWorking)
+
+                    Button { performRedownload() } label: {
+                      if isWorking && redownloadProgress > 0 {
+                        HStack(spacing: 6) { ProgressView(value: redownloadProgress); Text("\(Int(redownloadProgress * 100))%") }
+                          .frame(maxWidth: .infinity)
+                      } else {
+                        HStack { Image(systemName: "arrow.down.circle"); Text(L("Re-download")) }
+                          .frame(maxWidth: .infinity)
+                      }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isWorking)
+
+                    Button { copyToPasteboard(info.originalURL) } label: {
+                      HStack { Image(systemName: "doc.on.doc"); Text(L("Copy URL")) }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button { copyToPasteboard(info.localPath) } label: {
+                      HStack { Image(systemName: "folder"); Text(L("Copy Path")) }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                    #if os(iOS)
+                    if FileManager.default.fileExists(atPath: info.localPath) {
+                      Button { shareFile(path: info.localPath) } label: {
+                        HStack { Image(systemName: "square.and.arrow.up"); Text(L("Share")) }
+                          .frame(maxWidth: .infinity)
+                      }
+                      .buttonStyle(.bordered)
+                    }
+                    #endif
+                  }
+                  .padding(.top, 8)
+                }
               }
               .frame(maxWidth: w)
               .padding(.horizontal, 16)
-              .frame(maxWidth: .infinity, alignment: .center)
+              .frame(maxWidth: .infinity, alignment: .leading)
               .padding(.vertical, 16)
 
             }
@@ -2079,47 +2137,44 @@ private struct CacheInfoView: View {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button("Done") { dismiss() }
         }
-        ToolbarItemGroup(placement: .bottomBar) {
-          if let info = cacheInfo {
-            Spacer()
-            Button(role: .destructive) { performRemove() } label: {
-              Label(L("Remove"), systemImage: "trash")
-                .labelStyle(.titleAndIcon)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .disabled(isWorking)
-
-            Button { performRedownload() } label: {
-              if isWorking && redownloadProgress > 0 {
-                HStack(spacing: 6) {
-                  ProgressView(value: redownloadProgress).frame(width: 60)
-                  Text("\(Int(redownloadProgress * 100))%")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                }
-              } else {
-                Label(L("Re-download"), systemImage: "arrow.down.circle")
-                  .labelStyle(.titleAndIcon)
-              }
-            }
-            .buttonStyle(.bordered)
-            .disabled(isWorking)
-
-            Button { copyToPasteboard(info.originalURL) } label: {
-              Label(L("Copy URL"), systemImage: "doc.on.doc").labelStyle(.titleAndIcon)
-            }
-            .buttonStyle(.bordered)
-
-            Button { copyToPasteboard(info.localPath) } label: {
-              Label(L("Copy Path"), systemImage: "folder").labelStyle(.titleAndIcon)
-            }
-            .buttonStyle(.bordered)
-          }
-        }
       }
       .onAppear {
         loadCacheInfo()
+      }
+    #if os(iOS)
+      .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
+        Group {
+          if let url = shareURL {
+            ShareSheet(activityItems: [url])
+              .ignoresSafeArea()
+          } else {
+            EmptyView()
+          }
+        }
+      }
+    #endif
+      .overlay(
+        Group {
+          if let toast = toastText {
+            VStack {
+              Spacer()
+              Text(toast)
+                .font(.footnote)
+                .foregroundColor(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.black.opacity(0.7), in: Capsule())
+                .padding(.bottom, 20)
+            }
+            .transition(.opacity)
+            .animation(.easeInOut(duration: 0.2), value: toastText)
+          }
+        }
+      )
+      .alert(alertTitle, isPresented: $showAlert) {
+        Button(L("OK"), role: .cancel) {}
+      } message: {
+        Text(alertMessage)
       }
     }
   }
@@ -2132,30 +2187,21 @@ private struct CacheInfoView: View {
       return
     }
 
-    var foundSource = false
-    for source in RemoteSourcesStore.shared.sources {
-      if let webdavSource = source as? WebDAVSource {
-        foundSource = true
-        let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
-
-        // Check if cached and get info
-        Task {
-          let info = await getCacheInfo(from: webdavSource, for: remoteItem)
-          await MainActor.run {
-            self.cacheInfo = info
-            self.isLoading = false
-            if info == nil {
-              self.errorMessage = "This game is not currently cached"
-            }
-          }
+    if let source = getMatchingWebDAVSource(for: url) {
+      let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
+      // Check if cached and get info
+      Task {
+        let info = await getCacheInfo(from: source, for: remoteItem)
+        await MainActor.run {
+          self.cacheInfo = info
+          self.isLoading = false
+          self.errorMessage = info == nil ? "This game is not currently cached" : nil
         }
-        break
       }
-    }
-
-    if !foundSource {
+    } else {
       errorMessage = "No WebDAV source found for this game"
       isLoading = false
+      cacheInfo = nil
     }
   }
 
@@ -2184,7 +2230,16 @@ private struct CacheInfoView: View {
         try await source.removeCachedItem(remoteItem)
         await MainActor.run {
           isWorking = false
+          // Optimistically clear current info
+          self.cacheInfo = nil
+          self.errorMessage = "This game is not currently cached"
           loadCacheInfo()
+          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Removed from cache")])
+          toastText = L("Removed from cache")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { toastText = nil }
+          alertTitle = L("Removed")
+          alertMessage = L("The cached file was removed.")
+          showAlert = true
         }
       } catch {
         await MainActor.run { isWorking = false }
@@ -2199,12 +2254,18 @@ private struct CacheInfoView: View {
     redownloadProgress = 0
     Task {
       do {
-        let _ = try await source.preCacheItem(remoteItem) { progress in
+        let _ = try await source.forcePreCacheItem(remoteItem) { progress in
           DispatchQueue.main.async { self.redownloadProgress = progress }
         }
         await MainActor.run {
           isWorking = false
           loadCacheInfo()
+          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Downloaded to cache")])
+          toastText = L("Downloaded to cache")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { toastText = nil }
+          alertTitle = L("Downloaded")
+          alertMessage = L("The file has been downloaded to cache.")
+          showAlert = true
         }
       } catch {
         await MainActor.run { isWorking = false }
@@ -2216,9 +2277,20 @@ private struct CacheInfoView: View {
 #if os(iOS)
     UIPasteboard.general.string = text
     showCopiedToast = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { showCopiedToast = false }
+    toastText = L("Copied")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { showCopiedToast = false; toastText = nil }
+    alertTitle = L("Copied")
+    alertMessage = text
+    showAlert = true
 #endif
   }
+
+  #if os(iOS)
+  private func shareFile(path: String) {
+    let url = URL(fileURLWithPath: path)
+    shareURL = url
+  }
+  #endif
 }
 
 
@@ -2239,17 +2311,36 @@ private struct KVRow: View {
           .font(.caption)
           .foregroundColor(.secondary)
           .textCase(.uppercase)
+        #if os(tvOS)
+        if monospaced {
+          Text(value).font(.callout).monospaced().lineLimit(nil)
+        } else {
+          Text(value).font(.callout).lineLimit(nil)
+        }
+        #else
         if monospaced {
           Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
         } else {
           Text(value).font(.callout).textSelection(.enabled).lineLimit(nil)
         }
+        #endif
       }
       Spacer(minLength: 0)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
+
+#if os(iOS)
+/// Minimal share sheet wrapper
+private struct ShareSheet: UIViewControllerRepresentable {
+  let activityItems: [Any]
+  func makeUIViewController(context: Context) -> UIActivityViewController {
+    UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+  }
+  func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#endif
 
 // MARK: - Remote scan progress view (toolbar)
 private struct RemoteScanProgressView: View {
