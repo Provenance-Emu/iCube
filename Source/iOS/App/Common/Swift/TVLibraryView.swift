@@ -79,7 +79,7 @@ private extension View {
   func neonGlowBorder(active: Bool, cornerRadius: CGFloat = 16) -> some View {
     modifier(NeonGlowBorder(active: active, cornerRadius: cornerRadius))
   }
-  
+
   func retroFocusScale(active: Bool) -> some View {
     self
       .scaleEffect(active ? 1.10 : 1.0)
@@ -105,7 +105,7 @@ final class TVLibraryViewModel: ObservableObject {
   @Published var currentGame: TVGameItem?
   /// Grouped items by deduplication key
   @Published var groupsByKey: [String: [TVGameItem]] = [:]
-  
+
   /// Loads the current game list from the bridge
   func load() {
     let items = TVLibraryBridge.currentGames()
@@ -117,15 +117,15 @@ final class TVLibraryViewModel: ObservableObject {
     groupAndDedup(items: items)
     print("TVLibraryViewModel.load(): after dedup, showing \(games.count) games")
   }
-  
+
   /// Initiates a rescan and metadata fetch, then reloads the list
   func rescan() {
     guard !isRescanning else { return }
     isRescanning = true
-    
+
     // Trigger refresh of remote sources first - they will update the cache when ready
     NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
-    
+
     // For refresh, don't clear remote cache immediately - let WebDAV results drive updates
     // Only rescan local files to update metadata
     TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
@@ -136,7 +136,7 @@ final class TVLibraryViewModel: ObservableObject {
       }
     }
   }
-  
+
   /// Triggers metadata fetch on first appearance to populate artwork
   func kickoffInitialMetadataIfNeeded() {
     guard !didKickoffInitialMetadata, !isRescanning else { return }
@@ -148,26 +148,26 @@ final class TVLibraryViewModel: ObservableObject {
       }
     }
   }
-  
+
   func loadGameCubeMainMenu() {
     TVLibraryBridge.loadGameCubeMainMenu()
   }
-  
+
   func performOnlineSystemUpdate() {
     TVLibraryBridge.performOnlineSystemUpdate()
   }
-  
+
   private func isLocal(_ item: TVGameItem) -> Bool {
     if let scheme = URL(string: item.filePath)?.scheme?.lowercased() { return scheme == "file" }
     return item.filePath.hasPrefix("/")
   }
-  
+
   private func key(for item: TVGameItem) -> String {
     // Use filePath as fallback when gameID is empty (common for remote games still being processed)
     let gameID = item.gameID.isEmpty ? item.filePath : item.gameID
     return "\(gameID)|\(item.discNumber)|\(item.revision)"
   }
-  
+
   private func groupAndDedup(items: [TVGameItem]) {
     print("TVLibraryViewModel.groupAndDedup(): processing \(items.count) items")
     var grouped: [String: [TVGameItem]] = [:]
@@ -196,7 +196,7 @@ final class TVLibraryViewModel: ObservableObject {
       }
     }
     print("TVLibraryViewModel.groupAndDedup(): found \(representatives.count) representatives")
-    
+
     // Sort games alphabetically using fallback to filename when title is empty
     games = representatives.sorted { (a: TVGameItem, b: TVGameItem) -> Bool in
       let at: String = {
@@ -213,14 +213,14 @@ final class TVLibraryViewModel: ObservableObject {
     }
     print("TVLibraryViewModel.groupAndDedup(): final games count: \(games.count)")
   }
-  
+
   func sources(for item: TVGameItem) -> [TVGameItem] {
     groupsByKey[key(for: item)] ?? [item]
   }
 }
 
 struct TVLibraryView: View {
-  
+
   @StateObject private var model = TVLibraryViewModel()
   @State private var showSettings = false
   @State private var didReloadOnce = false
@@ -240,33 +240,33 @@ struct TVLibraryView: View {
   @State private var showCheatError: String?
   /// Cheat list modal state
   @State private var showCheatListFor: TVGameItem?
-  
+
   /// Currently focused game's file path to drive zIndex and animations
   @State private var focusedFilePath: String?
-  
+
   @State private var showSources = false
   /// Source picker modal state
   @State private var sourcePickerItems: [TVGameItem]? = nil
   /// Auto pre-cache progress state
   @State private var autoPreCacheProgress: [String: Double] = [:]
   @State private var autoPreCacheActive: Set<String> = []
-  
+
   /// Storage alerts
   @State private var storageAlertMessage = ""
   @State private var itemPendingLaunch: TVGameItem?
-  
+
   // Navigation to Save States views
   private struct GameIDRoute: Identifiable, Hashable { let id: String }
   @State private var navigateToSaveStates: GameIDRoute?
   @State private var showSaveStatesBrowser: Bool = false
-  
+
   /// Separate alert states (SwiftUI works better with simple booleans)
   @State private var showStorageErrorAlert = false
   @State private var showLowStorageWarning = false
   @State private var showCacheInfoFor: TVGameItem?
   @State private var blockingPrecacheItem: TVGameItem?
   @State private var blockingPrecacheProgress: Double = 0
-  
+
   /// iOS document pickers
 #if os(iOS) || targetEnvironment(macCatalyst)
   @State private var showImportSoftwarePicker = false
@@ -284,17 +284,17 @@ struct TVLibraryView: View {
   @State private var prevEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
   @State private var prevMGPHandlers: [ObjectIdentifier: (GCMicroGamepad, GCControllerElement) -> Void] = [:]
 #endif
-  
+
   /// Storage space management
   static let STORAGE_BUFFER_MB: Int64 = 100 * 1024 * 1024 // 100MB buffer
   static let LOW_STORAGE_THRESHOLD_MB: Int64 = 100 * 1024 * 1024 // 100MB warning threshold
-  
+
   /// Check available storage space
   static func getAvailableStorageSpace() -> Int64 {
     guard let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
       return 0
     }
-    
+
     do {
       let resourceValues = try cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityKey])
       return Int64(resourceValues.volumeAvailableCapacity ?? 0)
@@ -303,26 +303,26 @@ struct TVLibraryView: View {
       return 0
     }
   }
-  
+
   /// Check if there's enough space for pre-caching (file size + 100MB buffer)
   static func hasEnoughSpaceForPreCache(fileSize: Int64) -> Bool {
     let availableSpace = getAvailableStorageSpace()
     let requiredSpace = fileSize + STORAGE_BUFFER_MB
     return availableSpace >= requiredSpace
   }
-  
+
   /// Check if storage is critically low (< 100MB)
   static func isStorageCriticallyLow() -> Bool {
     return getAvailableStorageSpace() < LOW_STORAGE_THRESHOLD_MB
   }
-  
+
   /// Format storage space for user display
   static func formatStorageSpace(_ bytes: Int64) -> String {
     return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
   }
-  
+
   private enum CheatType { case gecko, ar }
-  
+
   /// Helper function to check if a URL is a remote URL (HTTP/HTTPS/WebDAV)
   static func isRemoteURL(_ urlString: String) -> Bool {
     let lower = urlString.lowercased()
@@ -331,7 +331,7 @@ struct TVLibraryView: View {
     lower.hasPrefix("webdav://") ||
     lower.hasPrefix("webdavs://")
   }
-  
+
   private enum Constants {
     static let gridVerticalSpacing: CGFloat = {
 #if os(tvOS)
@@ -370,7 +370,7 @@ struct TVLibraryView: View {
       return Array(repeating: GridItem(.flexible(), spacing: gridHorizontalSpacing), count: gridNumberOfColumns)
     }
   }
-  
+
   @ViewBuilder
   private var mainContent: some View {
     ZStack {
@@ -381,7 +381,7 @@ struct TVLibraryView: View {
       }
     }
   }
-  
+
   @ViewBuilder
   private var libraryView: some View {
 #if os(iOS) || targetEnvironment(macCatalyst)
@@ -392,100 +392,107 @@ struct TVLibraryView: View {
       let available = max(0, proxy.size.width - (paddingH * 2))
       let count = max(2, Int((available + spacingH) / (cardW + spacingH)))
       let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
-      ScrollView {
-        LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
-          ForEach(model.games, id: \.filePath) { item in
-            GameGridItem(
-              item: item,
-              select: selectGame,
-              focusedFilePath: $focusedFilePath,
-              showProperties: { showPropertiesFor = $0 },
-              showCheatList: { showCheatListFor = $0 },
-              downloadGeckoAction: { downloadGecko(for: $0) },
-              presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
-              presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
-              requestDelete: { itemPendingDelete = $0 },
-              showStorageAlert: { message in
-                storageAlertMessage = message
-                showStorageErrorAlert = true
-              },
-              showCacheInfo: { item in
-                showCacheInfoFor = item
-              },
-              showSaveStates: { item in
-                let gid = item.gameID
-                if !gid.isEmpty {
-                  navigateToSaveStates = GameIDRoute(id: gid)
+      ScrollViewReader { scr in
+        ScrollView {
+          LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
+            ForEach(model.games, id: \.filePath) { item in
+              GameGridItem(
+                item: item,
+                select: selectGame,
+                focusedFilePath: $focusedFilePath,
+                showProperties: { showPropertiesFor = $0 },
+                showCheatList: { showCheatListFor = $0 },
+                downloadGeckoAction: { downloadGecko(for: $0) },
+                presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
+                presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
+                requestDelete: { itemPendingDelete = $0 },
+                showStorageAlert: { message in
+                  storageAlertMessage = message
+                  showStorageErrorAlert = true
+                },
+                showCacheInfo: { item in
+                  showCacheInfoFor = item
+                },
+                showSaveStates: { item in
+                  let gid = item.gameID
+                  if !gid.isEmpty {
+                    navigateToSaveStates = GameIDRoute(id: gid)
+                  }
+                },
+                autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
+                isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
+              )
+              .id(item.filePath)
+              .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                  .stroke(focusedFilePath == item.filePath ? Color.accentColor : Color.clear, lineWidth: 3)
+              )
+              .onChange(of: focusedFilePath) { _, newVal in
+                if newVal == item.filePath {
+                  let gen = UIImpactFeedbackGenerator(style: .light)
+                  gen.impactOccurred()
+                  // Auto-scroll to follow focus
+                  DispatchQueue.main.async {
+                    scr.scrollTo(item.filePath, anchor: .center)
+                  }
                 }
-              },
-              autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
-              isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
-            )
-            .overlay(
-              RoundedRectangle(cornerRadius: 14)
-                .stroke(focusedFilePath == item.filePath ? Color.accentColor : Color.clear, lineWidth: 3)
-            )
-            .onChange(of: focusedFilePath) { _, newVal in
-              if newVal == item.filePath {
-                let gen = UIImpactFeedbackGenerator(style: .light)
-                gen.impactOccurred()
               }
             }
           }
+          .padding(.horizontal, paddingH)
+          .padding(.vertical, Constants.gridVerticalPadding)
         }
-        .padding(.horizontal, paddingH)
-        .padding(.vertical, Constants.gridVerticalPadding)
-      }
-      .background((!emulationRunning) ? AnyView(KeyCommandHostView(
-        onLeft: {
-          let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-          let newIndex = max(0, idx - 1)
-          focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.first?.filePath
-        },
-        onRight: {
-          let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-          let newIndex = min(model.games.count - 1, idx + 1)
-          focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.last?.filePath
-        },
-        onUp: {
-          let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-          let newIndex = max(0, idx - count)
-          focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.first?.filePath
-        },
-        onDown: {
-          let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-          let newIndex = min(model.games.count - 1, idx + count)
-          focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.last?.filePath
-        },
-        onEnter: {
-          if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
-        },
-        onSpace: {
-          showSources = true
+        .background((!emulationRunning) ? AnyView(KeyCommandHostView(
+          onLeft: {
+            let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+            let newIndex = max(0, idx - 1)
+            focusedFilePath = (model.games.indices.contains(newIndex) ? model.games[newIndex].filePath : model.games.first?.filePath)
+          },
+          onRight: {
+            let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+            let newIndex = min(model.games.count - 1, idx + 1)
+            focusedFilePath = (model.games.indices.contains(newIndex) ? model.games[newIndex].filePath : model.games.last?.filePath)
+          },
+          onUp: {
+            let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+            let newIndex = max(0, idx - count)
+            focusedFilePath = (model.games.indices.contains(newIndex) ? model.games[newIndex].filePath : model.games.first?.filePath)
+          },
+          onDown: {
+            let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+            let newIndex = min(model.games.count - 1, idx + count)
+            focusedFilePath = (model.games.indices.contains(newIndex) ? model.games[newIndex].filePath : model.games.last?.filePath)
+          },
+          onEnter: {
+            if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
+          },
+          onSpace: {
+            showSources = true
+          }
+        )) : AnyView(EmptyView()))
+        .onAppear {
+          setupControllerNavigation(columns: count)
+          emuStartObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
+            emulationRunning = true
+            teardownControllerNavigation()
+          }
+          emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
         }
-      )) : AnyView(EmptyView()))
-      .onAppear {
-        setupControllerNavigation(columns: count)
-        emuStartObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
-          emulationRunning = true
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+          ControllerStyleManager.shared.refreshDetection()
+          ControllerStyleManager.shared.applyPresetDefaults()
+          if !emulationRunning { setupControllerNavigation(columns: count) }
+        }
+        .onChange(of: model.games.count) { _, newCount in
+          if newCount > 0 && focusedFilePath == nil {
+            DispatchQueue.main.async { focusedFilePath = model.games.first?.filePath }
+          }
+        }
+        .onDisappear {
+          if let t = emuStartObs { NotificationCenter.default.removeObserver(t); emuStartObs = nil }
+          if let t = emuEndObs { NotificationCenter.default.removeObserver(t); emuEndObs = nil }
           teardownControllerNavigation()
         }
-        emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
-        ControllerStyleManager.shared.refreshDetection()
-        ControllerStyleManager.shared.applyPresetDefaults()
-        if !emulationRunning { setupControllerNavigation(columns: count) }
-      }
-      .onChange(of: model.games.count) { _, newCount in
-        if newCount > 0 && focusedFilePath == nil {
-          DispatchQueue.main.async { focusedFilePath = model.games.first?.filePath }
-        }
-      }
-      .onDisappear {
-        if let t = emuStartObs { NotificationCenter.default.removeObserver(t); emuStartObs = nil }
-        if let t = emuEndObs { NotificationCenter.default.removeObserver(t); emuEndObs = nil }
-        teardownControllerNavigation()
       }
     }
 #else
@@ -525,7 +532,7 @@ struct TVLibraryView: View {
     }
 #endif
   }
-  
+
   @ViewBuilder
   private var emptyLibraryView: some View {
     VStack(spacing: 16) {
@@ -535,7 +542,7 @@ struct TVLibraryView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
-  
+
   @ToolbarContentBuilder
   private var libraryToolbar: some ToolbarContent {
 #if os(tvOS)
@@ -609,7 +616,7 @@ struct TVLibraryView: View {
     }
 #endif
   }
-  
+
   var body: some View {
     NavigationStack {
       mainContent
@@ -638,16 +645,16 @@ struct TVLibraryView: View {
       print("TVLibraryView: initializing RemoteSourcesStore.shared")
       let store = RemoteSourcesStore.shared
       print("TVLibraryView: RemoteSourcesStore has \(store.sources.count) sources")
-      
+
       // Store hydration already starts sources; avoid redundant boot-time refresh triggers
-      
+
       model.load()
       model.kickoffInitialMetadataIfNeeded()
       if !didReloadOnce {
         didReloadOnce = true
         DispatchQueue.main.async { model.load() }
       }
-      
+
       // Listen for remote library updates
       NotificationCenter.default.addObserver(
         forName: NSNotification.Name("RemoteLibraryUpdated"),
@@ -658,7 +665,7 @@ struct TVLibraryView: View {
         model.load()
         print("TVLibraryView: after reload, library has \(model.games.count) games")
       }
-      
+
       // Deep link from Spotlight: launch by GameID
       NotificationCenter.default.addObserver(
         forName: NSNotification.Name("DOLLaunchGameByGameID"),
@@ -668,7 +675,7 @@ struct TVLibraryView: View {
         guard let gameID = note.userInfo?["gameID"] as? String else { return }
         spotlightLaunchByGameID(gameID, attempts: 10)
       }
-      
+
       // Listen for async metadata updates (covers/banners)
       NotificationCenter.default.addObserver(
         forName: NSNotification.Name("GameFileMetadataUpdated"),
@@ -782,7 +789,7 @@ struct TVLibraryView: View {
       }
       .overlay(blockingPrecacheOverlay)
   }
-  
+
   @ViewBuilder
   private var blockingPrecacheOverlay: some View {
     if let current = blockingPrecacheItem {
@@ -793,18 +800,18 @@ struct TVLibraryView: View {
             .font(.system(size: 44, weight: .semibold))
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 2)
-          
+
           Text(L("Preparing cache"))
             .font(.title3).fontWeight(.semibold)
             .foregroundStyle(.white)
-          
+
           Text(current.title)
             .font(.callout)
             .foregroundStyle(.white.opacity(0.85))
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .frame(maxWidth: 280)
-          
+
           ZStack {
             Circle()
               .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 8))
@@ -817,12 +824,12 @@ struct TVLibraryView: View {
               .animation(.easeInOut(duration: 0.2), value: blockingPrecacheProgress)
           }
           .padding(.top, 6)
-          
+
           Text("\(Int(blockingPrecacheProgress * 100))%")
             .font(.footnote).fontWeight(.semibold)
             .foregroundStyle(.white)
             .monospacedDigit()
-          
+
           HStack(spacing: 12) {
             Button(role: .cancel) {
               if let url = URL(string: current.filePath), let source = getMatchingWebDAVSource(for: url) {
@@ -831,13 +838,13 @@ struct TVLibraryView: View {
               }
               blockingPrecacheItem = nil
               blockingPrecacheProgress = 0
+              emulationRunning = false
               // Restore controller navigation if we were in library
 #if os(iOS) || targetEnvironment(macCatalyst)
-              emulationRunning = false
               Task { @MainActor in
                 // Re-setup navigation with current columns guess (3 as fallback)
-                let columns = max(2, Int((UIScreen.main.bounds.width - (24 * 2) + 12) / (Layout.cardSize.width + 12)))
-                setupControllerNavigation(columns: columns)
+//                let columns = max(2, Int((UIScreen.main.bounds.width - (24 * 2) + 12) / (Layout.cardSize.width + 12)))
+//                setupControllerNavigation(columns: columns)
               }
 #endif
             } label: {
@@ -865,18 +872,18 @@ struct TVLibraryView: View {
       .zIndex(10)
     }
   }
-  
+
   private func downloadGecko(for item: TVGameItem) {
     TVCheatsBridge.downloadGeckoCodes(forGameId: item.gameID, revision: item.revision, gametdbId: item.gametdbID) { success, _, _ in
       if !success { showCheatError = L("Failed to download Gecko codes.") }
     }
   }
-  
+
   private func presentCheatInput(for item: TVGameItem, type: CheatType) {
     cheatName = ""; cheatCreator = ""; cheatBody = ""; cheatNotes = ""
     cheatInputFor = (item, type); showCheatError = nil
   }
-  
+
   private func saveCheat(_ ctx: (item: TVGameItem, type: CheatType)) {
 #if os(tvOS)
     if ctx.type == .gecko {
@@ -887,7 +894,7 @@ struct TVLibraryView: View {
     cheatInputFor = nil
 #endif
   }
-  
+
   private func selectGame(_ item: TVGameItem) {
     let sources = model.sources(for: item)
     if sources.count > 1 {
@@ -898,7 +905,7 @@ struct TVLibraryView: View {
     teardownControllerNavigation()
     launchGame(item)
   }
-  
+
   private func launchGame(_ item: TVGameItem) {
     // Check for critically low storage before launching any game
     if TVLibraryView.isStorageCriticallyLow() {
@@ -906,17 +913,17 @@ struct TVLibraryView: View {
       itemPendingLaunch = item
       storageAlertMessage = """
             Warning: Low Storage Space
-            
+
             Available space: \(TVLibraryView.formatStorageSpace(availableSpace))
-            
+
             The emulator may act erratically with low storage space. Consider freeing up some space before playing.
-            
+
             Do you want to continue anyway?
             """
       showLowStorageWarning = true
       return
     }
-    
+
     // If remote and auto-precache enabled, ensure cache exists before launch
     if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
       for source in RemoteSourcesStore.shared.sources {
@@ -947,10 +954,10 @@ struct TVLibraryView: View {
         }
       }
     }
-    
+
     proceedWithGameLaunch(item)
   }
-  
+
   /// Actually launch the game (called after low storage warning is dismissed)
   private func proceedWithGameLaunch(_ item: TVGameItem) {
     GameProfiles.shared.applyProfileIfAvailable(for: item)
@@ -959,7 +966,7 @@ struct TVLibraryView: View {
       model.showReplaceAlert = true
     } else {
       NSLog("[INPUT] TVLibraryView selecting game: %@", item.title)
-      
+
       // Auto pre-cache if enabled and not already cached
       if let url = URL(string: item.filePath),
          Self.isRemoteURL(item.filePath) {
@@ -971,12 +978,12 @@ struct TVLibraryView: View {
             let gameKey = item.filePath
             autoPreCacheActive.insert(gameKey)
             autoPreCacheProgress[gameKey] = 0.0
-            
+
             Task {
               do {
                 // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
                 let fileSize = Int64(item.fileSize)
-                
+
                 // Skip auto pre-cache if insufficient storage space
                 if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
                   let availableSpace = TVLibraryView.getAvailableStorageSpace()
@@ -987,9 +994,9 @@ struct TVLibraryView: View {
                   }
                   return
                 }
-                
+
                 let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: fileSize)
-                
+
                 // Check if already cached with correct size
                 if !webdavSource.isCached(remoteItem) {
                   let _ = try await webdavSource.preCacheItem(remoteItem) { progress in
@@ -1014,12 +1021,12 @@ struct TVLibraryView: View {
           }
         }
       }
-      
+
       model.currentGame = item
       navigateTo = item
     }
   }
-  
+
   private func spotlightLaunchByGameID(_ gameID: String, attempts: Int) {
     let match = model.games.first { $0.gameID == gameID }
     ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
@@ -1060,7 +1067,7 @@ struct TVLibraryView: View {
     }
     navigateTo = item
   }
-  
+
   private func setupControllerNavigation(columns: Int) {
     GCController.shouldMonitorBackgroundEvents = false
     for c in GCController.controllers() {
@@ -1146,7 +1153,7 @@ struct TVLibraryView: View {
       }
     }
   }
-  
+
   private func teardownControllerNavigation() {
     for c in GCController.controllers() {
       let cid = ObjectIdentifier(c)
@@ -1187,7 +1194,7 @@ private struct GameGridItem: View {
   let item: TVGameItem
   let select: (TVGameItem) -> Void
   @Binding var focusedFilePath: String?
-  
+
   // Context menu action closures provided by parent view
   let showProperties: (TVGameItem) -> Void
   let showCheatList: (TVGameItem) -> Void
@@ -1200,15 +1207,15 @@ private struct GameGridItem: View {
   let showSaveStates: (TVGameItem) -> Void
   let autoPreCacheProgress: Double
   let isAutoPreCaching: Bool
-  
+
   @State private var showPreCacheProgress = false
   @State private var preCacheProgress: Double = 0.0
   @State private var isPreCaching = false
-  
+
 #if os(tvOS)
   @State private var isFocused: Bool = false
 #endif
-  
+
   /// Determines remote source type and appropriate icon
   private var remoteIconName: String? {
     guard let url = URL(string: item.filePath), let scheme = url.scheme?.lowercased() else { return nil }
@@ -1218,40 +1225,40 @@ private struct GameGridItem: View {
     default: return nil
     }
   }
-  
+
   /// Check if this is a remote game
   private var isRemoteGame: Bool {
     let result = remoteIconName != nil
     print("DEBUG: isRemoteGame for '\(item.title)' (path: '\(item.filePath)') = \(result)")
     return result
   }
-  
+
   /// Get the WebDAV source for this game (if any)
   private func getWebDAVSource() -> WebDAVSource? {
     guard isRemoteGame, let url = URL(string: item.filePath) else {
       print("DEBUG: getWebDAVSource early return - isRemoteGame: \(isRemoteGame), url valid: \(URL(string: item.filePath) != nil)")
       return nil
     }
-    
+
     func defaultPort(for scheme: String?) -> Int {
       switch (scheme?.lowercased()) {
       case "https", "webdavs": return 443
       default: return 80
       }
     }
-    
+
     guard let urlHost = url.host?.lowercased() else {
       print("DEBUG: getWebDAVSource no host for URL: \(url)")
       return nil
     }
     let urlPort = url.port ?? defaultPort(for: url.scheme)
     let urlPath = url.path
-    
+
     print("DEBUG: Looking for WebDAV source matching host: \(urlHost), port: \(urlPort), path: \(urlPath)")
     print("DEBUG: Available sources: \(RemoteSourcesStore.shared.sources.count)")
-    
+
     var bestMatch: (source: WebDAVSource, score: Int)? = nil
-    
+
     for (index, source) in RemoteSourcesStore.shared.sources.enumerated() {
       print("DEBUG: Source \(index): \(type(of: source))")
       guard let webdavSource = source as? WebDAVSource else { continue }
@@ -1261,34 +1268,34 @@ private struct GameGridItem: View {
       let basePort = base.port ?? defaultPort(for: base.scheme)
       print("DEBUG: Comparing - base host: \(baseHost), port: \(basePort) vs url host: \(urlHost), port: \(urlPort)")
       guard urlHost == baseHost && urlPort == basePort else { continue }
-      
+
       // Prefer the source with the longest base path prefix match
       let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
       let score: Int
       if basePath == "/" { score = 1 }
       else if urlPath.hasPrefix(basePath) { score = max(2, basePath.count) }
       else { score = 1 } // host/port match only
-      
+
       print("DEBUG: Found matching source with score \(score), basePath: '\(basePath)', isPreCachingEnabled: \(webdavSource.isPreCachingEnabled)")
       if bestMatch == nil || score > bestMatch!.score {
         bestMatch = (webdavSource, score)
       }
     }
-    
+
     let result = bestMatch?.source
     print("DEBUG: getWebDAVSource result: \(result != nil ? "found" : "nil"), final isPreCachingEnabled: \(result?.isPreCachingEnabled ?? false)")
     return result
   }
-  
+
   /// Check if this remote game is cached locally
   private var isCached: Bool {
     guard let source = getWebDAVSource(),
           let url = URL(string: item.filePath) else { return false }
-    
+
     let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: 0)
     return source.isCached(remoteItem)
   }
-  
+
   var body: some View {
 #if os(tvOS)
     // Clean, simple approach for tvOS
@@ -1319,14 +1326,14 @@ private struct GameGridItem: View {
             x: 0,
             y: isFocused ? 12 : 6
           )
-        
+
         if isFocused {
           VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center); Spacer() }
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
             .allowsHitTesting(false)
         }
-        
+
         if let icon = remoteIconName {
           ZStack {
             if isPreCaching {
@@ -1334,14 +1341,14 @@ private struct GameGridItem: View {
               Circle()
                 .stroke(Color.white.opacity(0.3), lineWidth: 2)
                 .frame(width: 24, height: 24)
-              
+
               Circle()
                 .trim(from: 0, to: preCacheProgress)
                 .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .frame(width: 24, height: 24)
                 .rotationEffect(.degrees(-90))
                 .animation(.linear(duration: 0.2), value: preCacheProgress)
-              
+
               Image(systemName: "arrow.down")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.white)
@@ -1349,7 +1356,7 @@ private struct GameGridItem: View {
               Image(systemName: icon)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.white)
-              
+
               // Show checkmark if cached
               if isCached {
                 Image(systemName: "checkmark.circle.fill")
@@ -1364,7 +1371,7 @@ private struct GameGridItem: View {
           .background(.ultraThinMaterial, in: Circle())
           .padding(8)
         }
-        
+
         // Region flag badge (top-left), styled like the cloud indicator
         if !item.countryName.isEmpty {
           Text(RegionFlagMapper.compactFlag(for: item.countryName))
@@ -1376,22 +1383,22 @@ private struct GameGridItem: View {
             .allowsHitTesting(false)
         }
       }
-      
+
       VStack(alignment: .leading, spacing: 4) {
         Text(item.title)
           .font(.headline)
           .lineLimit(1)
           .minimumScaleFactor(0.75)
           .foregroundColor(.primary)
-        
+
         HStack {
           // Game ID only (flag moved to artwork overlay)
           Text(item.gameID)
             .font(.caption)
             .foregroundColor(.secondary)
-          
+
           Spacer()
-          
+
           // Auto pre-cache progress indicator
           if isAutoPreCaching {
             HStack(spacing: 4) {
@@ -1440,7 +1447,7 @@ private struct GameGridItem: View {
               Label(L("Download to Cache"), systemImage: "arrow.down.circle")
             }
             .disabled(isPreCaching)
-            
+
             if isPreCaching {
               Button(action: { cancelPreCache() }) {
                 Label(L("Cancel Download"), systemImage: "xmark.circle")
@@ -1463,7 +1470,7 @@ private struct GameGridItem: View {
             .aspectRatio(contentMode: .fill)
             .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-          
+
           if let icon = remoteIconName {
             ZStack {
               if isPreCaching {
@@ -1471,14 +1478,14 @@ private struct GameGridItem: View {
                 Circle()
                   .stroke(Color.white.opacity(0.3), lineWidth: 2)
                   .frame(width: 20, height: 20)
-                
+
                 Circle()
                   .trim(from: 0, to: preCacheProgress)
                   .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                   .frame(width: 20, height: 20)
                   .rotationEffect(.degrees(-90))
                   .animation(.linear(duration: 0.2), value: preCacheProgress)
-                
+
                 Image(systemName: "arrow.down")
                   .font(.system(size: 10, weight: .semibold))
                   .foregroundColor(.white)
@@ -1486,7 +1493,7 @@ private struct GameGridItem: View {
                 Image(systemName: icon)
                   .font(.system(size: 16, weight: .semibold))
                   .foregroundColor(.white)
-                
+
                 // Show checkmark if cached
                 if isCached {
                   Image(systemName: "checkmark.circle.fill")
@@ -1502,13 +1509,13 @@ private struct GameGridItem: View {
             .padding(8)
           }
         }
-        
+
         VStack(alignment: .leading, spacing: 4) {
           Text(item.title)
             .font(.headline)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
-          
+
           // Game ID only (flag moved to artwork overlay)
           Text(item.gameID)
             .font(.caption)
@@ -1543,7 +1550,7 @@ private struct GameGridItem: View {
               Label(L("Download to Cache"), systemImage: "arrow.down.circle")
             }
             .disabled(isPreCaching)
-            
+
             if isPreCaching {
               Button(action: { cancelPreCache() }) {
                 Label(L("Cancel Download"), systemImage: "xmark.circle")
@@ -1558,58 +1565,58 @@ private struct GameGridItem: View {
     }
 #endif
   }
-  
+
   // MARK: - Pre-cache Methods
-  
+
   private func startPreCache() {
     guard let source = getWebDAVSource(),
           let url = URL(string: item.filePath) else { return }
-    
+
     isPreCaching = true
     preCacheProgress = 0.0
     showPreCacheProgress = true
-    
+
     Task {
       do {
         // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
         let fileSize = Int64(item.fileSize)
         print("Using cached file size for \(item.title): \(fileSize) bytes")
         print("DEBUG: TVGameItem.fileSize = \(item.fileSize)")
-        
+
         // Check if we have enough storage space (file size + 100MB buffer)
         if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
           let availableSpace = TVLibraryView.getAvailableStorageSpace()
           let requiredSpace = fileSize + TVLibraryView.STORAGE_BUFFER_MB
-          
+
           DispatchQueue.main.async {
             self.isPreCaching = false
             self.showPreCacheProgress = false
             let message = """
                         Not enough storage space to download \(self.item.title).
-                        
+
                         Available: \(TVLibraryView.formatStorageSpace(availableSpace))
                         Required: \(TVLibraryView.formatStorageSpace(requiredSpace))
-                        
+
                         Please free up some space and try again.
                         """
             self.showStorageAlert(message)
           }
           return
         }
-        
+
         // Create RemoteLibraryItem with correct size
         let remoteItem = RemoteLibraryItem(
           url: url,
           name: item.title,
           size: fileSize
         )
-        
+
         let _ = try await source.preCacheItem(remoteItem) { progress in
           DispatchQueue.main.async {
             self.preCacheProgress = progress
           }
         }
-        
+
         DispatchQueue.main.async {
           self.isPreCaching = false
           self.showPreCacheProgress = false
@@ -1619,20 +1626,20 @@ private struct GameGridItem: View {
         DispatchQueue.main.async {
           self.isPreCaching = false
           self.showPreCacheProgress = false
-          
+
           // Show user-friendly error message
           let message: String
           if let nsError = error as NSError?, nsError.domain == NSPOSIXErrorDomain && nsError.code == 28 {
             message = """
                         Download failed: Not enough storage space.
-                        
+
                         The device ran out of space while downloading \(self.item.title).
                         Please free up some space and try again.
                         """
           } else {
             message = """
                         Download failed: \(error.localizedDescription)
-                        
+
                         Unable to download \(self.item.title) to cache.
                         """
           }
@@ -1642,17 +1649,17 @@ private struct GameGridItem: View {
       }
     }
   }
-  
+
   private func cancelPreCache() {
     guard let source = getWebDAVSource(),
           let url = URL(string: item.filePath) else { return }
-    
+
     let remoteItem = RemoteLibraryItem(
       url: url,
       name: item.title,
       size: 0
     )
-    
+
     Task {
       await source.cancelPreCache(remoteItem)
       DispatchQueue.main.async {
@@ -1661,17 +1668,17 @@ private struct GameGridItem: View {
       }
     }
   }
-  
+
   private func removeCachedFile() {
     guard let source = getWebDAVSource(),
           let url = URL(string: item.filePath) else { return }
-    
+
     let remoteItem = RemoteLibraryItem(
       url: url,
       name: item.title,
       size: 0
     )
-    
+
     Task {
       do {
         try await source.removeCachedItem(remoteItem)
@@ -1705,7 +1712,7 @@ private struct SourcePickerView: View {
   let items: [TVGameItem]
   let onPick: (TVGameItem) -> Void
   @Environment(\.dismiss) private var dismiss
-  
+
   private func label(for item: TVGameItem) -> String {
     if let scheme = URL(string: item.filePath)?.scheme?.lowercased() {
       switch scheme {
@@ -1722,7 +1729,7 @@ private struct SourcePickerView: View {
     }
     return L("Local")
   }
-  
+
   var body: some View {
     NavigationStack {
       List {
@@ -1762,7 +1769,7 @@ private struct CacheInfoView: View {
   @State private var cacheInfo: CacheInfo?
   @State private var isLoading = true
   @State private var errorMessage: String?
-  
+
   private struct CacheInfo {
     let localPath: String
     let fileSize: Int64
@@ -1771,7 +1778,7 @@ private struct CacheInfoView: View {
     let etag: String?
     let lastModified: Date?
   }
-  
+
   var body: some View {
     NavigationView {
       VStack(alignment: .leading, spacing: 16) {
@@ -1798,20 +1805,20 @@ private struct CacheInfoView: View {
               Text("Cache Information")
                 .font(.title2)
                 .fontWeight(.bold)
-              
+
               InfoRow(label: "Game", value: item.title)
               InfoRow(label: "File Size", value: TVLibraryView.formatStorageSpace(info.fileSize))
               InfoRow(label: "Cached Date", value: DateFormatter.localizedString(from: info.cachedDate, dateStyle: .medium, timeStyle: .short))
               InfoRow(label: "Original URL", value: info.originalURL)
-              
+
               if let etag = info.etag {
                 InfoRow(label: "ETag", value: etag)
               }
-              
+
               if let lastModified = info.lastModified {
                 InfoRow(label: "Last Modified", value: DateFormatter.localizedString(from: lastModified, dateStyle: .medium, timeStyle: .short))
               }
-              
+
               InfoRow(label: "Local Path", value: info.localPath)
             }
             .padding()
@@ -1841,7 +1848,7 @@ private struct CacheInfoView: View {
       loadCacheInfo()
     }
   }
-  
+
   private func loadCacheInfo() {
     // Find the WebDAV source for this item
     guard let url = URL(string: item.filePath) else {
@@ -1849,13 +1856,13 @@ private struct CacheInfoView: View {
       isLoading = false
       return
     }
-    
+
     var foundSource = false
     for source in RemoteSourcesStore.shared.sources {
       if let webdavSource = source as? WebDAVSource {
         foundSource = true
         let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
-        
+
         // Check if cached and get info
         Task {
           let info = await getCacheInfo(from: webdavSource, for: remoteItem)
@@ -1870,19 +1877,19 @@ private struct CacheInfoView: View {
         break
       }
     }
-    
+
     if !foundSource {
       errorMessage = "No WebDAV source found for this game"
       isLoading = false
     }
   }
-  
+
   private func getCacheInfo(from source: WebDAVSource, for item: RemoteLibraryItem) async -> CacheInfo? {
     // Get actual cache information from the WebDAV source
     guard let cachedFileInfo = source.getCacheInfo(for: item) else {
       return nil
     }
-    
+
     return CacheInfo(
       localPath: cachedFileInfo.localPath,
       fileSize: cachedFileInfo.fileSize,
@@ -1898,7 +1905,7 @@ private struct CacheInfoView: View {
 private struct InfoRow: View {
   let label: String
   let value: String
-  
+
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
       Text(label)
