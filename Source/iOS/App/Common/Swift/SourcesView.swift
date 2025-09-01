@@ -217,13 +217,17 @@ private struct AddWebDAVSourceView: View {
             guard let host else { return }
             let record = DiscoveredService(name: name, host: host, port: port, txt: txt)
             // Filter out our own instance and already-added sources
-            let myHost = PVWebServer.shared.ipAddress?.lowercased()
-            let myBonjourHost = PVWebServer.shared.bonjourSeverURL?.host?.lowercased()
+            func norm(_ s: String?) -> String? {
+              guard let s else { return nil }
+              return s.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
+            }
+            let myHost = norm(PVWebServer.shared.ipAddress)
+            let myBonjourHost = norm(PVWebServer.shared.bonjourSeverURL?.host)
             let myHosts: Set<String> = Set([myHost, myBonjourHost].compactMap { $0 })
-            let isOwn = myHosts.contains(host.lowercased())
+            let isOwn = myHosts.contains(norm(host) ?? "")
             let alreadyAdded = store.sources.contains { src in
-                guard let w = src as? WebDAVSource else { return false }
-                return (w.baseURL.host?.lowercased() == host.lowercased()) && ((w.baseURL.port ?? 0) == port)
+              guard let w = src as? WebDAVSource else { return false }
+              return (norm(w.baseURL.host) == norm(host)) && ((w.baseURL.port ?? 0) == port)
             }
             if !isOwn && !alreadyAdded && !discovered.contains(where: { $0.host == host && $0.port == port }) {
                 discovered.append(record)
@@ -247,7 +251,7 @@ private final class BonjourResolveDelegate: NSObject, NetServiceDelegate {
     private let onResolved: (String?, Int, [String:String]) -> Void
     init(_ onResolved: @escaping (String?, Int, [String:String]) -> Void) { self.onResolved = onResolved }
     func netServiceDidResolveAddress(_ sender: NetService) {
-        let host = sender.hostName?.replacingOccurrences(of: ".local.", with: "")
+        let host = sender.hostName // keep full domain, e.g. myhost.local.
         let port = sender.port
         var txt: [String:String] = [:]
         if let data = sender.txtRecordData() {
