@@ -81,6 +81,9 @@ func installInputDebugHandlers(_ c: GCController) {
             let menuCombo = allFourShoulders && gamepad.buttonMenu.isPressed
             if menuCombo {
                 TVEmulationBridge.pause()
+                #if canImport(ActivityKit)
+                GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+                #endif
                 NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
             }
 
@@ -93,6 +96,9 @@ func installInputDebugHandlers(_ c: GCController) {
                     let optionsCombo = gamepad.leftShoulder.isPressed && gamepad.rightShoulder.isPressed && options.isPressed
                     if optionsCombo {
                         TVEmulationBridge.pause()
+                        #if canImport(ActivityKit)
+                        GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+                        #endif
                         NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
                     }
                 }
@@ -174,6 +180,9 @@ func installInputDebugHandlers(_ c: GCController) {
             if #available(iOS 14.0, *) {
                 if let options = gamepad.buttonOptions, options.isPressed {
                     TVEmulationBridge.pause()
+                    #if canImport(ActivityKit)
+                    GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+                    #endif
                     NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
                 }
             }

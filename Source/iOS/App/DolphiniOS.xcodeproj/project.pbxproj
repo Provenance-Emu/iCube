@@ -733,6 +733,11 @@
 			path = Bridging;
 			sourceTree = "<group>";
 		};
+		B31E805E2E654CC30036EE31 /* Activity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Activity;
+			sourceTree = "<group>";
+		};
 		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = Core;
@@ -1172,6 +1177,7 @@
 				B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */,
 				B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */,
 				B36B51962E5E41C7009A2303 /* WebDAVSource.swift */,
+				B31E805E2E654CC30036EE31 /* Activity */,
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B34EE6B22E57D65400301907 /* Shaders */,
 			);
@@ -2045,6 +2051,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
+				B31E805E2E654CC30036EE31 /* Activity */,
 			);
 			name = DolphiniOS;
 			packageProductDependencies = (

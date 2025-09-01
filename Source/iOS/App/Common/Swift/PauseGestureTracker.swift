@@ -44,4 +44,14 @@ final class PauseGestureTracker {
             NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
         }
     }
+
+    @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        if gesture.state == .began {
+            TVEmulationBridge.pause()
+            #if canImport(ActivityKit)
+            GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+            #endif
+            NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+        }
+    }
 }

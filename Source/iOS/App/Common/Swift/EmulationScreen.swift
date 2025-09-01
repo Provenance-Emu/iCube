@@ -193,6 +193,8 @@ struct EmulationScreen: View {
   // Touch pad refresh coordination to avoid system detection races
   @State private var touchPadsRefreshToken = UUID()
 #endif
+  @State private var elapsedSeconds: Int = 0
+  @State private var timer: Timer?
 
   var body: some View {
 #if os(tvOS)
@@ -271,6 +273,18 @@ struct EmulationScreen: View {
       exitObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil, queue: .main) { _ in
         dismiss()
       }
+      // Live Activity start
+      #if canImport(ActivityKit)
+      GameActivityManager.start(game: game)
+      #endif
+      // Start elapsed timer
+      timer?.invalidate()
+      timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+        elapsedSeconds += 1
+        #if canImport(ActivityKit)
+        GameActivityManager.update(isPaused: TVEmulationBridge.isPaused(), elapsedSeconds: elapsedSeconds)
+        #endif
+      }
     }
     .onDisappear {
       if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
@@ -286,9 +300,19 @@ struct EmulationScreen: View {
       #if !os(tvOS)
       arPollTask?.cancel(); arPollTask = nil
       #endif
+      // Live Activity end
+      #if canImport(ActivityKit)
+      GameActivityManager.end()
+      #endif
+      timer?.invalidate()
+      timer = nil
+      elapsedSeconds = 0
     }
     .onChange(of: showPauseMenu) { visible in
       NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
+      #if canImport(ActivityKit)
+      GameActivityManager.update(isPaused: visible, elapsedSeconds: elapsedSeconds)
+      #endif
     }
     .onExitCommand { if showPauseMenu { TVEmulationBridge.resume(); showPauseMenu = false } }
     .onPlayPauseCommand { }
@@ -347,7 +371,7 @@ struct EmulationScreen: View {
                     HStack(spacing: 16) {
                         Button {
                             hasTopBarInteraction = true
-                            TVEmulationBridge.pause()
+                            // Prompt to exit rather than opening pause menu
                             showExitConfirm = true
                         } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
                         Spacer()
@@ -556,14 +580,23 @@ struct EmulationScreen: View {
         Button("Save & Quit") {
             TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
             TVEmulationBridge.stop()
+            #if canImport(ActivityKit)
+            GameActivityManager.end()
+            #endif
             NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
         }
         Button("Quit", role: .destructive) {
             TVEmulationBridge.stop()
+            #if canImport(ActivityKit)
+            GameActivityManager.end()
+            #endif
             NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
         }
         Button("Continue", role: .cancel) {
             TVEmulationBridge.resume()
+            #if canImport(ActivityKit)
+            GameActivityManager.update(isPaused: false, elapsedSeconds: elapsedSeconds)
+            #endif
             withAnimation { showTopBar = false }
         }
     } message: {
