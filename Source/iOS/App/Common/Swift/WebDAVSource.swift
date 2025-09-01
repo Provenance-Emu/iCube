@@ -148,13 +148,13 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         var pc: AsyncStream<Double>.Continuation!
         self.scanningProgress = AsyncStream<Double> { c in pc = c }
         self.scanningProgressCont = pc
-
         #if canImport(os)
         Self.logger.info("Created fresh streams for WebDAV source: \(self.name)")
         #endif
 
-        // Emit any already cached items immediately to improve perceived performance
+        // Perform an initial ping, then emit cached items for fast UI
         Task { @MainActor in
+            await self.ping()
             let metadata = loadCacheMetadata()
             if !metadata.cachedFiles.isEmpty {
                 let items: [RemoteLibraryItem] = metadata.cachedFiles.values.compactMap { info in
@@ -702,6 +702,36 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         }
     }
 
+    /// Force pre-cache regardless of the enablePreCaching toggle
+    func forcePreCacheItem(_ item: RemoteLibraryItem, progressCallback: @escaping (Double) -> Void) async throws -> String {
+        // Check if already cached
+        let (cached, localPath) = isCachedWithPath(item)
+        if cached, let path = localPath {
+            progressCallback(1.0)
+            return path
+        }
+
+        let key = item.url.absoluteString
+
+        if let existingTask = activeCacheTasks[key] { existingTask.cancel() }
+        if let dl = activeDownloadTasks[key] { dl.cancel() }
+
+        let task = Task<Void, Error> { [weak self] in
+            guard let self else { return }
+            try await downloadFile(item: item, progressCallback: progressCallback)
+        }
+        activeCacheTasks[key] = task
+        do {
+            try await task.value
+            activeCacheTasks.removeValue(forKey: key)
+            let (_, localPath) = isCachedWithPath(item)
+            return localPath ?? ""
+        } catch {
+            activeCacheTasks.removeValue(forKey: key)
+            throw error
+        }
+    }
+
     /// Download a file to cache
     private func downloadFile(item: RemoteLibraryItem, progressCallback: @escaping (Double) -> Void) async throws {
         let fileName = item.url.lastPathComponent
@@ -815,17 +845,20 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         let key = item.url.absoluteString
         var metadata = loadCacheMetadata()
 
-        guard let cachedInfo = metadata.cachedFiles[key] else {
-            return // Not cached
+        // Determine filename-based synthetic key as saved during download
+        let fileName = item.url.lastPathComponent
+        let syntheticKey = URL(string: fileName)?.absoluteString
+
+        // Remove file if metadata entry exists for either key
+        let info = metadata.cachedFiles[key] ?? (syntheticKey.flatMap { metadata.cachedFiles[$0] })
+        if let cachedInfo = info {
+            let localURL = cacheDirectory.appendingPathComponent(cachedInfo.localPath)
+            try? FileManager.default.removeItem(at: localURL)
         }
 
-        let localURL = cacheDirectory.appendingPathComponent(cachedInfo.localPath)
-
-        // Remove file
-        try FileManager.default.removeItem(at: localURL)
-
-        // Update metadata
+        // Remove both the full URL key and the synthetic filename key
         metadata.cachedFiles.removeValue(forKey: key)
+        if let sk = syntheticKey { metadata.cachedFiles.removeValue(forKey: sk) }
         saveCacheMetadata(metadata)
 
         #if canImport(os)
