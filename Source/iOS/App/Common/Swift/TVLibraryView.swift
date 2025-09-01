@@ -391,7 +391,31 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private var libraryView: some View {
-#if os(iOS) || targetEnvironment(macCatalyst)
+    // Shared filtered view of games for both platforms
+    let displayGames: [TVGameItem] = {
+      let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !q.isEmpty else { return model.games }
+      let needle = q.lowercased()
+      func filenameLower(_ path: String) -> String {
+        if let url = URL(string: path) {
+          return (url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
+        }
+        return path.lowercased()
+      }
+      return model.games.filter { item in
+        let title = item.title.lowercased()
+        if title.contains(needle) { return true }
+        if filenameLower(item.filePath).contains(needle) { return true }
+        if item.gameID.lowercased().contains(needle) { return true }
+        if item.makerLong.lowercased().contains(needle) { return true }
+        if item.countryName.lowercased().contains(needle) { return true }
+        if item.gametdbID.lowercased().contains(needle) { return true }
+        if item.filePath.lowercased().contains(needle) { return true }
+        return false
+      }
+    }()
+
+    #if os(iOS) || targetEnvironment(macCatalyst)
     GeometryReader { proxy in
       let paddingH = Constants.gridHorizontalPadding
       let spacingH = Constants.gridHorizontalSpacing
@@ -402,7 +426,7 @@ struct TVLibraryView: View {
       ScrollViewReader { scr in
         ScrollView {
           LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
-            ForEach(model.games, id: \.filePath) { item in
+            ForEach(displayGames, id: \.filePath) { item in
               GameGridItem(
                 item: item,
                 select: selectGame,
@@ -447,31 +471,31 @@ struct TVLibraryView: View {
             }
           }
           .padding(.horizontal, paddingH)
-          .padding(.vertical, Constants.gridVerticalPadding)
+          .padding(.vertical, Constants.gridVerticalSpacing)
         }
         .background((!emulationRunning) ? AnyView(KeyCommandHostView(
           onLeft: {
-            let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+            let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
             let newIndex = max(0, idx - 1)
-            focusedFilePath = (model.games.indices.contains(newIndex) ? model.games[newIndex].filePath : model.games.first?.filePath)
+            focusedFilePath = (displayGames.indices.contains(newIndex) ? displayGames[newIndex].filePath : displayGames.first?.filePath)
           },
           onRight: {
-            let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-            let newIndex = min(model.games.count - 1, idx + 1)
-            focusedFilePath = (model.games.indices.contains(newIndex) ? model.games[newIndex].filePath : model.games.last?.filePath)
+            let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+            let newIndex = min(displayGames.count - 1, idx + 1)
+            focusedFilePath = (displayGames.indices.contains(newIndex) ? displayGames[newIndex].filePath : displayGames.last?.filePath)
           },
           onUp: {
-            let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+            let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
             let newIndex = max(0, idx - count)
-            focusedFilePath = (model.games.indices.contains(newIndex) ? model.games[newIndex].filePath : model.games.first?.filePath)
+            focusedFilePath = (displayGames.indices.contains(newIndex) ? displayGames[newIndex].filePath : displayGames.first?.filePath)
           },
           onDown: {
-            let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-            let newIndex = min(model.games.count - 1, idx + count)
-            focusedFilePath = (model.games.indices.contains(newIndex) ? model.games[newIndex].filePath : model.games.last?.filePath)
+            let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+            let newIndex = min(displayGames.count - 1, idx + count)
+            focusedFilePath = (displayGames.indices.contains(newIndex) ? displayGames[newIndex].filePath : displayGames.last?.filePath)
           },
           onEnter: {
-            if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
+            if let fp = focusedFilePath, let item = displayGames.first(where: { $0.filePath == fp }) { selectGame(item) }
           },
           onSpace: {
             showSources = true
@@ -490,9 +514,9 @@ struct TVLibraryView: View {
           ControllerStyleManager.shared.applyPresetDefaults()
           if !emulationRunning { setupControllerNavigation(columns: count) }
         }
-        .onChange(of: model.games.count) { _, newCount in
+        .onChange(of: displayGames.count) { _, newCount in
           if newCount > 0 && focusedFilePath == nil {
-            DispatchQueue.main.async { focusedFilePath = model.games.first?.filePath }
+            DispatchQueue.main.async { focusedFilePath = displayGames.first?.filePath }
           }
         }
         .onDisappear {
@@ -504,10 +528,10 @@ struct TVLibraryView: View {
         .onChange(of: count) { _, newVal in gridColumnCount = newVal }
       }
     }
-#else
+    #else
     ScrollView {
       LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
-        ForEach(model.games, id: \.filePath) { item in
+        ForEach(displayGames, id: \.filePath) { item in
           GameGridItem(
             item: item,
             select: selectGame,
@@ -539,7 +563,7 @@ struct TVLibraryView: View {
       .padding(.horizontal, Constants.gridHorizontalPadding)
       .padding(.vertical, Constants.gridVerticalPadding)
     }
-#endif
+    #endif
   }
 
   @ViewBuilder
