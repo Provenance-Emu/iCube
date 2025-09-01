@@ -1,4 +1,5 @@
 import SwiftUI
+import PVWebServer
 
 struct SourcesView: View {
     @ObservedObject private var store = RemoteSourcesStore.shared
@@ -76,9 +77,37 @@ private struct AddWebDAVSourceView: View {
     @State private var intervalMinutes: Int = 15
     @State private var enablePreCaching: Bool = false
 
+    // Bonjour discovery
+    @State private var discovered: [DiscoveredService] = []
+    @State private var browser = NetServiceBrowser()
+    @State private var browsing = false
+    @State private var browserDelegate: BonjourDelegate?
+    @State private var activeServices: [String: NetService] = [:]
+    @State private var resolveDelegates: [String: BonjourResolveDelegate] = [:]
+
+    private struct DiscoveredService: Identifiable { let id = UUID(); let name: String; let host: String; let port: Int; let txt: [String:String] }
+
     var body: some View {
         NavigationStack {
             Form {
+                if !discovered.isEmpty {
+                    Section("Discovered WebDAV Servers") {
+                        ForEach(discovered) { s in
+                            Button(action: { quickAdd(s) }) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(s.name.isEmpty ? "WebDAV" : s.name)
+                                        Text("http://\(s.host):\(s.port)\(s.txt["path"] ?? "/")")
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text(L("Add")).font(.caption)
+                                }
+                            }
+                        }
+                    }
+                }
                 Section("Details") {
                     TextField("Name", text: $name)
                     TextField("URL (e.g., http://192.168.1.29:8080)", text: $url)
@@ -116,6 +145,8 @@ private struct AddWebDAVSourceView: View {
                     Button("Save") { save() }.disabled(!canSave)
                 }
             })
+            .onAppear { startBonjour() }
+            .onDisappear { stopBonjour() }
         }
     }
 
@@ -140,6 +171,90 @@ private struct AddWebDAVSourceView: View {
         #endif
         store.addWebDAV(name: name, url: u, username: usr, password: pwd, recursive: recursive, interval: finalInterval, startPath: startPath, enablePreCaching: enablePreCaching)
         dismiss()
+    }
+
+    private func quickAdd(_ s: DiscoveredService) {
+        let path = s.txt["path"] ?? "/"
+        let urlString = "http://\(s.host):\(s.port)\(path)"
+        name = s.name.isEmpty ? "WebDAV" : s.name
+        url = urlString
+        if let u = s.txt["u"], !u.isEmpty { username = u }
+        if let p = s.txt["p"], !p.isEmpty { password = p }
+    }
+
+    private func startBonjour() {
+        guard !browsing else { return }
+        browsing = true
+        discovered.removeAll()
+        activeServices.removeAll()
+        resolveDelegates.removeAll()
+        browser.stop()
+        browser = NetServiceBrowser()
+        let delegate = BonjourDelegate { service, added in
+            if added { resolve(service) }
+            else { discovered.removeAll { $0.name == service.name }; activeServices.removeValue(forKey: service.name); resolveDelegates.removeValue(forKey: service.name) }
+        }
+        browserDelegate = delegate
+        browser.delegate = delegate
+        browser.schedule(in: .main, forMode: .common)
+        // Use default domain if available; empty string searches in default domains
+        browser.searchForServices(ofType: "_webdav._tcp.", inDomain: "")
+    }
+
+    private func stopBonjour() {
+        browser.stop()
+        browsing = false
+        browser.delegate = nil
+        browserDelegate = nil
+        activeServices.removeAll()
+        resolveDelegates.removeAll()
+    }
+
+    private func resolve(_ service: NetService) {
+        activeServices[service.name] = service
+        let resolver = BonjourResolveDelegate { host, port, txt in
+            let name = service.name
+            guard let host else { return }
+            let record = DiscoveredService(name: name, host: host, port: port, txt: txt)
+            // Filter out our own instance and already-added sources
+            let myHost = PVWebServer.shared.ipAddress?.lowercased()
+            let myBonjourHost = PVWebServer.shared.bonjourSeverURL?.host?.lowercased()
+            let myHosts: Set<String> = Set([myHost, myBonjourHost].compactMap { $0 })
+            let isOwn = myHosts.contains(host.lowercased())
+            let alreadyAdded = store.sources.contains { src in
+                guard let w = src as? WebDAVSource else { return false }
+                return (w.baseURL.host?.lowercased() == host.lowercased()) && ((w.baseURL.port ?? 0) == port)
+            }
+            if !isOwn && !alreadyAdded && !discovered.contains(where: { $0.host == host && $0.port == port }) {
+                discovered.append(record)
+            }
+        }
+        resolveDelegates[service.name] = resolver
+        service.delegate = resolver
+        service.resolve(withTimeout: 5)
+    }
+}
+
+// MARK: - Bonjour helpers
+private final class BonjourDelegate: NSObject, NetServiceBrowserDelegate {
+    private let onChange: (NetService, Bool) -> Void
+    init(_ onChange: @escaping (NetService, Bool) -> Void) { self.onChange = onChange }
+    func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) { onChange(service, true) }
+    func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) { onChange(service, false) }
+}
+
+private final class BonjourResolveDelegate: NSObject, NetServiceDelegate {
+    private let onResolved: (String?, Int, [String:String]) -> Void
+    init(_ onResolved: @escaping (String?, Int, [String:String]) -> Void) { self.onResolved = onResolved }
+    func netServiceDidResolveAddress(_ sender: NetService) {
+        let host = sender.hostName?.replacingOccurrences(of: ".local.", with: "")
+        let port = sender.port
+        var txt: [String:String] = [:]
+        if let data = sender.txtRecordData() {
+            let dict = NetService.dictionary(fromTXTRecord: data)
+            for (k,v) in dict { if let s = String(data: v, encoding: .utf8) { txt[k] = s } }
+        }
+        onResolved(host, port, txt)
     }
 }
 
