@@ -21,6 +21,7 @@ internal struct PauseMenuView: View {
   @State private var showExitDialog: Bool = false
   @State private var showShaders: Bool = false
   @State private var showSettingsSheet: Bool = false
+  @State private var showFilmstripSheet: Bool = false
 
   var body: some View {
     ZStack {
@@ -179,7 +180,11 @@ internal struct PauseMenuView: View {
                 let cols = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
                 LazyVGrid(columns: cols, spacing: 12) {
                   Button(action: { TVEmulationBridge.resume(); onClose() }) {
-                    labelRow(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue)
+                    HStack(spacing: 8) {
+                      Image(systemName: ControllerGlyphs.glyphName(for: "confirm", set: ControllerStyleManager.shared.current()))
+                        .foregroundStyle(.white.opacity(0.9))
+                      labelRow(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue)
+                    }
                   }
                   .buttonStyle(.plain)
 
@@ -213,7 +218,11 @@ internal struct PauseMenuView: View {
               } else {
                 VStack(spacing: 12) {
                   Button(action: { TVEmulationBridge.resume(); onClose() }) {
-                    labelRow(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue)
+                    HStack(spacing: 8) {
+                      Image(systemName: ControllerGlyphs.glyphName(for: "confirm", set: ControllerStyleManager.shared.current()))
+                        .foregroundStyle(.white.opacity(0.9))
+                      labelRow(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue)
+                    }
                   }
                   .buttonStyle(.plain)
 
@@ -309,13 +318,21 @@ internal struct PauseMenuView: View {
   private var settingsButtonRow: some View {
     #if os(tvOS)
     Button(action: { onShowSettings() }) {
-      labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
+      HStack(spacing: 8) {
+        Image(systemName: ControllerGlyphs.glyphName(for: "start", set: ControllerStyleManager.shared.current()))
+          .foregroundStyle(.white.opacity(0.9))
+        labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
+      }
     }
     .buttonStyle(.plain)
     .focused($focused, equals: .settings)
     #else
     Button(action: { showSettingsSheet = true }) {
-      labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
+      HStack(spacing: 8) {
+        Image(systemName: ControllerGlyphs.glyphName(for: "start", set: ControllerStyleManager.shared.current()))
+          .foregroundStyle(.white.opacity(0.9))
+        labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
+      }
     }
     .buttonStyle(.plain)
     .focused($focused, equals: .settings)
@@ -626,160 +643,196 @@ internal struct PauseMenuView: View {
   }
 
   private var savesMenu: some View {
-    ZStack {
-      // Beautiful blurred background
-      Image(uiImage: game.coverImage)
-        .resizable()
-        .scaledToFill()
-        .blur(radius: 25)
-        .opacity(0.8)
+    if platform == .ios {
+      NavigationStack {
+        List {
+          Section(header: Text(L("Quick Slots"))) {
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: 8) {
+                ForEach(1...10, id: \.self) { i in
+                  Button(action: { selectedSlot = i }) {
+                    Label(String(format: L("Slot %d"), i), systemImage: selectedSlot == i ? "checkmark.circle.fill" : "circle")
+                  }
+                  .buttonStyle(.bordered)
+                }
+              }
+              .padding(.vertical, 4)
+            }
+          }
+          Section(header: Text(L("Actions"))) {
+            Button { TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true); NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved to Slot %d"), selectedSlot)]) } label: {
+              HStack { Image(systemName: ControllerGlyphs.glyphName(for: "confirm", set: ControllerStyleManager.shared.current())); Text(String(format: L("Save to Slot %d"), selectedSlot)) }
+            }
+            Button { TVEmulationBridge.loadState(fromSlot: selectedSlot, wait: true); NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Loaded Slot %d"), selectedSlot)]) } label: {
+              HStack { Image(systemName: "arrow.down.circle"); Text(String(format: L("Load Slot %d"), selectedSlot)) }
+            }
+            Button { showFilmstripSheet = true } label: {
+              HStack { Image(systemName: "film"); Text(L("Open Filmstrip")) }
+            }
+          }
+        }
+        .navigationTitle(L("Save States"))
+        .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Back")) { pane = .main } } }
+        .sheet(isPresented: $showFilmstripSheet) {
+          NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
+        }
+      }
+    } else {
+      ZStack {
+        // Beautiful blurred background
+        Image(uiImage: game.coverImage)
+          .resizable()
+          .scaledToFill()
+          .blur(radius: 25)
+          .opacity(0.8)
+          .ignoresSafeArea()
+
+        // Elegant gradient overlay
+        LinearGradient(
+          colors: [
+            Color.black.opacity(0.85),
+            Color.black.opacity(0.4),
+            Color.black.opacity(0.85)
+          ],
+          startPoint: .top,
+          endPoint: .bottom
+        )
         .ignoresSafeArea()
 
-      // Elegant gradient overlay
-      LinearGradient(
-        colors: [
-          Color.black.opacity(0.85),
-          Color.black.opacity(0.4),
-          Color.black.opacity(0.85)
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .ignoresSafeArea()
-
-      // Content with proper layout
-      VStack(spacing: 40) {
-        // Header with back button and title
-        HStack {
-          Button(action: { pane = .main }) {
-            HStack(spacing: 12) {
-              Image(systemName: "chevron.left")
-                .font(.system(size: 16, weight: .semibold))
-              Text("Back to Menu")
-                .font(.system(size: 18, weight: .semibold))
+        // Content with proper layout
+        VStack(spacing: 40) {
+          // Header with back button and title
+          HStack {
+            Button(action: { pane = .main }) {
+              HStack(spacing: 12) {
+                Image(systemName: "chevron.left")
+                  .font(.system(size: 16, weight: .semibold))
+                Text("Back to Menu")
+                  .font(.system(size: 18, weight: .semibold))
+              }
+              .foregroundColor(.white.opacity(0.8))
+              .padding(.horizontal, 20)
+              .padding(.vertical, 12)
+              .background(.white.opacity(0.1))
+              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            .foregroundColor(.white.opacity(0.8))
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(.white.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .buttonStyle(.plain)
+            .focused($focused, equals: .back)
+
+            Spacer()
+
+            VStack(spacing: 4) {
+              Text(L("Save States"))
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(.white)
+
+              Text(L("Manage your game progress"))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white.opacity(0.7))
+            }
+
+            Spacer()
           }
-          .buttonStyle(.plain)
-          .focused($focused, equals: .back)
 
-          Spacer()
-
-          VStack(spacing: 4) {
-            Text(L("Save States"))
-              .font(.system(size: 28, weight: .bold))
+          // Save slot selection
+          VStack(spacing: 24) {
+            Text(L("Select Save Slot"))
+              .font(.system(size: 20, weight: .semibold))
               .foregroundColor(.white)
 
-            Text(L("Manage your game progress"))
-              .font(.system(size: 16, weight: .medium))
-              .foregroundColor(.white.opacity(0.7))
-          }
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: 8) {
+                ForEach(1...10, id: \.self) { i in
+                  Button(action: { selectedSlot = i }) {
+                    VStack(spacing: 4) {
+                      ZStack {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                          .fill(selectedSlot == i ? .blue.opacity(0.3) : .white.opacity(0.1))
+                          .frame(width: 44, height: 44)
 
-          Spacer()
-        }
+                        VStack(spacing: 1) {
+                          if selectedSlot == i {
+                            Image(systemName: "checkmark.circle.fill")
+                              .font(.system(size: 12, weight: .bold))
+                              .foregroundColor(.blue)
+                          } else {
+                            Image(systemName: "square.stack.3d.up")
+                              .font(.system(size: 10, weight: .medium))
+                              .foregroundColor(.white.opacity(0.7))
+                          }
 
-        // Save slot selection
-        VStack(spacing: 24) {
-          Text(L("Select Save Slot"))
-            .font(.system(size: 20, weight: .semibold))
-            .foregroundColor(.white)
-
-          ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-              ForEach(1...10, id: \.self) { i in
-                Button(action: { selectedSlot = i }) {
-                  VStack(spacing: 4) {
-                    ZStack {
-                      RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(selectedSlot == i ? .blue.opacity(0.3) : .white.opacity(0.1))
-                        .frame(width: 44, height: 44)
-
-                      VStack(spacing: 1) {
-                        if selectedSlot == i {
-                          Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.blue)
-                        } else {
-                          Image(systemName: "square.stack.3d.up")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
+                          Text("\(i)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(selectedSlot == i ? .blue : .white)
                         }
-
-                        Text("\(i)")
-                          .font(.system(size: 10, weight: .semibold))
-                          .foregroundColor(selectedSlot == i ? .blue : .white)
                       }
+
+                      Text(L("Slot") + "\(i)")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
                     }
-
-                    Text(L("Slot") + "\(i)")
-                      .font(.system(size: 8, weight: .medium))
-                      .foregroundColor(.white.opacity(0.7))
                   }
+                  .buttonStyle(.plain)
+                  .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                  .compositingGroup()
+                  .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                  .focused($focused, equals: .slot(i))
                 }
-                .buttonStyle(.plain)
-                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .compositingGroup()
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .focused($focused, equals: .slot(i))
               }
+              .padding(.horizontal, 30)
             }
-            .padding(.horizontal, 30)
           }
-        }
 
-        // Action buttons
-        HStack(spacing: 24) {
-          Button(action: { TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true) }) {
-            HStack(spacing: 12) {
-              Image(systemName: "square.and.arrow.down")
-                .font(.system(size: 16, weight: .semibold))
-              Text(L("Save to Slot") + "\(selectedSlot)")
-                .font(.system(size: 16, weight: .semibold))
+          // Action buttons
+          HStack(spacing: 24) {
+            Button(action: { TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true) }) {
+              HStack(spacing: 12) {
+                Image(systemName: "square.and.arrow.down")
+                  .font(.system(size: 16, weight: .semibold))
+                Text(L("Save to Slot") + "\(selectedSlot)")
+                  .font(.system(size: 16, weight: .semibold))
+              }
+              .foregroundColor(.white)
+              .frame(maxWidth: .infinity)
+              .padding(.horizontal, 24)
+              .padding(.vertical, 16)
+              .background(.green.opacity(0.2))
+              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+              .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                  .stroke(.green.opacity(0.4), lineWidth: 1)
+              )
             }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-            .background(.green.opacity(0.2))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.green.opacity(0.4), lineWidth: 1)
-            )
-          }
-          .buttonStyle(.plain)
-          .focused($focused, equals: .save)
+            .buttonStyle(.plain)
+            .focused($focused, equals: .save)
 
-          Button(action: { TVEmulationBridge.loadState(fromSlot: selectedSlot) }) {
-            HStack(spacing: 12) {
-              Image(systemName: "square.and.arrow.up")
-                .font(.system(size: 16, weight: .semibold))
-              Text(L("Load from Slot") + "\(selectedSlot)")
-                .font(.system(size: 16, weight: .semibold))
+            Button(action: { TVEmulationBridge.loadState(fromSlot: selectedSlot) }) {
+              HStack(spacing: 12) {
+                Image(systemName: "square.and.arrow.up")
+                  .font(.system(size: 16, weight: .semibold))
+                Text(L("Load from Slot") + "\(selectedSlot)")
+                  .font(.system(size: 16, weight: .semibold))
+              }
+              .foregroundColor(.white)
+              .frame(maxWidth: .infinity)
+              .padding(.horizontal, 24)
+              .padding(.vertical, 16)
+              .background(.blue.opacity(0.2))
+              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+              .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                  .stroke(.blue.opacity(0.4), lineWidth: 1)
+              )
             }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-            .background(.blue.opacity(0.2))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.blue.opacity(0.4), lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+            .focused($focused, equals: .load)
           }
-          .buttonStyle(.plain)
-          .focused($focused, equals: .load)
+          .frame(maxWidth: 600)
         }
-        .frame(maxWidth: 600)
+        .padding(60)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .zIndex(100)
       }
-      .padding(60)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .zIndex(100)
     }
 #if os(tvOS)
     .onExitCommand { pane = .main }
@@ -1342,6 +1395,45 @@ internal struct ControllerMappingView: View {
   }
 
   var body: some View {
+#if os(iOS)
+    NavigationStack {
+      List {
+        Section(header: Text(L("Players"))) {
+          ForEach(1...4, id: \.self) { port in
+            HStack {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(String(format: L("Player %d"), port)).font(.headline)
+                Text((currentQualifiers[port] ?? "").isEmpty ? L("No controller assigned") : (currentQualifiers[port] ?? "")).font(.caption).foregroundStyle(.secondary)
+              }
+              Spacer()
+              Button(L("Assign")) { showPickerForPort = port }
+              Button(L("Clear")) { TVControllerMappingBridge.clearDefaultDevice(forGCPort: port); reload(); NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Cleared Player %d"), port)]) }
+            }
+          }
+        }
+        Section(header: Text(L("Connected Controllers"))) {
+          if controllers.isEmpty {
+            Text(L("No controllers connected")).foregroundStyle(.secondary)
+          } else {
+            ForEach(Array(controllers.enumerated()), id: \.offset) { _, c in
+              HStack {
+                Image(systemName: "gamecontroller").foregroundStyle(.secondary)
+                VStack(alignment: .leading) {
+                  Text(c.vendorName ?? c.productCategory)
+                  Text(c.productCategory).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("P\(c.playerIndex.rawValue + 1)").font(.caption)
+              }
+            }
+          }
+        }
+      }
+      .navigationTitle(L("Controllers"))
+      .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Back")) { onBack() } } }
+      .onAppear { reload() }
+    }
+#else
     ZStack {
       // Beautiful blurred background
       Image(uiImage: game.coverImage)
@@ -1540,6 +1632,7 @@ internal struct ControllerMappingView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .zIndex(100)
     }
+#endif
     .defaultFocus($focused, .back)
     .onAppear { reload() }
 #if os(tvOS)
@@ -1552,6 +1645,7 @@ internal struct ControllerMappingView: View {
           if let idx = selected, controllers.indices.contains(idx) {
             TVControllerMappingBridge.assign(controllers[idx], toGCPort: port)
             reload()
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Assigned to Player %d"), port)])
           }
           showPickerForPort = nil
         }

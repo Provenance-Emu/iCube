@@ -348,6 +348,7 @@ struct ShaderParameterEditor: View {
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
+#if os(iOS)
                         Slider(value: Binding(
                             get: { values[p.index] ?? p.initialCGFloat },
                             set: { newVal in
@@ -355,6 +356,20 @@ struct ShaderParameterEditor: View {
                                 DOLShaderPostProcessor.shared.setValue(newVal, forParameterIndex: p.index)
                             }
                         ), in: p.minimumCGFloat...p.maximumCGFloat, step: p.stepCGFloat)
+#else
+                        // tvOS: Use TVFloatStepper for better UX
+                        TVFloatStepper(
+                            value: Binding(
+                                get: { values[p.index] ?? p.initialCGFloat },
+                                set: { newVal in
+                                    values[p.index] = newVal
+                                    DOLShaderPostProcessor.shared.setValue(newVal, forParameterIndex: p.index)
+                                }
+                            ),
+                            range: p.minimumCGFloat...p.maximumCGFloat,
+                            step: p.stepCGFloat
+                        )
+#endif
                     }
                     .padding(.vertical, 4)
                     }
@@ -367,9 +382,11 @@ struct ShaderParameterEditor: View {
             let token = currentPresetSignature()
             if token != lastLoadedPresetToken { load() }
         }
+#if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        .background(Color.clear)
         .scrollContentBackground(.hidden)
+#endif
+        .background(Color.clear)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {

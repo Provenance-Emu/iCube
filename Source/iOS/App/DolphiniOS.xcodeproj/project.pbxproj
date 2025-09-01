@@ -18,6 +18,7 @@
 		B31E80522E6504940036EE31 /* GameProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804F2E6504940036EE31 /* GameProfiles.swift */; };
 		B31E80542E65051F0036EE31 /* ControllerStyleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */; };
 		B31E80592E651FD80036EE31 /* libMoltenVK-Catalyst.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */; platformFilter = maccatalyst; };
+		B31E805C2E6544430036EE31 /* TVFloatStepper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E805B2E6544430036EE31 /* TVFloatStepper.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -299,6 +300,7 @@
 		B31E804F2E6504940036EE31 /* GameProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameProfiles.swift; sourceTree = "<group>"; };
 		B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerStyleManager.swift; sourceTree = "<group>"; };
 		B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libMoltenVK-Catalyst.a"; path = "../../../Externals/MoltenVK-macOS/libMoltenVK-Catalyst.a"; sourceTree = "<group>"; };
+		B31E805B2E6544430036EE31 /* TVFloatStepper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVFloatStepper.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -1134,19 +1136,18 @@
 		B933EDBB27F6A5C7004D7DD7 /* Swift */ = {
 			isa = PBXGroup;
 			children = (
-				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
-				B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
+				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */,
 				B31E804E2E6504940036EE31 /* ControllerPresets.swift */,
-				B31E804F2E6504940036EE31 /* GameProfiles.swift */,
-				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
+				B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */,
+				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
-				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
 				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
+				B31E804F2E6504940036EE31 /* GameProfiles.swift */,
 				B36B519A2E5E46AC009A2303 /* KeychainService.swift */,
 				B36B48C92E5D07D4009A2303 /* Localized.swift */,
 				B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */,
@@ -1163,6 +1164,7 @@
 				B3F216732E5F742400AF38F3 /* SaveStatesViewModel.swift */,
 				B36B519E2E5E4700009A2303 /* SourcesView.swift */,
 				B36B48C72E5D0749009A2303 /* TVCheatListView.swift */,
+				B31E805B2E6544430036EE31 /* TVFloatStepper.swift */,
 				B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */,
 				B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */,
 				B34ECD032E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift */,
@@ -1170,6 +1172,7 @@
 				B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */,
 				B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */,
 				B36B51962E5E41C7009A2303 /* WebDAVSource.swift */,
+				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B34EE6B22E57D65400301907 /* Shaders */,
 			);
 			path = Swift;
@@ -2337,6 +2340,7 @@
 				B97E4B58296573E200B3EE9C /* DOLBuildSource.swift in Sources */,
 				B34ECD002E56A57A00301907 /* EmulationScreen.swift in Sources */,
 				B9398716287FE28F008E8E47 /* FallbackRegionCell.m in Sources */,
+				B31E805C2E6544430036EE31 /* TVFloatStepper.swift in Sources */,
 				B939871A287FF135008E8E47 /* ConfigInterfaceViewController.mm in Sources */,
 				B900A7A727F26F61000361DD /* AppDelegate.swift in Sources */,
 				B974924429603A8A00794509 /* LegacyInputConfigMigrationService.mm in Sources */,

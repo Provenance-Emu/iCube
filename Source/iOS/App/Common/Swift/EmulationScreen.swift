@@ -283,7 +283,9 @@ struct EmulationScreen: View {
         c.gamepad?.valueChangedHandler = nil
         c.microGamepad?.valueChangedHandler = nil
       }
+      #if !os(tvOS)
       arPollTask?.cancel(); arPollTask = nil
+      #endif
     }
     .onChange(of: showPauseMenu) { visible in
       NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)

@@ -12,11 +12,13 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
+      #if !os(tvOS)
         guard userActivity.activityType == CSSearchableItemActionType,
               let identifier = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
               identifier.hasPrefix("dios.game.") else { return false }
         let gameID = String(identifier.dropFirst("dios.game.".count))
         NotificationCenter.default.post(name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil, userInfo: ["gameID": gameID])
+      #endif
         return true
     }
 
@@ -44,6 +46,7 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
     }
 
     private func index(items: [TVGameItem]) {
+#if !os(tvOS)
         var searchable: [CSSearchableItem] = []
         for game in items {
             let attr = CSSearchableItemAttributeSet(contentType: UTType.item)
@@ -58,5 +61,6 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
             searchable.append(item)
         }
         CSSearchableIndex.default().indexSearchableItems(searchable, completionHandler: nil)
+      #endif
     }
 }

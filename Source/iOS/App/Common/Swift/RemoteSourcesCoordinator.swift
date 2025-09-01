@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Network
 
 /// Coordinates multiple remote sources and updates the Dolphin cache with their items.
 @MainActor
@@ -14,6 +15,11 @@ class RemoteSourcesCoordinator: ObservableObject {
     private var lastUpdateTime: Date = .distantPast
     private let updateThrottleInterval: TimeInterval = 0.5 // Minimum 0.5 seconds between updates
 
+    // Reachability (nonisolated backing)
+    private let pathMonitor = NWPathMonitor()
+    private let pathQueue = DispatchQueue(label: "net.dolphinios.remotesources.reachability")
+    private var lastPathSatisfied: Bool = false
+
     init() {
         // Listen for refresh requests - clear caches and fetch fresh directory listings
         NotificationCenter.default.addObserver(
@@ -27,6 +33,33 @@ class RemoteSourcesCoordinator: ObservableObject {
                 self.clearCachesAndRefresh()
             }
         }
+
+        // Start reachability monitoring
+        pathMonitor.pathUpdateHandler = { @MainActor [weak self] path in
+            guard let self else { return }
+            let satisfied = path.status == .satisfied
+
+            // Capture current state to avoid main actor isolation issues
+            let wasOffline = !self.lastPathSatisfied
+            let wasOnline = self.lastPathSatisfied
+
+            if satisfied && wasOffline {
+                DispatchQueue.main.async {
+                    self.lastPathSatisfied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+                        print("Reachability: Online detected, refreshing remote sources")
+                        self.clearCachesAndRefresh()
+                        NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
+                    }
+                }
+            } else if !satisfied && wasOnline {
+                DispatchQueue.main.async {
+                    self.lastPathSatisfied = false
+                    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Offline — some sources unavailable")])
+                }
+            }
+        }
+        pathMonitor.start(queue: pathQueue)
     }
 
     func add(source: any RemoteLibrarySource) {
@@ -209,13 +242,34 @@ class RemoteSourcesCoordinator: ObservableObject {
             print("DEBUG PUSH:   source \(sourceId): \(items.count) items")
         }
 
-        let allUrls = lastItemsBySource.values.flatMap { $0 }.compactMap { item -> String? in
-            let urlString = item.url.absoluteString
-            if urlString.isEmpty {
-                print("DEBUG PUSH: WARNING - found empty URL string for item: \(item)")
-                return nil
+        // Build flattened list of URLs, converting WebDAV URLs to HTTP(S) with credentials
+        var allUrls: [String] = []
+        for (sourceId, items) in lastItemsBySource {
+            guard let source = sources.first(where: { $0.id == sourceId }) else {
+                print("DEBUG PUSH: WARNING - no matching source found for id=\(sourceId)")
+                // Fallback: append raw URLs
+                for item in items {
+                    let s = item.url.absoluteString
+                    if s.isEmpty { print("DEBUG PUSH: WARNING - empty URL for item=\(item)"); continue }
+                    allUrls.append(s)
+                }
+                continue
             }
-            return urlString
+
+            if let webdav = source as? WebDAVSource {
+                for item in items {
+                    let converted = webdav.httpURL(for: item.url)
+                    if converted.isEmpty { print("DEBUG PUSH: WARNING - empty converted URL for item=\(item)"); continue }
+                    print("DEBUG PUSH: URL transform (WebDAV -> HTTP): \(item.url.absoluteString) -> \(converted)")
+                    allUrls.append(converted)
+                }
+            } else {
+                for item in items {
+                    let s = item.url.absoluteString
+                    if s.isEmpty { print("DEBUG PUSH: WARNING - empty URL for item=\(item)"); continue }
+                    allUrls.append(s)
+                }
+            }
         }
         print("DEBUG PUSH: *** FLATTENED TO \(allUrls.count) TOTAL URLs (after filtering empty) ***")
         for (index, url) in allUrls.enumerated() {

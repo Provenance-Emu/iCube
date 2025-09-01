@@ -28,5 +28,7 @@ final class ControllerStyleManager {
         for (action, control) in preset.mapping {
             UserDefaults.standard.set(control, forKey: "controller_action_\(action.rawValue)")
         }
+        // Surface a brief toast
+        NotificationCenter.default.post(name: Notification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": "Applied \(preset.glyphSet.rawValue.capitalized) preset"])
     }
 }

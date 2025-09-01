@@ -133,6 +133,7 @@ final class TVLibraryViewModel: ObservableObject {
         self?.isRescanning = false
         // Remote sources will trigger additional reloads as they complete
         self?.load()
+        NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Library refreshed")])
       }
     }
   }
@@ -267,6 +268,12 @@ struct TVLibraryView: View {
   @State private var blockingPrecacheItem: TVGameItem?
   @State private var blockingPrecacheProgress: Double = 0
 
+  /// Search text for library filtering
+  @State private var searchText: String = ""
+
+  /// Whether emulation is currently running (disables library input)
+  @State private var emulationRunning = false
+
   /// iOS document pickers
 #if os(iOS) || targetEnvironment(macCatalyst)
   @State private var showImportSoftwarePicker = false
@@ -276,8 +283,6 @@ struct TVLibraryView: View {
   /// Controller navigation repeat throttle
   @State private var lastNavMoveTime: TimeInterval = 0
   @State private var navRepeatInterval: TimeInterval = 0.12
-  /// Whether emulation is currently running (disables library input)
-  @State private var emulationRunning = false
   @State private var emuStartObs: NSObjectProtocol?
   @State private var emuEndObs: NSObjectProtocol?
   /// Previous controller handlers to restore on teardown
@@ -633,12 +638,13 @@ struct TVLibraryView: View {
         }
         .navigationTitle("DolphiniOS Library")
         .toolbar { libraryToolbar }
-        .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
 #if os(iOS) || targetEnvironment(macCatalyst)
         .navigationDestination(isPresented: $navigateToSettings) {
           TVSettingsPage()
             .navigationBarTitleDisplayMode(.inline)
         }
+        .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
 #endif
     }
     .sheet(isPresented: $showSaveStatesBrowser) {
@@ -680,22 +686,34 @@ struct TVLibraryView: View {
         spotlightLaunchByGameID(gameID, attempts: 10)
       }
 
-      // Listen for async metadata updates (covers/banners)
-      NotificationCenter.default.addObserver(
-        forName: NSNotification.Name("GameFileMetadataUpdated"),
-        object: nil,
-        queue: .main
-      ) { notification in
-        if let filePath = notification.userInfo?["filePath"] as? String {
-          print("TVLibraryView: received GameFileMetadataUpdated for: \(filePath)")
-          model.load() // Refresh UI to show updated covers/banners
+      // Quick actions
+      NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowImportGame"), object: nil, queue: .main) { _ in
+        #if os(iOS) || targetEnvironment(macCatalyst)
+        showImportSoftwarePicker = true
+        #endif
+      }
+      NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowSettings"), object: nil, queue: .main) { _ in
+        #if os(iOS) || targetEnvironment(macCatalyst)
+        navigateToSettings = true
+        #endif
+      }
+      NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowSnackbar"), object: nil, queue: .main) { note in
+        if let text = note.userInfo?["text"] as? String { snackbarText = text; withAnimation { snackbarVisible = true };
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation { snackbarVisible = false } }
         }
+      }
+      // First-run onboarding
+      if !UserDefaults.standard.bool(forKey: "onboarding_seen_v1") {
+        withAnimation { showOnboarding = true }
       }
     }
     .onDisappear {
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
+      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowImportGame"), object: nil)
+      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSettings"), object: nil)
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
+      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSnackbar"), object: nil)
     }
 #if os(tvOS)
     .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
@@ -792,6 +810,54 @@ struct TVLibraryView: View {
         CacheInfoView(item: item)
       }
       .overlay(blockingPrecacheOverlay)
+      .overlay(offlineBanner)
+      .overlay(snackbar)
+      .overlay(onboardingOverlay)
+  }
+
+  @State private var snackbarText: String = ""
+  @State private var snackbarVisible: Bool = false
+  @State private var showOnboarding: Bool = false
+  @StateObject private var storeForBanner = RemoteSourcesStore.shared
+
+  @ViewBuilder private var snackbar: some View {
+    if snackbarVisible {
+      VStack {
+        Spacer()
+        HStack {
+          Text(snackbarText).foregroundStyle(.white).font(.subheadline)
+          Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color.black.opacity(0.8))
+        .clipShape(Capsule())
+        .padding(.bottom, 16)
+      }
+      .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+    }
+
+  @ViewBuilder private var offlineBanner: some View {
+    let anyOffline = storeForBanner.sources.contains { (src) -> Bool in
+      (src as? WebDAVSource)?.isOnline == false
+    }
+    if anyOffline {
+      VStack {
+        HStack {
+          Image(systemName: "wifi.slash").foregroundStyle(.white)
+          Text(L("Some remote sources are offline. Retrying…")).foregroundStyle(.white)
+          Spacer()
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.85))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        Spacer()
+      }
+      .transition(.move(edge: .top))
+      .animation(.easeInOut(duration: 0.25), value: anyOffline)
+    }
   }
 
   @ViewBuilder
@@ -873,6 +939,90 @@ struct TVLibraryView: View {
       }
       .transition(.opacity)
       .zIndex(10)
+    }
+  }
+
+  @ViewBuilder private var onboardingOverlay: some View {
+    if showOnboarding {
+      ZStack {
+        Color.black.opacity(0.5).ignoresSafeArea()
+        VStack(spacing: 20) {
+          // Header icon and title
+          VStack(spacing: 10) {
+            ZStack {
+              Circle()
+                .fill(.white.opacity(0.12))
+                .frame(width: 64, height: 64)
+              Image(systemName: "gamecontroller.fill")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(.white)
+            }
+            Text(L("Welcome to DolphiniOS"))
+              .font(.title2).fontWeight(.bold)
+              .foregroundStyle(.white)
+          }
+
+          // Subtitle
+          Text(L("Get started by importing a game or adding a remote source."))
+            .font(.subheadline)
+            .foregroundStyle(.white.opacity(0.85))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 12)
+
+          // Primary actions
+          HStack(spacing: 12) {
+            Button(action: {
+#if os(iOS) || targetEnvironment(macCatalyst)
+              showImportSoftwarePicker = true
+#endif
+              UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
+              withAnimation { showOnboarding = false }
+            }) {
+              HStack(spacing: 8) {
+                Image(systemName: "square.and.arrow.down")
+                Text(L("Import Game"))
+              }
+              .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+
+            Button(action: {
+              showSources = true
+              UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
+              withAnimation { showOnboarding = false }
+            }) {
+              HStack(spacing: 8) {
+                Image(systemName: "externaldrive.badge.plus")
+                Text(L("Add Remote Source"))
+              }
+              .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+          }
+
+          // Secondary action
+          Button(L("Maybe Later")) {
+            UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
+            withAnimation { showOnboarding = false }
+          }
+          .buttonStyle(.bordered)
+          .tint(.white)
+        }
+        .padding(22)
+        .background(
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .shadow(color: .black.opacity(0.25), radius: 18, x: 0, y: 10)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
+      }
+      .transition(.opacity)
     }
   }
 
@@ -1072,6 +1222,7 @@ struct TVLibraryView: View {
   }
 
   private func setupControllerNavigation(columns: Int) {
+#if !os(tvOS)
     GCController.shouldMonitorBackgroundEvents = false
     for c in GCController.controllers() {
       c.controllerPausedHandler = { _ in /* swallow to avoid Game Center */ }
@@ -1155,9 +1306,11 @@ struct TVLibraryView: View {
         }
       }
     }
+#endif
   }
 
   private func teardownControllerNavigation() {
+#if !os(tvOS)
     for c in GCController.controllers() {
       let cid = ObjectIdentifier(c)
       if let egp = c.extendedGamepad {
@@ -1178,6 +1331,7 @@ struct TVLibraryView: View {
       prevEGPHandlers.removeValue(forKey: cid)
       prevMGPHandlers.removeValue(forKey: cid)
     }
+#endif
   }
 }
 

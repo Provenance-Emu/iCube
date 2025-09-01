@@ -21,6 +21,61 @@ struct CheatsMenuView: View {
     }
 
     var body: some View {
+#if os(iOS)
+        NavigationStack {
+            List {
+                if !(geckoCodeList.isEmpty && actionReplayCodeList.isEmpty) {
+                    Section {
+                        Button {
+                            TVCheatsBridge.downloadGeckoCodes(forGameId: game.gameID, revision: game.revision, gametdbId: game.gametdbID) { _,_,_ in
+                                DispatchQueue.main.async { loadCheats() }
+                            }
+                        } label: {
+                            Label(L("Download Cheats"), systemImage: "arrow.down.circle")
+                        }
+                        Button(L("Refresh List")) { loadCheats() }
+                    }
+                }
+
+                let all = createCombinedCheatList().filter { c in
+                    let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !q.isEmpty else { return true }
+                    return c.name.localizedCaseInsensitiveContains(q) || c.type.localizedCaseInsensitiveContains(q)
+                }
+
+                if all.isEmpty {
+                    Section {
+                        VStack(spacing: 12) {
+                            Image(systemName: "gamecontroller").font(.title)
+                                .foregroundColor(.secondary)
+                            Text(L("No Cheats Available")).font(.headline)
+                            Text(L("Download cheats to get started")).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                    }
+                } else {
+                    Section(L("Cheat Codes")) {
+                        ForEach(all, id: \.id) { cheat in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(cheat.name)
+                                    Text(cheat.type).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Toggle("", isOn: Binding(get: { cheat.enabled }, set: { _ in toggleCheat(cheat) }))
+                                    .labelsHidden()
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(L("Cheat Codes"))
+            .searchable(text: $searchText)
+            .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Back")) { onBack() } } }
+            .onAppear { loadCheats() }
+        }
+#else
         ZStack {
             // Match parent background
             Image(uiImage: game.coverImage)
@@ -200,6 +255,7 @@ struct CheatsMenuView: View {
       #endif
         .defaultFocus($focused, .back)
         .onAppear { loadCheats() }
+#endif
     }
 
     private func createCombinedCheatList() -> [CheatItem] {
