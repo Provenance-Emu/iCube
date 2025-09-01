@@ -4,14 +4,20 @@
 <dict>
 	<key>com.apple.developer.background-tasks.continued-processing.gpu</key>
 	<true/>
+	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
+	<true/>
 	<key>com.apple.developer.kernel.increased-debugging-memory-limit</key>
 	<true/>
 	<key>com.apple.developer.kernel.increased-memory-limit</key>
 	<true/>
 	<key>com.apple.developer.networking.manage-thread-network-credentials</key>
 	<true/>
+	<key>com.apple.developer.sustained-execution</key>
+	<true/>
 	<key>com.apple.developer.user-management</key>
-	<array/>
+	<array>
+		<string>get-current-user</string>
+	</array>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
 	<key>com.apple.security.assets.movies.read-only</key>
@@ -19,6 +25,16 @@
 	<key>com.apple.security.assets.music.read-only</key>
 	<true/>
 	<key>com.apple.security.assets.pictures.read-only</key>
+	<true/>
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+	<key>com.apple.security.cs.disable-executable-page-protection</key>
+	<true/>
+	<key>com.apple.security.cs.disable-library-validation</key>
 	<true/>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>

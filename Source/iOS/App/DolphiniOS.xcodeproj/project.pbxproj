@@ -17,6 +17,7 @@
 		B31E80512E6504940036EE31 /* ControllerPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804E2E6504940036EE31 /* ControllerPresets.swift */; };
 		B31E80522E6504940036EE31 /* GameProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804F2E6504940036EE31 /* GameProfiles.swift */; };
 		B31E80542E65051F0036EE31 /* ControllerStyleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */; };
+		B31E80592E651FD80036EE31 /* libMoltenVK-Catalyst.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */; platformFilter = maccatalyst; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -27,8 +28,6 @@
 		B34ECD002E56A57A00301907 /* EmulationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */; };
 		B34ECD022E56A68200301907 /* TVEmulationBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34ECD012E56A68200301907 /* TVEmulationBridge.mm */; };
 		B34ECD042E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECD032E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift */; };
-		B34ECD072E5785BD00301907 /* libMoltenVK.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = B3B334452E5674FD002BF20C /* libMoltenVK.dylib */; platformFilter = maccatalyst; };
-		B34ECD082E5785BD00301907 /* libMoltenVK.dylib in CopyFiles */ = {isa = PBXBuildFile; fileRef = B3B334452E5674FD002BF20C /* libMoltenVK.dylib */; platformFilter = maccatalyst; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		B34EDDDD2E57AC9700301907 /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDDB2E57AC9700301907 /* SettingsRootView.swift */; };
 		B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */; };
 		B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */; };
@@ -284,7 +283,6 @@
 			files = (
 				B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */,
 				B31E6DC72E6409F90036EE31 /* PVlibDolphin.xcframework in CopyFiles */,
-				B34ECD082E5785BD00301907 /* libMoltenVK.dylib in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,6 +298,7 @@
 		B31E804E2E6504940036EE31 /* ControllerPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerPresets.swift; sourceTree = "<group>"; };
 		B31E804F2E6504940036EE31 /* GameProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameProfiles.swift; sourceTree = "<group>"; };
 		B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerStyleManager.swift; sourceTree = "<group>"; };
+		B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libMoltenVK-Catalyst.a"; path = "../../../Externals/MoltenVK-macOS/libMoltenVK-Catalyst.a"; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -752,10 +751,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B31E80592E651FD80036EE31 /* libMoltenVK-Catalyst.a in Frameworks */,
 				B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */,
 				B34ECCF52E569AF300301907 /* PVWebServer in Frameworks */,
 				B95AC5302D29C7FD0048E48B /* AVFoundation.framework in Frameworks */,
-				B34ECD072E5785BD00301907 /* libMoltenVK.dylib in Frameworks */,
 				B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */,
 				B9FCB7DE28988E7E0020E233 /* AltKit in Frameworks */,
 				B31E6DC62E6409F90036EE31 /* PVlibDolphin.xcframework in Frameworks */,
@@ -1830,6 +1829,7 @@
 		B9D9389C283EF7AD00B290FC /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */,
 				B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */,
 				B36B63002E5E56A3009A2303 /* PVlibDolphin.xcframework */,
 				B95AC52F2D29C7FD0048E48B /* AVFoundation.framework */,
@@ -3234,6 +3234,7 @@
 				CODE_SIGN_ENTITLEMENTS = DolphiniOS/DolphiniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -3338,6 +3339,7 @@
 				CODE_SIGN_ENTITLEMENTS = DolphiniOS/DolphiniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -3441,6 +3443,7 @@
 				CODE_SIGN_ENTITLEMENTS = DolphiniOS/DolphiniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -3544,6 +3547,7 @@
 				CODE_SIGN_ENTITLEMENTS = DolphiniOS/DolphiniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -3705,6 +3709,7 @@
 				CODE_SIGN_ENTITLEMENTS = DolphiniOS/DolphiniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -3752,6 +3757,7 @@
 				CODE_SIGN_ENTITLEMENTS = DolphiniOS/DolphiniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -3856,6 +3862,7 @@
 				CODE_SIGN_ENTITLEMENTS = DolphiniOS/DolphiniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -3959,6 +3966,7 @@
 				CODE_SIGN_ENTITLEMENTS = DolphiniOS/DolphiniOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
