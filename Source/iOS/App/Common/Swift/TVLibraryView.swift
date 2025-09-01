@@ -415,7 +415,7 @@ struct TVLibraryView: View {
       }
     }()
 
-    #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
     GeometryReader { proxy in
       let paddingH = Constants.gridHorizontalPadding
       let spacingH = Constants.gridHorizontalSpacing
@@ -528,7 +528,7 @@ struct TVLibraryView: View {
         .onChange(of: count) { _, newVal in gridColumnCount = newVal }
       }
     }
-    #else
+#else
     ScrollView {
       LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
         ForEach(displayGames, id: \.filePath) { item in
@@ -563,7 +563,7 @@ struct TVLibraryView: View {
       .padding(.horizontal, Constants.gridHorizontalPadding)
       .padding(.vertical, Constants.gridVerticalPadding)
     }
-    #endif
+#endif
   }
 
   @ViewBuilder
@@ -712,14 +712,14 @@ struct TVLibraryView: View {
 
       // Quick actions
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowImportGame"), object: nil, queue: .main) { _ in
-        #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
         showImportSoftwarePicker = true
-        #endif
+#endif
       }
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowSettings"), object: nil, queue: .main) { _ in
-        #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
         navigateToSettings = true
-        #endif
+#endif
       }
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowSnackbar"), object: nil, queue: .main) { note in
         if let text = note.userInfo?["text"] as? String { snackbarText = text; withAnimation { snackbarVisible = true };
@@ -843,6 +843,7 @@ struct TVLibraryView: View {
   @State private var snackbarVisible: Bool = false
   @State private var showOnboarding: Bool = false
   @StateObject private var storeForBanner = RemoteSourcesStore.shared
+  @State private var offlineBannerDismissed: Bool = false
 
   @ViewBuilder private var snackbar: some View {
     if snackbarVisible {
@@ -859,28 +860,41 @@ struct TVLibraryView: View {
       }
       .transition(.move(edge: .bottom).combined(with: .opacity))
     }
-    }
+  }
 
   @ViewBuilder private var offlineBanner: some View {
     let anyOffline = storeForBanner.sources.contains { (src) -> Bool in
       (src as? WebDAVSource)?.isOnline == false
     }
-    if anyOffline {
+    if anyOffline && !offlineBannerDismissed {
       VStack {
-        HStack {
+        // Leave safe area at top for the navigation bar; place banner below it
+        Spacer().frame(height: 8)
+        HStack(spacing: 10) {
           Image(systemName: "wifi.slash").foregroundStyle(.white)
           Text(L("Some remote sources are offline. Retrying…")).foregroundStyle(.white)
-          Spacer()
+            .lineLimit(2)
+          Spacer(minLength: 8)
+          Button(action: { offlineBannerDismissed = true }) {
+            Image(systemName: "xmark").foregroundStyle(.white)
+          }
+          .buttonStyle(.plain)
         }
-        .padding(10)
-        .background(Color.orange.opacity(0.85))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .padding(.horizontal, 12)
-        .padding(.top, 6)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
         Spacer()
       }
-      .transition(.move(edge: .top))
+      .ignoresSafeArea(edges: [])
+      .transition(.move(edge: .top).combined(with: .opacity))
       .animation(.easeInOut(duration: 0.25), value: anyOffline)
+    } else if !anyOffline && offlineBannerDismissed {
+      // Reset dismissal when all sources recover, using a no-op view to satisfy ViewBuilder
+      EmptyView()
+        .onAppear { offlineBannerDismissed = false }
     }
   }
 
@@ -1950,6 +1964,9 @@ private struct CacheInfoView: View {
   @State private var cacheInfo: CacheInfo?
   @State private var isLoading = true
   @State private var errorMessage: String?
+  @State private var isWorking = false
+  @State private var redownloadProgress: Double = 0
+  @State private var showCopiedToast: Bool = false
 
   private struct CacheInfo {
     let localPath: String
@@ -1962,71 +1979,148 @@ private struct CacheInfoView: View {
 
   var body: some View {
     NavigationView {
-      VStack(alignment: .leading, spacing: 16) {
-        if isLoading {
-          VStack {
-            ProgressView()
-            Text("Loading cache information...")
-              .foregroundColor(.secondary)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage = errorMessage {
-          VStack {
-            Image(systemName: "exclamationmark.triangle")
-              .font(.largeTitle)
-              .foregroundColor(.orange)
-            Text(errorMessage)
-              .foregroundColor(.secondary)
-              .multilineTextAlignment(.center)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let info = cacheInfo {
-          ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-              Text("Cache Information")
-                .font(.title2)
-                .fontWeight(.bold)
+      GeometryReader { proxy in
+        let w = max(320.0, min(proxy.size.width - 32.0, 680.0))
+        ZStack {
+          /// Blurred artwork background for visual depth
+          Image(uiImage: item.coverImage)
+            .resizable()
+            .scaledToFill()
+            .blur(radius: 20)
+            .opacity(0.35)
+            .ignoresSafeArea()
 
-              InfoRow(label: "Game", value: item.title)
-              InfoRow(label: "File Size", value: TVLibraryView.formatStorageSpace(info.fileSize))
-              InfoRow(label: "Cached Date", value: DateFormatter.localizedString(from: info.cachedDate, dateStyle: .medium, timeStyle: .short))
-              InfoRow(label: "Original URL", value: info.originalURL)
-
-              if let etag = info.etag {
-                InfoRow(label: "ETag", value: etag)
-              }
-
-              if let lastModified = info.lastModified {
-                InfoRow(label: "Last Modified", value: DateFormatter.localizedString(from: lastModified, dateStyle: .medium, timeStyle: .short))
-              }
-
-              InfoRow(label: "Local Path", value: info.localPath)
+          if isLoading {
+            VStack(spacing: 12) {
+              ProgressView()
+              Text("Loading cache information...")
+                .foregroundColor(.secondary)
             }
-            .padding()
+            .padding(24)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
+          } else if let errorMessage = errorMessage {
+            VStack(spacing: 14) {
+              Image(systemName: "icloud.slash")
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundColor(.orange)
+              Text(errorMessage)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            }
+            .padding(24)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
+          } else if let info = cacheInfo {
+            ScrollView {
+              VStack(alignment: .leading, spacing: 16) {
+                /// Header card with cover and basic details
+                HStack(alignment: .top, spacing: 16) {
+                  Image(uiImage: item.coverImage)
+                    .resizable()
+                    .aspectRatio(2.0/3.0, contentMode: .fit)
+                    .frame(width: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 6)
+                  VStack(alignment: .leading, spacing: 6) {
+                    Text(item.title)
+                      .font(.title3).fontWeight(.semibold)
+                      .lineLimit(2)
+                    Text(item.gameID)
+                      .font(.footnote)
+                      .foregroundColor(.secondary)
+                    HStack(spacing: 6) {
+                      Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                      Text("Cached \(DateFormatter.localizedString(from: info.cachedDate, dateStyle: .medium, timeStyle: .short))")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    }
+                  }
+                  Spacer(minLength: 0)
+                }
+                .padding(14)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))
+
+                /// Details card
+                VStack(spacing: 10) {
+                  KVRow(icon: "externaldrive", label: "Original URL", value: info.originalURL)
+                  KVRow(icon: "internaldrive", label: "Local Path", value: info.localPath, monospaced: true)
+                  KVRow(icon: "externaldrive.badge.person.crop", label: "ETag", value: info.etag ?? "-")
+                  KVRow(icon: "clock", label: "Last Modified", value: info.lastModified.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short) } ?? "-")
+                  KVRow(icon: "archivebox", label: "File Size", value: TVLibraryView.formatStorageSpace(info.fileSize))
+                }
+                .padding(16)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))
+              }
+              .frame(maxWidth: w)
+              .padding(.horizontal, 16)
+              .frame(maxWidth: .infinity, alignment: .center)
+              .padding(.vertical, 16)
+
+            }
+          } else {
+            VStack(spacing: 12) {
+              Image(systemName: "questionmark.circle")
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundColor(.secondary)
+              Text("No cache information available")
+                .foregroundColor(.secondary)
+            }
+            .padding(24)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
           }
-        } else {
-          VStack {
-            Image(systemName: "questionmark.circle")
-              .font(.largeTitle)
-              .foregroundColor(.secondary)
-            Text("No cache information available")
-              .foregroundColor(.secondary)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       }
       .navigationTitle("Cache Info")
-#if !os(tvOS)
-      .navigationBarTitleDisplayMode(.inline)
-#endif
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button("Done") { dismiss() }
         }
+        ToolbarItemGroup(placement: .bottomBar) {
+          if let info = cacheInfo {
+            Spacer()
+            Button(role: .destructive) { performRemove() } label: {
+              Label(L("Remove"), systemImage: "trash")
+                .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .disabled(isWorking)
+
+            Button { performRedownload() } label: {
+              if isWorking && redownloadProgress > 0 {
+                HStack(spacing: 6) {
+                  ProgressView(value: redownloadProgress).frame(width: 60)
+                  Text("\(Int(redownloadProgress * 100))%")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                }
+              } else {
+                Label(L("Re-download"), systemImage: "arrow.down.circle")
+                  .labelStyle(.titleAndIcon)
+              }
+            }
+            .buttonStyle(.bordered)
+            .disabled(isWorking)
+
+            Button { copyToPasteboard(info.originalURL) } label: {
+              Label(L("Copy URL"), systemImage: "doc.on.doc").labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.bordered)
+
+            Button { copyToPasteboard(info.localPath) } label: {
+              Label(L("Copy Path"), systemImage: "folder").labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.bordered)
+          }
+        }
       }
-    }
-    .onAppear {
-      loadCacheInfo()
+      .onAppear {
+        loadCacheInfo()
+      }
     }
   }
 
@@ -2080,25 +2174,80 @@ private struct CacheInfoView: View {
       lastModified: cachedFileInfo.lastModified
     )
   }
+
+  private func performRemove() {
+    guard let url = URL(string: item.filePath), let source = getMatchingWebDAVSource(for: url) else { return }
+    let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
+    isWorking = true
+    Task {
+      do {
+        try await source.removeCachedItem(remoteItem)
+        await MainActor.run {
+          isWorking = false
+          loadCacheInfo()
+        }
+      } catch {
+        await MainActor.run { isWorking = false }
+      }
+    }
+  }
+
+  private func performRedownload() {
+    guard let url = URL(string: item.filePath), let source = getMatchingWebDAVSource(for: url) else { return }
+    let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
+    isWorking = true
+    redownloadProgress = 0
+    Task {
+      do {
+        let _ = try await source.preCacheItem(remoteItem) { progress in
+          DispatchQueue.main.async { self.redownloadProgress = progress }
+        }
+        await MainActor.run {
+          isWorking = false
+          loadCacheInfo()
+        }
+      } catch {
+        await MainActor.run { isWorking = false }
+      }
+    }
+  }
+
+  private func copyToPasteboard(_ text: String) {
+#if os(iOS)
+    UIPasteboard.general.string = text
+    showCopiedToast = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { showCopiedToast = false }
+#endif
+  }
 }
 
-/// Helper view for displaying info rows
-private struct InfoRow: View {
+
+/// Labeled row with SF Symbol and value, used in cache details card
+private struct KVRow: View {
+  let icon: String
   let label: String
   let value: String
+  var monospaced: Bool = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(label)
-        .font(.caption)
-        .foregroundColor(.secondary)
-        .textCase(.uppercase)
-      Text(value)
-        .font(.body)
-#if !os(tvOS)
-        .textSelection(.enabled)
-#endif
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: icon)
+        .frame(width: 18)
+        .foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(label)
+          .font(.caption)
+          .foregroundColor(.secondary)
+          .textCase(.uppercase)
+        if monospaced {
+          Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
+        } else {
+          Text(value).font(.callout).textSelection(.enabled).lineLimit(nil)
+        }
+      }
+      Spacer(minLength: 0)
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
