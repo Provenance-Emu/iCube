@@ -1686,6 +1686,42 @@ private struct ControllerPickerSheet: View {
   private enum FocusField: Hashable { case back, row(Int), done }
 
   var body: some View {
+#if os(iOS)
+    NavigationStack {
+      List {
+        Section(header: Text(L("Select Controller"))) {
+          if controllers.isEmpty {
+            Text(L("No controllers connected")).foregroundStyle(.secondary)
+          } else {
+            ForEach(Array(controllers.enumerated()), id: \.offset) { idx, c in
+              Button(action: {
+                selection = idx
+                if controllers.indices.contains(idx) {
+                  TVControllerMappingBridge.assign(controllers[idx], toGCPort: port)
+                }
+              }) {
+                HStack(spacing: 12) {
+                  Image(systemName: "gamecontroller").foregroundStyle(.secondary)
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(c.vendorName ?? c.productCategory)
+                    Text(c.productCategory).font(.caption).foregroundStyle(.secondary)
+                  }
+                  Spacer()
+                  if selection == idx { Image(systemName: "checkmark").foregroundStyle(.blue) }
+                }
+              }
+            }
+          }
+        }
+      }
+      .navigationTitle(L("Assign to Player") + " \(port)")
+      .toolbar {
+        ToolbarItem(placement: .navigationBarLeading) { Button(L("Cancel")) { onDone(nil); dismiss() } }
+        ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { onDone(selection); dismiss() } }
+      }
+      .onAppear { controllers = GCController.controllers() }
+    }
+#else
     ZStack {
       // Background
       Image(uiImage: game.coverImage)
@@ -1831,6 +1867,7 @@ private struct ControllerPickerSheet: View {
 #endif
     .defaultFocus($focused, .back)
     .onAppear { controllers = GCController.controllers() }
+#endif
   }
 }
 
