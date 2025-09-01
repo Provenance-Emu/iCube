@@ -758,7 +758,7 @@ struct AboutView: View {
           .font(.system(size: 28, weight: .semibold))
           .foregroundColor(.blue)
 
-        Text("© 2003-2015+ Dolphin Team.\n© 2019-2024+ DolphiniOS Project.")
+        Text("© 2003-2015+ Dolphin Team.\n© 2019-2025+ DolphiniOS Project.")
           .multilineTextAlignment(.center)
 
         Text("DolphiniOS is an unofficial and separately maintained port of Dolphin to iOS. The DolphiniOS Project has no relation to Dolphin Team.")
