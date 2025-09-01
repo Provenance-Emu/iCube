@@ -218,46 +218,24 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             await ping()
             if Task.isCancelled { break }
             if isOnline {
-                scanningProgressCont?.yield(0.0)
-                do {
-                    let newItems = try await enumerateWebDAV()
-                    // Change detection against cached snapshot
-                    let snapshotPath = cacheDirectory.appendingPathComponent("listing_snapshot.json")
-                    var previous: Set<String> = []
-                    if FileManager.default.fileExists(atPath: snapshotPath.path) {
-                        if let data = try? Data(contentsOf: snapshotPath), let arr = try? JSONDecoder().decode([String].self, from: data) {
-                            previous = Set(arr)
-                        }
-                    }
-                    let current: [String] = newItems.map { $0.url.absoluteString }
-                    let currentSet = Set(current)
-                    let added = currentSet.subtracting(previous)
-                    let removed = previous.subtracting(currentSet)
-                    let changed = !added.isEmpty || !removed.isEmpty
-                    if changed {
-                        itemsCont?.yield(newItems)
-                        // Persist new snapshot
-                        if let data = try? JSONEncoder().encode(current) {
-                            try? data.write(to: snapshotPath)
-                        }
-                    } else {
-                        #if canImport(os)
-                        Self.logger.debug("No listing changes detected; suppressing emit")
-                        #endif
-                    }
-                    scanningProgressCont?.yield(1.0)
-                } catch {
-                    #if canImport(os)
-                    Self.logger.error("Enumeration error at \(self.rootURL.absoluteString, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                    #endif
-                }
+                #if canImport(os)
+                Self.logger.debug("Source is online, starting enumeration")
+                #endif
+                await enumerateAndEmit()
+            } else {
+                #if canImport(os)
+                Self.logger.debug("Source is offline, skipping enumeration")
+                #endif
             }
-            if Task.isCancelled { break }
-            sleep(UInt32(interval))
+            #if canImport(os)
+            Self.logger.debug("Sleeping for \(self.interval, privacy: .public) seconds")
+            #endif
+            do {
+                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            } catch {
+                break
+            }
         }
-        #if canImport(os)
-        Self.logger.info("WebDAV loop ended")
-        #endif
     }
 
     private func request(_ method: String, url: URL, headers: [String: String] = [:], body: Data? = nil) async throws -> (Int, Data, HTTPURLResponse) {
@@ -537,34 +515,6 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         return result
     }
 
-    /// Per-directory metadata cache (ETag/Last-Modified)
-    private func metadataCachePath(for directory: URL) -> URL {
-        let safe = directory.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? UUID().uuidString
-        return cacheDirectory.appendingPathComponent("meta_\(safe).json")
-    }
-
-    private struct DirMeta: Codable {
-        let etag: String?
-        let lastModified: String?
-        let listing: [String] // absolute URLs as strings
-        let savedAt: Date
-    }
-
-    private func loadDirMeta(for directory: URL) -> DirMeta? {
-        let path = metadataCachePath(for: directory)
-        guard FileManager.default.fileExists(atPath: path.path) else { return nil }
-        do {
-            let data = try Data(contentsOf: path)
-            return try JSONDecoder().decode(DirMeta.self, from: data)
-        } catch { return nil }
-    }
-
-    private func saveDirMeta(for directory: URL, etag: String?, lastModified: String?, listing: [String]) {
-        let path = metadataCachePath(for: directory)
-        let meta = DirMeta(etag: etag, lastModified: lastModified, listing: listing, savedAt: Date())
-        if let data = try? JSONEncoder().encode(meta) { try? data.write(to: path) }
-    }
-
     private func propfind(url: URL, depth: String) async throws -> [Node] {
         let body = """
         <?xml version=\"1.0\" encoding=\"utf-8\"?>
@@ -581,35 +531,14 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         #if canImport(os)
         Self.logger.debug("PROPFIND \(url.absoluteString, privacy: .public) depth=\(depth, privacy: .public)")
         #endif
-        // Load cached meta and send conditional headers
-        var headers: [String: String] = ["Depth": depth, "Content-Type": "text/xml"]
-        if let meta = loadDirMeta(for: url) {
-            if let et = meta.etag { headers["If-None-Match"] = et }
-            if let lm = meta.lastModified { headers["If-Modified-Since"] = lm }
-        }
-        let (code, data, resp) = try await request("PROPFIND", url: url, headers: headers, body: body)
-        if code == 304, let meta = loadDirMeta(for: url) {
-            // Return cached parse result based on stored listing
-            return meta.listing.map { href -> Node in
-                Node(href: href, displayName: URL(string: href)?.lastPathComponent, isCollection: href.hasSuffix("/"), contentLength: nil, etag: nil, lastModified: nil)
-            }
-        }
+        let (code, data, _) = try await request("PROPFIND", url: url, headers: ["Depth": depth, "Content-Type": "text/xml"], body: body)
         guard (200...399).contains(code) else {
             #if canImport(os)
             Self.logger.error("PROPFIND failed code=\(code, privacy: .public) url=\(url.absoluteString, privacy: .public)")
             #endif
             return []
         }
-        let nodes = parsePropfindXML(data: data)
-        // Capture server validators for this directory
-        let dirEtag = resp.value(forHTTPHeaderField: "ETag")
-        let dirLastMod = resp.value(forHTTPHeaderField: "Last-Modified")
-        let listing = nodes.compactMap { n -> String? in
-            guard let resolved = resolve(href: n.href, relativeTo: url) else { return nil }
-            return resolved.absoluteString
-        }
-        saveDirMeta(for: url, etag: dirEtag, lastModified: dirLastMod, listing: listing)
-        return nodes
+        return parsePropfindXML(data: data)
     }
 
     // MARK: - Pre-caching Support
