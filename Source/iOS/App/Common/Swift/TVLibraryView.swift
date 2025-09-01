@@ -241,6 +241,9 @@ struct TVLibraryView: View {
   @State private var showCheatError: String?
   /// Cheat list modal state
   @State private var showCheatListFor: TVGameItem?
+  /// UIKit cheats editors
+  @State private var showGeckoEditorFor: TVGameItem?
+  @State private var showAREditorFor: TVGameItem?
 
   /// Currently focused game's file path to drive zIndex and animations
   @State private var focusedFilePath: String?
@@ -434,8 +437,8 @@ struct TVLibraryView: View {
                 showProperties: { showPropertiesFor = $0 },
                 showCheatList: { showCheatListFor = $0 },
                 downloadGeckoAction: { downloadGecko(for: $0) },
-                presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
-                presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
+                presentCheatGecko: { showGeckoEditorFor = $0 },
+                presentCheatAR: { showAREditorFor = $0 },
                 requestDelete: { itemPendingDelete = $0 },
                 showStorageAlert: { message in
                   storageAlertMessage = message
@@ -539,8 +542,8 @@ struct TVLibraryView: View {
             showProperties: { showPropertiesFor = $0 },
             showCheatList: { showCheatListFor = $0 },
             downloadGeckoAction: { downloadGecko(for: $0) },
-            presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
-            presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
+            presentCheatGecko: { showGeckoEditorFor = $0 },
+            presentCheatAR: { showAREditorFor = $0 },
             requestDelete: { itemPendingDelete = $0 },
             showStorageAlert: { message in
               storageAlertMessage = message
@@ -837,6 +840,14 @@ struct TVLibraryView: View {
       .overlay(offlineBanner)
       .overlay(snackbar)
       .overlay(onboardingOverlay)
+      #if os(iOS)
+      .sheet(isPresented: Binding(get: { showGeckoEditorFor != nil }, set: { if !$0 { showGeckoEditorFor = nil } })) {
+        if let item = showGeckoEditorFor { GeckoCodesModal(item: item) }
+      }
+      .sheet(isPresented: Binding(get: { showAREditorFor != nil }, set: { if !$0 { showAREditorFor = nil } })) {
+        if let item = showAREditorFor { ActionReplayCodesModal(item: item) }
+      }
+      #endif
   }
 
   @State private var snackbarText: String = ""
@@ -1883,6 +1894,18 @@ private struct GameGridItem: View {
       }
     }
   }
+
+  private func presentCheatGecko(_ item: TVGameItem) {
+    Task { @MainActor in
+      showCheatList(item)
+    }
+  }
+
+  private func presentCheatAR(_ item: TVGameItem) {
+    Task { @MainActor in
+      showCheatList(item)
+    }
+  }
 }
 
 // MARK: - Source Picker
@@ -2360,3 +2383,55 @@ private extension Array {
     return indices.contains(index) ? self[index] : nil
   }
 }
+
+#if os(iOS)
+private struct GeckoCodesModal: UIViewControllerRepresentable {
+  let item: TVGameItem
+  func makeUIViewController(context: Context) -> UIViewController {
+    let sb = UIStoryboard(name: "Gecko", bundle: nil)
+    let vc = sb.instantiateInitialViewController()!
+    let list: UIViewController = (vc as? UINavigationController)?.topViewController ?? vc
+    // Bridge C++ property types
+    if let gcv = list as? NSObject {
+      // gameId std::string
+      let gid = item.gameID as NSString
+      if gcv.responds(to: Selector(("setGameIdString:"))) { gcv.perform(Selector(("setGameIdString:")), with: gid) } else { gcv.setValue(gid, forKey: "gameId") }
+      // gametdbId std::string
+      let gtdb = item.gametdbID as NSString
+      if gcv.responds(to: Selector(("setGametdbIdString:"))) { gcv.perform(Selector(("setGametdbIdString:")), with: gtdb) } else { gcv.setValue(gtdb, forKey: "gametdbId") }
+      // revision u16
+      let rev = NSNumber(value: Int(item.revision))
+      if gcv.responds(to: Selector(("setRevisionNumber:"))) { gcv.perform(Selector(("setRevisionNumber:")), with: rev) } else { gcv.setValue(rev, forKey: "revision") }
+    }
+    let nav = (vc as? UINavigationController) ?? UINavigationController(rootViewController: list)
+    list.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .close, target: context.coordinator, action: #selector(Coordinator.close))
+    return nav
+  }
+  func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+  func makeCoordinator() -> Coordinator { Coordinator() }
+  final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil); if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) } } }
+}
+
+private struct ActionReplayCodesModal: UIViewControllerRepresentable {
+  let item: TVGameItem
+  func makeUIViewController(context: Context) -> UIViewController {
+    let sb = UIStoryboard(name: "ActionReplay", bundle: nil)
+    let vc = sb.instantiateInitialViewController()!
+    let list: UIViewController = (vc as? UINavigationController)?.topViewController ?? vc
+    if let ar = list as? NSObject {
+      // gameId std::string
+      let gid = item.gameID as NSString
+      if ar.responds(to: Selector(("setGameIdString:"))) { ar.perform(Selector(("setGameIdString:")), with: gid) } else { ar.setValue(gid, forKey: "gameId") }
+      // revision u16
+      let rev = NSNumber(value: Int(item.revision))
+      if ar.responds(to: Selector(("setRevisionNumber:"))) { ar.perform(Selector(("setRevisionNumber:")), with: rev) } else { ar.setValue(rev, forKey: "revision") }
+    }
+    let nav = (vc as? UINavigationController) ?? UINavigationController(rootViewController: list)
+    list.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .close, target: context.coordinator, action: #selector(Coordinator.close))
+    return nav
+  }
+  func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+  func makeCoordinator() -> Coordinator { Coordinator() }
+  final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil); if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) } } }
+}
+#endif

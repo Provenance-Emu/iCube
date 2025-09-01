@@ -32,14 +32,14 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  
+
   self.navigationItem.rightBarButtonItem = self.editButtonItem;
-  
+
   Common::IniFile gameIniLocal;
   gameIniLocal.Load(File::GetUserPath(D_GAMESETTINGS_IDX) + self.gameId + ".ini");
 
   const Common::IniFile gameIniDefault = SConfig::LoadDefaultGameIni(self.gameId, self.revision);
-  
+
   _codes = Gecko::LoadCodes(gameIniDefault, gameIniLocal);
 }
 
@@ -71,14 +71,14 @@
     }
   } else {
     const auto& code = self->_codes[indexPath.row];
-    
+
     CheatCell* cell = [tableView dequeueReusableCellWithIdentifier:@"cheatCell" forIndexPath:indexPath];
-    
+
     [cell.nameLabel setText:CppToFoundationString(code.name)];
-    
+
     [cell.enabledSwitch setOn:code.enabled];
     [cell.enabledSwitch setTag:indexPath.row];
-    
+
     return cell;
   }
 }
@@ -89,27 +89,27 @@
       self->_newCode = Gecko::GeckoCode();
       self->_editTargetCode = &self->_newCode;
       self->_editTargetIsNew = true;
-      
+
       [self performSegueWithIdentifier:@"edit" sender:nil];
     } else {
       // TODO: Localization
       UIAlertController* downloadAlert = [UIAlertController alertControllerWithTitle:@"Downloading..." message:nil preferredStyle:UIAlertControllerStyleAlert];
-      
+
       [self presentViewController:downloadAlert animated:true completion:^{
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
           void (^showResult)(NSString*, NSString*) = ^void(NSString* title, NSString* text) {
             dispatch_async(dispatch_get_main_queue(), ^{
               [self.tableView reloadData];
-              
+
               [self dismissViewControllerAnimated:true completion:^{
                 UIAlertController* resultAlert = [UIAlertController alertControllerWithTitle:title message:text preferredStyle:UIAlertControllerStyleAlert];
                 [resultAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault handler:nil]];
-                
+
                 [self presentViewController:resultAlert animated:true completion:nil];
               }];
             });
           };
-          
+
           bool success;
           std::vector<Gecko::GeckoCode> downloadedCodes = Gecko::DownloadCodes(self.gametdbId, &success);
 
@@ -133,12 +133,12 @@
               addedCount++;
             }
           }
-          
+
           [self saveCodes];
-          
+
           NSString* resultTextFormat = DOLCoreLocalizedStringWithArgs(@"Downloaded %1 codes. (added %2)", @"d", @"d");
           NSString* resultText = [NSString stringWithFormat:resultTextFormat, downloadedCodes.size(), addedCount];
-          
+
           showResult(DOLCoreLocalizedString(@"Download complete"), resultText);
         });
       }];
@@ -146,10 +146,10 @@
   } else {
     self->_editTargetCode = &self->_codes[indexPath.row];
     self->_editTargetIsNew = false;
-    
+
     [self performSegueWithIdentifier:@"edit" sender:nil];
   }
-  
+
   [self.tableView deselectRowAtIndexPath:indexPath animated:true];
 }
 
@@ -160,16 +160,16 @@
 - (void)tableView:(UITableView*)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath*)indexPath {
   if (editingStyle == UITableViewCellEditingStyleDelete) {
     self->_codes.erase(self->_codes.begin() + indexPath.row);
-    
+
     [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
-    
+
     [self saveCodes];
   }
 }
 
 - (IBAction)codeEnabledChanged:(DOLSwitch*)sender {
   self->_codes[sender.tag].enabled = sender.on;
-  
+
   [self saveCodes];
 }
 
@@ -185,10 +185,14 @@
   if (self->_editTargetIsNew) {
     self->_codes.push_back(std::move(self->_newCode));
   }
-  
+
   [self saveCodes];
-  
+
   [self.tableView reloadData];
 }
+
+- (void)setGameIdString:(NSString*)value { self.gameId = FoundationToCppString(value ?: @""); }
+- (void)setGametdbIdString:(NSString*)value { self.gametdbId = FoundationToCppString(value ?: @""); }
+- (void)setRevisionNumber:(NSNumber*)value { self.revision = (u16)(value ? value.unsignedShortValue : 0); }
 
 @end

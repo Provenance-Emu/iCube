@@ -28,14 +28,14 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  
+
   self.navigationItem.rightBarButtonItem = self.editButtonItem;
-  
+
   Common::IniFile gameIniLocal;
   gameIniLocal.Load(File::GetUserPath(D_GAMESETTINGS_IDX) + self.gameId + ".ini");
 
   const Common::IniFile gameIniDefault = SConfig::LoadDefaultGameIni(self.gameId, self.revision);
-  
+
   self->_codes = ActionReplay::LoadCodes(gameIniDefault, gameIniLocal);
 }
 
@@ -61,14 +61,14 @@
     return [tableView dequeueReusableCellWithIdentifier:@"addCell" forIndexPath:indexPath];
   } else {
     const auto& code = self->_codes[indexPath.row];
-    
+
     CheatCell* cell = [tableView dequeueReusableCellWithIdentifier:@"cheatCell" forIndexPath:indexPath];
-    
+
     [cell.nameLabel setText:CppToFoundationString(code.name)];
-    
+
     [cell.enabledSwitch setOn:code.enabled];
     [cell.enabledSwitch setTag:indexPath.row];
-    
+
     return cell;
   }
 }
@@ -80,7 +80,7 @@
     self->_editTargetIsNew = true;
   } else {
     self->_editTargetCode = &self->_codes[indexPath.row];
-    
+
     if (!self->_editTargetCode->user_defined) {
       self->_newCode = *_editTargetCode;
       self->_editTargetCode = &self->_newCode;
@@ -89,9 +89,9 @@
       self->_editTargetIsNew = false;
     }
   }
-  
+
   [self performSegueWithIdentifier:@"edit" sender:nil];
-  
+
   [self.tableView deselectRowAtIndexPath:indexPath animated:true];
 }
 
@@ -99,23 +99,23 @@
   if (indexPath.section == 0) {
     return false;
   }
-  
+
   return self->_codes[indexPath.row].user_defined;
 }
 
 - (void)tableView:(UITableView*)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath*)indexPath {
   if (editingStyle == UITableViewCellEditingStyleDelete) {
     self->_codes.erase(self->_codes.begin() + indexPath.row);
-    
+
     [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
-    
+
     [self saveCodes];
   }
 }
 
 - (IBAction)codeEnabledChanged:(DOLSwitch*)sender {
   self->_codes[sender.tag].enabled = sender.on;
-  
+
   [self saveCodes];
 }
 
@@ -131,10 +131,13 @@
   if (self->_editTargetIsNew) {
     self->_codes.push_back(std::move(self->_newCode));
   }
-  
+
   [self saveCodes];
-  
+
   [self.tableView reloadData];
 }
+
+- (void)setGameIdString:(NSString*)value { self.gameId = FoundationToCppString(value ?: @""); }
+- (void)setRevisionNumber:(NSNumber*)value { self.revision = (u16)(value ? value.unsignedShortValue : 0); }
 
 @end
