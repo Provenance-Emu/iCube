@@ -23,6 +23,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter;
 - (void)clearMetalLayer;
 
+/// Ensures GameCube Pad 1 is bound to the iOS Touchscreen when no default device is connected.
+/// Also provides auto-assignment for newly connected external controllers.
++ (void)ensurePad1DefaultsToTouchscreen;
+/// Assign the most recently connected external controller to the first available player slot
+/// that is not already bound to a connected physical controller (ignores touchscreen bindings).
++ (void)autoAssignNewestExternalControllerToFirstAvailableSlot;
+
 @end
 
 NS_ASSUME_NONNULL_END

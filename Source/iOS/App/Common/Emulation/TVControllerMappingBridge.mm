@@ -9,6 +9,8 @@
 #include "Core/HW/GCPad.h"
 #include "InputCommon/InputConfig.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
+#include "Core/ConfigManager.h"
+#include <unordered_set>
 
 @implementation TVControllerMappingBridge
 
@@ -76,6 +78,71 @@
     return;
   pad->SetDefaultDevice("");
   pad->UpdateReferences(g_controller_interface);
+}
+
++ (void)reconcileAssignments
+{
+  auto* cfg = Pad::GetConfig();
+  if (!cfg)
+    return;
+
+  // Build set of qualified names for currently enumerated MFi devices
+  std::unordered_set<std::string> connected_qnames;
+  const auto devices = g_controller_interface.GetAllDevices();
+  for (const auto& dev : devices)
+  {
+    if (!dev || dev->GetSource() != "MFi")
+      continue;
+    connected_qnames.insert(dev->GetQualifiedName());
+  }
+
+  // Clear phantom defaults
+  const int count = cfg->GetControllerCount();
+  for (int i = 0; i < count; ++i)
+  {
+    auto* pad = cfg->GetController(i);
+    if (!pad) continue;
+    const auto dq = pad->GetDefaultDevice();
+    const auto q = dq.ToString();
+    if (!q.empty() && connected_qnames.find(q) == connected_qnames.end())
+    {
+      if (!(dq.source == "iOS" && dq.name == "Touchscreen"))
+      {
+        pad->SetDefaultDevice("");
+        pad->UpdateReferences(g_controller_interface);
+      }
+    }
+  }
+
+  // Assign first connected controller to first free port (ignoring touchscreen and occupied physicals)
+  for (const auto& dev : devices)
+  {
+    if (!dev || dev->GetSource() != "MFi")
+      continue;
+
+    ciface::Core::DeviceQualifier dq_new; dq_new.FromDevice(dev.get());
+    bool already = false;
+    for (int i = 0; i < count; ++i)
+    {
+      auto* pad = cfg->GetController(i);
+      if (pad && pad->GetDefaultDevice() == dq_new) { already = true; break; }
+    }
+    if (already) continue;
+
+    for (int i = 0; i < count; ++i)
+    {
+      auto* pad = cfg->GetController(i);
+      if (!pad) continue;
+      const auto cur = pad->GetDefaultDevice();
+      if (connected_qnames.find(cur.ToString()) != connected_qnames.end())
+        continue; // occupied by another physical controller
+      pad->SetDefaultDevice(dq_new);
+      pad->LoadDefaults(g_controller_interface);
+      pad->UpdateReferences(g_controller_interface);
+      Pad::GetConfig()->SaveConfig();
+      break;
+    }
+  }
 }
 
 @end

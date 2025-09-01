@@ -7,11 +7,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class UIView;
 
+@protocol VirtualMFiControllerManagerDelegate <NSObject>
+@optional
+- (void)virtualMFiControllerDidConnect;
+- (void)virtualMFiControllerDidDisconnect;
+@end
+
 @interface VirtualMFiControllerManager : NSObject
 
 + (VirtualMFiControllerManager*)shared;
 
 @property (nonatomic) bool shouldConnectController;
+@property (nonatomic, weak, nullable) id<VirtualMFiControllerManagerDelegate> delegate;
 
 - (void)connectControllerToView:(UIView*)superview API_AVAILABLE(ios(15.0));
 - (void)disconnectController API_AVAILABLE(ios(15.0));

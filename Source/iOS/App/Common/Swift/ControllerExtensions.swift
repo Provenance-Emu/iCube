@@ -13,6 +13,7 @@ private final class TouchpadIRState {
 }
 
 private var touchpadIRStates: [ObjectIdentifier: TouchpadIRState] = [:]
+private var activeTurboControllers: Set<ObjectIdentifier> = []
 
 func configureControllerForTVOS(_ c: GCController) {
     if let mg = c.microGamepad {
@@ -162,17 +163,29 @@ func installInputDebugHandlers(_ c: GCController) {
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickC.rawValue + 2, controller: 0, value: max(0, cy))
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickC.rawValue + 3, controller: 0, value: max(0, -cy))
             // 4x turbo while all four shoulders/triggers held
-            let l1 = gamepad.leftShoulder.isPressed
-            let r1 = gamepad.rightShoulder.isPressed
-            let l2 = gamepad.leftTrigger.isPressed
-            let r2 = gamepad.rightTrigger.isPressed
-            let allFour = l1 && r1 && l2 && r2
-            let configuredTurbo = UserDefaults.standard.integer(forKey: "controller_turbo_multiplier_percent")
-            let turboPercent = (configuredTurbo > 0) ? configuredTurbo : 800
-            let targetPercent = allFour ? turboPercent : 100
-            let current = DOLConfigBridge.mainEmulationSpeedPercent()
-            if current != targetPercent {
-                DOLConfigBridge.setMainEmulationSpeedPercent(targetPercent)
+            let controllerId = ObjectIdentifier(c)
+            // Use analog threshold for triggers to be more reliable across controllers
+            let l1Down = gamepad.leftShoulder.isPressed
+            let r1Down = gamepad.rightShoulder.isPressed
+            let l2Down = gamepad.leftTrigger.value > 0.7
+            let r2Down = gamepad.rightTrigger.value > 0.7
+            let allFour = l1Down && r1Down && l2Down && r2Down
+
+            let wasActive = activeTurboControllers.contains(controllerId)
+            if allFour && !wasActive {
+                activeTurboControllers.insert(controllerId)
+                if activeTurboControllers.count == 1 {
+                    let configuredTurbo = UserDefaults.standard.integer(forKey: "controller_turbo_multiplier_percent")
+                    let turboPercent = (configuredTurbo > 0) ? configuredTurbo : 800
+                    DOLConfigBridge.setMainEmulationSpeedPercent(turboPercent)
+                    NotificationCenter.default.post(name: Notification.Name("DOLFastForwardToggled"), object: nil, userInfo: ["enabled": true])
+                }
+            } else if !allFour && wasActive {
+                activeTurboControllers.remove(controllerId)
+                if activeTurboControllers.isEmpty {
+                    DOLConfigBridge.setMainEmulationSpeedPercent(100)
+                    NotificationCenter.default.post(name: Notification.Name("DOLFastForwardToggled"), object: nil, userInfo: ["enabled": false])
+                }
             }
 
             #if os(iOS)

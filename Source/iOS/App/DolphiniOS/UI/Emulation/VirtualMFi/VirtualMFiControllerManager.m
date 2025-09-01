@@ -81,6 +81,10 @@
       NSLog(@"Failed to connect GCVirtualController with error: %@", [error localizedDescription]);
     } else {
       self->_isControllerConnected = true;
+      id<VirtualMFiControllerManagerDelegate> delegate = self.delegate;
+      if (delegate && [delegate respondsToSelector:@selector(virtualMFiControllerDidConnect)]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [delegate virtualMFiControllerDidConnect]; });
+      }
     }
   }];
 #endif
@@ -96,6 +100,10 @@
 #endif
 
   _isControllerConnected = false;
+  id<VirtualMFiControllerManagerDelegate> delegate = self.delegate;
+  if (delegate && [delegate respondsToSelector:@selector(virtualMFiControllerDidDisconnect)]) {
+    dispatch_async(dispatch_get_main_queue(), ^{ [delegate virtualMFiControllerDidDisconnect]; });
+  }
 }
 
 @end

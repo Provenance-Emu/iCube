@@ -26,11 +26,19 @@
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerInterface/CoreDevice.h"
 #import "Core/PowerPC/PowerPC.h"
+#include "Common/IniFile.h"
+#include "Common/FileUtil.h"
+#include "Core/HW/Wiimote.h"
+#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 
 #import "EmulationBootParameter.h"
 #import "HostNotifications.h"
 #import "HostQueue.h"
 #import "JitManager.h"
+#import "TVControllerMappingBridge.h"
+#import "LocalizationUtil.h"
+#import "VirtualMFiControllerManager.h"
+#include "Core/Config/WiimoteSettings.h"
 
 // A lightweight host view that notifies us when its bounds change so we can
 // update the CAMetalLayer frame and drawableSize.
@@ -247,6 +255,205 @@
   }
 }
 
+static void EnsurePad1DefaultsToTouchscreen()
+{
+  // Bind Pad 1 to iOS Touchscreen unless Touchscreen is explicitly mapped to another player
+  if (!Pad::GetConfig() || Pad::GetConfig()->GetControllerCount() == 0)
+    return;
+
+  // Locate the iOS Touchscreen virtual device
+  const auto devices = g_controller_interface.GetAllDevices();
+  std::shared_ptr<ciface::Core::Device> touchscreen_dev;
+  for (const auto& dev : devices)
+  {
+    if (dev && dev->GetSource() == "iOS" && dev->GetName() == std::string("Touchscreen"))
+    {
+      touchscreen_dev = dev;
+      break;
+    }
+  }
+  if (!touchscreen_dev)
+    return;
+
+  ciface::Core::DeviceQualifier dq_touch;
+  dq_touch.FromDevice(touchscreen_dev.get());
+
+  // Otherwise, force Pad 1 (index 0) to Touchscreen and load the Touchscreen stock profile
+  auto* pad0 = Pad::GetConfig()->GetController(0);
+  if (pad0)
+  {
+    // If Touchscreen is explicitly assigned to any Pad other than 0, respect that and leave Pad1 alone
+    {
+      const int numc = Pad::GetConfig()->GetControllerCount();
+      for (int i = 1; i < numc; ++i)
+      {
+        auto* p = Pad::GetConfig()->GetController(i);
+        if (p && p->GetDefaultDevice() == dq_touch)
+        {
+          // Reserved elsewhere; don't remap Pad1
+          goto after_pad1;
+        }
+      }
+    }
+    pad0->SetDefaultDevice(dq_touch);
+    // Load stock Touchscreen profile if present
+    {
+      const std::string sysDir = pad0->GetConfig()->GetSysProfileDirectoryPath();
+      const std::string userDir = pad0->GetConfig()->GetUserProfileDirectoryPath();
+      const std::string sysProfile = sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+      const std::string userProfile = userDir + (userDir.empty() || userDir.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+      Common::IniFile ini;
+      if (File::Exists(userProfile) && ini.Load(userProfile))
+      {
+        pad0->LoadConfig(ini.GetOrCreateSection("Profile"));
+      }
+      else if (File::Exists(sysProfile) && ini.Load(sysProfile))
+      {
+        pad0->LoadConfig(ini.GetOrCreateSection("Profile"));
+      }
+    }
+    pad0->LoadDefaults(g_controller_interface);
+    pad0->UpdateReferences(g_controller_interface);
+    Pad::GetConfig()->SaveConfig();
+    NSLog(@"[DolphiniOS][Input] Ensured Pad1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
+  }
+after_pad1:
+
+  // Ensure Wiimote 1 uses Touchscreen and Emulated source unless Touchscreen is explicitly mapped elsewhere
+  if (Wiimote::GetConfig() && Wiimote::GetConfig()->GetControllerCount() > 0)
+  {
+    auto* wm0 = Wiimote::GetConfig()->GetController(0);
+    if (wm0)
+    {
+      // Set Wiimote source to Emulated for port 0
+      Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(0), WiimoteSource::Emulated);
+
+      // If Touchscreen is assigned to another Wiimote index, respect it
+      const int wcount = Wiimote::GetConfig()->GetControllerCount();
+      for (int i = 1; i < wcount; ++i)
+      {
+        auto* w = Wiimote::GetConfig()->GetController(i);
+        if (w && w->GetDefaultDevice() == dq_touch)
+          goto after_wiimote;
+      }
+
+      wm0->SetDefaultDevice(dq_touch);
+      // Load stock touchscreen profile if present
+      {
+        const std::string sysDirWM = wm0->GetConfig()->GetSysProfileDirectoryPath();
+        const std::string userDirWM = wm0->GetConfig()->GetUserProfileDirectoryPath();
+        const std::string sysProfileWM = sysDirWM + (sysDirWM.empty() || sysDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+        const std::string userProfileWM = userDirWM + (userDirWM.empty() || userDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+        Common::IniFile iniWM;
+        if (File::Exists(userProfileWM) && iniWM.Load(userProfileWM))
+        {
+          wm0->LoadConfig(iniWM.GetOrCreateSection("Profile"));
+        }
+        else if (File::Exists(sysProfileWM) && iniWM.Load(sysProfileWM))
+        {
+          wm0->LoadConfig(iniWM.GetOrCreateSection("Profile"));
+        }
+      }
+      wm0->LoadDefaults(g_controller_interface);
+      wm0->UpdateReferences(g_controller_interface);
+      Wiimote::GetConfig()->SaveConfig();
+      NSLog(@"[DolphiniOS][Input] Ensured Wiimote1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
+    }
+  }
+after_wiimote:
+}
+
+static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev)
+{
+  return dev && dev->GetSource() == std::string("iOS") && dev->GetName() == std::string("Touchscreen");
+}
+
++ (void)autoAssignNewestExternalControllerToFirstAvailableSlot
+{
+  DOLHostQueueRunAsync(^{
+    if (!Pad::GetConfig() || Pad::GetConfig()->GetControllerCount() == 0)
+      return;
+
+    // Reconcile any stale phantom assignments first
+    [TVControllerMappingBridge reconcileAssignments];
+
+    // Gather connected physical devices (exclude Touchscreen)
+    const auto devices = g_controller_interface.GetAllDevices();
+    std::vector<std::shared_ptr<ciface::Core::Device>> physical;
+    physical.reserve(devices.size());
+    for (const auto& d : devices)
+    {
+      if (!d)
+        continue;
+      if (IsTouchscreenDevice(d))
+        continue;
+      physical.push_back(d);
+    }
+    if (physical.empty())
+      return;
+
+    // Prefer the last enumerated (newest) device
+    std::shared_ptr<ciface::Core::Device> newest = physical.back();
+
+    // Skip if this device is already assigned to any GC pad
+    ciface::Core::DeviceQualifier dq_new;
+    dq_new.FromDevice(newest.get());
+    const int count = Pad::GetConfig()->GetControllerCount();
+    for (int i = 0; i < count; ++i)
+    {
+      auto* pad = Pad::GetConfig()->GetController(i);
+      if (!pad)
+        continue;
+      if (pad->GetDefaultDevice() == dq_new)
+        return; // already assigned somewhere
+    }
+
+    // Find first available slot not occupied by a physical controller
+    int target_index = -1;
+    for (int i = 0; i < count; ++i)
+    {
+      auto* pad = Pad::GetConfig()->GetController(i);
+      if (!pad)
+        continue;
+
+      const auto dq = pad->GetDefaultDevice();
+      const bool is_touch = (dq.source == "iOS" && dq.name == "Touchscreen");
+      const bool is_empty = dq.ToString().empty();
+      const bool is_connected_physical = (!is_touch && !is_empty && g_controller_interface.HasConnectedDevice(dq));
+
+      // Slot is available if it's Touchscreen, empty, or bound to a disconnected physical device
+      if (is_touch || is_empty || !is_connected_physical)
+      {
+        target_index = i;
+        break;
+      }
+    }
+
+    if (target_index < 0)
+      return;
+
+    auto* target_pad = Pad::GetConfig()->GetController(target_index);
+    if (!target_pad)
+      return;
+
+    if (target_pad->GetDefaultDevice() == dq_new)
+      return; // no change
+
+    target_pad->SetDefaultDevice(dq_new);
+    target_pad->LoadDefaults(g_controller_interface);
+    target_pad->UpdateReferences(g_controller_interface);
+    Pad::GetConfig()->SaveConfig();
+    NSLog(@"[DolphiniOS][Input] Auto-assigned external controller '%s' to Pad %d", dq_new.ToString().c_str(), target_index + 1);
+  });
+}
+
++ (void)ensurePad1DefaultsToTouchscreen
+{
+  DOLHostQueueRunAsync(^{
+    EnsurePad1DefaultsToTouchscreen();
+  });
+}
+
 - (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter {
   dispatch_sync(dispatch_get_main_queue(), ^{
     Core::UndeclareAsHostThread();
@@ -295,31 +502,9 @@
       auto local_boot = std::move(boot);
       // Initialize controller backends before boot so devices are available
       UICommon::InitControllers(wsi);
-      // Ensure GameCube Port 1 is plugged with an emulated controller on tvOS
-#if TARGET_OS_TV
+      // Ensure GameCube Port 1 is plugged with an emulated controller and default to Touchscreen if needed
       Config::SetBaseOrCurrent(Config::GetInfoForSIDevice(0), SerialInterface::SIDEVICE_GC_CONTROLLER);
-      // Force Pad 1 to bind to the iOS Touchscreen virtual device for reliable injection
-      if (Pad::GetConfig() && Pad::GetConfig()->GetControllerCount() > 0)
-      {
-        const auto devices = g_controller_interface.GetAllDevices();
-        std::string qualifier;
-        for (const auto& dev : devices)
-        {
-          if (dev && dev->GetSource() == "iOS" && dev->GetName() == std::string("Touchscreen"))
-          {
-            qualifier = dev->GetQualifiedName();
-            NSLog(@"[DolphiniOS][Input] Binding Pad1 to iOS Touchscreen: %s", qualifier.c_str());
-            break;
-          }
-        }
-        auto* pad0 = Pad::GetConfig()->GetController(0);
-        if (!qualifier.empty())
-          pad0->SetDefaultDevice(qualifier);
-        pad0->LoadDefaults(g_controller_interface);
-        pad0->UpdateReferences(g_controller_interface);
-        Pad::GetConfig()->SaveConfig();
-      }
-#endif
+      EnsurePad1DefaultsToTouchscreen();
       if (!BootManager::BootCore(system, std::move(local_boot), wsi)) {
         PanicAlertFmt("Failed to init core!");
       }

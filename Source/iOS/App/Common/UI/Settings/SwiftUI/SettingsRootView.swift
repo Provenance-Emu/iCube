@@ -517,6 +517,7 @@ struct ControllersRootView: View {
   @State private var wiimoteScan: Bool = false
   @State private var wiimoteSpeaker: Bool = false
   @State private var connectWiimotes: Bool = false
+  @State private var autoSelectOnScreenBySystem: Bool = true
 
   // Touchscreen
   #if os(iOS)
@@ -561,6 +562,8 @@ struct ControllersRootView: View {
       Section(header: Text(L("General"))) {
         Toggle(L("Background Input"), isOn: $backgroundInput)
           .onChange(of: backgroundInput) { newValue in DOLConfigBridge.setMainBackgroundInput(newValue) }
+        Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
+          .onChange(of: autoSelectOnScreenBySystem) { newValue in UserDefaults.standard.set(newValue, forKey: "auto_touchpad_by_system") }
         NavigationLink(L("Turbo Multiplier"), destination: ControllersTurboPicker())
       }
 
@@ -592,6 +595,10 @@ struct ControllersRootView: View {
       syncFromConfig()
       syncPortTypes()
       ensureDefaultGCPlayer1()
+      if UserDefaults.standard.object(forKey: "auto_touchpad_by_system") == nil {
+        UserDefaults.standard.set(true, forKey: "auto_touchpad_by_system")
+      }
+      autoSelectOnScreenBySystem = UserDefaults.standard.bool(forKey: "auto_touchpad_by_system")
     }
   }
 
