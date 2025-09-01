@@ -36,6 +36,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
     // Pre-caching support
     private var activeCacheTasks: [String: Task<Void, Error>] = [:]
+    private var activeDownloadTasks: [String: URLSessionDownloadTask] = [:]
     private let cacheDirectory: URL
     private let cacheMetadataFile: URL
 
@@ -182,6 +183,12 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         // Cancel the loop task
         loopTask?.cancel()
         loopTask = nil
+
+        // Cancel any active downloads
+        for (_, t) in activeDownloadTasks { t.cancel() }
+        activeDownloadTasks.removeAll()
+        for (_, task) in activeCacheTasks { task.cancel() }
+        activeCacheTasks.removeAll()
 
         // Finish the current streams to properly end them
         onlineCont?.finish()
@@ -671,10 +678,12 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
         let key = item.url.absoluteString
 
-        // Cancel any existing cache task for this item
-        activeCacheTasks[key]?.cancel()
+        // Cancel any existing cache task and underlying download for this item
+        if let existingTask = activeCacheTasks[key] { existingTask.cancel() }
+        if let dl = activeDownloadTasks[key] { dl.cancel() }
 
-        let task = Task<Void, Error> {
+        let task = Task<Void, Error> { [weak self] in
+            guard let self else { return }
             try await downloadFile(item: item, progressCallback: progressCallback)
         }
 
@@ -719,7 +728,8 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         return try await withCheckedThrowingContinuation { continuation in
             let delegate = DownloadProgressDelegate(
                 progressCallback: progressCallback,
-                completion: { result in
+                completion: { [weak self] result in
+                    guard let self else { return }
                     switch result {
                     case .success(let tempURL):
                         do {
@@ -758,11 +768,16 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                             Self.logger.info("Successfully cached \(item.displayName)")
                             #endif
 
+                            // Cleanup tracking
+                            self.activeDownloadTasks.removeValue(forKey: item.url.absoluteString)
+
                             continuation.resume()
                         } catch {
+                            self.activeDownloadTasks.removeValue(forKey: item.url.absoluteString)
                             continuation.resume(throwing: error)
                         }
                     case .failure(let error):
+                        self.activeDownloadTasks.removeValue(forKey: item.url.absoluteString)
                         continuation.resume(throwing: error)
                     }
                 }
@@ -771,6 +786,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
             let task = session.downloadTask(with: request)
             delegate.task = task
+            self.activeDownloadTasks[item.url.absoluteString] = task
             task.resume()
         }
     }
@@ -778,8 +794,16 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     /// Cancel pre-caching for an item
     func cancelPreCache(_ item: RemoteLibraryItem) async {
         let key = item.url.absoluteString
-        activeCacheTasks[key]?.cancel()
-        activeCacheTasks.removeValue(forKey: key)
+        // Cancel underlying URLSession task if present
+        if let dl = activeDownloadTasks[key] {
+            dl.cancel()
+            activeDownloadTasks.removeValue(forKey: key)
+        }
+        // Cancel the async task wrapper if present
+        if let t = activeCacheTasks[key] {
+            t.cancel()
+            activeCacheTasks.removeValue(forKey: key)
+        }
 
         #if canImport(os)
         Self.logger.info("Cancelled pre-caching for \(item.displayName)")
