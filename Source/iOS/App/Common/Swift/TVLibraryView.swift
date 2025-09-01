@@ -283,6 +283,8 @@ struct TVLibraryView: View {
   /// Previous controller handlers to restore on teardown
   @State private var prevEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
   @State private var prevMGPHandlers: [ObjectIdentifier: (GCMicroGamepad, GCControllerElement) -> Void] = [:]
+  /// Current grid columns (kept in state for reuse)
+  @State private var gridColumnCount: Int = 3
 #endif
 
   /// Storage space management
@@ -493,6 +495,8 @@ struct TVLibraryView: View {
           if let t = emuEndObs { NotificationCenter.default.removeObserver(t); emuEndObs = nil }
           teardownControllerNavigation()
         }
+        .task { gridColumnCount = count }
+        .onChange(of: count) { _, newVal in gridColumnCount = newVal }
       }
     }
 #else
@@ -842,9 +846,8 @@ struct TVLibraryView: View {
               // Restore controller navigation if we were in library
 #if os(iOS) || targetEnvironment(macCatalyst)
               Task { @MainActor in
-                // Re-setup navigation with current columns guess (3 as fallback)
-//                let columns = max(2, Int((UIScreen.main.bounds.width - (24 * 2) + 12) / (Layout.cardSize.width + 12)))
-//                setupControllerNavigation(columns: columns)
+                // Re-setup navigation using the last known grid column count
+                setupControllerNavigation(columns: max(2, gridColumnCount))
               }
 #endif
             } label: {
