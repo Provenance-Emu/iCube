@@ -265,6 +265,12 @@ private:
   u64 m_data_size = 0;
   u32 m_sector_size = 0;
   bool m_header_read = false;
+  // WBFS mapping state
+  u8 m_hd_sector_shift = 0;
+  u8 m_wbfs_sector_shift = 0;
+  u64 m_wbfs_sector_size = 0;
+  u64 m_blocks_per_disc = 0;
+  std::vector<u16> m_wlba_table;
 };
 
 // HTTP-backed TGC reader for TGC files over HTTP

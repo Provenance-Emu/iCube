@@ -1899,35 +1899,64 @@ bool HttpWBFSReader::ReadHeader()
 
   INFO_LOG_FMT(DISCIO, "HttpWBFSReader: reading WBFS header");
 
-  // Read WBFS header (simplified)
   struct WBFSHeader
   {
-    u32 magic;
-    u32 n_hd_sec;
-    u8 hd_sec_sz_s;
-    u8 wbfs_sec_sz_s;
-    // ... more fields
+    u32 magic;            // 'WBFS'
+    u32 hd_sector_count;  // big-endian
+    u8 hd_sector_shift;   // 2^n bytes
+    u8 wbfs_sector_shift; // 2^n bytes
+    u8 padding[2];
   };
 
-  WBFSHeader header;
+  WBFSHeader header{};
   if (!m_http_reader->Read(0, sizeof(header), reinterpret_cast<u8*>(&header)))
   {
     ERROR_LOG_FMT(DISCIO, "HttpWBFSReader: failed to read WBFS header");
     return false;
   }
 
-  // Validate header
   if (header.magic != 0x53464257) // 'WBFS' in little endian
   {
     ERROR_LOG_FMT(DISCIO, "HttpWBFSReader: invalid WBFS magic: 0x{:08x}", header.magic);
     return false;
   }
 
-  // Calculate data size (simplified)
-  m_sector_size = 1 << header.hd_sec_sz_s;
-  m_data_size = static_cast<u64>(header.n_hd_sec) * m_sector_size;
+  // Populate sizes/shifts
+  m_sector_size = 1u << header.hd_sector_shift;
+  m_hd_sector_shift = header.hd_sector_shift;
+  m_wbfs_sector_shift = header.wbfs_sector_shift;
+  m_wbfs_sector_size = 1ull << m_wbfs_sector_shift;
 
-  INFO_LOG_FMT(DISCIO, "HttpWBFSReader: WBFS header - sector_size: {}, data_size: {}", m_sector_size, m_data_size);
+  // Constants from local reader
+  static const u64 WII_SECTOR_SIZE = 0x8000;
+  static const u64 WII_SECTOR_COUNT = 143432 * 2;
+  static const u64 WII_DISC_HEADER_SIZE = 256;
+
+  // Compute WLBA table size
+  m_blocks_per_disc = (WII_SECTOR_COUNT * WII_SECTOR_SIZE + m_wbfs_sector_size - 1) / m_wbfs_sector_size;
+
+  // Read WLBA table for slot 0: starts after disc header inside first hd sector
+  const u64 wlba_offset = (1ull << m_hd_sector_shift) + WII_DISC_HEADER_SIZE;
+  const u64 wlba_bytes = m_blocks_per_disc * sizeof(u16);
+  std::vector<u8> buf(static_cast<size_t>(wlba_bytes));
+  if (!m_http_reader->Read(wlba_offset, wlba_bytes, buf.data()))
+  {
+    ERROR_LOG_FMT(DISCIO, "HttpWBFSReader: failed to read WLBA table");
+    return false;
+  }
+
+  m_wlba_table.resize(static_cast<size_t>(m_blocks_per_disc));
+  for (size_t i = 0; i < m_blocks_per_disc; ++i)
+  {
+    // Big-endian 16-bit value in the table; combine bytes without extra swapping
+    m_wlba_table[i] = static_cast<u16>((static_cast<u16>(buf[i * 2]) << 8) | static_cast<u16>(buf[i * 2 + 1]));
+  }
+
+  // Set data size to full disc logical size
+  m_data_size = WII_SECTOR_COUNT * WII_SECTOR_SIZE;
+
+  INFO_LOG_FMT(DISCIO, "HttpWBFSReader: WBFS header OK - hd_sector_size={}, wbfs_sector_size={}, blocks_per_disc={}",
+               (1ull << m_hd_sector_shift), m_wbfs_sector_size, m_blocks_per_disc);
 
   m_header_read = true;
   return true;
@@ -1945,7 +1974,7 @@ u64 HttpWBFSReader::GetDataSize() const
 
 u64 HttpWBFSReader::GetBlockSize() const
 {
-  return m_sector_size;
+  return m_wbfs_sector_size ? static_cast<u64>(m_wbfs_sector_size) : static_cast<u64>(m_sector_size);
 }
 
 bool HttpWBFSReader::Read(u64 offset, u64 size, u8* out_ptr)
@@ -1953,10 +1982,33 @@ bool HttpWBFSReader::Read(u64 offset, u64 size, u8* out_ptr)
   if (!m_header_read && !ReadHeader())
     return false;
 
-  // WBFS is complex with disc mapping - for now, just pass through to HTTP reader
-  // A full implementation would need to handle the WBFS disc table and sector mapping
-  INFO_LOG_FMT(DISCIO, "HttpWBFSReader::Read: WBFS format requires complex sector mapping - using simplified passthrough");
-  return m_http_reader->Read(offset, size, out_ptr);
+  // Bounds check
+  if (offset + size > m_data_size)
+    return false;
+
+  // Map GC/Wii logical offset into WBFS cluster, similar to local reader
+  while (size)
+  {
+    const u64 base_cluster = (offset >> m_wbfs_sector_shift);
+    if (base_cluster >= m_blocks_per_disc)
+      return false;
+
+    const u64 cluster_address = m_wbfs_sector_size * m_wlba_table[base_cluster];
+    const u64 cluster_offset = offset & (m_wbfs_sector_size - 1);
+    const u64 final_address = cluster_address + cluster_offset;
+
+    const u64 till_end_of_sector = m_wbfs_sector_size - cluster_offset;
+    const u64 to_read = std::min<u64>(till_end_of_sector, size);
+
+    if (!m_http_reader->Read(final_address, to_read, out_ptr))
+      return false;
+
+    out_ptr += to_read;
+    size -= to_read;
+    offset += to_read;
+  }
+
+  return true;
 }
 
 // HTTP-backed TGC reader implementation
