@@ -4,6 +4,7 @@ struct TVSoftwarePropertiesView: View, Identifiable {
     let id = UUID()
     let item: TVGameItem
     @Environment(\.dismiss) private var dismiss
+    @State private var profilesVersion: Int = 0
 
     var body: some View {
         #if os(iOS)
@@ -68,13 +69,26 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Profiles").font(.headline)
                             HStack(spacing: 12) {
-                                Button("Apply Recommended") {
-                                    if let rec = GameProfiles.shared.profile(for: item.gameID) {
-                                        GameProfiles.shared.setProfile(rec, for: item.gameID)
-                                        GameProfiles.shared.applyProfileIfAvailable(for: item)
+                                if GameProfiles.shared.profile(for: item.gameID) != nil {
+                                    Button("Apply Recommended") {
+                                        if let rec = GameProfiles.shared.profile(for: item.gameID) {
+                                            GameProfiles.shared.setProfile(rec, for: item.gameID)
+                                            GameProfiles.shared.applyProfileIfAvailable(for: item)
+                                            if let override = rec.touchControllerOverride {
+                                                UserDefaults.standard.set(override.rawValue, forKey: "current_profile_touch_override")
+                                            } else {
+                                                UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
+                                            }
+                                            if let irOverride = rec.wiimoteTouchIRMode {
+                                                UserDefaults.standard.set(irOverride, forKey: "current_profile_ir_override")
+                                            } else {
+                                                UserDefaults.standard.removeObject(forKey: "current_profile_ir_override")
+                                            }
+                                            profilesVersion &+= 1
+                                        }
                                     }
+                                    .buttonStyle(.bordered)
                                 }
-                                .buttonStyle(.bordered)
                                 Toggle("Widescreen Hack", isOn: Binding(get: { DOLConfigBridge.gfxWidescreenHack() }, set: { DOLConfigBridge.setGfxWidescreenHack($0) }))
                             }
                             HStack(spacing: 12) {
@@ -85,6 +99,43 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                                 }
                                 .pickerStyle(.segmented)
                             }
+                            // Per-game IR Mode override (Wii Touch)
+                            HStack(spacing: 12) {
+                                Picker("Per-Game IR Mode", selection: Binding(get: {
+                                    (UserDefaults.standard.object(forKey: "current_profile_ir_override") as? Int) ?? -1
+                                }, set: { newVal in
+                                    if newVal < 0 { UserDefaults.standard.removeObject(forKey: "current_profile_ir_override") }
+                                    else { UserDefaults.standard.set(newVal, forKey: "current_profile_ir_override") }
+                                    profilesVersion &+= 1
+                                })) {
+                                    Text("Use Global").tag(-1)
+                                    Text("None").tag(0)
+                                    Text("Absolute").tag(1)
+                                    Text("Drag").tag(2)
+                                }
+                                .pickerStyle(.segmented)
+                            }
+                            // Per-game Touch Controller override
+                            HStack(spacing: 12) {
+                                Picker("On-Screen Controller", selection: Binding(get: {
+                                    if let raw = UserDefaults.standard.string(forKey: "current_profile_touch_override"), let v = TouchControllerOverride(rawValue: raw) { return v }
+                                    return .systemAuto
+                                }, set: { newVal in
+                                    if newVal == .systemAuto { UserDefaults.standard.removeObject(forKey: "current_profile_touch_override") }
+                                    else { UserDefaults.standard.set(newVal.rawValue, forKey: "current_profile_touch_override") }
+                                    profilesVersion &+= 1
+                                })) {
+                                    Text("Auto (by System)").tag(TouchControllerOverride.systemAuto)
+                                    Text("Force GameCube").tag(TouchControllerOverride.forceGameCube)
+                                    Text("Force Wii").tag(TouchControllerOverride.forceWii)
+                                }
+                            }
+                            // Per-game Wii IR Sensitivity
+                            VStack(alignment: .leading) {
+                                HStack { Text("Wii IR Sensitivity"); Spacer(); Text("\(DOLConfigBridge.sysconfSensorBarSensitivity())").foregroundStyle(.secondary) }
+                                Slider(value: Binding(get: { Double(DOLConfigBridge.sysconfSensorBarSensitivity()) }, set: { DOLConfigBridge.setSysconfSensorBarSensitivity(Int($0.rounded())) }), in: 1...5, step: 1)
+                            }
+                            // Shader preset chooser with preview
                             HStack {
                                 NavigationLink(destination: ShaderPickerView(selectedPresetPath: Binding(get: { UserDefaults.standard.string(forKey: "shader_preset_path") }, set: { UserDefaults.standard.set($0, forKey: "shader_preset_path"); NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil) }))) {
                                     Text("Shader Preset")
@@ -92,9 +143,51 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                                     Text(UserDefaults.standard.string(forKey: "shader_preset_path")?.split(separator: "/").last.map(String.init) ?? L("None")).foregroundStyle(.secondary)
                                 }
                             }
+                            Divider()
+                            HStack(spacing: 12) {
+                                Button("Save Current as Profile") {
+                                    var snap = GameProfiles.shared.buildProfileFromCurrentSettings()
+                                    if let raw = UserDefaults.standard.string(forKey: "current_profile_touch_override"), let v = TouchControllerOverride(rawValue: raw) {
+                                        snap.touchControllerOverride = v
+                                    }
+                                    if let ir = UserDefaults.standard.object(forKey: "current_profile_ir_override") as? Int {
+                                        snap.wiimoteTouchIRMode = ir
+                                    }
+                                    GameProfiles.shared.setProfile(snap, for: item.gameID)
+                                    GameProfiles.shared.applyProfileIfAvailable(for: item)
+                                    profilesVersion &+= 1
+                                }
+                                .buttonStyle(.borderedProminent)
+                                Button("Clear Profile") {
+                                    GameProfiles.shared.clearProfile(for: item.gameID)
+                                    UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
+                                    UserDefaults.standard.removeObject(forKey: "current_profile_ir_override")
+                                    // Force update for the toggles and pickers to reflect cleared state
+                                    DOLConfigBridge.setGfxWidescreenHack(false)
+                                    profilesVersion &+= 1
+                                }
+                                    .buttonStyle(.bordered)
+                                if GameProfiles.shared.hasSavedProfile(for: item.gameID) {
+                                    Text("Saved").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            // Optional diff view
+                            if let prof = GameProfiles.shared.profile(for: item.gameID) {
+                                let diff = GameProfiles.shared.diffCurrentSettings(from: prof)
+                                if !diff.isEmpty {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("Profile Differences").font(.subheadline).foregroundStyle(.secondary)
+                                        ForEach(Array(diff.enumerated()), id: \.offset) { pair in
+                                            let row = pair.element
+                                            HStack { Text(row.0); Spacer(); Text(row.1).foregroundStyle(.secondary); Image(systemName: "arrow.right").foregroundStyle(.secondary); Text(row.2).foregroundStyle(.secondary) }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         .padding(12)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .id(profilesVersion)
                     }
                     .padding(16)
                 }
