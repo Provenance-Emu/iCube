@@ -1072,6 +1072,14 @@ struct TVLibraryView: View {
                     if element == dpad.down, dpad.down.isPressed { move(columns, dir: "down") }
                     if element == dpad.left, dpad.left.isPressed { move(-1, dir: "left") }
                     if element == dpad.right, dpad.right.isPressed { move(1, dir: "right") }
+                    if element == dpad {
+                        let vx = dpad.xAxis.value
+                        let vy = dpad.yAxis.value
+                        if vy < -0.5 { move(-columns, dir: "up") }
+                        if vy > 0.5 { move(columns, dir: "down") }
+                        if vx < -0.5 { move(-1, dir: "left") }
+                        if vx > 0.5 { move(1, dir: "right") }
+                    }
                     // Left thumbstick support
                     let lx = gamepad.leftThumbstick.xAxis.value
                     let ly = gamepad.leftThumbstick.yAxis.value
