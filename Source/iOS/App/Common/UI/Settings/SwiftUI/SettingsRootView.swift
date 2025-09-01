@@ -45,6 +45,7 @@ struct SettingsRootView<Background: View>: View {
   }
 
   @State private var currentSettingsPage: SettingsPage? = nil
+  @State private var showGlobalResetAlert: Bool = false
 
   @ViewBuilder
   private var pauseMenuStyleContent: some View {
@@ -225,6 +226,17 @@ struct SettingsRootView<Background: View>: View {
         }
       }
       .navigationTitle(L("Settings"))
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button(L("Reset All")) { showGlobalResetAlert = true }
+        }
+      }
+    }
+    .alert(L("Reset All Settings"), isPresented: $showGlobalResetAlert) {
+      Button(L("Cancel"), role: .cancel) {}
+      Button(L("Reset"), role: .destructive) { DOLConfigBridge.resetAllToDefaults() }
+    } message: {
+      Text(L("This will reset all settings to factory defaults. This may require restarting emulation."))
     }
   }
 }
