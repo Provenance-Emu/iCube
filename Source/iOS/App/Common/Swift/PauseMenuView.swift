@@ -87,6 +87,15 @@ internal struct PauseMenuView: View {
       .focusSection()
 #endif
     }
+#if os(iOS)
+    .sheet(isPresented: $showSettingsSheet) {
+      NavigationStack {
+        SettingsRootView()
+          .navigationTitle(L("Settings"))
+          .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showSettingsSheet = false } } }
+      }
+    }
+#endif
   }
 
   // Add pull-down to dismiss for iOS
@@ -194,16 +203,7 @@ internal struct PauseMenuView: View {
                   }
                   .buttonStyle(.plain)
 
-                  Button(action: {
-                    TVEmulationBridge.pause()
-                    onClose()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                      onShowSettings()
-                    }
-                  }) {
-                    labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
-                  }
-                  .buttonStyle(.plain)
+                  settingsButtonRow
 
                   Button(role: .destructive, action: { showExitDialog = true }) {
                     labelRow(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red)
@@ -237,16 +237,7 @@ internal struct PauseMenuView: View {
                   }
                   .buttonStyle(.plain)
 
-                  Button(action: {
-                    TVEmulationBridge.pause()
-                    onClose()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                      onShowSettings()
-                    }
-                  }) {
-                    labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
-                  }
-                  .buttonStyle(.plain)
+                  settingsButtonRow
 
                   Button(role: .destructive, action: { showExitDialog = true }) {
                     labelRow(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red)
@@ -311,6 +302,24 @@ internal struct PauseMenuView: View {
     .padding(.vertical, 12)
     .background(.white.opacity(0.08))
     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+  }
+
+  // Platform-specific Settings button row
+  @ViewBuilder
+  private var settingsButtonRow: some View {
+    #if os(tvOS)
+    Button(action: { onShowSettings() }) {
+      labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
+    }
+    .buttonStyle(.plain)
+    .focused($focused, equals: .settings)
+    #else
+    Button(action: { showSettingsSheet = true }) {
+      labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
+    }
+    .buttonStyle(.plain)
+    .focused($focused, equals: .settings)
+    #endif
   }
 
   // tvOS: original layout preserved
@@ -550,44 +559,7 @@ internal struct PauseMenuView: View {
             .focused($focused, equals: .shaders)
 
             // Settings
-            Button(action: { onShowSettings() }) {
-              HStack(spacing: 20) {
-                // Icon with background
-                ZStack {
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 48, height: 48)
-
-                  Image(systemName: "gearshape")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                }
-
-                // Text content
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(L("Settings"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-
-                  Text("Game & system options")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.white.opacity(0.5))
-              }
-              .padding(.horizontal, 24)
-              .padding(.vertical, 16)
-              .background(.white.opacity(0.05))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .settings)
+            settingsButtonRow
 
             // Exit Game
             Button(action: { showExitDialog = true }) {
@@ -609,7 +581,7 @@ internal struct PauseMenuView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.red)
 
-                  Text("Return to library")
+                  Text(L("Return to library"))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.red.opacity(0.7))
                 }
