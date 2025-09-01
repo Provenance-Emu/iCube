@@ -87,7 +87,7 @@ void JITMemoryTracker::JITRegionWriteEnableExecuteDisable(void* ptr)
 
   if (info->nest_counter == 0)
   {
-#if defined(__APPLE__) && defined(_M_ARM_64)
+#if defined(__APPLE__) && defined(_M_ARM_64) && !TARGET_OS_OSX && !TARGET_OS_MACCATALYST && !TARGET_OS_UIKITFORMAC
     if (AppleHasJitToggle())
     {
       // On Apple ARM64 platforms with per-thread toggle, switch to write mode.
@@ -126,7 +126,7 @@ void JITMemoryTracker::JITRegionWriteDisableExecuteEnable(void* ptr)
   }
   else if (info->nest_counter == 0)
   {
-#if defined(__APPLE__) && defined(_M_ARM_64)
+#if defined(__APPLE__) && defined(_M_ARM_64) && !TARGET_OS_OSX && !TARGET_OS_MACCATALYST && !TARGET_OS_UIKITFORMAC
     if (AppleHasJitToggle())
     {
       // Restore execute mode for this thread.
