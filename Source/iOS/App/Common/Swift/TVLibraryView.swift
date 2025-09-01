@@ -2,52 +2,52 @@ import SwiftUI
 import UIKit
 import GameController
 
-#if os(iOS)
+#if os(iOS) || targetEnvironment(macCatalyst)
 private struct KeyCommandHostView: UIViewRepresentable {
-    let onLeft: () -> Void
-    let onRight: () -> Void
-    let onUp: () -> Void
-    let onDown: () -> Void
-    let onEnter: () -> Void
-    let onSpace: () -> Void
-    func makeUIView(context: Context) -> KeyInputView {
-        let v = KeyInputView()
-        v.onLeft = onLeft
-        v.onRight = onRight
-        v.onUp = onUp
-        v.onDown = onDown
-        v.onEnter = onEnter
-        v.onSpace = onSpace
-        DispatchQueue.main.async { _ = v.becomeFirstResponder() }
-        return v
-    }
-    func updateUIView(_ uiView: KeyInputView, context: Context) { }
+  let onLeft: () -> Void
+  let onRight: () -> Void
+  let onUp: () -> Void
+  let onDown: () -> Void
+  let onEnter: () -> Void
+  let onSpace: () -> Void
+  func makeUIView(context: Context) -> KeyInputView {
+    let v = KeyInputView()
+    v.onLeft = onLeft
+    v.onRight = onRight
+    v.onUp = onUp
+    v.onDown = onDown
+    v.onEnter = onEnter
+    v.onSpace = onSpace
+    DispatchQueue.main.async { _ = v.becomeFirstResponder() }
+    return v
+  }
+  func updateUIView(_ uiView: KeyInputView, context: Context) { }
 }
 
 private final class KeyInputView: UIView {
-    var onLeft: (() -> Void)?
-    var onRight: (() -> Void)?
-    var onUp: (() -> Void)?
-    var onDown: (() -> Void)?
-    var onEnter: (() -> Void)?
-    var onSpace: (() -> Void)?
-    override var canBecomeFirstResponder: Bool { true }
-    override var keyCommands: [UIKeyCommand]? {
-        return [
-            UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [], action: #selector(handleLeft)),
-            UIKeyCommand(input: UIKeyCommand.inputRightArrow, modifierFlags: [], action: #selector(handleRight)),
-            UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(handleUp)),
-            UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(handleDown)),
-            UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(handleEnter)),
-            UIKeyCommand(input: " ", modifierFlags: [], action: #selector(handleSpace))
-        ]
-    }
-    @objc private func handleLeft() { onLeft?() }
-    @objc private func handleRight() { onRight?() }
-    @objc private func handleUp() { onUp?() }
-    @objc private func handleDown() { onDown?() }
-    @objc private func handleEnter() { onEnter?() }
-    @objc private func handleSpace() { onSpace?() }
+  var onLeft: (() -> Void)?
+  var onRight: (() -> Void)?
+  var onUp: (() -> Void)?
+  var onDown: (() -> Void)?
+  var onEnter: (() -> Void)?
+  var onSpace: (() -> Void)?
+  override var canBecomeFirstResponder: Bool { true }
+  override var keyCommands: [UIKeyCommand]? {
+    return [
+      UIKeyCommand(input: UIKeyCommand.inputLeftArrow, modifierFlags: [], action: #selector(handleLeft)),
+      UIKeyCommand(input: UIKeyCommand.inputRightArrow, modifierFlags: [], action: #selector(handleRight)),
+      UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(handleUp)),
+      UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(handleDown)),
+      UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(handleEnter)),
+      UIKeyCommand(input: " ", modifierFlags: [], action: #selector(handleSpace))
+    ]
+  }
+  @objc private func handleLeft() { onLeft?() }
+  @objc private func handleRight() { onRight?() }
+  @objc private func handleUp() { onUp?() }
+  @objc private func handleDown() { onDown?() }
+  @objc private func handleEnter() { onEnter?() }
+  @objc private func handleSpace() { onSpace?() }
 }
 #endif
 
@@ -56,1684 +56,1699 @@ private final class KeyInputView: UIView {
 extension TVGameItem: Identifiable {}
 
 private struct NeonGlowBorder: ViewModifier {
-    let active: Bool
-    let cornerRadius: CGFloat
-    func body(content: Content) -> some View {
-        content
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color.cyan.opacity(0.9), Color.purple.opacity(0.9)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        ), lineWidth: active ? 6 : 0
-                    )
-                    .opacity(active ? 1.0 : 0.0)
-                    .shadow(color: .cyan.opacity(active ? 0.6 : 0.0), radius: active ? 20 : 0, x: 0, y: 0)
-                    .shadow(color: .purple.opacity(active ? 0.5 : 0.0), radius: active ? 28 : 0, x: 0, y: 0)
-            )
-    }
+  let active: Bool
+  let cornerRadius: CGFloat
+  func body(content: Content) -> some View {
+    content
+      .overlay(
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+          .stroke(
+            LinearGradient(
+              colors: [Color.cyan.opacity(0.9), Color.purple.opacity(0.9)],
+              startPoint: .topLeading, endPoint: .bottomTrailing
+            ), lineWidth: active ? 6 : 0
+          )
+          .opacity(active ? 1.0 : 0.0)
+          .shadow(color: .cyan.opacity(active ? 0.6 : 0.0), radius: active ? 20 : 0, x: 0, y: 0)
+          .shadow(color: .purple.opacity(active ? 0.5 : 0.0), radius: active ? 28 : 0, x: 0, y: 0)
+      )
+  }
 }
 
 private extension View {
-    func neonGlowBorder(active: Bool, cornerRadius: CGFloat = 16) -> some View {
-        modifier(NeonGlowBorder(active: active, cornerRadius: cornerRadius))
-    }
-
-    func retroFocusScale(active: Bool) -> some View {
-        self
-            .scaleEffect(active ? 1.10 : 1.0)
-            .animation(.spring(response: 0.35, dampingFraction: 0.75, blendDuration: 0.0), value: active)
-    }
+  func neonGlowBorder(active: Bool, cornerRadius: CGFloat = 16) -> some View {
+    modifier(NeonGlowBorder(active: active, cornerRadius: cornerRadius))
+  }
+  
+  func retroFocusScale(active: Bool) -> some View {
+    self
+      .scaleEffect(active ? 1.10 : 1.0)
+      .animation(.spring(response: 0.35, dampingFraction: 0.75, blendDuration: 0.0), value: active)
+  }
 }
 
 // MARK: - Clean Game Card Implementation
 // All game card logic is now inline in GameGridItem for better control
 
 final class TVLibraryViewModel: ObservableObject {
-    /// Backing collection of games shown in the grid
-    @Published var games: [TVGameItem] = []
-    /// Indicates whether a metadata rescan is in progress
-    @Published var isRescanning: Bool = false
-    /// Ensures the initial metadata kick-off runs once
-    @Published var didKickoffInitialMetadata: Bool = false
-    /// Holds a pending selection when a game is already running
-    @Published var pendingSelection: TVGameItem?
-    /// Controls the replace-running-game confirmation dialog
-    @Published var showReplaceAlert: Bool = false
-    /// The currently running or most recently launched game
-    @Published var currentGame: TVGameItem?
-    /// Grouped items by deduplication key
-    @Published var groupsByKey: [String: [TVGameItem]] = [:]
-
-    /// Loads the current game list from the bridge
-    func load() {
-        let items = TVLibraryBridge.currentGames()
-        print("TVLibraryViewModel.load(): got \(items.count) items from bridge")
-        for (index, item) in items.enumerated() {
-            let isRemote = TVLibraryView.isRemoteURL(item.filePath)
-            print("  [\(index)]: \(item.title) - \(isRemote ? "REMOTE" : "LOCAL") - \(item.filePath)")
-        }
-        groupAndDedup(items: items)
-        print("TVLibraryViewModel.load(): after dedup, showing \(games.count) games")
+  /// Backing collection of games shown in the grid
+  @Published var games: [TVGameItem] = []
+  /// Indicates whether a metadata rescan is in progress
+  @Published var isRescanning: Bool = false
+  /// Ensures the initial metadata kick-off runs once
+  @Published var didKickoffInitialMetadata: Bool = false
+  /// Holds a pending selection when a game is already running
+  @Published var pendingSelection: TVGameItem?
+  /// Controls the replace-running-game confirmation dialog
+  @Published var showReplaceAlert: Bool = false
+  /// The currently running or most recently launched game
+  @Published var currentGame: TVGameItem?
+  /// Grouped items by deduplication key
+  @Published var groupsByKey: [String: [TVGameItem]] = [:]
+  
+  /// Loads the current game list from the bridge
+  func load() {
+    let items = TVLibraryBridge.currentGames()
+    print("TVLibraryViewModel.load(): got \(items.count) items from bridge")
+    for (index, item) in items.enumerated() {
+      let isRemote = TVLibraryView.isRemoteURL(item.filePath)
+      print("  [\(index)]: \(item.title) - \(isRemote ? "REMOTE" : "LOCAL") - \(item.filePath)")
     }
-
-    /// Initiates a rescan and metadata fetch, then reloads the list
-    func rescan() {
-        guard !isRescanning else { return }
-        isRescanning = true
-
-        // Trigger refresh of remote sources first - they will update the cache when ready
-        NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
-
-        // For refresh, don't clear remote cache immediately - let WebDAV results drive updates
-        // Only rescan local files to update metadata
-        TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
-            DispatchQueue.main.async {
-                self?.isRescanning = false
-                // Remote sources will trigger additional reloads as they complete
-                self?.load()
-            }
-        }
+    groupAndDedup(items: items)
+    print("TVLibraryViewModel.load(): after dedup, showing \(games.count) games")
+  }
+  
+  /// Initiates a rescan and metadata fetch, then reloads the list
+  func rescan() {
+    guard !isRescanning else { return }
+    isRescanning = true
+    
+    // Trigger refresh of remote sources first - they will update the cache when ready
+    NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
+    
+    // For refresh, don't clear remote cache immediately - let WebDAV results drive updates
+    // Only rescan local files to update metadata
+    TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+      DispatchQueue.main.async {
+        self?.isRescanning = false
+        // Remote sources will trigger additional reloads as they complete
+        self?.load()
+      }
     }
-
-    /// Triggers metadata fetch on first appearance to populate artwork
-    func kickoffInitialMetadataIfNeeded() {
-        guard !didKickoffInitialMetadata, !isRescanning else { return }
-        didKickoffInitialMetadata = true
-        // On boot, preserve remote URLs while WebDAV sources are starting up
-        TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
-            DispatchQueue.main.async {
-                self?.load()
-            }
-        }
+  }
+  
+  /// Triggers metadata fetch on first appearance to populate artwork
+  func kickoffInitialMetadataIfNeeded() {
+    guard !didKickoffInitialMetadata, !isRescanning else { return }
+    didKickoffInitialMetadata = true
+    // On boot, preserve remote URLs while WebDAV sources are starting up
+    TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+      DispatchQueue.main.async {
+        self?.load()
+      }
     }
-
-    func loadGameCubeMainMenu() {
-        TVLibraryBridge.loadGameCubeMainMenu()
+  }
+  
+  func loadGameCubeMainMenu() {
+    TVLibraryBridge.loadGameCubeMainMenu()
+  }
+  
+  func performOnlineSystemUpdate() {
+    TVLibraryBridge.performOnlineSystemUpdate()
+  }
+  
+  private func isLocal(_ item: TVGameItem) -> Bool {
+    if let scheme = URL(string: item.filePath)?.scheme?.lowercased() { return scheme == "file" }
+    return item.filePath.hasPrefix("/")
+  }
+  
+  private func key(for item: TVGameItem) -> String {
+    // Use filePath as fallback when gameID is empty (common for remote games still being processed)
+    let gameID = item.gameID.isEmpty ? item.filePath : item.gameID
+    return "\(gameID)|\(item.discNumber)|\(item.revision)"
+  }
+  
+  private func groupAndDedup(items: [TVGameItem]) {
+    print("TVLibraryViewModel.groupAndDedup(): processing \(items.count) items")
+    var grouped: [String: [TVGameItem]] = [:]
+    for it in items {
+      let itemKey = key(for: it)
+      let isRemote = !isLocal(it)
+      print("  Item: '\(it.title)' -> Key: '\(itemKey)' (gameID: '\(it.gameID)', discNumber: \(it.discNumber), revision: \(it.revision), isRemote: \(isRemote), titleEmpty: \(it.title.isEmpty))")
+      grouped[itemKey, default: []].append(it)
     }
-
-    func performOnlineSystemUpdate() {
-        TVLibraryBridge.performOnlineSystemUpdate()
+    print("TVLibraryViewModel.groupAndDedup(): created \(grouped.count) groups")
+    groupsByKey = grouped
+    var representatives: [TVGameItem] = []
+    for (groupKey, group) in grouped {
+      print("  Group '\(groupKey)': \(group.count) items")
+      for (idx, item) in group.enumerated() {
+        print("    [\(idx)]: '\(item.title)' (isLocal: \(isLocal(item)), titleEmpty: \(item.title.isEmpty))")
+      }
+      if let local = group.first(where: { isLocal($0) }) {
+        print("    -> Using local representative: '\(local.title)'")
+        representatives.append(local)
+      } else if let any = group.first {
+        print("    -> Using first representative: '\(any.title)' (titleEmpty: \(any.title.isEmpty))")
+        representatives.append(any)
+      } else {
+        print("    -> No representative found (empty group)")
+      }
     }
-
-    private func isLocal(_ item: TVGameItem) -> Bool {
-        if let scheme = URL(string: item.filePath)?.scheme?.lowercased() { return scheme == "file" }
-        return item.filePath.hasPrefix("/")
+    print("TVLibraryViewModel.groupAndDedup(): found \(representatives.count) representatives")
+    
+    // Sort games alphabetically using fallback to filename when title is empty
+    games = representatives.sorted { (a: TVGameItem, b: TVGameItem) -> Bool in
+      let at: String = {
+        if !a.title.isEmpty { return a.title }
+        if let url = URL(string: a.filePath) { return url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent }
+        return a.filePath
+      }()
+      let bt: String = {
+        if !b.title.isEmpty { return b.title }
+        if let url = URL(string: b.filePath) { return url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent }
+        return b.filePath
+      }()
+      return at.localizedCaseInsensitiveCompare(bt) == .orderedAscending
     }
-
-    private func key(for item: TVGameItem) -> String {
-        // Use filePath as fallback when gameID is empty (common for remote games still being processed)
-        let gameID = item.gameID.isEmpty ? item.filePath : item.gameID
-        return "\(gameID)|\(item.discNumber)|\(item.revision)"
-    }
-
-    private func groupAndDedup(items: [TVGameItem]) {
-        print("TVLibraryViewModel.groupAndDedup(): processing \(items.count) items")
-        var grouped: [String: [TVGameItem]] = [:]
-        for it in items {
-            let itemKey = key(for: it)
-            let isRemote = !isLocal(it)
-            print("  Item: '\(it.title)' -> Key: '\(itemKey)' (gameID: '\(it.gameID)', discNumber: \(it.discNumber), revision: \(it.revision), isRemote: \(isRemote), titleEmpty: \(it.title.isEmpty))")
-            grouped[itemKey, default: []].append(it)
-        }
-        print("TVLibraryViewModel.groupAndDedup(): created \(grouped.count) groups")
-        groupsByKey = grouped
-        var representatives: [TVGameItem] = []
-        for (groupKey, group) in grouped {
-            print("  Group '\(groupKey)': \(group.count) items")
-            for (idx, item) in group.enumerated() {
-                print("    [\(idx)]: '\(item.title)' (isLocal: \(isLocal(item)), titleEmpty: \(item.title.isEmpty))")
-            }
-            if let local = group.first(where: { isLocal($0) }) {
-                print("    -> Using local representative: '\(local.title)'")
-                representatives.append(local)
-            } else if let any = group.first {
-                print("    -> Using first representative: '\(any.title)' (titleEmpty: \(any.title.isEmpty))")
-                representatives.append(any)
-            } else {
-                print("    -> No representative found (empty group)")
-            }
-        }
-        print("TVLibraryViewModel.groupAndDedup(): found \(representatives.count) representatives")
-
-        // Filter out items with empty titles before sorting
-        let validRepresentatives = representatives.filter { !$0.title.isEmpty }
-        print("TVLibraryViewModel.groupAndDedup(): after filtering empty titles: \(validRepresentatives.count) valid representatives")
-
-        // Sort games alphabetically by title
-        games = validRepresentatives.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        print("TVLibraryViewModel.groupAndDedup(): final games count: \(games.count)")
-    }
-
-    func sources(for item: TVGameItem) -> [TVGameItem] {
-        groupsByKey[key(for: item)] ?? [item]
-    }
+    print("TVLibraryViewModel.groupAndDedup(): final games count: \(games.count)")
+  }
+  
+  func sources(for item: TVGameItem) -> [TVGameItem] {
+    groupsByKey[key(for: item)] ?? [item]
+  }
 }
 
 struct TVLibraryView: View {
-
-    @StateObject private var model = TVLibraryViewModel()
-    @State private var showSettings = false
-    @State private var didReloadOnce = false
-    @State private var navigateTo: TVGameItem?
-    @State private var showMoreMenu = false
-    @State private var showUpdateRegions = false
-    /// Game to present in the SwiftUI properties sheet
-    @State private var showPropertiesFor: TVGameItem?
-    /// Game pending deletion confirmation
-    @State private var itemPendingDelete: TVGameItem?
-    /// Cheat input modal state
-    @State private var cheatInputFor: (item: TVGameItem, type: CheatType)?
-    @State private var cheatName: String = ""
-    @State private var cheatCreator: String = ""
-    @State private var cheatBody: String = ""
-    @State private var cheatNotes: String = ""
-    @State private var showCheatError: String?
-    /// Cheat list modal state
-    @State private var showCheatListFor: TVGameItem?
-
-    /// Currently focused game's file path to drive zIndex and animations
-    @State private var focusedFilePath: String?
-
-    @State private var showSources = false
-    /// Source picker modal state
-    @State private var sourcePickerItems: [TVGameItem]? = nil
-    /// Auto pre-cache progress state
-    @State private var autoPreCacheProgress: [String: Double] = [:]
-    @State private var autoPreCacheActive: Set<String> = []
-
-    /// Storage alerts
-    @State private var storageAlertMessage = ""
-    @State private var itemPendingLaunch: TVGameItem?
-
-    // Navigation to Save States views
-    private struct GameIDRoute: Identifiable, Hashable { let id: String }
-    @State private var navigateToSaveStates: GameIDRoute?
-    @State private var showSaveStatesBrowser: Bool = false
-
-    /// Separate alert states (SwiftUI works better with simple booleans)
-    @State private var showStorageErrorAlert = false
-    @State private var showLowStorageWarning = false
-    @State private var showCacheInfoFor: TVGameItem?
-    @State private var blockingPrecacheItem: TVGameItem?
-    @State private var blockingPrecacheProgress: Double = 0
-
-    /// iOS document pickers
-    #if os(iOS)
-    @State private var showImportSoftwarePicker = false
-    @State private var showImportNANDPicker = false
-    /// Navigate to settings as a push on iOS
-    @State private var navigateToSettings = false
-    /// Controller navigation repeat throttle
-    @State private var lastNavMoveTime: TimeInterval = 0
-    @State private var navRepeatInterval: TimeInterval = 0.12
-    /// Whether emulation is currently running (disables library input)
-    @State private var emulationRunning = false
-    @State private var emuStartObs: NSObjectProtocol?
-    @State private var emuEndObs: NSObjectProtocol?
-    /// Previous controller handlers to restore on teardown
-    @State private var prevEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
-    @State private var prevMGPHandlers: [ObjectIdentifier: (GCMicroGamepad, GCControllerElement) -> Void] = [:]
-    #endif
-
-    /// Storage space management
-    static let STORAGE_BUFFER_MB: Int64 = 100 * 1024 * 1024 // 100MB buffer
-    static let LOW_STORAGE_THRESHOLD_MB: Int64 = 100 * 1024 * 1024 // 100MB warning threshold
-
-    /// Check available storage space
-    static func getAvailableStorageSpace() -> Int64 {
-        guard let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return 0
-        }
-
-        do {
-            let resourceValues = try cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityKey])
-            return Int64(resourceValues.volumeAvailableCapacity ?? 0)
-        } catch {
-            print("Error getting storage space: \(error)")
-            return 0
-        }
+  
+  @StateObject private var model = TVLibraryViewModel()
+  @State private var showSettings = false
+  @State private var didReloadOnce = false
+  @State private var navigateTo: TVGameItem?
+  @State private var showMoreMenu = false
+  @State private var showUpdateRegions = false
+  /// Game to present in the SwiftUI properties sheet
+  @State private var showPropertiesFor: TVGameItem?
+  /// Game pending deletion confirmation
+  @State private var itemPendingDelete: TVGameItem?
+  /// Cheat input modal state
+  @State private var cheatInputFor: (item: TVGameItem, type: CheatType)?
+  @State private var cheatName: String = ""
+  @State private var cheatCreator: String = ""
+  @State private var cheatBody: String = ""
+  @State private var cheatNotes: String = ""
+  @State private var showCheatError: String?
+  /// Cheat list modal state
+  @State private var showCheatListFor: TVGameItem?
+  
+  /// Currently focused game's file path to drive zIndex and animations
+  @State private var focusedFilePath: String?
+  
+  @State private var showSources = false
+  /// Source picker modal state
+  @State private var sourcePickerItems: [TVGameItem]? = nil
+  /// Auto pre-cache progress state
+  @State private var autoPreCacheProgress: [String: Double] = [:]
+  @State private var autoPreCacheActive: Set<String> = []
+  
+  /// Storage alerts
+  @State private var storageAlertMessage = ""
+  @State private var itemPendingLaunch: TVGameItem?
+  
+  // Navigation to Save States views
+  private struct GameIDRoute: Identifiable, Hashable { let id: String }
+  @State private var navigateToSaveStates: GameIDRoute?
+  @State private var showSaveStatesBrowser: Bool = false
+  
+  /// Separate alert states (SwiftUI works better with simple booleans)
+  @State private var showStorageErrorAlert = false
+  @State private var showLowStorageWarning = false
+  @State private var showCacheInfoFor: TVGameItem?
+  @State private var blockingPrecacheItem: TVGameItem?
+  @State private var blockingPrecacheProgress: Double = 0
+  
+  /// iOS document pickers
+#if os(iOS) || targetEnvironment(macCatalyst)
+  @State private var showImportSoftwarePicker = false
+  @State private var showImportNANDPicker = false
+  /// Navigate to settings as a push on iOS
+  @State private var navigateToSettings = false
+  /// Controller navigation repeat throttle
+  @State private var lastNavMoveTime: TimeInterval = 0
+  @State private var navRepeatInterval: TimeInterval = 0.12
+  /// Whether emulation is currently running (disables library input)
+  @State private var emulationRunning = false
+  @State private var emuStartObs: NSObjectProtocol?
+  @State private var emuEndObs: NSObjectProtocol?
+  /// Previous controller handlers to restore on teardown
+  @State private var prevEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
+  @State private var prevMGPHandlers: [ObjectIdentifier: (GCMicroGamepad, GCControllerElement) -> Void] = [:]
+#endif
+  
+  /// Storage space management
+  static let STORAGE_BUFFER_MB: Int64 = 100 * 1024 * 1024 // 100MB buffer
+  static let LOW_STORAGE_THRESHOLD_MB: Int64 = 100 * 1024 * 1024 // 100MB warning threshold
+  
+  /// Check available storage space
+  static func getAvailableStorageSpace() -> Int64 {
+    guard let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+      return 0
     }
-
-    /// Check if there's enough space for pre-caching (file size + 100MB buffer)
-    static func hasEnoughSpaceForPreCache(fileSize: Int64) -> Bool {
-        let availableSpace = getAvailableStorageSpace()
-        let requiredSpace = fileSize + STORAGE_BUFFER_MB
-        return availableSpace >= requiredSpace
+    
+    do {
+      let resourceValues = try cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityKey])
+      return Int64(resourceValues.volumeAvailableCapacity ?? 0)
+    } catch {
+      print("Error getting storage space: \(error)")
+      return 0
     }
-
-    /// Check if storage is critically low (< 100MB)
-    static func isStorageCriticallyLow() -> Bool {
-        return getAvailableStorageSpace() < LOW_STORAGE_THRESHOLD_MB
+  }
+  
+  /// Check if there's enough space for pre-caching (file size + 100MB buffer)
+  static func hasEnoughSpaceForPreCache(fileSize: Int64) -> Bool {
+    let availableSpace = getAvailableStorageSpace()
+    let requiredSpace = fileSize + STORAGE_BUFFER_MB
+    return availableSpace >= requiredSpace
+  }
+  
+  /// Check if storage is critically low (< 100MB)
+  static func isStorageCriticallyLow() -> Bool {
+    return getAvailableStorageSpace() < LOW_STORAGE_THRESHOLD_MB
+  }
+  
+  /// Format storage space for user display
+  static func formatStorageSpace(_ bytes: Int64) -> String {
+    return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+  }
+  
+  private enum CheatType { case gecko, ar }
+  
+  /// Helper function to check if a URL is a remote URL (HTTP/HTTPS/WebDAV)
+  static func isRemoteURL(_ urlString: String) -> Bool {
+    let lower = urlString.lowercased()
+    return lower.hasPrefix("http://") ||
+    lower.hasPrefix("https://") ||
+    lower.hasPrefix("webdav://") ||
+    lower.hasPrefix("webdavs://")
+  }
+  
+  private enum Constants {
+    static let gridVerticalSpacing: CGFloat = {
+#if os(tvOS)
+      return 32
+#else
+      return 16
+#endif
+    }()
+    static let gridHorizontalSpacing: CGFloat = {
+#if os(tvOS)
+      return 48
+#else
+      return 12
+#endif
+    }()
+#if os(tvOS)
+    static let gridNumberOfColumns = 6
+#else
+    static let gridNumberOfColumns = 3
+#endif
+    static let gridHorizontalPadding: CGFloat = {
+#if os(tvOS)
+      return 64
+#else
+      return 24
+#endif
+    }()
+    static let gridVerticalPadding: CGFloat = {
+#if os(tvOS)
+      return 80
+#else
+      return 24
+#endif
+    }()  // Increased for focus scale effect
+    static var columns: [GridItem] {
+      return Array(repeating: GridItem(.flexible(), spacing: gridHorizontalSpacing), count: gridNumberOfColumns)
     }
-
-    /// Format storage space for user display
-    static func formatStorageSpace(_ bytes: Int64) -> String {
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+  }
+  
+  @ViewBuilder
+  private var mainContent: some View {
+    ZStack {
+      if model.games.isEmpty {
+        emptyLibraryView
+      } else {
+        libraryView
+      }
     }
-
-    private enum CheatType { case gecko, ar }
-
-    /// Helper function to check if a URL is a remote URL (HTTP/HTTPS/WebDAV)
-    static func isRemoteURL(_ urlString: String) -> Bool {
-        let lower = urlString.lowercased()
-        return lower.hasPrefix("http://") ||
-               lower.hasPrefix("https://") ||
-               lower.hasPrefix("webdav://") ||
-               lower.hasPrefix("webdavs://")
-    }
-
-    private enum Constants {
-        static let gridVerticalSpacing: CGFloat = {
-            #if os(tvOS)
-            return 32
-            #else
-            return 16
-            #endif
-        }()
-        static let gridHorizontalSpacing: CGFloat = {
-            #if os(tvOS)
-            return 48
-            #else
-            return 12
-            #endif
-        }()
-        #if os(tvOS)
-        static let gridNumberOfColumns = 6
-        #else
-        static let gridNumberOfColumns = 3
-        #endif
-        static let gridHorizontalPadding: CGFloat = {
-            #if os(tvOS)
-            return 64
-            #else
-            return 24
-            #endif
-        }()
-        static let gridVerticalPadding: CGFloat = {
-            #if os(tvOS)
-            return 80
-            #else
-            return 24
-            #endif
-        }()  // Increased for focus scale effect
-        static var columns: [GridItem] {
-            return Array(repeating: GridItem(.flexible(), spacing: gridHorizontalSpacing), count: gridNumberOfColumns)
-        }
-    }
-
-    @ViewBuilder
-    private var mainContent: some View {
-        ZStack {
-            if model.games.isEmpty {
-                emptyLibraryView
-            } else {
-                libraryView
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var libraryView: some View {
-        #if os(iOS)
-        GeometryReader { proxy in
-            let paddingH = Constants.gridHorizontalPadding
-            let spacingH = Constants.gridHorizontalSpacing
-            let cardW = Layout.cardSize.width
-            let available = max(0, proxy.size.width - (paddingH * 2))
-            let count = max(2, Int((available + spacingH) / (cardW + spacingH)))
-            let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
-                    ForEach(model.games, id: \.filePath) { item in
-                        GameGridItem(
-                            item: item,
-                            select: selectGame,
-                            focusedFilePath: $focusedFilePath,
-                            showProperties: { showPropertiesFor = $0 },
-                            showCheatList: { showCheatListFor = $0 },
-                            downloadGeckoAction: { downloadGecko(for: $0) },
-                            presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
-                            presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
-                            requestDelete: { itemPendingDelete = $0 },
-                            showStorageAlert: { message in
-                                storageAlertMessage = message
-                                showStorageErrorAlert = true
-                            },
-                            showCacheInfo: { item in
-                                showCacheInfoFor = item
-                            },
-                            showSaveStates: { item in
-                                let gid = item.gameID
-                                if !gid.isEmpty {
-                                    navigateToSaveStates = GameIDRoute(id: gid)
-                                }
-                            },
-                            autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
-                            isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(focusedFilePath == item.filePath ? Color.accentColor : Color.clear, lineWidth: 3)
-                        )
-                        .onChange(of: focusedFilePath) { _, newVal in
-                            if newVal == item.filePath {
-                                let gen = UIImpactFeedbackGenerator(style: .light)
-                                gen.impactOccurred()
-                            }
-                        }
-                    }
+  }
+  
+  @ViewBuilder
+  private var libraryView: some View {
+#if os(iOS) || targetEnvironment(macCatalyst)
+    GeometryReader { proxy in
+      let paddingH = Constants.gridHorizontalPadding
+      let spacingH = Constants.gridHorizontalSpacing
+      let cardW = Layout.cardSize.width
+      let available = max(0, proxy.size.width - (paddingH * 2))
+      let count = max(2, Int((available + spacingH) / (cardW + spacingH)))
+      let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
+      ScrollView {
+        LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
+          ForEach(model.games, id: \.filePath) { item in
+            GameGridItem(
+              item: item,
+              select: selectGame,
+              focusedFilePath: $focusedFilePath,
+              showProperties: { showPropertiesFor = $0 },
+              showCheatList: { showCheatListFor = $0 },
+              downloadGeckoAction: { downloadGecko(for: $0) },
+              presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
+              presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
+              requestDelete: { itemPendingDelete = $0 },
+              showStorageAlert: { message in
+                storageAlertMessage = message
+                showStorageErrorAlert = true
+              },
+              showCacheInfo: { item in
+                showCacheInfoFor = item
+              },
+              showSaveStates: { item in
+                let gid = item.gameID
+                if !gid.isEmpty {
+                  navigateToSaveStates = GameIDRoute(id: gid)
                 }
-                .padding(.horizontal, paddingH)
-                .padding(.vertical, Constants.gridVerticalPadding)
+              },
+              autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
+              isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: 14)
+                .stroke(focusedFilePath == item.filePath ? Color.accentColor : Color.clear, lineWidth: 3)
+            )
+            .onChange(of: focusedFilePath) { _, newVal in
+              if newVal == item.filePath {
+                let gen = UIImpactFeedbackGenerator(style: .light)
+                gen.impactOccurred()
+              }
             }
-            .background((!emulationRunning) ? AnyView(KeyCommandHostView(
-                    onLeft: {
-                        let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-                        let newIndex = max(0, idx - 1)
-                        focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.first?.filePath
-                    },
-                    onRight: {
-                        let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-                        let newIndex = min(model.games.count - 1, idx + 1)
-                        focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.last?.filePath
-                    },
-                    onUp: {
-                        let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-                        let newIndex = max(0, idx - count)
-                        focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.first?.filePath
-                    },
-                    onDown: {
-                        let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
-                        let newIndex = min(model.games.count - 1, idx + count)
-                        focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.last?.filePath
-                    },
-                    onEnter: {
-                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
-                    },
-                    onSpace: {
-                        showSources = true
-                    }
-                )) : AnyView(EmptyView()))
-            .onAppear {
-                setupControllerNavigation(columns: count)
-                emuStartObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
-                    emulationRunning = true
-                    teardownControllerNavigation()
-                }
-                emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
-                ControllerStyleManager.shared.refreshDetection()
-                ControllerStyleManager.shared.applyPresetDefaults()
-                if !emulationRunning { setupControllerNavigation(columns: count) }
-            }
-            .onChange(of: model.games.count) { _, newCount in
-                if newCount > 0 && focusedFilePath == nil {
-                    DispatchQueue.main.async { focusedFilePath = model.games.first?.filePath }
-                }
-            }
-            .onDisappear {
-                if let t = emuStartObs { NotificationCenter.default.removeObserver(t); emuStartObs = nil }
-                if let t = emuEndObs { NotificationCenter.default.removeObserver(t); emuEndObs = nil }
-                teardownControllerNavigation()
-            }
+          }
         }
-        #else
-        ScrollView {
-            LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
-                ForEach(model.games, id: \.filePath) { item in
-                    GameGridItem(
-                        item: item,
-                        select: selectGame,
-                        focusedFilePath: $focusedFilePath,
-                        showProperties: { showPropertiesFor = $0 },
-                        showCheatList: { showCheatListFor = $0 },
-                        downloadGeckoAction: { downloadGecko(for: $0) },
-                        presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
-                        presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
-                        requestDelete: { itemPendingDelete = $0 },
-                        showStorageAlert: { message in
-                            storageAlertMessage = message
-                            showStorageErrorAlert = true
-                        },
-                        showCacheInfo: { item in
-                            showCacheInfoFor = item
-                        },
-                        showSaveStates: { item in
-                            let gid = item.gameID
-                            if !gid.isEmpty {
-                                navigateToSaveStates = GameIDRoute(id: gid)
-                            }
-                        },
-                        autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
-                        isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
-                    )
-                }
-            }
-            .padding(.horizontal, Constants.gridHorizontalPadding)
-            .padding(.vertical, Constants.gridVerticalPadding)
+        .padding(.horizontal, paddingH)
+        .padding(.vertical, Constants.gridVerticalPadding)
+      }
+      .background((!emulationRunning) ? AnyView(KeyCommandHostView(
+        onLeft: {
+          let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+          let newIndex = max(0, idx - 1)
+          focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.first?.filePath
+        },
+        onRight: {
+          let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+          let newIndex = min(model.games.count - 1, idx + 1)
+          focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.last?.filePath
+        },
+        onUp: {
+          let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+          let newIndex = max(0, idx - count)
+          focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.first?.filePath
+        },
+        onDown: {
+          let idx = model.games.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
+          let newIndex = min(model.games.count - 1, idx + count)
+          focusedFilePath = model.games[safe: newIndex]?.filePath ?? model.games.last?.filePath
+        },
+        onEnter: {
+          if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { selectGame(item) }
+        },
+        onSpace: {
+          showSources = true
         }
-        #endif
-    }
-
-    @ViewBuilder
-    private var emptyLibraryView: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-            Text(L("No games found. Add ROMs to your library."))
-                .foregroundStyle(.secondary)
+      )) : AnyView(EmptyView()))
+      .onAppear {
+        setupControllerNavigation(columns: count)
+        emuStartObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
+          emulationRunning = true
+          teardownControllerNavigation()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ToolbarContentBuilder
-    private var libraryToolbar: some ToolbarContent {
-        #if os(tvOS)
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button { showMoreMenu = true } label: { Image(systemName: "ellipsis.circle") }
-                .buttonStyle(.automatic)
-                .focusable(true)
+        emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+        ControllerStyleManager.shared.refreshDetection()
+        ControllerStyleManager.shared.applyPresetDefaults()
+        if !emulationRunning { setupControllerNavigation(columns: count) }
+      }
+      .onChange(of: model.games.count) { _, newCount in
+        if newCount > 0 && focusedFilePath == nil {
+          DispatchQueue.main.async { focusedFilePath = model.games.first?.filePath }
         }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { model.rescan() }) {
-                if model.isRescanning { ProgressView() } else { Label("", systemImage: "arrow.clockwise") }
-            }
-        }
-//        ToolbarItem(placement: .navigationBarTrailing) {
-//            Button(action: { showSaveStatesBrowser = true }) { Image(systemName: "film") }
-//        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { showSources = true }) { Image(systemName: "externaldrive.badge.plus") }
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { showSettings = true }) { Image(systemName: "gearshape") }
-        }
-        #else
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Menu {
-                Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
-                Button(L("Perform Online System Update")) { model.performOnlineSystemUpdate() }
-                Button(L("Import BootMii NAND Backup…")) {
-                    #if os(iOS)
-                    showImportNANDPicker = true
-                    #endif
-                }
-                Button(L("Sources")) { showSources = true }
-//                Button(L("Save States")) { showSaveStatesBrowser = true }
-            } label: { Image(systemName: "ellipsis.circle") }
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            let store = RemoteSourcesStore.shared
-            if store.isScanning {
-                Button(action: { showSources = true }) {
-                    HStack(spacing: 6) {
-                        ProgressView(value: store.scanningProgress).frame(width: 60)
-                        Text("\(Int(store.scanningProgress * 100))%")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
-                }
-            }
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { model.rescan() }) {
-                if model.isRescanning { ProgressView() } else { Label(L("Rescan"), systemImage: "arrow.clockwise") }
-            }
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: {
-                #if os(iOS)
-                showImportSoftwarePicker = true
-                #endif
-            }) { Image(systemName: "plus") }
-            .help(L("Import Game"))
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: {
-                #if os(iOS)
-                navigateToSettings = true
-                #endif
-            }) { Image(systemName: "gearshape") }
-        }
-        #endif
-    }
-
-    var body: some View {
-        NavigationStack {
-            mainContent
-            .navigationDestination(item: $navigateToSaveStates) { route in
-                SaveStateFilmstripView(gameID: route.id)
-            }
-            .navigationDestination(item: $navigateTo) { item in
-                EmulationScreen(game: item)
-                .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
-            }
-            .navigationTitle("DolphiniOS Library")
-            .toolbar { libraryToolbar }
-            .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
-            #if os(iOS)
-            .navigationDestination(isPresented: $navigateToSettings) {
-                TVSettingsPage()
-                    .navigationBarTitleDisplayMode(.inline)
-            }
-            #endif
-        }
-        .sheet(isPresented: $showSaveStatesBrowser) {
-            NavigationStack { SaveStatesBrowserView() }
-        }
-        .onAppear {
-            // Initialize shared remote sources store to start querying immediately
-            print("TVLibraryView: initializing RemoteSourcesStore.shared")
-            let store = RemoteSourcesStore.shared
-            print("TVLibraryView: RemoteSourcesStore has \(store.sources.count) sources")
-
-            // Force a refresh of remote sources to ensure they start
-            print("TVLibraryView: posting RefreshRemoteSources notification")
-            NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
-
-            model.load()
-            model.kickoffInitialMetadataIfNeeded()
-            if !didReloadOnce {
-                didReloadOnce = true
-                DispatchQueue.main.async { model.load() }
-            }
-
-            // Listen for remote library updates
-            NotificationCenter.default.addObserver(
-                forName: NSNotification.Name("RemoteLibraryUpdated"),
-                object: nil,
-                queue: .main
-            ) { _ in
-                print("TVLibraryView: received RemoteLibraryUpdated notification, reloading library")
-                model.load()
-                print("TVLibraryView: after reload, library has \(model.games.count) games")
-            }
-
-            // Deep link from Spotlight: launch by GameID
-            NotificationCenter.default.addObserver(
-                forName: NSNotification.Name("DOLLaunchGameByGameID"),
-                object: nil,
-                queue: .main
-            ) { note in
-                guard let gameID = note.userInfo?["gameID"] as? String else { return }
-                spotlightLaunchByGameID(gameID, attempts: 10)
-            }
-
-            // Listen for async metadata updates (covers/banners)
-            NotificationCenter.default.addObserver(
-                forName: NSNotification.Name("GameFileMetadataUpdated"),
-                object: nil,
-                queue: .main
-            ) { notification in
-                if let filePath = notification.userInfo?["filePath"] as? String {
-                    print("TVLibraryView: received GameFileMetadataUpdated for: \(filePath)")
-                    model.load() // Refresh UI to show updated covers/banners
-                }
-            }
-        }
-        .onDisappear {
-            NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
-            NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
-            NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
-        }
-        #if os(tvOS)
-        .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
-        #endif
-        #if os(tvOS)
-        .confirmationDialog(L("More"), isPresented: $showMoreMenu, titleVisibility: .visible) {
-            Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
-            Button(L("Perform Online System Update")) { showUpdateRegions = true }
-            Button(L("Cancel"), role: .cancel) {}
-        }
-        .confirmationDialog(L("Select Region"), isPresented: $showUpdateRegions, titleVisibility: .visible) {
-            Button(L("Europe")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "EUR") }
-            Button(L("Japan")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "JPN") }
-            Button(L("Korea")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "KOR") }
-            Button(L("United States")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "USA") }
-            Button(L("Cancel"), role: .cancel) {}
-        }
-        #endif
-        .confirmationDialog(L("A game is already running."), isPresented: $model.showReplaceAlert, titleVisibility: .visible) {
-            Button(L("Replace Game"), role: .destructive) {
-                TVEmulationBridge.stop()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    if let item = model.pendingSelection {
-                        model.currentGame = item
-                        navigateTo = item
-                    }
-                }
-            }
-            Button(L("Continue Current Game"), role: .cancel) { if let current = model.currentGame { navigateTo = current } }
-            Button(L("Cancel")) { }
-        } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
-        .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0) }
-        .sheet(item: $showCheatListFor) { TVCheatListView(item: $0) }
-        .sheet(isPresented: Binding(get: { sourcePickerItems != nil }, set: { if !$0 { sourcePickerItems = nil } })) {
-            if let items = sourcePickerItems {
-                SourcePickerView(items: items) { chosen in
-                    sourcePickerItems = nil
-                    launchGame(chosen)
-                }
-            }
-        }
-        // Sources sheet
-        .sheet(isPresented: $showSources) { SourcesView() }
-        #if os(iOS)
-        // iOS Document Pickers
-        .sheet(isPresented: $showImportSoftwarePicker) {
-            NavigationStack {
-                DocumentPickerView(
-                    contentTypes: DocumentPickerView.softwareContentTypes,
-                    onPick: { url in
-                      ImportFileManager.shared().importFile(at: url)
-                    }
-                )
-                .navigationTitle(L("Import Game"))
-            }
-        }
-        .sheet(isPresented: $showImportNANDPicker) {
-            NavigationStack {
-                DocumentPickerView(
-                    contentTypes: [DocumentPickerView.binType],
-                    onPick: { url in
-                        NANDImportManager.importNAND(from: url)
-                    }
-                )
-                .navigationTitle(L("Import BootMii NAND Backup"))
-            }
-        }
-        #endif
-        /// Delete confirmation and action
-        .alert(L("Delete Game?"), isPresented: Binding(get: { itemPendingDelete != nil }, set: { if !$0 { itemPendingDelete = nil } })) {
-            Button(L("Delete"), role: .destructive) {
-                if let toDelete = itemPendingDelete {
-                    try? FileManager.default.removeItem(atPath: toDelete.filePath)
-                    itemPendingDelete = nil
-                    model.rescan()
-                }
-            }
-            Button(L("Cancel"), role: .cancel) { itemPendingDelete = nil }
-        } message: { if let item = itemPendingDelete { Text(L("This will delete \(item.title). This action cannot be undone.")) } }
-        // Storage error alert
-        .alert(L("Storage Error"), isPresented: $showStorageErrorAlert) {
-            Button(L("OK")) {}
-        } message: { Text(storageAlertMessage) }
-        // Low storage warning - using confirmationDialog instead of alert to avoid conflicts
-        .confirmationDialog(L("Low Storage Warning"), isPresented: $showLowStorageWarning, titleVisibility: .visible) {
-            Button(L("Continue Anyway")) {
-                if let item = itemPendingLaunch {
-                    proceedWithGameLaunch(item)
-                }
-            }
-            Button(L("Cancel"), role: .cancel) {}
-        } message: { Text(storageAlertMessage) }
-        .sheet(item: $showCacheInfoFor) { item in
-            CacheInfoView(item: item)
-        }
-        .overlay(blockingPrecacheOverlay)
-    }
-
-    @ViewBuilder
-    private var blockingPrecacheOverlay: some View {
-        if let current = blockingPrecacheItem {
-            ZStack {
-                Color.black.opacity(0.6).ignoresSafeArea()
-                VStack(spacing: 14) {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.system(size: 44, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 2)
-
-                    Text(L("Preparing cache"))
-                        .font(.title3).fontWeight(.semibold)
-                        .foregroundStyle(.white)
-
-                    Text(current.title)
-                        .font(.callout)
-                        .foregroundStyle(.white.opacity(0.85))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .frame(maxWidth: 280)
-
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 8))
-                            .frame(width: 64, height: 64)
-                        Circle()
-                            .trim(from: 0, to: CGFloat(blockingPrecacheProgress))
-                            .stroke(Color.white, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .frame(width: 64, height: 64)
-                            .animation(.easeInOut(duration: 0.2), value: blockingPrecacheProgress)
-                    }
-                    .padding(.top, 6)
-
-                    Text("\(Int(blockingPrecacheProgress * 100))%")
-                        .font(.footnote).fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .monospacedDigit()
-
-                    HStack(spacing: 12) {
-                        Button(role: .cancel) {
-                            if let url = URL(string: current.filePath), let source = getMatchingWebDAVSource(for: url) {
-                                let remoteItem = RemoteLibraryItem(url: url, name: current.title, size: Int64(current.fileSize))
-                                Task { await source.cancelPreCache(remoteItem) }
-                            }
-                            blockingPrecacheItem = nil
-                            blockingPrecacheProgress = 0
-                        } label: {
-                            Text(L("Cancel"))
-                                .font(.callout).fontWeight(.semibold)
-                                .padding(.horizontal, 16).padding(.vertical, 8)
-                                .background(Color.white.opacity(0.15), in: Capsule())
-                        }
-                    }
-                    .padding(.top, 4)
-                }
-                .padding(.vertical, 22)
-                .padding(.horizontal, 24)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .shadow(color: .black.opacity(0.25), radius: 18, x: 0, y: 10)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                )
-            }
-            .transition(.opacity)
-            .zIndex(10)
-        }
-    }
-
-    private func downloadGecko(for item: TVGameItem) {
-        TVCheatsBridge.downloadGeckoCodes(forGameId: item.gameID, revision: item.revision, gametdbId: item.gametdbID) { success, _, _ in
-            if !success { showCheatError = L("Failed to download Gecko codes.") }
-        }
-    }
-
-    private func presentCheatInput(for item: TVGameItem, type: CheatType) {
-        cheatName = ""; cheatCreator = ""; cheatBody = ""; cheatNotes = ""
-        cheatInputFor = (item, type); showCheatError = nil
-    }
-
-    private func saveCheat(_ ctx: (item: TVGameItem, type: CheatType)) {
-        #if os(tvOS)
-        if ctx.type == .gecko {
-            if !TVCheatsBridge.addGeckoCode(forGameId: ctx.item.gameID, revision: ctx.item.revision, name: cheatName, creator: cheatCreator, codeText: cheatBody, notesText: cheatNotes) { showCheatError = L("Failed to add Gecko code"); return }
-        } else {
-            if !TVCheatsBridge.addActionReplayCode(forGameId: ctx.item.gameID, revision: ctx.item.revision, name: cheatName, codeText: cheatBody) { showCheatError = L("Failed to add AR code"); return }
-        }
-        cheatInputFor = nil
-        #endif
-    }
-
-    private func selectGame(_ item: TVGameItem) {
-        let sources = model.sources(for: item)
-        if sources.count > 1 {
-            sourcePickerItems = sources
-            return
-        }
-        emulationRunning = true
+      }
+      .onDisappear {
+        if let t = emuStartObs { NotificationCenter.default.removeObserver(t); emuStartObs = nil }
+        if let t = emuEndObs { NotificationCenter.default.removeObserver(t); emuEndObs = nil }
         teardownControllerNavigation()
-        launchGame(item)
+      }
     }
-
-    private func launchGame(_ item: TVGameItem) {
-        // Check for critically low storage before launching any game
-        if TVLibraryView.isStorageCriticallyLow() {
-            let availableSpace = TVLibraryView.getAvailableStorageSpace()
-            itemPendingLaunch = item
-            storageAlertMessage = """
-            Warning: Low Storage Space
-
-            Available space: \(TVLibraryView.formatStorageSpace(availableSpace))
-
-            The emulator may act erratically with low storage space. Consider freeing up some space before playing.
-
-            Do you want to continue anyway?
-            """
-            showLowStorageWarning = true
-            return
+#else
+    ScrollView {
+      LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
+        ForEach(model.games, id: \.filePath) { item in
+          GameGridItem(
+            item: item,
+            select: selectGame,
+            focusedFilePath: $focusedFilePath,
+            showProperties: { showPropertiesFor = $0 },
+            showCheatList: { showCheatListFor = $0 },
+            downloadGeckoAction: { downloadGecko(for: $0) },
+            presentCheatGecko: { presentCheatInput(for: $0, type: .gecko) },
+            presentCheatAR: { presentCheatInput(for: $0, type: .ar) },
+            requestDelete: { itemPendingDelete = $0 },
+            showStorageAlert: { message in
+              storageAlertMessage = message
+              showStorageErrorAlert = true
+            },
+            showCacheInfo: { item in
+              showCacheInfoFor = item
+            },
+            showSaveStates: { item in
+              let gid = item.gameID
+              if !gid.isEmpty {
+                navigateToSaveStates = GameIDRoute(id: gid)
+              }
+            },
+            autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
+            isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
+          )
         }
-
-        // If remote and auto-precache enabled, ensure cache exists before launch
-        if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
-            for source in RemoteSourcesStore.shared.sources {
-                if let webdav = source as? WebDAVSource, webdav.isPreCachingEnabled {
-                    let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
-                    if !webdav.isCached(remoteItem) {
-                        blockingPrecacheItem = item
-                        blockingPrecacheProgress = 0
-                        Task {
-                            do {
-                                let _ = try await webdav.preCacheItem(remoteItem) { progress in
-                                    DispatchQueue.main.async { blockingPrecacheProgress = progress }
-                                }
-                                DispatchQueue.main.async {
-                                    blockingPrecacheItem = nil
-                                    proceedWithGameLaunch(item)
-                                }
-                            } catch {
-                                DispatchQueue.main.async {
-                                    blockingPrecacheItem = nil
-                                    proceedWithGameLaunch(item) // fallback
-                                }
-                            }
-                        }
-                        return
-                    }
-                    break
-                }
-            }
-        }
-
-        proceedWithGameLaunch(item)
+      }
+      .padding(.horizontal, Constants.gridHorizontalPadding)
+      .padding(.vertical, Constants.gridVerticalPadding)
     }
-
-    /// Actually launch the game (called after low storage warning is dismissed)
-    private func proceedWithGameLaunch(_ item: TVGameItem) {
-        GameProfiles.shared.applyProfileIfAvailable(for: item)
-        if TVEmulationBridge.isRunning() {
-            model.pendingSelection = item
-            model.showReplaceAlert = true
-        } else {
-            NSLog("[INPUT] TVLibraryView selecting game: %@", item.title)
-
-            // Auto pre-cache if enabled and not already cached
-            if let url = URL(string: item.filePath),
-               Self.isRemoteURL(item.filePath) {
-                // This is a remote game - check for auto pre-caching
-                for source in RemoteSourcesStore.shared.sources {
-                    if let webdavSource = source as? WebDAVSource,
-                       webdavSource.isPreCachingEnabled {
-                        // Start background pre-caching with progress tracking
-                        let gameKey = item.filePath
-                        autoPreCacheActive.insert(gameKey)
-                        autoPreCacheProgress[gameKey] = 0.0
-
-                        Task {
-                            do {
-                                // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
-                                let fileSize = Int64(item.fileSize)
-
-                                // Skip auto pre-cache if insufficient storage space
-                                if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
-                                    let availableSpace = TVLibraryView.getAvailableStorageSpace()
-                                    print("Auto pre-cache skipped for \(item.title): insufficient space. Available: \(TVLibraryView.formatStorageSpace(availableSpace)), Required: \(TVLibraryView.formatStorageSpace(fileSize + TVLibraryView.STORAGE_BUFFER_MB))")
-                                    DispatchQueue.main.async {
-                                        autoPreCacheActive.remove(gameKey)
-                                        autoPreCacheProgress.removeValue(forKey: gameKey)
-                                    }
-                                    return
-                                }
-
-                                let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: fileSize)
-
-                                // Check if already cached with correct size
-                                if !webdavSource.isCached(remoteItem) {
-                                    let _ = try await webdavSource.preCacheItem(remoteItem) { progress in
-                                        DispatchQueue.main.async {
-                                            autoPreCacheProgress[gameKey] = progress
-                                        }
-                                    }
-                                }
-                                DispatchQueue.main.async {
-                                    autoPreCacheActive.remove(gameKey)
-                                    autoPreCacheProgress.removeValue(forKey: gameKey)
-                                }
-                            } catch {
-                                print("Auto pre-cache failed: \(error)")
-                                DispatchQueue.main.async {
-                                    autoPreCacheActive.remove(gameKey)
-                                    autoPreCacheProgress.removeValue(forKey: gameKey)
-                                }
-                            }
-                        }
-                        break
-                    }
-                }
-            }
-
+#endif
+  }
+  
+  @ViewBuilder
+  private var emptyLibraryView: some View {
+    VStack(spacing: 16) {
+      ProgressView()
+      Text(L("No games found. Add ROMs to your library."))
+        .foregroundStyle(.secondary)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+  
+  @ToolbarContentBuilder
+  private var libraryToolbar: some ToolbarContent {
+#if os(tvOS)
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Button { showMoreMenu = true } label: { Image(systemName: "ellipsis.circle") }
+        .buttonStyle(.automatic)
+        .focusable(true)
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Button(action: { model.rescan() }) {
+        if model.isRescanning { ProgressView() } else { Label("", systemImage: "arrow.clockwise") }
+      }
+    }
+    //        ToolbarItem(placement: .navigationBarTrailing) {
+    //            Button(action: { showSaveStatesBrowser = true }) { Image(systemName: "film") }
+    //        }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Button(action: { showSources = true }) { Image(systemName: "externaldrive.badge.plus") }
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Button(action: { showSettings = true }) { Image(systemName: "gearshape") }
+    }
+#else
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Menu {
+        Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
+        Button(L("Perform Online System Update")) { model.performOnlineSystemUpdate() }
+        Button(L("Import BootMii NAND Backup…")) {
+#if os(iOS) || targetEnvironment(macCatalyst)
+          showImportNANDPicker = true
+#endif
+        }
+        Button(L("Sources")) { showSources = true }
+        //                Button(L("Save States")) { showSaveStatesBrowser = true }
+      } label: { Image(systemName: "ellipsis.circle") }
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      let store = RemoteSourcesStore.shared
+      if store.isScanning {
+        Button(action: { showSources = true }) {
+          HStack(spacing: 6) {
+            ProgressView(value: store.scanningProgress).frame(width: 60)
+            Text("\(Int(store.scanningProgress * 100))%")
+              .font(.caption2)
+              .foregroundColor(.secondary)
+          }
+          .padding(.horizontal, 8).padding(.vertical, 4)
+          .background(.ultraThinMaterial, in: Capsule())
+        }
+      }
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Button(action: { model.rescan() }) {
+        if model.isRescanning { ProgressView() } else { Label(L("Rescan"), systemImage: "arrow.clockwise") }
+      }
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Button(action: {
+#if os(iOS) || targetEnvironment(macCatalyst)
+        showImportSoftwarePicker = true
+#endif
+      }) { Image(systemName: "plus") }
+        .help(L("Import Game"))
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Button(action: {
+#if os(iOS) || targetEnvironment(macCatalyst)
+        navigateToSettings = true
+#endif
+      }) { Image(systemName: "gearshape") }
+    }
+#endif
+  }
+  
+  var body: some View {
+    NavigationStack {
+      mainContent
+        .navigationDestination(item: $navigateToSaveStates) { route in
+          SaveStateFilmstripView(gameID: route.id)
+        }
+        .navigationDestination(item: $navigateTo) { item in
+          EmulationScreen(game: item)
+            .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
+        }
+        .navigationTitle("DolphiniOS Library")
+        .toolbar { libraryToolbar }
+        .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
+#if os(iOS) || targetEnvironment(macCatalyst)
+        .navigationDestination(isPresented: $navigateToSettings) {
+          TVSettingsPage()
+            .navigationBarTitleDisplayMode(.inline)
+        }
+#endif
+    }
+    .sheet(isPresented: $showSaveStatesBrowser) {
+      NavigationStack { SaveStatesBrowserView() }
+    }
+    .onAppear {
+      // Initialize shared remote sources store to start querying immediately
+      print("TVLibraryView: initializing RemoteSourcesStore.shared")
+      let store = RemoteSourcesStore.shared
+      print("TVLibraryView: RemoteSourcesStore has \(store.sources.count) sources")
+      
+      // Store hydration already starts sources; avoid redundant boot-time refresh triggers
+      
+      model.load()
+      model.kickoffInitialMetadataIfNeeded()
+      if !didReloadOnce {
+        didReloadOnce = true
+        DispatchQueue.main.async { model.load() }
+      }
+      
+      // Listen for remote library updates
+      NotificationCenter.default.addObserver(
+        forName: NSNotification.Name("RemoteLibraryUpdated"),
+        object: nil,
+        queue: .main
+      ) { _ in
+        print("TVLibraryView: received RemoteLibraryUpdated notification, reloading library")
+        model.load()
+        print("TVLibraryView: after reload, library has \(model.games.count) games")
+      }
+      
+      // Deep link from Spotlight: launch by GameID
+      NotificationCenter.default.addObserver(
+        forName: NSNotification.Name("DOLLaunchGameByGameID"),
+        object: nil,
+        queue: .main
+      ) { note in
+        guard let gameID = note.userInfo?["gameID"] as? String else { return }
+        spotlightLaunchByGameID(gameID, attempts: 10)
+      }
+      
+      // Listen for async metadata updates (covers/banners)
+      NotificationCenter.default.addObserver(
+        forName: NSNotification.Name("GameFileMetadataUpdated"),
+        object: nil,
+        queue: .main
+      ) { notification in
+        if let filePath = notification.userInfo?["filePath"] as? String {
+          print("TVLibraryView: received GameFileMetadataUpdated for: \(filePath)")
+          model.load() // Refresh UI to show updated covers/banners
+        }
+      }
+    }
+    .onDisappear {
+      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
+      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
+    }
+#if os(tvOS)
+    .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
+#endif
+#if os(tvOS)
+    .confirmationDialog(L("More"), isPresented: $showMoreMenu, titleVisibility: .visible) {
+      Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
+      Button(L("Perform Online System Update")) { showUpdateRegions = true }
+      Button(L("Cancel"), role: .cancel) {}
+    }
+    .confirmationDialog(L("Select Region"), isPresented: $showUpdateRegions, titleVisibility: .visible) {
+      Button(L("Europe")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "EUR") }
+      Button(L("Japan")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "JPN") }
+      Button(L("Korea")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "KOR") }
+      Button(L("United States")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "USA") }
+      Button(L("Cancel"), role: .cancel) {}
+    }
+#endif
+    .confirmationDialog(L("A game is already running."), isPresented: $model.showReplaceAlert, titleVisibility: .visible) {
+      Button(L("Replace Game"), role: .destructive) {
+        TVEmulationBridge.stop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+          if let item = model.pendingSelection {
             model.currentGame = item
             navigateTo = item
+          }
         }
+      }
+      Button(L("Continue Current Game"), role: .cancel) { if let current = model.currentGame { navigateTo = current } }
+      Button(L("Cancel")) { }
+    } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
+      .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0) }
+      .sheet(item: $showCheatListFor) { TVCheatListView(item: $0) }
+      .sheet(isPresented: Binding(get: { sourcePickerItems != nil }, set: { if !$0 { sourcePickerItems = nil } })) {
+        if let items = sourcePickerItems {
+          SourcePickerView(items: items) { chosen in
+            sourcePickerItems = nil
+            launchGame(chosen)
+          }
+        }
+      }
+    // Sources sheet
+      .sheet(isPresented: $showSources) { SourcesView() }
+#if os(iOS) || targetEnvironment(macCatalyst)
+    // iOS Document Pickers
+      .sheet(isPresented: $showImportSoftwarePicker) {
+        NavigationStack {
+          DocumentPickerView(
+            contentTypes: DocumentPickerView.softwareContentTypes,
+            onPick: { url in
+              ImportFileManager.shared().importFile(at: url)
+            }
+          )
+          .navigationTitle(L("Import Game"))
+        }
+      }
+      .sheet(isPresented: $showImportNANDPicker) {
+        NavigationStack {
+          DocumentPickerView(
+            contentTypes: [DocumentPickerView.binType],
+            onPick: { url in
+              NANDImportManager.importNAND(from: url)
+            }
+          )
+          .navigationTitle(L("Import BootMii NAND Backup"))
+        }
+      }
+#endif
+    /// Delete confirmation and action
+      .alert(L("Delete Game?"), isPresented: Binding(get: { itemPendingDelete != nil }, set: { if !$0 { itemPendingDelete = nil } })) {
+        Button(L("Delete"), role: .destructive) {
+          if let toDelete = itemPendingDelete {
+            try? FileManager.default.removeItem(atPath: toDelete.filePath)
+            itemPendingDelete = nil
+            model.rescan()
+          }
+        }
+        Button(L("Cancel"), role: .cancel) { itemPendingDelete = nil }
+      } message: { if let item = itemPendingDelete { Text(L("This will delete \(item.title). This action cannot be undone.")) } }
+    // Storage error alert
+      .alert(L("Storage Error"), isPresented: $showStorageErrorAlert) {
+        Button(L("OK")) {}
+      } message: { Text(storageAlertMessage) }
+    // Low storage warning - using confirmationDialog instead of alert to avoid conflicts
+      .confirmationDialog(L("Low Storage Warning"), isPresented: $showLowStorageWarning, titleVisibility: .visible) {
+        Button(L("Continue Anyway")) {
+          if let item = itemPendingLaunch {
+            proceedWithGameLaunch(item)
+          }
+        }
+        Button(L("Cancel"), role: .cancel) {}
+      } message: { Text(storageAlertMessage) }
+      .sheet(item: $showCacheInfoFor) { item in
+        CacheInfoView(item: item)
+      }
+      .overlay(blockingPrecacheOverlay)
+  }
+  
+  @ViewBuilder
+  private var blockingPrecacheOverlay: some View {
+    if let current = blockingPrecacheItem {
+      ZStack {
+        Color.black.opacity(0.6).ignoresSafeArea()
+        VStack(spacing: 14) {
+          Image(systemName: "arrow.down.circle.fill")
+            .font(.system(size: 44, weight: .semibold))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 2)
+          
+          Text(L("Preparing cache"))
+            .font(.title3).fontWeight(.semibold)
+            .foregroundStyle(.white)
+          
+          Text(current.title)
+            .font(.callout)
+            .foregroundStyle(.white.opacity(0.85))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(maxWidth: 280)
+          
+          ZStack {
+            Circle()
+              .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 8))
+              .frame(width: 64, height: 64)
+            Circle()
+              .trim(from: 0, to: CGFloat(blockingPrecacheProgress))
+              .stroke(Color.white, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+              .rotationEffect(.degrees(-90))
+              .frame(width: 64, height: 64)
+              .animation(.easeInOut(duration: 0.2), value: blockingPrecacheProgress)
+          }
+          .padding(.top, 6)
+          
+          Text("\(Int(blockingPrecacheProgress * 100))%")
+            .font(.footnote).fontWeight(.semibold)
+            .foregroundStyle(.white)
+            .monospacedDigit()
+          
+          HStack(spacing: 12) {
+            Button(role: .cancel) {
+              if let url = URL(string: current.filePath), let source = getMatchingWebDAVSource(for: url) {
+                let remoteItem = RemoteLibraryItem(url: url, name: current.title, size: Int64(current.fileSize))
+                Task { await source.cancelPreCache(remoteItem) }
+              }
+              blockingPrecacheItem = nil
+              blockingPrecacheProgress = 0
+              // Restore controller navigation if we were in library
+#if os(iOS) || targetEnvironment(macCatalyst)
+              emulationRunning = false
+              Task { @MainActor in
+                // Re-setup navigation with current columns guess (3 as fallback)
+                let columns = max(2, Int((UIScreen.main.bounds.width - (24 * 2) + 12) / (Layout.cardSize.width + 12)))
+                setupControllerNavigation(columns: columns)
+              }
+#endif
+            } label: {
+              Text(L("Cancel"))
+                .font(.callout).fontWeight(.semibold)
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                .background(Color.white.opacity(0.15), in: Capsule())
+            }
+          }
+          .padding(.top, 4)
+        }
+        .padding(.vertical, 22)
+        .padding(.horizontal, 24)
+        .background(
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .shadow(color: .black.opacity(0.25), radius: 18, x: 0, y: 10)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+      }
+      .transition(.opacity)
+      .zIndex(10)
     }
-
-    private func spotlightLaunchByGameID(_ gameID: String, attempts: Int) {
-        let match = model.games.first { $0.gameID == gameID }
-            ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
-        guard let item = match else {
-            if attempts > 0 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    spotlightLaunchByGameID(gameID, attempts: attempts - 1)
+  }
+  
+  private func downloadGecko(for item: TVGameItem) {
+    TVCheatsBridge.downloadGeckoCodes(forGameId: item.gameID, revision: item.revision, gametdbId: item.gametdbID) { success, _, _ in
+      if !success { showCheatError = L("Failed to download Gecko codes.") }
+    }
+  }
+  
+  private func presentCheatInput(for item: TVGameItem, type: CheatType) {
+    cheatName = ""; cheatCreator = ""; cheatBody = ""; cheatNotes = ""
+    cheatInputFor = (item, type); showCheatError = nil
+  }
+  
+  private func saveCheat(_ ctx: (item: TVGameItem, type: CheatType)) {
+#if os(tvOS)
+    if ctx.type == .gecko {
+      if !TVCheatsBridge.addGeckoCode(forGameId: ctx.item.gameID, revision: ctx.item.revision, name: cheatName, creator: cheatCreator, codeText: cheatBody, notesText: cheatNotes) { showCheatError = L("Failed to add Gecko code"); return }
+    } else {
+      if !TVCheatsBridge.addActionReplayCode(forGameId: ctx.item.gameID, revision: ctx.item.revision, name: cheatName, codeText: cheatBody) { showCheatError = L("Failed to add AR code"); return }
+    }
+    cheatInputFor = nil
+#endif
+  }
+  
+  private func selectGame(_ item: TVGameItem) {
+    let sources = model.sources(for: item)
+    if sources.count > 1 {
+      sourcePickerItems = sources
+      return
+    }
+    emulationRunning = true
+    teardownControllerNavigation()
+    launchGame(item)
+  }
+  
+  private func launchGame(_ item: TVGameItem) {
+    // Check for critically low storage before launching any game
+    if TVLibraryView.isStorageCriticallyLow() {
+      let availableSpace = TVLibraryView.getAvailableStorageSpace()
+      itemPendingLaunch = item
+      storageAlertMessage = """
+            Warning: Low Storage Space
+            
+            Available space: \(TVLibraryView.formatStorageSpace(availableSpace))
+            
+            The emulator may act erratically with low storage space. Consider freeing up some space before playing.
+            
+            Do you want to continue anyway?
+            """
+      showLowStorageWarning = true
+      return
+    }
+    
+    // If remote and auto-precache enabled, ensure cache exists before launch
+    if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
+      for source in RemoteSourcesStore.shared.sources {
+        if let webdav = source as? WebDAVSource, webdav.isPreCachingEnabled {
+          let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
+          if !webdav.isCached(remoteItem) {
+            blockingPrecacheItem = item
+            blockingPrecacheProgress = 0
+            Task {
+              do {
+                let _ = try await webdav.preCacheItem(remoteItem) { progress in
+                  DispatchQueue.main.async { blockingPrecacheProgress = progress }
                 }
+                DispatchQueue.main.async {
+                  blockingPrecacheItem = nil
+                  proceedWithGameLaunch(item)
+                }
+              } catch {
+                DispatchQueue.main.async {
+                  blockingPrecacheItem = nil
+                  proceedWithGameLaunch(item) // fallback
+                }
+              }
             }
             return
+          }
+          break
         }
-        GameProfiles.shared.applyProfileIfAvailable(for: item)
-        if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
-            if let webdav = getMatchingWebDAVSource(for: url), webdav.isPreCachingEnabled {
-                let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
-                if !webdav.isCached(remoteItem) {
-                    blockingPrecacheItem = item
-                    blockingPrecacheProgress = 0
-                    Task {
-                        do {
-                            let _ = try await webdav.preCacheItem(remoteItem) { progress in
-                                DispatchQueue.main.async { blockingPrecacheProgress = progress }
-                            }
-                            DispatchQueue.main.async {
-                                blockingPrecacheItem = nil
-                                navigateTo = item
-                            }
-                        } catch {
-                            DispatchQueue.main.async {
-                                blockingPrecacheItem = nil
-                                navigateTo = item // fallback to stream
-                            }
-                        }
-                    }
-                    return
-                }
-            }
-        }
-        navigateTo = item
+      }
     }
-
-    private func setupControllerNavigation(columns: Int) {
-        GCController.shouldMonitorBackgroundEvents = false
-        for c in GCController.controllers() {
-            c.controllerPausedHandler = { _ in /* swallow to avoid Game Center */ }
-            if let egp = c.extendedGamepad {
-                let cid = ObjectIdentifier(c)
-                if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
-                egp.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
-                    if emulationRunning { return }
-                    guard !model.games.isEmpty else { return }
-                    let index: Int = {
-                        if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
-                        return 0
-                    }()
-                    func move(_ delta: Int, dir: String) {
-                        let now = Date().timeIntervalSince1970
-                        if now - lastNavMoveTime < navRepeatInterval { return }
-                        lastNavMoveTime = now
-                        let newIndex = max(0, min(index + delta, model.games.count - 1))
-                        DispatchQueue.main.async { focusedFilePath = model.games[newIndex].filePath }
-                    }
-                    let dpad = gamepad.dpad
-                    if element == dpad.up, dpad.up.isPressed { move(-columns, dir: "up") }
-                    if element == dpad.down, dpad.down.isPressed { move(columns, dir: "down") }
-                    if element == dpad.left, dpad.left.isPressed { move(-1, dir: "left") }
-                    if element == dpad.right, dpad.right.isPressed { move(1, dir: "right") }
-                    if element == dpad {
-                        let vx = dpad.xAxis.value
-                        let vy = dpad.yAxis.value
-                        if vy < -0.5 { move(-columns, dir: "up") }
-                        if vy > 0.5 { move(columns, dir: "down") }
-                        if vx < -0.5 { move(-1, dir: "left") }
-                        if vx > 0.5 { move(1, dir: "right") }
-                    }
-                    // Left thumbstick support
-                    let lx = gamepad.leftThumbstick.xAxis.value
-                    let ly = gamepad.leftThumbstick.yAxis.value
-                    if element == gamepad.leftThumbstick {
-                        if ly < -0.6 { move(-columns, dir: "up") }
-                        if ly > 0.6 { move(columns, dir: "down") }
-                        if lx < -0.6 { move(-1, dir: "left") }
-                        if lx > 0.6 { move(1, dir: "right") }
-                    }
-                    if element == gamepad.buttonA, gamepad.buttonA.isPressed {
-                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { DispatchQueue.main.async { selectGame(item) } }
-                        let gen = UIImpactFeedbackGenerator(style: .medium)
-                        gen.impactOccurred()
-                    }
+    
+    proceedWithGameLaunch(item)
+  }
+  
+  /// Actually launch the game (called after low storage warning is dismissed)
+  private func proceedWithGameLaunch(_ item: TVGameItem) {
+    GameProfiles.shared.applyProfileIfAvailable(for: item)
+    if TVEmulationBridge.isRunning() {
+      model.pendingSelection = item
+      model.showReplaceAlert = true
+    } else {
+      NSLog("[INPUT] TVLibraryView selecting game: %@", item.title)
+      
+      // Auto pre-cache if enabled and not already cached
+      if let url = URL(string: item.filePath),
+         Self.isRemoteURL(item.filePath) {
+        // This is a remote game - check for auto pre-caching
+        for source in RemoteSourcesStore.shared.sources {
+          if let webdavSource = source as? WebDAVSource,
+             webdavSource.isPreCachingEnabled {
+            // Start background pre-caching with progress tracking
+            let gameKey = item.filePath
+            autoPreCacheActive.insert(gameKey)
+            autoPreCacheProgress[gameKey] = 0.0
+            
+            Task {
+              do {
+                // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
+                let fileSize = Int64(item.fileSize)
+                
+                // Skip auto pre-cache if insufficient storage space
+                if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
+                  let availableSpace = TVLibraryView.getAvailableStorageSpace()
+                  print("Auto pre-cache skipped for \(item.title): insufficient space. Available: \(TVLibraryView.formatStorageSpace(availableSpace)), Required: \(TVLibraryView.formatStorageSpace(fileSize + TVLibraryView.STORAGE_BUFFER_MB))")
+                  DispatchQueue.main.async {
+                    autoPreCacheActive.remove(gameKey)
+                    autoPreCacheProgress.removeValue(forKey: gameKey)
+                  }
+                  return
                 }
-            }
-            if let mgp = c.microGamepad {
-                mgp.reportsAbsoluteDpadValues = true
-                mgp.allowsRotation = true
-                let cid = ObjectIdentifier(c)
-                if prevMGPHandlers[cid] == nil { prevMGPHandlers[cid] = mgp.valueChangedHandler }
-                mgp.valueChangedHandler = {(gamepad: GCMicroGamepad, element: GCControllerElement) in
-                    if emulationRunning { return }
-                    guard !model.games.isEmpty else { return }
-                    let index: Int = {
-                        if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
-                        return 0
-                    }()
-                    func move(_ delta: Int, dir: String) {
-                        let now = Date().timeIntervalSince1970
-                        if now - lastNavMoveTime < navRepeatInterval { return }
-                        lastNavMoveTime = now
-                        let newIndex = max(0, min(index + delta, model.games.count - 1))
-                        DispatchQueue.main.async { focusedFilePath = model.games[newIndex].filePath }
+                
+                let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: fileSize)
+                
+                // Check if already cached with correct size
+                if !webdavSource.isCached(remoteItem) {
+                  let _ = try await webdavSource.preCacheItem(remoteItem) { progress in
+                    DispatchQueue.main.async {
+                      autoPreCacheProgress[gameKey] = progress
                     }
-                    if element == gamepad.dpad {
-                        let vx = gamepad.dpad.xAxis.value, vy = gamepad.dpad.yAxis.value
-                        if vy < -0.5 { move(-columns, dir: "up") }
-                        if vy > 0.5 { move(columns, dir: "down") }
-                        if vx < -0.5 { move(-1, dir: "left") }
-                        if vx > 0.5 { move(1, dir: "right") }
-                    }
-                    if element == gamepad.buttonA, gamepad.buttonA.isPressed {
-                        if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { DispatchQueue.main.async { selectGame(item) } }
-                        let gen = UIImpactFeedbackGenerator(style: .medium)
-                        gen.impactOccurred()
-                    }
+                  }
                 }
+                DispatchQueue.main.async {
+                  autoPreCacheActive.remove(gameKey)
+                  autoPreCacheProgress.removeValue(forKey: gameKey)
+                }
+              } catch {
+                print("Auto pre-cache failed: \(error)")
+                DispatchQueue.main.async {
+                  autoPreCacheActive.remove(gameKey)
+                  autoPreCacheProgress.removeValue(forKey: gameKey)
+                }
+              }
             }
+            break
+          }
         }
+      }
+      
+      model.currentGame = item
+      navigateTo = item
     }
-
-    private func teardownControllerNavigation() {
-        for c in GCController.controllers() {
-            let cid = ObjectIdentifier(c)
-            if let egp = c.extendedGamepad {
-                if let prev = prevEGPHandlers[cid] {
-                    egp.valueChangedHandler = prev
-                } else {
-                    egp.valueChangedHandler = nil
-                }
-            }
-            if let mgp = c.microGamepad {
-                if let prev = prevMGPHandlers[cid] {
-                    mgp.valueChangedHandler = prev
-                } else {
-                    mgp.valueChangedHandler = nil
-                }
-            }
-            c.controllerPausedHandler = nil
-            prevEGPHandlers.removeValue(forKey: cid)
-            prevMGPHandlers.removeValue(forKey: cid)
+  }
+  
+  private func spotlightLaunchByGameID(_ gameID: String, attempts: Int) {
+    let match = model.games.first { $0.gameID == gameID }
+    ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
+    guard let item = match else {
+      if attempts > 0 {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+          spotlightLaunchByGameID(gameID, attempts: attempts - 1)
         }
+      }
+      return
     }
+    GameProfiles.shared.applyProfileIfAvailable(for: item)
+    if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
+      if let webdav = getMatchingWebDAVSource(for: url), webdav.isPreCachingEnabled {
+        let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
+        if !webdav.isCached(remoteItem) {
+          blockingPrecacheItem = item
+          blockingPrecacheProgress = 0
+          Task {
+            do {
+              let _ = try await webdav.preCacheItem(remoteItem) { progress in
+                DispatchQueue.main.async { blockingPrecacheProgress = progress }
+              }
+              DispatchQueue.main.async {
+                blockingPrecacheItem = nil
+                navigateTo = item
+              }
+            } catch {
+              DispatchQueue.main.async {
+                blockingPrecacheItem = nil
+                navigateTo = item // fallback to stream
+              }
+            }
+          }
+          return
+        }
+      }
+    }
+    navigateTo = item
+  }
+  
+  private func setupControllerNavigation(columns: Int) {
+    GCController.shouldMonitorBackgroundEvents = false
+    for c in GCController.controllers() {
+      c.controllerPausedHandler = { _ in /* swallow to avoid Game Center */ }
+      if let egp = c.extendedGamepad {
+        let cid = ObjectIdentifier(c)
+        if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
+        egp.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
+          if emulationRunning { return }
+          guard !model.games.isEmpty else { return }
+          let index: Int = {
+            if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
+            return 0
+          }()
+          func move(_ delta: Int, dir: String) {
+            let now = Date().timeIntervalSince1970
+            if now - lastNavMoveTime < navRepeatInterval { return }
+            lastNavMoveTime = now
+            let newIndex = max(0, min(index + delta, model.games.count - 1))
+            DispatchQueue.main.async { focusedFilePath = model.games[newIndex].filePath }
+          }
+          let dpad = gamepad.dpad
+          if element == dpad.up, dpad.up.isPressed { move(-columns, dir: "up") }
+          if element == dpad.down, dpad.down.isPressed { move(columns, dir: "down") }
+          if element == dpad.left, dpad.left.isPressed { move(-1, dir: "left") }
+          if element == dpad.right, dpad.right.isPressed { move(1, dir: "right") }
+          if element == dpad {
+            let vx = dpad.xAxis.value
+            let vy = dpad.yAxis.value
+            if vy > 0.5 { move(-columns, dir: "up") }
+            if vy < -0.5 { move(columns, dir: "down") }
+            if vx < -0.5 { move(-1, dir: "left") }
+            if vx > 0.5 { move(1, dir: "right") }
+          }
+          // Left thumbstick support
+          let lx = gamepad.leftThumbstick.xAxis.value
+          let ly = gamepad.leftThumbstick.yAxis.value
+          if element == gamepad.leftThumbstick {
+            if ly > 0.6 { move(-columns, dir: "up") }
+            if ly < -0.6 { move(columns, dir: "down") }
+            if lx < -0.6 { move(-1, dir: "left") }
+            if lx > 0.6 { move(1, dir: "right") }
+          }
+          if element == gamepad.buttonA, gamepad.buttonA.isPressed {
+            if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { DispatchQueue.main.async { selectGame(item) } }
+            let gen = UIImpactFeedbackGenerator(style: .medium)
+            gen.impactOccurred()
+          }
+        }
+      }
+      if let mgp = c.microGamepad {
+        mgp.reportsAbsoluteDpadValues = true
+        mgp.allowsRotation = true
+        let cid = ObjectIdentifier(c)
+        if prevMGPHandlers[cid] == nil { prevMGPHandlers[cid] = mgp.valueChangedHandler }
+        mgp.valueChangedHandler = {(gamepad: GCMicroGamepad, element: GCControllerElement) in
+          if emulationRunning { return }
+          guard !model.games.isEmpty else { return }
+          let index: Int = {
+            if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
+            return 0
+          }()
+          func move(_ delta: Int, dir: String) {
+            let now = Date().timeIntervalSince1970
+            if now - lastNavMoveTime < navRepeatInterval { return }
+            lastNavMoveTime = now
+            let newIndex = max(0, min(index + delta, model.games.count - 1))
+            DispatchQueue.main.async { focusedFilePath = model.games[newIndex].filePath }
+          }
+          if element == gamepad.dpad {
+            let vx = gamepad.dpad.xAxis.value, vy = gamepad.dpad.yAxis.value
+            if vy > 0.5 { move(-columns, dir: "up") }
+            if vy < -0.5 { move(columns, dir: "down") }
+            if vx < -0.5 { move(-1, dir: "left") }
+            if vx > 0.5 { move(1, dir: "right") }
+          }
+          if element == gamepad.buttonA, gamepad.buttonA.isPressed {
+            if let fp = focusedFilePath, let item = model.games.first(where: { $0.filePath == fp }) { DispatchQueue.main.async { selectGame(item) } }
+            let gen = UIImpactFeedbackGenerator(style: .medium)
+            gen.impactOccurred()
+          }
+        }
+      }
+    }
+  }
+  
+  private func teardownControllerNavigation() {
+    for c in GCController.controllers() {
+      let cid = ObjectIdentifier(c)
+      if let egp = c.extendedGamepad {
+        if let prev = prevEGPHandlers[cid] {
+          egp.valueChangedHandler = prev
+        } else {
+          egp.valueChangedHandler = nil
+        }
+      }
+      if let mgp = c.microGamepad {
+        if let prev = prevMGPHandlers[cid] {
+          mgp.valueChangedHandler = prev
+        } else {
+          mgp.valueChangedHandler = nil
+        }
+      }
+      c.controllerPausedHandler = nil
+      prevEGPHandlers.removeValue(forKey: cid)
+      prevMGPHandlers.removeValue(forKey: cid)
+    }
+  }
 }
 
 // MARK: - Game Grid Item with Focus Management
 
 private enum Layout {
-    static var cardSize: CGSize {
-        #if os(tvOS)
-        return CGSize(width: 260, height: 390)
-        #else
-        return CGSize(width: 140, height: 210)
-        #endif
-    }
+  static var cardSize: CGSize {
+#if os(tvOS)
+    return CGSize(width: 260, height: 390)
+#else
+    return CGSize(width: 140, height: 210)
+#endif
+  }
 }
 
 private struct GameGridItem: View {
-    let item: TVGameItem
-    let select: (TVGameItem) -> Void
-    @Binding var focusedFilePath: String?
-
-    // Context menu action closures provided by parent view
-    let showProperties: (TVGameItem) -> Void
-    let showCheatList: (TVGameItem) -> Void
-    let downloadGeckoAction: (TVGameItem) -> Void
-    let presentCheatGecko: (TVGameItem) -> Void
-    let presentCheatAR: (TVGameItem) -> Void
-    let requestDelete: (TVGameItem) -> Void
-    let showStorageAlert: (String) -> Void
-    let showCacheInfo: (TVGameItem) -> Void
-    let showSaveStates: (TVGameItem) -> Void
-    let autoPreCacheProgress: Double
-    let isAutoPreCaching: Bool
-
-    @State private var showPreCacheProgress = false
-    @State private var preCacheProgress: Double = 0.0
-    @State private var isPreCaching = false
-
-    #if os(tvOS)
-    @State private var isFocused: Bool = false
-    #endif
-
-    /// Determines remote source type and appropriate icon
-    private var remoteIconName: String? {
-        guard let url = URL(string: item.filePath), let scheme = url.scheme?.lowercased() else { return nil }
-        switch scheme {
-        case "webdav", "webdavs": return "externaldrive"
-        case "http", "https": return "cloud"
-        default: return nil
-        }
+  let item: TVGameItem
+  let select: (TVGameItem) -> Void
+  @Binding var focusedFilePath: String?
+  
+  // Context menu action closures provided by parent view
+  let showProperties: (TVGameItem) -> Void
+  let showCheatList: (TVGameItem) -> Void
+  let downloadGeckoAction: (TVGameItem) -> Void
+  let presentCheatGecko: (TVGameItem) -> Void
+  let presentCheatAR: (TVGameItem) -> Void
+  let requestDelete: (TVGameItem) -> Void
+  let showStorageAlert: (String) -> Void
+  let showCacheInfo: (TVGameItem) -> Void
+  let showSaveStates: (TVGameItem) -> Void
+  let autoPreCacheProgress: Double
+  let isAutoPreCaching: Bool
+  
+  @State private var showPreCacheProgress = false
+  @State private var preCacheProgress: Double = 0.0
+  @State private var isPreCaching = false
+  
+#if os(tvOS)
+  @State private var isFocused: Bool = false
+#endif
+  
+  /// Determines remote source type and appropriate icon
+  private var remoteIconName: String? {
+    guard let url = URL(string: item.filePath), let scheme = url.scheme?.lowercased() else { return nil }
+    switch scheme {
+    case "webdav", "webdavs": return "externaldrive"
+    case "http", "https": return "cloud"
+    default: return nil
     }
-
-    /// Check if this is a remote game
-    private var isRemoteGame: Bool {
-        let result = remoteIconName != nil
-        print("DEBUG: isRemoteGame for '\(item.title)' (path: '\(item.filePath)') = \(result)")
-        return result
+  }
+  
+  /// Check if this is a remote game
+  private var isRemoteGame: Bool {
+    let result = remoteIconName != nil
+    print("DEBUG: isRemoteGame for '\(item.title)' (path: '\(item.filePath)') = \(result)")
+    return result
+  }
+  
+  /// Get the WebDAV source for this game (if any)
+  private func getWebDAVSource() -> WebDAVSource? {
+    guard isRemoteGame, let url = URL(string: item.filePath) else {
+      print("DEBUG: getWebDAVSource early return - isRemoteGame: \(isRemoteGame), url valid: \(URL(string: item.filePath) != nil)")
+      return nil
     }
-
-    /// Get the WebDAV source for this game (if any)
-    private func getWebDAVSource() -> WebDAVSource? {
-        guard isRemoteGame, let url = URL(string: item.filePath) else {
-            print("DEBUG: getWebDAVSource early return - isRemoteGame: \(isRemoteGame), url valid: \(URL(string: item.filePath) != nil)")
-            return nil
-        }
-
-        func defaultPort(for scheme: String?) -> Int {
-            switch (scheme?.lowercased()) {
-            case "https", "webdavs": return 443
-            default: return 80
-            }
-        }
-
-        guard let urlHost = url.host?.lowercased() else {
-            print("DEBUG: getWebDAVSource no host for URL: \(url)")
-            return nil
-        }
-        let urlPort = url.port ?? defaultPort(for: url.scheme)
-        let urlPath = url.path
-
-        print("DEBUG: Looking for WebDAV source matching host: \(urlHost), port: \(urlPort), path: \(urlPath)")
-        print("DEBUG: Available sources: \(RemoteSourcesStore.shared.sources.count)")
-
-        var bestMatch: (source: WebDAVSource, score: Int)? = nil
-
-        for (index, source) in RemoteSourcesStore.shared.sources.enumerated() {
-            print("DEBUG: Source \(index): \(type(of: source))")
-            guard let webdavSource = source as? WebDAVSource else { continue }
-            let base = webdavSource.baseURL
-            print("DEBUG: WebDAV source base URL: \(base)")
-            guard let baseHost = base.host?.lowercased() else { continue }
-            let basePort = base.port ?? defaultPort(for: base.scheme)
-            print("DEBUG: Comparing - base host: \(baseHost), port: \(basePort) vs url host: \(urlHost), port: \(urlPort)")
-            guard urlHost == baseHost && urlPort == basePort else { continue }
-
-            // Prefer the source with the longest base path prefix match
-            let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
-            let score: Int
-            if basePath == "/" { score = 1 }
-            else if urlPath.hasPrefix(basePath) { score = max(2, basePath.count) }
-            else { score = 1 } // host/port match only
-
-            print("DEBUG: Found matching source with score \(score), basePath: '\(basePath)', isPreCachingEnabled: \(webdavSource.isPreCachingEnabled)")
-            if bestMatch == nil || score > bestMatch!.score {
-                bestMatch = (webdavSource, score)
-            }
-        }
-
-        let result = bestMatch?.source
-        print("DEBUG: getWebDAVSource result: \(result != nil ? "found" : "nil"), final isPreCachingEnabled: \(result?.isPreCachingEnabled ?? false)")
-        return result
+    
+    func defaultPort(for scheme: String?) -> Int {
+      switch (scheme?.lowercased()) {
+      case "https", "webdavs": return 443
+      default: return 80
+      }
     }
-
-    /// Check if this remote game is cached locally
-    private var isCached: Bool {
-        guard let source = getWebDAVSource(),
-              let url = URL(string: item.filePath) else { return false }
-
-        let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: 0)
-        return source.isCached(remoteItem)
+    
+    guard let urlHost = url.host?.lowercased() else {
+      print("DEBUG: getWebDAVSource no host for URL: \(url)")
+      return nil
     }
-
-    var body: some View {
-        #if os(tvOS)
-        // Clean, simple approach for tvOS
-        VStack(alignment: .leading, spacing: 12) {
-            ZStack(alignment: .topTrailing) {
-                Image(uiImage: item.coverImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [Color.cyan.opacity(0.9), Color.purple.opacity(0.9)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: isFocused ? 6 : 0
-                            )
-                            .shadow(color: .cyan.opacity(isFocused ? 0.6 : 0), radius: isFocused ? 20 : 0)
-                            .shadow(color: .purple.opacity(isFocused ? 0.5 : 0), radius: isFocused ? 28 : 0)
-                    )
-                    .shadow(
-                        color: .black.opacity(isFocused ? 0.4 : 0.2),
-                        radius: isFocused ? 20 : 8,
-                        x: 0,
-                        y: isFocused ? 12 : 6
-                    )
-
-                if isFocused {
-                    VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center); Spacer() }
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-                        .allowsHitTesting(false)
-                }
-
-                if let icon = remoteIconName {
-                    ZStack {
-                        if isPreCaching {
-                            // Show manual pre-cache progress indicator
-                            Circle()
-                                .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                                .frame(width: 24, height: 24)
-
-                            Circle()
-                                .trim(from: 0, to: preCacheProgress)
-                                .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                                .frame(width: 24, height: 24)
-                                .rotationEffect(.degrees(-90))
-                                .animation(.linear(duration: 0.2), value: preCacheProgress)
-
-                            Image(systemName: "arrow.down")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white)
-                        } else {
-                            Image(systemName: icon)
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-
-                            // Show checkmark if cached
-                            if isCached {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(.green)
-                                    .background(Color.white, in: Circle())
-                                    .offset(x: 8, y: -8)
-                            }
-                        }
-                    }
-                    .padding(8)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .padding(8)
-                }
-
-                // Region flag badge (top-left), styled like the cloud indicator
-                if !item.countryName.isEmpty {
-                    Text(RegionFlagMapper.compactFlag(for: item.countryName))
-                        .font(.system(size: 18))
-                        .padding(8)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .padding(8)
-                        .frame(width: Layout.cardSize.width, height: Layout.cardSize.height, alignment: .topLeading)
-                        .allowsHitTesting(false)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .foregroundColor(.primary)
-
-                HStack {
-                    // Game ID only (flag moved to artwork overlay)
-                    Text(item.gameID)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    Spacer()
-
-                    // Auto pre-cache progress indicator
-                    if isAutoPreCaching {
-                        HStack(spacing: 4) {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                            Text("\(Int(autoPreCacheProgress * 100))%")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(width: Layout.cardSize.width)
-        .scaleEffect(isFocused ? 1.08 : 1.0)
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isFocused)
-        .focusable(true) { focused in
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                isFocused = focused
-                if focused { focusedFilePath = item.filePath } else if focusedFilePath == item.filePath { focusedFilePath = nil }
-            }
-        }
-        .onTapGesture { select(item) }
-        .onPlayPauseCommand { select(item) }
-        .contextMenu {
-            Button(L("Properties")) { showProperties(item) }
-//            Button(L("View Save States")) { showSaveStates(item) }
-            Menu(L("Cheats")) {
-                Button(L("Manage...")) { showCheatList(item) }
-                Button(L("Download Codes")) { downloadGeckoAction(item) }
-                Divider()
-                Menu(L("Gecko")) { Button(L("Add...")) { presentCheatGecko(item) } }
-                Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatAR(item) } }
-            }
-            if isRemoteGame {
-                if let source = getWebDAVSource() {
-                    if isCached {
-                        Button(action: { removeCachedFile() }) {
-                            Label(L("Remove from Cache"), systemImage: "trash")
-                        }
-                        Button(action: { showCacheInfo(item) }) {
-                            Label(L("Cache Info"), systemImage: "info.circle")
-                        }
-                    } else {
-                        Button(action: { startPreCache() }) {
-                            Label(L("Download to Cache"), systemImage: "arrow.down.circle")
-                        }
-                        .disabled(isPreCaching)
-
-                        if isPreCaching {
-                            Button(action: { cancelPreCache() }) {
-                                Label(L("Cancel Download"), systemImage: "xmark.circle")
-                            }
-                        }
-                    }
-                } else {
-                    Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
-                }
-            }
-            Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
-        }
-        .zIndex(isFocused ? 1 : 0)
-        #else
-        Button(action: { select(item) }) {
-            VStack(alignment: .leading, spacing: 12) {
-                ZStack(alignment: .topTrailing) {
-                    Image(uiImage: item.coverImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                    if let icon = remoteIconName {
-                        ZStack {
-                            if isPreCaching {
-                                // Show progress indicator
-                                Circle()
-                                    .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                                    .frame(width: 20, height: 20)
-
-                                Circle()
-                                    .trim(from: 0, to: preCacheProgress)
-                                    .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                                    .frame(width: 20, height: 20)
-                                    .rotationEffect(.degrees(-90))
-                                    .animation(.linear(duration: 0.2), value: preCacheProgress)
-
-                                Image(systemName: "arrow.down")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(.white)
-                            } else {
-                                Image(systemName: icon)
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white)
-
-                                // Show checkmark if cached
-                                if isCached {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.green)
-                                        .background(Color.white, in: Circle())
-                                        .offset(x: 6, y: -6)
-                                }
-                            }
-                        }
-                        .padding(8)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .padding(8)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-
-                    // Game ID only (flag moved to artwork overlay)
-                    Text(item.gameID)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .frame(width: Layout.cardSize.width)
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            // Align with tvOS context menu
-            Button(L("Properties")) { showProperties(item) }
-//            Button(L("View Save States")) { showSaveStates(item) }
-            Menu(L("Cheats")) {
-                Button(L("Manage...")) { showCheatList(item) }
-                Button(L("Download Codes")) { downloadGeckoAction(item) }
-                Divider()
-                Menu(L("Gecko")) { Button(L("Add...")) { presentCheatGecko(item) } }
-                Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatAR(item) } }
-            }
-            if isRemoteGame {
-                if let _ = getWebDAVSource() {
-                    if isCached {
-                        Button(action: { removeCachedFile() }) {
-                            Label(L("Remove from Cache"), systemImage: "trash")
-                        }
-                        Button(action: { showCacheInfo(item) }) {
-                            Label(L("Cache Info"), systemImage: "info.circle")
-                        }
-                    } else {
-                        Button(action: { startPreCache() }) {
-                            Label(L("Download to Cache"), systemImage: "arrow.down.circle")
-                        }
-                        .disabled(isPreCaching)
-
-                        if isPreCaching {
-                            Button(action: { cancelPreCache() }) {
-                                Label(L("Cancel Download"), systemImage: "xmark.circle")
-                            }
-                        }
-                    }
-                } else {
-                    Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
-                }
-            }
-            Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
-        }
-        #endif
+    let urlPort = url.port ?? defaultPort(for: url.scheme)
+    let urlPath = url.path
+    
+    print("DEBUG: Looking for WebDAV source matching host: \(urlHost), port: \(urlPort), path: \(urlPath)")
+    print("DEBUG: Available sources: \(RemoteSourcesStore.shared.sources.count)")
+    
+    var bestMatch: (source: WebDAVSource, score: Int)? = nil
+    
+    for (index, source) in RemoteSourcesStore.shared.sources.enumerated() {
+      print("DEBUG: Source \(index): \(type(of: source))")
+      guard let webdavSource = source as? WebDAVSource else { continue }
+      let base = webdavSource.baseURL
+      print("DEBUG: WebDAV source base URL: \(base)")
+      guard let baseHost = base.host?.lowercased() else { continue }
+      let basePort = base.port ?? defaultPort(for: base.scheme)
+      print("DEBUG: Comparing - base host: \(baseHost), port: \(basePort) vs url host: \(urlHost), port: \(urlPort)")
+      guard urlHost == baseHost && urlPort == basePort else { continue }
+      
+      // Prefer the source with the longest base path prefix match
+      let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
+      let score: Int
+      if basePath == "/" { score = 1 }
+      else if urlPath.hasPrefix(basePath) { score = max(2, basePath.count) }
+      else { score = 1 } // host/port match only
+      
+      print("DEBUG: Found matching source with score \(score), basePath: '\(basePath)', isPreCachingEnabled: \(webdavSource.isPreCachingEnabled)")
+      if bestMatch == nil || score > bestMatch!.score {
+        bestMatch = (webdavSource, score)
+      }
     }
-
-    // MARK: - Pre-cache Methods
-
-    private func startPreCache() {
-        guard let source = getWebDAVSource(),
-              let url = URL(string: item.filePath) else { return }
-
-        isPreCaching = true
-        preCacheProgress = 0.0
-        showPreCacheProgress = true
-
-        Task {
-            do {
-                // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
-                let fileSize = Int64(item.fileSize)
-                print("Using cached file size for \(item.title): \(fileSize) bytes")
-                print("DEBUG: TVGameItem.fileSize = \(item.fileSize)")
-
-                // Check if we have enough storage space (file size + 100MB buffer)
-                if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
-                    let availableSpace = TVLibraryView.getAvailableStorageSpace()
-                    let requiredSpace = fileSize + TVLibraryView.STORAGE_BUFFER_MB
-
-                    DispatchQueue.main.async {
-                        self.isPreCaching = false
-                        self.showPreCacheProgress = false
-                        let message = """
+    
+    let result = bestMatch?.source
+    print("DEBUG: getWebDAVSource result: \(result != nil ? "found" : "nil"), final isPreCachingEnabled: \(result?.isPreCachingEnabled ?? false)")
+    return result
+  }
+  
+  /// Check if this remote game is cached locally
+  private var isCached: Bool {
+    guard let source = getWebDAVSource(),
+          let url = URL(string: item.filePath) else { return false }
+    
+    let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: 0)
+    return source.isCached(remoteItem)
+  }
+  
+  var body: some View {
+#if os(tvOS)
+    // Clean, simple approach for tvOS
+    VStack(alignment: .leading, spacing: 12) {
+      ZStack(alignment: .topTrailing) {
+        Image(uiImage: item.coverImage)
+          .resizable()
+          .interpolation(.high)
+          .aspectRatio(contentMode: .fill)
+          .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+          .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+              .stroke(
+                LinearGradient(
+                  colors: [Color.cyan.opacity(0.9), Color.purple.opacity(0.9)],
+                  startPoint: .topLeading,
+                  endPoint: .bottomTrailing
+                ),
+                lineWidth: isFocused ? 6 : 0
+              )
+              .shadow(color: .cyan.opacity(isFocused ? 0.6 : 0), radius: isFocused ? 20 : 0)
+              .shadow(color: .purple.opacity(isFocused ? 0.5 : 0), radius: isFocused ? 28 : 0)
+          )
+          .shadow(
+            color: .black.opacity(isFocused ? 0.4 : 0.2),
+            radius: isFocused ? 20 : 8,
+            x: 0,
+            y: isFocused ? 12 : 6
+          )
+        
+        if isFocused {
+          VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center); Spacer() }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
+            .allowsHitTesting(false)
+        }
+        
+        if let icon = remoteIconName {
+          ZStack {
+            if isPreCaching {
+              // Show manual pre-cache progress indicator
+              Circle()
+                .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                .frame(width: 24, height: 24)
+              
+              Circle()
+                .trim(from: 0, to: preCacheProgress)
+                .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .frame(width: 24, height: 24)
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 0.2), value: preCacheProgress)
+              
+              Image(systemName: "arrow.down")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white)
+            } else {
+              Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.white)
+              
+              // Show checkmark if cached
+              if isCached {
+                Image(systemName: "checkmark.circle.fill")
+                  .font(.system(size: 12, weight: .bold))
+                  .foregroundColor(.green)
+                  .background(Color.white, in: Circle())
+                  .offset(x: 8, y: -8)
+              }
+            }
+          }
+          .padding(8)
+          .background(.ultraThinMaterial, in: Circle())
+          .padding(8)
+        }
+        
+        // Region flag badge (top-left), styled like the cloud indicator
+        if !item.countryName.isEmpty {
+          Text(RegionFlagMapper.compactFlag(for: item.countryName))
+            .font(.system(size: 18))
+            .padding(8)
+            .background(.ultraThinMaterial, in: Circle())
+            .padding(8)
+            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height, alignment: .topLeading)
+            .allowsHitTesting(false)
+        }
+      }
+      
+      VStack(alignment: .leading, spacing: 4) {
+        Text(item.title)
+          .font(.headline)
+          .lineLimit(1)
+          .minimumScaleFactor(0.75)
+          .foregroundColor(.primary)
+        
+        HStack {
+          // Game ID only (flag moved to artwork overlay)
+          Text(item.gameID)
+            .font(.caption)
+            .foregroundColor(.secondary)
+          
+          Spacer()
+          
+          // Auto pre-cache progress indicator
+          if isAutoPreCaching {
+            HStack(spacing: 4) {
+              ProgressView()
+                .scaleEffect(0.6)
+              Text("\(Int(autoPreCacheProgress * 100))%")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
+          }
+        }
+      }
+    }
+    .frame(width: Layout.cardSize.width)
+    .scaleEffect(isFocused ? 1.08 : 1.0)
+    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isFocused)
+    .focusable(true) { focused in
+      withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+        isFocused = focused
+        if focused { focusedFilePath = item.filePath } else if focusedFilePath == item.filePath { focusedFilePath = nil }
+      }
+    }
+    .onTapGesture { select(item) }
+    .onPlayPauseCommand { select(item) }
+    .contextMenu {
+      Button(L("Properties")) { showProperties(item) }
+      //            Button(L("View Save States")) { showSaveStates(item) }
+      Menu(L("Cheats")) {
+        Button(L("Manage...")) { showCheatList(item) }
+        Button(L("Download Codes")) { downloadGeckoAction(item) }
+        Divider()
+        Menu(L("Gecko")) { Button(L("Add...")) { presentCheatGecko(item) } }
+        Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatAR(item) } }
+      }
+      if isRemoteGame {
+        if let source = getWebDAVSource() {
+          if isCached {
+            Button(action: { removeCachedFile() }) {
+              Label(L("Remove from Cache"), systemImage: "trash")
+            }
+            Button(action: { showCacheInfo(item) }) {
+              Label(L("Cache Info"), systemImage: "info.circle")
+            }
+          } else {
+            Button(action: { startPreCache() }) {
+              Label(L("Download to Cache"), systemImage: "arrow.down.circle")
+            }
+            .disabled(isPreCaching)
+            
+            if isPreCaching {
+              Button(action: { cancelPreCache() }) {
+                Label(L("Cancel Download"), systemImage: "xmark.circle")
+              }
+            }
+          }
+        } else {
+          Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
+        }
+      }
+      Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
+    }
+    .zIndex(isFocused ? 1 : 0)
+#else
+    Button(action: { select(item) }) {
+      VStack(alignment: .leading, spacing: 12) {
+        ZStack(alignment: .topTrailing) {
+          Image(uiImage: item.coverImage)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+          
+          if let icon = remoteIconName {
+            ZStack {
+              if isPreCaching {
+                // Show progress indicator
+                Circle()
+                  .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                  .frame(width: 20, height: 20)
+                
+                Circle()
+                  .trim(from: 0, to: preCacheProgress)
+                  .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                  .frame(width: 20, height: 20)
+                  .rotationEffect(.degrees(-90))
+                  .animation(.linear(duration: 0.2), value: preCacheProgress)
+                
+                Image(systemName: "arrow.down")
+                  .font(.system(size: 10, weight: .semibold))
+                  .foregroundColor(.white)
+              } else {
+                Image(systemName: icon)
+                  .font(.system(size: 16, weight: .semibold))
+                  .foregroundColor(.white)
+                
+                // Show checkmark if cached
+                if isCached {
+                  Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.green)
+                    .background(Color.white, in: Circle())
+                    .offset(x: 6, y: -6)
+                }
+              }
+            }
+            .padding(8)
+            .background(.ultraThinMaterial, in: Circle())
+            .padding(8)
+          }
+        }
+        
+        VStack(alignment: .leading, spacing: 4) {
+          Text(item.title)
+            .font(.headline)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+          
+          // Game ID only (flag moved to artwork overlay)
+          Text(item.gameID)
+            .font(.caption)
+            .foregroundColor(.secondary)
+        }
+      }
+      .frame(width: Layout.cardSize.width)
+    }
+    .buttonStyle(.plain)
+    .contextMenu {
+      // Align with tvOS context menu
+      Button(L("Properties")) { showProperties(item) }
+      //            Button(L("View Save States")) { showSaveStates(item) }
+      Menu(L("Cheats")) {
+        Button(L("Manage...")) { showCheatList(item) }
+        Button(L("Download Codes")) { downloadGeckoAction(item) }
+        Divider()
+        Menu(L("Gecko")) { Button(L("Add...")) { presentCheatGecko(item) } }
+        Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatAR(item) } }
+      }
+      if isRemoteGame {
+        if let _ = getWebDAVSource() {
+          if isCached {
+            Button(action: { removeCachedFile() }) {
+              Label(L("Remove from Cache"), systemImage: "trash")
+            }
+            Button(action: { showCacheInfo(item) }) {
+              Label(L("Cache Info"), systemImage: "info.circle")
+            }
+          } else {
+            Button(action: { startPreCache() }) {
+              Label(L("Download to Cache"), systemImage: "arrow.down.circle")
+            }
+            .disabled(isPreCaching)
+            
+            if isPreCaching {
+              Button(action: { cancelPreCache() }) {
+                Label(L("Cancel Download"), systemImage: "xmark.circle")
+              }
+            }
+          }
+        } else {
+          Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
+        }
+      }
+      Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
+    }
+#endif
+  }
+  
+  // MARK: - Pre-cache Methods
+  
+  private func startPreCache() {
+    guard let source = getWebDAVSource(),
+          let url = URL(string: item.filePath) else { return }
+    
+    isPreCaching = true
+    preCacheProgress = 0.0
+    showPreCacheProgress = true
+    
+    Task {
+      do {
+        // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
+        let fileSize = Int64(item.fileSize)
+        print("Using cached file size for \(item.title): \(fileSize) bytes")
+        print("DEBUG: TVGameItem.fileSize = \(item.fileSize)")
+        
+        // Check if we have enough storage space (file size + 100MB buffer)
+        if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
+          let availableSpace = TVLibraryView.getAvailableStorageSpace()
+          let requiredSpace = fileSize + TVLibraryView.STORAGE_BUFFER_MB
+          
+          DispatchQueue.main.async {
+            self.isPreCaching = false
+            self.showPreCacheProgress = false
+            let message = """
                         Not enough storage space to download \(self.item.title).
-
+                        
                         Available: \(TVLibraryView.formatStorageSpace(availableSpace))
                         Required: \(TVLibraryView.formatStorageSpace(requiredSpace))
-
+                        
                         Please free up some space and try again.
                         """
-                        self.showStorageAlert(message)
-                    }
-                    return
-                }
-
-                // Create RemoteLibraryItem with correct size
-                let remoteItem = RemoteLibraryItem(
-                    url: url,
-                    name: item.title,
-                    size: fileSize
-                )
-
-                let _ = try await source.preCacheItem(remoteItem) { progress in
-                    DispatchQueue.main.async {
-                        self.preCacheProgress = progress
-                    }
-                }
-
-                DispatchQueue.main.async {
-                    self.isPreCaching = false
-                    self.showPreCacheProgress = false
-                    print("Pre-cache completed for: \(self.item.title)")
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.isPreCaching = false
-                    self.showPreCacheProgress = false
-
-                    // Show user-friendly error message
-                    let message: String
-                    if let nsError = error as NSError?, nsError.domain == NSPOSIXErrorDomain && nsError.code == 28 {
-                        message = """
+            self.showStorageAlert(message)
+          }
+          return
+        }
+        
+        // Create RemoteLibraryItem with correct size
+        let remoteItem = RemoteLibraryItem(
+          url: url,
+          name: item.title,
+          size: fileSize
+        )
+        
+        let _ = try await source.preCacheItem(remoteItem) { progress in
+          DispatchQueue.main.async {
+            self.preCacheProgress = progress
+          }
+        }
+        
+        DispatchQueue.main.async {
+          self.isPreCaching = false
+          self.showPreCacheProgress = false
+          print("Pre-cache completed for: \(self.item.title)")
+        }
+      } catch {
+        DispatchQueue.main.async {
+          self.isPreCaching = false
+          self.showPreCacheProgress = false
+          
+          // Show user-friendly error message
+          let message: String
+          if let nsError = error as NSError?, nsError.domain == NSPOSIXErrorDomain && nsError.code == 28 {
+            message = """
                         Download failed: Not enough storage space.
-
+                        
                         The device ran out of space while downloading \(self.item.title).
                         Please free up some space and try again.
                         """
-                    } else {
-                        message = """
+          } else {
+            message = """
                         Download failed: \(error.localizedDescription)
-
+                        
                         Unable to download \(self.item.title) to cache.
                         """
-                    }
-                    self.showStorageAlert(message)
-                    print("Pre-cache failed for \(self.item.title): \(error)")
-                }
-            }
-        }
-    }
-
-    private func cancelPreCache() {
-        guard let source = getWebDAVSource(),
-              let url = URL(string: item.filePath) else { return }
-
-        let remoteItem = RemoteLibraryItem(
-            url: url,
-            name: item.title,
-            size: 0
-        )
-
-        Task {
-            await source.cancelPreCache(remoteItem)
-            DispatchQueue.main.async {
-                self.isPreCaching = false
-                self.showPreCacheProgress = false
-            }
-        }
-    }
-
-    private func removeCachedFile() {
-        guard let source = getWebDAVSource(),
-              let url = URL(string: item.filePath) else { return }
-
-        let remoteItem = RemoteLibraryItem(
-            url: url,
-            name: item.title,
-            size: 0
-        )
-
-        Task {
-          do {
-            try await source.removeCachedItem(remoteItem)
-            // The UI will automatically update when isCached changes
-          } catch {
-            print("Error: \(error.localizedDescription)")
           }
+          self.showStorageAlert(message)
+          print("Pre-cache failed for \(self.item.title): \(error)")
         }
+      }
     }
+  }
+  
+  private func cancelPreCache() {
+    guard let source = getWebDAVSource(),
+          let url = URL(string: item.filePath) else { return }
+    
+    let remoteItem = RemoteLibraryItem(
+      url: url,
+      name: item.title,
+      size: 0
+    )
+    
+    Task {
+      await source.cancelPreCache(remoteItem)
+      DispatchQueue.main.async {
+        self.isPreCaching = false
+        self.showPreCacheProgress = false
+      }
+    }
+  }
+  
+  private func removeCachedFile() {
+    guard let source = getWebDAVSource(),
+          let url = URL(string: item.filePath) else { return }
+    
+    let remoteItem = RemoteLibraryItem(
+      url: url,
+      name: item.title,
+      size: 0
+    )
+    
+    Task {
+      do {
+        try await source.removeCachedItem(remoteItem)
+        // The UI will automatically update when isCached changes
+      } catch {
+        print("Error: \(error.localizedDescription)")
+      }
+    }
+  }
 }
 
 // MARK: - Source Picker
 
 @MainActor
 private func getMatchingWebDAVSource(for url: URL) -> WebDAVSource? {
-    func defaultPort(for scheme: String?) -> Int { (scheme?.lowercased() == "https" || scheme?.lowercased() == "webdavs") ? 443 : 80 }
-    guard let urlHost = url.host?.lowercased() else { return nil }
-    let urlPort = url.port ?? defaultPort(for: url.scheme)
-    for source in RemoteSourcesStore.shared.sources {
-        guard let w = source as? WebDAVSource else { continue }
-        let base = w.baseURL
-        guard let baseHost = base.host?.lowercased() else { continue }
-        let basePort = base.port ?? defaultPort(for: base.scheme)
-        if baseHost == urlHost && basePort == urlPort { return w }
-    }
-    return nil
+  func defaultPort(for scheme: String?) -> Int { (scheme?.lowercased() == "https" || scheme?.lowercased() == "webdavs") ? 443 : 80 }
+  guard let urlHost = url.host?.lowercased() else { return nil }
+  let urlPort = url.port ?? defaultPort(for: url.scheme)
+  for source in RemoteSourcesStore.shared.sources {
+    guard let w = source as? WebDAVSource else { continue }
+    let base = w.baseURL
+    guard let baseHost = base.host?.lowercased() else { continue }
+    let basePort = base.port ?? defaultPort(for: base.scheme)
+    if baseHost == urlHost && basePort == urlPort { return w }
+  }
+  return nil
 }
 
 
 private struct SourcePickerView: View {
-    let items: [TVGameItem]
-    let onPick: (TVGameItem) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    private func label(for item: TVGameItem) -> String {
-        if let scheme = URL(string: item.filePath)?.scheme?.lowercased() {
-            switch scheme {
-            case "file": return L("Local")
-            case "webdav", "webdavs":
-                let host = URL(string: item.filePath)?.host ?? "WebDAV"
-                return "WebDAV — \(host)"
-            case "http", "https":
-                let host = URL(string: item.filePath)?.host ?? "HTTP"
-                return "HTTP — \(host)"
-            default:
-                return scheme.uppercased()
-            }
-        }
-        return L("Local")
+  let items: [TVGameItem]
+  let onPick: (TVGameItem) -> Void
+  @Environment(\.dismiss) private var dismiss
+  
+  private func label(for item: TVGameItem) -> String {
+    if let scheme = URL(string: item.filePath)?.scheme?.lowercased() {
+      switch scheme {
+      case "file": return L("Local")
+      case "webdav", "webdavs":
+        let host = URL(string: item.filePath)?.host ?? "WebDAV"
+        return "WebDAV — \(host)"
+      case "http", "https":
+        let host = URL(string: item.filePath)?.host ?? "HTTP"
+        return "HTTP — \(host)"
+      default:
+        return scheme.uppercased()
+      }
     }
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section(L("Choose Source")) {
-                    ForEach(items, id: \.filePath) { item in
-                        Button(action: { onPick(item) }) {
-                            HStack {
-                                Text(label(for: item))
-                                Spacer()
-                                Text(URL(string: item.filePath)?.lastPathComponent ?? "")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
+    return L("Local")
+  }
+  
+  var body: some View {
+    NavigationStack {
+      List {
+        Section(L("Choose Source")) {
+          ForEach(items, id: \.filePath) { item in
+            Button(action: { onPick(item) }) {
+              HStack {
+                Text(label(for: item))
+                Spacer()
+                Text(URL(string: item.filePath)?.lastPathComponent ?? "")
+                  .foregroundStyle(.secondary)
+              }
             }
-            .navigationTitle(L("Select Source"))
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(L("Cancel"), role: .cancel) {
-                        dismiss()
-                    }
-                }
-            }
+          }
         }
+      }
+      .navigationTitle(L("Select Source"))
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Button(L("Cancel"), role: .cancel) {
+            dismiss()
+          }
+        }
+      }
     }
+  }
 }
 
 
@@ -1742,178 +1757,178 @@ private struct SourcePickerView: View {
 
 /// View showing cache information for a remote game
 private struct CacheInfoView: View {
-    let item: TVGameItem
-    @Environment(\.dismiss) private var dismiss
-    @State private var cacheInfo: CacheInfo?
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-
-    private struct CacheInfo {
-        let localPath: String
-        let fileSize: Int64
-        let cachedDate: Date
-        let originalURL: String
-        let etag: String?
-        let lastModified: Date?
-    }
-
-    var body: some View {
-        NavigationView {
-            VStack(alignment: .leading, spacing: 16) {
-                if isLoading {
-                    VStack {
-                        ProgressView()
-                        Text("Loading cache information...")
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let errorMessage = errorMessage {
-                    VStack {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundColor(.orange)
-                        Text(errorMessage)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let info = cacheInfo {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Cache Information")
-                                .font(.title2)
-                                .fontWeight(.bold)
-
-                            InfoRow(label: "Game", value: item.title)
-                            InfoRow(label: "File Size", value: TVLibraryView.formatStorageSpace(info.fileSize))
-                            InfoRow(label: "Cached Date", value: DateFormatter.localizedString(from: info.cachedDate, dateStyle: .medium, timeStyle: .short))
-                            InfoRow(label: "Original URL", value: info.originalURL)
-
-                            if let etag = info.etag {
-                                InfoRow(label: "ETag", value: etag)
-                            }
-
-                            if let lastModified = info.lastModified {
-                                InfoRow(label: "Last Modified", value: DateFormatter.localizedString(from: lastModified, dateStyle: .medium, timeStyle: .short))
-                            }
-
-                            InfoRow(label: "Local Path", value: info.localPath)
-                        }
-                        .padding()
-                    }
-                } else {
-                    VStack {
-                        Image(systemName: "questionmark.circle")
-                            .font(.largeTitle)
-                            .foregroundColor(.secondary)
-                        Text("No cache information available")
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+  let item: TVGameItem
+  @Environment(\.dismiss) private var dismiss
+  @State private var cacheInfo: CacheInfo?
+  @State private var isLoading = true
+  @State private var errorMessage: String?
+  
+  private struct CacheInfo {
+    let localPath: String
+    let fileSize: Int64
+    let cachedDate: Date
+    let originalURL: String
+    let etag: String?
+    let lastModified: Date?
+  }
+  
+  var body: some View {
+    NavigationView {
+      VStack(alignment: .leading, spacing: 16) {
+        if isLoading {
+          VStack {
+            ProgressView()
+            Text("Loading cache information...")
+              .foregroundColor(.secondary)
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let errorMessage = errorMessage {
+          VStack {
+            Image(systemName: "exclamationmark.triangle")
+              .font(.largeTitle)
+              .foregroundColor(.orange)
+            Text(errorMessage)
+              .foregroundColor(.secondary)
+              .multilineTextAlignment(.center)
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let info = cacheInfo {
+          ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+              Text("Cache Information")
+                .font(.title2)
+                .fontWeight(.bold)
+              
+              InfoRow(label: "Game", value: item.title)
+              InfoRow(label: "File Size", value: TVLibraryView.formatStorageSpace(info.fileSize))
+              InfoRow(label: "Cached Date", value: DateFormatter.localizedString(from: info.cachedDate, dateStyle: .medium, timeStyle: .short))
+              InfoRow(label: "Original URL", value: info.originalURL)
+              
+              if let etag = info.etag {
+                InfoRow(label: "ETag", value: etag)
+              }
+              
+              if let lastModified = info.lastModified {
+                InfoRow(label: "Last Modified", value: DateFormatter.localizedString(from: lastModified, dateStyle: .medium, timeStyle: .short))
+              }
+              
+              InfoRow(label: "Local Path", value: info.localPath)
             }
-            .navigationTitle("Cache Info")
-            #if !os(tvOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
+            .padding()
+          }
+        } else {
+          VStack {
+            Image(systemName: "questionmark.circle")
+              .font(.largeTitle)
+              .foregroundColor(.secondary)
+            Text("No cache information available")
+              .foregroundColor(.secondary)
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+      }
+      .navigationTitle("Cache Info")
+#if !os(tvOS)
+      .navigationBarTitleDisplayMode(.inline)
+#endif
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button("Done") { dismiss() }
+        }
+      }
+    }
+    .onAppear {
+      loadCacheInfo()
+    }
+  }
+  
+  private func loadCacheInfo() {
+    // Find the WebDAV source for this item
+    guard let url = URL(string: item.filePath) else {
+      errorMessage = "Invalid file path"
+      isLoading = false
+      return
+    }
+    
+    var foundSource = false
+    for source in RemoteSourcesStore.shared.sources {
+      if let webdavSource = source as? WebDAVSource {
+        foundSource = true
+        let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
+        
+        // Check if cached and get info
+        Task {
+          let info = await getCacheInfo(from: webdavSource, for: remoteItem)
+          await MainActor.run {
+            self.cacheInfo = info
+            self.isLoading = false
+            if info == nil {
+              self.errorMessage = "This game is not currently cached"
             }
+          }
         }
-        .onAppear {
-            loadCacheInfo()
-        }
+        break
+      }
     }
-
-    private func loadCacheInfo() {
-        // Find the WebDAV source for this item
-        guard let url = URL(string: item.filePath) else {
-            errorMessage = "Invalid file path"
-            isLoading = false
-            return
-        }
-
-        var foundSource = false
-        for source in RemoteSourcesStore.shared.sources {
-            if let webdavSource = source as? WebDAVSource {
-                foundSource = true
-                let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
-
-                // Check if cached and get info
-                Task {
-                    let info = await getCacheInfo(from: webdavSource, for: remoteItem)
-                    await MainActor.run {
-                        self.cacheInfo = info
-                        self.isLoading = false
-                        if info == nil {
-                            self.errorMessage = "This game is not currently cached"
-                        }
-                    }
-                }
-                break
-            }
-        }
-
-        if !foundSource {
-            errorMessage = "No WebDAV source found for this game"
-            isLoading = false
-        }
+    
+    if !foundSource {
+      errorMessage = "No WebDAV source found for this game"
+      isLoading = false
     }
-
-    private func getCacheInfo(from source: WebDAVSource, for item: RemoteLibraryItem) async -> CacheInfo? {
-        // Get actual cache information from the WebDAV source
-        guard let cachedFileInfo = source.getCacheInfo(for: item) else {
-            return nil
-        }
-
-        return CacheInfo(
-            localPath: cachedFileInfo.localPath,
-            fileSize: cachedFileInfo.fileSize,
-            cachedDate: cachedFileInfo.cachedDate,
-            originalURL: cachedFileInfo.originalURL,
-            etag: cachedFileInfo.etag,
-            lastModified: cachedFileInfo.lastModified
-        )
+  }
+  
+  private func getCacheInfo(from source: WebDAVSource, for item: RemoteLibraryItem) async -> CacheInfo? {
+    // Get actual cache information from the WebDAV source
+    guard let cachedFileInfo = source.getCacheInfo(for: item) else {
+      return nil
     }
+    
+    return CacheInfo(
+      localPath: cachedFileInfo.localPath,
+      fileSize: cachedFileInfo.fileSize,
+      cachedDate: cachedFileInfo.cachedDate,
+      originalURL: cachedFileInfo.originalURL,
+      etag: cachedFileInfo.etag,
+      lastModified: cachedFileInfo.lastModified
+    )
+  }
 }
 
 /// Helper view for displaying info rows
 private struct InfoRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
-            Text(value)
-                .font(.body)
-                #if !os(tvOS)
-                .textSelection(.enabled)
-                #endif
-        }
+  let label: String
+  let value: String
+  
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(label)
+        .font(.caption)
+        .foregroundColor(.secondary)
+        .textCase(.uppercase)
+      Text(value)
+        .font(.body)
+#if !os(tvOS)
+        .textSelection(.enabled)
+#endif
     }
+  }
 }
 
 // MARK: - Remote scan progress view (toolbar)
 private struct RemoteScanProgressView: View {
-    @StateObject private var store = RemoteSourcesStore.shared
-    var body: some View {
-        if store.isScanning {
-            ProgressView(value: store.scanningProgress)
-                .progressViewStyle(.linear)
-                .frame(maxWidth: .infinity)
-        }
+  @StateObject private var store = RemoteSourcesStore.shared
+  var body: some View {
+    if store.isScanning {
+      ProgressView(value: store.scanningProgress)
+        .progressViewStyle(.linear)
+        .frame(maxWidth: .infinity)
     }
+  }
 }
 
 // MARK: - Safe index helper
 private extension Array {
-    subscript(safe index: Int) -> Element? {
-        return indices.contains(index) ? self[index] : nil
-    }
+  subscript(safe index: Int) -> Element? {
+    return indices.contains(index) ? self[index] : nil
+  }
 }
