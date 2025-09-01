@@ -21,6 +21,8 @@
 		B31E805C2E6544430036EE31 /* TVFloatStepper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E805B2E6544430036EE31 /* TVFloatStepper.swift */; };
 		B31E80662E6563540036EE31 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80652E6563530036EE31 /* WidgetKit.framework */; };
 		B31E80682E6563540036EE31 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80672E6563540036EE31 /* SwiftUI.framework */; };
+		B31E808E2E6637820036EE31 /* ExternalDisplayManager.m in Sources */ = {isa = PBXBuildFile; fileRef = B31E808D2E6637820036EE31 /* ExternalDisplayManager.m */; };
+		B31E80902E6637CA0036EE31 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E808F2E6637CA0036EE31 /* AVKit.framework */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -307,6 +309,9 @@
 		B31E80652E6563530036EE31 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		B31E80672E6563540036EE31 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B31E807A2E6563550036EE31 /* Live ActivityExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Live ActivityExtension.entitlements"; sourceTree = "<group>"; };
+		B31E808C2E6637820036EE31 /* ExternalDisplayManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ExternalDisplayManager.h; sourceTree = "<group>"; };
+		B31E808D2E6637820036EE31 /* ExternalDisplayManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ExternalDisplayManager.m; sourceTree = "<group>"; };
+		B31E808F2E6637CA0036EE31 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/System/iOSSupport/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -805,6 +810,7 @@
 				B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */,
 				B34ECCF52E569AF300301907 /* PVWebServer in Frameworks */,
 				B95AC5302D29C7FD0048E48B /* AVFoundation.framework in Frameworks */,
+				B31E80902E6637CA0036EE31 /* AVKit.framework in Frameworks */,
 				B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */,
 				B9FCB7DE28988E7E0020E233 /* AltKit in Frameworks */,
 				B31E6DC62E6409F90036EE31 /* PVlibDolphin.xcframework in Frameworks */,
@@ -1835,6 +1841,8 @@
 				B9D9388B283DD86100B290FC /* EmulationBootParameter.mm */,
 				B9B2C650288E252900CB6569 /* EmulationCoordinator.h */,
 				B9B2C651288E252900CB6569 /* EmulationCoordinator.mm */,
+				B31E808C2E6637820036EE31 /* ExternalDisplayManager.h */,
+				B31E808D2E6637820036EE31 /* ExternalDisplayManager.m */,
 				B36B48C22E5D0056009A2303 /* TVCheatsBridge.h */,
 				B36B48C32E5D0056009A2303 /* TVCheatsBridge.mm */,
 				B36B48CB2E5D20A6009A2303 /* TVControllerMappingBridge.h */,
@@ -1881,6 +1889,7 @@
 		B9D9389C283EF7AD00B290FC /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				B31E808F2E6637CA0036EE31 /* AVKit.framework */,
 				B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */,
 				B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */,
 				B36B63002E5E56A3009A2303 /* PVlibDolphin.xcframework */,
@@ -2442,6 +2451,7 @@
 				B974924429603A8A00794509 /* LegacyInputConfigMigrationService.mm in Sources */,
 				B9FCB7CE2897998B0020E233 /* JitWaitViewControllerDelegate.swift in Sources */,
 				B9447AFF28418EA100BC9110 /* TCDirectionalPad.swift in Sources */,
+				B31E808E2E6637820036EE31 /* ExternalDisplayManager.m in Sources */,
 				B950CFCC2962590600197719 /* JitManager+PTrace.m in Sources */,
 				B9398710287FBB80008E8E47 /* SpeedLimitCell.m in Sources */,
 				B9B2C622288DB62D00CB6569 /* TCSidewaysWiiPad.swift in Sources */,

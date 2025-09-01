@@ -19,12 +19,13 @@
 #include <fstream>
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
+#import <objc/message.h>
+#include <dlfcn.h>
+#if TARGET_OS_IOS
+#import <QuartzCore/CAMetalLayer.h>
+#endif
 
-@interface DOLShaderPostProcessor : NSObject
-+ (instancetype)shared;
-- (void)configureWithDevice:(id<MTLDevice>)device;
-- (void)renderSource:(id<MTLTexture>)source commandBuffer:(id<MTLCommandBuffer>)cb drawable:(id<CAMetalDrawable>)drawable;
-@end
+
 
 Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
 {
@@ -528,180 +529,101 @@ void Metal::Gfx::PresentBackbuffer()
 {
   @autoreleasepool
   {
-    g_state_tracker->EndRenderPass();
     if (m_drawable)
     {
-      // Decide post-processing and whether we need to blit from an offscreen target
-      bool use_post = false;
-      @try { use_post = [[NSUserDefaults standardUserDefaults] boolForKey:@"shader_enabled"]; } @catch (...) { use_post = false; }
-      id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
+      id<MTLTexture> dst = [m_drawable texture];
       // Use the pass descriptor's bound color attachment (offscreen when shaders enabled) as source
       id<MTLTexture> source = [m_backbuffer->PassDesc() colorAttachments][0].texture;
-      id<MTLTexture> dst = [m_drawable texture];
-      // Copy from the drawable only when we rendered directly into it AND we need to sample it (post)
-      static id<MTLTexture> s_src_copy = nil;
-      if (use_post && dst && source == dst)
-      {
-        if (s_src_copy == nil || s_src_copy.width != dst.width || s_src_copy.height != dst.height || s_src_copy.pixelFormat != dst.pixelFormat)
-        {
-          MTLTextureDescriptor* desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:dst.pixelFormat
-                                                                                           width:dst.width
-                                                                                          height:dst.height
-                                                                                       mipmapped:NO];
-          desc.storageMode = MTLStorageModePrivate;
-#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
-          desc.usage = MTLTextureUsageShaderRead | (MTLTextureUsage) (1 << 3);
-#else
-          desc.usage = MTLTextureUsageShaderRead;
-#endif
-          s_src_copy = [g_device newTextureWithDescriptor:desc];
-          [s_src_copy setLabel:@"Dolphin Post Source Copy"];
-        }
-        id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-        if (blit)
-        {
-          [blit copyFromTexture:dst
-                    sourceSlice:0
-                    sourceLevel:0
-                   sourceOrigin:MTLOriginMake(0, 0, 0)
-                     sourceSize:MTLSizeMake(dst.width, dst.height, 1)
-                      toTexture:s_src_copy
-               destinationSlice:0
-               destinationLevel:0
-              destinationOrigin:MTLOriginMake(0, 0, 0)];
-          [blit endEncoding];
-          source = s_src_copy;
-        }
-      }
-      const bool needs_blit = (source && dst && source != dst);
-      // fprintf(stderr, "[Shaders] Present: use_post=%d needs_blit=%d src=%p dst=%p\n", use_post ? 1 : 0, needs_blit ? 1 : 0, (void*)source, (void*)dst);
+      const bool needs_blit = source && dst && (source != dst);
+      bool use_post = false;
+      @try { use_post = [[NSUserDefaults standardUserDefaults] boolForKey:@"shader_enabled"]; } @catch (...) { use_post = false; }
 
-      // Force a blit from the render target into a dedicated sampling texture to avoid tile-memory hazards
-      static id<MTLTexture> s_post_src = nil;
-      if (use_post && source)
-      {
-        if (s_post_src == nil || s_post_src.width != source.width || s_post_src.height != source.height || s_post_src.pixelFormat != source.pixelFormat)
-        {
-          MTLTextureDescriptor* desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:source.pixelFormat
-                                                                                        width:source.width
-                                                                                       height:source.height
-                                                                                    mipmapped:NO];
-          desc.storageMode = MTLStorageModePrivate;
-#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
-          desc.usage = MTLTextureUsageShaderRead | (MTLTextureUsage) (1 << 3);
-#else
-          desc.usage = MTLTextureUsageShaderRead;
-#endif
-          s_post_src = [g_device newTextureWithDescriptor:desc];
-          [s_post_src setLabel:@"Dolphin Post Source Blit"];
-        }
-        id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-        if (blit)
-        {
-          [blit copyFromTexture:source
-                    sourceSlice:0
-                    sourceLevel:0
-                   sourceOrigin:MTLOriginMake(0, 0, 0)
-                     sourceSize:MTLSizeMake(source.width, source.height, 1)
-                      toTexture:s_post_src
-               destinationSlice:0
-               destinationLevel:0
-              destinationOrigin:MTLOriginMake(0, 0, 0)];
-          [blit endEncoding];
-          source = s_post_src;
-        }
-      }
-
-      // If an offscreen was used but postprocessing is disabled, blit to the drawable now.
-      if (needs_blit && !use_post)
-      {
-        id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-        if (blit)
-        {
-          [blit copyFromTexture:source
-                    sourceSlice:0
-                    sourceLevel:0
-                   sourceOrigin:MTLOriginMake(0, 0, 0)
-                     sourceSize:MTLSizeMake(source.width, source.height, 1)
-                      toTexture:dst
-               destinationSlice:0
-               destinationLevel:0
-              destinationOrigin:MTLOriginMake(0, 0, 0)];
-          [blit endEncoding];
-        }
-      }
-
+      g_state_tracker->EndRenderPass();
+      id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
       if (use_post)
       {
-        if (source && cb)
+        Class _ppCls = NSClassFromString(@"DOLShaderPostProcessor");
+        id mgr = (_ppCls && [_ppCls respondsToSelector:@selector(shared)]) ? ((id(*)(id,SEL))objc_msgSend)(_ppCls, @selector(shared)) : nil;
+        if (mgr && [mgr respondsToSelector:@selector(renderSource:commandBuffer:drawable:)])
         {
-          Class C = NSClassFromString(@"DOLShaderPostProcessor");
-          if (!C)
+          ((void(*)(id, SEL, id, id, id))[mgr methodForSelector:@selector(renderSource:commandBuffer:drawable:)])(mgr, @selector(renderSource:commandBuffer:drawable:), source, cb, m_drawable);
+        }
+        else
+        {
+          // Fallback: blit
+          id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+          [blit copyFromTexture:source sourceSlice:0 sourceLevel:0 sourceOrigin:{0,0,0} sourceSize:{(NSUInteger)[dst width], (NSUInteger)[dst height], 1} toTexture:[m_drawable texture] destinationSlice:0 destinationLevel:0 destinationOrigin:{0,0,0}];
+          [blit endEncoding];
+        }
+      }
+      else if (needs_blit)
+      {
+        id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+        [blit copyFromTexture:source sourceSlice:0 sourceLevel:0 sourceOrigin:{0,0,0} sourceSize:{(NSUInteger)[dst width], (NSUInteger)[dst height], 1} toTexture:[m_drawable texture] destinationSlice:0 destinationLevel:0 destinationOrigin:{0,0,0}];
+        [blit endEncoding];
+      }
+
+#if TARGET_OS_IOS
+      // Mirror to external AirPlay screen if set
+      static CAMetalLayer* (*get_global_layer)() = nullptr;
+      if (!get_global_layer)
+      {
+        get_global_layer = (CAMetalLayer* (*)())dlsym(RTLD_DEFAULT, "DOLGetExternalMetalLayer");
+      }
+      CAMetalLayer* mirrorLayer = get_global_layer ? get_global_layer() : nil;
+      if (mirrorLayer)
+      {
+        id<CAMetalDrawable> mirrorDrawable = [mirrorLayer nextDrawable];
+        if (mirrorDrawable)
+        {
+          id<MTLTexture> mdst = [mirrorDrawable texture];
+          // For AirPlay, prefer post-processed source
+          id<MTLTexture> msrc = source;
+          g_state_tracker->EndRenderPass();
+          id<MTLCommandBuffer> mcb = g_state_tracker->GetRenderCmdBuf();
+          if (use_post)
           {
-            NSString* module = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
-            if (module && [module isKindOfClass:[NSString class]])
-            {
-              NSString* qualified = [NSString stringWithFormat:@"%@.%@", module, @"DOLShaderPostProcessor"];
-              C = NSClassFromString(qualified);
-              if (!C)
-                fprintf(stderr, "[Shaders] Swift class not found for %s or %s\n", "DOLShaderPostProcessor", qualified.UTF8String);
-            }
-          }
-          if (C && [C respondsToSelector:@selector(shared)])
-          {
-            id mgr = ((id(*)(id, SEL))[C methodForSelector:@selector(shared)])(C, @selector(shared));
-            if (mgr && [mgr respondsToSelector:@selector(configureWithDevice:)])
-              ((void(*)(id, SEL, id))[mgr methodForSelector:@selector(configureWithDevice:)])(mgr, @selector(configureWithDevice:), g_device);
-            if (mgr && [mgr respondsToSelector:@selector(reloadShadersNow)])
-              ((void(*)(id, SEL))[mgr methodForSelector:@selector(reloadShadersNow)])(mgr, @selector(reloadShadersNow));
+            Class _ppCls2 = NSClassFromString(@"DOLShaderPostProcessor");
+            id mgr = (_ppCls2 && [_ppCls2 respondsToSelector:@selector(shared)]) ? ((id(*)(id,SEL))objc_msgSend)(_ppCls2, @selector(shared)) : nil;
             if (mgr && [mgr respondsToSelector:@selector(renderSource:commandBuffer:drawable:)])
             {
-              // Minimal diagnostics about formats and sizes
-//              fprintf(stderr, "[Shaders] Post: src %ux%u fmt=%lu -> dst %ux%u fmt=%lu\n",
-//                      (unsigned)source.width, (unsigned)source.height, (unsigned long)source.pixelFormat,
-//                      (unsigned)dst.width, (unsigned)dst.height, (unsigned long)dst.pixelFormat);
-
-              ((void(*)(id, SEL, id, id, id))[mgr methodForSelector:@selector(renderSource:commandBuffer:drawable:)])(mgr, @selector(renderSource:commandBuffer:drawable:), source, cb, m_drawable);
+              ((void(*)(id, SEL, id, id, id))[mgr methodForSelector:@selector(renderSource:commandBuffer:drawable:)])(mgr, @selector(renderSource:commandBuffer:drawable:), msrc, mcb, mirrorDrawable);
+            }
+            else
+            {
+              id<MTLBlitCommandEncoder> blit = [mcb blitCommandEncoder];
+              [blit copyFromTexture:msrc sourceSlice:0 sourceLevel:0 sourceOrigin:{0,0,0} sourceSize:{(NSUInteger)[mdst width], (NSUInteger)[mdst height], 1} toTexture:mdst destinationSlice:0 destinationLevel:0 destinationOrigin:{0,0,0}];
+              [blit endEncoding];
             }
           }
           else
           {
-            // Fallback: simple blit copy
-            id<MTLBlitCommandEncoder> blit = [g_state_tracker->GetRenderCmdBuf() blitCommandEncoder];
-            if (blit)
-            {
-              [blit copyFromTexture:source
-                        sourceSlice:0
-                        sourceLevel:0
-                       sourceOrigin:MTLOriginMake(0, 0, 0)
-                         sourceSize:MTLSizeMake(source.width, source.height, 1)
-                          toTexture:[m_drawable texture]
-                   destinationSlice:0
-                   destinationLevel:0
-                  destinationOrigin:MTLOriginMake(0, 0, 0)];
-              [blit endEncoding];
-            }
+            id<MTLBlitCommandEncoder> blit = [mcb blitCommandEncoder];
+            [blit copyFromTexture:msrc sourceSlice:0 sourceLevel:0 sourceOrigin:{0,0,0} sourceSize:{(NSUInteger)[mdst width], (NSUInteger)[mdst height], 1} toTexture:mdst destinationSlice:0 destinationLevel:0 destinationOrigin:{0,0,0}];
+            [blit endEncoding];
           }
+          if (g_ActiveConfig.iUsePresentDrawable == TriState::On ||
+              (g_ActiveConfig.iUsePresentDrawable == TriState::Auto && g_ActiveConfig.bVSyncActive))
+            [mcb presentDrawable:mirrorDrawable];
+          else
+            [mcb addScheduledHandler:[drawable = mirrorDrawable](id) { [drawable present]; }];
         }
       }
+#endif
 
-      // PresentDrawable refuses to allow Dolphin to present faster than the display's refresh rate
-      // when windowed (or fullscreen with vsync enabled, but that's more understandable).
-      // On the other hand, it helps Xcode's GPU captures start and stop on frame boundaries
-      // which is convenient.  Put it here as a default-off config, which we can override in Xcode.
-      // It also seems to improve frame pacing, so enable it by default with vsync
       if (g_ActiveConfig.iUsePresentDrawable == TriState::On ||
           (g_ActiveConfig.iUsePresentDrawable == TriState::Auto && g_ActiveConfig.bVSyncActive))
         [g_state_tracker->GetRenderCmdBuf() presentDrawable:m_drawable];
       else
-        [g_state_tracker->GetRenderCmdBuf()
-            addScheduledHandler:[drawable = std::move(m_drawable)](id) { [drawable present]; }];
-      m_backbuffer->UpdateBackbufferTexture(nullptr);
-      m_drawable = nullptr;
+        [g_state_tracker->GetRenderCmdBuf() addScheduledHandler:[drawable = std::move(m_drawable)](id) { [drawable present]; }];
 
-      // Commit and release encoders and associated resources for this frame.
-      g_state_tracker->FlushEncoders();
+      m_drawable = nullptr;
     }
+
+    if (!g_presenter->SurfaceChangedTestAndClear())
+      return;
+
+    m_layer = MRCRetain(static_cast<CAMetalLayer*>(g_presenter->GetNewSurfaceHandle()));
   }
 }
 

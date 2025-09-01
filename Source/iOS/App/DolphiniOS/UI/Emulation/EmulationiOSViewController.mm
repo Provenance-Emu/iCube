@@ -26,6 +26,9 @@
 #import "VirtualMFiControllerManager.h"
 #import "TVControllerMappingBridge.h"
 #import <GameController/GameController.h>
+#import <AVKit/AVRoutePickerView.h>
+#import <QuartzCore/CAMetalLayer.h>
+#import "ExternalDisplayManager.h"
 
 typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   DOLEmulationVisibleTouchPadNone,
@@ -42,6 +45,8 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 @implementation EmulationiOSViewController {
   DOLEmulationVisibleTouchPad _visibleTouchPad;
   int _stateSlot;
+  UIWindow* _externalWindow;
+  CAMetalLayer* _externalMetalLayer;
 }
 
 - (void)viewDidLoad {
@@ -58,6 +63,14 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
     }
   }
 
+  // Add AirPlay route picker in nav bar if available
+  if (@available(iOS 13.0, *)) {
+    AVRoutePickerView* picker = [[AVRoutePickerView alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
+    picker.activeTintColor = [UIColor systemBlueColor];
+    UIBarButtonItem* airplayItem = [[UIBarButtonItem alloc] initWithCustomView:picker];
+    self.navigationItem.rightBarButtonItems = self.navigationItem.rightBarButtonItems ? [self.navigationItem.rightBarButtonItems arrayByAddingObject:airplayItem] : @[airplayItem];
+  }
+
   if (@available(iOS 15.0, *)) {
     // Stupidity - iOS 15 now uses the scrollEdgeAppearance when the UINavigationBar is off screen.
     // https://developer.apple.com/forums/thread/682420
@@ -72,6 +85,10 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 
   _stateSlot = Config::GetBase(Config::MAIN_SELECTED_STATE_SLOT);
   [VirtualMFiControllerManager shared].delegate = (id<VirtualMFiControllerManagerDelegate>)self;
+
+  // External screen notifications
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onScreenDidConnect:) name:UIScreenDidConnectNotification object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onScreenDidDisconnect:) name:UIScreenDidDisconnectNotification object:nil];
 }
 
 // MARK: - VirtualMFiControllerManagerDelegate
@@ -106,6 +123,40 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   [[NSNotificationCenter defaultCenter] removeObserver:self name:DOLEmulationDidEndNotification object:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self name:GCControllerDidConnectNotification object:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self name:GCControllerDidDisconnectNotification object:nil];
+  [[NSNotificationCenter defaultCenter] removeObserver:self name:UIScreenDidConnectNotification object:nil];
+  [[NSNotificationCenter defaultCenter] removeObserver:self name:UIScreenDidDisconnectNotification object:nil];
+}
+
+// MARK: - External Screen Handling
+- (void)onScreenDidConnect:(NSNotification*)note {
+  UIScreen* screen = (UIScreen*)note.object;
+  if (!screen) return;
+  // Create window on external screen
+  _externalWindow = [[UIWindow alloc] initWithFrame:screen.bounds];
+  _externalWindow.screen = screen;
+  UIViewController* vc = [UIViewController new];
+  vc.view.backgroundColor = [UIColor blackColor];
+  _externalWindow.rootViewController = vc;
+  [_externalWindow makeKeyAndVisible];
+
+  // Host a CAMetalLayer for mirrored video
+  _externalMetalLayer = [CAMetalLayer layer];
+  _externalMetalLayer.frame = vc.view.bounds;
+  _externalMetalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+  _externalMetalLayer.contentsScale = screen.scale;
+  _externalMetalLayer.drawableSize = vc.view.bounds.size;
+  [vc.view.layer addSublayer:_externalMetalLayer];
+
+  g_dol_external_metal_layer = _externalMetalLayer;
+}
+
+- (void)onScreenDidDisconnect:(NSNotification*)note {
+  g_dol_external_metal_layer = nil;
+  _externalMetalLayer = nil;
+  if (_externalWindow) {
+    _externalWindow.hidden = YES;
+    _externalWindow = nil;
+  }
 }
 
 // MARK: - Physical controller observers
