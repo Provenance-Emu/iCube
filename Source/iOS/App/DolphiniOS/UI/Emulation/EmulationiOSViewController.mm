@@ -186,6 +186,12 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   if (wiimoteTouchPadAttached || gamecubeTouchPadAttached) {
     UIAction* noneAction = [UIAction actionWithTitle:DOLCoreLocalizedString(@"Hide") image:nil identifier:nil handler:^(UIAction*) {
       [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadNone];
+      // If neither pad is attached, immediately recover to GC + defaults
+      if (![self isWiimoteTouchPadAttached] && ![self isGameCubeTouchPadAttached]) {
+        [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+        [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
+      }
+      [self ensureVisibleTouchPadFallbackIfAmbiguous];
       [self recreateMenu];
 
       [self.navigationController setNavigationBarHidden:true animated:true];
@@ -343,65 +349,6 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   return true;
 }
 
-- (void)updateVisibleTouchPadToWii {
-  // Per-game override
-  NSString* overrideStr = [[NSUserDefaults standardUserDefaults] stringForKey:@"current_profile_touch_override"];
-  if (overrideStr && [overrideStr isEqualToString:@"forceGameCube"]) {
-    [self updateVisibleTouchPadToGameCube];
-    return;
-  }
-  const BOOL autoSystem = [[NSUserDefaults standardUserDefaults] objectForKey:@"auto_touchpad_by_system"] ? [[NSUserDefaults standardUserDefaults] boolForKey:@"auto_touchpad_by_system"] : YES;
-  if (!autoSystem) {
-    // Fall back to existing behavior (profile/mapping driven)
-    // If Wiimote pad not attached, still fallback to GC
-    if (![self isWiimoteTouchPadAttached]) { [self updateVisibleTouchPadToGameCube]; return; }
-  }
-  // System-driven selection: Wii -> Wiimote, fallback to GameCube only if Wiimote pad view is not attached
-  if (![self isWiimoteTouchPadAttached]) {
-    [self updateVisibleTouchPadToGameCube];
-    return;
-  }
-
-  DOLEmulationVisibleTouchPad targetTouchPad;
-
-  const auto wiimote = static_cast<WiimoteEmu::Wiimote*>(Wiimote::GetConfig()->GetController(0));
-
-  if (wiimote->GetActiveExtensionNumber() == WiimoteEmu::ExtensionNumber::CLASSIC) {
-    targetTouchPad = DOLEmulationVisibleTouchPadClassic;
-  } else if (wiimote->IsSideways()) {
-    targetTouchPad = DOLEmulationVisibleTouchPadSidewaysWiimote;
-  } else {
-    targetTouchPad = DOLEmulationVisibleTouchPadWiimote;
-  }
-
-  [self updateVisibleTouchPadWithType:targetTouchPad];
-
-  [self updatePointerValuesOnWiiTouchPads];
-}
-
-- (void)updateVisibleTouchPadToGameCube {
-  // Per-game override
-  NSString* overrideStr = [[NSUserDefaults standardUserDefaults] stringForKey:@"current_profile_touch_override"];
-  if (overrideStr && [overrideStr isEqualToString:@"forceWii"]) {
-    [self updateVisibleTouchPadToWii];
-    return;
-  }
-  const BOOL autoSystem = [[NSUserDefaults standardUserDefaults] objectForKey:@"auto_touchpad_by_system"] ? [[NSUserDefaults standardUserDefaults] boolForKey:@"auto_touchpad_by_system"] : YES;
-  if (!autoSystem) {
-    // Keep existing behavior; if GC pad missing do nothing
-    if (![self isGameCubeTouchPadAttached]) { return; }
-  }
-  // System-driven selection: GameCube -> GameCube pad; if not attached, try Wii else fallback no-op
-  if (![self isGameCubeTouchPadAttached]) {
-    if (Core::System::GetInstance().IsWii() && [self isWiimoteTouchPadAttached]) {
-      [self updateVisibleTouchPadToWii];
-    }
-    return;
-  }
-
-  [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
-}
-
 - (void)updateVisibleTouchPadWithType:(DOLEmulationVisibleTouchPad)touchPad {
   if (_visibleTouchPad == touchPad) {
     return;
@@ -418,23 +365,77 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   }
 #endif
 
-  NSInteger targetIdx = touchPad - 1;
+  _visibleTouchPad = touchPad;
+  [self setNeedsStatusBarAppearanceUpdate];
+}
 
-  for (int i = 0; i < [self.touchPads count]; i++) {
-    TCView* padView = self.touchPads[i];
-    padView.userInteractionEnabled = i == targetIdx;
+/// Ensures an on-screen pad is always chosen even with ambiguous mappings
+- (void)ensureVisibleTouchPadFallbackIfAmbiguous {
+  const BOOL hasWii = [self isWiimoteTouchPadAttached];
+  const BOOL hasGC  = [self isGameCubeTouchPadAttached];
+  if (!hasWii && !hasGC) {
+    // Ambiguous or none attached: force GC pad visible and default touchscreen mapping
+    [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+    [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
+  }
+}
+
+// Call the ambiguity guard after choosing a target
+- (void)updateVisibleTouchPadToWii {
+  // Per-game override
+  NSString* overrideStr = [[NSUserDefaults standardUserDefaults] stringForKey:@"current_profile_touch_override"];
+  if (overrideStr && [overrideStr isEqualToString:@"forceGameCube"]) {
+    [self updateVisibleTouchPadToGameCube];
+    return;
+  }
+  const BOOL autoSystem = [[NSUserDefaults standardUserDefaults] objectForKey:@"auto_touchpad_by_system"] ? [[NSUserDefaults standardUserDefaults] boolForKey:@"auto_touchpad_by_system"] : YES;
+  if (!autoSystem) {
+    if (![self isWiimoteTouchPadAttached]) { [self updateVisibleTouchPadToGameCube]; [self ensureVisibleTouchPadFallbackIfAmbiguous]; return; }
+  }
+  if (![self isWiimoteTouchPadAttached]) {
+    [self updateVisibleTouchPadToGameCube];
+    [self ensureVisibleTouchPadFallbackIfAmbiguous];
+    return;
   }
 
-  const float targetOpacity = Config::Get(Config::MAIN_TOUCH_PAD_OPACITY);
+  DOLEmulationVisibleTouchPad targetTouchPad;
+  const auto wiimote = static_cast<WiimoteEmu::Wiimote*>(Wiimote::GetConfig()->GetController(0));
+  if (wiimote->GetActiveExtensionNumber() == WiimoteEmu::ExtensionNumber::CLASSIC) {
+    targetTouchPad = DOLEmulationVisibleTouchPadClassic;
+  } else if (wiimote->IsSideways()) {
+    targetTouchPad = DOLEmulationVisibleTouchPadSidewaysWiimote;
+  } else {
+    targetTouchPad = DOLEmulationVisibleTouchPadWiimote;
+  }
+  [self updateVisibleTouchPadWithType:targetTouchPad];
+  [self updatePointerValuesOnWiiTouchPads];
+  [self ensureVisibleTouchPadFallbackIfAmbiguous];
+}
 
-  [UIView animateWithDuration:0.5f animations:^{
-    for (int i = 0; i < [self.touchPads count]; i++) {
-      TCView* padView = self.touchPads[i];
-      padView.alpha = i == targetIdx ? targetOpacity : 0.0f;
+- (void)updateVisibleTouchPadToGameCube {
+  // Per-game override
+  NSString* overrideStr = [[NSUserDefaults standardUserDefaults] stringForKey:@"current_profile_touch_override"];
+  if (overrideStr && [overrideStr isEqualToString:@"forceWii"]) {
+    [self updateVisibleTouchPadToWii];
+    return;
+  }
+  const BOOL autoSystem = [[NSUserDefaults standardUserDefaults] objectForKey:@"auto_touchpad_by_system"] ? [[NSUserDefaults standardUserDefaults] boolForKey:@"auto_touchpad_by_system"] : YES;
+  if (!autoSystem) {
+    if (![self isGameCubeTouchPadAttached]) { [self ensureVisibleTouchPadFallbackIfAmbiguous]; return; }
+  }
+  if (![self isGameCubeTouchPadAttached]) {
+    if (Core::System::GetInstance().IsWii() && [self isWiimoteTouchPadAttached]) {
+      [self updateVisibleTouchPadToWii];
+    } else {
+      // Force GC as universal fallback
+      [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+      [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
     }
-  }];
-
-  _visibleTouchPad = touchPad;
+    [self ensureVisibleTouchPadFallbackIfAmbiguous];
+    return;
+  }
+  [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
+  [self ensureVisibleTouchPadFallbackIfAmbiguous];
 }
 
 - (void)updatePointerValuesOnWiiTouchPads {
