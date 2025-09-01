@@ -49,6 +49,10 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
     // Cancellable loop task; do not finish streams on stop()
     private var loopTask: Task<Void, Never>?
+    /// Guard to avoid overlapping enumerations; new requests coalesce while true
+    private var isEnumeratingNow: Bool = false
+    /// Signal to trigger an immediate refresh after the current run (coalesced)
+    private var immediateRefreshRequested: Bool = false
 
     /// Generate consistent ID based on host (matches C++ logic)
     static func generateConsistentId(for url: URL) -> String {
@@ -138,19 +142,22 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         // Clean up any stale cache entries from old implementation
         cleanupStaleCache()
 
-        // Create fresh streams and continuations for restart
-        var oc: AsyncStream<Bool>.Continuation!
-        self.onlineStream = AsyncStream<Bool> { c in oc = c }
-        self.onlineCont = oc
-        var ic: AsyncStream<[RemoteLibraryItem]>.Continuation!
-        self.itemsStream = AsyncStream<[RemoteLibraryItem]> { c in ic = c }
-        self.itemsCont = ic
-        var pc: AsyncStream<Double>.Continuation!
-        self.scanningProgress = AsyncStream<Double> { c in pc = c }
-        self.scanningProgressCont = pc
-        #if canImport(os)
-        Self.logger.info("Created fresh streams for WebDAV source: \(self.name)")
-        #endif
+        // If streams already exist, reuse them (do not recreate)
+        if onlineCont == nil {
+            var oc: AsyncStream<Bool>.Continuation!
+            self.onlineStream = AsyncStream<Bool> { c in oc = c }
+            self.onlineCont = oc
+        }
+        if itemsCont == nil {
+            var ic: AsyncStream<[RemoteLibraryItem]>.Continuation!
+            self.itemsStream = AsyncStream<[RemoteLibraryItem]> { c in ic = c }
+            self.itemsCont = ic
+        }
+        if scanningProgressCont == nil {
+            var pc: AsyncStream<Double>.Continuation!
+            self.scanningProgress = AsyncStream<Double> { c in pc = c }
+            self.scanningProgressCont = pc
+        }
 
         // Perform an initial ping, then emit cached items for fast UI
         Task { @MainActor in
@@ -167,8 +174,10 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             }
         }
 
-        // Cancel any previous loop and start a fresh one
-        loopTask?.cancel()
+        // If loop already running, do nothing
+        if let lt = loopTask, !lt.isCancelled { return }
+
+        // Start a single long-lived loop
         loopTask = Task { [weak self] in
             guard let self else { return }
             await self.loop()
@@ -180,7 +189,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         Self.logger.info("Stopping source loop for \(self.rootURL.absoluteString, privacy: .public)")
         #endif
 
-        // Cancel the loop task
+        // Cancel the loop task but keep streams alive for subscribers
         loopTask?.cancel()
         loopTask = nil
 
@@ -190,17 +199,17 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         for (_, task) in activeCacheTasks { task.cancel() }
         activeCacheTasks.removeAll()
 
-        // Finish the current streams to properly end them
-        onlineCont?.finish()
-        itemsCont?.finish()
-        scanningProgressCont?.finish()
-        onlineCont = nil
-        itemsCont = nil
-        scanningProgressCont = nil
-
         #if canImport(os)
-        Self.logger.info("WebDAV source stopped, streams finished and will be recreated on restart")
+        Self.logger.info("WebDAV source stopped (streams persist)")
         #endif
+    }
+
+    /// Coalesced immediate refresh request; triggers next scan ASAP without restarting streams
+    func requestRefresh() {
+        #if canImport(os)
+        Self.logger.info("requestRefresh called for \(self.rootURL.absoluteString, privacy: .public)")
+        #endif
+        immediateRefreshRequested = true
     }
 
     private func loop() async {
@@ -219,19 +228,23 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             if Task.isCancelled { break }
             if isOnline {
                 #if canImport(os)
-                Self.logger.debug("Source is online, starting enumeration")
+                Self.logger.debug("Source is online, starting enumeration (guarded)")
                 #endif
-                await enumerateAndEmit()
-            } else {
-                #if canImport(os)
-                Self.logger.debug("Source is offline, skipping enumeration")
-                #endif
+                if !isEnumeratingNow {
+                    isEnumeratingNow = true
+                    await enumerateAndEmit()
+                    isEnumeratingNow = false
+                } else {
+                    #if canImport(os)
+                    Self.logger.debug("Enumeration already running, skipping new run")
+                    #endif
+                }
             }
-            #if canImport(os)
-            Self.logger.debug("Sleeping for \(self.interval, privacy: .public) seconds")
-            #endif
+            // Decide next delay: run ASAP if an immediate refresh was requested during this cycle
+            let shouldRunSoon = immediateRefreshRequested
+            immediateRefreshRequested = false
             do {
-                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                try await Task.sleep(nanoseconds: UInt64((shouldRunSoon ? 0.1 : interval) * 1_000_000_000))
             } catch {
                 break
             }
