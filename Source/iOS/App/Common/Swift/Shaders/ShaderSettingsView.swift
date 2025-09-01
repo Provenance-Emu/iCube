@@ -204,7 +204,7 @@ struct ShaderSettingsView: View {
 
 	var body: some View {
 		List {
-			Section(header: Text(L("Post-Processing Shader"))) {
+			Section(header: Text(L("Post-Processing Shader")), footer: Text(L("Note: Some shaders can reduce performance. Heavier effects may cause slowdowns depending on your device."))) {
 				Toggle(L("Enable Shader"), isOn: $enabled)
 					.onChange(of: enabled) {
 						UserDefaults.standard.set($0, forKey: "shader_enabled")
