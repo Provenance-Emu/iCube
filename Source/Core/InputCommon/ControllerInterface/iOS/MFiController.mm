@@ -220,10 +220,12 @@ std::string MFiController::Button::GetName() const
 ControlState MFiController::Button::GetState() const
 {
   const bool pressed = [m_input isPressed];
+#if DEBUG
   if (pressed)
   {
     NSLog(@"[Input][MFi] %@ pressed", [NSString stringWithUTF8String:m_name.c_str()]);
   }
+#endif
   return pressed;
 }
 
@@ -235,10 +237,12 @@ std::string MFiController::PressureSensitiveButton::GetName() const
 ControlState MFiController::PressureSensitiveButton::GetState() const
 {
   const float v = [m_input value];
+#if DEBUG
   if (v > 0.01f)
   {
     NSLog(@"[Input][MFi] %@ value=%.3f", [NSString stringWithUTF8String:m_name.c_str()], v);
   }
+#endif
   return v;
 }
 
@@ -250,10 +254,12 @@ std::string MFiController::Axis::GetName() const
 ControlState MFiController::Axis::GetState() const
 {
   const float v = [m_input value] * m_multiplier;
+#if DEBUG
   if (fabsf(v) > 0.01f)
   {
     NSLog(@"[Input][MFi] %@ value=%.3f", [NSString stringWithUTF8String:m_name.c_str()], v);
   }
+#endif
   return v;
 }
 
