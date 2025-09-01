@@ -1448,8 +1448,15 @@ internal struct ControllerMappingView: View {
           ControllerPickerSheet(game: game, port: port) { selected in
             if let idx = selected, controllers.indices.contains(idx) {
               TVControllerMappingBridge.assign(controllers[idx], toGCPort: port)
+              TVControllerMappingBridge.reconcileAssignments()
               reload()
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Assigned to Player %d"), port)])
+            }
+            else if selected == -1 {
+              TVControllerMappingBridge.assignTouchscreen(toGCPort: port)
+              TVControllerMappingBridge.reconcileAssignments()
+              reload()
+              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Touchscreen assigned to Player %d"), port)])
             }
             showPickerForPort = nil
           }
@@ -1663,8 +1670,15 @@ internal struct ControllerMappingView: View {
           ControllerPickerSheet(game: game, port: port) { selected in
             if let idx = selected, controllers.indices.contains(idx) {
               TVControllerMappingBridge.assign(controllers[idx], toGCPort: port)
+              TVControllerMappingBridge.reconcileAssignments()
               reload()
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Assigned to Player %d"), port)])
+            }
+            else if selected == -1 {
+              TVControllerMappingBridge.assignTouchscreen(toGCPort: port)
+              TVControllerMappingBridge.reconcileAssignments()
+              reload()
+              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Touchscreen assigned to Player %d"), port)])
             }
             showPickerForPort = nil
           }
@@ -1690,8 +1704,21 @@ private struct ControllerPickerSheet: View {
     NavigationStack {
       List {
         Section(header: Text(L("Select Controller"))) {
+          // Always provide a Touchscreen option at top
+          Button(action: {
+            selection = -1
+            TVControllerMappingBridge.assignTouchscreen(toGCPort: port)
+          }) {
+            HStack(spacing: 12) {
+              Image(systemName: "hand.tap").foregroundStyle(.secondary)
+              Text(L("Touchscreen"))
+              Spacer()
+              if selection == -1 { Image(systemName: "checkmark").foregroundStyle(.blue) }
+            }
+          }
+
           if controllers.isEmpty {
-            Text(L("No controllers connected")).foregroundStyle(.secondary)
+            Text(L("No external controllers connected")).foregroundStyle(.secondary)
           } else {
             ForEach(Array(controllers.enumerated()), id: \.offset) { idx, c in
               Button(action: {
