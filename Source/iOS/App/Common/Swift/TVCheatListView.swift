@@ -6,6 +6,7 @@ struct TVCheatListView: View {
     @State private var tab: Tab = .gecko
     @State private var gecko: [TVGeckoCodeInfo] = []
     @State private var ar: [TVActionReplayCodeInfo] = []
+    @Environment(\.dismiss) private var dismissEnv
 
     var body: some View {
         NavigationStack {
@@ -49,7 +50,7 @@ struct TVCheatListView: View {
             }
             .navigationTitle("Cheats")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismissEnv() } }
             }
             .onAppear(perform: reload)
         }
