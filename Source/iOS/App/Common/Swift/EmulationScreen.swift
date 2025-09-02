@@ -580,6 +580,12 @@ struct EmulationScreen: View {
         ReplayKitManager.shared.startBufferingIfEnabled()
         if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
         #endif
+        // Force Wiimote 1 to Emulated when Wii overlay is active
+        if controllerManager.overlayMode == .wii || isWiiSystem {
+            DOLConfigBridge.setWiimoteSourceFor(1, source: 1)
+            DOLConfigBridge.setConnectWiimotesForControllerInterface(true)
+            EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
+        }
         // On iOS, do not hand controller button presses to the system while in-game
         GCController.shouldMonitorBackgroundEvents = false
         for c in GCController.controllers() {
@@ -689,6 +695,11 @@ struct EmulationScreen: View {
     }
     .onReceive(controllerManager.$overlayMode) { _ in
         touchPadsRefreshToken = UUID()
+        if controllerManager.overlayMode == .wii {
+            DOLConfigBridge.setWiimoteSourceFor(1, source: 1)
+            DOLConfigBridge.setConnectWiimotesForControllerInterface(true)
+            EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
+        }
     }
     .onReceive(controllerManager.$overlayVisible) { v in
         isTouchControlsActive = v
@@ -852,9 +863,11 @@ struct EmulationScreen: View {
   }
 
 #if os(iOS)
+  // MARK: - Touch overlay (UIKit-backed)
   private struct TouchPadsContainer: UIViewRepresentable {
     let forceVisible: Bool
     let isWii: Bool
+    let overrideWii: Bool?
     func makeUIView(context: Context) -> UIView {
       let host = UIView()
       host.backgroundColor = .clear
@@ -871,6 +884,21 @@ struct EmulationScreen: View {
             motion.setMotionEnabled(true)
             motion.setPort(4)
             motion.statusBarOrientationChanged()
+            wiiPad.isUserInteractionEnabled = true
+            let selNames = ["setPort:", "setWiimotePort:", "setPlayerIndex:", "setPlayer:"]
+            var didSetPort = false
+            for name in selNames {
+              let sel = Selector(name)
+              if wiiPad.responds(to: sel) {
+                _ = wiiPad.perform(sel, with: NSNumber(value: 1))
+                NSLog("[TOUCH] TCWiiPad responded to %@, set value 1", name)
+                didSetPort = true
+                break
+              }
+            }
+            if !didSetPort { NSLog("[TOUCH] TCWiiPad has no known port setter; relying on defaults") }
+            // Propagate port to all known subviews (TCButton, TCDirectionalPad, TCJoystick)
+            configureWiiSubtree(v, port: 1)
             let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
             if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) { wiiPad.setTouchIRMode(mode) }
             wiiPad.resetPointer()
@@ -878,6 +906,8 @@ struct EmulationScreen: View {
             wiiPad.recalculatePointerValues(new_rect: host.bounds, game_aspect: ar)
           } else {
             NSLog("[TOUCH] TCWiiPad class not found in loaded nib hierarchy")
+            dumpViewTree(v)
+            configureWiiSubtree(v, port: 1)
           }
           let a = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
           v.alpha = a
@@ -916,6 +946,21 @@ struct EmulationScreen: View {
               motion.setMotionEnabled(true)
               motion.setPort(4)
               motion.statusBarOrientationChanged()
+              wiiPad.isUserInteractionEnabled = true
+              let selNames = ["setPort:", "setWiimotePort:", "setPlayerIndex:", "setPlayer:"]
+              var didSetPort = false
+              for name in selNames {
+                let sel = Selector(name)
+                if wiiPad.responds(to: sel) {
+                  _ = wiiPad.perform(sel, with: NSNumber(value: 1))
+                  NSLog("[TOUCH] (update) TCWiiPad responded to %@, set value 1", name)
+                  didSetPort = true
+                  break
+                }
+              }
+              if !didSetPort { NSLog("[TOUCH] (update) TCWiiPad has no known port setter; relying on defaults") }
+              // Propagate port to all known subviews (TCButton, TCDirectionalPad, TCJoystick)
+              configureWiiSubtree(v, port: 1)
               let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
               if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) { wiiPad.setTouchIRMode(mode) }
               wiiPad.resetPointer()
@@ -923,6 +968,8 @@ struct EmulationScreen: View {
               wiiPad.recalculatePointerValues(new_rect: uiView.bounds, game_aspect: ar)
             } else {
               NSLog("[TOUCH] TCWiiPad class not found in loaded nib hierarchy (update)")
+              dumpViewTree(v)
+              configureWiiSubtree(v, port: 1)
             }
             let a = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
             v.alpha = a
@@ -1008,15 +1055,41 @@ struct EmulationScreen: View {
     private func viewContainsTCWiiPad(_ v: UIView) -> Bool { return findTCWiiPad(in: v) != nil }
     private func findTCWiiPad(in v: UIView) -> TCWiiPad? {
       if let w = v as? TCWiiPad { return w }
+      // Fallback: match by class name substring or selector presence
+      let name = NSStringFromClass(type(of: v))
+      if name.contains("TCWiiPad") || v.responds(to: Selector("setTouchIRMode:")) {
+        return v as? TCWiiPad
+      }
       for sub in v.subviews { if let found = findTCWiiPad(in: sub) { return found } }
       return nil
+    }
+
+    private func dumpViewTree(_ v: UIView, depth: Int = 0) {
+      let prefix = String(repeating: "-", count: depth)
+      NSLog("[TOUCH] %@ %@", prefix, NSStringFromClass(type(of: v)))
+      for sub in v.subviews { dumpViewTree(sub, depth: depth + 1) }
+    }
+
+    private func configureWiiSubtree(_ view: UIView, port: Int) {
+      // Try to set port/player on any known control classes
+      let selectors = ["setPort:", "setWiimotePort:", "setPlayerIndex:", "setPlayer:"]
+      for name in selectors {
+        let sel = Selector(name)
+        if view.responds(to: sel) {
+          _ = view.perform(sel, with: NSNumber(value: port))
+          NSLog("[TOUCH] Set %@ = %d on %@", name, port, NSStringFromClass(type(of: view)))
+          break
+        }
+      }
+      view.isUserInteractionEnabled = true
+      for sub in view.subviews { configureWiiSubtree(sub, port: port) }
     }
   }
   #endif
 
   #endif
 
-  private func logCurrentControllers() {
+   private func logCurrentControllers() {
     guard UserDefaults.standard.bool(forKey: "input_debug") else { return }
     let controllers = GCController.controllers()
     NSLog("[INPUT] Currently connected controllers: %d", controllers.count)
