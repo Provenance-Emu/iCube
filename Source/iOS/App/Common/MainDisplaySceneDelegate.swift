@@ -4,6 +4,7 @@
 import UIKit
 import SwiftUI
 import CoreSpotlight
+import QuartzCore
 
 class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
@@ -22,6 +23,7 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       window.rootViewController = UIHostingController(rootView: rootView)
       self.window = window
       window.makeKeyAndVisible()
+      applyFrameCap(to: windowScene)
 #if !os(tvOS)
       // Handle cold-boot quick actions after UI is ready
       if let shortcut = connectionOptions.shortcutItem {
@@ -45,6 +47,7 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     ServiceManager.shared.applicationDidBecomeActive()
 
     BootNoticeManager.shared().presentToSceneIfNecessary()
+    if let ws = scene as? UIWindowScene { applyFrameCap(to: ws) }
   }
 
   func sceneWillResignActive(_ scene: UIScene) {
@@ -108,5 +111,11 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     if attempt < 8 {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.attemptContinue(attempt: attempt + 1) }
     }
+  }
+
+  private func applyFrameCap(to scene: UIWindowScene) {
+    #if os(iOS)
+    _ = UserDefaults.standard.integer(forKey: "ui_frame_cap")
+    #endif
   }
 }

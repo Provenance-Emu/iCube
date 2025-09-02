@@ -3,6 +3,8 @@
 
 import SwiftUI
 import UIKit
+import CoreHaptics
+import QuartzCore
 
 /// Root Settings page implemented in SwiftUI for iOS/tvOS
 struct SettingsRootView<Background: View>: View {
@@ -565,6 +567,34 @@ struct ControllersRootView: View {
         Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
           .onChange(of: autoSelectOnScreenBySystem) { newValue in UserDefaults.standard.set(newValue, forKey: "auto_touchpad_by_system") }
         NavigationLink(L("Turbo Multiplier"), destination: ControllersTurboPicker())
+        #if os(iOS)
+        Button(L("Test Rumble")) {
+          if let controller = GCController.controllers().first, #available(iOS 14.0, *) {
+            if let h = controller.haptics {
+              do {
+                let engine = try h.createEngine(withLocality: .default)
+                try engine?.start()
+                let pattern = try CHHapticPattern(events: [
+                  CHHapticEvent(eventType: .hapticTransient, parameters: [
+                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
+                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5)
+                  ], relativeTime: 0)
+                ], parameters: [])
+                if let engine = engine {
+                  let player = try engine.makePlayer(with: pattern)
+                  try player.start(atTime: 0)
+                }
+              } catch {
+                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Rumble not available")])
+              }
+            } else {
+              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Rumble not available")])
+            }
+          } else {
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("No controller connected")])
+          }
+        }
+        #endif
       }
 
       Section(header: Text(L("Wii Remotes"))) {
@@ -674,6 +704,7 @@ struct DebugRootView: View {
   @State private var loggingEnabled: Bool = false
   @State private var loggingVerbosity: Int = 4
   @State private var inputDebug: Bool = false
+  @State private var instantReplay: Bool = false
 
   var body: some View {
     List {
@@ -690,6 +721,13 @@ struct DebugRootView: View {
           .onChange(of: mfiConnect) { _ in
             UserDefaults.standard.set(mfiConnect, forKey: "virtual_mfi_connect")
           }
+      }
+
+      Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
+        #if os(iOS)
+        Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
+          .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }
+        #endif
       }
 
       Section(header: Text(L("Environment"))) {
@@ -739,6 +777,7 @@ struct DebugRootView: View {
     var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = 4 }
     loggingVerbosity = v
     inputDebug = UserDefaults.standard.bool(forKey: "input_debug")
+    instantReplay = UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled")
   }
 }
 
@@ -1579,6 +1618,7 @@ struct GraphicsGeneralView: View {
   @State private var targetFPS: TargetFPS = .fps60
   @State private var minScale: InternalScale = .x1_0
   @State private var maxScale: InternalScale = .x2_0
+  @State private var frameCap: Int = 0
 
   // Shader compilation
   @State private var shaderType: ShaderCompileType = .asynchronousUber
@@ -1587,9 +1627,13 @@ struct GraphicsGeneralView: View {
   var body: some View {
     List {
       Section {
-        NavigationLink("\(L("Backend")): \(backend.label)", destination: GraphicsBackendPickerView(selected: $backend))
+        NavigationLink(destination: GraphicsBackendPickerView(selected: $backend)) {
+          Text("\(L("Backend")): \(backend.label)")
+        }
           .onChange(of: backend) { _ in DOLConfigBridge.setGfxBackend(backend.backendKey) }
-        NavigationLink("\(L("Aspect Ratio")): \(aspect.label)", destination: GraphicsAspectRatioView(selected: $aspect))
+        NavigationLink(destination: GraphicsAspectRatioView(selected: $aspect)) {
+          Text("\(L("Aspect Ratio")): \(aspect.label)")
+        }
           .onChange(of: aspect) { _ in DOLConfigBridge.setGfxAspectRatio(aspect.aspectRaw) }
         Toggle(L("V-Sync"), isOn: $vSync)
           .onChange(of: vSync) { newValue in DOLConfigBridge.setGfxVSync(newValue) }
@@ -1603,16 +1647,37 @@ struct GraphicsGeneralView: View {
           .onChange(of: asyncPresent) { newValue in DOLConfigBridge.setGfxAsyncPresent(newValue) }
         Toggle(L("Enable Auto Internal Resolution"), isOn: $autoIR)
           .onChange(of: autoIR) { newValue in DOLConfigBridge.setGfxAutoIREnable(newValue) }
-        NavigationLink("\(L("Target FPS")): \(targetFPS.label)", destination: GraphicsTargetFPSView(selected: $targetFPS))
+        NavigationLink(destination: GraphicsTargetFPSView(selected: $targetFPS)) {
+          Text("\(L("Target FPS")): \(targetFPS.label)")
+        }
           .onChange(of: targetFPS) { _ in DOLConfigBridge.setGfxAutoIRTargetFPS(targetFPS.fpsValue) }
-        NavigationLink("\(L("Min Scale")): \(minScale.label)", destination: GraphicsMinScaleView(selected: $minScale))
+        NavigationLink(destination: GraphicsMinScaleView(selected: $minScale)) {
+          Text("\(L("Min Scale")): \(minScale.label)")
+        }
           .onChange(of: minScale) { _ in DOLConfigBridge.setGfxAutoIRMinScale(minScale.scaleValue) }
-        NavigationLink("\(L("Max Scale")): \(maxScale.label)", destination: GraphicsMaxScaleView(selected: $maxScale))
+        NavigationLink(destination: GraphicsMaxScaleView(selected: $maxScale)) {
+          Text("\(L("Max Scale")): \(maxScale.label)")
+        }
           .onChange(of: maxScale) { _ in DOLConfigBridge.setGfxAutoIRMaxScale(maxScale.scaleValue) }
+        #if os(iOS)
+        Picker(L("Frame Rate Cap"), selection: $frameCap) {
+          Text(L("System Default")).tag(0)
+          Text("30").tag(30)
+          Text("60").tag(60)
+          Text("90").tag(90)
+          Text("120").tag(120)
+        }
+        .onChange(of: frameCap) { v in
+          UserDefaults.standard.set(v, forKey: "ui_frame_cap")
+          // Application is handled by the scene delegate where supported
+        }
+        #endif
       }
 
       Section(header: Text(L("Shader Compilation"))) {
-        NavigationLink("\(L("Type")): \(shaderType.label)", destination: GraphicsShaderTypeView(selected: $shaderType))
+        NavigationLink(destination: GraphicsShaderTypeView(selected: $shaderType)) {
+          Text("\(L("Type")): \(shaderType.label)")
+        }
           .onChange(of: shaderType) { _ in DOLConfigBridge.setGfxShaderCompilationMode(shaderType.modeRaw) }
         Toggle(L("Compile shaders before starting"), isOn: $compileBeforeStart)
           .onChange(of: compileBeforeStart) { newValue in DOLConfigBridge.setGfxWaitForShadersBeforeStarting(newValue) }
@@ -1620,6 +1685,7 @@ struct GraphicsGeneralView: View {
     }
     .navigationTitle(L("General"))
     .onAppear { syncFromConfig() }
+    .onAppear { frameCap = UserDefaults.standard.integer(forKey: "ui_frame_cap") }
   }
 
   private func syncFromConfig() {

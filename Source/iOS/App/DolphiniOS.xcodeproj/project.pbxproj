@@ -22,6 +22,10 @@
 		B31E80662E6563540036EE31 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80652E6563530036EE31 /* WidgetKit.framework */; };
 		B31E80682E6563540036EE31 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80672E6563540036EE31 /* SwiftUI.framework */; };
 		B31E921B2E665F530036EE31 /* ControllerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E921A2E665F530036EE31 /* ControllerManager.swift */; };
+		B31E921D2E667BE10036EE31 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E921C2E667BE10036EE31 /* ReplayKit.framework */; };
+		B31E92212E667C0F0036EE31 /* SiriShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E921F2E667C0F0036EE31 /* SiriShortcutManager.swift */; };
+		B31E92222E667C0F0036EE31 /* ThermalManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E92202E667C0F0036EE31 /* ThermalManager.swift */; };
+		B31E92232E667C0F0036EE31 /* ReplayKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E921E2E667C0F0036EE31 /* ReplayKitManager.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -309,6 +313,10 @@
 		B31E80672E6563540036EE31 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B31E807A2E6563550036EE31 /* Live ActivityExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Live ActivityExtension.entitlements"; sourceTree = "<group>"; };
 		B31E921A2E665F530036EE31 /* ControllerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerManager.swift; sourceTree = "<group>"; };
+		B31E921C2E667BE10036EE31 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/System/iOSSupport/System/Library/Frameworks/ReplayKit.framework; sourceTree = DEVELOPER_DIR; };
+		B31E921E2E667C0F0036EE31 /* ReplayKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplayKitManager.swift; sourceTree = "<group>"; };
+		B31E921F2E667C0F0036EE31 /* SiriShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriShortcutManager.swift; sourceTree = "<group>"; };
+		B31E92202E667C0F0036EE31 /* ThermalManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThermalManager.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -805,6 +813,7 @@
 			files = (
 				B31E80592E651FD80036EE31 /* libMoltenVK-Catalyst.a in Frameworks */,
 				B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */,
+				B31E921D2E667BE10036EE31 /* ReplayKit.framework in Frameworks */,
 				B34ECCF52E569AF300301907 /* PVWebServer in Frameworks */,
 				B95AC5302D29C7FD0048E48B /* AVFoundation.framework in Frameworks */,
 				B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */,
@@ -1195,6 +1204,9 @@
 				B31E804E2E6504940036EE31 /* ControllerPresets.swift */,
 				B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */,
 				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
+				B31E921E2E667C0F0036EE31 /* ReplayKitManager.swift */,
+				B31E921F2E667C0F0036EE31 /* SiriShortcutManager.swift */,
+				B31E92202E667C0F0036EE31 /* ThermalManager.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
 				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
@@ -1884,6 +1896,7 @@
 		B9D9389C283EF7AD00B290FC /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				B31E921C2E667BE10036EE31 /* ReplayKit.framework */,
 				B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */,
 				B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */,
 				B36B63002E5E56A3009A2303 /* PVlibDolphin.xcframework */,
@@ -2406,6 +2419,9 @@
 				B9FCB7D8289841730020E233 /* MsgAlertManager.mm in Sources */,
 				B9DC5FB92884CB7C004BD94A /* GraphicsChoiceCell.mm in Sources */,
 				B9B2C626288DB64700CB6569 /* TCWiiPad.swift in Sources */,
+				B31E92212E667C0F0036EE31 /* SiriShortcutManager.swift in Sources */,
+				B31E92222E667C0F0036EE31 /* ThermalManager.swift in Sources */,
+				B31E92232E667C0F0036EE31 /* ReplayKitManager.swift in Sources */,
 				B36B51912E5D8760009A2303 /* CheatsMenuView.swift in Sources */,
 				B9114F9C2893C6CA00B9C57A /* DebugRootViewController.mm in Sources */,
 				B95AC52A2D29BA5C0048E48B /* AudioSessionManager.mm in Sources */,

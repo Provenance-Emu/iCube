@@ -192,6 +192,8 @@ struct EmulationScreen: View {
   @State private var arPollTask: Task<Void, Never>?
   // Touch pad refresh coordination to avoid system detection races
   @State private var touchPadsRefreshToken = UUID()
+  @State private var irModeRaw: Int = 1
+  @State private var desiredTouchControls: Bool = true
 #endif
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
@@ -390,6 +392,20 @@ struct EmulationScreen: View {
                             Image(systemName: fastForwardEnabled ? "forward.fill" : "forward")
                                 .font(.title2)
                         }
+                        #if os(iOS)
+                        // Thermal badge
+                        if UserDefaults.standard.bool(forKey: "thermal_auto_enable") {
+                            ThermalBadgeView()
+                        }
+                        if UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled") {
+                            Button {
+                                hasTopBarInteraction = true
+                                ReplayKitManager.shared.saveRecentClip(seconds: 15)
+                            } label: {
+                                Image(systemName: "clock.arrow.circlepath").font(.title2)
+                            }
+                        }
+                        #endif
                         Button {
                             hasTopBarInteraction = true
                             showShaderSheet = true
@@ -502,6 +518,20 @@ struct EmulationScreen: View {
     .onAppear {
         NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
         NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
+        irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
+        let useIMU = (irModeRaw == 0)
+        TVEmulationBridge.setWiiIMUPointEnabled(useIMU)
+        TCDeviceMotion.shared.setMotionEnabled(isTouchControlsActive && useIMU)
+        // Ensure touch controls start visible
+        isTouchControlsActive = true
+        desiredTouchControls = true
+        // Reconcile and ensure Pad 1 defaults to touchscreen if needed
+        ControllerManager.shared.reconcile()
+        EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
+        #if os(iOS)
+        ReplayKitManager.shared.startBufferingIfEnabled()
+        if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
+        #endif
         // On iOS, do not hand controller button presses to the system while in-game
         GCController.shouldMonitorBackgroundEvents = false
         for c in GCController.controllers() {
@@ -516,6 +546,9 @@ struct EmulationScreen: View {
         logCurrentControllers()
         fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
         for c in GCController.controllers() { installInputDebugHandlers(c) }
+        #if os(iOS)
+        SiriShortcutManager.shared.donatePlay(game: game)
+        #endif
         obsGCConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
             if let c = note.object as? GCController { installInputDebugHandlers(c) }
             touchPadsRefreshToken = UUID()
@@ -825,3 +858,34 @@ struct EmulationScreen: View {
     }
   }
 }
+
+#if os(iOS)
+private struct ThermalBadgeView: View {
+    @State private var state: Int = 0
+    private func icon() -> String {
+        switch state {
+        case 1: return "thermometer"
+        case 2: return "thermometer.sun"
+        case 3: return "thermometer.high"
+        default: return "thermometer"
+        }
+    }
+    private func color() -> Color {
+        switch state {
+        case 1: return .yellow
+        case 2: return .orange
+        case 3: return .red
+        default: return .green
+        }
+    }
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon()).foregroundStyle(color())
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ThermalManager.changedNotification)) { note in
+            if let s = note.userInfo?["state"] as? Int { state = s }
+        }
+        .onAppear { state = 0 }
+    }
+}
+#endif

@@ -54,6 +54,8 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
             var lines: [String] = []
             if !game.makerLong.isEmpty { lines.append(game.makerLong) }
             if let date = game.apploaderDateString, let year = date.split(separator: "/").first { lines.append(String(year)) }
+            if !game.countryName.isEmpty { lines.append(game.countryName) }
+            if !game.gametdbID.isEmpty { lines.append(game.gametdbID) }
             attr.contentDescription = lines.isEmpty ? game.gameID : (lines.joined(separator: " • "))
             attr.thumbnailData = game.coverImage.pngData()
             let uniqueId = "dios.game.\(game.gameID)"

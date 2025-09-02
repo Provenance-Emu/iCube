@@ -95,6 +95,7 @@
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
   BOOL tripleBuffering = [defaults boolForKey:@"gfx_triple_buffering"];
   BOOL forceScaleOneOnNonProMotion = [defaults boolForKey:@"gfx_force_scale_one_non_promo"];
+  BOOL edrEnabled = [defaults boolForKey:@"gfx_edr_enabled"];
 
   if (_metalLayer) {
     _metalLayer.framebufferOnly = YES;
@@ -109,6 +110,7 @@
       surfaceScale = 1.0;
     }
     _metalLayer.contentsScale = surfaceScale;
+    _metalLayer.pixelFormat = edrEnabled ? MTLPixelFormatRGBA16Float : MTLPixelFormatBGRA8Unorm;
   }
 }
 
@@ -197,6 +199,9 @@
   const CGSize newDrawable = CGSizeMake(size.width * scale, size.height * scale);
   const bool changed = !CGSizeEqualToSize(_lastDrawableSize, newDrawable);
   _metalLayer.drawableSize = newDrawable;
+  // Apply HDR/EDR preference dynamically
+  BOOL edrEnabled = [NSUserDefaults.standardUserDefaults boolForKey:@"gfx_edr_enabled"];
+  _metalLayer.pixelFormat = edrEnabled ? MTLPixelFormatRGBA16Float : MTLPixelFormatBGRA8Unorm;
   if (changed && g_presenter)
   {
     _lastDrawableSize = newDrawable;

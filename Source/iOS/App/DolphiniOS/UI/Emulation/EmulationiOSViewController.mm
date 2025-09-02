@@ -138,6 +138,27 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
       [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar" object:nil userInfo:@{ @"text": msg }];
     }
   }
+  // Battery toast if available
+  id obj = note.object;
+  if ([obj isKindOfClass:[GCController class]]) {
+    GCController* ctrl = (GCController*)obj;
+    if ([ctrl respondsToSelector:@selector(battery)] && ctrl.battery) {
+      float level = ctrl.battery.batteryLevel; // 0.0 ... 1.0 or -1 if unknown
+      NSString* stateStr = @"";
+      if (@available(iOS 14.0, *)) {
+        switch (ctrl.battery.batteryState) {
+          case GCDeviceBatteryStateCharging: stateStr = NSLocalizedString(@"Charging", nil); break;
+          case GCDeviceBatteryStateFull: stateStr = NSLocalizedString(@"Full", nil); break;
+          default: stateStr = @""; break;
+        }
+      }
+      if (level >= 0.0f) {
+        int pct = (int)lrintf(level * 100.0f);
+        NSString* text = stateStr.length ? [NSString stringWithFormat:NSLocalizedString(@"Controller Battery: %d%% (%@)", nil), pct, stateStr] : [NSString stringWithFormat:NSLocalizedString(@"Controller Battery: %d%%", nil), pct];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar" object:nil userInfo:@{ @"text": text }];
+      }
+    }
+  }
   dispatch_async(dispatch_get_main_queue(), ^{
     // Prefer reported system; if ambiguous or Wiimote pad not available, default to GameCube
     if (Core::System::GetInstance().IsWii()) {

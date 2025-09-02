@@ -1,8 +1,10 @@
 import SwiftUI
 import UIKit
 import GameController
+import UniformTypeIdentifiers
 
 #if os(iOS) || targetEnvironment(macCatalyst)
+import UniformTypeIdentifiers
 private struct KeyCommandHostView: UIViewRepresentable {
   let onLeft: () -> Void
   let onRight: () -> Void
@@ -293,6 +295,8 @@ struct TVLibraryView: View {
   @State private var prevMGPHandlers: [ObjectIdentifier: (GCMicroGamepad, GCControllerElement) -> Void] = [:]
   /// Current grid columns (kept in state for reuse)
   @State private var gridColumnCount: Int = 3
+  @State private var dropTargeted: Bool = false
+  @State private var dropPreviewCount: Int = 0
 #endif
 
   /// Storage space management
@@ -670,6 +674,12 @@ struct TVLibraryView: View {
   var body: some View {
     NavigationStack {
       mainContent
+#if os(iOS) || targetEnvironment(macCatalyst)
+        .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
+          handleDrop(providers: providers)
+          return true
+        }
+#endif
         .navigationDestination(item: $navigateToSaveStates) { route in
           SaveStateFilmstripView(gameID: route.id)
         }
@@ -881,6 +891,9 @@ struct TVLibraryView: View {
       }
       .overlay(blockingPrecacheOverlay)
       .overlay(offlineBanner)
+      #if os(iOS) || targetEnvironment(macCatalyst)
+      .overlay(dropHighlight)
+      #endif
       .overlay(searchHintBanner)
       .overlay(snackbar)
       .overlay(onboardingOverlay)
@@ -2527,5 +2540,91 @@ private struct ActionReplayCodesModal: UIViewControllerRepresentable {
   func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
   func makeCoordinator() -> Coordinator { Coordinator() }
   final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil); if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) } } }
+}
+#endif
+
+#if os(iOS) || targetEnvironment(macCatalyst)
+extension TVLibraryView {
+  private var dropHighlight: some View {
+    if dropTargeted {
+      return AnyView(
+        VStack {
+          Spacer().frame(height: 8)
+          HStack(spacing: 10) {
+            Image(systemName: "square.and.arrow.down").foregroundStyle(.white)
+            if dropPreviewCount > 0 {
+              Text(String(format: L("Drop %1 files to import"), dropPreviewCount))
+                .foregroundStyle(.white)
+            } else {
+              Text(L("Drop files to import")).foregroundStyle(.white)
+            }
+            Spacer(minLength: 8)
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 10)
+          .background(Color.accentColor.opacity(0.9))
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          .padding(.horizontal, 12)
+          .padding(.top, 8)
+          Spacer()
+        }
+        .transition(.move(edge: .top).combined(with: .opacity))
+      )
+    }
+    return AnyView(EmptyView())
+  }
+
+  private func handleDrop(providers: [NSItemProvider]) {
+    let wanted = UTType.fileURL.identifier
+    var pendingURLs: [URL] = []
+    let group = DispatchGroup()
+    for provider in providers {
+      if provider.hasItemConformingToTypeIdentifier(wanted) {
+        group.enter()
+        provider.loadItem(forTypeIdentifier: wanted, options: nil) { (item, error) in
+          defer { group.leave() }
+          if let nsURL = item as? NSURL, let url = nsURL as URL? {
+            pendingURLs.append(url)
+          }
+        }
+      }
+    }
+    group.notify(queue: .main) {
+      dropPreviewCount = pendingURLs.count
+      let files = expandAndFilterImportURLs(pendingURLs)
+      guard !files.isEmpty else {
+        NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("No supported files to import")])
+        return
+      }
+      NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Importing %1 files…"), files.count)])
+      for u in files { ImportFileManager.shared().importFile(at: u) }
+    }
+  }
+
+  private func expandAndFilterImportURLs(_ urls: [URL]) -> [URL] {
+    let allowed: Set<String> = ["iso","gcm","wbfs","gcz","ciso","rvz","wad","dol","elf"]
+    var results: [URL] = []
+    let fm = FileManager.default
+    for url in urls {
+      var isDir: ObjCBool = false
+      if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+        // Recurse directory
+        if let e = fm.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
+          for case let f as URL in e {
+            if allowed.contains(f.pathExtension.lowercased()) { results.append(f) }
+          }
+        }
+      } else {
+        let ext = url.pathExtension.lowercased()
+        if allowed.contains(ext) {
+          results.append(url)
+        } else if ext == "zip" {
+          // Pass zip to importer; if importer unzips, it will handle contents
+          results.append(url)
+        }
+      }
+    }
+    return results
+  }
 }
 #endif
