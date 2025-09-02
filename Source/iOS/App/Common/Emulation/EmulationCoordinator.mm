@@ -467,7 +467,7 @@ static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev
 
 + (void)ensurePad1DefaultsToTouchscreen
 {
-  DOLHostQueueRunAsync(^{
+  DOLHostQueueRunSync(^{
     EnsurePad1DefaultsToTouchscreen();
   });
 }
