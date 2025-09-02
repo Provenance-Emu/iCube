@@ -197,6 +197,7 @@ struct EmulationScreen: View {
 #endif
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
+  @State private var isWiiSystem: Bool = false
 
   var body: some View {
 #if os(tvOS)
@@ -309,6 +310,8 @@ struct EmulationScreen: View {
       timer?.invalidate()
       timer = nil
       elapsedSeconds = 0
+      // Reset inferred system to avoid carryover to the next game
+      isWiiSystem = false
     }
     .onChange(of: showPauseMenu) { visible in
       NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
@@ -487,7 +490,7 @@ struct EmulationScreen: View {
 
             // Legacy touch pads
             if isTouchControlsActive {
-                TouchPadsContainer(forceVisible: true)
+                TouchPadsContainer(forceVisible: true, isWii: isWiiSystem)
                     .id(touchPadsRefreshToken)
                     .ignoresSafeArea()
                     .transition(.opacity)
@@ -518,6 +521,8 @@ struct EmulationScreen: View {
     .onAppear {
         NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
         NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
+        // Initialize expected system early from metadata to avoid startup races
+        isWiiSystem = inferIsWii(from: game)
         irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
         let useIMU = (irModeRaw == 0)
         TVEmulationBridge.setWiiIMUPointEnabled(useIMU)
@@ -582,6 +587,11 @@ struct EmulationScreen: View {
         // Re-fetch AR soon after appear to avoid tiny first layout
         scheduleARPoll()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { TVEmulationBridge.resizeSurfaceNow() }
+        // Re-infer system shortly after appear in case metadata was incomplete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            isWiiSystem = inferIsWii(from: game)
+            touchPadsRefreshToken = UUID()
+        }
         // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
         let currentIR = DOLConfigBridge.mainTouchPadIRMode()
         if currentIR == 0 { // None
@@ -732,6 +742,21 @@ struct EmulationScreen: View {
     if TVEmulationBridge.isPaused() { TVEmulationBridge.resume() } else { TVEmulationBridge.pause() }
   }
 
+  /// Heuristic: infer Wii vs GC from game metadata (gameID prefix, file extension)
+  private func inferIsWii(from item: TVGameItem) -> Bool {
+    let id = item.gameID.uppercased()
+    if let first = id.first {
+      if first == "R" || first == "S" { return true } // Wii titles commonly start with 'R'/'S'
+      if first == "G" { return false } // GameCube
+    }
+    if let url = URL(string: item.filePath) {
+      let ext = url.pathExtension.lowercased()
+      if ext == "wbfs" || ext == "wad" { return true }
+      if ext == "gcm" { return false }
+    }
+    return isWiiSystem
+  }
+
   /// Sets up pause gesture handlers for all currently connected controllers
   private func setupPauseGestureHandlers() {
     for controller in GCController.controllers() {
@@ -768,6 +793,7 @@ struct EmulationScreen: View {
 #if os(iOS)
   private struct TouchPadsContainer: UIViewRepresentable {
     let forceVisible: Bool
+    let isWii: Bool
     func makeUIView(context: Context) -> UIView {
       let host = UIView()
       host.backgroundColor = .clear
@@ -775,45 +801,94 @@ struct EmulationScreen: View {
 
       // Decide which pad to show based on current system/controller config
       if shouldShowWiiPad() {
-        if let wiiPad = loadPad(named: "TCWiiPad") as? TCWiiPad {
-          wiiPad.frame = host.bounds
-          wiiPad.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-          host.addSubview(wiiPad)
-          // Configure motion and IR mode, recalc pointer using current aspect ratio
-          let motion = TCDeviceMotion.shared
-          motion.setMotionEnabled(true)
-          motion.setPort(4)
-          motion.statusBarOrientationChanged()
-          let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
-          if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) {
-            wiiPad.setTouchIRMode(mode)
+        if let v = loadPad(named: "TCWiiPad") {
+          v.frame = host.bounds
+          v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+          host.addSubview(v)
+          if let wiiPad = findTCWiiPad(in: v) {
+            let motion = TCDeviceMotion.shared
+            motion.setMotionEnabled(true)
+            motion.setPort(4)
+            motion.statusBarOrientationChanged()
+            let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
+            if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) { wiiPad.setTouchIRMode(mode) }
+            wiiPad.resetPointer()
+            let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+            wiiPad.recalculatePointerValues(new_rect: host.bounds, game_aspect: ar)
+          } else {
+            NSLog("[TOUCH] TCWiiPad class not found in loaded nib hierarchy")
           }
-          wiiPad.resetPointer()
-          let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
-          wiiPad.recalculatePointerValues(new_rect: host.bounds, game_aspect: ar)
-          // Ensure visible according to settings
-          wiiPad.alpha = CGFloat(DOLConfigBridge.mainTouchPadOpacity())
-        }
+          let a = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+          v.alpha = a
+          NSLog("[TOUCH] Added Wii pad container with alpha=%.2f", a)
+        } else { NSLog("[TOUCH] Failed to load TCWiiPad nib") }
       } else if shouldShowGameCubePad() {
         if let gcPad = loadPad(named: "TCGameCubePad") {
           gcPad.frame = host.bounds
           gcPad.autoresizingMask = [.flexibleWidth, .flexibleHeight]
           host.addSubview(gcPad)
-          gcPad.alpha = CGFloat(DOLConfigBridge.mainTouchPadOpacity())
+          let a = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+          gcPad.alpha = a
+          NSLog("[TOUCH] Added GC pad with alpha=%.2f", a)
+        } else {
+          NSLog("[TOUCH] Failed to load TCGameCubePad nib")
         }
       }
       return host
     }
     func updateUIView(_ uiView: UIView, context: Context) {
-      // Recalculate Wii pointer values on layout/updates
-      for sub in uiView.subviews {
-        if let wiiPad = sub as? TCWiiPad {
-          let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
-          wiiPad.recalculatePointerValues(new_rect: uiView.bounds, game_aspect: ar)
-          // Keep alpha in sync with setting
-          wiiPad.alpha = CGFloat(DOLConfigBridge.mainTouchPadOpacity())
-        } else if let gcPad = sub as? UIView {
-          gcPad.alpha = CGFloat(DOLConfigBridge.mainTouchPadOpacity())
+      // Ensure the correct pad is present for the current system
+      let wantWii = shouldShowWiiPad()
+      let wantGC = shouldShowGameCubePad()
+      let hasWii = uiView.subviews.contains { viewContainsTCWiiPad($0) }
+      let hasGC = (!hasWii) && !uiView.subviews.isEmpty // simple check
+      NSLog("[TOUCH] updateUIView wantWii=\(wantWii) wantGC=\(wantGC) hasWii=\(hasWii) subviews=\(uiView.subviews.count)")
+      if (wantWii && !hasWii) || (wantGC && hasWii) || uiView.subviews.isEmpty {
+        uiView.subviews.forEach { $0.removeFromSuperview() }
+        if wantWii {
+          if let v = loadPad(named: "TCWiiPad") {
+            v.frame = uiView.bounds
+            v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            uiView.addSubview(v)
+            if let wiiPad = findTCWiiPad(in: v) {
+              let motion = TCDeviceMotion.shared
+              motion.setMotionEnabled(true)
+              motion.setPort(4)
+              motion.statusBarOrientationChanged()
+              let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
+              if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) { wiiPad.setTouchIRMode(mode) }
+              wiiPad.resetPointer()
+              let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+              wiiPad.recalculatePointerValues(new_rect: uiView.bounds, game_aspect: ar)
+            } else {
+              NSLog("[TOUCH] TCWiiPad class not found in loaded nib hierarchy (update)")
+            }
+            let a = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+            v.alpha = a
+            NSLog("[TOUCH] Rebuilt Wii pad container with alpha=%.2f", a)
+          } else { NSLog("[TOUCH] Failed to load TCWiiPad nib (update)") }
+        } else if wantGC {
+          if let gcPad = loadPad(named: "TCGameCubePad") {
+            gcPad.frame = uiView.bounds
+            gcPad.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            uiView.addSubview(gcPad)
+            let a = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+            gcPad.alpha = a
+            NSLog("[TOUCH] Rebuilt GC pad with alpha=%.2f", a)
+          } else {
+            NSLog("[TOUCH] Failed to load TCGameCubePad nib (update)")
+          }
+        }
+      } else {
+        // Recalculate Wii pointer values on layout/updates
+        for sub in uiView.subviews {
+          if let wiiPad = findTCWiiPad(in: sub) {
+            let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+            wiiPad.recalculatePointerValues(new_rect: uiView.bounds, game_aspect: ar)
+            wiiPad.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+          } else {
+            sub.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+          }
         }
       }
     }
@@ -823,10 +898,11 @@ struct EmulationScreen: View {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
 
-      // Show GameCube pad only if the current system is GameCube (not Wii)
-      let isWii = TVEmulationBridge.isCurrentSystemWii()
-      let shouldShow = !isWii
-      NSLog("[TOUCH] GameCube pad decision: isWii=\(isWii), shouldShow=\(shouldShow)")
+      // Prefer bridge when core is running; otherwise use inferred flag
+      let running = TVEmulationBridge.isRunning()
+      let currentIsWii = running ? TVEmulationBridge.isCurrentSystemWii() : isWii
+      let shouldShow = !currentIsWii
+      NSLog("[TOUCH] GameCube pad decision: running=\(running) isWiiState=\(isWii) shouldShow=\(shouldShow)")
       return shouldShow
     }
 
@@ -834,17 +910,39 @@ struct EmulationScreen: View {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
 
-      // Show Wii pad only if the current system is Wii
-      let isWii = TVEmulationBridge.isCurrentSystemWii()
-      NSLog("[TOUCH] Wii pad decision: isWii=\(isWii), shouldShow=\(isWii)")
-      return isWii
+      // Show Wii pad only if the current title is Wii; prefer bridge when running
+      let running = TVEmulationBridge.isRunning()
+      let currentIsWii = running ? TVEmulationBridge.isCurrentSystemWii() : isWii
+      NSLog("[TOUCH] Wii pad decision: running=\(running) isWiiState=\(isWii) shouldShow=\(currentIsWii)")
+      return currentIsWii
     }
 
     private func loadPad(named name: String) -> UIView? {
-      let bundle = Bundle(for: TCView.self)
-      let nib = UINib(nibName: name, bundle: bundle)
-      let objects = nib.instantiate(withOwner: nil, options: nil)
-      return objects.first as? UIView
+      // Try framework bundle first, then main, and alternate nib names
+      let candidateBundles: [Bundle] = [Bundle(for: TCWiiPad.self), Bundle.main]
+      var candidateNames: [String] = [name]
+      if name == "TCWiiPad" {
+        candidateNames.append(contentsOf: ["TCWiiPad_iOS", "TCWiiPad~iphone", "TCWiiPad~ipad", "WiiPad", "WiiPadView"]) }
+      if name == "TCGameCubePad" {
+        candidateNames.append(contentsOf: ["TCGameCubePadView", "TCGamePad", "GameCubePad"]) }
+      for b in candidateBundles {
+        for n in candidateNames {
+          if let _ = b.path(forResource: n, ofType: "nib") {
+            let nib = UINib(nibName: n, bundle: b)
+            let objects = nib.instantiate(withOwner: nil, options: nil)
+            if let v = objects.first as? UIView { NSLog("[TOUCH] Loaded nib %@ from %@", n, String(describing: b.bundlePath)); return v }
+          }
+        }
+      }
+      NSLog("[TOUCH] Could not find nib for %@ in candidate bundles", name)
+      return nil
+    }
+
+    private func viewContainsTCWiiPad(_ v: UIView) -> Bool { return findTCWiiPad(in: v) != nil }
+    private func findTCWiiPad(in v: UIView) -> TCWiiPad? {
+      if let w = v as? TCWiiPad { return w }
+      for sub in v.subviews { if let found = findTCWiiPad(in: sub) { return found } }
+      return nil
     }
   }
 #endif

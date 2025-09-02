@@ -16,13 +16,29 @@
 
 @implementation TVControllerMappingBridge
 
+static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core::Device>& dev)
+{
+  if (!dev) return true;
+  const std::string q = dev->GetQualifiedName();
+  const std::string n = dev->GetName();
+  auto contains_dis = [](const std::string& s) {
+    for (size_t i = 0; i + 11 <= s.size(); ++i) {
+      char c0 = s[i];
+      // compare case-insensitively for "disconnected"
+      if ((c0 == 'd' || c0 == 'D') && strncasecmp(s.c_str() + i, "disconnected", 12) == 0) return true;
+    }
+    return false;
+  };
+  return contains_dis(q) || contains_dis(n);
+}
+
 + (NSString*)qualifiedNameForController:(GCController*)controller
 {
   std::string qualifier;
   const auto devices = g_controller_interface.GetAllDevices();
   for (const auto& dev : devices)
   {
-    if (!dev || dev->GetSource() != "MFi")
+    if (!dev || dev->GetSource() != "MFi" || IsDisconnectedPlaceholder(dev))
       continue;
     const auto* mfi = dynamic_cast<const ciface::iOS::MFiController*>(dev.get());
     if (mfi && mfi->IsSameController(controller))
@@ -39,9 +55,18 @@
   if (portOneBased < 1 || portOneBased > 4)
     return;
 
-  const NSString* q = [self qualifiedNameForController:controller];
+  NSString* q = [self qualifiedNameForController:controller];
   if (q.length == 0)
-    return;
+  {
+    // Fallback: if we cannot match the specific GCController, pick the first connected MFi device
+    const auto devices = g_controller_interface.GetAllDevices();
+    for (const auto& dev : devices)
+    {
+      if (dev && dev->GetSource() == std::string("MFi") && !IsDisconnectedPlaceholder(dev)) { q = [NSString stringWithUTF8String:dev->GetQualifiedName().c_str()]; break; }
+    }
+    if (q.length == 0)
+      return;
+  }
 
   auto* cfg = Pad::GetConfig();
   if (!cfg)
@@ -51,7 +76,10 @@
   if (!pad)
     return;
   pad->SetDefaultDevice([q UTF8String]);
+  // Load default bindings for this device, then refresh references
+  pad->LoadDefaults(g_controller_interface);
   pad->UpdateReferences(g_controller_interface);
+  Pad::GetConfig()->SaveConfig();
 
   controller.playerIndex = (GCControllerPlayerIndex)port;
 }
@@ -93,13 +121,14 @@
   const auto devices = g_controller_interface.GetAllDevices();
   for (const auto& dev : devices)
   {
-    if (!dev || dev->GetSource() != "MFi")
+    if (!dev || dev->GetSource() != "MFi" || IsDisconnectedPlaceholder(dev))
       continue;
     connected_qnames.insert(dev->GetQualifiedName());
   }
 
   // Clear phantom defaults
   const int count = cfg->GetControllerCount();
+  bool did_mutate = false;
   for (int i = 0; i < count; ++i)
   {
     auto* pad = cfg->GetController(i);
@@ -112,6 +141,7 @@
       {
         pad->SetDefaultDevice("");
         pad->UpdateReferences(g_controller_interface);
+        did_mutate = true;
       }
     }
   }
@@ -119,7 +149,7 @@
   // Assign first connected controller to first free port (ignoring touchscreen and occupied physicals)
   for (const auto& dev : devices)
   {
-    if (!dev || dev->GetSource() != "MFi")
+    if (!dev || dev->GetSource() != "MFi" || IsDisconnectedPlaceholder(dev))
       continue;
 
     ciface::Core::DeviceQualifier dq_new; dq_new.FromDevice(dev.get());
@@ -141,10 +171,11 @@
       pad->SetDefaultDevice(dq_new);
       pad->LoadDefaults(g_controller_interface);
       pad->UpdateReferences(g_controller_interface);
-      Pad::GetConfig()->SaveConfig();
+      did_mutate = true;
       break;
     }
   }
+  if (did_mutate) Pad::GetConfig()->SaveConfig();
 }
 
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased

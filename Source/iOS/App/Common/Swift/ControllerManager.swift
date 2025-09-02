@@ -10,7 +10,17 @@ final class ControllerManager: NSObject {
 
   // MARK: Reconcile
   func reconcile() {
+    // Run legacy reconciliation to clear phantoms and auto-assign connected devices
     TVControllerMappingBridge.reconcileAssignments()
+
+    // Compute a single decision based on a snapshot, then apply via existing bridge methods
+    let state = ControllerStateStore.shared.snapshot()
+    let decision = AssignmentEngine().decide(from: state)
+    if let p = decision.reassignPortOneBased {
+      TVControllerMappingBridge.assignTouchscreen(toGCPort: p)
+    }
+    // (Optional) assign by qualifier path reserved for future expansion
+
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
   }
 

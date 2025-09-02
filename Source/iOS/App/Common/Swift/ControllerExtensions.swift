@@ -109,6 +109,9 @@ func installInputDebugHandlers(_ c: GCController) {
     }
 
     if let g = c.extendedGamepad {
+        if UserDefaults.standard.bool(forKey: "input_debug") {
+            NSLog("[INPUT] extendedGamepad handler set for %@", c.vendorName ?? "(nil)")
+        }
         let prev = g.valueChangedHandler
         g.valueChangedHandler = { gamepad, element in
             prev?(gamepad, element)
@@ -158,7 +161,7 @@ func installInputDebugHandlers(_ c: GCController) {
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickMain.rawValue + 2, controller: 0, value: max(0, ly))
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickMain.rawValue + 3, controller: 0, value: max(0, -ly))
             // C-Stick UI
-            TCManagerInterface.setAxisValueFor(TCButtonType.gcStickC.rawValue, controller: 0, value: gamepad.rightThumbstick.xAxis.value)
+            TCManagerInterface.setAxisValueFor(TCButtonType.gcStickC.rawValue, controller: 0, value: gamepad.rightThumbstick.yAxis.value)
             let cy = gamepad.rightThumbstick.yAxis.value
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickC.rawValue + 2, controller: 0, value: max(0, cy))
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickC.rawValue + 3, controller: 0, value: max(0, -cy))
@@ -170,6 +173,9 @@ func installInputDebugHandlers(_ c: GCController) {
             let l2Down = gamepad.leftTrigger.value > 0.7
             let r2Down = gamepad.rightTrigger.value > 0.7
             let allFour = l1Down && r1Down && l2Down && r2Down
+            if UserDefaults.standard.bool(forKey: "input_debug") {
+                NSLog("[INPUT][Turbo] L1=%d R1=%d L2=%.2f R2=%.2f allFour=%d", l1Down, r1Down, gamepad.leftTrigger.value, gamepad.rightTrigger.value, allFour)
+            }
 
             let wasActive = activeTurboControllers.contains(controllerId)
             if allFour && !wasActive {
@@ -178,12 +184,18 @@ func installInputDebugHandlers(_ c: GCController) {
                     let configuredTurbo = UserDefaults.standard.integer(forKey: "controller_turbo_multiplier_percent")
                     let turboPercent = (configuredTurbo > 0) ? configuredTurbo : 800
                     DOLConfigBridge.setMainEmulationSpeedPercent(turboPercent)
+                    if UserDefaults.standard.bool(forKey: "input_debug") {
+                        NSLog("[INPUT][Turbo] ENTER turbo at %d%%", turboPercent)
+                    }
                     NotificationCenter.default.post(name: Notification.Name("DOLFastForwardToggled"), object: nil, userInfo: ["enabled": true])
                 }
             } else if !allFour && wasActive {
                 activeTurboControllers.remove(controllerId)
                 if activeTurboControllers.isEmpty {
                     DOLConfigBridge.setMainEmulationSpeedPercent(100)
+                    if UserDefaults.standard.bool(forKey: "input_debug") {
+                        NSLog("[INPUT][Turbo] EXIT turbo")
+                    }
                     NotificationCenter.default.post(name: Notification.Name("DOLFastForwardToggled"), object: nil, userInfo: ["enabled": false])
                 }
             }
@@ -283,6 +295,35 @@ func installInputDebugHandlers(_ c: GCController) {
                     process(button: ds.touchpadButton, xAxis: ds.touchpadPrimary.xAxis, yAxis: ds.touchpadPrimary.yAxis)
                 } else if let ds4 = gamepad as? GCDualShockGamepad {
                     process(button: ds4.touchpadButton, xAxis: ds4.touchpadPrimary.xAxis, yAxis: ds4.touchpadPrimary.yAxis)
+                }
+            }
+        }
+        // Map controller motion (if available) to Wii accelerometer and gyro
+        if #available(iOS 14.0, tvOS 14.0, *), let motion = c.motion {
+            motion.valueChangedHandler = { m in
+                // Use userAcceleration for shake/tilt impulses and rotationRate for gyro
+                let ax = Float(m.userAcceleration.x)
+                let ay = Float(m.userAcceleration.y)
+                let az = Float(m.userAcceleration.z)
+                // Accelerometer -> Wii accel axes
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: 0, value: ax)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: 0, value: ax)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: 0, value: ay)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: 0, value: ay)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: 0, value: az)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: 0, value: az)
+                // Gyro -> Wii gyro axes
+                let gx = Float(m.rotationRate.x)
+                let gy = Float(m.rotationRate.y)
+                let gz = Float(m.rotationRate.z)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: 0, value: gx)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: 0, value: gx)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: 0, value: gy)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: 0, value: gy)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: 0, value: gz)
+                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: 0, value: gz)
+                if UserDefaults.standard.bool(forKey: "input_debug") {
+                    NSLog("[INPUT][Motion] acc(%.2f,%.2f,%.2f) rot(%.2f,%.2f,%.2f)", ax, ay, az, gx, gy, gz)
                 }
             }
         }
