@@ -116,6 +116,28 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 - (void)onGCControllerDidConnect:(NSNotification*)note {
   [[ControllerManager shared] reconcile];
   [EmulationCoordinator autoAssignNewestExternalControllerToFirstAvailableSlot];
+  int assignedPort = -1;
+  // Detect first available GC port that now has a default device set to a non-touchscreen
+  for (int i = 0; i < 4; i++) {
+    std::string q = Pad::GetConfig()->GetController(i)->GetDefaultDevice().ToString();
+    if (!q.empty() && q.find("Touchscreen") == std::string::npos) { assignedPort = i + 1; break; }
+  }
+  if (assignedPort > 0) {
+    NSString* msg = [NSString stringWithFormat:NSLocalizedString(@"Assigned to Player %d", nil), assignedPort];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar" object:nil userInfo:@{ @"text": msg }];
+  }
+  if (Core::System::GetInstance().IsWii()) {
+    int wmAssigned = -1;
+    const int count = Wiimote::GetConfig() ? Wiimote::GetConfig()->GetControllerCount() : 0;
+    for (int i = 0; i < count; i++) {
+      std::string q = Wiimote::GetConfig()->GetController(i)->GetDefaultDevice().ToString();
+      if (!q.empty() && q.find("Touchscreen") == std::string::npos) { wmAssigned = i + 1; break; }
+    }
+    if (wmAssigned > 0) {
+      NSString* msg = [NSString stringWithFormat:NSLocalizedString(@"Assigned Wiimote %d", nil), wmAssigned];
+      [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar" object:nil userInfo:@{ @"text": msg }];
+    }
+  }
   dispatch_async(dispatch_get_main_queue(), ^{
     // Prefer reported system; if ambiguous or Wiimote pad not available, default to GameCube
     if (Core::System::GetInstance().IsWii()) {
