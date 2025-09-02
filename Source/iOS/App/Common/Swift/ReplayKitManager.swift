@@ -57,47 +57,65 @@ final class ReplayKitManager {
 			let fm = FileManager.default
 			let docs = URL(fileURLWithPath: UserFolderUtil.getUserFolder())
 			let clips = docs.appendingPathComponent("Clips", isDirectory: true)
-			try? fm.createDirectory(at: clips, withIntermediateDirectories: true)
+			let saveToPhotos = UserDefaults.standard.bool(forKey: "replaykit_save_to_photos")
+			let onlyPhotos = UserDefaults.standard.bool(forKey: "replaykit_save_only_photos")
+			if !onlyPhotos { try? fm.createDirectory(at: clips, withIntermediateDirectories: true) }
 			let filename = "Clip_\(Int(Date().timeIntervalSince1970)).mov"
-			let url = clips.appendingPathComponent(filename)
+			let baseDir = onlyPhotos ? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true) : clips
+			let url = baseDir.appendingPathComponent(filename)
 			RPScreenRecorder.shared().exportClip(to: url, duration: secs) { err in
 				DispatchQueue.main.async {
 					if let e = err {
 						NSLog("[ReplayKit] exportClip error: %@", e.localizedDescription)
 						NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Failed to save replay")])
 					} else {
-						NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
-						self.saveToPhotosIfEnabled(fileURL: url)
+						if saveToPhotos {
+							self.saveToPhotos(fileURL: url) { success in
+								if success {
+									if onlyPhotos {
+										try? fm.removeItem(at: url)
+										NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Saved clip to Photos")])
+									} else {
+										NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Saved clip to Clips and Photos")])
+									}
+								} else {
+									// Fall back snackbar to indicate local save succeeded
+									if onlyPhotos {
+										NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
+									} else {
+										NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
+									}
+								}
+							}
+						} else {
+							NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
+						}
 					}
 				}
 			}
 		}
 	}
 
-	private func saveToPhotosIfEnabled(fileURL: URL) {
-		guard UserDefaults.standard.bool(forKey: "replaykit_save_to_photos") else { return }
-		let saveBlock = {
+	private func saveToPhotos(fileURL: URL, completion: @escaping (Bool) -> Void) {
+		let performSave = {
 			PHPhotoLibrary.shared().performChanges({
 				let request = PHAssetCreationRequest.forAsset()
 				request.addResource(with: .video, fileURL: fileURL, options: nil)
 			}, completionHandler: { success, error in
 				DispatchQueue.main.async {
-					if success {
-						NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Saved clip to Photos")])
-					} else if let e = error {
-						NSLog("[ReplayKit] Photos save error: %@", e.localizedDescription)
-					}
+					if let e = error { NSLog("[ReplayKit] Photos save error: %@", e.localizedDescription) }
+					completion(success)
 				}
 			})
 		}
 		if #available(iOS 14.0, *) {
 			let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
-			if status == .authorized || status == .limited { saveBlock(); return }
-			PHPhotoLibrary.requestAuthorization(for: .addOnly) { _ in saveBlock() }
+			if status == .authorized || status == .limited { performSave(); return }
+			PHPhotoLibrary.requestAuthorization(for: .addOnly) { _ in performSave() }
 		} else {
 			let status = PHPhotoLibrary.authorizationStatus()
-			if status == .authorized { saveBlock(); return }
-			PHPhotoLibrary.requestAuthorization { _ in saveBlock() }
+			if status == .authorized { performSave(); return }
+			PHPhotoLibrary.requestAuthorization { _ in performSave() }
 		}
 	}
 }
