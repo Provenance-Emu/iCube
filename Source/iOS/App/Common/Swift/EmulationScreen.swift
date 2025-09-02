@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import GameController
+import Combine
 
 private struct EmulationSurfaceView: UIViewRepresentable {
   let gamePath: String
@@ -194,6 +195,8 @@ struct EmulationScreen: View {
   @State private var touchPadsRefreshToken = UUID()
   @State private var irModeRaw: Int = 1
   @State private var desiredTouchControls: Bool = true
+  @StateObject private var touchVM = TouchControlsViewModel()
+  @ObservedObject private var controllerManager = ControllerManager.shared
 #endif
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
@@ -241,8 +244,6 @@ struct EmulationScreen: View {
       )
     }
     .onAppear {
-      UserDefaults.standard.set(true, forKey: "input_debug")
-      InputOverriderBridge.registerGameCubeOverride(forController: 0)
       NSLog("[INPUT] tvOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
       let initialCount = GCController.controllers().count
       NSLog("[INPUT] tvOS initial controllers count: %d", initialCount)
@@ -380,13 +381,48 @@ struct EmulationScreen: View {
                             showExitConfirm = true
                         } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
                         Spacer()
-                        // Touch Controls toggle (uses TC* pads)
-                        Button {
+                        // Touch controls menu
+                        Menu {
+                          Button {
                             hasTopBarInteraction = true
-                            toggleTouchControls()
+                            userOverrideTouchControls = true
+                            controllerManager.overlayVisible.toggle()
+                            isTouchControlsActive = controllerManager.overlayVisible
+                            touchPadsRefreshToken = UUID()
+                          } label: {
+                            Label(controllerManager.overlayVisible ? "Hide On‑Screen Controller" : "Show On‑Screen Controller", systemImage: controllerManager.overlayVisible ? "eye.slash" : "eye")
+                          }
+                          Divider()
+                          Button {
+                            hasTopBarInteraction = true
+                            userOverrideTouchControls = true
+                            controllerManager.overlayMode = .auto
+                            touchPadsRefreshToken = UUID()
+                          } label: {
+                            Label("Auto", systemImage: controllerManager.overlayMode == .auto ? "checkmark" : "")
+                          }
+                          Button {
+                            hasTopBarInteraction = true
+                            userOverrideTouchControls = true
+                            controllerManager.overlayMode = .gamecube
+                            controllerManager.overlayVisible = true
+                            isTouchControlsActive = true
+                            touchPadsRefreshToken = UUID()
+                          } label: {
+                            Label("GameCube", systemImage: controllerManager.overlayMode == .gamecube ? "checkmark" : "")
+                          }
+                          Button {
+                            hasTopBarInteraction = true
+                            userOverrideTouchControls = true
+                            controllerManager.overlayMode = .wii
+                            controllerManager.overlayVisible = true
+                            isTouchControlsActive = true
+                            touchPadsRefreshToken = UUID()
+                          } label: {
+                            Label("Wii", systemImage: controllerManager.overlayMode == .wii ? "checkmark" : "")
+                          }
                         } label: {
-                            Image(systemName: isTouchControlsActive ? "hand.draw.fill" : "hand.draw")
-                                .font(.title2)
+                          Image(systemName: "gamecontroller").font(.title2)
                         }
                         Button {
                             hasTopBarInteraction = true
@@ -490,7 +526,14 @@ struct EmulationScreen: View {
 
             // Legacy touch pads
             if isTouchControlsActive {
-                TouchPadsContainer(forceVisible: true, isWii: isWiiSystem)
+                let isWiiToShow: Bool = {
+                    switch controllerManager.overlayMode {
+                    case .auto: return isWiiSystem
+                    case .gamecube: return false
+                    case .wii: return true
+                    }
+                }()
+                TouchPadsContainer(forceVisible: true, isWii: isWiiToShow)
                     .id(touchPadsRefreshToken)
                     .ignoresSafeArea()
                     .transition(.opacity)
@@ -528,7 +571,7 @@ struct EmulationScreen: View {
         TVEmulationBridge.setWiiIMUPointEnabled(useIMU)
         TCDeviceMotion.shared.setMotionEnabled(isTouchControlsActive && useIMU)
         // Ensure touch controls start visible
-        isTouchControlsActive = true
+        isTouchControlsActive = controllerManager.overlayVisible
         desiredTouchControls = true
         // Reconcile and ensure Pad 1 defaults to touchscreen if needed
         ControllerManager.shared.reconcile()
@@ -602,20 +645,26 @@ struct EmulationScreen: View {
         }
         // Default touch controls: enabled when no controllers are connected (only if not user-overridden)
         if !userOverrideTouchControls {
-            isTouchControlsActive = GCController.controllers().isEmpty
+            let visible = GCController.controllers().isEmpty
+            controllerManager.overlayVisible = visible
+            isTouchControlsActive = visible
         }
         // Observe controller connect/disconnect to recompute default only when no override is set
         if obsGCConnect == nil {
             obsGCConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { _ in
                 if !userOverrideTouchControls {
-                    isTouchControlsActive = GCController.controllers().isEmpty
+                    let visible = GCController.controllers().isEmpty
+                    controllerManager.overlayVisible = visible
+                    isTouchControlsActive = visible
                 }
             }
         }
         if obsGCDisconnect == nil {
             obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in
                 if !userOverrideTouchControls {
-                    isTouchControlsActive = GCController.controllers().isEmpty
+                    let visible = GCController.controllers().isEmpty
+                    controllerManager.overlayVisible = visible
+                    isTouchControlsActive = visible
                 }
             }
         }
@@ -637,6 +686,13 @@ struct EmulationScreen: View {
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
         // Ask the renderer to resize/reconfigure
         TVEmulationBridge.resizeSurfaceNow()
+    }
+    .onReceive(controllerManager.$overlayMode) { _ in
+        touchPadsRefreshToken = UUID()
+    }
+    .onReceive(controllerManager.$overlayVisible) { v in
+        isTouchControlsActive = v
+        touchPadsRefreshToken = UUID()
     }
     .navigationBarHidden(true)
     .statusBar(hidden: true)
@@ -682,15 +738,25 @@ struct EmulationScreen: View {
   }
 
 #if os(iOS)
-  @State private var isTouchControlsActive = false
-  @State private var userOverrideTouchControls = false
+  /// ViewModel for on-screen controller visibility and mode
+  final class TouchControlsViewModel: ObservableObject {
+    enum Mode { case auto, gamecube, wii }
+    @Published var isVisible: Bool = true
+    @Published var mode: Mode = .auto
+  }
 
-  private func toggleTouchControls() {
-    withAnimation {
-      isTouchControlsActive.toggle()
-      userOverrideTouchControls = true
+  /// Resolve whether the overlay should show Wii or GC pads based on VM mode and current system
+  private func overlayIsWii() -> Bool {
+    let currentIsWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : isWiiSystem
+    switch touchVM.mode {
+    case .auto: return currentIsWii
+    case .gamecube: return false
+    case .wii: return true
     }
   }
+
+  @State private var isTouchControlsActive = false
+  @State private var userOverrideTouchControls = false
 
   private func toggleTopBar() {
     withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
@@ -735,11 +801,6 @@ struct EmulationScreen: View {
         try? await Task.sleep(nanoseconds: 120_000_000)
       }
     }
-  }
-#endif
-
-  private func togglePause() {
-    if TVEmulationBridge.isPaused() { TVEmulationBridge.resume() } else { TVEmulationBridge.pause() }
   }
 
   /// Heuristic: infer Wii vs GC from game metadata (gameID prefix, file extension)
@@ -897,24 +958,16 @@ struct EmulationScreen: View {
     private func shouldShowGameCubePad() -> Bool {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
-
-      // Prefer bridge when core is running; otherwise use inferred flag
-      let running = TVEmulationBridge.isRunning()
-      let currentIsWii = running ? TVEmulationBridge.isCurrentSystemWii() : isWii
-      let shouldShow = !currentIsWii
-      NSLog("[TOUCH] GameCube pad decision: running=\(running) isWiiState=\(isWii) shouldShow=\(shouldShow)")
+      let shouldShow = !isWii
+      NSLog("[TOUCH] GameCube pad decision: isWiiState=\(isWii) shouldShow=\(shouldShow)")
       return shouldShow
     }
 
     private func shouldShowWiiPad() -> Bool {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
-
-      // Show Wii pad only if the current title is Wii; prefer bridge when running
-      let running = TVEmulationBridge.isRunning()
-      let currentIsWii = running ? TVEmulationBridge.isCurrentSystemWii() : isWii
-      NSLog("[TOUCH] Wii pad decision: running=\(running) isWiiState=\(isWii) shouldShow=\(currentIsWii)")
-      return currentIsWii
+      NSLog("[TOUCH] Wii pad decision: isWiiState=\(isWii) shouldShow=\(isWii)")
+      return isWii
     }
 
     private func loadPad(named name: String) -> UIView? {
@@ -945,7 +998,9 @@ struct EmulationScreen: View {
       return nil
     }
   }
-#endif
+  #endif
+
+  #endif
 
   private func logCurrentControllers() {
     guard UserDefaults.standard.bool(forKey: "input_debug") else { return }

@@ -2,11 +2,24 @@ import Foundation
 import GameController
 
 @objcMembers
-final class ControllerManager: NSObject {
+final class ControllerManager: NSObject, ObservableObject {
   static let shared = ControllerManager()
   static let assignmentsChanged = Notification.Name("ControllerAssignmentsChanged")
 
+  enum OverlayMode: Int { case auto, gamecube, wii }
+  @Published var overlayVisible: Bool = true
+  @Published var overlayMode: OverlayMode = .auto
+
   private override init() {}
+
+  // MARK: Overlays
+  func overlayIsWii(isWiiSystem: Bool) -> Bool {
+    switch overlayMode {
+    case .auto: return isWiiSystem
+    case .gamecube: return false
+    case .wii: return true
+    }
+  }
 
   // MARK: Reconcile
   func reconcile() {
