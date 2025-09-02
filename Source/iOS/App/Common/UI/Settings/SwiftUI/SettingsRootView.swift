@@ -1619,6 +1619,10 @@ struct GraphicsGeneralView: View {
   @State private var minScale: InternalScale = .x1_0
   @State private var maxScale: InternalScale = .x2_0
   @State private var frameCap: Int = 0
+  #if os(iOS)
+  @State private var instantReplay: Bool = false
+  @State private var clipSeconds: Int = 15
+  #endif
 
   // Shader compilation
   @State private var shaderType: ShaderCompileType = .asynchronousUber
@@ -1671,6 +1675,17 @@ struct GraphicsGeneralView: View {
           UserDefaults.standard.set(v, forKey: "ui_frame_cap")
           // Application is handled by the scene delegate where supported
         }
+        Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
+          Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
+            .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }
+          Picker(L("Clip Length"), selection: $clipSeconds) {
+            Text("5s").tag(5)
+            Text("10s").tag(10)
+            Text("15s").tag(15)
+            Text("30s").tag(30)
+          }
+          .onChange(of: clipSeconds) { v in UserDefaults.standard.set(v, forKey: "replaykit_clip_seconds") }
+        }
         #endif
       }
 
@@ -1686,6 +1701,12 @@ struct GraphicsGeneralView: View {
     .navigationTitle(L("General"))
     .onAppear { syncFromConfig() }
     .onAppear { frameCap = UserDefaults.standard.integer(forKey: "ui_frame_cap") }
+    #if os(iOS)
+    .onAppear {
+      instantReplay = UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled")
+      let s = UserDefaults.standard.integer(forKey: "replaykit_clip_seconds"); clipSeconds = (s > 0 ? s : 15)
+    }
+    #endif
   }
 
   private func syncFromConfig() {
