@@ -472,6 +472,65 @@ static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev
   });
 }
 
++ (void)ensureWiimoteDefaultsToTouchscreenForPort:(NSInteger)portOneBased
+{
+  const int idx = (int)MAX(1, portOneBased) - 1;
+  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= idx)
+    return;
+  auto* wm = Wiimote::GetConfig()->GetController(idx);
+  if (!wm)
+    return;
+
+  Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(idx), WiimoteSource::Emulated);
+
+  // Build Touchscreen device qualifier for comparisons and assignment
+  ciface::Core::DeviceQualifier dq_touch;
+  {
+    const auto devices = g_controller_interface.GetAllDevices();
+    std::shared_ptr<ciface::Core::Device> touchscreen_dev;
+    for (const auto& dev : devices)
+    {
+      if (dev && dev->GetSource() == std::string("iOS") && dev->GetName() == std::string("Touchscreen"))
+      {
+        touchscreen_dev = dev;
+        break;
+      }
+    }
+    if (!touchscreen_dev)
+      return;
+    dq_touch.FromDevice(touchscreen_dev.get());
+  }
+
+  // Respect touchscreen if already mapped elsewhere
+  const int wcount = Wiimote::GetConfig()->GetControllerCount();
+  for (int i = 0; i < wcount; ++i)
+  {
+    if (i == idx) continue;
+    auto* w = Wiimote::GetConfig()->GetController(i);
+    if (w && w->GetDefaultDevice() == dq_touch)
+      goto after_set;
+  }
+
+  wm->SetDefaultDevice(dq_touch);
+  {
+    const std::string sysDirWM = wm->GetConfig()->GetSysProfileDirectoryPath();
+    const std::string userDirWM = wm->GetConfig()->GetUserProfileDirectoryPath();
+    const std::string sysProfileWM = sysDirWM + (sysDirWM.empty() || sysDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+    const std::string userProfileWM = userDirWM + (userDirWM.empty() || userDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+    Common::IniFile iniWM;
+    if (File::Exists(userProfileWM) && iniWM.Load(userProfileWM))
+      wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
+    else if (File::Exists(sysProfileWM) && iniWM.Load(sysProfileWM))
+      wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
+    else
+      wm->LoadDefaults(g_controller_interface);
+  }
+  wm->UpdateReferences(g_controller_interface);
+  Wiimote::GetConfig()->SaveConfig();
+after_set:
+  NSLog(@"[DolphiniOS][Input] Ensured Wiimote%ld mapped to iOS Touchscreen: %s", (long)portOneBased, dq_touch.ToString().c_str());
+}
+
 - (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter {
   dispatch_sync(dispatch_get_main_queue(), ^{
     Core::UndeclareAsHostThread();

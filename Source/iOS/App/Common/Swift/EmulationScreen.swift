@@ -268,7 +268,7 @@ struct EmulationScreen: View {
         dismiss()
       }
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
-        InputOverriderBridge.registerGameCubeOverride(forController: 0)
+        ControllerManager.shared.registerGCOverride(forController: 0)
         configureAllControllersForTVOS()
       }
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
@@ -295,7 +295,7 @@ struct EmulationScreen: View {
 #if os(tvOS)
       if let token = exitObserver { NotificationCenter.default.removeObserver(token); exitObserver = nil }
 #endif
-      InputOverriderBridge.unregisterGameCubeOverride(forController: 0)
+      ControllerManager.shared.unregisterGCOverride(forController: 0)
       for c in GCController.controllers() {
         c.extendedGamepad?.valueChangedHandler = nil
         c.gamepad?.valueChangedHandler = nil
@@ -564,6 +564,7 @@ struct EmulationScreen: View {
     .onAppear {
         NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
         NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
+        ControllerManager.shared.startObserving()
         // Initialize expected system early from metadata to avoid startup races
         isWiiSystem = inferIsWii(from: game)
         irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
@@ -597,35 +598,16 @@ struct EmulationScreen: View {
         #if os(iOS)
         SiriShortcutManager.shared.donatePlay(game: game)
         #endif
-        obsGCConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
-            if let c = note.object as? GCController { installInputDebugHandlers(c) }
-            touchPadsRefreshToken = UUID()
-            ControllerStyleManager.shared.refreshDetection()
-            // Persist logical action defaults for UI hints based on the connected controller
-            ControllerStyleManager.shared.applyPresetDefaults()
-            if let c = note.object as? GCController {
-                c.controllerPausedHandler = { _ in }
-            }
-        }
+        // Controller connect/disconnect handled by ControllerManager
+        // NotificationCenter bridging for assignments remains
         NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
             touchPadsRefreshToken = UUID()
-        }
-        obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in
-            touchPadsRefreshToken = UUID()
-            ControllerStyleManager.shared.refreshDetection()
         }
         endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
             dismiss()
         }
         obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
             showPauseMenu = true
-        }
-        NotificationCenter.default.addObserver(forName: Notification.Name("DOLFastForwardToggled"), object: nil, queue: .main) { note in
-            if let enabled = (note.userInfo?["enabled"] as? NSNumber)?.boolValue {
-                fastForwardEnabled = enabled
-            } else {
-                fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
-            }
         }
         // Re-fetch AR soon after appear to avoid tiny first layout
         scheduleARPoll()
@@ -649,25 +631,7 @@ struct EmulationScreen: View {
             controllerManager.overlayVisible = visible
             isTouchControlsActive = visible
         }
-        // Observe controller connect/disconnect to recompute default only when no override is set
-        if obsGCConnect == nil {
-            obsGCConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { _ in
-                if !userOverrideTouchControls {
-                    let visible = GCController.controllers().isEmpty
-                    controllerManager.overlayVisible = visible
-                    isTouchControlsActive = visible
-                }
-            }
-        }
-        if obsGCDisconnect == nil {
-            obsGCDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in
-                if !userOverrideTouchControls {
-                    let visible = GCController.controllers().isEmpty
-                    controllerManager.overlayVisible = visible
-                    isTouchControlsActive = visible
-                }
-            }
-        }
+        // ControllerManager publishes connect/disconnect; adjust default overlay there via reconcile if needed
         // Show bar on appear and schedule one-time auto-hide
         showTopBar = true
         hasTopBarInteraction = false
@@ -678,7 +642,7 @@ struct EmulationScreen: View {
         if let t = obsGCConnect { NotificationCenter.default.removeObserver(t); obsGCConnect = nil }
         if let t = obsGCDisconnect { NotificationCenter.default.removeObserver(t); obsGCDisconnect = nil }
         if let t = obsShowPause { NotificationCenter.default.removeObserver(t); obsShowPause = nil }
-        NotificationCenter.default.removeObserver(self, name: Notification.Name("DOLFastForwardToggled"), object: nil)
+        ControllerManager.shared.stopObserving()
         // Disable motion when leaving screen
         TCDeviceMotion.shared.setMotionEnabled(false)
         arPollTask?.cancel(); arPollTask = nil
@@ -687,8 +651,25 @@ struct EmulationScreen: View {
         // Ask the renderer to resize/reconfigure
         TVEmulationBridge.resizeSurfaceNow()
     }
+    .onReceive(controllerManager.controllerConnectedPublisher) { _ in
+        touchPadsRefreshToken = UUID()
+        ControllerStyleManager.shared.refreshDetection()
+        ControllerStyleManager.shared.applyPresetDefaults()
+    }
+    .onReceive(controllerManager.controllerDisconnectedPublisher) { _ in
+        touchPadsRefreshToken = UUID()
+        ControllerStyleManager.shared.refreshDetection()
+    }
+    .onReceive(controllerManager.fastForwardToggledPublisher) { enabled in
+        fastForwardEnabled = enabled
+    }
     .onReceive(controllerManager.$overlayMode) { _ in
         touchPadsRefreshToken = UUID()
+        if controllerManager.overlayMode == .wii {
+            DOLConfigBridge.setWiimoteSourceFor(1, source: 1)
+            DOLConfigBridge.setConnectWiimotesForControllerInterface(true)
+            EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
+        }
     }
     .onReceive(controllerManager.$overlayVisible) { v in
         isTouchControlsActive = v

@@ -26,6 +26,7 @@
 #import "VirtualMFiControllerManager.h"
 #import "TVControllerMappingBridge.h"
 #import <GameController/GameController.h>
+#import "DolphiniOS-Swift.h"
 
 typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   DOLEmulationVisibleTouchPadNone,
@@ -94,8 +95,7 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onControllerAssignmentsChanged) name:@"ControllerAssignmentsChanged" object:nil];
 
   // Physical controller connect/disconnect
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onGCControllerDidConnect:) name:GCControllerDidConnectNotification object:nil];
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onGCControllerDidDisconnect:) name:GCControllerDidDisconnectNotification object:nil];
+  // Centralized in ControllerManager
 
   // Reconcile at view appearance to fix phantom controllers after game start
   [[ControllerManager shared] reconcile];
@@ -107,89 +107,17 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   [[NSNotificationCenter defaultCenter] removeObserver:self name:DOLHostTitleChangedNotification object:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self name:DOLHostRequestRenderWindowSizeNotification object:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self name:DOLEmulationDidEndNotification object:nil];
-  [[NSNotificationCenter defaultCenter] removeObserver:self name:GCControllerDidConnectNotification object:nil];
-  [[NSNotificationCenter defaultCenter] removeObserver:self name:GCControllerDidDisconnectNotification object:nil];
+  // ControllerManager handles GC notifications
   [[NSNotificationCenter defaultCenter] removeObserver:self name:@"ControllerAssignmentsChanged" object:nil];
 }
 
 // MARK: - Physical controller observers
-- (void)onGCControllerDidConnect:(NSNotification*)note {
-  [[ControllerManager shared] reconcile];
-  [EmulationCoordinator autoAssignNewestExternalControllerToFirstAvailableSlot];
-  int assignedPort = -1;
-  // Detect first available GC port that now has a default device set to a non-touchscreen
-  for (int i = 0; i < 4; i++) {
-    std::string q = Pad::GetConfig()->GetController(i)->GetDefaultDevice().ToString();
-    if (!q.empty() && q.find("Touchscreen") == std::string::npos) { assignedPort = i + 1; break; }
-  }
-  if (assignedPort > 0) {
-    NSString* msg = [NSString stringWithFormat:NSLocalizedString(@"Assigned to Player %d", nil), assignedPort];
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar" object:nil userInfo:@{ @"text": msg }];
-  }
-  if (Core::System::GetInstance().IsWii()) {
-    int wmAssigned = -1;
-    const int count = Wiimote::GetConfig() ? Wiimote::GetConfig()->GetControllerCount() : 0;
-    for (int i = 0; i < count; i++) {
-      std::string q = Wiimote::GetConfig()->GetController(i)->GetDefaultDevice().ToString();
-      if (!q.empty() && q.find("Touchscreen") == std::string::npos) { wmAssigned = i + 1; break; }
-    }
-    if (wmAssigned > 0) {
-      NSString* msg = [NSString stringWithFormat:NSLocalizedString(@"Assigned Wiimote %d", nil), wmAssigned];
-      [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar" object:nil userInfo:@{ @"text": msg }];
-    }
-  }
-  // Battery toast if available
-  id obj = note.object;
-  if ([obj isKindOfClass:[GCController class]]) {
-    GCController* ctrl = (GCController*)obj;
-    if ([ctrl respondsToSelector:@selector(battery)] && ctrl.battery) {
-      float level = ctrl.battery.batteryLevel; // 0.0 ... 1.0 or -1 if unknown
-      NSString* stateStr = @"";
-      if (@available(iOS 14.0, *)) {
-        switch (ctrl.battery.batteryState) {
-          case GCDeviceBatteryStateCharging: stateStr = NSLocalizedString(@"Charging", nil); break;
-          case GCDeviceBatteryStateFull: stateStr = NSLocalizedString(@"Full", nil); break;
-          default: stateStr = @""; break;
-        }
-      }
-      if (level >= 0.0f) {
-        int pct = (int)lrintf(level * 100.0f);
-        NSString* text = stateStr.length ? [NSString stringWithFormat:NSLocalizedString(@"Controller Battery: %d%% (%@)", nil), pct, stateStr] : [NSString stringWithFormat:NSLocalizedString(@"Controller Battery: %d%%", nil), pct];
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar" object:nil userInfo:@{ @"text": text }];
-      }
-    }
-  }
-  dispatch_async(dispatch_get_main_queue(), ^{
-    // Prefer reported system; if ambiguous or Wiimote pad not available, default to GameCube
-    if (Core::System::GetInstance().IsWii()) {
-      if ([self isWiimoteTouchPadAttached]) {
-        [self updateVisibleTouchPadToWii];
-      } else {
-        [self updateVisibleTouchPadToGameCube];
-      }
-    } else {
-      [self updateVisibleTouchPadToGameCube];
-    }
-  });
-}
-
-- (void)onGCControllerDidDisconnect:(NSNotification*)note {
-  // On disconnect, ensure Pad1 touch fallback and prefer GC when ambiguous
-  if (Core::System::GetInstance().IsWii()) {
-    if ([self isWiimoteTouchPadAttached]) {
-      [self updateVisibleTouchPadToWii];
-    } else {
-      [self updateVisibleTouchPadToGameCube];
-    }
-  } else {
-    [self updateVisibleTouchPadToGameCube];
-  }
-}
-
 - (void)onControllerAssignmentsChanged {
   dispatch_async(dispatch_get_main_queue(), ^{
     [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
-    if (Core::System::GetInstance().IsWii()) {
+    BOOL isWii = Core::System::GetInstance().IsWii();
+    BOOL showWii = [[ControllerManager shared] shouldShowWiiOverlayWithWiiSystem:isWii wiiPadAttached:[self isWiimoteTouchPadAttached] gcPadAttached:[self isGameCubeTouchPadAttached]];
+    if (showWii) {
       [self updateVisibleTouchPadToWii];
     } else {
       [self updateVisibleTouchPadToGameCube];
@@ -205,6 +133,8 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 
   bool wiimoteTouchPadAttached = [self isWiimoteTouchPadAttached] && Core::System::GetInstance().IsWii();
   bool gamecubeTouchPadAttached = [self isGameCubeTouchPadAttached];
+  BOOL isWiiSystem = Core::System::GetInstance().IsWii();
+  BOOL shouldShowGC = [[ControllerManager shared] shouldShowGCPadWithWiiSystem:isWiiSystem wiiPadAttached:wiimoteTouchPadAttached gcPadAttached:gamecubeTouchPadAttached];
 
   if (wiimoteTouchPadAttached) {
     UIAction* wiimoteAction = [UIAction actionWithTitle:DOLCoreLocalizedString(@"Wii Remote") image:nil identifier:nil handler:^(UIAction*) {
@@ -233,7 +163,7 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
       [self.navigationController setNavigationBarHidden:true animated:true];
     }];
 
-    if (_visibleTouchPad == DOLEmulationVisibleTouchPadGameCube) {
+    if (_visibleTouchPad == DOLEmulationVisibleTouchPadGameCube || shouldShowGC) {
       gamecubeAction.state = UIMenuElementStateOn;
     } else {
       gamecubeAction.state = UIMenuElementStateOff;
@@ -255,6 +185,7 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 
       [self.navigationController setNavigationBarHidden:true animated:true];
     }];
+    noneAction.state = [[ControllerManager shared] overlayVisible] ? UIMenuElementStateOff : UIMenuElementStateOn;
 
     if (_visibleTouchPad == DOLEmulationVisibleTouchPadNone) {
       noneAction.state = UIMenuElementStateOn;
@@ -358,7 +289,9 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 
 - (void)receiveTitleChangedNotificationiOS {
   dispatch_async(dispatch_get_main_queue(), ^{
-    if (Core::System::GetInstance().IsWii()) {
+    BOOL isWii = Core::System::GetInstance().IsWii();
+    BOOL showWii = [[ControllerManager shared] shouldShowWiiOverlayWithWiiSystem:isWii wiiPadAttached:[self isWiimoteTouchPadAttached] gcPadAttached:[self isGameCubeTouchPadAttached]];
+    if (showWii) {
       [self updateVisibleTouchPadToWii];
     } else {
       [self updateVisibleTouchPadToGameCube];
@@ -483,7 +416,9 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
     if (![self isGameCubeTouchPadAttached]) { [self ensureVisibleTouchPadFallbackIfAmbiguous]; return; }
   }
   if (![self isGameCubeTouchPadAttached]) {
-    if (Core::System::GetInstance().IsWii() && [self isWiimoteTouchPadAttached]) {
+    BOOL isWii = Core::System::GetInstance().IsWii();
+    BOOL shouldShowWii = [[ControllerManager shared] shouldShowWiiOverlayWithWiiSystem:isWii wiiPadAttached:[self isWiimoteTouchPadAttached] gcPadAttached:[self isGameCubeTouchPadAttached]];
+    if (shouldShowWii) {
       [self updateVisibleTouchPadToWii];
     } else {
       // Force GC as universal fallback

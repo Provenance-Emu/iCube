@@ -30,6 +30,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// that is not already bound to a connected physical controller (ignores touchscreen bindings).
 + (void)autoAssignNewestExternalControllerToFirstAvailableSlot;
 
+// Ensure a given Wiimote port (1-based) is set to Emulated and uses the iOS Touchscreen profile
++ (void)ensureWiimoteDefaultsToTouchscreenForPort:(NSInteger)portOneBased;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -516,9 +516,13 @@ struct TVLibraryView: View {
           }
           emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+        .onReceive(ControllerManager.shared.controllerConnectedPublisher) { _ in
           ControllerStyleManager.shared.refreshDetection()
           ControllerStyleManager.shared.applyPresetDefaults()
+          if !emulationRunning { setupControllerNavigation(columns: count) }
+        }
+        .onReceive(ControllerManager.shared.controllerDisconnectedPublisher) { _ in
+          ControllerStyleManager.shared.refreshDetection()
           if !emulationRunning { setupControllerNavigation(columns: count) }
         }
         .onChange(of: displayGames.count) { _, newCount in
