@@ -347,6 +347,12 @@ struct ShaderParameterEditor: View {
                             Text(String(format: "%.3f", values[p.index] ?? p.initialCGFloat))
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
+                            Button(L("Reset")) {
+                                values[p.index] = p.initialCGFloat
+                                DOLShaderPostProcessor.shared.setValue(p.initialCGFloat, forParameterIndex: p.index)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
 #if os(iOS)
                         Slider(value: Binding(
@@ -424,84 +430,40 @@ struct ShaderParameterEditor: View {
                 }
             }
         }
-        .onAppear { load() }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLShaderPresetDidLoad"))) { _ in
-            self.isLoadingPreset = false
-            let token = currentPresetSignature()
-            if token != lastLoadedPresetToken { load() }
-        }
-#if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        .scrollContentBackground(.hidden)
-#endif
-        .background(Color.clear)
+        .navigationTitle(L("Parameters"))
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    Button(L("None")) {
-                        currentPresetPath = nil
-                        DOLShaderPostProcessor.shared.applyPresetPath(nil)
-                        isLoadingPreset = true
-                    }
-                    let presets = ShaderLibrary.discoverPresets()
-                    ForEach(presets, id: \.id) { preset in
-                        Button(preset.name) {
-                            let absPath = preset.id.path
-                            let bundleBase = Bundle.main.bundleURL.path
-                            let normalized: String = {
-                                if absPath.hasPrefix(bundleBase), let dotApp = absPath.range(of: ".app/") {
-                                    return String(absPath[dotApp.upperBound...])
-                                } else { return absPath }
-                            }()
-                            currentPresetPath = normalized
-                            DOLShaderPostProcessor.shared.applyPresetPath(normalized)
-                            isLoadingPreset = true
-                            // Update MRU on quick change
-                            var list = UserDefaults.standard.stringArray(forKey: "shader_mru") ?? []
-                            list.removeAll(where: { $0 == normalized })
-                            list.insert(normalized, at: 0)
-                            if list.count > 10 { list = Array(list.prefix(10)) }
-                            UserDefaults.standard.set(list, forKey: "shader_mru")
-                        }
-                    }
-                } label: {
-                    Label(L("Preset"), systemImage: "square.grid.2x2")
-                }
-            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(L("Reset All")) {
                     for p in params {
-                        let v = p.initialCGFloat
-                        values[p.index] = v
-                        DOLShaderPostProcessor.shared.setValue(v, forParameterIndex: p.index)
+                        values[p.index] = p.initialCGFloat
+                        DOLShaderPostProcessor.shared.setValue(p.initialCGFloat, forParameterIndex: p.index)
                     }
                 }
             }
         }
+        .onAppear { loadParams() }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLShaderPresetDidLoad"))) { _ in loadParams() }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLShaderSettingsDidChange"))) { _ in loadParams() }
     }
 
-    private func load() {
-        let ps = DOLShaderPostProcessor.shared.currentParameters()
-        self.params = ps
-        var map: [Int: CGFloat] = [:]
-        for p in ps {
-            map[p.index] = DOLShaderPostProcessor.shared.currentValueForParameter(index: p.index)
-        }
-        self.values = map
-        self.groups = buildGroups(params: ps)
-        if !groups.contains(where: { $0.id == selectedGroup }) { selectedGroup = groups.first?.id ?? "ALL" }
-        self.lastLoadedPresetToken = currentPresetSignature()
+    private func shouldShowParam(_ idx: Int) -> Bool {
+        if selectedGroup == "ALL" { return true }
+        if let g = groups.first(where: { $0.id == selectedGroup }) { return g.indices.contains(idx) }
+        return true
     }
 
-    private func currentPresetSignature() -> String? {
-        let path = UserDefaults.standard.string(forKey: "shader_preset_path") ?? "(none)"
-        return "\(path)|\(params.count)"
+    private func loadParams() {
+        isLoadingPreset = true
+        let loaded = DOLShaderPostProcessor.shared.currentParameters()
+        self.params = loaded
+        self.groups = buildGroups(params: loaded)
+        var dict: [Int: CGFloat] = [:]
+        for p in loaded { dict[p.index] = DOLShaderPostProcessor.shared.currentValueForParameter(index: p.index) }
+        self.values = dict
+        self.isLoadingPreset = false
     }
 
     private func buildGroups(params: [Compiled.Parameter]) -> [(id: String, title: String, indices: [Int])] {
-        // We don’t have per-param pass/alias in the parameter itself, so group all under ALL for now
-        // Future: if parameter naming convention includes pass aliases (e.g., "Bloom:Intensity"), split by prefix
-        // Try to derive groups from name prefix before ':'
         var buckets: [String: [Int]] = [:]
         for p in params {
             let comps = p.name.split(separator: ":", maxSplits: 1).map(String.init)
@@ -513,20 +475,11 @@ struct ShaderParameterEditor: View {
             let title = (k == "ALL") ? L("All") : k
             result.append((id: k, title: title, indices: idxs.sorted()))
         }
-        // Ensure ALL appears first
-        return result.sorted(by: { (a: (id: String, title: String, indices: [Int]), b: (id: String, title: String, indices: [Int])) -> Bool in
+        return result.sorted(by: { a, b in
             if a.id == "ALL" { return true }
             if b.id == "ALL" { return false }
             return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
         })
-    }
-
-    private func shouldShowParam(_ index: Int) -> Bool {
-        if selectedGroup == "ALL" { return true }
-        if let grp = groups.first(where: { $0.id == selectedGroup }) {
-            return grp.indices.contains(index)
-        }
-        return true
     }
 }
 
