@@ -28,6 +28,7 @@
 		B31E92232E667C0F0036EE31 /* ReplayKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E921E2E667C0F0036EE31 /* ReplayKitManager.swift */; };
 		B31EAC6F2E6697FD0036EE31 /* AssignmentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */; };
 		B31EAC702E6697FD0036EE31 /* ControllerStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */; };
+		B31EAC822E67743D0036EE31 /* ModernCheatItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -321,6 +322,7 @@
 		B31E92202E667C0F0036EE31 /* ThermalManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThermalManager.swift; sourceTree = "<group>"; };
 		B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentEngine.swift; sourceTree = "<group>"; };
 		B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerStateStore.swift; sourceTree = "<group>"; };
+		B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernCheatItem.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -786,6 +788,11 @@
 			path = "Live Activity";
 			sourceTree = "<group>";
 		};
+		B31EAC712E6772C80036EE31 /* Widgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Widgets;
+			sourceTree = "<group>";
+		};
 		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = Core;
@@ -1199,6 +1206,8 @@
 		B933EDBB27F6A5C7004D7DD7 /* Swift */ = {
 			isa = PBXGroup;
 			children = (
+				B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */,
+				B31EAC712E6772C80036EE31 /* Widgets */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
@@ -2144,6 +2153,7 @@
 			fileSystemSynchronizedGroups = (
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B31E805E2E654CC30036EE31 /* Activity */,
+				B31EAC712E6772C80036EE31 /* Widgets */,
 			);
 			name = DolphiniOS;
 			packageProductDependencies = (
@@ -2444,6 +2454,7 @@
 				B34ECCFE2E56A52C00301907 /* TVLibraryView.swift in Sources */,
 				B950CFBA296208A900197719 /* UpdateNoticeViewController.mm in Sources */,
 				B904ACCB28854782008B6BE9 /* GraphicsEnhancementsViewController.mm in Sources */,
+				B31EAC822E67743D0036EE31 /* ModernCheatItem.swift in Sources */,
 				B9B2C61A288D3A7F00CB6569 /* EmulationiOSViewController.mm in Sources */,
 				B904AD082887DAEE008B6BE9 /* ControllersTypeCell.m in Sources */,
 				B97C49B4297E7DB600E30877 /* AnalyticsNoticeViewControllerDelegate.swift in Sources */,
@@ -3994,6 +4005,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = "Debug (Jailbroken)";
 		};
@@ -4411,6 +4423,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = "Debug (Non-Jailbroken)";
 		};
