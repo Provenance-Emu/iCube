@@ -101,6 +101,8 @@
 		<string>_altserver._tcp</string>
 		<string>_webdav._tcp</string>
 	</array>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Used to save gameplay clips you record with Instant Replay.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
