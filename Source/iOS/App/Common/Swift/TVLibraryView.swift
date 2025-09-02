@@ -588,9 +588,23 @@ struct TVLibraryView: View {
         .focusable(true)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
+      let store = RemoteSourcesStore.shared
+      if store.isScanning {
+        HStack(spacing: 6) {
+          ProgressView(value: store.scanningProgress).frame(width: 80)
+          Text("Refreshing…")
+            .font(.caption2)
+            .foregroundColor(.secondary)
+        }
+      }
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { model.rescan() }) {
         if model.isRescanning { ProgressView() } else { Label("", systemImage: "arrow.clockwise") }
       }
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      Button(action: { showSearchSheet = true }) { Image(systemName: "magnifyingglass") }
     }
     //        ToolbarItem(placement: .navigationBarTrailing) {
     //            Button(action: { showSaveStatesBrowser = true }) { Image(systemName: "film") }
@@ -744,8 +758,38 @@ struct TVLibraryView: View {
     }
 #if os(tvOS)
     .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
+    .sheet(isPresented: $showSearchSheet) {
+      NavigationStack {
+        Form {
+          Section(header: Text(L("Search Games"))) {
+            TextField(L("Search by title, maker, ID, filename…"), text: $searchText)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled(true)
+          }
+          if !searchText.isEmpty {
+            Text(String(format: L("%1 results"), model.games.filter { item in
+              let q = searchText.lowercased()
+              let title = item.title.lowercased()
+              let maker = item.makerLong.lowercased()
+              let gid = item.gameID.lowercased()
+              let gtdb = item.gametdbID.lowercased()
+              let country = item.countryName.lowercased()
+              let filename: String = {
+                if let url = URL(string: item.filePath) {
+                  return (url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
+                }
+                return item.filePath.lowercased()
+              }()
+              return title.contains(q) || maker.contains(q) || gid.contains(q) || gtdb.contains(q) || country.contains(q) || filename.contains(q) || item.filePath.lowercased().contains(q)
+            }.count))
+            .foregroundStyle(.secondary)
+          }
+        }
+        .navigationTitle(L("Search"))
+        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { showSearchSheet = false } } }
+      }
+    }
 #endif
-#if os(tvOS)
     .confirmationDialog(L("More"), isPresented: $showMoreMenu, titleVisibility: .visible) {
       Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
       Button(L("Perform Online System Update")) { showUpdateRegions = true }
@@ -758,7 +802,6 @@ struct TVLibraryView: View {
       Button(L("United States")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "USA") }
       Button(L("Cancel"), role: .cancel) {}
     }
-#endif
     .confirmationDialog(L("A game is already running."), isPresented: $model.showReplaceAlert, titleVisibility: .visible) {
       Button(L("Replace Game"), role: .destructive) {
         TVEmulationBridge.stop()
@@ -838,6 +881,7 @@ struct TVLibraryView: View {
       }
       .overlay(blockingPrecacheOverlay)
       .overlay(offlineBanner)
+      .overlay(searchHintBanner)
       .overlay(snackbar)
       .overlay(onboardingOverlay)
       #if os(iOS)
@@ -855,6 +899,9 @@ struct TVLibraryView: View {
   @State private var showOnboarding: Bool = false
   @StateObject private var storeForBanner = RemoteSourcesStore.shared
   @State private var offlineBannerDismissed: Bool = false
+  #if os(tvOS)
+  @State private var showSearchSheet: Bool = false
+  #endif
 
   @ViewBuilder private var snackbar: some View {
     if snackbarVisible {
@@ -902,11 +949,57 @@ struct TVLibraryView: View {
       .ignoresSafeArea(edges: [])
       .transition(.move(edge: .top).combined(with: .opacity))
       .animation(.easeInOut(duration: 0.25), value: anyOffline)
-    } else if !anyOffline && offlineBannerDismissed {
-      // Reset dismissal when all sources recover, using a no-op view to satisfy ViewBuilder
+    } else {
       EmptyView()
-        .onAppear { offlineBannerDismissed = false }
     }
+  }
+
+  @ViewBuilder private var searchHintBanner: some View {
+    #if os(tvOS)
+    let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !q.isEmpty {
+      let needle = q.lowercased()
+      func filenameLower(_ path: String) -> String {
+        if let url = URL(string: path) {
+          return (url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
+        }
+        return path.lowercased()
+      }
+      let hasMatches = model.games.contains { item in
+        let title = item.title.lowercased()
+        if title.contains(needle) { return true }
+        if filenameLower(item.filePath).contains(needle) { return true }
+        if item.gameID.lowercased().contains(needle) { return true }
+        if item.makerLong.lowercased().contains(needle) { return true }
+        if item.countryName.lowercased().contains(needle) { return true }
+        if item.gametdbID.lowercased().contains(needle) { return true }
+        if item.filePath.lowercased().contains(needle) { return true }
+        return false
+      }
+      if !hasMatches {
+        VStack {
+          Spacer().frame(height: 8)
+          HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.white)
+            Text(L("No results. Try title, maker, Game ID, or filename."))
+              .foregroundStyle(.white)
+              .lineLimit(2)
+            Spacer(minLength: 8)
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 10)
+          .background(Color.gray.opacity(0.85))
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          .padding(.horizontal, 12)
+          .padding(.top, 8)
+          Spacer()
+        }
+        .transition(.move(edge: .top).combined(with: .opacity))
+      } else { EmptyView() }
+    } else { EmptyView() }
+    #else
+    EmptyView()
+    #endif
   }
 
   @ViewBuilder
