@@ -5,6 +5,8 @@ import Network
 /// Coordinates multiple remote sources and updates the Dolphin cache with their items.
 @MainActor
 class RemoteSourcesCoordinator: ObservableObject {
+    static let shared = RemoteSourcesCoordinator()
+    static var isGlobalRefreshRunning: Bool = false
     @Published var sources: [any RemoteLibrarySource] = []
     @Published var lastItemsBySource: [String: [RemoteLibraryItem]] = [:]
     @Published var scanningProgressBySource: [String: Double] = [:]
@@ -59,6 +61,8 @@ class RemoteSourcesCoordinator: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
+            if Self.isGlobalRefreshRunning { print("DEBUG REFRESH: Global refresh already running; coalescing request"); return }
+            Self.isGlobalRefreshRunning = true
             print("DEBUG REFRESH: RefreshRemoteSources notification received - in-place refresh")
             for src in self.sources {
                 if let w = src as? WebDAVSource {
@@ -68,6 +72,7 @@ class RemoteSourcesCoordinator: ObservableObject {
                     src.start()
                 }
             }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { Self.isGlobalRefreshRunning = false }
         }
 
         // Start reachability monitoring
