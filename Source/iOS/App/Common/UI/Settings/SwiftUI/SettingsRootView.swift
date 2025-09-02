@@ -761,6 +761,15 @@ struct AboutView: View {
         Text("© 2003-2015+ Dolphin Team.\n© 2019-2025+ DolphiniOS Project.")
           .multilineTextAlignment(.center)
 
+        Text("SwiftUI version by Joe Mattiello")
+          .multilineTextAlignment(.center)
+
+        Button("github.com/JoeMatt") {
+          if let url = URL(string: "https://github.com/JoeMatt") {
+            openURL(url)
+          }
+        }
+
         Text("DolphiniOS is an unofficial and separately maintained port of Dolphin to iOS. The DolphiniOS Project has no relation to Dolphin Team.")
           .multilineTextAlignment(.center)
 
