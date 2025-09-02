@@ -1678,6 +1678,7 @@ struct GraphicsGeneralView: View {
         Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
           Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
             .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }
+          Toggle(L("Save Clips to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_to_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_to_photos") }))
           Picker(L("Clip Length"), selection: $clipSeconds) {
             Text("5s").tag(5)
             Text("10s").tag(10)

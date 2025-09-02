@@ -1,6 +1,7 @@
 import Foundation
 import ReplayKit
 import UIKit
+import Photos
 
 /// Simple facade for ReplayKit rolling clips
 final class ReplayKitManager {
@@ -66,9 +67,37 @@ final class ReplayKitManager {
 						NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Failed to save replay")])
 					} else {
 						NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
+						self.saveToPhotosIfEnabled(fileURL: url)
 					}
 				}
 			}
+		}
+	}
+
+	private func saveToPhotosIfEnabled(fileURL: URL) {
+		guard UserDefaults.standard.bool(forKey: "replaykit_save_to_photos") else { return }
+		let saveBlock = {
+			PHPhotoLibrary.shared().performChanges({
+				let request = PHAssetCreationRequest.forAsset()
+				request.addResource(with: .video, fileURL: fileURL, options: nil)
+			}, completionHandler: { success, error in
+				DispatchQueue.main.async {
+					if success {
+						NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Saved clip to Photos")])
+					} else if let e = error {
+						NSLog("[ReplayKit] Photos save error: %@", e.localizedDescription)
+					}
+				}
+			})
+		}
+		if #available(iOS 14.0, *) {
+			let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+			if status == .authorized || status == .limited { saveBlock(); return }
+			PHPhotoLibrary.requestAuthorization(for: .addOnly) { _ in saveBlock() }
+		} else {
+			let status = PHPhotoLibrary.authorizationStatus()
+			if status == .authorized { saveBlock(); return }
+			PHPhotoLibrary.requestAuthorization { _ in saveBlock() }
 		}
 	}
 }
