@@ -29,6 +29,7 @@
 		B31EAC6F2E6697FD0036EE31 /* AssignmentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */; };
 		B31EAC702E6697FD0036EE31 /* ControllerStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */; };
 		B31EAC822E67743D0036EE31 /* ModernCheatItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */; };
+		B31EAC8B2E67E9050036EE31 /* DOLWiimoteBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -323,6 +324,8 @@
 		B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentEngine.swift; sourceTree = "<group>"; };
 		B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerStateStore.swift; sourceTree = "<group>"; };
 		B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernCheatItem.swift; sourceTree = "<group>"; };
+		B31EAC892E67E9050036EE31 /* DOLWiimoteBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLWiimoteBridge.h; sourceTree = "<group>"; };
+		B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLWiimoteBridge.mm; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -1858,6 +1861,8 @@
 		B9B2C65C288E481300CB6569 /* Emulation */ = {
 			isa = PBXGroup;
 			children = (
+				B31EAC892E67E9050036EE31 /* DOLWiimoteBridge.h */,
+				B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */,
 				B3B149552E594A73009C7049 /* InputOverriderBridge.h */,
 				B3B149562E594A8C009C7049 /* InputOverriderBridge.mm */,
 				B9D93889283DD83E00B290FC /* EmulationBootType.h */,
@@ -2582,6 +2587,7 @@
 				B904ACCF288555E8008B6BE9 /* InternalResolutionViewController.mm in Sources */,
 				B36B519B2E5E46AC009A2303 /* KeychainService.swift in Sources */,
 				B9FCB7BC289672830020E233 /* JitManager+Debugger.m in Sources */,
+				B31EAC8B2E67E9050036EE31 /* DOLWiimoteBridge.mm in Sources */,
 				B9398724287FFBEC008E8E47 /* ConfigSoundViewController.mm in Sources */,
 				B9447B072841906000BC9110 /* TCView.swift in Sources */,
 				B9809C762A49F78700877579 /* GeckoCodeEditViewController.mm in Sources */,

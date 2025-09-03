@@ -28,6 +28,20 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     pressHandler.cancelsTouchesInView = false
     pressHandler.delegate = self
     self.real_view!.addGestureRecognizer(pressHandler)
+    debugLog("[TOUCH] TCWiiPad initialized; gesture recognizer installed")
+  }
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    let pressHandler = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+    pressHandler.minimumPressDuration = 0
+    #if os(iOS)
+    pressHandler.numberOfTouchesRequired = 1
+    #endif
+    pressHandler.cancelsTouchesInView = false
+    pressHandler.delegate = self
+    self.real_view!.addGestureRecognizer(pressHandler)
+    debugLog("[TOUCH] TCWiiPad init(frame:) gesture recognizer installed")
   }
 
   @objc func recalculatePointerValues(new_rect: CGRect, game_aspect: CGFloat) {
@@ -50,6 +64,8 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
 
     gameWidthHalfInv = 1 / (gameWidth * 0.5)
     gameHeightHalfInv = 1 / (gameHeight * 0.5)
+    debugLog(String(format: "[TOUCH] Wii recalc: rect=(%.1fx%.1f) center=(%.1f,%.1f) inv=(%.4f,%.4f) AR=%.3f",
+                    new_rect.width, new_rect.height, gameCenterX, gameCenterY, gameWidthHalfInv, gameHeightHalfInv, game_aspect))
   }
 
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -79,6 +95,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
 
     if gesture.state == .began {
       touchStartPoint = point
+      debugLog(String(format: "[TOUCH] Wii IR begin at (%.3f, %.3f) port=%d mode=%d", point.x, point.y, port, mode.rawValue))
       return
     }
 
@@ -92,26 +109,37 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
       y = oldY + (point.y - touchStartPoint.y) * gameHeightHalfInv
     }
 
-    #if os(iOS)
+#if os(iOS)
     let axisStartIdx = TCButtonType.wiiInfrared
     for (i, axis) in [y, y, x, x].enumerated() {
-      TCManagerInterface.setAxisValueFor(axisStartIdx.rawValue + i + 1, controller: self.port, value: Float(axis))
+      let idx = axisStartIdx.rawValue + i + 1
+      TCManagerInterface.setAxisValueFor(idx, controller: self.port, value: Float(axis))
+      debugLog(String(format: "[TOUCH] Wii IR axis send idx=%d val=%.4f port=%d", idx, axis, port))
     }
-    #endif
+#endif
 
     if gesture.state == .ended && mode == .drag {
       oldX = x
       oldY = y
+      debugLog(String(format: "[TOUCH] Wii IR end; persisted (x=%.4f,y=%.4f)", x, y))
     }
   }
 
   @objc func setTouchIRMode(_ newMode: TCWiiTouchIRMode) {
     self.mode = newMode
+    debugLog("[TOUCH] Wii IR mode set to \(newMode.rawValue)")
   }
 
   @objc func resetPointer() {
     touchStartPoint = CGPoint(x: 0, y: 0)
     oldX = 0
     oldY = 0
+    debugLog("[TOUCH] Wii IR pointer reset")
+  }
+
+  private func debugLog(_ message: String) {
+    if UserDefaults.standard.bool(forKey: "input_debug") {
+      NSLog(message)
+    }
   }
 }
