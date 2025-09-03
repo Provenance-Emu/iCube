@@ -139,4 +139,23 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   }, true);
 }
 
++ (CGRect)currentVideoContentRect {
+  UIView* view = [[EmulationCoordinator shared] mainDisplayView];
+  if (!view) return CGRectZero;
+  const CGFloat w = view.bounds.size.width;
+  const CGFloat h = view.bounds.size.height;
+  if (w <= 0 || h <= 0) return CGRectZero;
+  const CGFloat ar = (CGFloat)[self currentDrawAspectRatio];
+  // Aspect-fit the video inside view.bounds
+  CGFloat contentW = w;
+  CGFloat contentH = w / ar;
+  if (contentH > h) {
+    contentH = h;
+    contentW = h * ar;
+  }
+  const CGFloat x = (w - contentW) * 0.5;
+  const CGFloat y = (h - contentH) * 0.5;
+  return CGRectMake(x, y, contentW, contentH);
+}
+
 @end

@@ -159,6 +159,10 @@
   }
 }
 
+- (UIView*)mainDisplayView {
+  return _mainDisplayView;
+}
+
 - (void)registerExternalDisplayView:(UIView*)externalView {
   [self requestDisplayOnSuperview:externalView];
 }

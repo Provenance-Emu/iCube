@@ -675,8 +675,8 @@ struct ControllersRootView: View {
   }
 }
 
-private enum TouchIRMode: Int, CaseIterable { case disabled = 0, follow = 1, drag = 2
-  var label: String { switch self { case .disabled: return L("Disabled"); case .follow: return L("Follow"); case .drag: return L("Drag") } }
+private enum TouchIRMode: Int, CaseIterable { case gyro = 0, follow = 1, drag = 2
+  var label: String { switch self { case .gyro: return L("Gyro"); case .follow: return L("Follow"); case .drag: return L("Drag") } }
   static func from(raw: Int) -> TouchIRMode { TouchIRMode(rawValue: raw) ?? .drag }
 }
 
@@ -1693,7 +1693,7 @@ struct GraphicsGeneralView: View {
         .onChange(of: clipSeconds) { v in UserDefaults.standard.set(v, forKey: "replaykit_clip_seconds") }
       }
       #endif
-      
+
       Section(header: Text(L("Shader Compilation"))) {
         NavigationLink(destination: GraphicsShaderTypeView(selected: $shaderType)) {
           Text("\(L("Type")): \(shaderType.label)")

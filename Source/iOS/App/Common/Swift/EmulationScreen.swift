@@ -854,7 +854,9 @@ struct EmulationScreen: View {
         for sub in uiView.subviews {
           if let wiiPad = findTCWiiPad(in: sub) {
             let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
-            wiiPad.recalculatePointerValues(new_rect: uiView.bounds, game_aspect: ar)
+            let vr = TVEmulationBridge.currentVideoContentRect()
+            let inHost = vr == .zero ? uiView.bounds : vr
+            wiiPad.recalculatePointerValues(new_rect: inHost, game_aspect: ar)
             wiiPad.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
           } else {
             sub.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
@@ -909,7 +911,9 @@ struct EmulationScreen: View {
         motion.statusBarOrientationChanged()
         wiiPad.resetPointer()
         let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
-        wiiPad.recalculatePointerValues(new_rect: container.bounds, game_aspect: ar)
+        let vr = TVEmulationBridge.currentVideoContentRect()
+        let inHost = vr == .zero ? container.bounds : vr
+        wiiPad.recalculatePointerValues(new_rect: inHost, game_aspect: ar)
       } else {
         applyPortRecursively(4, to: view)
       }

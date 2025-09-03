@@ -44,6 +44,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (float)currentDrawAspectRatio;
 + (void)setWiiIMUPointEnabled:(BOOL)enabled;
 
+// Video Geometry
+// Returns the current video content rect in the coordinate space of the registered main display view.
++ (CGRect)currentVideoContentRect;
+
 @end
 
 NS_ASSUME_NONNULL_END

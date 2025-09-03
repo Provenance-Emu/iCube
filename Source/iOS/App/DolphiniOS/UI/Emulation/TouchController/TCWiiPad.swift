@@ -99,6 +99,14 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
                     gameRectLocal.origin.x, gameRectLocal.origin.y, gameRectLocal.size.width, gameRectLocal.size.height))
   }
 
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+    let vr = TVEmulationBridge.currentVideoContentRect()
+    let rect = vr == .zero ? self.bounds : vr
+    recalculatePointerValues(new_rect: rect, game_aspect: ar)
+  }
+
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
     if let rv = self.real_view {
       return touch.view?.isDescendant(of: rv) ?? true
