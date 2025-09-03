@@ -142,8 +142,22 @@ internal struct PauseMenuView: View {
     return ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         HStack {
-          Button(L("Close")) { onClose() }
-            .buttonStyle(.borderedProminent)
+          Button(action: { onClose() }) {
+            Text(L("Close"))
+              .font(.system(size: 16, weight: .semibold))
+              .foregroundColor(.white)
+              .padding(.horizontal, 18)
+              .padding(.vertical, 10)
+              .background(
+                Capsule(style: .continuous)
+                  .fill(.ultraThinMaterial)
+              )
+              .overlay(
+                Capsule(style: .continuous)
+                  .stroke(Color.white.opacity(0.08), lineWidth: 1)
+              )
+          }
+          .buttonStyle(.plain)
           Spacer()
         }
 
@@ -214,14 +228,15 @@ internal struct PauseMenuView: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
           .font(.system(size: 16, weight: .semibold))
+          .foregroundColor(.white)
         Text(subtitle)
           .font(.system(size: 13, weight: .medium))
-          .foregroundStyle(.secondary)
+          .foregroundColor(.white.opacity(0.7))
       }
       Spacer()
       Image(systemName: "chevron.right")
         .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(.tertiary)
+        .foregroundColor(.white.opacity(0.5))
     }
     .padding(.horizontal, 14)
     .padding(.vertical, 12)
@@ -234,10 +249,10 @@ internal struct PauseMenuView: View {
       menuRowIOS(title: title, subtitle: subtitle, icon: icon, tint: tint)
         .background(
           RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color(uiColor: .secondarySystemBackground))
+            .fill(.ultraThinMaterial)
             .overlay(
               RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
         )
     }
