@@ -27,6 +27,8 @@ class RemoteSourcesCoordinator: ObservableObject {
     private var lastPathSatisfied: Bool = false
     /// Avoid triggering an immediate duplicate refresh on cold boot when we were already online.
     private var suppressNextOnlineRefresh: Bool = true
+    /// During cold boot, avoid clearing/rebuilding the library; write only after first full scan completes.
+    private var suppressWritesUntilFirstScanComplete: Bool = true
 
     // MARK: - Disk cache
     private var cacheDirURL: URL {
@@ -265,6 +267,12 @@ class RemoteSourcesCoordinator: ObservableObject {
                         self.scanningProgress = 0
                         self.isScanning = false
                     }
+                    // If this was the last active scan to complete, allow writes and do one final commit
+                    let allDone = self.sources.allSatisfy { self.scanningProgressBySource[$0.id] ?? 1.0 >= 1.0 }
+                    if allDone && self.suppressWritesUntilFirstScanComplete {
+                        self.suppressWritesUntilFirstScanComplete = false
+                        self.pushCacheUpdate(forceUpdate: true)
+                    }
                 }
             }
         }
@@ -341,6 +349,15 @@ class RemoteSourcesCoordinator: ObservableObject {
         print("DEBUG PUSH: *** FLATTENED TO \(allUrls.count) TOTAL URLs (after filtering empty) ***")
         for (index, url) in allUrls.enumerated() {
             print("DEBUG PUSH:   [\(index)]: \(url)")
+        }
+
+        // During cold boot, avoid writing to the core cache until the first scan is complete
+        if suppressWritesUntilFirstScanComplete && !forceUpdate {
+            print("DEBUG PUSH: Suppressing updateLibrary write until first scan completes; posting UI update only")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+            }
+            return
         }
 
         // Avoid nuking the cache with an empty remote list during startup/refresh
