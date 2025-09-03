@@ -567,8 +567,7 @@ after_set:
 
     __block std::unique_ptr<BootParameters> boot = [bootParameter generateDolphinBootParameter];
 
-    // Important: Renderer initialization may mutate CAMetalLayer properties.
-    // UIKit requires layer mutations on the main thread. Run BootCore on main.
+    // Prepare Metal layer on main, but DO NOT boot on main to avoid MsgAlert deadlocks.
     dispatch_sync(dispatch_get_main_queue(), ^{
       // Ensure we have a valid drawable size before booting to avoid CAMetalLayer warnings
       [self updateMetalLayerFrame];
@@ -579,17 +578,16 @@ after_set:
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
         [self updateMetalLayerFrame];
       }
-
-      auto local_boot = std::move(boot);
-      // Initialize controller backends before boot so devices are available
-      UICommon::InitControllers(wsi);
-      // Ensure GameCube Port 1 is plugged with an emulated controller and default to Touchscreen if needed
-      Config::SetBaseOrCurrent(Config::GetInfoForSIDevice(0), SerialInterface::SIDEVICE_GC_CONTROLLER);
-      EnsurePad1DefaultsToTouchscreen();
-      if (!BootManager::BootCore(system, std::move(local_boot), wsi)) {
-        PanicAlertFmt("Failed to init core!");
-      }
     });
+
+    // Back on host queue: init controllers and boot core (non-main) so MsgAlert can present UI on main.
+    UICommon::InitControllers(wsi);
+    Config::SetBaseOrCurrent(Config::GetInfoForSIDevice(0), SerialInterface::SIDEVICE_GC_CONTROLLER);
+    EnsurePad1DefaultsToTouchscreen();
+
+    if (!BootManager::BootCore(system, std::move(boot), wsi)) {
+      PanicAlertFmt("Failed to init core!");
+    }
   });
 
   // Wait for state changes instead of polling
