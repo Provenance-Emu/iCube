@@ -2262,11 +2262,21 @@ private struct ControllersTypePicker: View {
       if isGC {
         // 0: None, 1: GC Controller
         SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 0) }
-        SelectRow(label: L("GameCube Controller"), checked: selected == 1) { selected = 1; DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 1); ControllerManager.shared.reconcile() }
+        SelectRow(label: L("GameCube Controller"), checked: selected == 1) {
+          selected = 1
+          DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 1)
+          EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
+          ControllerManager.shared.reconcile()
+        }
       } else {
         // 0: None, 1: Emulated
         SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 0) }
-        SelectRow(label: L("Emulated Wii Remote"), checked: selected == 1) { selected = 1; DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 1); ControllerManager.shared.reconcile() }
+        SelectRow(label: L("Emulated Wii Remote"), checked: selected == 1) {
+          selected = 1
+          DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 1)
+          EmulationCoordinator.ensureWiimoteDefaultsToTouchscreen(forPort: portOneBased)
+          ControllerManager.shared.reconcile()
+        }
       }
     }
     .navigationTitle(L("Type"))
