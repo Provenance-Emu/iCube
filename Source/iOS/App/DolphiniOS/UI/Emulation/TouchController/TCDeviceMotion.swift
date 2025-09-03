@@ -82,25 +82,24 @@ import Foundation
     self.motionManager.startGyroUpdates(to: operationQueue) { (data, error) in
       if error != nil { return }
 
-      // Get the data
-      let rotation_rate = data!.rotationRate
+      let rr = data!.rotationRate
 
-      var x, y: Double
-      let z = rotation_rate.z
+      var horiz: Double = 0.0 // from yaw (z)
+      var vert: Double = 0.0  // from pitch (x or y depending on orientation)
 
       switch self.orientation {
       case .portrait, .unknown:
-        x = -rotation_rate.x
-        y = -rotation_rate.y
-      case .landscapeRight:
-        x = rotation_rate.y
-        y = -rotation_rate.x
+        horiz = rr.z
+        vert = -rr.x
       case .portraitUpsideDown:
-        x = rotation_rate.x
-        y = rotation_rate.y
+        horiz = -rr.z
+        vert = rr.x
       case .landscapeLeft:
-        x = -rotation_rate.y
-        y = rotation_rate.x
+        horiz = rr.z
+        vert = -rr.y
+      case .landscapeRight:
+        horiz = -rr.z
+        vert = rr.y
       @unknown default:
         return
       }
