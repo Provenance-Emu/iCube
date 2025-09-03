@@ -6,6 +6,7 @@
 #import "Core/Config/MainSettings.h"
 
 #import "Swift.h"
+#import "DolphiniOS-Swift.h"
 
 #import "FastmemManager.h"
 #import "JitManager.h"
@@ -46,6 +47,20 @@
   if (verbosity <= 0) verbosity = 4;
   self.loggingSwitch.on = logsEnabled;
   self.loggingVerbosityLabel.text = [NSString stringWithFormat:@"%ld", (long)verbosity];
+
+  // Add Reset Tips button on the navigation bar for quick access
+  UIBarButtonItem* resetTipsItem = [[UIBarButtonItem alloc] initWithTitle:@"Reset Tips" style:UIBarButtonItemStylePlain target:self action:@selector(onResetTips)];
+  NSMutableArray* rightItems = [self.navigationItem.rightBarButtonItems mutableCopy];
+  if (!rightItems) rightItems = [NSMutableArray array];
+  [rightItems addObject:resetTipsItem];
+  self.navigationItem.rightBarButtonItems = rightItems;
+}
+
+- (void)onResetTips {
+  [TipsAdmin resetAll];
+  UIAlertController* tipsAlert = [UIAlertController alertControllerWithTitle:@"Reset" message:@"Tips datastore reset." preferredStyle:UIAlertControllerStyleAlert];
+  [tipsAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {}]];
+  [self presentViewController:tipsAlert animated:true completion:nil];
 }
 
 - (void)fastmemChanged {
@@ -105,6 +120,8 @@
     [sharedMotion setPort:4];
     [sharedMotion setMotionEnabled:true];
 #endif
+  } else if (indexPath.section == 2 && indexPath.row == 2) { // Reset Tips state
+    [self onResetTips];
   } else if (indexPath.section == 0 && indexPath.row == 2) { // Verbosity label tap to cycle
     NSInteger verbosity = [[NSUserDefaults standardUserDefaults] integerForKey:@"logger_console_verbosity"];
     if (verbosity <= 0) verbosity = 4;

@@ -796,6 +796,11 @@
 			path = Widgets;
 			sourceTree = "<group>";
 		};
+		B31EAC8E2E68B1710036EE31 /* Tips */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Tips;
+			sourceTree = "<group>";
+		};
 		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = Core;
@@ -1209,28 +1214,24 @@
 		B933EDBB27F6A5C7004D7DD7 /* Swift */ = {
 			isa = PBXGroup;
 			children = (
-				B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */,
-				B31EAC712E6772C80036EE31 /* Widgets */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
+				B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */,
 				B31E921A2E665F530036EE31 /* ControllerManager.swift */,
 				B31E804E2E6504940036EE31 /* ControllerPresets.swift */,
+				B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */,
 				B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */,
 				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
-				B31E921E2E667C0F0036EE31 /* ReplayKitManager.swift */,
-				B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */,
-				B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */,
-				B31E921F2E667C0F0036EE31 /* SiriShortcutManager.swift */,
-				B31E92202E667C0F0036EE31 /* ThermalManager.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
 				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
 				B31E804F2E6504940036EE31 /* GameProfiles.swift */,
 				B36B519A2E5E46AC009A2303 /* KeychainService.swift */,
 				B36B48C92E5D07D4009A2303 /* Localized.swift */,
+				B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */,
 				B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */,
 				B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */,
 				B3F216642E5F5EA100AF38F3 /* RegionFlagMapper.swift */,
@@ -1238,12 +1239,15 @@
 				B3F216662E5F6DEC00AF38F3 /* RemoteSourceFactory.swift */,
 				B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */,
 				B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */,
+				B31E921E2E667C0F0036EE31 /* ReplayKitManager.swift */,
 				B3F2166D2E5F741B00AF38F3 /* SaveStateCardView.swift */,
 				B3F216752E5F746600AF38F3 /* SaveStateFilmstripView.swift */,
 				B3F2166E2E5F741B00AF38F3 /* SaveStateInfo.swift */,
 				B3F216772E5F748300AF38F3 /* SaveStatesBrowserView.swift */,
 				B3F216732E5F742400AF38F3 /* SaveStatesViewModel.swift */,
+				B31E921F2E667C0F0036EE31 /* SiriShortcutManager.swift */,
 				B36B519E2E5E4700009A2303 /* SourcesView.swift */,
+				B31E92202E667C0F0036EE31 /* ThermalManager.swift */,
 				B36B48C72E5D0749009A2303 /* TVCheatListView.swift */,
 				B31E805B2E6544430036EE31 /* TVFloatStepper.swift */,
 				B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */,
@@ -1256,6 +1260,8 @@
 				B31E805E2E654CC30036EE31 /* Activity */,
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B34EE6B22E57D65400301907 /* Shaders */,
+				B31EAC8E2E68B1710036EE31 /* Tips */,
+				B31EAC712E6772C80036EE31 /* Widgets */,
 			);
 			path = Swift;
 			sourceTree = "<group>";
@@ -2159,6 +2165,7 @@
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B31E805E2E654CC30036EE31 /* Activity */,
 				B31EAC712E6772C80036EE31 /* Widgets */,
+				B31EAC8E2E68B1710036EE31 /* Tips */,
 			);
 			name = DolphiniOS;
 			packageProductDependencies = (

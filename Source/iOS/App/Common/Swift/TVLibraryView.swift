@@ -5,6 +5,9 @@ import UniformTypeIdentifiers
 
 #if os(iOS) || targetEnvironment(macCatalyst)
 import UniformTypeIdentifiers
+#if canImport(TipKit)
+import TipKit
+#endif
 private struct KeyCommandHostView: UIViewRepresentable {
   let onLeft: () -> Void
   let onRight: () -> Void
@@ -224,6 +227,8 @@ final class TVLibraryViewModel: ObservableObject {
 
 struct TVLibraryView: View {
 
+  @Environment(\.tipsService) private var tipsService
+
   @StateObject private var model = TVLibraryViewModel()
   @State private var showSettings = false
   @State private var didReloadOnce = false
@@ -393,6 +398,15 @@ struct TVLibraryView: View {
       } else {
         libraryView
       }
+    }
+    .task {
+      #if canImport(TipKit)
+      if #available(iOS 17, tvOS 17, *), !didReloadOnce {
+        // Wait for first load to complete before showing tips
+        // Simple debounce: small delay after initial load to allow UI to settle
+        try? await Task.sleep(nanoseconds: 300_000_000)
+      }
+      #endif
     }
   }
 
@@ -614,9 +628,6 @@ struct TVLibraryView: View {
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { showSearchSheet = true }) { Image(systemName: "magnifyingglass") }
     }
-    //        ToolbarItem(placement: .navigationBarTrailing) {
-    //            Button(action: { showSaveStatesBrowser = true }) { Image(systemName: "film") }
-    //        }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { showSources = true }) { Image(systemName: "externaldrive.badge.plus") }
     }
@@ -634,8 +645,12 @@ struct TVLibraryView: View {
 #endif
         }
         Button(L("Sources")) { showSources = true }
-        //                Button(L("Save States")) { showSaveStatesBrowser = true }
-      } label: { Image(systemName: "ellipsis.circle") }
+      } label: {
+        Image(systemName: "ellipsis.circle")
+      }
+      #if canImport(TipKit)
+      .modifier(AttachTipModifier.tip(.importGame))
+      #endif
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       let store = RemoteSourcesStore.shared
@@ -662,8 +677,13 @@ struct TVLibraryView: View {
 #if os(iOS) || targetEnvironment(macCatalyst)
         showImportSoftwarePicker = true
 #endif
-      }) { Image(systemName: "plus") }
-        .help(L("Import Game"))
+      }) {
+        Image(systemName: "plus")
+      }
+      #if canImport(TipKit)
+      .modifier(AttachTipModifier.tip(.importGame))
+      #endif
+      .help(L("Import Game"))
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: {
@@ -706,6 +726,10 @@ struct TVLibraryView: View {
       NavigationStack { SaveStatesBrowserView() }
     }
     .onAppear {
+      // Tips setup
+      if #available(iOS 17, tvOS 17, *) {
+        _ = (Environment(\.tipsService).wrappedValue).configure()
+      }
       // Initialize shared remote sources store to start querying immediately
       print("TVLibraryView: initializing RemoteSourcesStore.shared")
       let store = RemoteSourcesStore.shared
@@ -2629,6 +2653,26 @@ extension TVLibraryView {
       }
     }
     return results
+  }
+}
+#endif
+
+#if canImport(TipKit)
+import TipKit
+@available(iOS 17, tvOS 17, *)
+private struct AttachTipModifier: ViewModifier {
+  enum Kind { case importGame, addSource, search }
+  let kind: Kind
+  static func tip(_ kind: Kind) -> AttachTipModifier { AttachTipModifier(kind: kind) }
+  func body(content: Content) -> some View {
+    switch kind {
+    case .importGame:
+      content.popoverTip(ImportGameTip())
+    case .addSource:
+      content.popoverTip(AddRemoteSourceTip())
+    case .search:
+      content.popoverTip(SearchLibraryTip())
+    }
   }
 }
 #endif
