@@ -29,12 +29,13 @@ import Foundation
     self.motionManager.accelerometerUpdateInterval = updateInterval
     self.motionManager.gyroUpdateInterval = updateInterval
 
+    func clamp(_ v: Double) -> Float { return Float(max(-1.0, min(1.0, v))) }
+    let accelGain: Double = 1.0 / 9.81 // scale to ~[-1,1] before clamping
+    let gyroGain: Double = 1.0 / 8.0   // reduce gyro sensitivity
+
     // Register the handlers
     self.motionManager.startAccelerometerUpdates(to: operationQueue) { (data, error) in
-      if error != nil {
-        return
-      }
-
+      if error != nil { return }
       // Get the data
       let acceleration = data!.acceleration
 
@@ -58,31 +59,28 @@ import Foundation
         return
       }
 
-      // CMAccelerationData's units are G's
-      let gravity = -9.81
-      x *= gravity
-      y *= gravity
-      z *= gravity
+      // CMAccelerationData's units are G's -> scale to ~[-1,1]
+      x *= accelGain
+      y *= accelGain
+      z *= accelGain
 
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: self.port, value: Float(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: self.port, value: Float(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: self.port, value: Float(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: self.port, value: Float(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: self.port, value: Float(z))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: self.port, value: Float(z))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: self.port, value: clamp(x))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: self.port, value: clamp(x))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: self.port, value: clamp(y))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: self.port, value: clamp(y))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: self.port, value: clamp(z))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: self.port, value: clamp(z))
 
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelLeft.rawValue, controller: self.port, value: Float(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelRight.rawValue, controller: self.port, value: Float(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelForward.rawValue, controller: self.port, value: Float(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelBackward.rawValue, controller: self.port, value: Float(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelUp.rawValue, controller: self.port, value: Float(z))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelDown.rawValue, controller: self.port, value: Float(z))
+      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelLeft.rawValue, controller: self.port, value: clamp(x))
+      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelRight.rawValue, controller: self.port, value: clamp(x))
+      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelForward.rawValue, controller: self.port, value: clamp(y))
+      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelBackward.rawValue, controller: self.port, value: clamp(y))
+      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelUp.rawValue, controller: self.port, value: clamp(z))
+      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelDown.rawValue, controller: self.port, value: clamp(z))
     }
 
     self.motionManager.startGyroUpdates(to: operationQueue) { (data, error) in
-      if error != nil {
-        return
-      }
+      if error != nil { return }
 
       // Get the data
       let rotation_rate = data!.rotationRate
@@ -107,20 +105,21 @@ import Foundation
         return
       }
 
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: self.port, value: Float(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: self.port, value: Float(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: self.port, value: Float(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: self.port, value: Float(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: self.port, value: Float(z))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: self.port, value: Float(z))
+      horiz *= gyroGain
+      vert  *= gyroGain
+
+      // Map to Wii gyro axes: yaw drives horizontal, pitch drives vertical, roll unused (0)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: self.port, value: clamp(vert))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: self.port, value: clamp(vert))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: self.port, value: 0)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: self.port, value: 0)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: self.port, value: clamp(horiz))
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: self.port, value: clamp(horiz))
     }
   }
 
   @objc func setMotionEnabled(_ mode: Bool) {
-    if self.motionEnabled == mode {
-      return
-    }
-
+    if self.motionEnabled == mode { return }
     self.motionEnabled = mode
 
     if self.motionEnabled {
@@ -131,9 +130,7 @@ import Foundation
     }
   }
 
-  @objc func setPort(_ port: Int) {
-    self.port = port
-  }
+  @objc func setPort(_ port: Int) { self.port = port }
 
   // UIApplicationDidChangeStatusBarOrientationNotification is deprecated...
   @objc func statusBarOrientationChanged() {
