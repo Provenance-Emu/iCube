@@ -11,6 +11,8 @@
 
 @interface TVWiiSystemUpdateViewController ()
 
+- (void)startUpdate;
+
 @end
 
 @implementation TVWiiSystemUpdateViewController {
@@ -78,6 +80,25 @@
 	}
 	_hasStarted = true;
 
+	// If performing online update without a preset source, prompt for region first
+	if (self.isOnlineUpdate && (self.updateSource.length == 0)) {
+		UIAlertController* sheet = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Select Region")
+																							  message:nil
+																				preferredStyle:UIAlertControllerStyleActionSheet];
+		void (^pick)(NSString*) = ^(NSString* code){ self.updateSource = code; [self startUpdate]; };
+		[sheet addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Europe") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){ pick(@"EUR"); }]];
+		[sheet addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Japan") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){ pick(@"JPN"); }]];
+		[sheet addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Korea") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){ pick(@"KOR"); }]];
+		[sheet addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"United States") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){ pick(@"USA"); }]];
+		[sheet addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Cancel") style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction* a){ [self dismissViewControllerAnimated:true completion:nil]; }]];
+		[self presentViewController:sheet animated:true completion:nil];
+		return;
+	}
+
+	[self startUpdate];
+}
+
+- (void)startUpdate {
 	TVWiiSystemUpdateViewController* thisPtr = self;
 	WiiUtils::UpdateCallback callback = [thisPtr](size_t processed, size_t total, u64 titleId) -> bool {
 		__block bool cancelled = false;
@@ -96,10 +117,11 @@
 
 	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 		WiiUtils::UpdateResult result;
+		const std::string source = FoundationToCppString(self.updateSource ?: @"");
 		if (self.isOnlineUpdate) {
-			result = WiiUtils::DoOnlineUpdate(callback, FoundationToCppString(self.updateSource));
+			result = WiiUtils::DoOnlineUpdate(callback, source);
 		} else {
-			result = WiiUtils::DoDiscUpdate(callback, FoundationToCppString(self.updateSource));
+			result = WiiUtils::DoDiscUpdate(callback, source);
 		}
 		if (result == WiiUtils::UpdateResult::Succeeded || result == WiiUtils::UpdateResult::AlreadyUpToDate) {
 			DiscIO::NANDImporter().ExtractCertificates();
@@ -163,8 +185,8 @@
 
 - (void)showAlertWithTitle:(NSString*)title message:(NSString*)message {
 	UIAlertController* alert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(title)
-																		 message:DOLCoreLocalizedString(message)
-																  preferredStyle:UIAlertControllerStyleAlert];
+																					message:DOLCoreLocalizedString(message)
+															preferredStyle:UIAlertControllerStyleAlert];
 	[alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* action) {
 		[self dismissViewControllerAnimated:true completion:nil];
 	}]];

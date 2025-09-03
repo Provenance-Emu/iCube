@@ -17,9 +17,7 @@
 #import "EmulationBootParameter.h"
 #import "EmulationBootType.h"
 #import "WiiSystemUpdateViewController.h"
-#if TARGET_OS_TV
 #import "TVWiiSystemUpdateViewController.h"
-#endif
 
 @implementation TVLibraryBridge
 
@@ -46,39 +44,45 @@
   [[EmulationCoordinator shared] runEmulationWithBootParameter:p];
 }
 
++ (void)presentUpdateControllerWithRegion:(NSString*)regionCode {
+  UIViewController* root = UIApplication.sharedApplication.keyWindow.rootViewController;
+  if (!root) return;
+
+  // Prefer the unified TVWiiSystemUpdateViewController on all platforms
+  if ([TVWiiSystemUpdateViewController class]) {
+    TVWiiSystemUpdateViewController* vc = [TVWiiSystemUpdateViewController new];
+    if (regionCode.length > 0) { vc.updateSource = regionCode; }
+    vc.isOnlineUpdate = YES;
+    [root presentViewController:vc animated:YES completion:nil];
+    return;
+  }
+
+  // Fallback (older iOS builds): storyboard-based updater
+  @try {
+    UIStoryboard* sb = [UIStoryboard storyboardWithName:@"WiiSystemUpdate" bundle:nil];
+    if (sb) {
+      UIViewController* vc = (UIViewController*)[sb instantiateInitialViewController];
+      if (vc) {
+        if (regionCode.length > 0 && [vc respondsToSelector:@selector(setUpdateSource:)]) {
+          [vc setValue:regionCode forKey:@"updateSource"];
+        }
+        if ([vc respondsToSelector:@selector(setIsOnlineUpdate:)]) {
+          [vc setValue:@(YES) forKey:@"isOnlineUpdate"];
+        }
+        [root presentViewController:vc animated:YES completion:nil];
+        return;
+      }
+    }
+  } @catch (...) {
+  }
+}
+
 + (void)performOnlineSystemUpdate {
-  EmulationBootParameter* p = [EmulationBootParameter new];
-  p.bootType = EmulationBootTypeSystemMenu;
-  [[EmulationCoordinator shared] runEmulationWithBootParameter:p];
+  [self presentUpdateControllerWithRegion:nil];
 }
 
 + (void)performOnlineSystemUpdateWithRegion:(NSString*)regionCode {
-#if TARGET_OS_TV
-	UIViewController* root = UIApplication.sharedApplication.keyWindow.rootViewController;
-	if (root) {
-		TVWiiSystemUpdateViewController* vc = [TVWiiSystemUpdateViewController new];
-		vc.updateSource = regionCode;
-		vc.isOnlineUpdate = true;
-		[root presentViewController:vc animated:YES completion:nil];
-		return;
-	}
-#else
-	@try {
-		UIStoryboard* sb = [UIStoryboard storyboardWithName:@"WiiSystemUpdate" bundle:nil];
-		UIViewController* root = UIApplication.sharedApplication.keyWindow.rootViewController;
-		if (sb && root) {
-			WiiSystemUpdateViewController* vc = (WiiSystemUpdateViewController*)[sb instantiateInitialViewController];
-			if (vc) {
-				vc.updateSource = regionCode;
-				vc.isOnlineUpdate = true;
-				[root presentViewController:vc animated:YES completion:nil];
-				return;
-			}
-		}
-	} @catch (...) {
-	}
-#endif
-	[self performOnlineSystemUpdate];
+  [self presentUpdateControllerWithRegion:regionCode];
 }
 
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {
