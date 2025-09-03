@@ -119,7 +119,7 @@ func installInputDebugHandlers(_ c: GCController) {
             // Overrider injection
             InputOverriderBridge.setControl(.gcPadA, controller: 0, value: pressed(gamepad.buttonA) ? 1.0 : 0.0)
             InputOverriderBridge.setControl(.gcPadB, controller: 0, value: pressed(gamepad.buttonB) ? 1.0 : 0.0)
-            if #available(tvOS 14.0, *) {
+            if #available(tvOS 14.0, iOS 14.0, *) {
                 let menu = gamepad.buttonMenu
                 if menu.isPressed {
                     InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: 1.0)
@@ -155,7 +155,9 @@ func installInputDebugHandlers(_ c: GCController) {
             TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonLeft.rawValue, controller: 0, state: gamepad.dpad.left.isPressed)
             TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonRight.rawValue, controller: 0, state: gamepad.dpad.right.isPressed)
             TCManagerInterface.setAxisValueFor(TCButtonType.gcTriggerL.rawValue, controller: 0, value: gamepad.leftTrigger.value)
-            TCManagerInterface.setAxisValueFor(TCButtonType.gcTriggerR.rawValue, controller: 0, value: Float(rAnalog))
+            let r2Half2: Double = gamepad.rightTrigger.isPressed ? 0.49 : 0.0
+            let rAnalog2 = max(Double(gamepad.rightTrigger.value), r2Half2)
+            TCManagerInterface.setAxisValueFor(TCButtonType.gcTriggerR.rawValue, controller: 0, value: Float(rAnalog2))
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickMain.rawValue, controller: 0, value: gamepad.leftThumbstick.xAxis.value)
             let ly = gamepad.leftThumbstick.yAxis.value
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickMain.rawValue + 2, controller: 0, value: max(0, ly))
@@ -197,6 +199,17 @@ func installInputDebugHandlers(_ c: GCController) {
                         NSLog("[INPUT][Turbo] EXIT turbo")
                     }
                     NotificationCenter.default.post(name: Notification.Name("DOLFastForwardToggled"), object: nil, userInfo: ["enabled": false])
+                }
+            }
+
+            // Shoulder + Menu/Options -> Pause
+            PauseGestureTracker.shared.updateShoulderState(allPressed: allFour)
+            if #available(tvOS 14.0, iOS 14.0, *) {
+                if element === gamepad.buttonMenu, gamepad.buttonMenu.isPressed {
+                    PauseGestureTracker.shared.menuOrStartPressed()
+                }
+                if let options = gamepad.buttonOptions, element === options, options.isPressed {
+                    PauseGestureTracker.shared.menuOrStartPressed()
                 }
             }
 
