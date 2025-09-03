@@ -26,6 +26,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) NSString *gametdbID;
 @property (nonatomic, readonly) NSUInteger fileSize;
 
+/// User flag for Favorites (persisted via NSUserDefaults)
+@property (nonatomic, getter=isFavorite) BOOL favorite;
+
 - (instancetype)initWithWrapper:(GameFilePtrWrapper *)wrapper NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 

@@ -280,6 +280,7 @@ struct TVLibraryView: View {
 
   /// Search text for library filtering
   @State private var searchText: String = ""
+  @State private var favoritesVersion: Int = 0
 
   /// Whether emulation is currently running (disables library input)
   @State private var emulationRunning = false
@@ -412,6 +413,7 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private var libraryView: some View {
+    let _ = favoritesVersion
     // Shared filtered view of games for both platforms
     let displayGames: [TVGameItem] = {
       let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -435,6 +437,7 @@ struct TVLibraryView: View {
         return false
       }
     }()
+    let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
 #if os(iOS) || targetEnvironment(macCatalyst)
     GeometryReader { proxy in
@@ -446,6 +449,43 @@ struct TVLibraryView: View {
       let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
       ScrollViewReader { scr in
         ScrollView {
+          if !isSearching, let favs = favorites(), !favs.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: spacingH) {
+                ForEach(favs, id: \.filePath) { fav in
+                  GameGridItem(
+                    item: fav,
+                    select: selectGame,
+                    focusedFilePath: $focusedFilePath,
+                    showProperties: { showPropertiesFor = $0 },
+                    showCheatList: { showCheatListFor = $0 },
+                    downloadGeckoAction: { downloadGecko(for: $0) },
+                    presentCheatGecko: { showGeckoEditorFor = $0 },
+                    presentCheatAR: { showAREditorFor = $0 },
+                    requestDelete: { itemPendingDelete = $0 },
+                    showFavoriteToggle: { toggleFavorite(for: $0) },
+                    showStorageAlert: { message in
+                      storageAlertMessage = message
+                      showStorageErrorAlert = true
+                    },
+                    showCacheInfo: { item in
+                      showCacheInfoFor = item
+                    },
+                    showSaveStates: { item in
+                      let gid = item.gameID
+                      if !gid.isEmpty {
+                        navigateToSaveStates = GameIDRoute(id: gid)
+                      }
+                    },
+                    autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
+                    isAutoPreCaching: autoPreCacheActive.contains(fav.filePath)
+                  )
+                }
+              }
+              .padding(.horizontal, paddingH)
+              .padding(.vertical, Constants.gridVerticalSpacing)
+            }
+          }
           LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
             ForEach(displayGames, id: \.filePath) { item in
               GameGridItem(
@@ -458,6 +498,7 @@ struct TVLibraryView: View {
                 presentCheatGecko: { showGeckoEditorFor = $0 },
                 presentCheatAR: { showAREditorFor = $0 },
                 requestDelete: { itemPendingDelete = $0 },
+                showFavoriteToggle: { toggleFavorite(for: $0) },
                 showStorageAlert: { message in
                   storageAlertMessage = message
                   showStorageErrorAlert = true
@@ -555,6 +596,41 @@ struct TVLibraryView: View {
     }
 #else
     ScrollView {
+      if !isSearching, let favs = favorites(), !favs.isEmpty {
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: Constants.gridHorizontalSpacing) {
+            ForEach(favs, id: \.filePath) { fav in
+              GameGridItem(
+                item: fav,
+                select: selectGame,
+                focusedFilePath: $focusedFilePath,
+                showProperties: { showPropertiesFor = $0 },
+                showCheatList: { showCheatListFor = $0 },
+                downloadGeckoAction: { downloadGecko(for: $0) },
+                presentCheatGecko: { showGeckoEditorFor = $0 },
+                presentCheatAR: { showAREditorFor = $0 },
+                requestDelete: { itemPendingDelete = $0 },
+                showFavoriteToggle: { toggleFavorite(for: $0) },
+                showStorageAlert: { message in
+                  storageAlertMessage = message
+                  showStorageErrorAlert = true
+                },
+                showCacheInfo: { item in
+                  showCacheInfoFor = item
+                },
+                showSaveStates: { item in
+                  let gid = item.gameID
+                  if !gid.isEmpty {
+                    navigateToSaveStates = GameIDRoute(id: gid)
+                  }
+                },
+                autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
+                isAutoPreCaching: autoPreCacheActive.contains(fav.filePath)
+              )
+            }
+          }
+        }
+      }
       LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
         ForEach(displayGames, id: \.filePath) { item in
           GameGridItem(
@@ -567,6 +643,7 @@ struct TVLibraryView: View {
             presentCheatGecko: { showGeckoEditorFor = $0 },
             presentCheatAR: { showAREditorFor = $0 },
             requestDelete: { itemPendingDelete = $0 },
+            showFavoriteToggle: { toggleFavorite(for: $0) },
             showStorageAlert: { message in
               storageAlertMessage = message
               showStorageErrorAlert = true
@@ -721,6 +798,9 @@ struct TVLibraryView: View {
         .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
 #endif
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FavoritesChanged"))) { _ in
+          favoritesVersion &+= 1
+        }
     }
     .sheet(isPresented: $showSaveStatesBrowser) {
       NavigationStack { SaveStatesBrowserView() }
@@ -1517,6 +1597,19 @@ struct TVLibraryView: View {
     }
 #endif
   }
+
+  private func favorites() -> [TVGameItem]? {
+    let favDict = UserDefaults.standard.dictionary(forKey: "favorites_by_gameid") as? [String: Any] ?? [:]
+    let set = Set(favDict.compactMap { (k, v) in (v as? Bool) == true ? k : nil })
+    guard !set.isEmpty else { return [] }
+    return model.games.filter { set.contains($0.gameID) }
+  }
+
+  private func toggleFavorite(for item: TVGameItem) {
+    item.isFavorite = !item.isFavorite
+    // Nudge UI to update favorites row
+    // Reload lightweight by touching state
+  }
 }
 
 // MARK: - Game Grid Item with Focus Management
@@ -1543,6 +1636,7 @@ private struct GameGridItem: View {
   let presentCheatGecko: (TVGameItem) -> Void
   let presentCheatAR: (TVGameItem) -> Void
   let requestDelete: (TVGameItem) -> Void
+  let showFavoriteToggle: (TVGameItem) -> Void
   let showStorageAlert: (String) -> Void
   let showCacheInfo: (TVGameItem) -> Void
   let showSaveStates: (TVGameItem) -> Void
@@ -1799,6 +1893,7 @@ private struct GameGridItem: View {
           Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
         }
       }
+      Button(item.isFavorite ? L("Unfavorite") : L("Favorite")) { showFavoriteToggle(item) }
       Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
     }
     .zIndex(isFocused ? 1 : 0)
@@ -1902,6 +1997,7 @@ private struct GameGridItem: View {
           Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
         }
       }
+      Button(item.isFavorite ? L("Unfavorite") : L("Favorite")) { showFavoriteToggle(item) }
       Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
     }
 #endif

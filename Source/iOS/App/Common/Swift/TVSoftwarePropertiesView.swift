@@ -42,6 +42,7 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                                 Text(combinedId)
                                     .font(.system(size: 14, weight: .medium))
                                     .foregroundColor(.secondary)
+                                Toggle("Favorite", isOn: Binding(get: { item.isFavorite }, set: { item.isFavorite = $0 }))
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }

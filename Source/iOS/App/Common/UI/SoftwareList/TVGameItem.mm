@@ -146,4 +146,20 @@
 - (NSString *)gametdbID { return _gametdbID; }
 - (NSUInteger)fileSize { return _fileSize; }
 
+- (BOOL)isFavorite {
+    if (!_gameID) return NO;
+    NSDictionary *fav = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"favorites_by_gameid"] ?: @{};
+    return [fav[_gameID] boolValue];
+}
+
+- (void)setFavorite:(BOOL)favorite {
+    if (!_gameID) return;
+    NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+    NSMutableDictionary *fav = [[d dictionaryForKey:@"favorites_by_gameid"] mutableCopy];
+    if (!fav) fav = [NSMutableDictionary dictionary];
+    fav[_gameID] = @(favorite);
+    [d setObject:fav forKey:@"favorites_by_gameid"];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"FavoritesChanged" object:nil userInfo:@{ @"gameID": _gameID }];
+}
+
 @end
