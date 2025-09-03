@@ -1675,22 +1675,25 @@ struct GraphicsGeneralView: View {
           UserDefaults.standard.set(v, forKey: "ui_frame_cap")
           // Application is handled by the scene delegate where supported
         }
-        Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
-          Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
-            .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }
-          Toggle(L("Save Clips to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_to_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_to_photos") }))
-          Toggle(L("Save Only to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_only_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_only_photos") }))
-          Picker(L("Clip Length"), selection: $clipSeconds) {
-            Text("5s").tag(5)
-            Text("10s").tag(10)
-            Text("15s").tag(15)
-            Text("30s").tag(30)
-          }
-          .onChange(of: clipSeconds) { v in UserDefaults.standard.set(v, forKey: "replaykit_clip_seconds") }
-        }
         #endif
       }
 
+      #if os(iOS)
+      Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
+        Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
+          .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }
+        Toggle(L("Save Clips to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_to_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_to_photos") }))
+        Toggle(L("Save Only to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_only_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_only_photos") }))
+        Picker(L("Clip Length"), selection: $clipSeconds) {
+          Text("5s").tag(5)
+          Text("10s").tag(10)
+          Text("15s").tag(15)
+          Text("30s").tag(30)
+        }
+        .onChange(of: clipSeconds) { v in UserDefaults.standard.set(v, forKey: "replaykit_clip_seconds") }
+      }
+      #endif
+      
       Section(header: Text(L("Shader Compilation"))) {
         NavigationLink(destination: GraphicsShaderTypeView(selected: $shaderType)) {
           Text("\(L("Type")): \(shaderType.label)")
