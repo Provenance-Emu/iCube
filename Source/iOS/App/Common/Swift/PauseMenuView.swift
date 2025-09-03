@@ -118,95 +118,71 @@ internal struct PauseMenuView: View {
     }
   }
 
-  // iOS: compact, single-column, scrollable layout
+  // iOS: compact layout with adaptive grid and safe-area background
   private var iosMainMenu: some View {
-    ZStack(alignment: .top) {
+    let backgroundView = ZStack {
       Image(uiImage: game.coverImage)
         .resizable()
         .scaledToFill()
         .blur(radius: 24)
         .opacity(0.5)
         .ignoresSafeArea()
-
       LinearGradient(
         colors: [
-          Color.black.opacity(0.9),
-          Color.black.opacity(0.4),
-          Color.black.opacity(0.9)
+          Color.black.opacity(0.85),
+          Color.black.opacity(0.35),
+          Color.black.opacity(0.85)
         ],
         startPoint: .top,
         endPoint: .bottom
       )
       .ignoresSafeArea()
+    }
 
-      GeometryReader { geo in
-        let hInset = max(16.0, max(geo.safeAreaInsets.leading, geo.safeAreaInsets.trailing))
-        let topPad = max(8.0, geo.safeAreaInsets.top + 8.0)
-        let bottomPad = geo.safeAreaInsets.bottom + 24.0
+    return ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+        HStack {
+          Button(L("Close")) { onClose() }
+            .buttonStyle(.borderedProminent)
+          Spacer()
+        }
 
-        ScrollView {
-          VStack(spacing: 16) {
-            // Header with Close button inside content to avoid overlay/offset issues
-            HStack {
-              Button(L("Close")) { onClose() }
-                .buttonStyle(.borderedProminent)
-              Spacer()
-            }
-            .padding(.top, 0)
-
-            HStack(alignment: .top, spacing: 12) {
-              Image(uiImage: game.coverImage)
-                .resizable()
-                .aspectRatio(2.0/3.0, contentMode: .fit)
-                .frame(maxWidth: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
-
-              VStack(alignment: .leading, spacing: 6) {
-                Text(game.title)
-                  .font(.system(size: 22, weight: .bold))
-                  .foregroundColor(.white)
-                  .lineLimit(2)
-                  .minimumScaleFactor(0.85)
-                Text(game.gameID)
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.white.opacity(0.7))
-              }
-              Spacer(minLength: 0)
-            }
-
-            // Adaptive grid: 1 column on narrow widths, 2+ when space allows
-            let columns = [GridItem(.adaptive(minimum: 280), spacing: 12)]
-            LazyVGrid(columns: columns, spacing: 12) {
-              actionButton(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue) {
-                TVEmulationBridge.resume(); onClose()
-              }
-              actionButton(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple) {
-                pane = .saves
-              }
-              actionButton(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow) {
-                pane = .cheats
-              }
-              actionButton(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green) {
-                pane = .controllers
-              }
-              actionButton(title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange) {
-                showShaders = true
-              }
-              settingsButtonRow
-              Button(role: .destructive, action: { showExitDialog = true }) {
-                labelRow(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red)
-              }
-              .buttonStyle(.plain)
-            }
+        HStack(alignment: .top, spacing: 12) {
+          Image(uiImage: game.coverImage)
+            .resizable()
+            .aspectRatio(2.0/3.0, contentMode: .fit)
+            .frame(width: 96)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+          VStack(alignment: .leading, spacing: 4) {
+            Text(game.title)
+              .font(.headline)
+              .foregroundStyle(.white)
+            Text(game.gameID)
+              .font(.subheadline)
+              .foregroundStyle(.white.opacity(0.7))
           }
-          .padding(.horizontal, hInset)
-          .padding(.top, topPad)
-          .padding(.bottom, bottomPad)
+          Spacer(minLength: 0)
+        }
+
+        // Adaptive grid: 1 column portrait, 2+ landscape based on width automatically
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12)], spacing: 12) {
+          menuButtonIOS(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue) {
+            TVEmulationBridge.resume(); onClose()
+          }
+          menuButtonIOS(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple) { pane = .saves }
+          menuButtonIOS(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow) { pane = .cheats }
+          menuButtonIOS(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green) { pane = .controllers }
+          menuButtonIOS(title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange) { showShaders = true }
+          #if os(iOS)
+          menuButtonIOS(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray) { showSettingsSheet = true }
+          #endif
+          menuButtonIOS(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red, role: .destructive) { showExitDialog = true }
         }
       }
+      .padding(16)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
-    // Drag-to-dismiss removed to avoid interfering with ScrollView in landscape
+    .background(backgroundView)
     .alert(L("Exit Game"), isPresented: $showExitDialog) {
       Button(L("Cancel"), role: .cancel) { showExitDialog = false }
       Button(L("Quit"), role: .destructive) {
@@ -223,19 +199,13 @@ internal struct PauseMenuView: View {
     }
   }
 
-  private func actionButton(title: String, subtitle: String, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      labelRow(title: title, subtitle: subtitle, icon: icon, tint: tint)
-    }
-    .buttonStyle(.plain)
-  }
-
-  // Reusable row styling for iOS menu
-  private func labelRow(title: String, subtitle: String, icon: String, tint: Color) -> some View {
+  /// Styled iOS pause menu row with icon and subtitle
+  @ViewBuilder
+  private func menuRowIOS(title: String, subtitle: String, icon: String, tint: Color) -> some View {
     HStack(spacing: 14) {
       ZStack {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(tint.opacity(0.2))
+          .fill(tint.opacity(0.15))
           .frame(width: 44, height: 44)
         Image(systemName: icon)
           .font(.system(size: 18, weight: .semibold))
@@ -244,41 +214,49 @@ internal struct PauseMenuView: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(title)
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(.white)
         Text(subtitle)
           .font(.system(size: 13, weight: .medium))
-          .foregroundColor(.white.opacity(0.7))
+          .foregroundStyle(.secondary)
       }
       Spacer()
       Image(systemName: "chevron.right")
         .font(.system(size: 12, weight: .medium))
-        .foregroundColor(.white.opacity(0.5))
+        .foregroundStyle(.tertiary)
     }
     .padding(.horizontal, 14)
     .padding(.vertical, 12)
-    .background(.white.opacity(0.08))
-    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+  }
+
+  /// Reusable iOS menu button applying consistent styling
+  @ViewBuilder
+  private func menuButtonIOS(title: String, subtitle: String, icon: String, tint: Color, role: ButtonRole? = nil, action: @escaping () -> Void) -> some View {
+    Button(role: role, action: action) {
+      menuRowIOS(title: title, subtitle: subtitle, icon: icon, tint: tint)
+        .background(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color(uiColor: .secondarySystemBackground))
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+            )
+        )
+    }
+    .buttonStyle(.plain)
   }
 
   // Platform-specific Settings button row
   @ViewBuilder
   private var settingsButtonRow: some View {
     #if os(tvOS)
-    Button(action: { onShowSettings() }) {
-      HStack(spacing: 8) {
-        labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
-      }
-    }
-    .buttonStyle(.plain)
+    PauseMenuRow(
+      icon: "gearshape",
+      title: L("Settings"),
+      subtitle: L("Game & system options"),
+      action: { onShowSettings() }
+    )
     .focused($focused, equals: .settings)
     #else
-    Button(action: { showSettingsSheet = true }) {
-      HStack(spacing: 8) {
-        labelRow(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray)
-      }
-    }
-    .buttonStyle(.plain)
-    .focused($focused, equals: .settings)
+    EmptyView()
     #endif
   }
 
