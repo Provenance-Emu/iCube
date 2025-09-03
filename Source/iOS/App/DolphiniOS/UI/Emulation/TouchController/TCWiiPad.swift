@@ -221,7 +221,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   private func sendIR(x: CGFloat, y: CGFloat) {
     #if os(iOS)
     let axisStartIdx = TCButtonType.wiiInfrared
-    for (i, axis) in [-y, -y, -x, -x].enumerated() {
+    for (i, axis) in [y, y, x, x].enumerated() {
       let idx = axisStartIdx.rawValue + i + 1
       TCManagerInterface.setAxisValueFor(idx, controller: self.port, value: Float(axis))
       debugLog(String(format: "[TOUCH] Wii IR axis send idx=%d val=%.4f port=%d", idx, axis, port))
