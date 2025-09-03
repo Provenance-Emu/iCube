@@ -29,6 +29,8 @@ class RemoteSourcesCoordinator: ObservableObject {
     private var suppressNextOnlineRefresh: Bool = true
     /// During cold boot, avoid clearing/rebuilding the library; write only after first full scan completes.
     private var suppressWritesUntilFirstScanComplete: Bool = true
+    /// Tracks if system network is currently online; used to filter remote sources while offline.
+    private var isSystemOnline: Bool = true
 
     // MARK: - Disk cache
     private var cacheDirURL: URL {
@@ -90,11 +92,14 @@ class RemoteSourcesCoordinator: ObservableObject {
 
             if satisfied && wasOffline {
                 DispatchQueue.main.async {
+                    self.isSystemOnline = true
                     // On cold boot, skip the first "back online" refresh to avoid duplicate scans.
                     if self.suppressNextOnlineRefresh {
                         print("Reachability: Online detected (initial). Suppressing first refresh.")
                         self.lastPathSatisfied = true
                         self.suppressNextOnlineRefresh = false
+                        // Rebuild union to re-include remote sources immediately
+                        self.pushCacheUpdate(forceUpdate: true)
                         return
                     }
                     self.lastPathSatisfied = true
@@ -103,12 +108,17 @@ class RemoteSourcesCoordinator: ObservableObject {
                         for src in self.sources {
                             if let w = src as? WebDAVSource { w.requestRefresh() }
                         }
+                        // Rebuild union to include remote sources while new items stream in
+                        self.pushCacheUpdate(forceUpdate: true)
                         NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
                     }
                 }
             } else if !satisfied && wasOnline {
                 DispatchQueue.main.async {
+                    self.isSystemOnline = false
                     self.lastPathSatisfied = false
+                    // Prune remote WebDAV items while offline
+                    self.pushCacheUpdate(forceUpdate: true)
                     NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Offline — some sources unavailable")])
                 }
             }
@@ -328,6 +338,12 @@ class RemoteSourcesCoordinator: ObservableObject {
                     if s.isEmpty { print("DEBUG PUSH: WARNING - empty URL for item=\(item)"); continue }
                     allUrls.append(s)
                 }
+                continue
+            }
+
+            // While offline, exclude WebDAV sources entirely from updates
+            if !isSystemOnline, source is WebDAVSource {
+                print("DEBUG PUSH: Skipping WebDAV source \(sourceId) due to offline state")
                 continue
             }
 
