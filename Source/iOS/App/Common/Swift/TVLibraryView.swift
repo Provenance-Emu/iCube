@@ -1081,7 +1081,7 @@ struct TVLibraryView: View {
     let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     if !q.isEmpty {
       let needle = q.lowercased()
-      func filenameLower(_ path: String) -> String {
+      let filenameLower: (String) -> String = { path in
         if let url = URL(string: path) {
           return (url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
         }

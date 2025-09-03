@@ -352,7 +352,9 @@ struct ShaderParameterEditor: View {
                                 DOLShaderPostProcessor.shared.setValue(p.initialCGFloat, forParameterIndex: p.index)
                             }
                             .buttonStyle(.bordered)
+#if os(iOS)
                             .controlSize(.small)
+#endif
                         }
 #if os(iOS)
                         Slider(value: Binding(

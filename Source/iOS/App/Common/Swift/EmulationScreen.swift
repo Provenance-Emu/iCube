@@ -3,6 +3,11 @@ import UIKit
 import GameController
 import Combine
 
+#if os(tvOS)
+private func setupPauseGestureHandlers() { }
+private func setupPauseGestureHandler(for controller: GCController) { }
+#endif
+
 private struct EmulationSurfaceView: UIViewRepresentable {
   let gamePath: String
   func makeUIView(context: Context) -> UIView {

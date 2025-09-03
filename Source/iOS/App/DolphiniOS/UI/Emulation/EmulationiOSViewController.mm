@@ -358,7 +358,9 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 #endif
 
   _visibleTouchPad = touchPad;
+#if TARGET_OS_IOS
   [self setNeedsStatusBarAppearanceUpdate];
+#endif
 }
 
 /// Ensures an on-screen pad is always chosen even with ambiguous mappings
