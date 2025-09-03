@@ -855,8 +855,14 @@ struct EmulationScreen: View {
           if let wiiPad = findTCWiiPad(in: sub) {
             let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
             let vr = TVEmulationBridge.currentVideoContentRect()
-            let inHost = vr == .zero ? uiView.bounds : vr
-            wiiPad.recalculatePointerValues(new_rect: inHost, game_aspect: ar)
+            let inPad: CGRect = {
+              if vr == .zero { return wiiPad.bounds }
+              if let main = EmulationCoordinator.shared().mainDisplayView() {
+                return wiiPad.convert(vr, from: main)
+              }
+              return wiiPad.bounds
+            }()
+            wiiPad.recalculatePointerValues(new_rect: inPad, game_aspect: ar)
             wiiPad.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
           } else {
             sub.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
@@ -912,8 +918,14 @@ struct EmulationScreen: View {
         wiiPad.resetPointer()
         let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
         let vr = TVEmulationBridge.currentVideoContentRect()
-        let inHost = vr == .zero ? container.bounds : vr
-        wiiPad.recalculatePointerValues(new_rect: inHost, game_aspect: ar)
+        let inPad: CGRect = {
+          if vr == .zero { return wiiPad.bounds }
+          if let main = EmulationCoordinator.shared().mainDisplayView() {
+            return wiiPad.convert(vr, from: main)
+          }
+          return wiiPad.bounds
+        }()
+        wiiPad.recalculatePointerValues(new_rect: inPad, game_aspect: ar)
       } else {
         applyPortRecursively(4, to: view)
       }
