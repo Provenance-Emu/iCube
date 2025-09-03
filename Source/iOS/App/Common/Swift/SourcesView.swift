@@ -75,7 +75,7 @@ private struct AddWebDAVSourceView: View {
     @State private var recursive: Bool = true
     @State private var interval: Double = 900
     @State private var intervalMinutes: Int = 15
-    @State private var enablePreCaching: Bool = false
+    @State private var enablePreCaching: Bool = true
 
     // Bonjour discovery
     @State private var discovered: [DiscoveredService] = []
