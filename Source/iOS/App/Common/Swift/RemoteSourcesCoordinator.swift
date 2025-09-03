@@ -25,6 +25,8 @@ class RemoteSourcesCoordinator: ObservableObject {
     private let pathMonitor = NWPathMonitor()
     private let pathQueue = DispatchQueue(label: "net.dolphinios.remotesources.reachability")
     private var lastPathSatisfied: Bool = false
+    /// Avoid triggering an immediate duplicate refresh on cold boot when we were already online.
+    private var suppressNextOnlineRefresh: Bool = true
 
     // MARK: - Disk cache
     private var cacheDirURL: URL {
@@ -86,6 +88,13 @@ class RemoteSourcesCoordinator: ObservableObject {
 
             if satisfied && wasOffline {
                 DispatchQueue.main.async {
+                    // On cold boot, skip the first "back online" refresh to avoid duplicate scans.
+                    if self.suppressNextOnlineRefresh {
+                        print("Reachability: Online detected (initial). Suppressing first refresh.")
+                        self.lastPathSatisfied = true
+                        self.suppressNextOnlineRefresh = false
+                        return
+                    }
                     self.lastPathSatisfied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
                         print("Reachability: Online detected, refreshing remote sources")
@@ -370,5 +379,7 @@ class RemoteSourcesCoordinator: ObservableObject {
         // Update debounce state
         lastPushedURLs = newSet
         lastPushTime = Date()
+        // After the first successful push, allow future back-online refreshes
+        suppressNextOnlineRefresh = false
     }
 }
