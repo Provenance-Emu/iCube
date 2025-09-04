@@ -1109,9 +1109,9 @@ struct ConfigAdvancedView: View {
           .onChange(of: vbiEnabled) { DOLConfigBridge.setMainViOverclockEnable($0) }
         HStack {
           #if os(tvOS)
-          TVIntStepper(value: $vbiPercent, range: 50...200, step: 1)
+          TVIntStepper(value: $vbiPercent, range: 1...400, step: 1)
           #else
-          Slider(value: Binding(get: { Double(vbiPercent) }, set: { vbiPercent = Int($0) }), in: 50...200)
+          Slider(value: Binding(get: { Double(vbiPercent) }, set: { vbiPercent = Int($0) }), in: 1...400)
             .frame(width: 260)
           #endif
           Spacer()
