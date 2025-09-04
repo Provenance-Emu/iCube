@@ -2644,12 +2644,52 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA; // destination is RA
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
+                {
+                  // Fold consecutive ori RA, RA, uimm
+                  const u8 rt = next.inst.RA;
+                  const u8 rs = next.inst.RS;
+                  u32 combined = mu.imm & 0xFFFFu;
+                  u32 jj = j + 1;
+                  while (jj < code_block.m_num_instructions)
+                  {
+                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
+                      break;
+                    if (n2.inst.OPCD != 24 /*ori*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                      break;
+                    combined |= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                    js.downcountAmount += n2.opinfo->num_cycles;
+                    j = jj; // consume
+                    ++jj;
+                  }
+                  mu.imm = combined;
+                }
                 break;
               case 25: // oris
                 mu.op = MicroOpCode::ORIS;
                 mu.rd = next.inst.RA; // destination is RA
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
+                {
+                  // Fold consecutive oris RA, RA, uimm
+                  const u8 rt = next.inst.RA;
+                  const u8 rs = next.inst.RS;
+                  u32 combined = mu.imm & 0xFFFFu;
+                  u32 jj = j + 1;
+                  while (jj < code_block.m_num_instructions)
+                  {
+                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
+                      break;
+                    if (n2.inst.OPCD != 25 /*oris*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                      break;
+                    combined |= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                    js.downcountAmount += n2.opinfo->num_cycles;
+                    j = jj; // consume
+                    ++jj;
+                  }
+                  mu.imm = combined;
+                }
                 break;
               case 26: // xori
                 mu.op = MicroOpCode::XORI;
