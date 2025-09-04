@@ -123,9 +123,15 @@ private:
   template <bool write_pc>
   static s32 LoadStoreXFormPIC(std::ostream& stream,
                                const LoadStoreDFormPICOperands& operands);
-  // Cold, out-of-line slow path for Load/Store PIC fallback to avoid i-cache pollution
+
+  [[gnu::noinline]] [[gnu::cold]]
   static s32 Cold_LoadStoreFallback(PowerPC::PowerPCState& ppc_state,
                                     const LoadStoreDFormPICOperands& operands);
+
+  // Minimal dcbz fast path (safe): only when MSR.DR == 0, HID0.DCE set, and within MEM1/MEM2
+  template <bool write_pc>
+  static s32 DcbzPIC(PowerPC::PowerPCState& ppc_state,
+                     const LoadStoreDFormPICOperands& operands);
   template <bool write_pc>
   static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
                              const ExecuteMicroOpsOperands& operands);
