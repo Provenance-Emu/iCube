@@ -31,6 +31,12 @@ struct CheatsMenuView: View {
 #if os(iOS)
         NavigationStack {
             List {
+                Section {
+                    Toggle(L("Enable Cheats"), isOn: Binding(get: { cheatsEnabledGlobal }, set: { newValue in
+                        DOLConfigBridge.setMainEnableCheats(newValue)
+                        cheatsEnabledGlobal = newValue
+                    }))
+                }
                 if !(geckoCodeList.isEmpty && actionReplayCodeList.isEmpty) {
                     Section {
                         Button {
@@ -167,6 +173,17 @@ struct CheatsMenuView: View {
                         Text(L("Cheat Codes"))
                             .font(.system(size: 28, weight: .bold))
                             .foregroundColor(.white)
+                    }
+
+                    // Global Cheats toggle
+                    HStack(spacing: 12) {
+                        Text(L("Enable Cheats")).foregroundColor(.white)
+                        Spacer()
+                        Toggle("", isOn: Binding(get: { cheatsEnabledGlobal }, set: { newValue in
+                            DOLConfigBridge.setMainEnableCheats(newValue)
+                            cheatsEnabledGlobal = newValue
+                        }))
+                        .labelsHidden()
                     }
 
                     // Search & actions
