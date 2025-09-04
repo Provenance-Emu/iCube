@@ -143,6 +143,16 @@ template <bool write_pc>
     base_ptr = fakevmem_base;
     offset = (ea & fakevmem_mask);
   }
+  else if (!ppc_state.msr.DR && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (ea - 0xC0000000u) & mem1_mask;
+  }
+  else if (!ppc_state.msr.DR && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (ea - 0xD0000000u) & exram_mask;
+  }
 
   if (base_ptr) [[likely]]
   {
@@ -491,6 +501,16 @@ template <bool write_pc>
   {
     base_ptr = fakevmem_base;
     offset = (ea & fakevmem_mask);
+  }
+  else if (!ppc_state.msr.DR && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (ea - 0xC0000000u) & mem1_mask;
+  }
+  else if (!ppc_state.msr.DR && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (ea - 0xD0000000u) & exram_mask;
   }
 
   if (base_ptr) [[likely]]
@@ -2628,6 +2648,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
                          ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
                          ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                {
+                  // NOP elimination: rlwinm rA,rA,0,0,31 with Rc==0
+                  const bool is_identity = (next.inst.SH & 31u) == 0 && (next.inst.MB & 31u) == 0 &&
+                                          (next.inst.ME & 31u) == 31 && next.inst.RA == next.inst.RS &&
+                                          next.inst.Rc == 0;
+                  if (is_identity)
+                  {
+                    // Drop this op from the micro-op batch
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
+                }
                 break;
               case 23: // rlwnmx
                 mu.op = MicroOpCode::RLWNM_VAR;
@@ -2645,6 +2677,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 {
+                  // NOP elimination: ori rA,rA,0
+                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                  {
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
                   // Fold consecutive ori RA, RA, uimm
                   const u8 rt = next.inst.RA;
                   const u8 rs = next.inst.RS;
@@ -2671,6 +2709,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 {
+                  // NOP elimination: oris rA,rA,0
+                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                  {
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
                   // Fold consecutive oris RA, RA, uimm
                   const u8 rt = next.inst.RA;
                   const u8 rs = next.inst.RS;
@@ -2697,6 +2741,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 {
+                  // NOP elimination: xori rA,rA,0
+                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                  {
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
                   // Fold consecutive xori RA, RA, uimm
                   const u8 rt = next.inst.RA;
                   const u8 rs = next.inst.RS;
@@ -2723,6 +2773,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.ra = next.inst.RS; // source is RS
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 {
+                  // NOP elimination: xoris rA,rA,0
+                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                  {
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
                   // Fold consecutive xoris RA, RA, uimm
                   const u8 rt = next.inst.RA;
                   const u8 rs = next.inst.RS;
@@ -3178,6 +3234,16 @@ template <bool write_pc>
   {
     base_ptr = fakevmem_base;
     offset = (ea & fakevmem_mask);
+  }
+  else if (!ppc_state.msr.DR && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (ea - 0xC0000000u) & mem1_mask;
+  }
+  else if (!ppc_state.msr.DR && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (ea - 0xD0000000u) & exram_mask;
   }
 
   std::memset(base_ptr + offset, 0, 32);
