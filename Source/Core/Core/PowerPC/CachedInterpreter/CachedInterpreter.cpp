@@ -2491,6 +2491,39 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 break;
               }
 
+              // Lightweight combo: fold a single adjacent rlwinm onto a preceding addi/addis
+              if (mop.count > 0)
+              {
+                const MicroOp& prev = mop.ops[mop.count - 1];
+                const bool prev_is_add = prev.op == MicroOpCode::ADDI || prev.op == MicroOpCode::ADDIS;
+                if (prev_is_add && next.inst.OPCD == 21 /*rlwinm*/)
+                {
+                  MicroOp& mu = mop.ops[mop.count++];
+                  mu.op = MicroOpCode::RLWINM_IMM;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
+                           ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                           ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                  continue;
+                }
+                 if (prev_is_add && next.inst.OPCD == 20 /*rlwimi*/)
+                 {
+                   MicroOp& mu = mop.ops[mop.count++];
+                   mu.op = MicroOpCode::RLWIMI_IMM;
+                   mu.rd = next.inst.RA; // destination RA
+                   mu.ra = next.inst.RS; // source RS
+                   mu.rb = 0;
+                   mu.rc = static_cast<u8>(next.inst.Rc);
+                   mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
+                            ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                            ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                   continue;
+                 }
+              }
+
               MicroOp& mu = mop.ops[mop.count++];
               switch (next.inst.OPCD)
               {
