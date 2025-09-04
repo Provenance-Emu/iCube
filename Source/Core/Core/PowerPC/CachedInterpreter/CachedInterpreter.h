@@ -126,6 +126,18 @@ private:
   // Cold, out-of-line slow path for Load/Store PIC fallback to avoid i-cache pollution
   static s32 Cold_LoadStoreFallback(PowerPC::PowerPCState& ppc_state,
                                     const LoadStoreDFormPICOperands& operands);
+  // New: PIC fast path for lmw/stmw
+  template <bool write_pc>
+  static s32 LoadMultipleWordsPIC(PowerPC::PowerPCState& ppc_state,
+                                  const LoadStoreDFormPICOperands& operands);
+  template <bool write_pc>
+  static s32 StoreMultipleWordsPIC(PowerPC::PowerPCState& ppc_state,
+                                   const LoadStoreDFormPICOperands& operands);
+
+  // New: PIC fast path for dcbz (zero a 32-byte cache line)
+  template <bool write_pc>
+  static s32 DcbzPIC(PowerPC::PowerPCState& ppc_state,
+                     const LoadStoreDFormPICOperands& operands);
   template <bool write_pc>
   static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
                              const ExecuteMicroOpsOperands& operands);

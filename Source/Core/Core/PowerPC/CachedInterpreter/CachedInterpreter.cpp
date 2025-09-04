@@ -2906,9 +2906,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                                                         mm.GetExRamMask()};
             if (op.inst.OPCD == 31)
             {
-              Write(op.canEndBlock ? CallbackCast(LoadStoreXFormPIC<true>) :
-                                     CallbackCast(LoadStoreXFormPIC<false>),
-                    operands);
+              if (op.inst.SUBOP10 == 1014)
+              {
+                Write(op.canEndBlock ? CallbackCast(DcbzPIC<true>) :
+                                       CallbackCast(DcbzPIC<false>),
+                      operands);
+              }
+              else
+              {
+                Write(op.canEndBlock ? CallbackCast(LoadStoreXFormPIC<true>) :
+                                       CallbackCast(LoadStoreXFormPIC<false>),
+                      operands);
+              }
             }
             else
             {
@@ -2998,4 +3007,66 @@ void CachedInterpreter::LogGeneratedCode() const
 
   // TODO C++20: std::ostringstream::view()
   DEBUG_LOG_FMT(DYNA_REC, "{}", std::move(stream).str());
+}
+
+template <bool write_pc>
+[[gnu::hot]] s32 CachedInterpreter::DcbzPIC(PowerPC::PowerPCState& ppc_state,
+                                           const LoadStoreDFormPICOperands& operands)
+{
+  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
+               exram_mask, fakevmem_base, fakevmem_mask] = operands;
+
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = current_pc;
+    ppc_state.npc = current_pc + 4;
+  }
+
+  // HID0.DCE must be set or this is an alignment exception per interpreter
+  if (!HID0(ppc_state).DCE)
+  {
+    // Delegate to interpreter which will generate the exception and semantics
+    func(interpreter, inst);
+    return sizeof(AnyCallback) + sizeof(operands);
+  }
+
+  // EA for X-form: RA? GPR[RA] + GPR[RB] : GPR[RB]
+  const u32 ea = inst.RA ? (ppc_state.gpr[inst.RA] + ppc_state.gpr[inst.RB]) : ppc_state.gpr[inst.RB];
+  const u32 line_addr = ea & ~31u;
+
+  // Respect LOW_DCBZ_HACK when data cache is disabled
+  if (!ppc_state.m_enable_dcache)
+  {
+    if ((line_addr >= 0x80000000u && line_addr < 0x80008000u) && Config::Get(Config::MAIN_LOW_DCBZ_HACK))
+      return sizeof(AnyCallback) + sizeof(operands);
+  }
+
+  // If address falls into known direct regions, perform fast zero. Otherwise fallback to interpreter
+  u8* __restrict base_ptr = nullptr;
+  u32 offset = 0;
+  if (line_addr >= Memory::MEM1_BASE_ADDR && line_addr - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  {
+    base_ptr = mem1_base;
+    offset = (line_addr - Memory::MEM1_BASE_ADDR) & mem1_mask;
+  }
+  else if (line_addr >= Memory::MEM2_BASE_ADDR && line_addr - Memory::MEM2_BASE_ADDR <= exram_mask)
+  {
+    base_ptr = exram_base;
+    offset = (line_addr - Memory::MEM2_BASE_ADDR) & exram_mask;
+  }
+  else if (fakevmem_base && ((line_addr & 0xFE000000u) == 0x7E000000u))
+  {
+    base_ptr = fakevmem_base;
+    offset = (line_addr & fakevmem_mask);
+  }
+  else
+  {
+    // Fallback to interpreter to honor MMU translation, direct-store segments, DSI
+    func(interpreter, inst);
+    return sizeof(AnyCallback) + sizeof(operands);
+  }
+
+  // Zero 32 bytes; use 8-byte stores for speed
+  std::memset(base_ptr + offset, 0, 32);
+  return sizeof(AnyCallback) + sizeof(operands);
 }
