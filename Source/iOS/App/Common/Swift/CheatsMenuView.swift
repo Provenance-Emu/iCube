@@ -20,6 +20,13 @@ struct CheatsMenuView: View {
         case cheat(String)
     }
 
+    /// Tracks whether global cheats are enabled
+    @State private var cheatsEnabledGlobal: Bool = false
+    /// Controls the alert asking to enable cheats
+    @State private var showEnableCheatsPrompt: Bool = false
+    /// Holds the cheat the user attempted to toggle before enabling cheats
+    @State private var pendingCheat: CheatItem? = nil
+
     var body: some View {
 #if os(iOS)
         NavigationStack {
@@ -63,7 +70,14 @@ struct CheatsMenuView: View {
                                     Text(cheat.type).font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Toggle("", isOn: Binding(get: { cheat.enabled }, set: { _ in toggleCheat(cheat) }))
+                                Toggle("", isOn: Binding(get: { cheat.enabled }, set: { newValue in
+                                    if newValue && !cheatsEnabledGlobal {
+                                        pendingCheat = cheat
+                                        showEnableCheatsPrompt = true
+                                    } else {
+                                        toggleCheat(cheat)
+                                    }
+                                }))
                                     .labelsHidden()
                             }
                         }
@@ -73,7 +87,17 @@ struct CheatsMenuView: View {
             .navigationTitle(L("Cheat Codes"))
             .searchable(text: $searchText)
             .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Back")) { onBack() } } }
-            .onAppear { loadCheats() }
+            .onAppear { cheatsEnabledGlobal = DOLConfigBridge.mainEnableCheats(); loadCheats() }
+        }
+        .alert(L("Enable Cheats?"), isPresented: $showEnableCheatsPrompt) {
+            Button(L("Turn On Cheats")) {
+                DOLConfigBridge.setMainEnableCheats(true)
+                cheatsEnabledGlobal = true
+                if let c = pendingCheat { toggleCheat(c); pendingCheat = nil }
+            }
+            Button(L("Cancel"), role: .cancel) { pendingCheat = nil }
+        } message: {
+            Text(L("Cheats can affect performance and stability. Enable global cheats to apply this code?"))
         }
 #else
         ZStack {
@@ -235,7 +259,14 @@ struct CheatsMenuView: View {
                                     CheatRowView(
                                         cheat: cheat,
                                         isFocused: focused == .cheat(cheat.id),
-                                        onToggle: { toggleCheat(cheat) }
+                                        onToggle: {
+                                            if !cheatsEnabledGlobal {
+                                                pendingCheat = cheat
+                                                showEnableCheatsPrompt = true
+                                            } else {
+                                                toggleCheat(cheat)
+                                            }
+                                        }
                                     )
                                     .focused($focused, equals: .cheat(cheat.id))
                                 }
@@ -254,7 +285,17 @@ struct CheatsMenuView: View {
         .focusSection()
       #endif
         .defaultFocus($focused, .back)
-        .onAppear { loadCheats() }
+        .onAppear { cheatsEnabledGlobal = DOLConfigBridge.mainEnableCheats(); loadCheats() }
+        .alert(L("Enable Cheats?"), isPresented: $showEnableCheatsPrompt) {
+            Button(L("Turn On Cheats")) {
+                DOLConfigBridge.setMainEnableCheats(true)
+                cheatsEnabledGlobal = true
+                if let c = pendingCheat { toggleCheat(c); pendingCheat = nil }
+            }
+            Button(L("Cancel"), role: .cancel) { pendingCheat = nil }
+        } message: {
+            Text(L("Cheats can affect performance and stability. Enable global cheats to apply this code?"))
+        }
 #endif
     }
 
