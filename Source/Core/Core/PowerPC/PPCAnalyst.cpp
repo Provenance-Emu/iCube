@@ -815,6 +815,48 @@ bool PPCAnalyzer::IsBusyWaitLoop(CodeBlock* block, CodeOp* code, size_t instruct
     if (only_cmp && last_is_branch)
       return true;
   }
+
+  // Allow a single benign integer op before branch back to start (e.g., counter update), still no
+  // memory writes and no CTR use.
+  if (instructions >= 2)
+  {
+    bool benign_body = true;
+    size_t non_cmp_int_ops = 0;
+    for (size_t i = 0; i < instructions; ++i)
+    {
+      const auto* info = code[i].opinfo;
+      if (info->type == OpType::Branch || info->type == OpType::Store ||
+          info->type == OpType::StoreFP || info->type == OpType::StorePS)
+      {
+        benign_body = false;
+        break;
+      }
+      if (info->type == OpType::Integer)
+      {
+        // Count integer ops; allow at most one non-compare integer op
+        const bool is_compare = (code[i].inst.OPCD == 11 /*cmpi*/ || code[i].inst.OPCD == 10 /*cmpli*/ ||
+                                 (code[i].inst.OPCD == 31 && (code[i].inst.SUBOP10 == 0 || code[i].inst.SUBOP10 == 32)));
+        if (!is_compare)
+        {
+          if (++non_cmp_int_ops > 1)
+          {
+            benign_body = false;
+            break;
+          }
+        }
+      }
+      else if (info->type != OpType::Load)
+      {
+        benign_body = false;
+        break;
+      }
+    }
+    const CodeOp& last = code[instructions];
+    const bool last_is_branch = last.opinfo->type == OpType::Branch && !last.branchUsesCtr &&
+                                last.branchTo == block->m_address;
+    if (benign_body && last_is_branch)
+      return true;
+  }
   return false;
 }
 
