@@ -364,6 +364,92 @@ template <bool write_pc>
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
+    case 46: // lmw
+    {
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break; // misaligned or LE -> fallback
+      const u32 count = 32u - static_cast<u32>(inst.RD);
+      // Pre-scan to ensure the entire range lies in a single fast region
+      u8* region_base = nullptr;
+      u32 region_mask = 0;
+      bool ok = true;
+      u32 addr = ea;
+      for (u32 k = 0; k < count; ++k, addr += 4)
+      {
+        if (addr >= Memory::MEM1_BASE_ADDR && addr - Memory::MEM1_BASE_ADDR <= mem1_mask)
+        {
+          if (!region_base) { region_base = mem1_base; region_mask = mem1_mask; }
+          else if (region_base != mem1_base || region_mask != mem1_mask) { ok = false; break; }
+        }
+        else if (addr >= Memory::MEM2_BASE_ADDR && addr - Memory::MEM2_BASE_ADDR <= exram_mask)
+        {
+          if (!region_base) { region_base = exram_base; region_mask = exram_mask; }
+          else if (region_base != exram_base || region_mask != exram_mask) { ok = false; break; }
+        }
+        else if (fakevmem_base && ((addr & 0xFE000000u) == 0x7E000000u))
+        {
+          if (!region_base) { region_base = fakevmem_base; region_mask = fakevmem_mask; }
+          else if (region_base != fakevmem_base || region_mask != fakevmem_mask) { ok = false; break; }
+        }
+        else { ok = false; break; }
+      }
+      if (!ok || !region_base)
+        break; // fallback
+      // Load all words
+      addr = ea;
+      for (u32 r = static_cast<u32>(inst.RD); r <= 31u; ++r, addr += 4)
+      {
+        const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
+                         : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
+                         : (addr & region_mask);
+        const u32 raw = *reinterpret_cast<const u32*>(region_base + roff);
+        ppc_state.gpr[r] = Common::FromBigEndian(raw);
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 47: // stmw
+    {
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break; // misaligned or LE -> fallback
+      const u32 count = 32u - static_cast<u32>(inst.RS);
+      // Pre-scan to ensure the entire range lies in a single fast region
+      u8* region_base = nullptr;
+      u32 region_mask = 0;
+      bool ok = true;
+      u32 addr = ea;
+      for (u32 k = 0; k < count; ++k, addr += 4)
+      {
+        if (addr >= Memory::MEM1_BASE_ADDR && addr - Memory::MEM1_BASE_ADDR <= mem1_mask)
+        {
+          if (!region_base) { region_base = mem1_base; region_mask = mem1_mask; }
+          else if (region_base != mem1_base || region_mask != mem1_mask) { ok = false; break; }
+        }
+        else if (addr >= Memory::MEM2_BASE_ADDR && addr - Memory::MEM2_BASE_ADDR <= exram_mask)
+        {
+          if (!region_base) { region_base = exram_base; region_mask = exram_mask; }
+          else if (region_base != exram_base || region_mask != exram_mask) { ok = false; break; }
+        }
+        else if (fakevmem_base && ((addr & 0xFE000000u) == 0x7E000000u))
+        {
+          if (!region_base) { region_base = fakevmem_base; region_mask = fakevmem_mask; }
+          else if (region_base != fakevmem_base || region_mask != fakevmem_mask) { ok = false; break; }
+        }
+        else { ok = false; break; }
+      }
+      if (!ok || !region_base)
+        break; // fallback
+      // Store all words
+      addr = ea;
+      for (u32 r = static_cast<u32>(inst.RS); r <= 31u; ++r, addr += 4)
+      {
+        const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
+                         : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
+                         : (addr & region_mask);
+        const u32 raw = Common::swap32(ppc_state.gpr[r]);
+        *reinterpret_cast<u32*>(region_base + roff) = raw;
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
     }
   }
   // Slow path or unsupported opcodes: delegate to interpreter implementation.
