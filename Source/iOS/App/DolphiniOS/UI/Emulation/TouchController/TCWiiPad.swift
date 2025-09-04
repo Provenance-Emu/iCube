@@ -17,53 +17,63 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   var touchStartPoint: CGPoint = CGPoint(x: 0, y: 0)
   var oldX: CGFloat = 0
   var oldY: CGFloat = 0
+  private var irPressRecognizer: UILongPressGestureRecognizer!
+  private var centerHoldRecognizer: UILongPressGestureRecognizer!
+  private func viewIsInsideControl(_ v: UIView?) -> Bool {
+    var node = v
+    while let cur = node {
+      if cur is TCJoystick || cur is TCDirectionalPad || cur is TCButton { return true }
+      node = cur.superview
+    }
+    return false
+  }
 
   required init?(coder: NSCoder) {
     super.init(coder: coder)
 
     // Register our "long press" gesture recognizer
-    let pressHandler = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
-    pressHandler.minimumPressDuration = 0
+    irPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+    irPressRecognizer.minimumPressDuration = 0
     #if os(iOS)
-    pressHandler.numberOfTouchesRequired = 1
+    irPressRecognizer.numberOfTouchesRequired = 1
     #endif
-    pressHandler.cancelsTouchesInView = false
-    pressHandler.delegate = self
-    self.real_view!.addGestureRecognizer(pressHandler)
+    irPressRecognizer.cancelsTouchesInView = false
+    irPressRecognizer.delegate = self
+    self.real_view!.addGestureRecognizer(irPressRecognizer)
 
     // Three-finger hold to center IR
-    let centerHold = UILongPressGestureRecognizer(target: self, action: #selector(handleThreeFingerHold))
-    centerHold.minimumPressDuration = 3.0
+    centerHoldRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleThreeFingerHold))
+    centerHoldRecognizer.minimumPressDuration = 3.0
     #if os(iOS)
-    centerHold.numberOfTouchesRequired = 3
+    centerHoldRecognizer.numberOfTouchesRequired = 3
     #endif
-    centerHold.cancelsTouchesInView = false
-    centerHold.delegate = self
-    self.real_view!.addGestureRecognizer(centerHold)
+    centerHoldRecognizer.cancelsTouchesInView = false
+    centerHoldRecognizer.delegate = self
+    self.real_view!.addGestureRecognizer(centerHoldRecognizer)
 
     debugLog("[TOUCH] TCWiiPad initialized; gesture recognizer installed")
   }
 
   override init(frame: CGRect) {
     super.init(frame: frame)
-    let pressHandler = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
-    pressHandler.minimumPressDuration = 0
+    irPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+    irPressRecognizer.minimumPressDuration = 0
     #if os(iOS)
-    pressHandler.numberOfTouchesRequired = 1
+    irPressRecognizer.numberOfTouchesRequired = 1
     #endif
-    pressHandler.cancelsTouchesInView = false
-    pressHandler.delegate = self
-    self.real_view!.addGestureRecognizer(pressHandler)
+    irPressRecognizer.cancelsTouchesInView = false
+    irPressRecognizer.delegate = self
+    self.real_view!.addGestureRecognizer(irPressRecognizer)
 
     // Three-finger hold to center IR
-    let centerHold = UILongPressGestureRecognizer(target: self, action: #selector(handleThreeFingerHold))
-    centerHold.minimumPressDuration = 3.0
+    centerHoldRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleThreeFingerHold))
+    centerHoldRecognizer.minimumPressDuration = 3.0
     #if os(iOS)
-    centerHold.numberOfTouchesRequired = 3
+    centerHoldRecognizer.numberOfTouchesRequired = 3
     #endif
-    centerHold.cancelsTouchesInView = false
-    centerHold.delegate = self
-    self.real_view!.addGestureRecognizer(centerHold)
+    centerHoldRecognizer.cancelsTouchesInView = false
+    centerHoldRecognizer.delegate = self
+    self.real_view!.addGestureRecognizer(centerHoldRecognizer)
 
     debugLog("[TOUCH] TCWiiPad init(frame:) gesture recognizer installed")
   }
@@ -108,9 +118,9 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   }
 
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-    if let rv = self.real_view {
-      return touch.view?.isDescendant(of: rv) ?? true
-    }
+    // Do not start IR gestures when touches begin inside joystick/dpad/button controls
+    if viewIsInsideControl(touch.view) { return false }
+    if let rv = self.real_view { return touch.view?.isDescendant(of: rv) ?? true }
 
     return true
   }
@@ -122,6 +132,12 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     }
     #endif
 
+    return false
+  }
+
+  func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+    // Allow IR drag to run simultaneously with joystick/dpad/button pans to avoid breaking their drags
+    if viewIsInsideControl(otherGestureRecognizer.view) { return true }
     return false
   }
 

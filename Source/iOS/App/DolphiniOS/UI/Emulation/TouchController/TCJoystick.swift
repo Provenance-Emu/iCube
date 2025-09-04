@@ -4,7 +4,7 @@
 import Foundation
 import UIKit
 
-class TCJoystick: UIView {
+class TCJoystick: UIView, UIGestureRecognizerDelegate {
   @IBInspectable var joystickType: Int = 10 // default: GC stick
   var port: Int = 0
 
@@ -29,6 +29,9 @@ class TCJoystick: UIView {
     // Create handle
     let handleView = createImageView(imageName: TCButtonType(rawValue: joystickType)!.getImageName())
     let panHandler = UIPanGestureRecognizer(target: self, action: #selector(handlePan))
+    /// Do not steal touches from other recognizers (e.g., Wii IR long press)
+    panHandler.cancelsTouchesInView = false
+    panHandler.delegate = self
     handleView.isUserInteractionEnabled = true
     handleView.addGestureRecognizer(panHandler)
     self.addSubview(handleView)
@@ -95,4 +98,8 @@ class TCJoystick: UIView {
     gesture.view?.center = point
   }
 
+  /// Allow simultaneous recognition with Wii IR long-press to avoid broken drags
+  func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+    return true
+  }
 }
