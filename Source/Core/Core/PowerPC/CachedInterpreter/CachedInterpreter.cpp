@@ -2332,7 +2332,33 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         bool emitted_const32 = false;
         if (op.inst.OPCD == 15 /*addis*/ && op.inst.RA == 0 && (i + 1) < code_block.m_num_instructions)
         {
-          // (Body added earlier in previous patch)
+          PPCAnalyst::CodeOp& op2 = m_code_buffer[i + 1];
+          if (!op2.skip && (op2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) == 0 &&
+              op2.inst.OPCD == 24 /*ori*/)
+          {
+            const u8 rt = op.inst.RD;
+            if (op2.inst.RA == rt && op2.inst.RS == rt)
+            {
+              ExecuteMicroOpsOperands mop{};
+              mop.count = 1;
+              mop.current_pc = js.compilerPC;
+              MicroOp& mu = mop.ops[0];
+              mu.op = MicroOpCode::CONST32;
+              mu.rd = rt;
+              const u32 hi = static_cast<u32>(static_cast<s16>(op.inst.SIMM_16));
+              const u32 lo = static_cast<u32>(op2.inst.UIMM & 0xFFFFu);
+              mu.imm = (hi << 16) | lo;
+
+              js.downcountAmount += op2.opinfo->num_cycles;
+              const bool end_block = op2.canEndBlock;
+              ++i; // consume op2
+
+              emitted_const32 = true;
+              Write(end_block ? CallbackCast(ExecuteMicroOps<true>) :
+                               CallbackCast(ExecuteMicroOps<false>),
+                    mop);
+            }
+          }
         }
 
         // If we did not match CONST32, try to collapse an AddRA CONST32 pattern:
