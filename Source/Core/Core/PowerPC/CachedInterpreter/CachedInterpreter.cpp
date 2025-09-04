@@ -358,6 +358,50 @@ template <bool write_pc>
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
+    case 46: // lmw
+    {
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break; // misaligned or LE -> fallback
+      u32 addr = ea;
+      for (u32 i = inst.RD; i <= 31; ++i, addr += 4)
+      {
+        u8* r_base = nullptr; u32 r_off = 0;
+        if (addr >= Memory::MEM1_BASE_ADDR && addr - Memory::MEM1_BASE_ADDR <= mem1_mask) {
+          r_base = mem1_base; r_off = (addr - Memory::MEM1_BASE_ADDR) & mem1_mask;
+        } else if (addr >= Memory::MEM2_BASE_ADDR && addr - Memory::MEM2_BASE_ADDR <= exram_mask) {
+          r_base = exram_base; r_off = (addr - Memory::MEM2_BASE_ADDR) & exram_mask;
+        } else if (fakevmem_base && ((addr & 0xFE000000u) == 0x7E000000u)) {
+          r_base = fakevmem_base; r_off = (addr & fakevmem_mask);
+        } else {
+          break; // fallback
+        }
+        const u32 raw = *reinterpret_cast<const u32*>(r_base + r_off);
+        ppc_state.gpr[i] = Common::FromBigEndian(raw);
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 47: // stmw
+    {
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break; // misaligned or LE -> fallback
+      u32 addr = ea;
+      for (u32 i = inst.RS; i <= 31; ++i, addr += 4)
+      {
+        u8* r_base = nullptr; u32 r_off = 0;
+        if (addr >= Memory::MEM1_BASE_ADDR && addr - Memory::MEM1_BASE_ADDR <= mem1_mask) {
+          r_base = mem1_base; r_off = (addr - Memory::MEM1_BASE_ADDR) & mem1_mask;
+        } else if (addr >= Memory::MEM2_BASE_ADDR && addr - Memory::MEM2_BASE_ADDR <= exram_mask) {
+          r_base = exram_base; r_off = (addr - Memory::MEM2_BASE_ADDR) & exram_mask;
+        } else if (fakevmem_base && ((addr & 0xFE000000u) == 0x7E000000u)) {
+          r_base = fakevmem_base; r_off = (addr & fakevmem_mask);
+        } else {
+          break; // fallback
+        }
+        const u32 raw = Common::swap32(ppc_state.gpr[i]);
+        *reinterpret_cast<u32*>(r_base + r_off) = raw;
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
     }
   }
   // Slow path or unsupported opcodes: delegate to interpreter implementation.
