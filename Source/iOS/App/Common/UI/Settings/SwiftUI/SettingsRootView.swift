@@ -893,7 +893,14 @@ struct ConfigGeneralView: View {
     fastDiscSpeed = DOLConfigBridge.mainFastDiscSpeed()
     dspThread = DOLConfigBridge.mainDSPThread()
     speedLimitPercent = DOLConfigBridge.mainEmulationSpeedPercent()
-    fallbackRegion = Region.from(raw: DOLConfigBridge.mainFallbackRegion())
+    let regionRaw = DOLConfigBridge.mainFallbackRegion()
+    let regionVal = Region.from(raw: regionRaw)
+    if regionVal == .unknown {
+      fallbackRegion = .ntscU
+      DOLConfigBridge.setMainFallbackRegion(Region.ntscU.rawValue)
+    } else {
+      fallbackRegion = regionVal
+    }
   }
 
   private func speedLimitLabel(percent: Int) -> String {
