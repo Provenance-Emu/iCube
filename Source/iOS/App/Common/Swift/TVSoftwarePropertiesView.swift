@@ -5,6 +5,7 @@ struct TVSoftwarePropertiesView: View, Identifiable {
     let item: TVGameItem
     @Environment(\.dismiss) private var dismiss
     @State private var profilesVersion: Int = 0
+    @State private var wiiControllerType: Int = 0 // 0=Nunchuk (default), 1=Classic, 2=Sideways
 
     var body: some View {
         #if os(iOS)
@@ -99,6 +100,29 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                                     Text("Drag").tag(2)
                                 }
                                 .pickerStyle(.segmented)
+                            }
+                            // Wii Controller Type
+                            HStack(spacing: 12) {
+                                Picker("Wii Controller", selection: $wiiControllerType) {
+                                    Text("Nunchuk").tag(0)
+                                    Text("Classic").tag(1)
+                                    Text("Sideways").tag(2)
+                                }
+                                .pickerStyle(.segmented)
+                                .onChange(of: wiiControllerType) { newVal in
+                                    // Port 0 in core terms (Wiimote 1)
+                                    if newVal == 1 {
+                                        DOLWiimoteBridge.setExtensionForWiimote(0, extension: 2) // CLASSIC
+                                        DOLWiimoteBridge.setSidewaysForWiimote(0, enabled: false)
+                                    } else if newVal == 2 {
+                                        DOLWiimoteBridge.setExtensionForWiimote(0, extension: 0) // NONE (bare Wiimote)
+                                        DOLWiimoteBridge.setSidewaysForWiimote(0, enabled: true)
+                                    } else {
+                                        DOLWiimoteBridge.setExtensionForWiimote(0, extension: 1) // NUNCHUK
+                                        DOLWiimoteBridge.setSidewaysForWiimote(0, enabled: false)
+                                    }
+                                    NotificationCenter.default.post(name: ControllerManager.assignmentsChanged, object: nil)
+                                }
                             }
                             // Per-game IR Mode override (Wii Touch)
                             HStack(spacing: 12) {
@@ -206,6 +230,14 @@ struct TVSoftwarePropertiesView: View, Identifiable {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { dismiss() } }
             }
+        }
+        .onAppear {
+            // Initialize Wii controller picker based on current core state
+            let classic = DOLWiimoteBridge.isClassicActive(forWiimote: 0)
+            let sideways = DOLWiimoteBridge.isSideways(forWiimote: 0)
+            if classic { wiiControllerType = 1 }
+            else if sideways { wiiControllerType = 2 }
+            else { wiiControllerType = 0 }
         }
     }
     #endif
