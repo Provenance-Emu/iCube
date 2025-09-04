@@ -787,6 +787,34 @@ bool PPCAnalyzer::IsBusyWaitLoop(CodeBlock* block, CodeOp* code, size_t instruct
       }
     }
   }
+
+  // Trivial-pattern shortcut: [cmp/cmpl] + [conditional branch back to start]
+  // No memory writes, no calls, no CTR use.
+  if (instructions >= 1)
+  {
+    bool only_cmp = true;
+    for (size_t i = 0; i < instructions; ++i)
+    {
+      const auto* info = code[i].opinfo;
+      if (info->type == OpType::Branch || info->type == OpType::Store ||
+          info->type == OpType::StoreFP || info->type == OpType::StorePS)
+      {
+        only_cmp = false;
+        break;
+      }
+      // Accept integer ops but reject anything with memory side-effects
+      if (info->type != OpType::Integer && info->type != OpType::Load)
+      {
+        only_cmp = false;
+        break;
+      }
+    }
+    const CodeOp& last = code[instructions];
+    const bool last_is_branch = last.opinfo->type == OpType::Branch && !last.branchUsesCtr &&
+                                last.branchTo == block->m_address;
+    if (only_cmp && last_is_branch)
+      return true;
+  }
   return false;
 }
 
