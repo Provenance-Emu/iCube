@@ -33,8 +33,10 @@ void AudioStretcher::ProcessSamples(const short* in, unsigned int num_in, unsign
   double current_ratio = static_cast<double>(num_in) / static_cast<double>(num_out);
 
   const double max_latency = Config::Get(Config::MAIN_AUDIO_STRETCH_LATENCY);
-  const double max_backlog = m_sample_rate * max_latency / 1000.0 / m_stretch_ratio;
-  const double backlog_fullness = m_sound_touch.numSamples() / max_backlog;
+  const double inv_ms = 1.0 / 1000.0;
+  const double max_backlog = (m_sample_rate * max_latency * inv_ms) / m_stretch_ratio;
+  const double backlog_fullness = static_cast<double>(m_sound_touch.numSamples()) / max_backlog;
+
   if (backlog_fullness > 5.0)
   {
     // Too many samples in backlog: Don't push anymore on
@@ -53,13 +55,15 @@ void AudioStretcher::ProcessSamples(const short* in, unsigned int num_in, unsign
   const double lpf_gain = 1.0 - std::exp(-time_delta / lpf_time_scale);
   m_stretch_ratio += lpf_gain * (current_ratio - m_stretch_ratio);
 
-  // Place a lower limit of 10% speed.  When a game boots up, there will be
-  // many silence samples.  These do not need to be timestretched.
-  m_stretch_ratio = std::max(m_stretch_ratio, 0.1);
+  // Place a lower limit of 10% speed.
+  if (m_stretch_ratio < 0.1)
+    m_stretch_ratio = 0.1;
   m_sound_touch.setTempo(m_stretch_ratio);
 
+#if defined(_DEBUG) || !defined(NDEBUG)
   DEBUG_LOG_FMT(AUDIO, "Audio stretching: samples:{}/{} ratio:{} backlog:{} gain: {}", num_in,
                 num_out, m_stretch_ratio, backlog_fullness, lpf_gain);
+#endif
 
   m_sound_touch.putSamples(in, num_in);
 }
@@ -75,10 +79,11 @@ void AudioStretcher::GetStretchedSamples(short* out, unsigned int num_out)
   }
 
   // Perform padding if we've run out of samples.
-  for (size_t i = samples_received; i < num_out; i++)
+  const size_t start_idx = samples_received * 2;
+  for (size_t i = start_idx; i < static_cast<size_t>(num_out) * 2; i += 2)
   {
-    out[i * 2 + 0] = m_last_stretched_sample[0];
-    out[i * 2 + 1] = m_last_stretched_sample[1];
+    out[i + 0] = m_last_stretched_sample[0];
+    out[i + 1] = m_last_stretched_sample[1];
   }
 }
 

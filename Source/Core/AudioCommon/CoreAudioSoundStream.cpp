@@ -14,7 +14,8 @@ OSStatus CoreAudioSound::callback(void* ref_con, AudioUnitRenderActionFlags* act
   for (UInt32 i = 0; i < io_data->mNumberBuffers; i++)
   {
     const AudioBuffer buffer = io_data->mBuffers[i];
-    sound->m_mixer->Mix(static_cast<short*>(buffer.mData), buffer.mDataByteSize / 4);
+    // 16-bit stereo: 4 bytes per frame; use shift to avoid divide in callback.
+    sound->m_mixer->Mix(static_cast<short*>(buffer.mData), buffer.mDataByteSize >> 2);
   }
 
   return noErr;
@@ -45,6 +46,16 @@ bool CoreAudioSound::Init()
   {
     ERROR_LOG_FMT(AUDIO, "error opening audio component");
     return false;
+  }
+
+  // Reduce CPU overhead on iOS by disabling input path and allowing larger callback slices.
+  {
+    UInt32 disable_io = 0;
+    (void)AudioUnitSetProperty(audio_unit, kAudioOutputUnitProperty_EnableIO, kAudioUnitScope_Input,
+                               1, &disable_io, sizeof(disable_io));
+    UInt32 max_frames = 1024; // Favor fewer callbacks per second
+    (void)AudioUnitSetProperty(audio_unit, kAudioUnitProperty_MaximumFramesPerSlice,
+                               kAudioUnitScope_Global, 0, &max_frames, sizeof(max_frames));
   }
 
   FillOutASBDForLPCM(format, m_mixer->GetSampleRate(), 2, 16, 16, false, false, false);
