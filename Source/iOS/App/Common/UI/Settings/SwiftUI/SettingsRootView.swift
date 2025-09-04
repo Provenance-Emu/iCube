@@ -1091,9 +1091,9 @@ struct ConfigAdvancedView: View {
           .onChange(of: cpuClockEnabled) { DOLConfigBridge.setMainOverclockEnable($0) }
         HStack {
           #if os(tvOS)
-          TVIntStepper(value: $cpuClockPercent, range: 50...200, step: 1)
+          TVIntStepper(value: $cpuClockPercent, range: 1...400, step: 1)
           #else
-          Slider(value: Binding(get: { Double(cpuClockPercent) }, set: { cpuClockPercent = Int($0) }), in: 50...200)
+          Slider(value: Binding(get: { Double(cpuClockPercent) }, set: { cpuClockPercent = Int($0) }), in: 1...400)
             .frame(width: 260)
           #endif
           Spacer()
