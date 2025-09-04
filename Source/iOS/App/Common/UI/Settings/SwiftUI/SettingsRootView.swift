@@ -1362,7 +1362,13 @@ struct ConfigGameCubeView: View {
 
   private func syncGC() {
     skipIPL = DOLConfigBridge.mainSkipIPL()
-    gcLanguage = DOLConfigBridge.mainGCLanguage()
+    let lang = DOLConfigBridge.mainGCLanguage()
+    if (0...6).contains(lang) {
+      gcLanguage = lang
+    } else {
+      gcLanguage = 1
+      DOLConfigBridge.setMainGCLanguage(1)
+    }
   }
 
   private func languageLabel(for value: Int) -> String {
