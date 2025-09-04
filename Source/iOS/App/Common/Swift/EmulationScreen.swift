@@ -201,6 +201,7 @@ struct EmulationScreen: View {
   @State private var irModeRaw: Int = 1
   @State private var desiredTouchControls: Bool = true
   @StateObject private var touchVM = TouchControlsViewModel()
+  @State private var wiiOverlaySignature: Int = 0
   @ObservedObject private var controllerManager = ControllerManager.shared
 #endif
   @State private var elapsedSeconds: Int = 0
@@ -608,6 +609,9 @@ struct EmulationScreen: View {
         NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
             touchPadsRefreshToken = UUID()
         }
+        NotificationCenter.default.addObserver(forName: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil, queue: .main) { _ in
+            touchPadsRefreshToken = UUID()
+        }
         endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
             dismiss()
         }
@@ -630,6 +634,10 @@ struct EmulationScreen: View {
                 TVEmulationBridge.resizeSurfaceNow()
             }
         }
+        // Initialize overlay signature for Wii type (extension + sideways)
+        let ext0 = Int(DOLWiimoteBridge.selectedExtension(forWiimote: 0))
+        let side0 = DOLWiimoteBridge.isSideways(forWiimote: 0)
+        wiiOverlaySignature = (ext0 & 0xFF) | (side0 ? 0x100 : 0)
         // Default touch controls: enabled when no controllers are connected (only if not user-overridden)
         if !userOverrideTouchControls {
             let visible = GCController.controllers().isEmpty
