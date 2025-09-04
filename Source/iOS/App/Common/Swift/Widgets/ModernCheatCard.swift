@@ -68,7 +68,7 @@ internal struct ModernCheatCard: View {
       )
     }
     .buttonStyle(.plain)
-    .focusable()
+    .modifier(FocusableCompat())
     .focused($isFocused)
   }
 
@@ -76,6 +76,16 @@ internal struct ModernCheatCard: View {
     let newState = !isEnabled
     onToggle(newState)
     isEnabled = newState
+  }
+
+  private struct FocusableCompat: ViewModifier {
+    func body(content: Content) -> some View {
+      if #available(iOS 17, tvOS 17, *) {
+        content.focusable()
+      } else {
+        content
+      }
+    }
   }
 }
 

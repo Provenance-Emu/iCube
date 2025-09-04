@@ -77,7 +77,7 @@ internal struct PauseMenuView: View {
       }
     }
 #endif
-    .defaultFocus($focused, .resume)
+    .modifier(DefaultFocusCompat(focused: $focused, value: .resume))
     .sheet(isPresented: $showShaders) {
       NavigationStack {
         ShaderSettingsView()
@@ -891,3 +891,15 @@ private func makePreviewGame() -> TVGameItem {
   .previewInterfaceOrientation(.landscapeLeft)
 }
 #endif
+
+private struct DefaultFocusCompat<Value: Hashable>: ViewModifier {
+  var focused: FocusState<Value?>.Binding
+  let value: Value
+  func body(content: Content) -> some View {
+    if #available(iOS 17, tvOS 17, *) {
+      content.defaultFocus(focused, value)
+    } else {
+      content
+    }
+  }
+}

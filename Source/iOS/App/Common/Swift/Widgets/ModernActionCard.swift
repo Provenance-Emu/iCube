@@ -60,8 +60,18 @@ internal struct ModernActionCard: View {
       )
     }
     .buttonStyle(.plain)
-    .focusable()
+    .modifier(FocusableCompat())
     .focused($isFocused)
     .disabled(isLoading)
+  }
+}
+
+private struct FocusableCompat: ViewModifier {
+  func body(content: Content) -> some View {
+    if #available(iOS 17, tvOS 17, *) {
+      content.focusable()
+    } else {
+      content
+    }
   }
 }

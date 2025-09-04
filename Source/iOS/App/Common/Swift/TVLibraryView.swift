@@ -520,7 +520,7 @@ struct TVLibraryView: View {
                 RoundedRectangle(cornerRadius: 14)
                   .stroke(focusedFilePath == item.filePath ? Color.accentColor : Color.clear, lineWidth: 3)
               )
-              .onChange(of: focusedFilePath) { _, newVal in
+              .onChangeCompat(of: focusedFilePath) { _, newVal in
                 if newVal == item.filePath {
                   let gen = UIImpactFeedbackGenerator(style: .light)
                   gen.impactOccurred()
@@ -580,7 +580,7 @@ struct TVLibraryView: View {
           ControllerStyleManager.shared.refreshDetection()
           if !emulationRunning { setupControllerNavigation(columns: count) }
         }
-        .onChange(of: displayGames.count) { _, newCount in
+        .onChangeCompat(of: displayGames.count) { _, newCount in
           if newCount > 0 && focusedFilePath == nil {
             DispatchQueue.main.async { focusedFilePath = displayGames.first?.filePath }
           }
@@ -591,7 +591,7 @@ struct TVLibraryView: View {
           teardownControllerNavigation()
         }
         .task { gridColumnCount = count }
-        .onChange(of: count) { _, newVal in gridColumnCount = newVal }
+        .onChangeCompat(of: count) { _, newVal in gridColumnCount = newVal }
       }
     }
 #else
@@ -725,9 +725,7 @@ struct TVLibraryView: View {
       } label: {
         Image(systemName: "ellipsis.circle")
       }
-      #if canImport(TipKit)
-      .modifier(AttachTipModifier.tip(.importGame))
-      #endif
+      .tipAttachCompat(.importGame)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       let store = RemoteSourcesStore.shared
@@ -757,9 +755,7 @@ struct TVLibraryView: View {
       }) {
         Image(systemName: "plus")
       }
-      #if canImport(TipKit)
-      .modifier(AttachTipModifier.tip(.importGame))
-      #endif
+      .tipAttachCompat(.importGame)
       .help(L("Import Game"))
     }
     ToolbarItem(placement: .navigationBarTrailing) {
@@ -781,17 +777,17 @@ struct TVLibraryView: View {
           return true
         }
 #endif
-        .navigationDestination(item: $navigateToSaveStates) { route in
+        .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
           SaveStateFilmstripView(gameID: route.id)
         }
-        .navigationDestination(item: $navigateTo) { item in
+        .navigationDestinationItemCompat(item: $navigateTo) { item in
           EmulationScreen(game: item)
             .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
         }
         .navigationTitle("DolphiniOS Library")
         .toolbar { libraryToolbar }
 #if os(iOS) || targetEnvironment(macCatalyst)
-        .navigationDestination(isPresented: $navigateToSettings) {
+        .navigationDestinationItemCompat(item: Binding(get: { navigateToSettings ? trueWrapper : nil }, set: { v in navigateToSettings = (v != nil) })) { _ in
           TVSettingsPage()
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -2772,3 +2768,55 @@ private struct AttachTipModifier: ViewModifier {
   }
 }
 #endif
+
+// MARK: - Compatibility Helpers (iOS 16)
+private struct TrueWrapper: Identifiable { let id = UUID() }
+private var trueWrapper: TrueWrapper { TrueWrapper() }
+
+private enum TipKind { case importGame, addSource, search }
+
+private extension View {
+  @ViewBuilder
+  func onChangeCompat<T: Equatable>(of value: T, initial: Bool = false,
+                                    _ handler: @escaping (_ old: T?, _ new: T) -> Void) -> some View {
+    if #available(iOS 17, tvOS 17, *) {
+      self.onChange(of: value, initial: initial, handler)
+    } else {
+      self.onChange(of: value) { new in handler(nil, new) }
+    }
+  }
+
+  @ViewBuilder
+  func navigationDestinationItemCompat<Item: Identifiable, Destination: View>(item: Binding<Item?>,
+                                                                               @ViewBuilder destination: @escaping (Item) -> Destination) -> some View {
+    self.background(
+      NavigationLink(
+        destination: Group {
+          if let it = item.wrappedValue { destination(it) } else { EmptyView() }
+        },
+        isActive: Binding(get: { item.wrappedValue != nil }, set: { active in if !active { item.wrappedValue = nil } })
+      ) { EmptyView() }
+      .hidden()
+    )
+  }
+
+  @ViewBuilder
+  func tipAttachCompat(_ kind: TipKind) -> some View {
+    #if canImport(TipKit)
+    if #available(iOS 17, tvOS 17, *) {
+      let mapped: AttachTipModifier.Kind = {
+        switch kind {
+        case .importGame: return .importGame
+        case .addSource: return .addSource
+        case .search: return .search
+        }
+      }()
+      self.modifier(AttachTipModifier.tip(mapped))
+    } else {
+      self
+    }
+    #else
+    self
+    #endif
+  }
+}
