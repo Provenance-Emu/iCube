@@ -200,6 +200,8 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
   u32 mem1_mask;
   u8* exram_base;
   u32 exram_mask;
+  u8* fakevmem_base;
+  u32 fakevmem_mask;
 };
 
   // Minimal micro-op engine scaffolding for Phase 3

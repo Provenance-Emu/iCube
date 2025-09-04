@@ -33,6 +33,7 @@
 #include "Core/HW/Memmap.h"
 #include "Common/Swap.h"
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
+#include "Core/Config/MainSettings.h"
 
 // PSQ fast-path helpers (mirror Interpreter_LoadStorePaired semantics)
 static inline float CI_DequantizeFactor(u32 scale)
@@ -109,7 +110,7 @@ template <bool write_pc>
                                                       const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
-               exram_mask] = operands;
+               exram_mask, fakevmem_base, fakevmem_mask] = operands;
 
   // Always set PC/NPC like other callbacks: write_pc variant is selected at emission time.
   // We mirror Interpret<write_pc> behavior by writing both; NPC will be updated by branch logic.
@@ -136,6 +137,11 @@ template <bool write_pc>
   {
     base_ptr = exram_base;
     offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
+  }
+  else if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
+  {
+    base_ptr = fakevmem_base;
+    offset = (ea & fakevmem_mask);
   }
 
   if (base_ptr) [[likely]]
@@ -369,7 +375,7 @@ template <bool write_pc>
                                                       const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
-               exram_mask] = operands;
+               exram_mask, fakevmem_base, fakevmem_mask] = operands;
 
   if constexpr (write_pc)
   {
@@ -394,6 +400,11 @@ template <bool write_pc>
   {
     base_ptr = exram_base;
     offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
+  }
+  else if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
+  {
+    base_ptr = fakevmem_base;
+    offset = (ea & fakevmem_mask);
   }
 
   if (base_ptr) [[likely]]
@@ -857,13 +868,15 @@ s32 CachedInterpreter::Cold_LoadStoreFallback(PowerPC::PowerPCState& /*ppc_state
                                               const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
-               exram_mask] = operands;
+               exram_mask, fakevmem_base, fakevmem_mask] = operands;
   (void)current_pc;
   (void)power_pc;
   (void)mem1_base;
   (void)mem1_mask;
   (void)exram_base;
   (void)exram_mask;
+  (void)fakevmem_base;
+  (void)fakevmem_mask;
   func(interpreter, inst);
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -2826,7 +2839,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                                                         mm.GetRAM(),
                                                         mm.GetRamMask(),
                                                         mm.GetEXRAM(),
-                                                        mm.GetExRamMask()};
+                                                        mm.GetExRamMask(),
+                                                        mm.GetFakeVMEM(),
+                                                        mm.GetFakeVMemMask()};
             if (op.inst.OPCD == 31)
             {
               if (op.inst.SUBOP10 == 1014) // dcbz
@@ -2936,7 +2951,7 @@ template <bool write_pc>
                                            const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
-               exram_mask] = operands;
+               exram_mask, fakevmem_base, fakevmem_mask] = operands;
 
   if constexpr (write_pc)
   {
@@ -2967,10 +2982,10 @@ template <bool write_pc>
     base_ptr = exram_base;
     offset = (line_addr - Memory::MEM2_BASE_ADDR) & exram_mask;
   }
-  else
+  else if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
   {
-    func(interpreter, inst);
-    return sizeof(AnyCallback) + sizeof(operands);
+    base_ptr = fakevmem_base;
+    offset = (ea & fakevmem_mask);
   }
 
   std::memset(base_ptr + offset, 0, 32);
