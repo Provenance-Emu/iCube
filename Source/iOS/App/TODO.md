@@ -23,14 +23,15 @@
 
 ## iOS
 
-- [ ] touch cursor control doesn't work
+- [X] touch cursor control doesn't work
 
 ## All Platforms
 
+- [ ] Player 2 on wii always connected
 - [X] FF / Pause menu gestures are wrong / conflicting
 - [ ] Remove extra logging when done
-- [ ] Excessive webdav refreshes
-- [ ] Re-test all 4 paddels fast forward
+- [X] Excessive webdav refreshes
+- [X] Re-test all 4 paddels fast forward
 
 ### New Feature?
 
