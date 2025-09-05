@@ -1912,9 +1912,9 @@ enum GraphicsBackend: CaseIterable { case metal, opengl, vulkan
 }
 
 enum AspectRatio: CaseIterable { case auto, stretch, _4_3, _16_9
-  var label: String { switch self { case .auto: return L("Auto"); case .stretch: return L("Stretch"); case ._4_3: return "4:3"; case ._16_9: return "16:9" } }
-  var aspectRaw: Int { switch self { case .auto: return 0; case .stretch: return 3; case ._4_3: return 1; case ._16_9: return 2 } }
-  static func from(raw: Int) -> AspectRatio { switch raw { case 1: return ._4_3; case 2: return ._16_9; case 3: return .stretch; default: return .auto } }
+  var label: String { switch self { case .auto: return L("Auto"); case .stretch: return L("Stretch to Window"); case ._4_3: return "4:3"; case ._16_9: return "16:9" } }
+  var aspectRaw: Int { switch self { case .auto: return 0; case .stretch: return 3; case ._4_3: return 2; case ._16_9: return 1 } }
+  static func from(raw: Int) -> AspectRatio { switch raw { case 1: return ._16_9; case 2: return ._4_3; case 3: return .stretch; default: return .auto } }
 }
 
 enum TargetFPS: CaseIterable { case unlimited, fps30, fps60, fps120
