@@ -856,7 +856,20 @@ void Metal::StateTracker::PrepareRender()
       auto& system = Core::System::GetInstance();
       auto& pixel_shader_manager = system.GetPixelShaderManager();
       memcpy(map.cpu_buffer, &pixel_shader_manager.constants, sizeof(PixelShaderConstants));
-      SetFragmentBufferNow(0, map.gpu_buffer, map.gpu_offset);
+      if (g_features.batched_buffer_binding_supported && pipe->UsesFragmentBuffer(2))
+      {
+        id<MTLBuffer> bufs[] = {map.gpu_buffer, m_state.texels};
+        NSUInteger offs[] = {map.gpu_offset, m_state.texel_buffer_offset0};
+        [enc setFragmentBuffers:bufs offsets:offs withRange:NSMakeRange(0, 2)];
+        m_current.fragment_buffers[0] = map.gpu_buffer;
+        m_current.fragment_buffers[2] = m_state.texels;
+      }
+      else
+      {
+        SetFragmentBufferNow(0, map.gpu_buffer, map.gpu_offset);
+        if (!m_flags.has_texel_buffer && pipe->UsesFragmentBuffer(2))
+          SetFragmentBufferNow(2, m_state.texels, m_state.texel_buffer_offset0);
+      }
       ADDSTAT(g_stats.this_frame.bytes_uniform_streamed,
               Align(sizeof(PixelShaderConstants), AlignMask::Uniform));
     }
