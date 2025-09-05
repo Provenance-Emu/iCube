@@ -181,6 +181,20 @@ bool VideoBackend::Initialize(const WindowSystemInfo& wsi)
     return false;
   }
 
+  // Concise one-shot summary (API + enabled extensions)
+  INFO_LOG_FMT(VIDEO, "Vulkan summary: API {}.{}", VK_VERSION_MAJOR(vk_api_version),
+               VK_VERSION_MINOR(vk_api_version));
+  {
+    const auto& inst_exts = g_vulkan_context->GetInstanceExtensions();
+    INFO_LOG_FMT(VIDEO, "Enabled instance extensions ({}):", (unsigned)inst_exts.size());
+    for (const std::string& e : inst_exts)
+      INFO_LOG_FMT(VIDEO, "  {}", e);
+    const auto& dev_exts = g_vulkan_context->GetDeviceExtensions();
+    INFO_LOG_FMT(VIDEO, "Enabled device extensions ({}):", (unsigned)dev_exts.size());
+    for (const std::string& e : dev_exts)
+      INFO_LOG_FMT(VIDEO, "  {}", e);
+  }
+
   // Since VulkanContext maintains a copy of the device features and properties, we can use this
   // to initialize the backend information, so that we don't need to enumerate everything again.
   VulkanContext::PopulateBackendInfoFeatures(&g_Config, g_vulkan_context->GetPhysicalDevice(),

@@ -209,12 +209,23 @@ static u32 getAPIVersion()
   u32 used_version = VK_API_VERSION_1_0;
   if (vkEnumerateInstanceVersion && vkEnumerateInstanceVersion(&supported_version) == VK_SUCCESS)
   {
-    // The device itself may not support 1.1, so we check that before using any 1.1 functionality.
-    if (supported_version >= VK_API_VERSION_1_2)
+    // Prefer the highest supported version, with graceful fallback.
+#if defined(VK_API_VERSION_1_4)
+    if (supported_version >= VK_API_VERSION_1_4)
+      used_version = VK_API_VERSION_1_4;
+    else
+#endif
+#if defined(VK_API_VERSION_1_3)
+    if (used_version == VK_API_VERSION_1_0 && supported_version >= VK_API_VERSION_1_3)
+      used_version = VK_API_VERSION_1_3;
+    else
+#endif
+    if (used_version == VK_API_VERSION_1_0 && supported_version >= VK_API_VERSION_1_2)
       used_version = VK_API_VERSION_1_2;
-    else if (supported_version >= VK_API_VERSION_1_1)
+    else if (used_version == VK_API_VERSION_1_0 && supported_version >= VK_API_VERSION_1_1)
       used_version = VK_API_VERSION_1_1;
-    WARN_LOG_FMT(HOST_GPU, "Using Vulkan 1.{}, supported: {}.{}", VK_VERSION_MINOR(used_version),
+    WARN_LOG_FMT(HOST_GPU, "Using Vulkan {}.{} (instance supports {}.{})",
+                 VK_VERSION_MAJOR(used_version), VK_VERSION_MINOR(used_version),
                  VK_VERSION_MAJOR(supported_version), VK_VERSION_MINOR(supported_version));
   }
   else
@@ -268,6 +279,11 @@ VkInstance VulkanContext::CreateVulkanInstance(WindowSystemType wstype, bool ena
     LOG_VULKAN_ERROR(res, "vkCreateInstance failed: ");
     return nullptr;
   }
+
+  // Record enabled instance extensions
+  m_instance_extensions.clear();
+  for (u32 i = 0; i < instance_create_info.enabledExtensionCount; ++i)
+    m_instance_extensions.emplace_back(instance_create_info.ppEnabledExtensionNames[i]);
 
   return instance;
 }
@@ -665,6 +681,25 @@ bool VulkanContext::SelectDeviceExtensions(bool enable_surface)
 
   AddExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, false);
   AddExtension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, false);
+
+  // Optional extensions (enable if available)
+#ifdef VK_KHR_PRESENT_ID_EXTENSION_NAME
+  AddExtension(VK_KHR_PRESENT_ID_EXTENSION_NAME, false);
+#endif
+#ifdef VK_KHR_PRESENT_WAIT_EXTENSION_NAME
+  AddExtension(VK_KHR_PRESENT_WAIT_EXTENSION_NAME, false);
+#endif
+#ifdef VK_KHR_LINE_RASTERIZATION_EXTENSION_NAME
+  AddExtension(VK_KHR_LINE_RASTERIZATION_EXTENSION_NAME, false);
+#elif defined(VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME)
+  AddExtension(VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME, false);
+#endif
+#ifdef VK_KHR_MAINTENANCE_5_EXTENSION_NAME
+  AddExtension(VK_KHR_MAINTENANCE_5_EXTENSION_NAME, false);
+#endif
+#ifdef VK_KHR_MAINTENANCE_8_EXTENSION_NAME
+  AddExtension(VK_KHR_MAINTENANCE_8_EXTENSION_NAME, false);
+#endif
 
   return true;
 }

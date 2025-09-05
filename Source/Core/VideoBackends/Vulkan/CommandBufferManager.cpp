@@ -430,6 +430,20 @@ void CommandBufferManager::SubmitCommandBuffer(u32 command_buffer_index,
   if (present_swap_chain != VK_NULL_HANDLE)
   {
     // Should have a signal semaphore.
+#ifdef VK_KHR_PRESENT_ID_EXTENSION_NAME
+    uint64_t present_id_value = GetCurrentFenceCounter();
+    VkPresentIdKHR present_id{VK_STRUCTURE_TYPE_PRESENT_ID_KHR};
+    present_id.swapchainCount = 1;
+    present_id.pPresentIds = &present_id_value;
+    VkPresentInfoKHR present_info = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+                                     &present_id,
+                                     1,
+                                     &m_present_semaphore,
+                                     1,
+                                     &present_swap_chain,
+                                     &present_image_index,
+                                     nullptr};
+#else
     VkPresentInfoKHR present_info = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
                                      nullptr,
                                      1,
@@ -438,6 +452,7 @@ void CommandBufferManager::SubmitCommandBuffer(u32 command_buffer_index,
                                      &present_swap_chain,
                                      &present_image_index,
                                      nullptr};
+#endif
 
     m_last_present_result = vkQueuePresentKHR(g_vulkan_context->GetPresentQueue(), &present_info);
     m_last_present_done.Set();

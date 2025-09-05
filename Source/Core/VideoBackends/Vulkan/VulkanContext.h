@@ -123,6 +123,10 @@ public:
   // Returns true if exclusive fullscreen is supported for the given surface.
   bool SupportsExclusiveFullscreen(const WindowSystemInfo& wsi, VkSurfaceKHR surface);
 
+  // Summaries
+  const std::vector<std::string>& GetInstanceExtensions() const { return m_instance_extensions; }
+  const std::vector<std::string>& GetDeviceExtensions() const { return m_device_extensions; }
+
   VmaAllocator GetMemoryAllocator() const { return m_allocator; }
 
 #ifdef WIN32
@@ -157,6 +161,7 @@ private:
   PhysicalDeviceInfo m_device_info;
 
   std::vector<std::string> m_device_extensions;
+  std::vector<std::string> m_instance_extensions;
 };
 
 extern std::unique_ptr<VulkanContext> g_vulkan_context;

@@ -39,20 +39,21 @@
 
 ## Graphics (Vulkan/MoltenVK 1.4)
 
-- [ ] Baseline/API bump
-  - [ ] Query `vkEnumerateInstanceVersion`, prefer Vulkan 1.4, fallback to 1.3.
+- [X] Baseline/API bump
+  - [X] Query `vkEnumerateInstanceVersion`, prefer Vulkan 1.4, fallback to 1.3.
   - [ ] Chain `VkPhysicalDeviceVulkan14Features` (+ any 1.3 structs still needed) into device `pNext` and enable supported bits.
-- [ ] Enable/guard new extensions (runtime feature checks, graceful fallback)
+- [X] Enable/guard new extensions (runtime feature checks, graceful fallback)
   - [ ] `VK_KHR_dynamic_rendering_local_read`
-  - [ ] `VK_KHR_present_id` + `VK_KHR_present_id2`
+  - [X] `VK_KHR_present_id` + `VK_KHR_present_id2` (present IDs plumbed)
   - [ ] `VK_KHR_present_wait` + `VK_KHR_present_wait2`
   - [ ] `VK_KHR_shader_float_controls2`
-  - [ ] `VK_KHR_line_rasterization` (or `VK_EXT_line_rasterization` as fallback)
+  - [X] `VK_KHR_line_rasterization` (or `VK_EXT_line_rasterization` as fallback)
   - [ ] `VK_KHR_global_priority` (HIGH, fallback to default)
-  - [ ] `VK_KHR_maintenance5` and `VK_KHR_maintenance8`
-- [ ] Swapchain pacing
-  - [ ] Plumb present IDs (`vkQueuePresentKHR`) and use `vkWaitForPresentKHR` when `present_wait(2)` is supported.
-  - [ ] Keep existing CPU-based vsync as fallback.
+  - [X] `VK_KHR_maintenance5` and `VK_KHR_maintenance8`
+- [~] Swapchain pacing
+  - [X] Plumb present IDs (`vkQueuePresentKHR`)
+  - [ ] Use `vkWaitForPresentKHR` when `present_wait(2)` is supported.
+  - [X] Keep existing CPU-based vsync as fallback.
 - [ ] Dynamic rendering + local read integration
   - [ ] Where we perform EFB/RT copies or peeks within a render pass, switch to dynamic rendering and use local-read to avoid resolves/layout transitions on tile memory.
   - [ ] Validate attachment formats vs dynamic rendering (MoltenVK bug fixed; re-test).
@@ -69,7 +70,10 @@
   - [ ] Scenarios: GC/Wii boot, EFB copies (copy/peek), stereo/dual-source blending paths, MSAA on/off, shader cache warm/cold.
   - [ ] Measure: frametime p95/p99, GPU time, present-to-present latency with and without `present_wait`.
   - [ ] Compare visual correctness: float controls on/off, EQ of transcendentals, FP16 diffs.
-- [ ] Rollout plan
-  - [ ] Land behind feature probes; keep 1.3/legacy path.
+- [X] Rollout plan
+  - [X] Land behind feature probes; keep 1.3/legacy path.
   - [ ] Gate present-wait by a setting if needed (debug toggle), default on when supported.
   - [ ] File follow-ups for any MoltenVK regressions.
+
+- [X] Logging
+  - [X] Add one-shot summary after device creation listing API and enabled instance/device extensions.
