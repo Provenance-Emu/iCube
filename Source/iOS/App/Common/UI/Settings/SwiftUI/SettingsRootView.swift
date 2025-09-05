@@ -5,6 +5,10 @@ import SwiftUI
 import UIKit
 import CoreHaptics
 import QuartzCore
+import PVWebServer
+#if os(iOS)
+import SafariServices
+#endif
 
 /// Root Settings page implemented in SwiftUI for iOS/tvOS
 struct SettingsRootView<Background: View>: View {
@@ -28,6 +32,16 @@ struct SettingsRootView<Background: View>: View {
     VersionManager.shared().coreVersion
   }
 
+  /// Web UI URL string from PVWebServer; empty if not running
+  private var webURLString: String {
+    PVWebServer.shared.urlString ?? ""
+  }
+
+  /// WebDAV URL string from PVWebServer; empty if not running
+  private var webDavURLString: String {
+    PVWebServer.shared.webDavURLString ?? ""
+  }
+
   var body: some View {
     ZStack {
       // Optional background
@@ -48,6 +62,10 @@ struct SettingsRootView<Background: View>: View {
 
   @State private var currentSettingsPage: SettingsPage? = nil
   @State private var showGlobalResetAlert: Bool = false
+  #if os(iOS)
+  @State private var showSafari: Bool = false
+  @State private var safariURL: URL? = nil
+  #endif
 
   @ViewBuilder
   private var pauseMenuStyleContent: some View {
@@ -151,6 +169,53 @@ struct SettingsRootView<Background: View>: View {
             .background(.white.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
+            // Network info
+            VStack(spacing: 12) {
+              HStack {
+                Text("Web UI")
+                  .font(.system(size: 16, weight: .medium))
+                  .foregroundColor(.white.opacity(0.8))
+                Spacer()
+                Text(webURLString.isEmpty ? L("Not Running") : webURLString)
+                  .font(.system(size: 16, weight: .medium))
+                  .foregroundColor(.white.opacity(0.6))
+                  .lineLimit(1)
+                  .truncationMode(.middle)
+              }
+              HStack {
+                Text("WebDAV")
+                  .font(.system(size: 16, weight: .medium))
+                  .foregroundColor(.white.opacity(0.8))
+                Spacer()
+                Text(webDavURLString.isEmpty ? L("Not Running") : webDavURLString)
+                  .font(.system(size: 16, weight: .medium))
+                  .foregroundColor(.white.opacity(0.6))
+                  .lineLimit(1)
+                  .truncationMode(.middle)
+              }
+              #if os(iOS)
+              Button(action: {
+                if !webURLString.isEmpty, let u = URL(string: webURLString) {
+                  safariURL = u
+                  showSafari = true
+                }
+              }) {
+                Text(L("Open Web UI"))
+                  .font(.system(size: 16, weight: .semibold))
+                  .foregroundColor(.white)
+                  .padding(.horizontal, 16)
+                  .padding(.vertical, 10)
+                  .background(.blue.opacity(0.3))
+                  .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+              }
+              .buttonStyle(.plain)
+              #endif
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
             SettingsMenuRow(icon: "info.circle", title: "About", subtitle: "App information") {
               currentSettingsPage = .about
             }
@@ -226,6 +291,36 @@ struct SettingsRootView<Background: View>: View {
           }
           #endif
         }
+
+        // Network
+        Section(header: Text(L("Network"))) {
+          HStack {
+            Text(L("Web UI"))
+            Spacer()
+            let s = webURLString
+            Text(s.isEmpty ? L("Not Running") : s)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+              .truncationMode(.middle)
+          }
+          HStack {
+            Text(L("WebDAV"))
+            Spacer()
+            let s = webDavURLString
+            Text(s.isEmpty ? L("Not Running") : s)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+              .truncationMode(.middle)
+          }
+          #if os(iOS)
+          Button(L("Open Web UI")) {
+            if !webURLString.isEmpty, let u = URL(string: webURLString) {
+              safariURL = u
+              showSafari = true
+            }
+          }
+          #endif
+        }
       }
       .navigationTitle(L("Settings"))
       .toolbar {
@@ -240,6 +335,11 @@ struct SettingsRootView<Background: View>: View {
     } message: {
       Text(L("This will reset all settings to factory defaults. This may require restarting emulation."))
     }
+    #if os(iOS)
+    .sheet(isPresented: $showSafari) {
+      if let u = safariURL { SafariView(url: u) }
+    }
+    #endif
   }
 }
 
@@ -2687,5 +2787,14 @@ struct CoreAudioDSPEditor: View {
         .onAppear { syncFromDefaultsOrEngine() }
     }
   }
+}
+#endif
+
+#if os(iOS)
+/// Wrapper for presenting SFSafariViewController in SwiftUI
+private struct SafariView: UIViewControllerRepresentable {
+  let url: URL
+  func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+  func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) { }
 }
 #endif
