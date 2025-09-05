@@ -297,6 +297,22 @@ bool FramebufferManager::CreateEFBFramebuffer()
   // Pixel Shader uses EFB scale as a constant, dirty that in case it changed
   Core::System::GetInstance().GetPixelShaderManager().Dirty();
 
+  // Prewarm EFB resolve/copy pipelines by touching resolve paths once with a no-op region
+  {
+    const MathUtil::Rectangle<int> native_rect = m_efb_color_texture->GetRect();
+    // Depth resolve/copy pipelines
+    if (m_efb_depth_resolve_texture)
+    {
+      // Force creation by requesting a resolve with force_r32f path
+      ResolveEFBDepthTexture(native_rect, true);
+    }
+    // Color resolve pipeline if multisampled or partial resolve unsupported
+    if (m_efb_resolve_color_texture || !g_ActiveConfig.backend_info.bSupportsPartialMultisampleResolve)
+    {
+      ResolveEFBColorTexture(native_rect);
+    }
+  }
+
   return true;
 }
 
