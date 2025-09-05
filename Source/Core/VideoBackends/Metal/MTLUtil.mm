@@ -175,8 +175,18 @@ fragment float4 fbfetch_test(float4 in [[color(0), raster_order_group(0)]]) {
 }
 )";
   auto lib = MRCTransfer([dev newLibraryWithSource:[NSString stringWithUTF8String:shader]
-                                           options:nil
-                                             error:nil]);
+                                           options:({
+                                             MTLCompileOptions* opt = [MTLCompileOptions new];
+                                             if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+                                               opt.languageVersion = MTLLanguageVersion2_3;
+                                             else if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *))
+                                               opt.languageVersion = MTLLanguageVersion2_2;
+                                             else if (@available(iOS 12.0, tvOS 12.0, macOS 10.14, *))
+                                               opt.languageVersion = MTLLanguageVersion2_1;
+                                             else
+                                               opt.languageVersion = MTLLanguageVersion2_0;
+                                             opt; })
+                                            error:nil]);
   if (!lib)
     return false;
   u32 outpx;
@@ -216,8 +226,18 @@ fragment float4 is_helper_test() {
 )";
 
   auto lib = MRCTransfer([dev newLibraryWithSource:[NSString stringWithUTF8String:shader]
-                                           options:nil
-                                             error:nil]);
+                                           options:({
+                                             MTLCompileOptions* opt = [MTLCompileOptions new];
+                                             if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+                                               opt.languageVersion = MTLLanguageVersion2_3;
+                                             else if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *))
+                                               opt.languageVersion = MTLLanguageVersion2_2;
+                                             else if (@available(iOS 12.0, tvOS 12.0, macOS 10.14, *))
+                                               opt.languageVersion = MTLLanguageVersion2_1;
+                                             else
+                                               opt.languageVersion = MTLLanguageVersion2_0;
+                                             opt; })
+                                            error:nil]);
   if (!lib)
     return DetectionResult::Unsure;
 

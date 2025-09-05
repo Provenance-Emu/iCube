@@ -241,4 +241,29 @@ void Metal::Framebuffer::ActualSetLoadAction(MTLLoadAction action)
   }
   for (size_t i = 0; i < NumAdditionalColorTextures(); i++)
     desc.colorAttachments[i + 1].loadAction = action;
+
+  if (action == MTLLoadActionDontCare)
+  {
+    desc.colorAttachments[0].storeAction = MTLStoreActionDontCare;
+    if (depth_fmt != AbstractTextureFormat::Undefined)
+    {
+      desc.depthAttachment.storeAction = MTLStoreActionDontCare;
+      if (Util::HasStencil(depth_fmt))
+        desc.stencilAttachment.storeAction = MTLStoreActionDontCare;
+    }
+    for (size_t i = 0; i < NumAdditionalColorTextures(); i++)
+      desc.colorAttachments[i + 1].storeAction = MTLStoreActionDontCare;
+  }
+  else
+  {
+    desc.colorAttachments[0].storeAction = MTLStoreActionStore;
+    if (depth_fmt != AbstractTextureFormat::Undefined)
+    {
+      desc.depthAttachment.storeAction = MTLStoreActionStore;
+      if (Util::HasStencil(depth_fmt))
+        desc.stencilAttachment.storeAction = MTLStoreActionStore;
+    }
+    for (size_t i = 0; i < NumAdditionalColorTextures(); i++)
+      desc.colorAttachments[i + 1].storeAction = MTLStoreActionStore;
+  }
 }

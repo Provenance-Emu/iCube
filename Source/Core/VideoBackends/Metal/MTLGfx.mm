@@ -214,8 +214,18 @@ std::unique_ptr<AbstractShader> Metal::Gfx::CreateShaderFromMSL(ShaderStage stag
     };
 
     auto lib = MRCTransfer([g_device newLibraryWithSource:[NSString stringWithUTF8String:msl.data()]
-                                                  options:nil
-                                                    error:&err]);
+                                                  options:({
+                                                    MTLCompileOptions* opt = [MTLCompileOptions new];
+                                                    if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+                                                      opt.languageVersion = MTLLanguageVersion2_3;
+                                                    else if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *))
+                                                      opt.languageVersion = MTLLanguageVersion2_2;
+                                                    else if (@available(iOS 12.0, tvOS 12.0, macOS 10.14, *))
+                                                      opt.languageVersion = MTLLanguageVersion2_1;
+                                                    else
+                                                      opt.languageVersion = MTLLanguageVersion2_0;
+                                                    opt; })
+                                                   error:&err]);
     if (err)
     {
       DumpBadShader(fmt::format("Failed to compile {}", name));
@@ -725,6 +735,8 @@ void Metal::Gfx::SetupSurface()
   auto info = GetSurfaceInfo();
 
   [m_layer setDrawableSize:{static_cast<double>(info.width), static_cast<double>(info.height)}];
+  if ([m_layer respondsToSelector:@selector(setFramebufferOnly:)])
+    [m_layer setFramebufferOnly:YES];
 
   TextureConfig cfg(info.width, info.height, 1, 1, 1, info.format, AbstractTextureFlag_RenderTarget,
                     AbstractTextureType::Texture_2DArray);
