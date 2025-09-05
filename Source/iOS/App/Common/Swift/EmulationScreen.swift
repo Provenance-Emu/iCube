@@ -208,6 +208,13 @@ struct EmulationScreen: View {
   @State private var timer: Timer?
   @State private var isWiiSystem: Bool = false
 
+  // Quick performance overlay
+  @State private var showPerfOverlay: Bool = false
+  @State private var ocEnabled: Bool = false
+  @State private var ocPercent: Int = 100
+  @State private var vbiEnabledQuick: Bool = false
+  @State private var vbiPercentQuick: Int = 100
+
   var body: some View {
 #if os(tvOS)
     ZStack {
@@ -217,6 +224,78 @@ struct EmulationScreen: View {
         .allowsHitTesting(!showPauseMenu)
         .navigationBarBackButtonHidden(true)
 
+      // Floating button to show quick performance overlay
+      VStack {
+        HStack {
+          Spacer()
+          Button {
+            showPerfOverlay = true
+          } label: {
+            Image(systemName: "speedometer")
+              .font(.system(size: 28, weight: .bold))
+              .foregroundColor(.white)
+              .padding(12)
+              .background(.white.opacity(0.15))
+              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          }
+          .buttonStyle(.plain)
+          .focusable(true)
+          .padding([.top, .trailing], 24)
+        }
+        Spacer()
+      }
+      .allowsHitTesting(true)
+      .zIndex(3)
+
+      // Semi-transparent overlay with controls
+      if showPerfOverlay {
+        Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
+        VStack(alignment: .leading, spacing: 16) {
+          HStack {
+            Text("Performance Controls").font(.title3).foregroundColor(.white)
+            Spacer()
+            Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.white) }
+              .buttonStyle(.plain)
+          }
+          Divider().background(.white.opacity(0.2))
+
+          // CPU Clock
+          Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+            ocEnabled = v
+            DOLConfigBridge.setMainOverclockEnable(v)
+          }))
+          .tint(.blue)
+          .foregroundColor(.white)
+          HStack {
+            Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8))
+            Spacer()
+            TVIntStepperOverlay(value: $ocPercent, range: 1...400, step: 1)
+              .disabled(!ocEnabled)
+              .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
+          }
+
+          // VBI
+          Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+            vbiEnabledQuick = v
+            DOLConfigBridge.setMainViOverclockEnable(v)
+          }))
+          .tint(.blue)
+          .foregroundColor(.white)
+          HStack {
+            Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8))
+            Spacer()
+            TVIntStepperOverlay(value: $vbiPercentQuick, range: 1...400, step: 1)
+              .disabled(!vbiEnabledQuick)
+              .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
+          }
+        }
+        .padding(20)
+        .frame(maxWidth: 520)
+        .background(.black.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
+        .zIndex(5)
+      }
     }
     .sheet(isPresented: $showSettings) {
       ZStack {
@@ -277,12 +356,11 @@ struct EmulationScreen: View {
         ControllerManager.shared.registerGCOverride(forController: 0)
         configureAllControllersForTVOS()
       }
-      NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
-        showPauseMenu = true
-      }
-      exitObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil, queue: .main) { _ in
-        dismiss()
-      }
+      // Load current OC/VBI state
+      ocEnabled = DOLConfigBridge.mainOverclockEnable()
+      ocPercent = DOLConfigBridge.mainOverclockPercent()
+      vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
+      vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
       // Live Activity start
       #if canImport(ActivityKit)
       GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
@@ -430,6 +508,13 @@ struct EmulationScreen: View {
                         } label: {
                           Image(systemName: "gamecontroller").font(.title2)
                         }
+                        // Quick performance overlay button
+                        Button {
+                            hasTopBarInteraction = true
+                            showPerfOverlay = true
+                        } label: {
+                            Image(systemName: "speedometer").font(.title2)
+                        }
                         Button {
                             hasTopBarInteraction = true
                             fastForwardEnabled = TVEmulationBridge.toggleFastForward()
@@ -530,6 +615,50 @@ struct EmulationScreen: View {
                 .zIndex(2)
             }
 
+            // Semi-transparent overlay with quick performance controls (iOS)
+            if showPerfOverlay {
+                Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("Performance Controls").font(.headline).foregroundColor(.white)
+                        Spacer()
+                        Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
+                            .buttonStyle(.plain)
+                    }
+                    Divider().background(.white.opacity(0.2))
+                    Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+                        ocEnabled = v
+                        DOLConfigBridge.setMainOverclockEnable(v)
+                    }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
+                    HStack {
+                        Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1...400)
+                            .disabled(!ocEnabled)
+                            .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
+                        Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                    }
+                    Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+                        vbiEnabledQuick = v
+                        DOLConfigBridge.setMainViOverclockEnable(v)
+                    }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
+                    HStack {
+                        Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1...400)
+                            .disabled(!vbiEnabledQuick)
+                            .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
+                        Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 420)
+                .background(.black.opacity(0.6))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
+                .zIndex(5)
+            }
+
             // Legacy touch pads
             if isTouchControlsActive {
                 let isWiiToShow: Bool = {
@@ -626,6 +755,11 @@ struct EmulationScreen: View {
             isWiiSystem = inferIsWii(from: game)
             touchPadsRefreshToken = UUID()
         }
+        // Load current OC/VBI state
+        ocEnabled = DOLConfigBridge.mainOverclockEnable()
+        ocPercent = DOLConfigBridge.mainOverclockPercent()
+        vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
+        vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
         // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
         let currentIR = DOLConfigBridge.mainTouchPadIRMode()
         if currentIR == 0 { // None
@@ -981,6 +1115,35 @@ struct EmulationScreen: View {
   }
 #endif
 
+  #endif
+
+  #if os(tvOS)
+  // Simple tvOS-friendly stepper used inside the quick overlay
+  private struct TVIntStepperOverlay: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    @FocusState private var isFocused: Bool
+    var body: some View {
+      HStack(spacing: 16) {
+        Button("−") { value = max(range.lowerBound, value - step) }
+        Text("\(value)").frame(minWidth: 44)
+        Button("+") { value = min(range.upperBound, value + step) }
+      }
+      .focusable(true)
+      .focused($isFocused)
+      .padding(6)
+      .background(.white.opacity(isFocused ? 0.15 : 0.08))
+      .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+      .onMoveCommand { direction in
+        switch direction {
+        case .left: value = max(range.lowerBound, value - step)
+        case .right: value = min(range.upperBound, value + step)
+        default: break
+        }
+      }
+    }
+  }
   #endif
 
   private func logCurrentControllers() {
