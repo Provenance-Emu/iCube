@@ -70,7 +70,7 @@ void Metal::Texture::Load(u32 level, u32 width, u32 height, u32 row_length,  //
     {
       tmp_buffer = MRCTransfer([g_device
           newBufferWithLength:upload_size
-                      options:MTLResourceStorageModeShared | MTLResourceCPUCacheModeWriteCombined]);
+                      options:MTLResourceStorageModeShared | MTLResourceCPUCacheModeWriteCombined | MTLResourceHazardTrackingModeUntracked]);
       [tmp_buffer setLabel:@"Temp Texture Upload"];
       map.gpu_buffer = tmp_buffer;
       map.gpu_offset = 0;
