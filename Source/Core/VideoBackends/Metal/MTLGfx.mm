@@ -218,14 +218,34 @@ std::unique_ptr<AbstractShader> Metal::Gfx::CreateShaderFromMSL(ShaderStage stag
     auto lib = MRCTransfer([g_device newLibraryWithSource:[NSString stringWithUTF8String:msl.data()]
                                                   options:({
                                                     MTLCompileOptions* opt = [MTLCompileOptions new];
+#if defined(MTLLanguageVersion3_2)
+                                                    if (@available(iOS 18.0, tvOS 18.0, macOS 15.0, *))
+                                                      opt.languageVersion = MTLLanguageVersion3_2;
+                                                    else
+#endif
+#if defined(MTLLanguageVersion3_1)
+                                                    if (@available(iOS 17.0, tvOS 17.0, macOS 14.0, *))
+                                                      opt.languageVersion = MTLLanguageVersion3_1;
+                                                    else
+#endif
+#if defined(MTLLanguageVersion3_0)
+                                                    if (@available(iOS 16.0, tvOS 16.0, macOS 13.0, *))
+                                                      opt.languageVersion = MTLLanguageVersion3_0;
+                                                    else
+#endif
+#if defined(MTLLanguageVersion2_4)
+                                                    if (@available(iOS 15.0, tvOS 15.0, macOS 12.0, *))
+                                                      opt.languageVersion = MTLLanguageVersion2_4;
+                                                    else
+#endif
+#if defined(MTLLanguageVersion2_3)
                                                     if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
                                                       opt.languageVersion = MTLLanguageVersion2_3;
-                                                    else if (@available(iOS 13.0, tvOS 13.0, macOS 10.15, *))
-                                                      opt.languageVersion = MTLLanguageVersion2_2;
-                                                    else if (@available(iOS 12.0, tvOS 12.0, macOS 10.14, *))
-                                                      opt.languageVersion = MTLLanguageVersion2_1;
                                                     else
-                                                      opt.languageVersion = MTLLanguageVersion2_0;
+#endif
+#if defined(MTLLanguageVersion2_2)
+                                                      opt.languageVersion = MTLLanguageVersion2_2;
+#endif
                                                     opt; })
                                                    error:&err]);
     if (err)
