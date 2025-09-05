@@ -23,6 +23,7 @@
 
 ## iOS
 
+- [ ] Shake doesn't work
 - [X] touch cursor control doesn't work
 
 ## All Platforms
