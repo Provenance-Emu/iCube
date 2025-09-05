@@ -44,6 +44,8 @@
 		B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */; };
 		B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */; };
 		B34EE6B32E57D65400301907 /* ShaderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EE6B12E57D65400301907 /* ShaderSettingsView.swift */; };
+		B34F8D0E2E6A6D7A007C1005 /* AudioFXBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34F8D0D2E6A6D7A007C1005 /* AudioFXBridge.mm */; };
+		B34F8D102E6A6FAB007C1005 /* CoreMotion.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B34F8D0F2E6A6FAB007C1005 /* CoreMotion.framework */; platformFilters = (ios, maccatalyst, ); };
 		B36B48C12E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */; };
 		B36B48C42E5D0056009A2303 /* TVCheatsBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C32E5D0056009A2303 /* TVCheatsBridge.mm */; };
 		B36B48C62E5D0496009A2303 /* TVMultilineTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */; };
@@ -342,6 +344,9 @@
 		B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLConfigBridge.mm; sourceTree = "<group>"; };
 		B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSettingsPage.swift; sourceTree = "<group>"; };
 		B34EE6B12E57D65400301907 /* ShaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderSettingsView.swift; sourceTree = "<group>"; };
+		B34F8D0C2E6A6D7A007C1005 /* AudioFXBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioFXBridge.h; sourceTree = "<group>"; };
+		B34F8D0D2E6A6D7A007C1005 /* AudioFXBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AudioFXBridge.mm; sourceTree = "<group>"; };
+		B34F8D0F2E6A6FAB007C1005 /* CoreMotion.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMotion.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/System/Library/Frameworks/CoreMotion.framework; sourceTree = DEVELOPER_DIR; };
 		B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PVlibDolphin.xcframework; path = ../../../build/xcframework/PVlibDolphin.xcframework; sourceTree = "<group>"; };
 		B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSoftwarePropertiesView.swift; sourceTree = "<group>"; };
 		B36B48C22E5D0056009A2303 /* TVCheatsBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVCheatsBridge.h; sourceTree = "<group>"; };
@@ -843,6 +848,7 @@
 				B97E4B492964CBA100B3EE9C /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
 				B97E4B4B2964CBA100B3EE9C /* FirebaseCrashlytics in Frameworks */,
 				B900A7D227F5228B000361DD /* UICollectionViewLeftAlignedLayout in Frameworks */,
+				B34F8D102E6A6FAB007C1005 /* CoreMotion.framework in Frameworks */,
 				B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1515,6 +1521,8 @@
 		B95AC5242D29B9100048E48B /* Audio */ = {
 			isa = PBXGroup;
 			children = (
+				B34F8D0C2E6A6D7A007C1005 /* AudioFXBridge.h */,
+				B34F8D0D2E6A6D7A007C1005 /* AudioFXBridge.mm */,
 				B95AC52B2D29BA790048E48B /* AudioMuteSwitchMode.swift */,
 				B95AC5282D29BA5C0048E48B /* AudioSessionManager.h */,
 				B95AC5292D29BA5C0048E48B /* AudioSessionManager.mm */,
@@ -1922,6 +1930,7 @@
 		B9D9389C283EF7AD00B290FC /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				B34F8D0F2E6A6FAB007C1005 /* CoreMotion.framework */,
 				B31E921C2E667BE10036EE31 /* ReplayKit.framework */,
 				B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */,
 				B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */,
@@ -2507,6 +2516,7 @@
 				B3B149572E594A8C009C7049 /* InputOverriderBridge.mm in Sources */,
 				B97E4B612965FA1B00B3EE9C /* AnalyticsNoticeViewController.mm in Sources */,
 				B904AD3528890477008B6BE9 /* MappingGroupEditEnabledCell.m in Sources */,
+				B34F8D0E2E6A6D7A007C1005 /* AudioFXBridge.mm in Sources */,
 				B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */,
 				B9913792288153D000588446 /* ConfigAdvancedViewController.mm in Sources */,
 				B904AD0F28886AF8008B6BE9 /* MappingRootGroupCell.m in Sources */,

@@ -45,8 +45,8 @@ static std::unique_ptr<SoundStream> CreateSoundStreamForBackend(std::string_view
   else if (backend == BACKEND_WASAPI && WASAPIStream::IsValid())
     return std::make_unique<WASAPIStream>();
 #ifdef IPHONEOS
-  else if (backend == "AVAudioEngine" && AVAudioEngineSound::IsValid())
-    return std::unique_ptr<SoundStream>(new AVAudioEngineSound());
+  else if (backend == "AVAudioEngine" && ::AVAudioEngineSound::IsValid())
+    return std::unique_ptr<SoundStream>(new ::AVAudioEngineSound());
   else if (backend == BACKEND_COREAUDIO && CoreAudioSound::IsValid())
     return std::make_unique<CoreAudioSound>();
 #else
@@ -291,4 +291,16 @@ void ToggleMuteVolume(Core::System& system)
   Config::SetBaseOrCurrent(Config::MAIN_AUDIO_MUTED, !isMuted);
   UpdateSoundStream(system);
 }
+
+#ifdef IPHONEOS
+::AVAudioEngineSound* GetActiveAVAudioEngineSound()
+{
+  using namespace Core;
+  System& sys = System::GetInstance();
+  SoundStream* ss = sys.GetSoundStream();
+  if (!ss)
+    return nullptr;
+  return dynamic_cast<::AVAudioEngineSound*>(ss);
+}
+#endif
 }  // namespace AudioCommon

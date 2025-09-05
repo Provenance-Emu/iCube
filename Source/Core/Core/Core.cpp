@@ -708,6 +708,12 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
     OSD::AddMessage(std::string("CPU core: ") + core_name, OSD::Duration::NORMAL, OSD::Color::GREEN);
   }
 
+  // Show which Audio backend is active on the OSD for debugging
+  {
+    const std::string backend = Config::Get(Config::MAIN_AUDIO_BACKEND);
+    OSD::AddMessage(std::string("Audio backend: ") + backend, OSD::Duration::NORMAL, OSD::Color::GREEN);
+  }
+
   UpdateTitle(system);
 
   // ENTER THE VIDEO THREAD LOOP

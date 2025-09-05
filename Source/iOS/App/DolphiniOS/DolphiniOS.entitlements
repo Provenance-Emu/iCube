@@ -36,5 +36,7 @@
 	<true/>
 	<key>com.apple.security.personal-information.photos-library</key>
 	<true/>
+	<key>inter-app-audio</key>
+	<true/>
 </dict>
 </plist>

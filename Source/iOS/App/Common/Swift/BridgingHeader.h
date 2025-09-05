@@ -26,6 +26,7 @@
 #import "TVGameItem.h"
 #import "DOLWiimoteBridge.h"
 #import "VirtualMFiControllerManager.h"
+#import "AudioFXBridge.h"
 
 #if TARGET_OS_IOS
 #import "DOLUIKitSwitch.h"

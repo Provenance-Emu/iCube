@@ -189,6 +189,7 @@ struct EmulationScreen: View {
   @State private var showExitConfirm = false
   @State private var showShaderSheet = false
   @State private var showShaderParams = false
+  @State private var showFXSheet = false
   // Auto-hide coordination
   @State private var hasTopBarInteraction: Bool = false
   @State private var autoHideScheduled: Bool = false
@@ -522,6 +523,7 @@ struct EmulationScreen: View {
                             Image(systemName: fastForwardEnabled ? "forward.fill" : "forward")
                                 .font(.title2)
                         }
+
                         #if os(iOS)
                         // Thermal badge
                         if UserDefaults.standard.bool(forKey: "thermal_auto_enable") {
@@ -536,18 +538,29 @@ struct EmulationScreen: View {
                             }
                         }
                         #endif
-                        Button {
-                            hasTopBarInteraction = true
-                            showShaderSheet = true
-                        } label: {
-                            Image(systemName: "wand.and.stars").font(.title2)
-                        }
-                        Button {
-                            hasTopBarInteraction = true
-                            showShaderParams = true
+                        Menu {
+                            Button {
+                                hasTopBarInteraction = true
+                                showFXSheet = true
+                            } label: {
+                                Label("Audio Effects", systemImage: "slider.horizontal.3")
+                            }
+                            Button {
+                                hasTopBarInteraction = true
+                                showShaderSheet = true
+                            } label: {
+                                Label("Shaders", systemImage: "wand.and.stars")
+                            }
+                            Button {
+                                hasTopBarInteraction = true
+                                showShaderParams = true
+                            } label: {
+                                Label("Shader Parameters", systemImage: "slider.horizontal.3")
+                            }
                         } label: {
                             Image(systemName: "slider.horizontal.3").font(.title2)
                         }
+
                         Menu {
                             Menu("Save State") {
                                 ForEach(1...10, id: \.self) { slot in
@@ -659,6 +672,7 @@ struct EmulationScreen: View {
                 .zIndex(5)
             }
 
+
             // Legacy touch pads
             if isTouchControlsActive {
                 let isWiiToShow: Bool = {
@@ -694,6 +708,36 @@ struct EmulationScreen: View {
                 platform: .ios,
                 game: game
             )
+        }
+        // FX editor overlay
+        if showFXSheet {
+            Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text(L("Audio Effects")).font(.headline).foregroundColor(.white)
+                    Spacer()
+                    Button { showFXSheet = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
+                        .buttonStyle(.plain)
+                }
+                Divider().background(.white.opacity(0.2))
+                NavigationStack {
+                    Group {
+                        if DOLConfigBridge.audioBackend() == "AVAudioEngine" || AudioFXBridge.isEngineActive() {
+                            ScrollView { FXChainEditor() }
+                        } else if DOLConfigBridge.audioBackend() == "CoreAudio" {
+                            ScrollView { CoreAudioDSPEditor(embedded: true).padding(.horizontal, 2) }
+                        }
+                    }
+                    .navigationBarTitleDisplayMode(.inline)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .padding(20)
+            .frame(maxWidth: 560, maxHeight: 640)
+            .background(.black.opacity(0.6))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
+            .zIndex(5)
         }
     }
     .onAppear {
@@ -754,6 +798,10 @@ struct EmulationScreen: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             isWiiSystem = inferIsWii(from: game)
             touchPadsRefreshToken = UUID()
+        }
+        // Apply saved CoreAudio DSP defaults if CoreAudio backend is selected
+        if DOLConfigBridge.audioBackend() == "CoreAudio" {
+            applyCoreAudioDSPDefaults()
         }
         // Load current OC/VBI state
         ocEnabled = DOLConfigBridge.mainOverclockEnable()
@@ -929,6 +977,21 @@ struct EmulationScreen: View {
         try? await Task.sleep(nanoseconds: 120_000_000)
       }
     }
+  }
+
+  /// Apply saved CoreAudio DSP defaults to the engine when a game starts
+  private func applyCoreAudioDSPDefaults() {
+    func has(_ k: String) -> Bool { UserDefaults.standard.object(forKey: k) != nil }
+    if has("ca_fx_delay_enabled") { AudioFXBridge.setCADelayEnabled(UserDefaults.standard.bool(forKey: "ca_fx_delay_enabled")) }
+    if has("ca_fx_delay_ms") { AudioFXBridge.setCADelayMs(Int(UserDefaults.standard.double(forKey: "ca_fx_delay_ms"))) }
+    if has("ca_fx_delay_fb") { AudioFXBridge.setCADelayFeedback(UserDefaults.standard.double(forKey: "ca_fx_delay_fb")) }
+    if has("ca_fx_crush_enabled") { AudioFXBridge.setCABitcrushEnabled(UserDefaults.standard.bool(forKey: "ca_fx_crush_enabled")) }
+    if has("ca_fx_crush_bits") { AudioFXBridge.setCABitcrushBits(UserDefaults.standard.integer(forKey: "ca_fx_crush_bits")) }
+    if has("ca_fx_crush_down") { AudioFXBridge.setCABitcrushDownsample(UserDefaults.standard.integer(forKey: "ca_fx_crush_down")) }
+    if has("ca_fx_eq_enabled") { AudioFXBridge.setCAEQEnabled(UserDefaults.standard.bool(forKey: "ca_fx_eq_enabled")) }
+    if has("ca_fx_eq_low") { AudioFXBridge.setCAEQLowGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_low")) }
+    if has("ca_fx_eq_mid") { AudioFXBridge.setCAEQMidGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_mid")) }
+    if has("ca_fx_eq_high") { AudioFXBridge.setCAEQHighGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_high")) }
   }
 
   /// Heuristic: infer Wii vs GC from game metadata (gameID prefix, file extension)
