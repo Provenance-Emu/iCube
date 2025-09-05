@@ -84,15 +84,6 @@ std::unique_ptr<AbstractTexture> Metal::Gfx::CreateTexture(const TextureConfig& 
     if (config.IsComputeImage())
       usage |= MTLTextureUsageShaderWrite;
     [desc setUsage:usage];
-    // Use memoryless storage for depth(-stencil) attachments that are never sampled
-    if (config.IsRenderTarget() && !config.IsComputeImage() &&
-        (config.format == AbstractTextureFormat::D16 ||
-         config.format == AbstractTextureFormat::D24_S8 ||
-         config.format == AbstractTextureFormat::D32F ||
-         config.format == AbstractTextureFormat::D32F_S8))
-    {
-      [desc setStorageMode:MTLStorageModeMemoryless];
-    }
     id<MTLTexture> texture = [g_device newTextureWithDescriptor:desc];
     if (!texture)
       return nullptr;
