@@ -361,13 +361,24 @@ after_pad1:
         const std::string userDirWM = wm0->GetConfig()->GetUserProfileDirectoryPath();
         const std::string sysProfileWM = sysDirWM + (sysDirWM.empty() || sysDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
         const std::string userProfileWM = userDirWM + (userDirWM.empty() || userDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+
+        // If any user Wiimote profile exists, skip auto-loading stock profile to respect user mappings
+        bool user_has_any_profile = false;
+        {
+          auto entries = File::ScanDirectoryTree(userDirWM, false);
+          for (const auto& child : entries.children)
+          {
+            if (!child.isDirectory && StringEndsWith(child.physicalName, ".ini")) { user_has_any_profile = true; break; }
+          }
+        }
+
         Common::IniFile iniWM;
-        if (File::Exists(userProfileWM) && iniWM.Load(userProfileWM))
+        if (!user_has_any_profile && File::Exists(userProfileWM) && iniWM.Load(userProfileWM))
         {
           wm0->LoadConfig(iniWM.GetOrCreateSection("Profile"));
           loaded_profile_wm = true;
         }
-        else if (File::Exists(sysProfileWM) && iniWM.Load(sysProfileWM))
+        else if (!user_has_any_profile && File::Exists(sysProfileWM) && iniWM.Load(sysProfileWM))
         {
           wm0->LoadConfig(iniWM.GetOrCreateSection("Profile"));
           loaded_profile_wm = true;
