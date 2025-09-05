@@ -876,9 +876,23 @@ void Metal::StateTracker::PrepareRender()
     {
       m_flags.has_utility_ps_uniform = true;
       m_flags.has_gx_ps_uniform = false;
-      [enc setFragmentBytes:m_state.utility_uniform.get()
-                     length:m_state.utility_uniform_size
-                    atIndex:0];
+      if (g_features.batched_buffer_binding_supported && pipe->UsesFragmentBuffer(2))
+      {
+        id<MTLBuffer> bufs[] = {nullptr, nullptr, m_state.texels};
+        NSUInteger offs[] = {0, 0, m_state.texel_buffer_offset0};
+        [enc setFragmentBytes:m_state.utility_uniform.get()
+                       length:m_state.utility_uniform_size
+                      atIndex:0];
+        [enc setFragmentBuffers:bufs offsets:offs withRange:NSMakeRange(0, 3)];
+      }
+      else
+      {
+        [enc setFragmentBytes:m_state.utility_uniform.get()
+                       length:m_state.utility_uniform_size
+                      atIndex:0];
+        if (!m_flags.has_texel_buffer && pipe->UsesFragmentBuffer(2))
+          SetFragmentBufferNow(2, m_state.texels, m_state.texel_buffer_offset0);
+      }
     }
     if (!m_flags.has_texel_buffer && pipe->UsesFragmentBuffer(2))
     {
@@ -934,9 +948,18 @@ void Metal::StateTracker::PrepareCompute()
   if (!m_flags.has_texel_buffer && pipe->UsesBuffer(2))
   {
     m_flags.has_texel_buffer = true;
-    [enc setBuffer:m_state.texels offset:m_state.texel_buffer_offset0 atIndex:2];
-    if (pipe->UsesBuffer(3))
-      [enc setBuffer:m_state.texels offset:m_state.texel_buffer_offset1 atIndex:3];
+    if (g_features.batched_buffer_binding_supported && pipe->UsesBuffer(3))
+    {
+      id<MTLBuffer> bufs[] = {m_state.texels, m_state.texels};
+      NSUInteger offs[] = {m_state.texel_buffer_offset0, m_state.texel_buffer_offset1};
+      [enc setBuffers:bufs offsets:offs withRange:NSMakeRange(2, 2)];
+    }
+    else
+    {
+      [enc setBuffer:m_state.texels offset:m_state.texel_buffer_offset0 atIndex:2];
+      if (pipe->UsesBuffer(3))
+        [enc setBuffer:m_state.texels offset:m_state.texel_buffer_offset1 atIndex:3];
+    }
   }
 }
 
