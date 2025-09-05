@@ -1571,7 +1571,14 @@ struct ConfigWiiView: View {
     List {
       Section(header: Text(L("Video"))) {
         Toggle(L("Use PAL60 Mode (EuRGB60)"), isOn: $pal60).onChange(of: pal60) { DOLConfigBridge.setSysconfPAL60($0) }
-        Toggle(L("Widescreen Hack"), isOn: $widescreen).onChange(of: widescreen) { DOLConfigBridge.setSysconfWidescreen($0) }
+        /// Wii System Aspect Ratio (4:3 vs 16:9)
+        HStack {
+          Text(L("Aspect Ratio"))
+          Spacer()
+          NavigationLink(widescreen ? "16:9" : "4:3", destination: WiiAspectRatioPicker(selectedWide: $widescreen))
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .onChange(of: widescreen) { DOLConfigBridge.setSysconfWidescreen($0) }
       }
 
       Section(header: Text(L("General"))) {
@@ -2798,3 +2805,14 @@ private struct SafariView: UIViewControllerRepresentable {
   func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) { }
 }
 #endif
+
+private struct WiiAspectRatioPicker: View {
+  @Binding var selectedWide: Bool
+  var body: some View {
+    List {
+      SelectRow(label: "4:3", checked: selectedWide == false) { selectedWide = false; DOLConfigBridge.setSysconfWidescreen(false) }
+      SelectRow(label: "16:9", checked: selectedWide == true) { selectedWide = true; DOLConfigBridge.setSysconfWidescreen(true) }
+    }
+    .navigationTitle(L("Aspect Ratio"))
+  }
+}
