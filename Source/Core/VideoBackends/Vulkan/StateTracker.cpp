@@ -61,7 +61,7 @@ bool StateTracker::Initialize()
 {
   // Create a dummy texture which can be used in place of a real binding.
   m_dummy_texture = VKTexture::Create(TextureConfig(1, 1, 1, 1, 1, AbstractTextureFormat::RGBA8, 0,
-                                                    AbstractTextureType::Texture_2DArray),
+                                                    AbstractTextureType::Texture_2D),
                                       "");
   if (!m_dummy_texture)
     return false;
@@ -370,8 +370,8 @@ void StateTracker::SetScissor(const VkRect2D& scissor)
 
 bool StateTracker::Bind()
 {
-  // Must have a pipeline.
-  if (!m_pipeline)
+  // Must have a pipeline and framebuffer.
+  if (!m_pipeline || !m_framebuffer)
     return false;
 
   // Check the render area if we were in a clear pass.
@@ -475,9 +475,8 @@ void StateTracker::UpdateDescriptorSet()
 
 void StateTracker::UpdateGXDescriptorSet()
 {
-  const size_t MAX_DESCRIPTOR_WRITES = NUM_UBO_DESCRIPTOR_SET_BINDINGS +  // UBO
-                                       1 +                                // Samplers
-                                       2;                                 // SSBO
+  // UBO (<=4) + Samplers (1 array + 8 singles = 9) + SSBO (<=2) = up to 15 writes
+  const size_t MAX_DESCRIPTOR_WRITES = NUM_UBO_DESCRIPTOR_SET_BINDINGS + 9 + 2;
   std::array<VkWriteDescriptorSet, MAX_DESCRIPTOR_WRITES> writes;
   u32 num_writes = 0;
 
@@ -522,16 +521,48 @@ void StateTracker::UpdateGXDescriptorSet()
     m_gx_descriptor_sets[1] = g_command_buffer_mgr->AllocateDescriptorSet(
         g_object_cache->GetDescriptorSetLayout(DESCRIPTOR_SET_LAYOUT_STANDARD_SAMPLERS));
 
+    // Ensure all 16 sampler descriptors are valid
+    for (u32 i = 0; i < VideoCommon::MAX_PIXEL_SHADER_SAMPLERS; ++i)
+    {
+      VkDescriptorImageInfo& img = m_bindings.samplers[i];
+      if (img.imageView == VK_NULL_HANDLE)
+      {
+        if (m_dummy_texture)
+        {
+          img.imageView = m_dummy_texture->GetView();
+          img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+      }
+      if (img.sampler == VK_NULL_HANDLE)
+        img.sampler = g_object_cache->GetPointSampler();
+    }
+
+    // Binding 0: array of 8
     writes[num_writes++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                             nullptr,
                             m_gx_descriptor_sets[1],
                             0,
                             0,
-                            static_cast<u32>(VideoCommon::MAX_PIXEL_SHADER_SAMPLERS),
+                            8,
                             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                             m_bindings.samplers.data(),
                             nullptr,
                             nullptr};
+
+    // Bindings 8..15: single descriptors
+    for (u32 i = 0; i < 8; ++i)
+    {
+      writes[num_writes++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                              nullptr,
+                              m_gx_descriptor_sets[1],
+                              8 + i,
+                              0,
+                              1,
+                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                              &m_bindings.samplers[8 + i],
+                              nullptr,
+                              nullptr};
+    }
     m_dirty_flags = (m_dirty_flags & ~DIRTY_FLAG_GX_SAMPLERS) | DIRTY_FLAG_DESCRIPTOR_SETS;
   }
 
@@ -597,8 +628,8 @@ void StateTracker::UpdateGXDescriptorSet()
 
 void StateTracker::UpdateUtilityDescriptorSet()
 {
-  // Max number of updates - UBO, Samplers, TexelBuffer
-  std::array<VkWriteDescriptorSet, 3> dswrites;
+  // Max number of updates - UBO, 8 Samplers, TexelBuffer
+  std::array<VkWriteDescriptorSet, 10> dswrites;
   u32 writes = 0;
 
   // Allocate descriptor sets.
@@ -626,16 +657,36 @@ void StateTracker::UpdateUtilityDescriptorSet()
     m_utility_descriptor_sets[1] = g_command_buffer_mgr->AllocateDescriptorSet(
         g_object_cache->GetDescriptorSetLayout(DESCRIPTOR_SET_LAYOUT_UTILITY_SAMPLERS));
 
-    dswrites[writes++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                          nullptr,
-                          m_utility_descriptor_sets[1],
-                          0,
-                          0,
-                          NUM_UTILITY_PIXEL_SAMPLERS,
-                          VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                          m_bindings.samplers.data(),
-                          nullptr,
-                          nullptr};
+    // Ensure all sampler descriptors reference a valid image view/sampler
+    for (u32 i = 0; i < NUM_UTILITY_PIXEL_SAMPLERS; ++i)
+    {
+      VkDescriptorImageInfo& img = m_bindings.samplers[i];
+      if (img.imageView == VK_NULL_HANDLE)
+      {
+        // Fallback to dummy texture
+        if (m_dummy_texture)
+        {
+          img.imageView = m_dummy_texture->GetView();
+          img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+        if (img.sampler == VK_NULL_HANDLE)
+          img.sampler = g_object_cache->GetPointSampler();
+      }
+
+      // One write per binding (0..7), layout defines count=1 for each
+      dswrites[writes++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            nullptr,
+                            m_utility_descriptor_sets[1],
+                            i,
+                            0,
+                            1,
+                            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                            &m_bindings.samplers[i],
+                            nullptr,
+                            nullptr};
+    }
+
+    // Texel buffer at binding 8
     dswrites[writes++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                           nullptr,
                           m_utility_descriptor_sets[1],
@@ -672,57 +723,87 @@ void StateTracker::UpdateUtilityDescriptorSet()
 
 void StateTracker::UpdateComputeDescriptorSet()
 {
-  // Max number of updates - UBO, Samplers, TexelBuffer, Image
-  std::array<VkWriteDescriptorSet, 4> dswrites;
+  // Max number of updates - UBO, 8 Samplers, 2 TexelBuffer, 8 Images
+  std::array<VkWriteDescriptorSet, 19> dswrites;
 
   // Allocate descriptor sets.
   if (m_dirty_flags & DIRTY_FLAG_COMPUTE_BINDINGS)
   {
     m_compute_descriptor_set = g_command_buffer_mgr->AllocateDescriptorSet(
         g_object_cache->GetDescriptorSetLayout(DESCRIPTOR_SET_LAYOUT_COMPUTE));
-    dswrites[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                   nullptr,
-                   m_compute_descriptor_set,
-                   0,
-                   0,
-                   1,
-                   VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-                   nullptr,
-                   &m_bindings.utility_ubo_binding,
-                   nullptr};
-    dswrites[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                   nullptr,
-                   m_compute_descriptor_set,
-                   1,
-                   0,
-                   VideoCommon::MAX_COMPUTE_SHADER_SAMPLERS,
-                   VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   m_bindings.samplers.data(),
-                   nullptr,
-                   nullptr};
-    dswrites[2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                   nullptr,
-                   m_compute_descriptor_set,
-                   1 + VideoCommon::MAX_COMPUTE_SHADER_SAMPLERS,
-                   0,
-                   NUM_COMPUTE_TEXEL_BUFFERS,
-                   VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
-                   nullptr,
-                   nullptr,
-                   m_bindings.texel_buffers.data()};
-    dswrites[3] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                   nullptr,
-                   m_compute_descriptor_set,
-                   1 + VideoCommon::MAX_COMPUTE_SHADER_SAMPLERS + NUM_COMPUTE_TEXEL_BUFFERS,
-                   0,
-                   VideoCommon::MAX_COMPUTE_SHADER_SAMPLERS,
-                   VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                   m_bindings.image_textures.data(),
-                   nullptr,
-                   nullptr};
 
-    vkUpdateDescriptorSets(g_vulkan_context->GetDevice(), static_cast<uint32_t>(dswrites.size()),
-                           dswrites.data(), 0, nullptr);
+    u32 w = 0;
+    // ubo at binding 0
+    dswrites[w++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                     nullptr,
+                     m_compute_descriptor_set,
+                     0,
+                     0,
+                     1,
+                     VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+                     nullptr,
+                     &m_bindings.utility_ubo_binding,
+                     nullptr};
+
+    // 8 combined image samplers at bindings 1..8
+    for (u32 i = 0; i < VideoCommon::MAX_COMPUTE_SHADER_SAMPLERS; ++i)
+    {
+      // Ensure valid defaults
+      VkDescriptorImageInfo& img = m_bindings.image_textures[i];
+      if (img.imageView == VK_NULL_HANDLE)
+      {
+        if (m_dummy_compute_texture)
+        {
+          img.imageView = m_dummy_compute_texture->GetView();
+          img.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        }
+        if (img.sampler == VK_NULL_HANDLE)
+          img.sampler = g_object_cache->GetPointSampler();
+      }
+
+      dswrites[w++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                       nullptr,
+                       m_compute_descriptor_set,
+                       1 + i,
+                       0,
+                       1,
+                       VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                       &m_bindings.image_textures[i],
+                       nullptr,
+                       nullptr};
+    }
+
+    // 2 texel buffers at bindings 9..10
+    for (u32 i = 0; i < NUM_COMPUTE_TEXEL_BUFFERS; ++i)
+    {
+      dswrites[w++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                       nullptr,
+                       m_compute_descriptor_set,
+                       1 + VideoCommon::MAX_COMPUTE_SHADER_SAMPLERS + i,
+                       0,
+                       1,
+                       VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+                       nullptr,
+                       nullptr,
+                       &m_bindings.texel_buffers[i]};
+    }
+
+    // 8 storage images at bindings 11..18
+    for (u32 i = 0; i < VideoCommon::MAX_COMPUTE_SHADER_SAMPLERS; ++i)
+    {
+      dswrites[w++] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                       nullptr,
+                       m_compute_descriptor_set,
+                       1 + VideoCommon::MAX_COMPUTE_SHADER_SAMPLERS + NUM_COMPUTE_TEXEL_BUFFERS + i,
+                       0,
+                       1,
+                       VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                       &m_bindings.image_textures[i],
+                       nullptr,
+                       nullptr};
+    }
+
+    vkUpdateDescriptorSets(g_vulkan_context->GetDevice(), w, dswrites.data(), 0, nullptr);
     m_dirty_flags =
         (m_dirty_flags & ~DIRTY_FLAG_COMPUTE_BINDINGS) | DIRTY_FLAG_COMPUTE_DESCRIPTOR_SET;
   }

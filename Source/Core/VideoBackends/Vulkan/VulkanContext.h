@@ -64,7 +64,8 @@ public:
 
   // Helper method to create a Vulkan instance.
   static VkInstance CreateVulkanInstance(WindowSystemType wstype, bool enable_debug_utils,
-                                         bool enable_validation_layer, u32* out_vk_api_version);
+                                         bool enable_validation_layer, u32* out_vk_api_version,
+                                         std::vector<std::string>* out_enabled_extensions = nullptr);
 
   // Returns a list of Vulkan-compatible GPUs.
   using GPUList = std::vector<VkPhysicalDevice>;
@@ -84,7 +85,8 @@ public:
   // been called for the specified VideoConfig.
   static std::unique_ptr<VulkanContext> Create(VkInstance instance, VkPhysicalDevice gpu,
                                                VkSurfaceKHR surface, bool enable_debug_utils,
-                                               bool enable_validation_layer, u32 api_version);
+                                               bool enable_validation_layer, u32 api_version,
+                                               const std::vector<std::string>& instance_extensions = {});
 
   // Enable/disable debug message runtime.
   bool EnableDebugUtils();

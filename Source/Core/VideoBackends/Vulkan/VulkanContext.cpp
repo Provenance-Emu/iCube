@@ -237,7 +237,8 @@ static u32 getAPIVersion()
 
 VkInstance VulkanContext::CreateVulkanInstance(WindowSystemType wstype, bool enable_debug_utils,
                                                bool enable_validation_layer,
-                                               u32* out_vk_api_version)
+                                               u32* out_vk_api_version,
+                                               std::vector<std::string>* out_enabled_extensions)
 {
   std::vector<const char*> enabled_extensions;
   if (!SelectInstanceExtensions(&enabled_extensions, wstype, enable_debug_utils,
@@ -280,10 +281,12 @@ VkInstance VulkanContext::CreateVulkanInstance(WindowSystemType wstype, bool ena
     return nullptr;
   }
 
-  // Record enabled instance extensions
-  m_instance_extensions.clear();
-  for (u32 i = 0; i < instance_create_info.enabledExtensionCount; ++i)
-    m_instance_extensions.emplace_back(instance_create_info.ppEnabledExtensionNames[i]);
+  if (out_enabled_extensions)
+  {
+    out_enabled_extensions->clear();
+    for (u32 i = 0; i < instance_create_info.enabledExtensionCount; ++i)
+      out_enabled_extensions->emplace_back(instance_create_info.ppEnabledExtensionNames[i]);
+  }
 
   return instance;
 }
@@ -605,9 +608,11 @@ void VulkanContext::PopulateBackendInfoMultisampleModes(VideoConfig* config, VkP
 std::unique_ptr<VulkanContext> VulkanContext::Create(VkInstance instance, VkPhysicalDevice gpu,
                                                      VkSurfaceKHR surface, bool enable_debug_utils,
                                                      bool enable_validation_layer,
-                                                     u32 vk_api_version)
+                                                     u32 vk_api_version,
+                                                     const std::vector<std::string>& instance_exts)
 {
   std::unique_ptr<VulkanContext> context = std::make_unique<VulkanContext>(instance, gpu);
+  context->m_instance_extensions = instance_exts;
 
   // Initialize DriverDetails so that we can check for bugs to disable features if needed.
   context->InitDriverDetails();
