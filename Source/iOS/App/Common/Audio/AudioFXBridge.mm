@@ -7,7 +7,9 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <CoreAudio/CoreAudioTypes.h>
 #import <AudioUnit/AudioUnit.h>
+#if !TARGET_OS_TV
 #import <CoreAudioKit/CoreAudioKit.h>
+#endif
 
 // Ensure iOS guard is enabled for the engine header when building in the app target
 #ifndef IPHONEOS
@@ -94,7 +96,8 @@ static inline AVAudioEngineSound* ActiveEngine()
   if (!eng) { completion(nil); return; }
   AVAudioUnitEffect* u = (AVAudioUnitEffect*)eng->fxAt(index);
   if (!u) { NSLog(@"[FX/Bridge] requestEffectVC: no unit at index"); completion(nil); return; }
-  if (@available(iOS 9.0, tvOS 9.0, *)) {
+#if !TARGET_OS_TV
+  if (@available(iOS 9.0, *)) {
     [u.AUAudioUnit requestViewControllerWithCompletionHandler:^(UIViewController * _Nullable viewController) {
       NSLog(@"[FX/Bridge] requestEffectVC completion: vc=%@", viewController);
       completion(viewController);
@@ -102,6 +105,9 @@ static inline AVAudioEngineSound* ActiveEngine()
   } else {
     completion(nil);
   }
+#else
+  completion(nil);
+#endif
 }
 
 // MARK: - CoreAudio (RemoteIO) built-in DSP controls

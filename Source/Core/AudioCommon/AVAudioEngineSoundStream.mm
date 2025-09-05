@@ -4,7 +4,9 @@
 #ifdef IPHONEOS
 
 #import <AVFoundation/AVFoundation.h>
+#if TARGET_OS_IOS
 #import <CoreMotion/CoreMotion.h>
+#endif
 
 #include "AudioCommon/AVAudioEngineSoundStream.h"
 #include "Common/Logging/Log.h"
@@ -118,6 +120,7 @@ void AVAudioEngineSound::unregisterAudioSessionObservers()
 
 void AVAudioEngineSound::startHeadTracking()
 {
+#if TARGET_OS_IOS
   if (m_motion) return;
   m_motion = [[CMMotionManager alloc] init];
   if (!m_motion.isDeviceMotionAvailable) return;
@@ -129,11 +132,14 @@ void AVAudioEngineSound::startHeadTracking()
     CMAttitude* a = motion.attitude;
     selfPtr->m_environment.listenerAngularOrientation = (AVAudio3DAngularOrientation){ (float)a.yaw, (float)a.pitch, (float)a.roll };
   }];
+#endif
 }
 
 void AVAudioEngineSound::stopHeadTracking()
 {
+#if TARGET_OS_IOS
   if (m_motion) { [m_motion stopDeviceMotionUpdates]; m_motion = nil; }
+#endif
 }
 
 bool AVAudioEngineSound::Init()

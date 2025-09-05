@@ -87,7 +87,9 @@ endif()
 
 if(IOS)
   find_library(AVFOUNDATION_LIBRARY AVFoundation)
-  find_library(COREMOTION_LIBRARY CoreMotion)
+  if(NOT TVOS)
+    find_library(COREMOTION_LIBRARY CoreMotion)
+  endif()
   target_sources(audiocommon PRIVATE
     CoreAudioSoundStream.cpp
     CoreAudioSoundStream.h
@@ -95,7 +97,11 @@ if(IOS)
     AVAudioEngineSoundStream.h
   )
 
-  target_link_libraries(audiocommon PRIVATE ${AUDIOTOOLBOX_LIBRARY} ${AVFOUNDATION_LIBRARY} ${COREMOTION_LIBRARY})
+  if(COREMOTION_LIBRARY)
+    target_link_libraries(audiocommon PRIVATE ${AUDIOTOOLBOX_LIBRARY} ${AVFOUNDATION_LIBRARY} ${COREMOTION_LIBRARY})
+  else()
+    target_link_libraries(audiocommon PRIVATE ${AUDIOTOOLBOX_LIBRARY} ${AVFOUNDATION_LIBRARY})
+  endif()
 endif()
 
 target_link_libraries(audiocommon

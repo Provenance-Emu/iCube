@@ -92,6 +92,7 @@
 		[sheet addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"United States") style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction* a){ pick(@"USA"); }]];
 		[sheet addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Cancel") style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction* a){ [self dismissViewControllerAnimated:true completion:nil]; }]];
 		// iPad popover source
+#if !TARGET_OS_TV
 		UIPopoverPresentationController* pop = sheet.popoverPresentationController;
 		if (pop) {
 			pop.sourceView = self.view;
@@ -99,6 +100,7 @@
 			pop.sourceRect = r;
 			pop.permittedArrowDirections = UIPopoverArrowDirectionDown;
 		}
+#endif
 		[self presentViewController:sheet animated:true completion:nil];
 		return;
 	}
