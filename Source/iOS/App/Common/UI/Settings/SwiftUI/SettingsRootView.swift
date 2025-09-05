@@ -960,6 +960,7 @@ private struct SelectRow: View {
         if checked { Image(systemName: "checkmark") }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
     }
     #if os(tvOS)
     .buttonStyle(.automatic)
