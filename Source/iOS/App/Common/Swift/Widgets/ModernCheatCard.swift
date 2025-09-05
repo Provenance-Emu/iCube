@@ -47,6 +47,9 @@ internal struct ModernCheatCard: View {
                 .foregroundColor(.white)
             }
           }
+          .contentShape(Rectangle())
+          .buttonStyle(.plain)
+          .focused($isFocused)
         }
 
         // Name

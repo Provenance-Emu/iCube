@@ -30,6 +30,9 @@ struct ControllerPickerSheet: View {
               Spacer()
               if selection == -1 { Image(systemName: "checkmark").foregroundStyle(.blue) }
             }
+            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .focused($focused, equals: .row(-1))
           }
 
           if controllers.isEmpty {
@@ -51,6 +54,9 @@ struct ControllerPickerSheet: View {
                   Spacer()
                   if selection == idx { Image(systemName: "checkmark").foregroundStyle(.blue) }
                 }
+                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .focused($focused, equals: .row(idx))
               }
             }
           }

@@ -19,6 +19,9 @@ private struct SlotsGrid: View {
           }
           .padding(.vertical, 8)
           .frame(maxWidth: .infinity)
+          .contentShape(Rectangle())
+          .buttonStyle(.plain)
+          .focused(focused, equals: .slot(i))
         }
         .buttonStyle(.bordered)
         .focused(focused, equals: .slot(i))
