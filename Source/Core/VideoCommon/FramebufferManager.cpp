@@ -313,6 +313,10 @@ bool FramebufferManager::CreateEFBFramebuffer()
     }
   }
 
+  // Prewarm format conversion pipelines and poke pipelines
+  CompileConversionPipelines();
+  CompilePokePipelines();
+
   return true;
 }
 
