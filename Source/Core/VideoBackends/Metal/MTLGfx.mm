@@ -767,6 +767,10 @@ void Metal::Gfx::SetupSurface()
   [m_layer setDrawableSize:{static_cast<double>(info.width), static_cast<double>(info.height)}];
   if ([m_layer respondsToSelector:@selector(setFramebufferOnly:)])
     [m_layer setFramebufferOnly:YES];
+  if ([m_layer respondsToSelector:@selector(setAllowsNextDrawableTimeout:)])
+    [m_layer setAllowsNextDrawableTimeout:NO];
+  if ([m_layer respondsToSelector:@selector(setMaximumDrawableCount:)])
+    [m_layer setMaximumDrawableCount:3];
 
   TextureConfig cfg(info.width, info.height, 1, 1, 1, info.format, AbstractTextureFlag_RenderTarget,
                     AbstractTextureType::Texture_2DArray);
