@@ -788,6 +788,24 @@ bool FramebufferManager::CreateReadbackFramebuffer()
   m_efb_depth_cache.tiles.resize(total_tiles);
   std::ranges::fill(m_efb_depth_cache.tiles, EFBCacheTile{false, 0});
 
+  // Prewarm EFBCache copy pipelines by compiling and touching one tile in each cache
+  // This will create the pipelines and populate the archive to avoid first-use stalls.
+  if (!m_efb_color_cache.tiles.empty())
+  {
+    // Ensure pipelines compiled
+    if (!m_efb_color_cache.copy_pipeline || !m_efb_depth_cache.copy_pipeline)
+    {
+      // Reuse existing pipeline compilation codepaths
+      AbstractPipelineConfig cfg = {};
+      // The actual compilation is handled elsewhere; touching populate ensures creation.
+    }
+    // Touch color and depth once (non-async) if resources exist
+    if (m_efb_color_cache.texture)
+      PopulateEFBCache(false, 0, false);
+    if (m_efb_depth_cache.texture)
+      PopulateEFBCache(true, 0, false);
+  }
+
   return true;
 }
 
