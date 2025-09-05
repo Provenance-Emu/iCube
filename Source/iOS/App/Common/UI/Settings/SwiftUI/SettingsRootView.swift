@@ -2207,6 +2207,7 @@ struct GraphicsHacksView: View {
   @State private var deferEfbCopies: Bool = false
   @State private var viSkipMode: Int = 0 // TriState
   @State private var fastTextureSampling: Bool = true
+  @State private var fastMath: Bool = false
   var body: some View {
     List {
       Section(header: Text(L("General Hacks"))) {
@@ -2222,6 +2223,7 @@ struct GraphicsHacksView: View {
         NavigationLink("\(L("VI Skip Mode")): \(viSkipLabel(viSkipMode))", destination: ViSkipModePicker(selected: $viSkipMode))
           .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
         Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling).onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
+        Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath).onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) }
       }
     }
     .navigationTitle(L("Hacks"))
@@ -2239,6 +2241,7 @@ struct GraphicsHacksView: View {
     deferEfbCopies = DOLConfigBridge.gfxHackDeferEfbCopies()
     viSkipMode = DOLConfigBridge.gfxHackViSkipMode()
     fastTextureSampling = DOLConfigBridge.gfxHackFastTextureSampling()
+    fastMath = DOLConfigBridge.gfxHackFastMath()
   }
   private func viSkipLabel(_ v: Int) -> String { switch v { case 1: return L("On"); case 2: return L("Auto"); default: return L("Off") } }
 }

@@ -10,6 +10,8 @@
 #include <spirv_msl.hpp>
 
 #include "Common/MsgHandler.h"
+#include "Core/Config/GraphicsSettings.h"
+#include "Common/Config/Config.h"
 
 #include "VideoCommon/Constants.h"
 #include "VideoCommon/DriverDetails.h"
@@ -185,6 +187,7 @@ fragment float4 fbfetch_test(float4 in [[color(0), raster_order_group(0)]]) {
                                                opt.languageVersion = MTLLanguageVersion2_1;
                                              else
                                                opt.languageVersion = MTLLanguageVersion2_0;
+                                             opt.fastMathEnabled = Config::Get(Config::GFX_HACK_FAST_MATH);
                                              opt; })
                                             error:nil]);
   if (!lib)
@@ -236,6 +239,7 @@ fragment float4 is_helper_test() {
                                                opt.languageVersion = MTLLanguageVersion2_1;
                                              else
                                                opt.languageVersion = MTLLanguageVersion2_0;
+                                             opt.fastMathEnabled = Config::Get(Config::GFX_HACK_FAST_MATH);
                                              opt; })
                                             error:nil]);
   if (!lib)

@@ -15,6 +15,8 @@
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/VideoBackendBase.h"
+#include "Core/Config/GraphicsSettings.h"
+#include "Common/Config/Config.h"
 
 #include <fstream>
 #import <Foundation/Foundation.h>
@@ -246,6 +248,7 @@ std::unique_ptr<AbstractShader> Metal::Gfx::CreateShaderFromMSL(ShaderStage stag
 #if defined(MTLLanguageVersion2_2)
                                                       opt.languageVersion = MTLLanguageVersion2_2;
 #endif
+                                                    opt.fastMathEnabled = Config::Get(Config::GFX_HACK_FAST_MATH);
                                                     opt; })
                                                    error:&err]);
     if (err)

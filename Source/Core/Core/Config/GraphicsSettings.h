@@ -191,6 +191,7 @@ extern const Info<bool> GFX_HACK_FAST_TEXTURE_SAMPLING;
 #ifdef __APPLE__
 extern const Info<bool> GFX_HACK_NO_MIPMAPPING;
 #endif
+extern const Info<bool> GFX_HACK_FAST_MATH;
 
 // Graphics.GameSpecific
 

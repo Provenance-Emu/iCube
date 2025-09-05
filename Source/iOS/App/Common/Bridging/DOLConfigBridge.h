@@ -264,6 +264,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxHackViSkipMode:(NSInteger)mode;
 + (BOOL)gfxHackFastTextureSampling;
 + (void)setGfxHackFastTextureSampling:(BOOL)enabled;
++ (BOOL)gfxHackFastMath;
++ (void)setGfxHackFastMath:(BOOL)enabled;
 
 // Graphics > Advanced
 // Performance Statistics
@@ -334,6 +336,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)resetAllToDefaults NS_SWIFT_NAME(resetAllToDefaults());
 + (void)resetPageToDefaults:(NSInteger)page NS_SWIFT_NAME(resetPage(toDefaults:)); // 0=config, 1=graphics, 2=controllers, 3=debug, 4=about
+
++ (NSArray<NSString*>*)audioBackendsForPicker;
 
 @end
 

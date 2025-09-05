@@ -322,6 +322,8 @@
 + (void)setGfxHackViSkipMode:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_HACK_VI_SKIP_MODE, (TriState)mode); }
 + (BOOL)gfxHackFastTextureSampling { return Config::Get(Config::GFX_HACK_FAST_TEXTURE_SAMPLING); }
 + (void)setGfxHackFastTextureSampling:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_FAST_TEXTURE_SAMPLING, (bool)enabled); }
++ (BOOL)gfxHackFastMath { return Config::Get(Config::GFX_HACK_FAST_MATH); }
++ (void)setGfxHackFastMath:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_FAST_MATH, (bool)enabled); }
 
 // Graphics > Advanced
 + (BOOL)gfxFastDepthCalc { return Config::Get(Config::GFX_FAST_DEPTH_CALC); }
