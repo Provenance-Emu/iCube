@@ -712,6 +712,14 @@ struct TVLibraryView: View {
       Button(action: { showSettings = true }) { Image(systemName: "gearshape") }
     }
 #else
+    ToolbarItem(placement: .navigationBarLeading) {
+      let store = RemoteSourcesStore.shared
+      if store.isScanning {
+        ProgressView(value: store.scanningProgress)
+          .progressViewStyle(.linear)
+          .frame(width: 140)
+      }
+    }
     ToolbarItem(placement: .navigationBarTrailing) {
       Menu {
         Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
@@ -726,21 +734,6 @@ struct TVLibraryView: View {
         Image(systemName: "ellipsis.circle")
       }
       .tipAttachCompat(.importGame)
-    }
-    ToolbarItem(placement: .navigationBarTrailing) {
-      let store = RemoteSourcesStore.shared
-      if store.isScanning {
-        Button(action: { showSources = true }) {
-          HStack(spacing: 6) {
-            ProgressView(value: store.scanningProgress).frame(width: 60)
-            Text("\(Int(store.scanningProgress * 100))%")
-              .font(.caption2)
-              .foregroundColor(.secondary)
-          }
-          .padding(.horizontal, 8).padding(.vertical, 4)
-          .background(.ultraThinMaterial, in: Capsule())
-        }
-      }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { model.rescan() }) {
@@ -784,7 +777,7 @@ struct TVLibraryView: View {
           EmulationScreen(game: item)
             .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
         }
-        .navigationTitle("DolphiniOS Library")
+        .navigationTitle(storeForBanner.isScanning ? "" : "DolphiniOS Library")
         .toolbar { libraryToolbar }
 #if os(iOS) || targetEnvironment(macCatalyst)
         .navigationDestinationItemCompat(item: Binding(get: { navigateToSettings ? trueWrapper : nil }, set: { v in navigateToSettings = (v != nil) })) { _ in
