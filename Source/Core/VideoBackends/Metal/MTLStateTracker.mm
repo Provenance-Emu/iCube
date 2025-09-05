@@ -881,28 +881,27 @@ void Metal::StateTracker::PrepareRender()
     {
       m_flags.has_utility_vs_uniform = true;
       m_flags.has_gx_vs_uniform = false;
-      [enc setVertexBytes:m_state.utility_uniform.get()
-                   length:m_state.utility_uniform_size
-                  atIndex:1];
+      Map map = Allocate(UploadBuffer::Uniform, m_state.utility_uniform_size, AlignMask::Uniform);
+      memcpy(map.cpu_buffer, m_state.utility_uniform.get(), m_state.utility_uniform_size);
+      SetVertexBufferNow(1, map.gpu_buffer, map.gpu_offset);
     }
     if (!m_flags.has_utility_ps_uniform && pipe->UsesFragmentBuffer(0))
     {
       m_flags.has_utility_ps_uniform = true;
       m_flags.has_gx_ps_uniform = false;
+      Map map = Allocate(UploadBuffer::Uniform, m_state.utility_uniform_size, AlignMask::Uniform);
+      memcpy(map.cpu_buffer, m_state.utility_uniform.get(), m_state.utility_uniform_size);
       if (g_features.batched_buffer_binding_supported && pipe->UsesFragmentBuffer(2))
       {
-        id<MTLBuffer> bufs[] = {nullptr, nullptr, m_state.texels};
-        NSUInteger offs[] = {0, 0, m_state.texel_buffer_offset0};
-        [enc setFragmentBytes:m_state.utility_uniform.get()
-                       length:m_state.utility_uniform_size
-                      atIndex:0];
+        id<MTLBuffer> bufs[] = {map.gpu_buffer, nullptr, m_state.texels};
+        NSUInteger offs[] = {map.gpu_offset, 0, m_state.texel_buffer_offset0};
         [enc setFragmentBuffers:bufs offsets:offs withRange:NSMakeRange(0, 3)];
+        m_current.fragment_buffers[0] = map.gpu_buffer;
+        m_current.fragment_buffers[2] = m_state.texels;
       }
       else
       {
-        [enc setFragmentBytes:m_state.utility_uniform.get()
-                       length:m_state.utility_uniform_size
-                      atIndex:0];
+        SetFragmentBufferNow(0, map.gpu_buffer, map.gpu_offset);
         if (!m_flags.has_texel_buffer && pipe->UsesFragmentBuffer(2))
           SetFragmentBufferNow(2, m_state.texels, m_state.texel_buffer_offset0);
       }
