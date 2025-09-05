@@ -1697,7 +1697,10 @@ struct GraphicsGeneralView: View {
         NavigationLink(destination: GraphicsBackendPickerView(selected: $backend)) {
           Text("\(L("Backend")): \(backend.label)")
         }
-          .onChange(of: backend) { _ in DOLConfigBridge.setGfxBackend(backend.backendKey) }
+          .onChange(of: backend) { _ in
+            DOLConfigBridge.setGfxBackend(backend.backendKey)
+            UserDefaults.standard.set(backend.backendKey, forKey: "ui_gfx_backend")
+          }
         NavigationLink(destination: GraphicsAspectRatioView(selected: $aspect)) {
           Text("\(L("Aspect Ratio")): \(aspect.label)")
         }
@@ -1778,7 +1781,11 @@ struct GraphicsGeneralView: View {
   }
 
   private func syncFromConfig() {
-    let key = DOLConfigBridge.gfxBackend(); backend = GraphicsBackend.from(key: key)
+    let keyFromConfig = DOLConfigBridge.gfxBackend()
+    let keyFromDefaults = UserDefaults.standard.string(forKey: "ui_gfx_backend")
+    let effectiveKey = (keyFromDefaults?.isEmpty == false) ? keyFromDefaults! : keyFromConfig
+    backend = GraphicsBackend.from(key: effectiveKey)
+    if effectiveKey != keyFromConfig { DOLConfigBridge.setGfxBackend(effectiveKey) }
     vSync = DOLConfigBridge.gfxVSync()
     aspect = AspectRatio.from(raw: DOLConfigBridge.gfxAspectRatio())
     asyncPresent = DOLConfigBridge.gfxAsyncPresent()
