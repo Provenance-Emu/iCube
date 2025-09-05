@@ -41,6 +41,13 @@
 #import "DolphiniOS-Swift.h"
 #include "Core/Config/WiimoteSettings.h"
 
+static inline bool _EndsWith(const std::string& s, const char* suf)
+{
+  const size_t slen = s.size();
+  const size_t tlen = strlen(suf);
+  return slen >= tlen && 0 == s.compare(slen - tlen, tlen, suf);
+}
+
 // A lightweight host view that notifies us when its bounds change so we can
 // update the CAMetalLayer frame and drawableSize.
 @interface RenderHostView : UIView
@@ -368,7 +375,7 @@ after_pad1:
           auto entries = File::ScanDirectoryTree(userDirWM, false);
           for (const auto& child : entries.children)
           {
-            if (!child.isDirectory && StringEndsWith(child.physicalName, ".ini")) { user_has_any_profile = true; break; }
+            if (!child.isDirectory && _EndsWith(child.physicalName, ".ini")) { user_has_any_profile = true; break; }
           }
         }
 
