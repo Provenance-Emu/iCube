@@ -33,6 +33,8 @@ Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
 
   SetupSurface();
   g_state_tracker->FlushEncoders();
+
+
 }
 
 Metal::Gfx::~Gfx() = default;

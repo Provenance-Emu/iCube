@@ -378,10 +378,28 @@ void Metal::Util::PopulateBackendInfoFeatures(VideoConfig* config, id<MTLDevice>
 #if TARGET_OS_OSX
   if (@available(macOS 11, *))
     if (vendor == DriverDetails::VENDOR_INTEL)
-      config->backend_info.bSupportsFramebufferFetch |= DetectIntelGPUFBFetch(device);
+      DriverDetails::EnableBug(DriverDetails::BUG_INTEL_PIXEL_SHADER_DEPTH_ROUNDING);
 #endif
-  if (DriverDetails::HasBug(DriverDetails::BUG_BROKEN_DYNAMIC_SAMPLER_INDEXING))
-    config->backend_info.bSupportsDynamicSamplerIndexing = false;
+
+  // New feature flags
+  g_features.memoryless_depth_supported = false;
+  g_features.batched_buffer_binding_supported = false;
+  if (@available(iOS 11.0, tvOS 11.0, macOS 10.13, *))
+  {
+    g_features.batched_buffer_binding_supported = true; // set{Vertex,Fragment}Buffers:... exist
+  }
+  if (@available(iOS 11.0, tvOS 11.0, macOS 10.13, *))
+  {
+    // Memoryless is generally supported on Apple GPUs; we restrict to Apple GPU families
+    g_features.memoryless_depth_supported = [device supportsFamily:MTLGPUFamilyApple1] ||
+                                            [device supportsFamily:MTLGPUFamilyApple2] ||
+                                            [device supportsFamily:MTLGPUFamilyApple3] ||
+                                            [device supportsFamily:MTLGPUFamilyApple4] ||
+                                            [device supportsFamily:MTLGPUFamilyApple5] ||
+                                            [device supportsFamily:MTLGPUFamilyApple6] ||
+                                            [device supportsFamily:MTLGPUFamilyApple7] ||
+                                            [device supportsFamily:MTLGPUFamilyApple8];
+  }
 }
 
 // clang-format off

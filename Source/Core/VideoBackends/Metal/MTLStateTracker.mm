@@ -781,7 +781,18 @@ void Metal::StateTracker::PrepareRender()
   {
     m_flags.has_vertices = true;
     if (m_state.vertices)
-      SetVertexBufferNow(0, m_state.vertices, 0);
+    {
+      if (g_features.batched_buffer_binding_supported)
+      {
+        id<MTLBuffer> bufs[] = {m_state.vertices};
+        NSUInteger offs[] = {0};
+        [enc setVertexBuffers:bufs offsets:offs withRange:NSMakeRange(0, 1)];
+      }
+      else
+      {
+        SetVertexBufferNow(0, m_state.vertices, 0);
+      }
+    }
   }
   if (u32 dirty = m_dirty_textures & pipe->GetTextures())
   {

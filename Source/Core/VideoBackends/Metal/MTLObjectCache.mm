@@ -43,7 +43,6 @@ void Metal::ObjectCache::Initialize(MRCOwned<id<MTLDevice>> device)
 {
   g_device = std::move(device);
   g_queue = MRCTransfer([g_device newCommandQueue]);
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000 || __TV_OS_VERSION_MAX_ALLOWED >= 140000 || TARGET_OS_OSX
   if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
   {
     const std::string path = GetDiskShaderCacheFileName(APIType::Metal, "Pipeline", false, true, true);
@@ -55,13 +54,11 @@ void Metal::ObjectCache::Initialize(MRCOwned<id<MTLDevice>> device)
     s_pipeline_archive = MRCTransfer([g_device newBinaryArchiveWithDescriptor:desc error:&err]);
     (void)err; // Best-effort: proceed without archive on error
   }
-#endif
   g_object_cache = std::unique_ptr<ObjectCache>(new ObjectCache);
 }
 
 void Metal::ObjectCache::Shutdown()
 {
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000 || __TV_OS_VERSION_MAX_ALLOWED >= 140000 || TARGET_OS_OSX
   if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
   {
     if (s_pipeline_archive)
@@ -75,7 +72,6 @@ void Metal::ObjectCache::Shutdown()
       s_pipeline_archive = nil;
     }
   }
-#endif
   g_object_cache.reset();
   g_queue = nullptr;
   g_device = nullptr;
@@ -467,13 +463,11 @@ public:
       [desc setDepthAttachmentPixelFormat:Util::FromAbstract(fs.depth_texture_format)];
       if (Util::HasStencil(fs.depth_texture_format))
         [desc setStencilAttachmentPixelFormat:Util::FromAbstract(fs.depth_texture_format)];
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000 || __TV_OS_VERSION_MAX_ALLOWED >= 140000 || TARGET_OS_OSX
       if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
       {
         if (s_pipeline_archive)
           [desc setBinaryArchives:@[ s_pipeline_archive ]];
       }
-#endif
       NSError* err = nullptr;
       MTLRenderPipelineReflection* reflection = nullptr;
       id<MTLRenderPipelineState> pipe =
