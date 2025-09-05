@@ -19,6 +19,7 @@ namespace Metal
 class Shader;
 extern MRCOwned<id<MTLDevice>> g_device;
 extern MRCOwned<id<MTLCommandQueue>> g_queue;
+extern MRCOwned<id<MTLBinaryArchive>> g_pipeline_archive;
 
 struct DepthStencilSelector
 {

@@ -25,6 +25,7 @@ MRCOwned<id<MTLDevice>> Metal::g_device;
 MRCOwned<id<MTLCommandQueue>> Metal::g_queue;
 std::unique_ptr<Metal::ObjectCache> Metal::g_object_cache;
 static MRCOwned<id<MTLBinaryArchive>> s_pipeline_archive;
+MRCOwned<id<MTLBinaryArchive>> Metal::g_pipeline_archive;
 
 static void SetupDepthStencil(
     MRCOwned<id<MTLDepthStencilState>> (&dss)[Metal::DepthStencilSelector::N_VALUES]);
@@ -52,6 +53,7 @@ void Metal::ObjectCache::Initialize(MRCOwned<id<MTLDevice>> device)
     MRCOwned<MTLBinaryArchiveDescriptor*> desc = MRCTransfer([MTLBinaryArchiveDescriptor new]);
     [desc setUrl:url];
     s_pipeline_archive = MRCTransfer([g_device newBinaryArchiveWithDescriptor:desc error:&err]);
+    Metal::g_pipeline_archive = s_pipeline_archive;
     (void)err; // Best-effort: proceed without archive on error
   }
   g_object_cache = std::unique_ptr<ObjectCache>(new ObjectCache);
@@ -70,6 +72,7 @@ void Metal::ObjectCache::Shutdown()
       [s_pipeline_archive serializeToURL:url error:&err];
       (void)err;
       s_pipeline_archive = nil;
+      Metal::g_pipeline_archive = nil;
     }
   }
   g_object_cache.reset();

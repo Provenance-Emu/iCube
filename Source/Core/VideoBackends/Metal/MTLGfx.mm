@@ -253,6 +253,14 @@ std::unique_ptr<AbstractShader> Metal::Gfx::CreateShaderFromMSL(ShaderStage stag
       auto desc = [MTLComputePipelineDescriptor new];
       [desc setComputeFunction:fn];
       [desc setLabel:[fn label]];
+#if __has_feature(objc_arc)
+#else
+#endif
+      if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+      {
+        if (Metal::g_pipeline_archive)
+          [desc setBinaryArchives:@[ Metal::g_pipeline_archive ]];
+      }
       MRCOwned<id<MTLComputePipelineState>> pipeline =
           MRCTransfer([g_device newComputePipelineStateWithDescriptor:desc
                                                               options:MTLPipelineOptionArgumentInfo
