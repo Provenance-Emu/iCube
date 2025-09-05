@@ -393,7 +393,11 @@ void Metal::Gfx::ClearRegion(const MathUtil::Rectangle<int>& target_rc, bool col
 
   g_state_tracker->EnableEncoderLabel(false);
   AbstractGfx::ClearRegion(target_rc, color_enable, alpha_enable, z_enable, color, z);
+#if !defined(NDEBUG)
   g_state_tracker->EnableEncoderLabel(true);
+#else
+  g_state_tracker->EnableEncoderLabel(false);
+#endif
 }
 
 void Metal::Gfx::SetPipeline(const AbstractPipeline* pipeline)
