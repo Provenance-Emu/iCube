@@ -1280,6 +1280,10 @@ struct ConfigAudioView: View {
       Section(header: Text(L("Audio Backend"))) {
         NavigationLink(backend.isEmpty ? L("Default Device") : backend, destination: BackendPickerView(selected: $backend, options: availableBackends))
           .onChange(of: backend) { DOLConfigBridge.setAudioBackend($0) }
+        Text(L("AVAudioEngine enables Headphone Spatial Audio (AirPods, Beats)."))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Section(header: Text(L("Volume"))) {
@@ -1326,7 +1330,10 @@ struct ConfigAudioView: View {
 
   private func syncAudio() {
     availableBackends = DOLConfigBridge.audioBackends()
+    // Annotate AVAudioEngine entry to surface Spatial Audio support
+    availableBackends = availableBackends.map { $0 == "AVAudioEngine" ? "AVAudioEngine (Supports Spatial Audio)" : $0 }
     backend = DOLConfigBridge.audioBackend()
+    if backend == "AVAudioEngine" { backend = "AVAudioEngine (Supports Spatial Audio)" }
     volume = DOLConfigBridge.audioVolume()
     stretch = DOLConfigBridge.audioStretch()
     stretchLatency = DOLConfigBridge.audioStretchLatencyMs()
@@ -1338,13 +1345,38 @@ struct ConfigAudioView: View {
 private struct BackendPickerView: View {
   @Binding var selected: String
   let options: [String]
+  @State private var pendingSelection: String? = nil
+  @State private var showConfirm: Bool = false
   var body: some View {
     List {
       ForEach(options, id: \.self) { opt in
-        SelectRow(label: opt, checked: opt == selected) { selected = opt; DOLConfigBridge.setAudioBackend(opt) }
+        SelectRow(label: opt, checked: opt == selected) {
+          // Strip annotation before passing to bridge
+          let raw = opt.replacingOccurrences(of: " (Supports Spatial Audio)", with: "")
+          if raw == "AVAudioEngine" {
+            pendingSelection = opt
+            showConfirm = true
+          } else {
+            selected = opt
+            DOLConfigBridge.setAudioBackend(raw)
+          }
+        }
       }
     }
     .navigationTitle(L("Audio Backend"))
+    .alert(L("Enable AVAudioEngine?"), isPresented: $showConfirm) {
+      Button(L("Enable")) {
+        if let opt = pendingSelection {
+          selected = opt
+          let raw = opt.replacingOccurrences(of: " (Supports Spatial Audio)", with: "")
+          DOLConfigBridge.setAudioBackend(raw)
+        }
+        pendingSelection = nil
+      }
+      Button(L("Cancel"), role: .cancel) { pendingSelection = nil }
+    } message: {
+      Text(L("AVAudioEngine is in development and not recommended for general usage yet. Are you sure?"))
+    }
   }
 }
 /// GameCube config placeholder

@@ -8,6 +8,7 @@
 
 #include "AudioCommon/AlsaSoundStream.h"
 #include "AudioCommon/CoreAudioSoundStream.h"
+#include "AudioCommon/AVAudioEngineSoundStream.h"
 #include "AudioCommon/CubebStream.h"
 #include "AudioCommon/Mixer.h"
 #include "AudioCommon/NullSoundStream.h"
@@ -43,8 +44,15 @@ static std::unique_ptr<SoundStream> CreateSoundStreamForBackend(std::string_view
     return std::make_unique<OpenSLESStream>();
   else if (backend == BACKEND_WASAPI && WASAPIStream::IsValid())
     return std::make_unique<WASAPIStream>();
+#ifdef IPHONEOS
+  else if (backend == "AVAudioEngine" && AVAudioEngineSound::IsValid())
+    return std::unique_ptr<SoundStream>(new AVAudioEngineSound());
   else if (backend == BACKEND_COREAUDIO && CoreAudioSound::IsValid())
     return std::make_unique<CoreAudioSound>();
+#else
+  else if (backend == BACKEND_COREAUDIO && CoreAudioSound::IsValid())
+    return std::make_unique<CoreAudioSound>();
+#endif
   return {};
 }
 
@@ -136,8 +144,14 @@ std::vector<std::string> GetSoundBackends()
     backends.emplace_back(BACKEND_OPENSLES);
   if (WASAPIStream::IsValid())
     backends.emplace_back(BACKEND_WASAPI);
+#ifdef IPHONEOS
+  backends.emplace_back("AVAudioEngine");
   if (CoreAudioSound::IsValid())
     backends.emplace_back(BACKEND_COREAUDIO);
+#else
+  if (CoreAudioSound::IsValid())
+    backends.emplace_back(BACKEND_COREAUDIO);
+#endif
 
   return backends;
 }
