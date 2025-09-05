@@ -709,36 +709,7 @@ struct EmulationScreen: View {
                 game: game
             )
         }
-        // FX editor overlay
-        if showFXSheet {
-            Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text(L("Audio Effects")).font(.headline).foregroundColor(.white)
-                    Spacer()
-                    Button { showFXSheet = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
-                        .buttonStyle(.plain)
-                }
-                Divider().background(.white.opacity(0.2))
-                NavigationStack {
-                    Group {
-                        if DOLConfigBridge.audioBackend() == "AVAudioEngine" || AudioFXBridge.isEngineActive() {
-                            ScrollView { FXChainEditor() }
-                        } else if DOLConfigBridge.audioBackend() == "CoreAudio" {
-                            ScrollView { CoreAudioDSPEditor(embedded: true).padding(.horizontal, 2) }
-                        }
-                    }
-                    .navigationBarTitleDisplayMode(.inline)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .padding(20)
-            .frame(maxWidth: 560, maxHeight: 640)
-            .background(.black.opacity(0.6))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
-            .zIndex(5)
-        }
+
     }
     .onAppear {
         NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
@@ -882,6 +853,19 @@ struct EmulationScreen: View {
         NavigationStack {
             ShaderParameterEditor()
                 .navigationTitle(L("Shader Parameters"))
+        }
+    }
+    .sheet(isPresented: $showFXSheet) {
+        NavigationStack {
+            Group {
+                if DOLConfigBridge.audioBackend() == "AVAudioEngine" || AudioFXBridge.isEngineActive() {
+                    FXChainEditor()
+                        .navigationTitle(L("Audio Effects"))
+                } else {
+                    CoreAudioDSPEditor()
+                        .navigationTitle(L("Audio Effects"))
+                }
+            }
         }
     }
     .alert("Exit Game?", isPresented: $showExitConfirm) {
