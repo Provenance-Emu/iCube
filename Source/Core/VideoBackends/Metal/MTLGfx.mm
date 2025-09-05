@@ -109,6 +109,8 @@ Metal::Gfx::CreateStagingTexture(StagingTextureType type, const TextureConfig& c
     MTLResourceOptions options = MTLStorageModeShared;
     if (type == StagingTextureType::Upload)
       options |= MTLResourceCPUCacheModeWriteCombined;
+    if (type == StagingTextureType::Upload)
+      options |= MTLResourceHazardTrackingModeUntracked;
 
     id<MTLBuffer> buffer = [g_device newBufferWithLength:buffer_size options:options];
     if (!buffer)
