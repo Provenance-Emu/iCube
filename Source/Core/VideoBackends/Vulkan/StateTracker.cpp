@@ -563,6 +563,23 @@ void StateTracker::UpdateGXDescriptorSet()
                               nullptr,
                               nullptr};
     }
+
+    // One-shot sampler dump
+    {
+      static bool s_dumped = false;
+      if (!s_dumped)
+      {
+        printf("[Vulkan] GX sampler bindings:\n");
+        for (u32 i = 0; i < 16 && i < VideoCommon::MAX_PIXEL_SHADER_SAMPLERS; ++i)
+        {
+          const VkDescriptorImageInfo& img = m_bindings.samplers[i];
+          printf("  b%u: view=%p sampler=%p layout=%u\n", i, (void*)img.imageView, (void*)img.sampler,
+                 (unsigned)img.imageLayout);
+        }
+        s_dumped = true;
+      }
+    }
+
     m_dirty_flags = (m_dirty_flags & ~DIRTY_FLAG_GX_SAMPLERS) | DIRTY_FLAG_DESCRIPTOR_SETS;
   }
 

@@ -121,10 +121,36 @@ void VertexFormat::SetupInputState()
 {
   m_binding_description.binding = 0;
 
-  // Keep stride identical to the declared vertex layout to match actual buffer packing
-  uint32_t aligned_stride = m_decl.stride;
+  // Compute stride as max(declared, largest attribute end), align to 4 bytes
+  auto formatSize = [](VkFormat f) -> uint32_t {
+    switch (f) {
+      case VK_FORMAT_R8_UNORM: case VK_FORMAT_R8_SNORM: case VK_FORMAT_R8_UINT: case VK_FORMAT_R8_SINT: return 1;
+      case VK_FORMAT_R8G8_UNORM: case VK_FORMAT_R8G8_SNORM: case VK_FORMAT_R8G8_UINT: case VK_FORMAT_R8G8_SINT: return 2;
+      case VK_FORMAT_R8G8B8A8_UNORM: case VK_FORMAT_R8G8B8A8_SNORM: case VK_FORMAT_R8G8B8A8_UINT: case VK_FORMAT_R8G8B8A8_SINT: return 4;
+      case VK_FORMAT_B8G8R8A8_UNORM: return 4;
+      case VK_FORMAT_R16_UNORM: case VK_FORMAT_R16_SNORM: case VK_FORMAT_R16_UINT: case VK_FORMAT_R16_SINT: case VK_FORMAT_R16_SFLOAT: return 2;
+      case VK_FORMAT_R16G16_UNORM: case VK_FORMAT_R16G16_SNORM: case VK_FORMAT_R16G16_UINT: case VK_FORMAT_R16G16_SINT: case VK_FORMAT_R16G16_SFLOAT: return 4;
+      case VK_FORMAT_R16G16B16A16_UNORM: case VK_FORMAT_R16G16B16A16_SNORM: case VK_FORMAT_R16G16B16A16_UINT: case VK_FORMAT_R16G16B16A16_SINT: case VK_FORMAT_R16G16B16A16_SFLOAT: return 8;
+      case VK_FORMAT_R32_SFLOAT: case VK_FORMAT_R32_UINT: case VK_FORMAT_R32_SINT: return 4;
+      case VK_FORMAT_R32G32_SFLOAT: case VK_FORMAT_R32G32_UINT: case VK_FORMAT_R32G32_SINT: return 8;
+      case VK_FORMAT_R32G32B32_SFLOAT: case VK_FORMAT_R32G32B32_UINT: case VK_FORMAT_R32G32B32_SINT: return 12;
+      case VK_FORMAT_R32G32B32A32_SFLOAT: case VK_FORMAT_R32G32B32A32_UINT: case VK_FORMAT_R32G32B32A32_SINT: return 16;
+      default: return 4;
+    }
+  };
+  uint32_t max_end = 0;
+  for (uint32_t i = 0; i < m_num_attributes; ++i)
+  {
+    const auto& a = m_attribute_descriptions[i];
+    uint32_t end = a.offset + formatSize(a.format);
+    if (end > max_end) max_end = end;
+  }
+  uint32_t computed_stride = m_decl.stride;
+  if (max_end > computed_stride) computed_stride = max_end;
+  // Align to 4 for safety
+  computed_stride = (computed_stride + 3u) & ~3u;
 
-  m_binding_description.stride = aligned_stride;
+  m_binding_description.stride = computed_stride;
   m_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
   m_input_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
