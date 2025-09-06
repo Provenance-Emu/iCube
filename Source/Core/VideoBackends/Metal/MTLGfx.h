@@ -82,6 +82,9 @@ public:
   bool TryComputeScaleRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
                             const AbstractTexture* src, const MathUtil::Rectangle<int>& src_rc,
                             u32 scale_x, u32 scale_y) override;
+  bool TryComputeGammaRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                            const AbstractTexture* src, const MathUtil::Rectangle<int>& src_rc,
+                            float gamma_rcp) override;
 
 private:
   MRCOwned<CAMetalLayer*> m_layer;
@@ -95,6 +98,7 @@ private:
    std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
   std::unique_ptr<AbstractShader> m_rgba8_scale_cs;
   std::unique_ptr<AbstractShader> m_rgba8_down2x_cs;
+  std::unique_ptr<AbstractShader> m_rgba8_gamma_cs;
 
    void CheckForSurfaceChange();
    void CheckForSurfaceResize();

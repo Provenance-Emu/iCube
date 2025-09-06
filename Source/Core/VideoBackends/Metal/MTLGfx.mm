@@ -990,6 +990,53 @@ bool Metal::Gfx::TryComputeScaleRGBA8(AbstractTexture* dst, const MathUtil::Rect
   }
 }
 
+bool Metal::Gfx::TryComputeGammaRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                       const AbstractTexture* src,
+                                       const MathUtil::Rectangle<int>& src_rc,
+                                       float gamma_rcp)
+{
+  if (!dst || !src)
+    return false;
+  if (dst_rc.GetWidth() != src_rc.GetWidth() || dst_rc.GetHeight() != src_rc.GetHeight())
+    return false;
+  @autoreleasepool
+  {
+    if (!m_rgba8_gamma_cs)
+    {
+      static const char* msl = R"(
+        #include <metal_stdlib>
+        using namespace metal;
+        struct Params { float gamma_rcp; };
+        kernel void main0(texture2d<float, access::read>  src [[texture(0)]],
+                          texture2d<float, access::write> dst [[texture(1)]],
+                          constant Params& p [[buffer(0)]],
+                          uint2 gid [[thread_position_in_grid]])
+        {
+          if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+          float4 c = src.read(gid);
+          c.rgb = pow(c.rgb, p.gamma_rcp);
+          dst.write(c, gid);
+        }
+      )";
+      auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl, "", "gamma_rgba8");
+      if (!cs)
+        return false;
+      m_rgba8_gamma_cs = std::move(cs);
+    }
+    SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+    SetComputeImageTexture(1, dst, false, true);
+    struct { float gamma_rcp; } params{ gamma_rcp };
+    g_state_tracker->SetUtilityUniform(&params, sizeof(params));
+    const u32 w = static_cast<u32>(dst_rc.GetWidth());
+    const u32 h = static_cast<u32>(dst_rc.GetHeight());
+    const u32 tgx = 16, tgy = 16;
+    const u32 gx = (w + tgx - 1) / tgx;
+    const u32 gy = (h + tgy - 1) / tgy;
+    DispatchComputeShader(m_rgba8_gamma_cs.get(), tgx, tgy, 1, gx, gy, 1);
+    return true;
+  }
+}
+
 void Metal::Gfx::GenerateMipmaps(AbstractTexture* texture)
 {
   if (!texture)

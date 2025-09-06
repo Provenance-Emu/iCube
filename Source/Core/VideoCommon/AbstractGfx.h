@@ -190,6 +190,15 @@ public:
     return false;
   }
 
+  // Optional compute-based gamma correction for RGBA8 copies.
+  virtual bool TryComputeGammaRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                    const AbstractTexture* src,
+                                    const MathUtil::Rectangle<int>& src_rc,
+                                    float gamma_rcp)
+  {
+    return false;
+  }
+
   // Returns true if a layer-expanding geometry shader should be used when rendering
   // the user interface on the output buffer.
   bool UseGeometryShaderForUI() const;

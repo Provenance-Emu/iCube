@@ -2913,7 +2913,7 @@ void TextureCacheBase::CopyEFBToCacheEntry(RcTcacheEntry& entry, bool is_depth_c
 
   // Compute fast-path for RGBA8 2x downscale when requested via scale_by_half and simple settings
   if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) && !is_depth_copy && !is_intensity &&
-      !is_xfb_copy && scale_by_half && !linear_filter && gamma == 1.0f &&
+      dst_format != EFBCopyFormat::XFB && scale_by_half && !linear_filter && gamma == 1.0f &&
       !clamp_top && !clamp_bottom &&
       entry->texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
       src_texture->GetFormat() == AbstractTextureFormat::RGBA8)
