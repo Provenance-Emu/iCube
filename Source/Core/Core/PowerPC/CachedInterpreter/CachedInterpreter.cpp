@@ -4493,19 +4493,7 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
   auto& ppc_state = m_ppc_state;
   while (true)
   {
-#if defined(__aarch64__)
-    // Apple Silicon: Enhanced prefetching with multiple cache lines
-    __builtin_prefetch(normal_entry + 64, 0, 0);   // L1 temporal
-    __builtin_prefetch(normal_entry + 128, 0, 0);  // L1 temporal
-#endif
-
-    using AnyCallback = s32 (*)(PowerPC::PowerPCState&, const void*);
-    const AnyCallback callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
-
-#if defined(__aarch64__)
-    // Apple Silicon: Speculative execution hints
-    __builtin_prefetch(normal_entry + sizeof(callback), 0, 0); // Prefetch operands
-#endif
+    const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
     const u8* payload = normal_entry + sizeof(callback);
     // Direct dispatch to the most commonly used callbacks for better performance
     if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<false>))) [[likely]]
@@ -4525,11 +4513,6 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
       else
         break;
     }
-#if defined(__aarch64__)
-    // Apple Silicon: Aggressive block chaining prefetch
-    __builtin_prefetch(normal_entry, 0, 0); // Next callback
-    __builtin_prefetch(normal_entry + 32, 0, 1); // Next operands
-#endif
   }
   MaybeLogLinkStats();
 }
