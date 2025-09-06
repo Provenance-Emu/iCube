@@ -370,6 +370,7 @@ AbstractTexture* FramebufferManager::ResolveEFBColorTexture(const MathUtil::Rect
                                      m_efb_color_texture.get(), clamped_region))
       {
         m_efb_resolve_color_texture->FinishedRendering();
+        g_gfx->GenerateMipmaps(m_efb_resolve_color_texture.get());
         return m_efb_resolve_color_texture.get();
       }
     }
