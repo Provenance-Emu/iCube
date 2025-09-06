@@ -2909,6 +2909,22 @@ void TextureCacheBase::CopyEFBToCacheEntry(RcTcacheEntry& entry, bool is_depth_c
       return;
     }
   }
+  // Compute fast-path for gamma correction on RGBA8 when no scaling/clamp/filter
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) && !is_depth_copy && !is_intensity &&
+      dst_format != EFBCopyFormat::XFB && !scale_by_half && !linear_filter && gamma != 1.0f &&
+      !clamp_top && !clamp_bottom &&
+      entry->texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      src_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    MathUtil::Rectangle<int> dst_rect(0, 0, static_cast<int>(entry->texture->GetWidth()), static_cast<int>(entry->texture->GetHeight()));
+    MathUtil::Rectangle<int> src_rect_fb = framebuffer_rect;
+    if (g_gfx->TryComputeGammaRGBA8(entry->texture.get(), dst_rect, src_texture, src_rect_fb, 1.0f / gamma))
+    {
+      entry->texture->FinishedRendering();
+      g_gfx->GenerateMipmaps(entry->texture.get());
+      return;
+    }
+  }
   g_gfx->BeginUtilityDrawing();
 
   // Compute fast-path for RGBA8 2x downscale when requested via scale_by_half and simple settings
