@@ -942,6 +942,54 @@ bool Metal::Gfx::TryComputeResolveDepth(AbstractTexture* dst, const MathUtil::Re
   }
 }
 
+bool Metal::Gfx::TryComputeScaleRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                       const AbstractTexture* src,
+                                       const MathUtil::Rectangle<int>& src_rc,
+                                       u32 scale_x, u32 scale_y)
+{
+  if (!dst || !src)
+    return false;
+  if (scale_x != 2 || scale_y != 2)
+    return false;
+  if (dst_rc.GetWidth() * 2 != src_rc.GetWidth() || dst_rc.GetHeight() * 2 != src_rc.GetHeight())
+    return false;
+  @autoreleasepool
+  {
+    if (!m_rgba8_down2x_cs)
+    {
+      static const char* msl = R"(
+        #include <metal_stdlib>
+        using namespace metal;
+        kernel void main0(texture2d<float, access::read>  src [[texture(0)]],
+                          texture2d<float, access::write> dst [[texture(1)]],
+                          uint2 gid [[thread_position_in_grid]])
+        {
+          if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+          uint2 s0 = uint2(gid.x*2,   gid.y*2);
+          uint2 s1 = uint2(gid.x*2+1, gid.y*2);
+          uint2 s2 = uint2(gid.x*2,   gid.y*2+1);
+          uint2 s3 = uint2(gid.x*2+1, gid.y*2+1);
+          float4 acc = src.read(s0) + src.read(s1) + src.read(s2) + src.read(s3);
+          dst.write(acc * 0.25, gid);
+        }
+      )";
+      auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl, "", "downscale_rgba8_2x");
+      if (!cs)
+        return false;
+      m_rgba8_down2x_cs = std::move(cs);
+    }
+    SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+    SetComputeImageTexture(1, dst, false, true);
+    const u32 w = static_cast<u32>(dst_rc.GetWidth());
+    const u32 h = static_cast<u32>(dst_rc.GetHeight());
+    const u32 tgx = 16, tgy = 16;
+    const u32 gx = (w + tgx - 1) / tgx;
+    const u32 gy = (h + tgy - 1) / tgy;
+    DispatchComputeShader(m_rgba8_down2x_cs.get(), tgx, tgy, 1, gx, gy, 1);
+    return true;
+  }
+}
+
 void Metal::Gfx::GenerateMipmaps(AbstractTexture* texture)
 {
   if (!texture)

@@ -181,6 +181,15 @@ public:
     return false;
   }
 
+  // Optional compute-based scale (e.g., 2x2 -> 1x1) for RGBA8.
+  virtual bool TryComputeScaleRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                    const AbstractTexture* src,
+                                    const MathUtil::Rectangle<int>& src_rc,
+                                    u32 scale_x, u32 scale_y)
+  {
+    return false;
+  }
+
   // Returns true if a layer-expanding geometry shader should be used when rendering
   // the user interface on the output buffer.
   bool UseGeometryShaderForUI() const;

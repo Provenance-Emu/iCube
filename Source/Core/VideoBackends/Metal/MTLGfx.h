@@ -79,6 +79,9 @@ public:
   bool TryComputeResolveDepth(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
                               const AbstractTexture* src,
                               const MathUtil::Rectangle<int>& src_rc) override;
+  bool TryComputeScaleRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                            const AbstractTexture* src, const MathUtil::Rectangle<int>& src_rc,
+                            u32 scale_x, u32 scale_y) override;
 
 private:
   MRCOwned<CAMetalLayer*> m_layer;
@@ -89,10 +92,12 @@ private:
   u32 m_staging_texture_counter = 0;
   std::array<u32, 4> m_shader_counter = {};
 
-  std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
+   std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
+  std::unique_ptr<AbstractShader> m_rgba8_scale_cs;
+  std::unique_ptr<AbstractShader> m_rgba8_down2x_cs;
 
-  void CheckForSurfaceChange();
-  void CheckForSurfaceResize();
-  void SetupSurface();
+   void CheckForSurfaceChange();
+   void CheckForSurfaceResize();
+   void SetupSurface();
 };
 }  // namespace Metal

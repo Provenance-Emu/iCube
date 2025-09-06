@@ -2893,6 +2893,22 @@ void TextureCacheBase::CopyEFBToCacheEntry(RcTcacheEntry& entry, bool is_depth_c
                       g_framebuffer_manager->ResolveEFBColorTexture(framebuffer_rect);
 
   src_texture->FinishedRendering();
+  // Compute fast-path for XFB RGBA8 copies without scaling/gamma/clamp
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) && !is_depth_copy && !is_intensity &&
+      dst_format == EFBCopyFormat::XFB && !scale_by_half && !linear_filter && gamma == 1.0f &&
+      !clamp_top && !clamp_bottom &&
+      entry->texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      src_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    MathUtil::Rectangle<int> dst_rect(0, 0, static_cast<int>(entry->texture->GetWidth()), static_cast<int>(entry->texture->GetHeight()));
+    MathUtil::Rectangle<int> src_rect_fb = framebuffer_rect;
+    if (g_gfx->TryComputeBlitRGBA8(entry->texture.get(), dst_rect, src_texture, src_rect_fb))
+    {
+      entry->texture->FinishedRendering();
+      g_gfx->GenerateMipmaps(entry->texture.get());
+      return;
+    }
+  }
   g_gfx->BeginUtilityDrawing();
 
   // Fill uniform buffer.
