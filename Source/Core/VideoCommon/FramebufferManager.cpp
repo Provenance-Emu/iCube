@@ -401,6 +401,19 @@ AbstractTexture* FramebufferManager::ResolveEFBDepthTexture(const MathUtil::Rect
   MathUtil::Rectangle<int> clamped_region = region;
   clamped_region.ClampUL(0, 0, GetEFBWidth(), GetEFBHeight());
 
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) &&
+      m_efb_depth_texture->GetFormat() == AbstractTextureFormat::D32F &&
+      m_efb_depth_resolve_texture->GetFormat() == AbstractTextureFormat::D32F)
+  {
+    m_efb_depth_texture->FinishedRendering();
+    if (g_gfx->TryComputeResolveDepth(m_efb_depth_resolve_texture.get(), clamped_region,
+                                      m_efb_depth_texture.get(), clamped_region))
+    {
+      m_efb_depth_resolve_texture->FinishedRendering();
+      return m_efb_depth_resolve_texture.get();
+    }
+  }
+
   m_efb_depth_texture->FinishedRendering();
   g_gfx->BeginUtilityDrawing();
   g_gfx->SetAndDiscardFramebuffer(m_efb_depth_resolve_framebuffer.get());

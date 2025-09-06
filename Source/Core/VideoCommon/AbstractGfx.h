@@ -173,6 +173,14 @@ public:
   // Optional backend hook to generate mipmaps for a texture on the GPU.
   virtual void GenerateMipmaps(AbstractTexture* /*texture*/) {}
 
+  // Optional compute-based depth resolve (e.g., D32F) for MSAA EFB.
+  virtual bool TryComputeResolveDepth(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                     const AbstractTexture* src,
+                                     const MathUtil::Rectangle<int>& src_rc)
+  {
+    return false;
+  }
+
   // Returns true if a layer-expanding geometry shader should be used when rendering
   // the user interface on the output buffer.
   bool UseGeometryShaderForUI() const;

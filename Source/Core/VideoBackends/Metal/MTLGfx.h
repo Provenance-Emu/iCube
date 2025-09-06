@@ -76,6 +76,9 @@ public:
                            const AbstractTexture* src,
                            const MathUtil::Rectangle<int>& src_rc) override;
   void GenerateMipmaps(AbstractTexture* texture) override;
+  bool TryComputeResolveDepth(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                              const AbstractTexture* src,
+                              const MathUtil::Rectangle<int>& src_rc) override;
 
 private:
   MRCOwned<CAMetalLayer*> m_layer;
