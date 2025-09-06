@@ -411,6 +411,7 @@ AbstractTexture* FramebufferManager::ResolveEFBDepthTexture(const MathUtil::Rect
                                       m_efb_depth_texture.get(), clamped_region))
     {
       m_efb_depth_resolve_texture->FinishedRendering();
+      g_gfx->GenerateMipmaps(m_efb_depth_resolve_texture.get());
       return m_efb_depth_resolve_texture.get();
     }
   }
@@ -426,6 +427,7 @@ AbstractTexture* FramebufferManager::ResolveEFBDepthTexture(const MathUtil::Rect
   g_gfx->Draw(0, 3);
   m_efb_depth_resolve_texture->FinishedRendering();
   g_gfx->EndUtilityDrawing();
+  g_gfx->GenerateMipmaps(m_efb_depth_resolve_texture.get());
 
   return m_efb_depth_resolve_texture.get();
 }
