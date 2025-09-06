@@ -216,6 +216,14 @@ struct EmulationScreen: View {
   @State private var vbiEnabledQuick: Bool = false
   @State private var vbiPercentQuick: Int = 100
 
+#if os(iOS)
+  @State private var showSkyMenu = false
+  @State private var showSkyImporter = false
+  @State private var skyPickedURL: URL? = nil
+  @State private var showSkyClearPicker = false
+  @State private var skyLastLoadedSlot: Int = 0
+#endif
+
   var body: some View {
 #if os(tvOS)
     ZStack {
@@ -708,6 +716,45 @@ struct EmulationScreen: View {
                 platform: .ios,
                 game: game
             )
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+              HStack(spacing: 12) {
+                Button { showPauseMenu = true } label: { Image(systemName: "line.3.horizontal") }
+#if os(iOS)
+                if DOLConfigBridge.mainEmulateSkylanderPortal() && isWiiSystem {
+                  Menu {
+                    Button("Load Skylander…") { showSkyImporter = true }
+                    Button("Clear Slot…") { showSkyClearPicker = true }
+                    Button("Clear All") {
+                      DOLConfigBridge.skylanderClearAll()
+                    }
+                  } label: {
+                    Image(systemName: "externaldrive")
+                  }
+                }
+#endif
+              }
+            }
+        }
+        .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
+          if case .success(let urls) = result, let url = urls.first {
+            let started = url.startAccessingSecurityScopedResource()
+            defer { if started { url.stopAccessingSecurityScopedResource() } }
+            let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
+            if slot > 0 { skyLastLoadedSlot = slot }
+          }
+        }
+        .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {
+          ForEach(1...16, id: \.self) { slot in
+            Button("Slot \(slot)") { _ = DOLConfigBridge.skylanderRemove(atSlot: slot) }
+          }
+          if skyLastLoadedSlot > 0 {
+            Button("Clear Last Loaded (Slot \(skyLastLoadedSlot))", role: .destructive) {
+              _ = DOLConfigBridge.skylanderRemove(atSlot: skyLastLoadedSlot)
+            }
+          }
+          Button(L("Cancel"), role: .cancel) { }
         }
 
     }

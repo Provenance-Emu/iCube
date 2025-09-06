@@ -339,6 +339,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (NSArray<NSString*>*)audioBackendsForPicker;
 
+// Main.EmulatedUSBDevices (subset for iOS)
++ (BOOL)mainEmulateSkylanderPortal;
++ (void)setMainEmulateSkylanderPortal:(BOOL)enabled;
++ (NSInteger)skylanderLoadFromPath:(NSString*)path;
++ (BOOL)skylanderRemoveAtSlot:(NSInteger)slot;
++ (void)skylanderClearAll;
+
 @end
 
 NS_ASSUME_NONNULL_END

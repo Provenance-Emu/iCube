@@ -20,6 +20,10 @@
 #include "Core/Config/AchievementSettings.h"
 #include "Core/AchievementManager.h"
 #include "Common/Logging/Log.h"
+#include "Core/System.h"
+#include "Common/IOFile.h"
+#include "Core/IOS/USB/Emulated/Skylanders/Skylander.h"
+#include "Core/IOS/USB/Emulated/Skylanders/SkylanderFigure.h"
 
 @implementation DOLConfigBridge
 
@@ -391,6 +395,9 @@
 + (BOOL)gfxHackEfbDeferInvalidation { return Config::Get(Config::GFX_HACK_EFB_DEFER_INVALIDATION); }
 + (void)setGfxHackEfbDeferInvalidation:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_EFB_DEFER_INVALIDATION, (bool)enabled); }
 
++ (BOOL)mainEmulateSkylanderPortal { return Config::Get(Config::MAIN_EMULATE_SKYLANDER_PORTAL); }
++ (void)setMainEmulateSkylanderPortal:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_EMULATE_SKYLANDER_PORTAL, (bool)enabled); }
+
 + (void)resetAllToDefaults {
   // Remove user/game override layers so Base defaults take effect
   Config::RemoveLayer(Config::LayerType::GlobalGame);
@@ -453,6 +460,29 @@
       break;
   }
   Config::Save();
+}
+
++ (NSInteger)skylanderLoadFromPath:(NSString*)path
+{
+  std::string p = std::string(path.UTF8String);
+  File::IOFile sky_file(p, "r+b");
+  if (!sky_file)
+    return -1;
+  auto& system = Core::System::GetInstance();
+  u8 slot = system.GetSkylanderPortal().LoadSkylander(std::make_unique<IOS::HLE::USB::SkylanderFigure>(std::move(sky_file)));
+  return slot == 0xFF ? -1 : (slot + 1);
+}
++ (BOOL)skylanderRemoveAtSlot:(NSInteger)slot
+{
+  if (slot <= 0) return NO;
+  auto& system = Core::System::GetInstance();
+  return system.GetSkylanderPortal().RemoveSkylander((u8)(slot - 1)) ? YES : NO;
+}
++ (void)skylanderClearAll
+{
+  auto& system = Core::System::GetInstance();
+  for (int i = 0; i < 16; i++)
+    system.GetSkylanderPortal().RemoveSkylander((u8)i);
 }
 
 @end
