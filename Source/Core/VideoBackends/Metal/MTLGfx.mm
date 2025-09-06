@@ -808,21 +808,64 @@ bool Metal::Gfx::TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Recta
                                       const AbstractTexture* src,
                                       const MathUtil::Rectangle<int>& src_rc)
 {
-  // Only handle simple identical-size RGBA8 copies for now
   if (!dst || !src)
     return false;
   if (dst_rc.GetWidth() != src_rc.GetWidth() || dst_rc.GetHeight() != src_rc.GetHeight())
     return false;
   @autoreleasepool
   {
+    // Detect MSAA source
+    id<MTLTexture> src_tex = static_cast<const Texture*>(src)->GetMTLTexture();
+    id<MTLTexture> dst_tex = static_cast<Texture*>(dst)->GetMTLTexture();
+    if (!src_tex || !dst_tex)
+      return false;
+
+    // MSAA resolve path
+    if (src_tex.sampleCount > 1)
+    {
+      static std::unique_ptr<AbstractShader> s_resolve_ms_cs;
+      if (!s_resolve_ms_cs)
+      {
+        static const char* msl_ms = R"(
+          #include <metal_stdlib>
+          using namespace metal;
+          kernel void main0(texture2d_ms<float, access::read>  src  [[texture(0)]],
+                            texture2d<float,    access::write> dst  [[texture(1)]],
+                            uint2 gid [[thread_position_in_grid]])
+          {
+            if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+            const ushort samples = src.get_num_samples();
+            float4 acc = float4(0.0);
+            for (ushort s = 0; s < samples; ++s)
+              acc += src.read(gid, s);
+            dst.write(acc / float(samples), gid);
+          }
+        )";
+        auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl_ms, "", "resolve_rgba8_ms");
+        if (!cs)
+          return false;
+        s_resolve_ms_cs = std::move(cs);
+      }
+      SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+      SetComputeImageTexture(1, dst, false, true);
+      const u32 w = static_cast<u32>(dst_rc.GetWidth());
+      const u32 h = static_cast<u32>(dst_rc.GetHeight());
+      const u32 tgx = 16, tgy = 16;
+      const u32 gx = (w + tgx - 1) / tgx;
+      const u32 gy = (h + tgy - 1) / tgy;
+      DispatchComputeShader(s_resolve_ms_cs.get(), tgx, tgy, 1, gx, gy, 1);
+      return true;
+    }
+
+    // Non-MSAA copy path
     if (!m_rgba8_blit_cs)
     {
       static const char* msl = R"(
         #include <metal_stdlib>
         using namespace metal;
-        kernel void blit_rgba8(texture2d<float, access::read>  src  [[texture(0)]],
-                               texture2d<float, access::write> dst  [[texture(1)]],
-                               uint2 gid [[thread_position_in_grid]])
+        kernel void main0(texture2d<float, access::read>  src  [[texture(0)]],
+                          texture2d<float, access::write> dst  [[texture(1)]],
+                          uint2 gid [[thread_position_in_grid]])
         {
           if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
           float4 c = src.read(gid);
@@ -834,10 +877,8 @@ bool Metal::Gfx::TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Recta
         return false;
       m_rgba8_blit_cs = std::move(cs);
     }
-    // Bind textures
     SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
     SetComputeImageTexture(1, dst, false, true);
-    // Dispatch
     const u32 w = static_cast<u32>(dst_rc.GetWidth());
     const u32 h = static_cast<u32>(dst_rc.GetHeight());
     const u32 tgx = 16;
