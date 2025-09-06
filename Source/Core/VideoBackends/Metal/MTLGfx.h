@@ -72,6 +72,10 @@ public:
 
   SurfaceInfo GetSurfaceInfo() const override;
 
+  bool TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                           const AbstractTexture* src,
+                           const MathUtil::Rectangle<int>& src_rc) override;
+
 private:
   MRCOwned<CAMetalLayer*> m_layer;
   MRCOwned<id<CAMetalDrawable>> m_drawable;
@@ -80,6 +84,8 @@ private:
   u32 m_texture_counter = 0;
   u32 m_staging_texture_counter = 0;
   std::array<u32, 4> m_shader_counter = {};
+
+  std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
 
   void CheckForSurfaceChange();
   void CheckForSurfaceResize();

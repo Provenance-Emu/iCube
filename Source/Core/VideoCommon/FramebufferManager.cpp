@@ -341,7 +341,9 @@ AbstractTexture* FramebufferManager::ResolveEFBColorTexture(const MathUtil::Rect
 {
   // Return the normal EFB texture if multisampling is off.
   if (!IsEFBMultisampled())
+  {
     return m_efb_color_texture.get();
+  }
 
   // It's not valid to resolve an out-of-range rectangle.
   MathUtil::Rectangle<int> clamped_region = region;
@@ -358,6 +360,19 @@ AbstractTexture* FramebufferManager::ResolveEFBColorTexture(const MathUtil::Rect
   }
   else
   {
+    // Try compute fast-path resolve for RGBA8 when enabled
+    if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) &&
+        m_efb_color_texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+        m_efb_resolve_color_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+    {
+      m_efb_color_texture->FinishedRendering();
+      if (g_gfx->TryComputeBlitRGBA8(m_efb_resolve_color_texture.get(), clamped_region,
+                                     m_efb_color_texture.get(), clamped_region))
+      {
+        m_efb_resolve_color_texture->FinishedRendering();
+        return m_efb_resolve_color_texture.get();
+      }
+    }
     m_efb_color_texture->FinishedRendering();
     g_gfx->BeginUtilityDrawing();
     g_gfx->SetAndDiscardFramebuffer(m_efb_color_resolve_framebuffer.get());

@@ -803,3 +803,48 @@ SurfaceInfo Metal::Gfx::GetSurfaceInfo() const
   return {static_cast<u32>(drawable.width), static_cast<u32>(drawable.height), scale,
           Util::ToAbstract([m_layer pixelFormat])};
 }
+
+bool Metal::Gfx::TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                      const AbstractTexture* src,
+                                      const MathUtil::Rectangle<int>& src_rc)
+{
+  // Only handle simple identical-size RGBA8 copies for now
+  if (!dst || !src)
+    return false;
+  if (dst_rc.GetWidth() != src_rc.GetWidth() || dst_rc.GetHeight() != src_rc.GetHeight())
+    return false;
+  @autoreleasepool
+  {
+    if (!m_rgba8_blit_cs)
+    {
+      static const char* msl = R"(
+        #include <metal_stdlib>
+        using namespace metal;
+        kernel void blit_rgba8(texture2d<float, access::read>  src  [[texture(0)]],
+                               texture2d<float, access::write> dst  [[texture(1)]],
+                               uint2 gid [[thread_position_in_grid]])
+        {
+          if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+          float4 c = src.read(gid);
+          dst.write(c, gid);
+        }
+      )";
+      auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl, "", "blit_rgba8");
+      if (!cs)
+        return false;
+      m_rgba8_blit_cs = std::move(cs);
+    }
+    // Bind textures
+    SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+    SetComputeImageTexture(1, dst, false, true);
+    // Dispatch
+    const u32 w = static_cast<u32>(dst_rc.GetWidth());
+    const u32 h = static_cast<u32>(dst_rc.GetHeight());
+    const u32 tgx = 16;
+    const u32 tgy = 16;
+    const u32 gx = (w + tgx - 1) / tgx;
+    const u32 gy = (h + tgy - 1) / tgy;
+    DispatchComputeShader(m_rgba8_blit_cs.get(), tgx, tgy, 1, gx, gy, 1);
+    return true;
+  }
+}
