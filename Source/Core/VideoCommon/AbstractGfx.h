@@ -170,6 +170,9 @@ public:
     return false;
   }
 
+  // Optional backend hook to generate mipmaps for a texture on the GPU.
+  virtual void GenerateMipmaps(AbstractTexture* /*texture*/) {}
+
   // Returns true if a layer-expanding geometry shader should be used when rendering
   // the user interface on the output buffer.
   bool UseGeometryShaderForUI() const;

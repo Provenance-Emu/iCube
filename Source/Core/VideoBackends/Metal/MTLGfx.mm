@@ -848,3 +848,22 @@ bool Metal::Gfx::TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Recta
     return true;
   }
 }
+
+void Metal::Gfx::GenerateMipmaps(AbstractTexture* texture)
+{
+  if (!texture)
+    return;
+  @autoreleasepool
+  {
+    g_state_tracker->EndRenderPass();
+    id<MTLTexture> tex = static_cast<Texture*>(texture)->GetMTLTexture();
+    if (!tex || tex.mipmapLevelCount <= 1)
+      return;
+    id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
+    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+    if (!blit)
+      return;
+    [blit generateMipmapsForTexture:tex];
+    [blit endEncoding];
+  }
+}

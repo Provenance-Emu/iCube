@@ -75,6 +75,7 @@ public:
   bool TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
                            const AbstractTexture* src,
                            const MathUtil::Rectangle<int>& src_rc) override;
+  void GenerateMipmaps(AbstractTexture* texture) override;
 
 private:
   MRCOwned<CAMetalLayer*> m_layer;

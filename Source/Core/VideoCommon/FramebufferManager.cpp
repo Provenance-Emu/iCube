@@ -421,6 +421,23 @@ bool FramebufferManager::ReinterpretPixelData(EFBReinterpretType convtype)
   if (!m_format_conversion_pipelines[static_cast<u32>(convtype)])
     return false;
 
+  // Compute fast-path for simple RGBA8 blit (no scaling) when enabled
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) &&
+      m_efb_color_texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      m_efb_convert_color_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    m_efb_color_texture->FinishedRendering();
+    const MathUtil::Rectangle<int> rect = m_efb_framebuffer->GetRect();
+    if (g_gfx->TryComputeBlitRGBA8(m_efb_convert_color_texture.get(), rect, m_efb_color_texture.get(), rect))
+    {
+      std::swap(m_efb_color_texture, m_efb_convert_color_texture);
+      std::swap(m_efb_framebuffer, m_efb_convert_framebuffer);
+      InvalidatePeekCache(true);
+      g_gfx->GenerateMipmaps(m_efb_color_texture.get());
+      return true;
+    }
+  }
+
   // Draw to the secondary framebuffer.
   // We don't discard here because discarding the framebuffer also throws away the depth
   // buffer, which we want to preserve. If we find this to be hindering performance in the
@@ -438,6 +455,7 @@ bool FramebufferManager::ReinterpretPixelData(EFBReinterpretType convtype)
   std::swap(m_efb_framebuffer, m_efb_convert_framebuffer);
   g_gfx->EndUtilityDrawing();
   InvalidatePeekCache(true);
+  g_gfx->GenerateMipmaps(m_efb_color_texture.get());
   return true;
 }
 
