@@ -162,6 +162,14 @@ public:
   // Called when the configuration changes, and backend structures need to be updated.
   virtual void OnConfigChanged(u32 changed_bits);
 
+  // Optional compute-based blit/convert path for backends that support it.
+  virtual bool TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                   const AbstractTexture* src,
+                                   const MathUtil::Rectangle<int>& src_rc)
+  {
+    return false;
+  }
+
   // Returns true if a layer-expanding geometry shader should be used when rendering
   // the user interface on the output buffer.
   bool UseGeometryShaderForUI() const;
