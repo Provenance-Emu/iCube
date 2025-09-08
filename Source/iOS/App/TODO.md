@@ -28,10 +28,10 @@
 
 ## All Platforms
 
-- [ ] Library refresh isn't great, especially webav online/offline detection and force refresh
-- [ ] Player 2 on wii always connected
-- [ ] cancel wii update doesn't cancel
-- [ ] text input hints for wedav sources
+- [X] Library refresh isn't great, especially webav online/offline detection and force refresh
+- [X] Player 2 on wii always connected
+- [X] cancel wii update doesn't cancel
+- [X] text input hints for wedav sources
 - [ ] better filter for webdav sources localhost
 - [X] FF / Pause menu gestures are wrong / conflicting
 - [X] Remove extra logging when done
