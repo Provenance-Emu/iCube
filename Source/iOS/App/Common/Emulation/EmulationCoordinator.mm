@@ -540,12 +540,22 @@ static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev
   {
     const std::string sysDirWM = wm->GetConfig()->GetSysProfileDirectoryPath();
     const std::string userDirWM = wm->GetConfig()->GetUserProfileDirectoryPath();
-    const std::string sysProfileWM = sysDirWM + (sysDirWM.empty() || sysDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
-    const std::string userProfileWM = userDirWM + (userDirWM.empty() || userDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+    const auto join = [](const std::string& dir, const char* file) {
+      return dir + (dir.empty() || dir.back() == '/' ? "" : "/") + std::string(file);
+    };
+    // Prefer MotionPlus profile to ensure gyro is enabled by default
+    const std::string sysMP = join(sysDirWM, "Wii Remote with MotionPlus Pointing.ini");
+    const std::string userMP = join(userDirWM, "Wii Remote with MotionPlus Pointing.ini");
+    const std::string sysTS = join(sysDirWM, "Touchscreen.ini");
+    const std::string userTS = join(userDirWM, "Touchscreen.ini");
     Common::IniFile iniWM;
-    if (File::Exists(userProfileWM) && iniWM.Load(userProfileWM))
+    if (File::Exists(userMP) && iniWM.Load(userMP))
       wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
-    else if (File::Exists(sysProfileWM) && iniWM.Load(sysProfileWM))
+    else if (File::Exists(sysMP) && iniWM.Load(sysMP))
+      wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
+    else if (File::Exists(userTS) && iniWM.Load(userTS))
+      wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
+    else if (File::Exists(sysTS) && iniWM.Load(sysTS))
       wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
     else
       wm->LoadDefaults(g_controller_interface);
