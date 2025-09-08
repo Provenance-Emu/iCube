@@ -236,6 +236,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
 
   private func sendIR(x: CGFloat, y: CGFloat) {
     #if os(iOS)
+    guard mode != .none else { return }
     let axisStartIdx = TCButtonType.wiiInfrared
     for (i, axis) in [y, y, x, x].enumerated() {
       let idx = axisStartIdx.rawValue + i + 1

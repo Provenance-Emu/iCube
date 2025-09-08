@@ -774,6 +774,10 @@ struct EmulationScreen: View {
         // Reconcile and ensure Pad 1 defaults to touchscreen if needed
         ControllerManager.shared.reconcile()
         EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
+        // Ensure only Wiimote 1 is Emulated; disable Wiimote 2-4
+        DOLConfigBridge.setWiimoteSourceFor(2, source: 0)
+        DOLConfigBridge.setWiimoteSourceFor(3, source: 0)
+        DOLConfigBridge.setWiimoteSourceFor(4, source: 0)
         #if os(iOS)
         ReplayKitManager.shared.startBufferingIfEnabled()
         if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
@@ -880,6 +884,10 @@ struct EmulationScreen: View {
         touchPadsRefreshToken = UUID()
         if controllerManager.overlayMode == .wii {
             DOLConfigBridge.setWiimoteSourceFor(1, source: 1)
+            // Ensure only Wiimote 1 enabled for overlay
+            DOLConfigBridge.setWiimoteSourceFor(2, source: 0)
+            DOLConfigBridge.setWiimoteSourceFor(3, source: 0)
+            DOLConfigBridge.setWiimoteSourceFor(4, source: 0)
             DOLConfigBridge.setConnectWiimotesForControllerInterface(true)
             EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
         }

@@ -10,6 +10,8 @@ final class ControllerManager: NSObject, ObservableObject {
   enum OverlayMode: Int { case auto, gamecube, wii }
   @Published var overlayVisible: Bool = true
   @Published var overlayMode: OverlayMode = .auto { didSet { if overlayMode == .wii { ensureWiimote1EmulatedTouchscreen() } } }
+  // Map GCController -> Wiimote slot (1-based). Slot 1 reserved for on-screen Touch.
+  private var wiimoteSlotByController: [ObjectIdentifier: Int] = [:]
   @Published var isWiiSystem: Bool = false
 
   final class PresetManager: NSObject {
@@ -58,6 +60,7 @@ final class ControllerManager: NSObject, ObservableObject {
         self.configureControllerForCurrentPlatform(c)
         self.presets.applyCurrentPreset()
         EmulationCoordinator.autoAssignNewestExternalControllerToFirstAvailableSlot()
+        self.updateWiimoteEmulationForExternalControllers()
         // Battery toast if available
         if #available(iOS 14.0, tvOS 14.0, *), let battery = c.battery {
           let level = battery.batteryLevel
@@ -79,6 +82,7 @@ final class ControllerManager: NSObject, ObservableObject {
       self.presets.applyCurrentPreset()
       self.controllerDisconnectedSubject.send(c)
       self.reconcile()
+      self.updateWiimoteEmulationForExternalControllers()
     }
     observers.append(contentsOf: [onConnect, onDisconnect])
 
@@ -174,6 +178,7 @@ final class ControllerManager: NSObject, ObservableObject {
     DOLConfigBridge.setWiimoteSourceFor(1, source: 1)
     DOLConfigBridge.setConnectWiimotesForControllerInterface(true)
     EmulationCoordinator.ensureWiimoteDefaultsToTouchscreen(forPort: 1)
+    updateWiimoteEmulationForExternalControllers()
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
   }
 
@@ -209,5 +214,39 @@ final class ControllerManager: NSObject, ObservableObject {
 
   func defaultDeviceQualifier(forGCPort portOneBased: Int) -> String {
     return TVControllerMappingBridge.defaultDevice(forGCPort: portOneBased) as String
+  }
+
+  // MARK: Wiimote Emulation for External Controllers
+  private func controllerSupportsTouchpad(_ c: GCController) -> Bool {
+    if #available(iOS 14.0, tvOS 14.0, *) {
+      if let ds = c.extendedGamepad as? GCDualSenseGamepad { return ds.touchpadPrimary != nil }
+      if let ds4 = c.extendedGamepad as? GCDualShockGamepad { return ds4.touchpadPrimary != nil }
+    }
+    return false
+  }
+
+  // Assign Wiimote slots 2..4 to external controllers that have a touchpad (DS4/DS5).
+  // Slot 1 remains for the on-screen touch overlay.
+  func updateWiimoteEmulationForExternalControllers() {
+    var nextSlot = 2
+    wiimoteSlotByController.removeAll()
+
+    // Disable all P2–P4 by default
+    for s in 2...4 { DOLConfigBridge.setWiimoteSourceFor(s, source: 0) }
+
+    for c in GCController.controllers() {
+      guard nextSlot <= 4 else { break }
+      guard controllerSupportsTouchpad(c) else { continue }
+      wiimoteSlotByController[ObjectIdentifier(c)] = nextSlot
+      DOLConfigBridge.setWiimoteSourceFor(nextSlot, source: 1)
+      EmulationCoordinator.ensureWiimoteDefaultsToTouchscreen(forPort: nextSlot)
+      nextSlot += 1
+    }
+    NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
+  }
+
+  // Resolve Wiimote slot (1-based) for a controller if assigned for touch IR.
+  func wiimoteIndex(for controller: GCController) -> Int? {
+    return wiimoteSlotByController[ObjectIdentifier(controller)]
   }
 }

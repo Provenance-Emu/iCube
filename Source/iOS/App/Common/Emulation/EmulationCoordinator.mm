@@ -350,6 +350,9 @@ after_pad1:
     {
       // Set Wiimote source to Emulated for port 0
       Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(0), WiimoteSource::Emulated);
+      // Explicitly disable Wiimote 2-4 to avoid phantom P2 on Wii IR
+      for (int i = 1; i < std::min(4, Wiimote::GetConfig()->GetControllerCount()); ++i)
+        Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(i), WiimoteSource::None);
 
       // If Touchscreen is assigned to another Wiimote index, respect it
       const int wcount = Wiimote::GetConfig()->GetControllerCount();
