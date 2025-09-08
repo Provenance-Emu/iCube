@@ -297,10 +297,13 @@ func installInputDebugHandlers(_ c: GCController) {
                     }
 
                     // Push to Wii IR axes: order [Y, Y, X, X] to match TCWiiPad
-                    let base = TCButtonType.wiiInfrared.rawValue
-                    let values: [Float] = [outY, outY, outX, outX]
-                    for (i, v) in values.enumerated() {
-                        TCManagerInterface.setAxisValueFor(base + i + 1, controller: 0, value: v)
+                    if let slot = ControllerManager.shared.wiimoteIndex(for: c) {
+                        let controllerId = 3 + slot
+                        let base = TCButtonType.wiiInfrared.rawValue
+                        let values: [Float] = [outY, outY, outX, outX]
+                        for (i, v) in values.enumerated() {
+                            TCManagerInterface.setAxisValueFor(base + i + 1, controller: controllerId, value: v)
+                        }
                     }
                 }
 
@@ -319,22 +322,28 @@ func installInputDebugHandlers(_ c: GCController) {
                 let ay = Float(m.userAcceleration.y)
                 let az = Float(m.userAcceleration.z)
                 // Accelerometer -> Wii accel axes
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: 0, value: ax)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: 0, value: ax)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: 0, value: ay)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: 0, value: ay)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: 0, value: az)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: 0, value: az)
+                if let slot = ControllerManager.shared.wiimoteIndex(for: c) {
+                    let controllerId = 3 + slot
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: controllerId, value: ax)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: controllerId, value: ax)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: controllerId, value: ay)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: controllerId, value: ay)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: controllerId, value: az)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: controllerId, value: az)
+                }
                 // Gyro -> Wii gyro axes
                 let gx = Float(m.rotationRate.x)
                 let gy = Float(m.rotationRate.y)
                 let gz = Float(m.rotationRate.z)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: 0, value: gx)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: 0, value: gx)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: 0, value: gy)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: 0, value: gy)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: 0, value: gz)
-                TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: 0, value: gz)
+                if let slot = ControllerManager.shared.wiimoteIndex(for: c) {
+                    let controllerId = 3 + slot
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: controllerId, value: gx)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: controllerId, value: gx)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: controllerId, value: gy)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: controllerId, value: gy)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: controllerId, value: gz)
+                    TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: controllerId, value: gz)
+                }
                 if UserDefaults.standard.bool(forKey: "input_debug") {
                     NSLog("[INPUT][Motion] acc(%.2f,%.2f,%.2f) rot(%.2f,%.2f,%.2f)", ax, ay, az, gx, gy, gz)
                 }
