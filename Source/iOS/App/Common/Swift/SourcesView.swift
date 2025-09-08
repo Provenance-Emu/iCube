@@ -24,16 +24,11 @@ struct SourcesView: View {
                                         Text(url)
                                             .font(.footnote)
                                             .foregroundStyle(.secondary)
-                                            .textInputAutocapitalization(.never)
-                                            .autocorrectionDisabled(true)
-                                            .textContentType(.url)
                                     }
                                     if let sp = (s as? WebDAVSource)?.startPathComponent, !sp.isEmpty {
                                         Text("Start: \(sp)")
                                             .font(.footnote)
                                             .foregroundStyle(.tertiary)
-                                            .autocorrectionDisabled(true)
-                                            .textInputAutocapitalization(.never)
                                     }
                                 }
                                 Spacer()
@@ -120,11 +115,11 @@ private struct AddWebDAVSourceView: View {
                 TextField("URL (e.g., http://192.168.1.29:8080)", text: $url)
                   .autocorrectionDisabled(true)
                   .textInputAutocapitalization(.never)
-                  .textContentType(.url)
+                  .keyboardType(.URL)
                 TextField("Start Path (optional) (`Software` for other DolphiniOS instances)", text: $startPath)
                   .autocorrectionDisabled(true)
                   .textInputAutocapitalization(.never)
-                  .textContentType(.url)
+                  .keyboardType(.URL)
               }
               Section("Authentication") {
                 TextField("Username (optional)", text: $username)
