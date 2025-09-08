@@ -22,10 +22,12 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
         return true
     }
 
+    @MainActor
     @objc private func reindexOnLibraryUpdate() {
         indexAllGames()
     }
 
+    @MainActor
     @objc private func reindexOnMetadataUpdate(_ note: Notification) {
         // Reindex just the one if we have its filePath; otherwise fall back to all
         if let filePath = note.userInfo?["filePath"] as? String {
@@ -35,16 +37,19 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
         }
     }
 
+    @MainActor
     private func indexAllGames() {
         let games = TVLibraryBridge.currentGames()
         index(items: games)
     }
 
+    @MainActor
     private func indexGames(matching predicate: (TVGameItem) -> Bool) {
         let games = TVLibraryBridge.currentGames().filter(predicate)
         index(items: games)
     }
 
+    @MainActor
     private func index(items: [TVGameItem]) {
 #if !os(tvOS)
         var searchable: [CSSearchableItem] = []
