@@ -199,6 +199,16 @@ public:
     return false;
   }
 
+  // Optional compute-based EFB copy filter for RGBA8 (with optional gamma and clamping).
+  virtual bool TryComputeEFBFilterRGBA8(
+      AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc, const AbstractTexture* src,
+      const MathUtil::Rectangle<int>& src_rc, const std::array<u32, 3>& filter_coefficients,
+      bool efb_has_alpha, float gamma_rcp, float clamp_top, float clamp_bottom,
+      bool allow_overflow)
+  {
+    return false;
+  }
+
   // Returns true if a layer-expanding geometry shader should be used when rendering
   // the user interface on the output buffer.
   bool UseGeometryShaderForUI() const;
