@@ -177,6 +177,8 @@
 - (NSArray<TVGameItem*>*)currentGames {
   NSMutableArray<TVGameItem*>* items = [[NSMutableArray alloc] init];
   size_t count = 0;
+  
+  if (!self->_cache) { return nil; }
 
   self->_cache->ForEach([items, &count](const std::shared_ptr<const UICommon::GameFile>& game) {
     // Protect against null GameFile shared_ptr in cache
@@ -187,7 +189,9 @@
 
     // Additional safety check - ensure GameFile is valid
     if (!game->IsValid()) {
+#ifdef DEBUG
       printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
+#endif
       return;
     }
 
@@ -196,13 +200,17 @@
     TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];
     [items addObject:item];
 
+#ifdef DEBUG
     if (count < 20) {
       NSLog(@"  [%zu]: %s (isRemote: %s)", count, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
     }
+#endif
     count++;
   });
 
+#ifdef DEBUG
   NSLog(@"GameFileCacheManager: currentGames returning %lu game files from cache", (unsigned long)count);
+#endif
   return items;
 }
 
