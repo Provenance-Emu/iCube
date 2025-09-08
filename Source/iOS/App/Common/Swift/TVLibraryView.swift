@@ -320,6 +320,9 @@ struct TVLibraryView: View {
   @State private var gridColumnCount: Int = 3
   @State private var dropTargeted: Bool = false
   @State private var dropPreviewCount: Int = 0
+  // Library GCController observers
+  @State private var libGCConnectObs: NSObjectProtocol?
+  @State private var libGCDisconnectObs: NSObjectProtocol?
 #endif
 
   /// Storage space management
@@ -557,16 +560,19 @@ struct TVLibraryView: View {
             let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
             let newIndex = max(0, idx - 1)
             focusedFilePath = (displayGames.indices.contains(newIndex) ? displayGames[newIndex].filePath : displayGames.first?.filePath)
+            if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] DPad Left -> index=\(newIndex)") }
           },
           onRight: {
             let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
             let newIndex = min(displayGames.count - 1, idx + 1)
             focusedFilePath = (displayGames.indices.contains(newIndex) ? displayGames[newIndex].filePath : displayGames.last?.filePath)
+            if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] DPad Right -> index=\(newIndex)") }
           },
           onUp: {
             let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
             let newIndex = max(0, idx - count)
             focusedFilePath = (displayGames.indices.contains(newIndex) ? displayGames[newIndex].filePath : displayGames.first?.filePath)
+            if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] DPad Up -> index=\(newIndex)") }
           },
           onDown: {
             let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
@@ -581,12 +587,35 @@ struct TVLibraryView: View {
           }
         )) : AnyView(EmptyView()))
         .onAppear {
+          emulationRunning = false
+          if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] onAppear: controllers=\(GCController.controllers().count)") }
+          // Library should own controller handlers; stop global observers to avoid overrides
+          ControllerManager.shared.stopObserving()
+          GCController.shouldMonitorBackgroundEvents = false
+          for c in GCController.controllers() {
+            c.extendedGamepad?.valueChangedHandler = nil
+            c.microGamepad?.valueChangedHandler = nil
+            c.controllerPausedHandler = { _ in }
+            if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] cleared handlers for \(c.vendorName ?? "(nil)")") }
+            // Ensure microGamepad behaves sanely for library nav
+            if let mg = c.microGamepad { mg.reportsAbsoluteDpadValues = true; mg.allowsRotation = true }
+          }
+          if GCController.controllers().isEmpty { GCController.startWirelessControllerDiscovery(completionHandler: {}) }
+          if focusedFilePath == nil, let first = displayGames.first?.filePath { focusedFilePath = first }
           setupControllerNavigation(columns: count)
           emuStartObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
             emulationRunning = true
             teardownControllerNavigation()
           }
           emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
+        }
+        .task {
+          gridColumnCount = count
+          if !emulationRunning { setupControllerNavigation(columns: count) }
+        }
+        .onChangeCompat(of: count) { _, newVal in
+          gridColumnCount = newVal
+          if !emulationRunning { setupControllerNavigation(columns: newVal) }
         }
         .onReceive(ControllerManager.shared.controllerConnectedPublisher) { _ in
           ControllerStyleManager.shared.refreshDetection()
@@ -605,10 +634,10 @@ struct TVLibraryView: View {
         .onDisappear {
           if let t = emuStartObs { NotificationCenter.default.removeObserver(t); emuStartObs = nil }
           if let t = emuEndObs { NotificationCenter.default.removeObserver(t); emuEndObs = nil }
+          if let t = libGCConnectObs { NotificationCenter.default.removeObserver(t); libGCConnectObs = nil }
+          if let t = libGCDisconnectObs { NotificationCenter.default.removeObserver(t); libGCDisconnectObs = nil }
           teardownControllerNavigation()
         }
-        .task { gridColumnCount = count }
-        .onChangeCompat(of: count) { _, newVal in gridColumnCount = newVal }
       }
     }
 #else
@@ -1508,7 +1537,6 @@ struct TVLibraryView: View {
         let cid = ObjectIdentifier(c)
         if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
         egp.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
-          if emulationRunning { return }
           guard !model.games.isEmpty else { return }
           let index: Int = {
             if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
@@ -1556,7 +1584,6 @@ struct TVLibraryView: View {
         let cid = ObjectIdentifier(c)
         if prevMGPHandlers[cid] == nil { prevMGPHandlers[cid] = mgp.valueChangedHandler }
         mgp.valueChangedHandler = {(gamepad: GCMicroGamepad, element: GCControllerElement) in
-          if emulationRunning { return }
           guard !model.games.isEmpty else { return }
           let index: Int = {
             if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
