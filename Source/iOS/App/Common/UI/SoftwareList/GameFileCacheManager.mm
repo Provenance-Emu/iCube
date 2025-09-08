@@ -178,12 +178,14 @@
   static dispatch_queue_t _enumQueue;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{ _enumQueue = dispatch_queue_create("org.dolphin-ios.gamefilecache.enum", DISPATCH_QUEUE_SERIAL); });
-  __block NSMutableArray<TVGameItem*>* items = [[NSMutableArray alloc] init];
-  __block size_t count = 0;
   if (!self->_cache) { return nil; }
+  __block NSArray<TVGameItem*>* result = nil;
+  __block size_t countLogged = 0;
 
   dispatch_sync(_enumQueue, ^{
-    self->_cache->ForEach([items, &count](const std::shared_ptr<const UICommon::GameFile>& game) {
+    NSMutableArray<TVGameItem*>* localItems = [[NSMutableArray alloc] init];
+    size_t localCount = 0;
+    self->_cache->ForEach([&](const std::shared_ptr<const UICommon::GameFile>& game) {
       // Protect against null GameFile shared_ptr in cache
       if (!game) {
         printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
@@ -201,21 +203,23 @@
       GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
       wrapper.gameFile = game;
       TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];
-      [items addObject:item];
+      [localItems addObject:item];
 
 #ifdef DEBUG
-      if (count < 20) {
-        NSLog(@"  [%zu]: %s (isRemote: %s)", count, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
+      if (localCount < 20) {
+        NSLog(@"  [%zu]: %s (isRemote: %s)", localCount, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
       }
 #endif
-      count++;
+      localCount++;
     });
+    result = [localItems copy];
+    countLogged = localCount;
   });
 
 #ifdef DEBUG
-  NSLog(@"GameFileCacheManager: currentGames returning %lu game files from cache", (unsigned long)count);
+  NSLog(@"GameFileCacheManager: currentGames returning %lu game files from cache", (unsigned long)countLogged);
 #endif
-  return items;
+  return result;
 }
 
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
