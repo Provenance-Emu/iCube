@@ -739,14 +739,22 @@ struct TVLibraryView: View {
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Menu {
-        Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
-        Button(L("Perform Online System Update")) { model.performOnlineSystemUpdate() }
-        Button(L("Import BootMii NAND Backup…")) {
+        Button(action: { model.loadGameCubeMainMenu() }) {
+          Label(L("Load GameCube Main Menu"), systemImage: "gamecontroller")
+        }
+        Button(action: { model.performOnlineSystemUpdate() }) {
+          Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
+        }
+        Button(action: {
 #if os(iOS) || targetEnvironment(macCatalyst)
           showImportNANDPicker = true
 #endif
+        }) {
+          Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
         }
-        Button(L("Sources")) { showSources = true }
+        Button(action: { showSources = true }) {
+          Label(L("Sources"), systemImage: "externaldrive.badge.plus")
+        }
       } label: {
         Image(systemName: "ellipsis.circle")
       }
