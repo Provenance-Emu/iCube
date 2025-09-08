@@ -142,12 +142,11 @@ func installInputDebugHandlers(_ c: GCController) {
             InputOverriderBridge.setControl(.gcPadDpadLeft, controller: 0, value: gamepad.dpad.left.isPressed ? 1.0 : 0.0)
             InputOverriderBridge.setControl(.gcPadDpadRight, controller: 0, value: gamepad.dpad.right.isPressed ? 1.0 : 0.0)
             InputOverriderBridge.setControl(.gcPadLAnalog, controller: 0, value: Double(gamepad.leftTrigger.value))
-            let r2Half: Double = gamepad.rightTrigger.isPressed ? 0.49 : 0.0
-            let rAnalog = max(Double(gamepad.rightTrigger.value), r2Half)
-            InputOverriderBridge.setControl(.gcPadRAnalog, controller: 0, value: rAnalog)
-            // Map shoulders to digital L/R
+            // R2 is pure analog R; R1 should map to Z
+            InputOverriderBridge.setControl(.gcPadRAnalog, controller: 0, value: Double(gamepad.rightTrigger.value))
+            // Map shoulders: L1 -> L digital, R1 -> Z digital (not R digital)
             InputOverriderBridge.setControl(.gcPadLDigital, controller: 0, value: gamepad.leftShoulder.isPressed ? 1.0 : 0.0)
-            InputOverriderBridge.setControl(.gcPadRDigital, controller: 0, value: gamepad.rightShoulder.isPressed ? 1.0 : 0.0)
+            InputOverriderBridge.setControl(.gcPadZ, controller: 0, value: gamepad.rightShoulder.isPressed ? 1.0 : 0.0)
             InputOverriderBridge.setControl(.gcPadMainStickX, controller: 0, value: Double(gamepad.leftThumbstick.xAxis.value))
             InputOverriderBridge.setControl(.gcPadMainStickY, controller: 0, value: Double(gamepad.leftThumbstick.yAxis.value))
             // Map right thumbstick to C-Stick
@@ -163,9 +162,7 @@ func installInputDebugHandlers(_ c: GCController) {
             TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonLeft.rawValue, controller: 0, state: gamepad.dpad.left.isPressed)
             TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonRight.rawValue, controller: 0, state: gamepad.dpad.right.isPressed)
             TCManagerInterface.setAxisValueFor(TCButtonType.gcTriggerL.rawValue, controller: 0, value: gamepad.leftTrigger.value)
-            let r2Half2: Double = gamepad.rightTrigger.isPressed ? 0.49 : 0.0
-            let rAnalog2 = max(Double(gamepad.rightTrigger.value), r2Half2)
-            TCManagerInterface.setAxisValueFor(TCButtonType.gcTriggerR.rawValue, controller: 0, value: Float(rAnalog2))
+            TCManagerInterface.setAxisValueFor(TCButtonType.gcTriggerR.rawValue, controller: 0, value: gamepad.rightTrigger.value)
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickMain.rawValue, controller: 0, value: gamepad.leftThumbstick.xAxis.value)
             let ly = gamepad.leftThumbstick.yAxis.value
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickMain.rawValue + 2, controller: 0, value: max(0, ly))
@@ -175,6 +172,19 @@ func installInputDebugHandlers(_ c: GCController) {
             let cy = gamepad.rightThumbstick.yAxis.value
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickC.rawValue + 2, controller: 0, value: max(0, cy))
             TCManagerInterface.setAxisValueFor(TCButtonType.gcStickC.rawValue + 3, controller: 0, value: max(0, -cy))
+            // Non-gesture Wiimote shake: map L3/R3 press to a short shake pulse on the assigned Wiimote slot
+            if #available(iOS 12.0, tvOS 14.0, *), let slot = ControllerManager.shared.wiimoteIndex(for: c) {
+                let controllerId = 3 + slot
+                let pulse: () -> Void = {
+                    let b = TCButtonType.wiiShakeZ.rawValue
+                    TCManagerInterface.setButtonStateFor(b, controller: controllerId, state: true)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+                        TCManagerInterface.setButtonStateFor(b, controller: controllerId, state: false)
+                    }
+                }
+                if let l3 = gamepad.leftThumbstickButton, element === l3, l3.isPressed { pulse() }
+                if let r3 = gamepad.rightThumbstickButton, element === r3, r3.isPressed { pulse() }
+            }
             // 4x turbo while all four shoulders/triggers held
             let controllerId = ObjectIdentifier(c)
             // Use analog threshold for triggers to be more reliable across controllers
