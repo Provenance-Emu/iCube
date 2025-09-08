@@ -175,37 +175,41 @@
 }
 
 - (NSArray<TVGameItem*>*)currentGames {
-  NSMutableArray<TVGameItem*>* items = [[NSMutableArray alloc] init];
-  size_t count = 0;
-  
+  static dispatch_queue_t _enumQueue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{ _enumQueue = dispatch_queue_create("org.dolphin-ios.gamefilecache.enum", DISPATCH_QUEUE_SERIAL); });
+  __block NSMutableArray<TVGameItem*>* items = [[NSMutableArray alloc] init];
+  __block size_t count = 0;
   if (!self->_cache) { return nil; }
 
-  self->_cache->ForEach([items, &count](const std::shared_ptr<const UICommon::GameFile>& game) {
-    // Protect against null GameFile shared_ptr in cache
-    if (!game) {
-      printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
-      return;
-    }
+  dispatch_sync(_enumQueue, ^{
+    self->_cache->ForEach([items, &count](const std::shared_ptr<const UICommon::GameFile>& game) {
+      // Protect against null GameFile shared_ptr in cache
+      if (!game) {
+        printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
+        return;
+      }
 
-    // Additional safety check - ensure GameFile is valid
-    if (!game->IsValid()) {
+      // Additional safety check - ensure GameFile is valid
+      if (!game->IsValid()) {
 #ifdef DEBUG
-      printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
+        printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
 #endif
-      return;
-    }
+        return;
+      }
 
-    GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
-    wrapper.gameFile = game;
-    TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];
-    [items addObject:item];
+      GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
+      wrapper.gameFile = game;
+      TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];
+      [items addObject:item];
 
 #ifdef DEBUG
-    if (count < 20) {
-      NSLog(@"  [%zu]: %s (isRemote: %s)", count, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
-    }
+      if (count < 20) {
+        NSLog(@"  [%zu]: %s (isRemote: %s)", count, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
+      }
 #endif
-    count++;
+      count++;
+    });
   });
 
 #ifdef DEBUG
