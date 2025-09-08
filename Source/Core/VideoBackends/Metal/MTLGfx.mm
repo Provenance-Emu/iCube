@@ -1037,6 +1037,95 @@ bool Metal::Gfx::TryComputeGammaRGBA8(AbstractTexture* dst, const MathUtil::Rect
   }
 }
 
+bool Metal::Gfx::TryComputeEFBFilterRGBA8(
+    AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc, const AbstractTexture* src,
+    const MathUtil::Rectangle<int>& src_rc, const std::array<u32, 3>& filter_coefficients,
+    bool efb_has_alpha, float gamma_rcp, float clamp_top, float clamp_bottom, bool allow_overflow)
+{
+  if (!dst || !src)
+    return false;
+  if (dst_rc.GetWidth() != src_rc.GetWidth() || dst_rc.GetHeight() != src_rc.GetHeight())
+    return false;
+  @autoreleasepool
+  {
+    if (!m_rgba8_filter_cs)
+    {
+      static const char* msl = R"(
+        #include <metal_stdlib>
+        using namespace metal;
+        struct Params {
+          uint3 filter_coefficients;
+          float gamma_rcp;
+          float clamp_top;
+          float clamp_bottom;
+          uint efb_has_alpha;
+          uint allow_overflow;
+          float pixel_height;
+        };
+        inline float4 sample_clamped(texture2d<float, access::read> tex, float2 uv, float clamp_top, float clamp_bottom)
+        {
+          const uint w = tex.get_width();
+          const uint h = tex.get_height();
+          float y = clamp(uv.y, clamp_top, clamp_bottom);
+          uint2 coord = uint2(clamp(uint(uv.x), 0u, w-1u), clamp(uint(y), 0u, h-1u));
+          return tex.read(coord);
+        }
+        kernel void main0(texture2d<float, access::read>  src [[texture(0)]],
+                          texture2d<float, access::write> dst [[texture(1)]],
+                          constant Params& p [[buffer(0)]],
+                          uint2 gid [[thread_position_in_grid]])
+        {
+          if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+          float2 uv = float2(gid);
+          float y_top = uv.y - 1.0;
+          float y_bot = uv.y + 1.0;
+          // Apply integer line clamping in pixel space
+          y_top = clamp(y_top, p.clamp_top, p.clamp_bottom);
+          y_bot = clamp(y_bot, p.clamp_top, p.clamp_bottom);
+          float4 prev_row = src.read(uint2(gid.x, uint(y_top)));
+          float4 curr_row = src.read(gid);
+          float4 next_row = src.read(uint2(gid.x, uint(y_bot)));
+          float3 combined = prev_row.rgb * float(p.filter_coefficients.x) +
+                            curr_row.rgb * float(p.filter_coefficients.y) +
+                            next_row.rgb * float(p.filter_coefficients.z);
+          combined *= (1.0 / 64.0);
+          if (p.allow_overflow == 0u)
+            combined = clamp(combined, float3(0.0), float3(1.0));
+          float a = p.efb_has_alpha != 0u ? curr_row.a : 1.0;
+          float3 rgb = (p.gamma_rcp != 1.0) ? pow(max(combined, float3(0.0)), float3(p.gamma_rcp)) : combined;
+          dst.write(float4(rgb, a), gid);
+        }
+      )";
+      auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl, "", "efb_filter_rgba8");
+      if (!cs)
+        return false;
+      m_rgba8_filter_cs = std::move(cs);
+    }
+    SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+    SetComputeImageTexture(1, dst, false, true);
+    struct Params
+    {
+      uint32_t filter_coefficients[3];
+      float gamma_rcp;
+      float clamp_top;
+      float clamp_bottom;
+      uint32_t efb_has_alpha;
+      uint32_t allow_overflow;
+      float pixel_height;
+    } params = { {filter_coefficients[0], filter_coefficients[1], filter_coefficients[2]},
+                 gamma_rcp, clamp_top, clamp_bottom, efb_has_alpha ? 1u : 0u,
+                 allow_overflow ? 1u : 0u, 0.0f };
+    g_state_tracker->SetUtilityUniform(&params, sizeof(params));
+    const u32 w = static_cast<u32>(dst_rc.GetWidth());
+    const u32 h = static_cast<u32>(dst_rc.GetHeight());
+    const u32 tgx = 16, tgy = 16;
+    const u32 gx = (w + tgx - 1) / tgx;
+    const u32 gy = (h + tgy - 1) / tgy;
+    DispatchComputeShader(m_rgba8_filter_cs.get(), tgx, tgy, 1, gx, gy, 1);
+    return true;
+  }
+}
+
 void Metal::Gfx::GenerateMipmaps(AbstractTexture* texture)
 {
   if (!texture)
