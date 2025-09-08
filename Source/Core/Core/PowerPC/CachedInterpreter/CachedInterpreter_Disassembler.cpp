@@ -10,6 +10,9 @@
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
 #include "Core/HLE/HLE.h"
 
