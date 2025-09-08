@@ -68,6 +68,13 @@ public:
   }
   void Write(AnyCallback callback) { Write(callback, nullptr, 0); }
 
+  // Reserve space for N callbacks + operands to avoid bounds checks per Write.
+  void Reserve(std::size_t bytes)
+  {
+    if (static_cast<std::size_t>(m_code_end - m_code) < bytes)
+      m_write_failed = true;
+  }
+
   const u8* GetCodePtr() const { return m_code; }
   u8* GetWritableCodePtr() { return m_code; }
   const u8* GetCodeEnd() const { return m_code_end; }
