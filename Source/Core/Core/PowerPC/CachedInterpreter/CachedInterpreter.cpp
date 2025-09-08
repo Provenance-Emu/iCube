@@ -38,6 +38,65 @@
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/Config/MainSettings.h"
 
+namespace {
+struct CI_RegionInfo
+{
+  u8* base;
+  u32 mask;
+  u32 sub;
+  bool is_fake;
+};
+
+static inline CI_RegionInfo CI_GetRegionInfo(u32 ea, bool dr, u8* mem1_base, u32 mem1_mask,
+                                             u8* exram_base, u32 exram_mask, u8* fakevmem_base,
+                                             u32 fakevmem_mask)
+{
+  CI_RegionInfo info{nullptr, 0, 0, false};
+  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  {
+    info.base = mem1_base;
+    info.mask = mem1_mask;
+    info.sub = Memory::MEM1_BASE_ADDR;
+    return info;
+  }
+  if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
+  {
+    info.base = exram_base;
+    info.mask = exram_mask;
+    info.sub = Memory::MEM2_BASE_ADDR;
+    return info;
+  }
+  if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
+  {
+    info.base = fakevmem_base;
+    info.mask = fakevmem_mask;
+    info.sub = 0;
+    info.is_fake = true;
+    return info;
+  }
+  if (!dr && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
+  {
+    info.base = mem1_base;
+    info.mask = mem1_mask;
+    info.sub = 0xC0000000u;
+    return info;
+  }
+  if (!dr && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
+  {
+    info.base = exram_base;
+    info.mask = exram_mask;
+    info.sub = 0xD0000000u;
+    return info;
+  }
+  return info;
+}
+
+static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
+{
+  return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
+}
+} // anonymous namespace
+
 // PSQ fast-path helpers (mirror Interpreter_LoadStorePaired semantics)
 static inline float CI_DequantizeFactor(u32 scale)
 {
@@ -131,30 +190,12 @@ template <bool write_pc>
   // Compute direct pointer if EA lies in MEM1 or EXRAM logical regions
   u8* __restrict base_ptr = nullptr;
   u32 offset = 0;
-  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  const auto region = CI_GetRegionInfo(ea, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                       exram_mask, fakevmem_base, fakevmem_mask);
+  if (region.base)
   {
-    base_ptr = mem1_base;
-    offset = (ea - Memory::MEM1_BASE_ADDR) & mem1_mask;
-  }
-  else if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
-  {
-    base_ptr = exram_base;
-    offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
-  }
-  else if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
-  {
-    base_ptr = fakevmem_base;
-    offset = (ea & fakevmem_mask);
-  }
-  else if (!ppc_state.msr.DR && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
-  {
-    base_ptr = mem1_base;
-    offset = (ea - 0xC0000000u) & mem1_mask;
-  }
-  else if (!ppc_state.msr.DR && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
-  {
-    base_ptr = exram_base;
-    offset = (ea - 0xD0000000u) & exram_mask;
+    base_ptr = region.base;
+    offset = CI_RegionOffset(region, ea);
   }
 
   if (base_ptr) [[likely]]
@@ -385,26 +426,27 @@ template <bool write_pc>
       // Pre-scan to ensure the entire range lies in a single fast region
       u8* region_base = nullptr;
       u32 region_mask = 0;
+      u32 region_sub = 0;
+      bool region_is_fake = false;
       bool ok = true;
       u32 addr = ea;
       for (u32 k = 0; k < count; ++k, addr += 4)
       {
-        if (addr >= Memory::MEM1_BASE_ADDR && addr - Memory::MEM1_BASE_ADDR <= mem1_mask)
+        const auto r = CI_GetRegionInfo(addr, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                        exram_mask, fakevmem_base, fakevmem_mask);
+        if (!r.base) { ok = false; break; }
+        if (!region_base)
         {
-          if (!region_base) { region_base = mem1_base; region_mask = mem1_mask; }
-          else if (region_base != mem1_base || region_mask != mem1_mask) { ok = false; break; }
+          region_base = r.base;
+          region_mask = r.mask;
+          region_sub = r.sub;
+          region_is_fake = r.is_fake;
         }
-        else if (addr >= Memory::MEM2_BASE_ADDR && addr - Memory::MEM2_BASE_ADDR <= exram_mask)
+        else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
+                 region_is_fake != r.is_fake)
         {
-          if (!region_base) { region_base = exram_base; region_mask = exram_mask; }
-          else if (region_base != exram_base || region_mask != exram_mask) { ok = false; break; }
+          ok = false; break;
         }
-        else if (fakevmem_base && ((addr & 0xFE000000u) == 0x7E000000u))
-        {
-          if (!region_base) { region_base = fakevmem_base; region_mask = fakevmem_mask; }
-          else if (region_base != fakevmem_base || region_mask != fakevmem_mask) { ok = false; break; }
-        }
-        else { ok = false; break; }
       }
       if (!ok || !region_base)
         break; // fallback
@@ -418,9 +460,8 @@ template <bool write_pc>
         const u32 remaining = 32u - r;
         if (remaining >= 4)
         {
-          const u32 roff0 = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
-                               : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
-                               : (addr & region_mask);
+          const u32 roff0 = region_is_fake ? (addr & region_mask)
+                                           : ((addr - region_sub) & region_mask);
           const u8* p0 = region_base + roff0;
           uint8x16_t vb = vld1q_u8(reinterpret_cast<const uint8_t*>(p0));
           vb = vrev32q_u8(vb);
@@ -430,9 +471,8 @@ template <bool write_pc>
           addr += 16;
           continue;
         }
-        const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
-                         : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
-                         : (addr & region_mask);
+        const u32 roff = region_is_fake ? (addr & region_mask)
+                                        : ((addr - region_sub) & region_mask);
         const u32 raw = *reinterpret_cast<const u32*>(region_base + roff);
         ppc_state.gpr[r++] = Common::FromBigEndian(raw);
         addr += 4;
@@ -440,9 +480,8 @@ template <bool write_pc>
 #else
       for (u32 r = static_cast<u32>(inst.RD); r <= 31u; ++r, addr += 4)
       {
-        const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
-                         : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
-                         : (addr & region_mask);
+        const u32 roff = region_is_fake ? (addr & region_mask)
+                                        : ((addr - region_sub) & region_mask);
         const u32 raw = *reinterpret_cast<const u32*>(region_base + roff);
         ppc_state.gpr[r] = Common::FromBigEndian(raw);
       }
@@ -457,33 +496,38 @@ template <bool write_pc>
       // Pre-scan to ensure the entire range lies in a single fast region
       u8* region_base = nullptr;
       u32 region_mask = 0;
+      u32 region_sub = 0;
+      bool region_is_fake = false;
       bool ok = true;
       u32 addr = ea;
       for (u32 k = 0; k < count; ++k, addr += 4)
       {
-        if (addr >= Memory::MEM1_BASE_ADDR && addr - Memory::MEM1_BASE_ADDR <= mem1_mask)
+        const auto r = CI_GetRegionInfo(addr, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                        exram_mask, fakevmem_base, fakevmem_mask);
+        if (!r.base) { ok = false; break; }
+        if (!region_base)
         {
-          if (!region_base) { region_base = mem1_base; region_mask = mem1_mask; }
-          else if (region_base != mem1_base || region_mask != mem1_mask) { ok = false; break; }
+          region_base = r.base;
+          region_mask = r.mask;
+          region_sub = r.sub;
+          region_is_fake = r.is_fake;
         }
-        else if (addr >= Memory::MEM2_BASE_ADDR && addr - Memory::MEM2_BASE_ADDR <= exram_mask)
+        else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
+                 region_is_fake != r.is_fake)
         {
-          if (!region_base) { region_base = exram_base; region_mask = exram_mask; }
-          else if (region_base != exram_base || region_mask != exram_mask) { ok = false; break; }
+          ok = false; break;
         }
-        else if (fakevmem_base && ((addr & 0xFE000000u) == 0x7E000000u))
-        {
-          if (!region_base) { region_base = fakevmem_base; region_mask = fakevmem_mask; }
-          else if (region_base != fakevmem_base || region_mask != fakevmem_mask) { ok = false; break; }
-        }
-        else { ok = false; break; }
       }
       if (!ok || !region_base)
         break; // fallback
       // Store all words
       addr = ea;
 #if defined(__aarch64__)
-      __builtin_prefetch(region_base + ((addr - ((region_base==mem1_base)?Memory::MEM1_BASE_ADDR:Memory::MEM2_BASE_ADDR)) & region_mask) + 64, 1, 1);
+      {
+        const u32 roff_prefetch = region_is_fake ? (addr & region_mask)
+                                                 : ((addr - region_sub) & region_mask);
+        __builtin_prefetch(region_base + roff_prefetch + 64, 1, 1);
+      }
 #endif
 #if defined(__aarch64__)
       // Vectorized store of up to 4 regs per iteration with endian swap
@@ -492,9 +536,8 @@ template <bool write_pc>
         const u32 remaining = 32u - r;
         if (remaining >= 4)
         {
-          const u32 roff0 = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
-                               : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
-                               : (addr & region_mask);
+          const u32 roff0 = region_is_fake ? (addr & region_mask)
+                                           : ((addr - region_sub) & region_mask);
           u8* p0 = region_base + roff0;
           uint32x4_t v = vld1q_u32(reinterpret_cast<const uint32_t*>(&ppc_state.gpr[r]));
           uint8x16_t vb = vreinterpretq_u8_u32(v);
@@ -504,9 +547,8 @@ template <bool write_pc>
           addr += 16;
           continue;
         }
-        const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
-                         : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
-                         : (addr & region_mask);
+        const u32 roff = region_is_fake ? (addr & region_mask)
+                                        : ((addr - region_sub) & region_mask);
         const u32 raw = Common::swap32(ppc_state.gpr[r++]);
         *reinterpret_cast<u32*>(region_base + roff) = raw;
         addr += 4;
@@ -514,9 +556,8 @@ template <bool write_pc>
 #else
       for (u32 r = static_cast<u32>(inst.RS); r <= 31u; ++r, addr += 4)
       {
-        const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
-                         : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
-                         : (addr & region_mask);
+        const u32 roff = region_is_fake ? (addr & region_mask)
+                                        : ((addr - region_sub) & region_mask);
         const u32 raw = Common::swap32(ppc_state.gpr[r]);
         *reinterpret_cast<u32*>(region_base + roff) = raw;
       }
@@ -550,30 +591,12 @@ template <bool write_pc>
   // Region decode
   u8* __restrict base_ptr = nullptr;
   u32 offset = 0;
-  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  const auto region = CI_GetRegionInfo(ea, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                       exram_mask, fakevmem_base, fakevmem_mask);
+  if (region.base)
   {
-    base_ptr = mem1_base;
-    offset = (ea - Memory::MEM1_BASE_ADDR) & mem1_mask;
-  }
-  else if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
-  {
-    base_ptr = exram_base;
-    offset = (ea - Memory::MEM2_BASE_ADDR) & exram_mask;
-  }
-  else if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
-  {
-    base_ptr = fakevmem_base;
-    offset = (ea & fakevmem_mask);
-  }
-  else if (!ppc_state.msr.DR && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
-  {
-    base_ptr = mem1_base;
-    offset = (ea - 0xC0000000u) & mem1_mask;
-  }
-  else if (!ppc_state.msr.DR && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
-  {
-    base_ptr = exram_base;
-    offset = (ea - 0xD0000000u) & exram_mask;
+    base_ptr = region.base;
+    offset = CI_RegionOffset(region, ea);
   }
 
   if (base_ptr) [[likely]]
@@ -2171,6 +2194,7 @@ void CachedInterpreter::ExecuteOneBlock()
   {
 #if defined(__aarch64__)
     __builtin_prefetch(normal_entry + 64, 0, 1);
+    __builtin_prefetch(normal_entry + 128, 0, 1);
 #endif
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
     if (const auto distance = callback(ppc_state, normal_entry + sizeof(callback))) [[likely]]
@@ -3284,34 +3308,14 @@ template <bool write_pc>
   const u32 ea = inst.RA ? (ppc_state.gpr[inst.RA] + ppc_state.gpr[inst.RB]) : ppc_state.gpr[inst.RB];
   const u32 line_addr = ea & ~31u;
 
-  u8* base_ptr = nullptr;
-  u32 offset = 0;
-  if (line_addr >= Memory::MEM1_BASE_ADDR && line_addr - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  const auto region = CI_GetRegionInfo(line_addr, ppc_state.msr.DR, mem1_base, mem1_mask,
+                                       exram_base, exram_mask, fakevmem_base, fakevmem_mask);
+  if (!region.base)
   {
-    base_ptr = mem1_base;
-    offset = (line_addr - Memory::MEM1_BASE_ADDR) & mem1_mask;
+    func(interpreter, inst);
+    return sizeof(AnyCallback) + sizeof(operands);
   }
-  else if (line_addr >= Memory::MEM2_BASE_ADDR && line_addr - Memory::MEM2_BASE_ADDR <= exram_mask)
-  {
-    base_ptr = exram_base;
-    offset = (line_addr - Memory::MEM2_BASE_ADDR) & exram_mask;
-  }
-  else if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
-  {
-    base_ptr = fakevmem_base;
-    offset = (ea & fakevmem_mask);
-  }
-  else if (!ppc_state.msr.DR && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
-  {
-    base_ptr = mem1_base;
-    offset = (ea - 0xC0000000u) & mem1_mask;
-  }
-  else if (!ppc_state.msr.DR && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
-  {
-    base_ptr = exram_base;
-    offset = (ea - 0xD0000000u) & exram_mask;
-  }
-
-  std::memset(base_ptr + offset, 0, 32);
+  const u32 offset = CI_RegionOffset(region, line_addr);
+  std::memset(region.base + offset, 0, 32);
   return sizeof(AnyCallback) + sizeof(operands);
 }
