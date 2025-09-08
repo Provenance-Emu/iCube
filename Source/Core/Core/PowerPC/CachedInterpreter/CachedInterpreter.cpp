@@ -14,6 +14,9 @@
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
 #include "Common/CommonTypes.h"
 #include "Common/GekkoDisassembler.h"
@@ -407,6 +410,34 @@ template <bool write_pc>
         break; // fallback
       // Load all words
       addr = ea;
+
+#if defined(__aarch64__)
+      // Vectorized load of up to 4 regs per iteration with endian swap
+      for (u32 r = static_cast<u32>(inst.RD); r <= 31u; )
+      {
+        const u32 remaining = 32u - r;
+        if (remaining >= 4)
+        {
+          const u32 roff0 = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
+                               : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
+                               : (addr & region_mask);
+          const u8* p0 = region_base + roff0;
+          uint8x16_t vb = vld1q_u8(reinterpret_cast<const uint8_t*>(p0));
+          vb = vrev32q_u8(vb);
+          uint32x4_t v = vreinterpretq_u32_u8(vb);
+          vst1q_u32(reinterpret_cast<uint32_t*>(&ppc_state.gpr[r]), v);
+          r += 4;
+          addr += 16;
+          continue;
+        }
+        const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
+                         : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
+                         : (addr & region_mask);
+        const u32 raw = *reinterpret_cast<const u32*>(region_base + roff);
+        ppc_state.gpr[r++] = Common::FromBigEndian(raw);
+        addr += 4;
+      }
+#else
       for (u32 r = static_cast<u32>(inst.RD); r <= 31u; ++r, addr += 4)
       {
         const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
@@ -415,6 +446,7 @@ template <bool write_pc>
         const u32 raw = *reinterpret_cast<const u32*>(region_base + roff);
         ppc_state.gpr[r] = Common::FromBigEndian(raw);
       }
+#endif
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 47: // stmw
@@ -453,6 +485,33 @@ template <bool write_pc>
 #if defined(__aarch64__)
       __builtin_prefetch(region_base + ((addr - ((region_base==mem1_base)?Memory::MEM1_BASE_ADDR:Memory::MEM2_BASE_ADDR)) & region_mask) + 64, 1, 1);
 #endif
+#if defined(__aarch64__)
+      // Vectorized store of up to 4 regs per iteration with endian swap
+      for (u32 r = static_cast<u32>(inst.RS); r <= 31u; )
+      {
+        const u32 remaining = 32u - r;
+        if (remaining >= 4)
+        {
+          const u32 roff0 = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
+                               : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
+                               : (addr & region_mask);
+          u8* p0 = region_base + roff0;
+          uint32x4_t v = vld1q_u32(reinterpret_cast<const uint32_t*>(&ppc_state.gpr[r]));
+          uint8x16_t vb = vreinterpretq_u8_u32(v);
+          vb = vrev32q_u8(vb);
+          vst1q_u8(reinterpret_cast<uint8_t*>(p0), vb);
+          r += 4;
+          addr += 16;
+          continue;
+        }
+        const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
+                         : (region_base == exram_base) ? ((addr - Memory::MEM2_BASE_ADDR) & region_mask)
+                         : (addr & region_mask);
+        const u32 raw = Common::swap32(ppc_state.gpr[r++]);
+        *reinterpret_cast<u32*>(region_base + roff) = raw;
+        addr += 4;
+      }
+#else
       for (u32 r = static_cast<u32>(inst.RS); r <= 31u; ++r, addr += 4)
       {
         const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
@@ -461,6 +520,7 @@ template <bool write_pc>
         const u32 raw = Common::swap32(ppc_state.gpr[r]);
         *reinterpret_cast<u32*>(region_base + roff) = raw;
       }
+#endif
       return sizeof(AnyCallback) + sizeof(operands);
     }
     }
