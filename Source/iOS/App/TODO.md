@@ -28,9 +28,13 @@
 
 ## All Platforms
 
+- [ ] Library refresh isn't great, especially webav online/offline detection and force refresh
 - [ ] Player 2 on wii always connected
+- [ ] cancel wii update doesn't cancel
+- [ ] text input hints for wedav sources
+- [ ] better filter for webdav sources localhost
 - [X] FF / Pause menu gestures are wrong / conflicting
-- [ ] Remove extra logging when done
+- [X] Remove extra logging when done
 - [X] Excessive webdav refreshes
 - [X] Re-test all 4 paddels fast forward
 
