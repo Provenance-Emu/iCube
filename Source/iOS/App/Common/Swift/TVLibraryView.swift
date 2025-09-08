@@ -1883,14 +1883,34 @@ private struct GameGridItem: View {
     .onTapGesture { select(item) }
     .onPlayPauseCommand { select(item) }
     .contextMenu {
-      Button(L("Properties")) { showProperties(item) }
+      Button(action: { showProperties(item) }) {
+        Label(L("Properties"), systemImage: "info.circle")
+      }
       //            Button(L("View Save States")) { showSaveStates(item) }
-      Menu(L("Cheats")) {
-        Button(L("Manage...")) { showCheatList(item) }
-        Button(L("Download Codes")) { downloadGeckoAction(item) }
+      Menu {
+        Button(action: { showCheatList(item) }) {
+          Label(L("Manage..."), systemImage: "slider.horizontal.3")
+        }
+        Button(action: { downloadGeckoAction(item) }) {
+          Label(L("Download Codes"), systemImage: "arrow.down.doc")
+        }
         Divider()
-        Menu(L("Gecko")) { Button(L("Add...")) { presentCheatGecko(item) } }
-        Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatAR(item) } }
+        Menu {
+          Button(action: { presentCheatGecko(item) }) {
+            Label(L("Add..."), systemImage: "plus.circle")
+          }
+        } label: {
+          Label(L("Gecko"), systemImage: "chevron.left.slash.chevron.right")
+        }
+        Menu {
+          Button(action: { presentCheatAR(item) }) {
+            Label(L("Add..."), systemImage: "plus.circle")
+          }
+        } label: {
+          Label(L("Action Replay"), systemImage: "number")
+        }
+      } label: {
+        Label(L("Cheats"), systemImage: "wand.and.stars")
       }
       if isRemoteGame {
         if let source = getWebDAVSource() {
@@ -1917,8 +1937,16 @@ private struct GameGridItem: View {
           Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
         }
       }
-      Button(item.isFavorite ? L("Unfavorite") : L("Favorite")) { showFavoriteToggle(item) }
-      Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
+      if item.isFavorite {
+        Button(action: { showFavoriteToggle(item) }) {
+          Label(L("Unfavorite"), systemImage: "star.fill")
+        }
+      } else {
+        Button(action: { showFavoriteToggle(item) }) {
+          Label(L("Favorite"), systemImage: "star")
+        }
+      }
+      Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
     .zIndex(isFocused ? 1 : 0)
 #else
@@ -1987,14 +2015,34 @@ private struct GameGridItem: View {
     .buttonStyle(.plain)
     .contextMenu {
       // Align with tvOS context menu
-      Button(L("Properties")) { showProperties(item) }
+      Button(action: { showProperties(item) }) {
+        Label(L("Properties"), systemImage: "info.circle")
+      }
       //            Button(L("View Save States")) { showSaveStates(item) }
-      Menu(L("Cheats")) {
-        Button(L("Manage...")) { showCheatList(item) }
-        Button(L("Download Codes")) { downloadGeckoAction(item) }
+      Menu {
+        Button(action: { showCheatList(item) }) {
+          Label(L("Manage..."), systemImage: "slider.horizontal.3")
+        }
+        Button(action: { downloadGeckoAction(item) }) {
+          Label(L("Download Codes"), systemImage: "arrow.down.doc")
+        }
         Divider()
-        Menu(L("Gecko")) { Button(L("Add...")) { presentCheatGecko(item) } }
-        Menu(L("Action Replay")) { Button(L("Add...")) { presentCheatAR(item) } }
+        Menu {
+          Button(action: { presentCheatGecko(item) }) {
+            Label(L("Add..."), systemImage: "plus.circle")
+          }
+        } label: {
+          Label(L("Gecko"), systemImage: "chevron.left.slash.chevron.right")
+        }
+        Menu {
+          Button(action: { presentCheatAR(item) }) {
+            Label(L("Add..."), systemImage: "plus.circle")
+          }
+        } label: {
+          Label(L("Action Replay"), systemImage: "number")
+        }
+      } label: {
+        Label(L("Cheats"), systemImage: "wand.and.stars")
       }
       if isRemoteGame {
         if let _ = getWebDAVSource() {
@@ -2021,8 +2069,16 @@ private struct GameGridItem: View {
           Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
         }
       }
-      Button(item.isFavorite ? L("Unfavorite") : L("Favorite")) { showFavoriteToggle(item) }
-      Button(role: .destructive) { requestDelete(item) } label: { Text(L("Delete")) }
+      if item.isFavorite {
+        Button(action: { showFavoriteToggle(item) }) {
+          Label(L("Unfavorite"), systemImage: "star.fill")
+        }
+      } else {
+        Button(action: { showFavoriteToggle(item) }) {
+          Label(L("Favorite"), systemImage: "star")
+        }
+      }
+      Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
 #endif
   }
