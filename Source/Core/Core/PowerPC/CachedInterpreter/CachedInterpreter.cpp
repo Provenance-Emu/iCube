@@ -450,6 +450,9 @@ template <bool write_pc>
         break; // fallback
       // Store all words
       addr = ea;
+#if defined(__aarch64__)
+      __builtin_prefetch(region_base + ((addr - ((region_base==mem1_base)?Memory::MEM1_BASE_ADDR:Memory::MEM2_BASE_ADDR)) & region_mask) + 64, 1, 1);
+#endif
       for (u32 r = static_cast<u32>(inst.RS); r <= 31u; ++r, addr += 4)
       {
         const u32 roff = (region_base == mem1_base) ? ((addr - Memory::MEM1_BASE_ADDR) & region_mask)
@@ -2106,6 +2109,9 @@ void CachedInterpreter::ExecuteOneBlock()
   auto& ppc_state = m_ppc_state;
   while (true)
   {
+#if defined(__aarch64__)
+    __builtin_prefetch(normal_entry + 64, 0, 1);
+#endif
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
     if (const auto distance = callback(ppc_state, normal_entry + sizeof(callback))) [[likely]]
       normal_entry += distance;
