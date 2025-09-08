@@ -233,28 +233,7 @@ struct EmulationScreen: View {
         .allowsHitTesting(!showPauseMenu)
         .navigationBarBackButtonHidden(true)
 
-      // Floating button to show quick performance overlay
-      VStack {
-        HStack {
-          Spacer()
-          Button {
-            showPerfOverlay = true
-          } label: {
-            Image(systemName: "speedometer")
-              .font(.system(size: 28, weight: .bold))
-              .foregroundColor(.white)
-              .padding(12)
-              .background(.white.opacity(0.15))
-              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-          }
-          .buttonStyle(.plain)
-          .focusable(true)
-          .padding([.top, .trailing], 24)
-        }
-        Spacer()
-      }
-      .allowsHitTesting(true)
-      .zIndex(3)
+      // Removed floating speed overlay toggle; moved into pause menu
 
       // Semi-transparent overlay with controls
       if showPerfOverlay {
@@ -329,13 +308,35 @@ struct EmulationScreen: View {
       }
     }
     .fullScreenCover(isPresented: $showPauseMenu) {
-      PauseMenuView(
-        selectedSlot: $selectedSlot,
-        onClose: { showPauseMenu = false },
-        onShowSettings: { showSettings = true },
-        platform: .tvos,
-        game: game
-      )
+      ZStack {
+        PauseMenuView(
+          selectedSlot: $selectedSlot,
+          onClose: { showPauseMenu = false },
+          onShowSettings: { showSettings = true },
+          platform: .tvos,
+          game: game
+        )
+        // Speed overlay toggle inside pause menu
+        VStack {
+          HStack {
+            Spacer()
+            Button {
+              showPerfOverlay = true
+            } label: {
+              Image(systemName: "speedometer")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(.white)
+                .padding(12)
+                .background(.white.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .focusable(true)
+            .padding([.top, .trailing], 24)
+          }
+          Spacer()
+        }
+      }
     }
     .onAppear {
       NSLog("[INPUT] tvOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
