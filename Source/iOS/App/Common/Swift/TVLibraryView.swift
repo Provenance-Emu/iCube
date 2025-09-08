@@ -198,16 +198,22 @@ final class TVLibraryViewModel: ObservableObject {
       for (idx, item) in group.enumerated() {
         print("    [\(idx)]: '\(item.title)' (isLocal: \(isLocal(item)), titleEmpty: \(item.title.isEmpty))")
       }
+      #endif
       if let local = group.first(where: { isLocal($0) }) {
+        #if DEBUG
         print("    -> Using local representative: '\(local.title)'")
+        #endif
         representatives.append(local)
       } else if let any = group.first {
+        #if DEBUG
         print("    -> Using first representative: '\(any.title)' (titleEmpty: \(any.title.isEmpty))")
+        #endif
         representatives.append(any)
       } else {
+        #if DEBUG
         print("    -> No representative found (empty group)")
+        #endif
       }
-      #endif
     }
 #if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): found \(representatives.count) representatives")
