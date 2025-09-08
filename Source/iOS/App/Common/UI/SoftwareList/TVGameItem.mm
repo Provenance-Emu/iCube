@@ -33,7 +33,9 @@
 
         // Critical safety check - ensure GameFile shared_ptr is not null
         if (!wrapper.gameFile) {
+#ifdef DEBUG
             NSLog(@"TVGameItem: ERROR - null GameFile shared_ptr in wrapper, creating invalid item");
+#endif
             _title = @"<null GameFile>";
             _filePath = @"<null>";
             _id = @"<null>";
@@ -74,7 +76,9 @@
                 NSData *data = [NSData dataWithBytes:cover.buffer.data() length:len];
                 result = [UIImage imageWithData:data];
             } else {
+#ifdef DEBUG
                 NSLog(@"TVGameItem: cover size invalid (%zu), using placeholder", len);
+#endif
                 result = [UIImage imageNamed:@"NoCover"];
             }
         }
@@ -124,8 +128,10 @@
         _fileSize = (NSUInteger)game.GetFileSize();
 
         // Debug logging for file size
+#ifdef DEBUG
         NSLog(@"TVGameItem: %@ - GameFile.GetFileSize() = %llu, TVGameItem.fileSize = %lu",
               _title, game.GetFileSize(), (unsigned long)_fileSize);
+#endif
     }
     return self;
 }

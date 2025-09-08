@@ -175,18 +175,25 @@ final class TVLibraryViewModel: ObservableObject {
   }
 
   private func groupAndDedup(items: [TVGameItem]) {
+    #if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): processing \(items.count) items")
+    #endif
     var grouped: [String: [TVGameItem]] = [:]
     for it in items {
       let itemKey = key(for: it)
       let isRemote = !isLocal(it)
+      #if DEBUG
       print("  Item: '\(it.title)' -> Key: '\(itemKey)' (gameID: '\(it.gameID)', discNumber: \(it.discNumber), revision: \(it.revision), isRemote: \(isRemote), titleEmpty: \(it.title.isEmpty))")
+      #endif
       grouped[itemKey, default: []].append(it)
     }
+    #if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): created \(grouped.count) groups")
+    #endif
     groupsByKey = grouped
     var representatives: [TVGameItem] = []
     for (groupKey, group) in grouped {
+      #if DEBUG
       print("  Group '\(groupKey)': \(group.count) items")
       for (idx, item) in group.enumerated() {
         print("    [\(idx)]: '\(item.title)' (isLocal: \(isLocal(item)), titleEmpty: \(item.title.isEmpty))")
@@ -200,9 +207,11 @@ final class TVLibraryViewModel: ObservableObject {
       } else {
         print("    -> No representative found (empty group)")
       }
+      #endif
     }
+#if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): found \(representatives.count) representatives")
-
+#endif
     // Sort games alphabetically using fallback to filename when title is empty
     games = representatives.sorted { (a: TVGameItem, b: TVGameItem) -> Bool in
       let at: String = {
@@ -217,7 +226,9 @@ final class TVLibraryViewModel: ObservableObject {
       }()
       return at.localizedCaseInsensitiveCompare(bt) == .orderedAscending
     }
+#if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): final games count: \(games.count)")
+#endif
   }
 
   func sources(for item: TVGameItem) -> [TVGameItem] {
@@ -1653,14 +1664,18 @@ private struct GameGridItem: View {
   /// Check if this is a remote game
   private var isRemoteGame: Bool {
     let result = remoteIconName != nil
+    #if DEBUG
     print("DEBUG: isRemoteGame for '\(item.title)' (path: '\(item.filePath)') = \(result)")
+    #endif
     return result
   }
 
   /// Get the WebDAV source for this game (if any)
   private func getWebDAVSource() -> WebDAVSource? {
     guard isRemoteGame, let url = URL(string: item.filePath) else {
+      #if DEBUG
       print("DEBUG: getWebDAVSource early return - isRemoteGame: \(isRemoteGame), url valid: \(URL(string: item.filePath) != nil)")
+      #endif
       return nil
     }
 
@@ -1672,25 +1687,35 @@ private struct GameGridItem: View {
     }
 
     guard let urlHost = url.host?.lowercased() else {
+#if DEBUG
       print("DEBUG: getWebDAVSource no host for URL: \(url)")
+#endif
       return nil
     }
     let urlPort = url.port ?? defaultPort(for: url.scheme)
     let urlPath = url.path
 
+#if DEBUG
     print("DEBUG: Looking for WebDAV source matching host: \(urlHost), port: \(urlPort), path: \(urlPath)")
     print("DEBUG: Available sources: \(RemoteSourcesStore.shared.sources.count)")
+#endif
 
     var bestMatch: (source: WebDAVSource, score: Int)? = nil
 
     for (index, source) in RemoteSourcesStore.shared.sources.enumerated() {
+#if DEBUG
       print("DEBUG: Source \(index): \(type(of: source))")
+#endif
       guard let webdavSource = source as? WebDAVSource else { continue }
       let base = webdavSource.baseURL
+#if DEBUG
       print("DEBUG: WebDAV source base URL: \(base)")
+#endif
       guard let baseHost = base.host?.lowercased() else { continue }
       let basePort = base.port ?? defaultPort(for: base.scheme)
+#if DEBUG
       print("DEBUG: Comparing - base host: \(baseHost), port: \(basePort) vs url host: \(urlHost), port: \(urlPort)")
+#endif
       guard urlHost == baseHost && urlPort == basePort else { continue }
 
       // Prefer the source with the longest base path prefix match
@@ -1700,14 +1725,18 @@ private struct GameGridItem: View {
       else if urlPath.hasPrefix(basePath) { score = max(2, basePath.count) }
       else { score = 1 } // host/port match only
 
+#if DEBUG
       print("DEBUG: Found matching source with score \(score), basePath: '\(basePath)', isPreCachingEnabled: \(webdavSource.isPreCachingEnabled)")
+#endif
       if bestMatch == nil || score > bestMatch!.score {
         bestMatch = (webdavSource, score)
       }
     }
 
     let result = bestMatch?.source
+#if DEBUG
     print("DEBUG: getWebDAVSource result: \(result != nil ? "found" : "nil"), final isPreCachingEnabled: \(result?.isPreCachingEnabled ?? false)")
+#endif
     return result
   }
 
@@ -2006,8 +2035,10 @@ private struct GameGridItem: View {
       do {
         // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
         let fileSize = Int64(item.fileSize)
+#if DEBUG
         print("Using cached file size for \(item.title): \(fileSize) bytes")
         print("DEBUG: TVGameItem.fileSize = \(item.fileSize)")
+#endif
 
         // Check if we have enough storage space (file size + 100MB buffer)
         if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
