@@ -793,6 +793,11 @@ struct EmulationScreen: View {
                     gp.buttonOptions?.preferredSystemGestureState = .disabled
                 }
             }
+            if let mg = c.microGamepad {
+                if #available(iOS 14.0, *) {
+                    mg.buttonMenu.preferredSystemGestureState = .alwaysReceive
+                }
+            }
         }
         logCurrentControllers()
         fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
