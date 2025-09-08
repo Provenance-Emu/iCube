@@ -586,6 +586,10 @@ UpdateResult OnlineSystemUpdater::InstallTitleFromNUS(const std::string& prefix_
   const UpdateResult import_result = [&]() {
     for (const IOS::ES::Content& content : tmd.first.GetContents())
     {
+      // Mid-title cancellation check: honor UI cancel without waiting for all contents
+      if (!m_update_callback(0, 0, title.id))
+        return UpdateResult::Cancelled;
+
       const bool is_already_installed =
           Common::Contains(stored_contents, content.id, &IOS::ES::Content::id);
 
@@ -600,12 +604,20 @@ UpdateResult OnlineSystemUpdater::InstallTitleFromNUS(const std::string& prefix_
         return UpdateResult::ImportFailed;
       }
 
+      // Cancellation check before heavy download
+      if (!m_update_callback(0, 0, title.id))
+        return UpdateResult::Cancelled;
+
       const std::optional<std::vector<u8>> data = DownloadContent(prefix_url, title, content.id);
       if (!data)
       {
         ERROR_LOG_FMT(CORE, "Failed to download content {:08x}", content.id);
         return UpdateResult::DownloadFailed;
       }
+
+      // Cancellation check after download before committing
+      if (!m_update_callback(0, 0, title.id))
+        return UpdateResult::Cancelled;
 
       if (es.ImportContentData(context, 0, data->data(), static_cast<u32>(data->size())) < 0 ||
           es.ImportContentEnd(context, 0) < 0)
