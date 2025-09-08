@@ -13,7 +13,7 @@
 
 using preg_t = size_t;
 
-class PPCCachedReg
+class __attribute__((aligned(16))) PPCCachedReg
 {
 public:
   enum class LocationType
@@ -123,7 +123,7 @@ private:
   size_t locked = 0;
 };
 
-class X64CachedReg
+class __attribute__((aligned(16))) X64CachedReg
 {
 public:
   preg_t Contents() const { return ppcReg; }
