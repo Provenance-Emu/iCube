@@ -13,6 +13,12 @@
 #include "Core/PowerPC/JitCommon/JitBase.h"
 #include "Core/PowerPC/PPCAnalyst.h"
 
+#if defined(__GNUC__) || defined(__clang__)
+#define DOL_HOT __attribute__((hot))
+#else
+#define DOL_HOT
+#endif
+
 namespace CoreTiming
 {
 class CoreTimingManager;
@@ -101,24 +107,24 @@ private:
   template <bool profiled>
   static s32 EndBlock(std::ostream& stream, const EndBlockOperands<profiled>& operands);
   template <bool write_pc>
-  static s32 Interpret(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  DOL_HOT static s32 Interpret(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   template <bool write_pc>
   static s32 Interpret(std::ostream& stream, const InterpretOperands& operands);
   template <bool write_pc>
-  static s32 InterpretAndCheckExceptions(PowerPC::PowerPCState& ppc_state,
+  DOL_HOT static s32 InterpretAndCheckExceptions(PowerPC::PowerPCState& ppc_state,
                                          const InterpretAndCheckExceptionsOperands& operands);
   template <bool write_pc>
   static s32 InterpretAndCheckExceptions(std::ostream& stream,
                                          const InterpretAndCheckExceptionsOperands& operands);
   template <bool write_pc>
-  static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
+  DOL_HOT static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
                                const LoadStoreDFormPICOperands& operands);
   template <bool write_pc>
   static s32 LoadStoreDFormPIC(std::ostream& stream,
                                const LoadStoreDFormPICOperands& operands);
   // X-form (indexed) Load/Store PIC fast path
   template <bool write_pc>
-  static s32 LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
+  DOL_HOT static s32 LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
                                const LoadStoreDFormPICOperands& operands);
   template <bool write_pc>
   static s32 LoadStoreXFormPIC(std::ostream& stream,
@@ -130,10 +136,10 @@ private:
 
   // Minimal dcbz fast path (safe): only when MSR.DR == 0, HID0.DCE set, and within MEM1/MEM2
   template <bool write_pc>
-  static s32 DcbzPIC(PowerPC::PowerPCState& ppc_state,
+  DOL_HOT static s32 DcbzPIC(PowerPC::PowerPCState& ppc_state,
                      const LoadStoreDFormPICOperands& operands);
   template <bool write_pc>
-  static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
+  DOL_HOT static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
                              const ExecuteMicroOpsOperands& operands);
   template <bool write_pc>
   static s32 ExecuteMicroOps(std::ostream& stream, const ExecuteMicroOpsOperands& operands);
@@ -270,7 +276,7 @@ struct MicroOp
 struct CachedInterpreter::ExecuteMicroOpsOperands
 {
   // Embedded small array keeps lifetime simple and avoids heap allocs
-  static constexpr u32 kMaxOps = 32;
+  static constexpr u32 kMaxOps = 48;
   u32 count;
   MicroOp ops[kMaxOps];
   u32 current_pc;
