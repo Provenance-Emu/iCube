@@ -24,11 +24,16 @@ struct SourcesView: View {
                                         Text(url)
                                             .font(.footnote)
                                             .foregroundStyle(.secondary)
+                                            .textInputAutocapitalization(.never)
+                                            .autocorrectionDisabled(true)
+                                            .textContentType(.url)
                                     }
                                     if let sp = (s as? WebDAVSource)?.startPathComponent, !sp.isEmpty {
                                         Text("Start: \(sp)")
                                             .font(.footnote)
                                             .foregroundStyle(.tertiary)
+                                            .autocorrectionDisabled(true)
+                                            .textInputAutocapitalization(.never)
                                     }
                                 }
                                 Spacer()
@@ -108,17 +113,31 @@ private struct AddWebDAVSourceView: View {
                         }
                     }
                 }
-                Section("Details") {
-                    TextField("Name", text: $name)
-                    TextField("URL (e.g., http://192.168.1.29:8080)", text: $url)
-                    TextField("Start Path (optional) (`Software` for other DolphiniOS instances)", text: $startPath)
-                }
-                Section("Authentication") {
-                    TextField("Username (optional)", text: $username)
-                    SecureField("Password (optional)", text: $password)
-                }
-                Section("Options") {
-                    Toggle("Recursive", isOn: $recursive)
+              Section("Details") {
+                TextField("Name", text: $name)
+                  .autocorrectionDisabled(true)
+                  .textInputAutocapitalization(.never)
+                TextField("URL (e.g., http://192.168.1.29:8080)", text: $url)
+                  .autocorrectionDisabled(true)
+                  .textInputAutocapitalization(.never)
+                  .textContentType(.url)
+                TextField("Start Path (optional) (`Software` for other DolphiniOS instances)", text: $startPath)
+                  .autocorrectionDisabled(true)
+                  .textInputAutocapitalization(.never)
+                  .textContentType(.url)
+              }
+              Section("Authentication") {
+                TextField("Username (optional)", text: $username)
+                  .textContentType(.username)
+                  .autocorrectionDisabled(true)
+                  .textInputAutocapitalization(.never)
+                SecureField("Password (optional)", text: $password)
+                  .autocorrectionDisabled(true)
+                  .textInputAutocapitalization(.never)
+                  .textContentType(.password)
+              }
+              Section("Options") {
+                Toggle("Recursive", isOn: $recursive)
                     Toggle("Automatic Pre-cache", isOn: $enablePreCaching)
                     #if os(tvOS)
                     TVIntStepper(value: $intervalMinutes, range: 1...60, step: 1)
