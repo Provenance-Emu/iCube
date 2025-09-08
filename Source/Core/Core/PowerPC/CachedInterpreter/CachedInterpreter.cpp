@@ -38,6 +38,22 @@
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/Config/MainSettings.h"
 
+#if defined(__clang__) || defined(__GNUC__)
+#if defined(__aarch64__)
+#define CI_HOT_FLATTEN [[gnu::hot, gnu::flatten]]
+#define CI_HOT_ONLY [[gnu::hot]]
+#define CI_COLD_ONLY [[gnu::cold]]
+#else
+#define CI_HOT_FLATTEN [[gnu::hot]]
+#define CI_HOT_ONLY [[gnu::hot]]
+#define CI_COLD_ONLY [[gnu::cold]]
+#endif
+#else
+#define CI_HOT_FLATTEN
+#define CI_HOT_ONLY
+#define CI_COLD_ONLY
+#endif
+
 namespace {
 struct CI_RegionInfo
 {
@@ -168,8 +184,8 @@ CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_
 }
 
 template <bool write_pc>
-[[gnu::hot]] s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
-                                                      const LoadStoreDFormPICOperands& operands)
+CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
+                                                        const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
                exram_mask, fakevmem_base, fakevmem_mask] = operands;
@@ -571,8 +587,8 @@ template <bool write_pc>
 }
 
 template <bool write_pc>
-[[gnu::hot]] s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
-                                                      const LoadStoreDFormPICOperands& operands)
+CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
+                                                        const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
                exram_mask, fakevmem_base, fakevmem_mask] = operands;
@@ -1055,7 +1071,7 @@ s32 CachedInterpreter::LoadStoreXFormPIC(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-[[gnu::noinline]] [[gnu::cold]]
+[[gnu::noinline]] CI_COLD_ONLY
 s32 CachedInterpreter::Cold_LoadStoreFallback(PowerPC::PowerPCState& /*ppc_state*/,
                                               const LoadStoreDFormPICOperands& operands)
 {
@@ -1107,7 +1123,7 @@ void CachedInterpreter::Init()
 }
 
 template <bool write_pc>
-static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
+CI_HOT_ONLY static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
 {
   if constexpr (write_pc)
   {
@@ -1117,8 +1133,8 @@ static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
 }
 
 template <bool write_pc>
-s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
-                                       const ExecuteMicroOpsOperands& operands)
+CI_HOT_FLATTEN s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
+                                                       const ExecuteMicroOpsOperands& operands)
 {
   CI_SetPCForMicroOps<write_pc>(ppc_state, operands.current_pc);
 
@@ -2177,10 +2193,7 @@ void CachedInterpreter::Shutdown()
   m_block_cache.Shutdown();
 }
 
-#if defined(__GNUC__) || defined(__clang__)
-__attribute__((hot))
-#endif
-void CachedInterpreter::ExecuteOneBlock()
+CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
 {
   const u8* normal_entry = m_block_cache.Dispatch();
   if (!normal_entry)
@@ -2204,10 +2217,7 @@ void CachedInterpreter::ExecuteOneBlock()
   }
 }
 
-#if defined(__GNUC__) || defined(__clang__)
-__attribute__((hot))
-#endif
-void CachedInterpreter::Run()
+CI_HOT_ONLY void CachedInterpreter::Run()
 {
   auto& core_timing = m_system.GetCoreTiming();
 
@@ -2225,7 +2235,7 @@ void CachedInterpreter::Run()
   }
 }
 
-void CachedInterpreter::SingleStep()
+CI_HOT_ONLY void CachedInterpreter::SingleStep()
 {
   // Enter new timing slice
   m_system.GetCoreTiming().Advance();
@@ -3285,7 +3295,7 @@ void CachedInterpreter::LogGeneratedCode() const
 }
 
 template <bool write_pc>
-[[gnu::hot]] s32 CachedInterpreter::DcbzPIC(PowerPC::PowerPCState& ppc_state,
+CI_HOT_ONLY s32 CachedInterpreter::DcbzPIC(PowerPC::PowerPCState& ppc_state,
                                            const LoadStoreDFormPICOperands& operands)
 {
   const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,

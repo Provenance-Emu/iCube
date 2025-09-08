@@ -16,13 +16,19 @@
 
 #include "Core/HLE/HLE.h"
 
-s32 CachedInterpreterEmitter::PoisonCallback(std::ostream& stream, const void* operands)
+#if defined(__clang__) || defined(__GNUC__)
+#define CI_COLD_ONLY [[gnu::cold]]
+#else
+#define CI_COLD_ONLY
+#endif
+
+CI_COLD_ONLY s32 CachedInterpreterEmitter::PoisonCallback(std::ostream& stream, const void* operands)
 {
   stream << "PoisonCallback()\n";
   return sizeof(AnyCallback);
 }
 
-s32 CachedInterpreter::StartProfiledBlock(std::ostream& stream,
+CI_COLD_ONLY s32 CachedInterpreter::StartProfiledBlock(std::ostream& stream,
                                           const StartProfiledBlockOperands& operands)
 {
   stream << "StartProfiledBlock()\n";
@@ -30,15 +36,15 @@ s32 CachedInterpreter::StartProfiledBlock(std::ostream& stream,
 }
 
 template <bool profiled>
-s32 CachedInterpreter::EndBlock(std::ostream& stream, const EndBlockOperands<profiled>& operands)
+CI_COLD_ONLY s32 CachedInterpreter::EndBlock(std::ostream& stream, const EndBlockOperands<profiled>& operands)
 {
-  fmt::println(stream, "EndBlock<profiled={}>(downcount={}, num_load_stores={}, num_fp_inst={})",
+  fmt::println(stream, "EndBlock<profiled={}>\n(downcount={}, num_load_stores={}, num_fp_inst={})",
                profiled, operands.downcount, operands.num_load_stores, operands.num_fp_inst);
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
 template <bool write_pc>
-s32 CachedInterpreter::Interpret(std::ostream& stream, const InterpretOperands& operands)
+CI_COLD_ONLY s32 CachedInterpreter::Interpret(std::ostream& stream, const InterpretOperands& operands)
 {
   fmt::println(stream, "Interpret<write_pc={:5}>(current_pc=0x{:08x}, inst=0x{:08x})", write_pc,
                operands.current_pc, operands.inst.hex);
@@ -46,7 +52,7 @@ s32 CachedInterpreter::Interpret(std::ostream& stream, const InterpretOperands& 
 }
 
 template <bool write_pc>
-s32 CachedInterpreter::InterpretAndCheckExceptions(
+CI_COLD_ONLY s32 CachedInterpreter::InterpretAndCheckExceptions(
     std::ostream& stream, const InterpretAndCheckExceptionsOperands& operands)
 {
   fmt::println(stream,
@@ -56,7 +62,7 @@ s32 CachedInterpreter::InterpretAndCheckExceptions(
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-s32 CachedInterpreter::HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands)
+CI_COLD_ONLY s32 CachedInterpreter::HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands)
 {
   const auto& [system, current_pc, hook_index] = operands;
   fmt::println(stream, "HLEFunction(current_pc=0x{:08x}, hook_index={}) [\"{}\"]", current_pc,
@@ -64,7 +70,7 @@ s32 CachedInterpreter::HLEFunction(std::ostream& stream, const HLEFunctionOperan
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-s32 CachedInterpreter::WriteBrokenBlockNPC(std::ostream& stream,
+CI_COLD_ONLY s32 CachedInterpreter::WriteBrokenBlockNPC(std::ostream& stream,
                                            const WriteBrokenBlockNPCOperands& operands)
 {
   const auto& [current_pc] = operands;
@@ -72,21 +78,21 @@ s32 CachedInterpreter::WriteBrokenBlockNPC(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-s32 CachedInterpreter::CheckFPU(std::ostream& stream, const CheckHaltOperands& operands)
+CI_COLD_ONLY s32 CachedInterpreter::CheckFPU(std::ostream& stream, const CheckHaltOperands& operands)
 {
   const auto& [power_pc, current_pc, downcount] = operands;
   fmt::println(stream, "CheckFPU(current_pc=0x{:08x}, downcount={})", current_pc, downcount);
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-s32 CachedInterpreter::CheckBreakpoint(std::ostream& stream, const CheckHaltOperands& operands)
+CI_COLD_ONLY s32 CachedInterpreter::CheckBreakpoint(std::ostream& stream, const CheckHaltOperands& operands)
 {
   const auto& [power_pc, current_pc, downcount] = operands;
   fmt::println(stream, "CheckBreakpoint(current_pc=0x{:08x}, downcount={})", current_pc, downcount);
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-s32 CachedInterpreter::CheckIdle(std::ostream& stream, const CheckIdleOperands& operands)
+CI_COLD_ONLY s32 CachedInterpreter::CheckIdle(std::ostream& stream, const CheckIdleOperands& operands)
 {
   const auto& [core_timing, idle_pc] = operands;
   fmt::println(stream, "CheckIdle(idle_pc=0x{:08x})", idle_pc);

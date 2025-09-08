@@ -9,7 +9,20 @@
 #include "Common/Assert.h"
 #include "Common/MsgHandler.h"
 
-void CachedInterpreterEmitter::Write(AnyCallback callback, const void* operands, std::size_t size)
+#if defined(__clang__) || defined(__GNUC__)
+#if defined(__aarch64__)
+#define CI_HOT_FLATTEN [[gnu::hot, gnu::flatten]]
+#define CI_HOT_ONLY [[gnu::hot]]
+#else
+#define CI_HOT_FLATTEN [[gnu::hot]]
+#define CI_HOT_ONLY [[gnu::hot]]
+#endif
+#else
+#define CI_HOT_FLATTEN
+#define CI_HOT_ONLY
+#endif
+
+CI_HOT_ONLY void CachedInterpreterEmitter::Write(AnyCallback callback, const void* operands, std::size_t size)
 {
 #if defined(__aarch64__)
   __builtin_prefetch(m_code + 64, 1, 1);
