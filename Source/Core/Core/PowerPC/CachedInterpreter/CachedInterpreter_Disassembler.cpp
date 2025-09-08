@@ -132,6 +132,9 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
   for (const u8* normal_entry = block.normalEntry; normal_entry != block.near_end;
        ++instruction_count)
   {
+#if defined(__aarch64__)
+    __builtin_prefetch(normal_entry + 64, 0, 0);
+#endif
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
     const auto kv = std::ranges::lower_bound(sorted_lookup, callback, {}, &LookupKV::first);
     if (kv != sorted_lookup.end() && kv->first == callback)
