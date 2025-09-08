@@ -86,12 +86,6 @@ public:
                             const AbstractTexture* src, const MathUtil::Rectangle<int>& src_rc,
                             float gamma_rcp) override;
 
-  bool TryComputeEFBFilterRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
-                                const AbstractTexture* src, const MathUtil::Rectangle<int>& src_rc,
-                                const std::array<u32, 3>& filter_coefficients,
-                                bool efb_has_alpha, float gamma_rcp, float clamp_top,
-                                float clamp_bottom, bool allow_overflow) override;
-
 private:
   MRCOwned<CAMetalLayer*> m_layer;
   MRCOwned<id<CAMetalDrawable>> m_drawable;
@@ -105,7 +99,6 @@ private:
   std::unique_ptr<AbstractShader> m_rgba8_scale_cs;
   std::unique_ptr<AbstractShader> m_rgba8_down2x_cs;
   std::unique_ptr<AbstractShader> m_rgba8_gamma_cs;
-  std::unique_ptr<AbstractShader> m_rgba8_filter_cs;
 
    void CheckForSurfaceChange();
    void CheckForSurfaceResize();
