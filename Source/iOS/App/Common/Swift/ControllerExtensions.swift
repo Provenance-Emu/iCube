@@ -84,7 +84,11 @@ func installInputDebugHandlers(_ c: GCController) {
             }
             // Multiple pause gesture options for different controller types (tvOS)
             #if os(tvOS)
-            let allFourShoulders = gamepad.leftShoulder.isPressed && gamepad.rightShoulder.isPressed && gamepad.leftTrigger.isPressed && gamepad.rightTrigger.isPressed
+            let l1Down = gamepad.leftShoulder.isPressed
+            let r1Down = gamepad.rightShoulder.isPressed
+            let l2Down = gamepad.leftTrigger.value > 0.5
+            let r2Down = gamepad.rightTrigger.value > 0.5
+            let allFourShoulders = l1Down && r1Down && l2Down && r2Down
 
             // Option 1: All 4 shoulders + Menu (for controllers with Menu button)
             let menuCombo = allFourShoulders && gamepad.buttonMenu.isPressed
@@ -113,6 +117,39 @@ func installInputDebugHandlers(_ c: GCController) {
                 }
             }
             #endif
+        }
+        // Install high-reliability handlers for Menu/Options/Home presses
+        if #available(iOS 14.0, tvOS 14.0, *) {
+            /// Map Menu button to Start reliably and trigger pause chord when applicable
+            gp.buttonMenu.pressedChangedHandler = { _, _, pressed in
+                InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: pressed ? 1.0 : 0.0)
+                if pressed {
+                    PauseGestureTracker.shared.menuOrStartPressed()
+                }
+            }
+            /// Treat Options as Start-equivalent for pause chord and quick menu on iOS
+            if let options = gp.buttonOptions {
+                options.pressedChangedHandler = { _, _, pressed in
+                    if pressed {
+                        PauseGestureTracker.shared.menuOrStartPressed()
+                        #if os(iOS)
+                        TVEmulationBridge.pause()
+                        #if canImport(ActivityKit)
+                        GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+                        #endif
+                        NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+                        #endif
+                    }
+                }
+            }
+            /// Home can also act as Start for chord if available and not reserved
+            if let home = gp.buttonHome {
+                home.pressedChangedHandler = { _, _, pressed in
+                    if pressed {
+                        PauseGestureTracker.shared.menuOrStartPressed()
+                    }
+                }
+            }
         }
     }
 
@@ -190,8 +227,8 @@ func installInputDebugHandlers(_ c: GCController) {
             // Use analog threshold for triggers to be more reliable across controllers
             let l1Down = gamepad.leftShoulder.isPressed
             let r1Down = gamepad.rightShoulder.isPressed
-            let l2Down = gamepad.leftTrigger.value > 0.7
-            let r2Down = gamepad.rightTrigger.value > 0.7
+            let l2Down = gamepad.leftTrigger.value > 0.5
+            let r2Down = gamepad.rightTrigger.value > 0.5
             let allFour = l1Down && r1Down && l2Down && r2Down
             if UserDefaults.standard.bool(forKey: "input_debug") {
                 NSLog("[INPUT][Turbo] L1=%d R1=%d L2=%.2f R2=%.2f allFour=%d", l1Down, r1Down, gamepad.leftTrigger.value, gamepad.rightTrigger.value, allFour)
@@ -438,6 +475,16 @@ func installInputDebugHandlers(_ c: GCController) {
             TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonRight.rawValue, controller: 0, state: dx > 0.5)
             TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonDown.rawValue, controller: 0, state: dy < -0.5)
             TCManagerInterface.setButtonStateFor(TCButtonType.gcButtonUp.rawValue, controller: 0, state: dy > 0.5)
+        }
+        // High-reliability Start mapping for remotes/controllers with only Menu button
+        if #available(iOS 14.0, tvOS 14.0, *) {
+            /// Map Menu to Start and also allow pause chord when applicable
+            mg.buttonMenu.pressedChangedHandler = { _, _, pressed in
+                InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: pressed ? 1.0 : 0.0)
+                if pressed {
+                    PauseGestureTracker.shared.menuOrStartPressed()
+                }
+            }
         }
     }
 }
