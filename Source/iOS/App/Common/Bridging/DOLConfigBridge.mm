@@ -330,6 +330,8 @@
 + (void)setGfxHackFastMath:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_FAST_MATH, (bool)enabled); }
 + (BOOL)gfxUseComputeEfbXfb { return Config::Get(Config::GFX_USE_COMPUTE_EFBXFB); }
 + (void)setGfxUseComputeEfbXfb:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_USE_COMPUTE_EFBXFB, (bool)enabled); }
++ (BOOL)gfxHackNoMipmapping { return Config::Get(Config::GFX_HACK_NO_MIPMAPPING); }
++ (void)setGfxHackNoMipmapping:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_NO_MIPMAPPING, (bool)enabled); }
 
 // Graphics > Advanced
 + (BOOL)gfxFastDepthCalc { return Config::Get(Config::GFX_FAST_DEPTH_CALC); }

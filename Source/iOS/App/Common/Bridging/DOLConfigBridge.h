@@ -268,6 +268,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxHackFastMath:(BOOL)enabled;
 + (BOOL)gfxUseComputeEfbXfb;
 + (void)setGfxUseComputeEfbXfb:(BOOL)enabled;
++ (BOOL)gfxHackNoMipmapping;
++ (void)setGfxHackNoMipmapping:(BOOL)enabled;
 
 // Graphics > Advanced
 // Performance Statistics

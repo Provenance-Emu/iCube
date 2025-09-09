@@ -2210,6 +2210,7 @@ struct GraphicsHacksView: View {
   @State private var fastTextureSampling: Bool = true
   @State private var fastMath: Bool = false
   @State private var useComputeEfbXfb: Bool = false
+  @State private var noMipmapping: Bool = false
   var body: some View {
     List {
       Section(header: Text(L("General Hacks"))) {
@@ -2226,7 +2227,9 @@ struct GraphicsHacksView: View {
           .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
         Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling).onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
         Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath).onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) }
+        /// Compute path for EFB/XFB; may improve performance but can break some games
         Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb).onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
+        Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping).onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) }
       }
     }
     .navigationTitle(L("Hacks"))
@@ -2246,6 +2249,7 @@ struct GraphicsHacksView: View {
     fastTextureSampling = DOLConfigBridge.gfxHackFastTextureSampling()
     fastMath = DOLConfigBridge.gfxHackFastMath()
     useComputeEfbXfb = DOLConfigBridge.gfxUseComputeEfbXfb()
+    noMipmapping = DOLConfigBridge.gfxHackNoMipmapping()
   }
   private func viSkipLabel(_ v: Int) -> String { switch v { case 1: return L("On"); case 2: return L("Auto"); default: return L("Off") } }
 }
