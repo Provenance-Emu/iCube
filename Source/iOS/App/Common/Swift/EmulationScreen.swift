@@ -216,6 +216,13 @@ struct EmulationScreen: View {
   @State private var ocPercent: Int = 100
   @State private var vbiEnabledQuick: Bool = false
   @State private var vbiPercentQuick: Int = 100
+  @State private var showFPSQuick: Bool = false
+  @State private var showVPSQuick: Bool = false
+  @State private var showSpeedQuick: Bool = false
+  @State private var showVBlankQuick: Bool = false
+  @State private var efbScaleQuick: Int = 1
+  @State private var efbMaxScaleQuick: Int = 6
+  @State private var anisotropyQuick: Int = 1
 
 #if os(iOS)
   @State private var showSkyMenu = false
@@ -276,6 +283,36 @@ struct EmulationScreen: View {
             TVIntStepperOverlay(value: $vbiPercentQuick, range: 1...400, step: 1)
               .disabled(!vbiEnabledQuick)
               .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
+          }
+
+          Divider().background(.white.opacity(0.2))
+
+          // Overlays (FPS/VPS/Speed/VBlank)
+          Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
+            .tint(.blue)
+            .foregroundColor(.white)
+          Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
+            .tint(.blue)
+            .foregroundColor(.white)
+          Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
+            .tint(.blue)
+            .foregroundColor(.white)
+          Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
+            .tint(.blue)
+            .foregroundColor(.white)
+
+          // Graphics quick controls
+          HStack {
+            Text("Internal Resolution: \(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x")").foregroundColor(.white.opacity(0.8))
+            Spacer()
+            TVIntStepperOverlay(value: $efbScaleQuick, range: 0...efbMaxScaleQuick, step: 1)
+              .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
+          }
+          HStack {
+            Text("Anisotropic: \(anisotropyQuick)x").foregroundColor(.white.opacity(0.8))
+            Spacer()
+            TVIntStepperOverlay(value: $anisotropyQuick, range: 1...16, step: 1)
+              .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
           }
         }
         .padding(20)
@@ -372,6 +409,14 @@ struct EmulationScreen: View {
       ocPercent = DOLConfigBridge.mainOverclockPercent()
       vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
       vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+      // Overlay toggles and quick graphics
+      showFPSQuick = DOLConfigBridge.gfxShowFPS()
+      showVPSQuick = DOLConfigBridge.gfxShowVPS()
+      showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
+      showVBlankQuick = DOLConfigBridge.gfxShowVTimes()
+      efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
+      efbScaleQuick = DOLConfigBridge.gfxEfbScale()
+      anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
       // Live Activity start
       #if canImport(ActivityKit)
       GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
@@ -673,6 +718,39 @@ struct EmulationScreen: View {
                             .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
                         Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                     }
+
+                    Divider().background(.white.opacity(0.2))
+                    // Overlay toggles
+                    Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                    Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                    Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                    Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+
+                    // Quick graphics controls
+                    HStack {
+                        Text(L("Internal Resolution"))
+                            .foregroundColor(.white.opacity(0.8))
+                        Spacer()
+                        Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0...Double(max(1, efbMaxScaleQuick)), step: 1)
+                            .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
+                        Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+                    }
+                    HStack {
+                        Text(L("Anisotropic Filtering"))
+                            .foregroundColor(.white.opacity(0.8))
+                        Spacer()
+                        Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1...16, step: 1)
+                            .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+                        Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+                    }
                 }
                 .padding(20)
                 .frame(maxWidth: 420)
@@ -834,6 +912,14 @@ struct EmulationScreen: View {
         ocPercent = DOLConfigBridge.mainOverclockPercent()
         vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
         vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+        // Overlay toggles and quick graphics
+        showFPSQuick = DOLConfigBridge.gfxShowFPS()
+        showVPSQuick = DOLConfigBridge.gfxShowVPS()
+        showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
+        showVBlankQuick = DOLConfigBridge.gfxShowVTimes()
+        efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
+        efbScaleQuick = DOLConfigBridge.gfxEfbScale()
+        anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
         // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
         let currentIR = DOLConfigBridge.mainTouchPadIRMode()
         if currentIR == 0 { // None
