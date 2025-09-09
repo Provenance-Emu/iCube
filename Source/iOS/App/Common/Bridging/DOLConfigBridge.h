@@ -266,6 +266,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxHackFastTextureSampling:(BOOL)enabled;
 + (BOOL)gfxHackFastMath;
 + (void)setGfxHackFastMath:(BOOL)enabled;
++ (BOOL)gfxUseComputeEfbXfb;
++ (void)setGfxUseComputeEfbXfb:(BOOL)enabled;
 
 // Graphics > Advanced
 // Performance Statistics
