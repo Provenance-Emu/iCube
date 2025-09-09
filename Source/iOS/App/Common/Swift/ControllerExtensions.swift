@@ -52,10 +52,6 @@ func configureAllControllersForTVOS() {
 }
 
 func installInputDebugHandlers(_ c: GCController) {
-    // Avoid overriding library navigation: only install these handlers during emulation
-    if !TVEmulationBridge.isRunning() {
-        return
-    }
     // Chain pause handler
 
     if let gp = c.extendedGamepad {
@@ -88,7 +84,11 @@ func installInputDebugHandlers(_ c: GCController) {
             }
             // Multiple pause gesture options for different controller types (tvOS)
             #if os(tvOS)
-            let allFourShoulders = gamepad.leftShoulder.isPressed && gamepad.rightShoulder.isPressed && gamepad.leftTrigger.isPressed && gamepad.rightTrigger.isPressed
+            let l1Down = gamepad.leftShoulder.isPressed
+            let r1Down = gamepad.rightShoulder.isPressed
+            let l2Down = gamepad.leftTrigger.value > 0.5
+            let r2Down = gamepad.rightTrigger.value > 0.5
+            let allFourShoulders = l1Down && r1Down && l2Down && r2Down
 
             // Option 1: All 4 shoulders + Menu (for controllers with Menu button)
             let menuCombo = allFourShoulders && gamepad.buttonMenu.isPressed
@@ -227,8 +227,8 @@ func installInputDebugHandlers(_ c: GCController) {
             // Use analog threshold for triggers to be more reliable across controllers
             let l1Down = gamepad.leftShoulder.isPressed
             let r1Down = gamepad.rightShoulder.isPressed
-            let l2Down = gamepad.leftTrigger.value > 0.7
-            let r2Down = gamepad.rightTrigger.value > 0.7
+            let l2Down = gamepad.leftTrigger.value > 0.5
+            let r2Down = gamepad.rightTrigger.value > 0.5
             let allFour = l1Down && r1Down && l2Down && r2Down
             if UserDefaults.standard.bool(forKey: "input_debug") {
                 NSLog("[INPUT][Turbo] L1=%d R1=%d L2=%.2f R2=%.2f allFour=%d", l1Down, r1Down, gamepad.leftTrigger.value, gamepad.rightTrigger.value, allFour)
