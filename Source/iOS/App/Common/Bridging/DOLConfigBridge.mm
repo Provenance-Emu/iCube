@@ -53,6 +53,8 @@
 // Disable Fog
 + (BOOL)gfxDisableFog { return Config::Get(Config::GFX_DISABLE_FOG); }
 + (void)setGfxDisableFog:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_DISABLE_FOG, (bool)enabled); }
++ (BOOL)gfxEnableGPUTextureDecoding { return Config::Get(Config::GFX_ENABLE_GPU_TEXTURE_DECODING); }
++ (void)setGfxEnableGPUTextureDecoding:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_ENABLE_GPU_TEXTURE_DECODING, (bool)enabled); }
 
 + (BOOL)gfxAsyncPresent { return Config::Get(Config::GFX_ASYNC_PRESENT); }
 + (void)setGfxAsyncPresent:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_ASYNC_PRESENT, (bool)enabled); }
@@ -332,6 +334,10 @@
 + (void)setGfxUseComputeEfbXfb:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_USE_COMPUTE_EFBXFB, (bool)enabled); }
 + (BOOL)gfxHackNoMipmapping { return Config::Get(Config::GFX_HACK_NO_MIPMAPPING); }
 + (void)setGfxHackNoMipmapping:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_NO_MIPMAPPING, (bool)enabled); }
++ (BOOL)gfxHackEarlyXfbOutput { return Config::Get(Config::GFX_HACK_EARLY_XFB_OUTPUT); }
++ (void)setGfxHackEarlyXfbOutput:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_EARLY_XFB_OUTPUT, (bool)enabled); }
++ (BOOL)gfxHackSkipDuplicateXFBs { return Config::Get(Config::GFX_HACK_SKIP_DUPLICATE_XFBS); }
++ (void)setGfxHackSkipDuplicateXFBs:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_SKIP_DUPLICATE_XFBS, (bool)enabled); }
 
 // Graphics > Advanced
 + (BOOL)gfxFastDepthCalc { return Config::Get(Config::GFX_FAST_DEPTH_CALC); }

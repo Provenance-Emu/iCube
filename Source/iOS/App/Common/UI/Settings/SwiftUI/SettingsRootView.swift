@@ -2040,790 +2040,798 @@ struct GraphicsEnhancementsView: View {
   @State private var arbitraryMipmapDetection: Bool = false
   @State private var arbitraryMipmapThreshold: Double = 0.5
   @State private var hdrOutput: Bool = false
-@State private var helpMessage: String = ""
-@State private var showHelp: Bool = false
-var body: some View {
-  List {
-    Section(content: {
-      NavigationLink(destination: EfbScalePicker(selected: $efbScale, maxScale: efbMaxScale)) {
-        Text("\(L("Internal Resolution")): \(efbScale == 0 ? L("Auto") : "\(efbScale)x")")
-          .overlay(alignment: .trailing) {
-            Button { helpMessage = helpTextInternalResolution(); showHelp = true } label: { Image(systemName: "info.circle") }
-              .buttonStyle(.plain)
-          }
-      }
-      .onChange(of: efbScale) { DOLConfigBridge.setGfxEfbScale($0) }
-    }, header: { Text(L("Internal Resolution")) })
-    Section(content: {
-      NavigationLink(destination: AnisotropyPicker(selected: $anisotropy)) {
-        Text("\(L("Anisotropic Filtering")): \(anisotropy)x")
-          .overlay(alignment: .trailing) {
-            Button { helpMessage = helpTextAnisotropy(); showHelp = true } label: { Image(systemName: "info.circle") }
-              .buttonStyle(.plain)
-          }
-      }
-      .onChange(of: anisotropy) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
-    }, header: { Text(L("Texture Filtering")) })
-    Section(content: {
-      Toggle(isOn: $trueColor) { labelWithInfo(L("Force 24-bit Color")) { helpMessage = helpTextForceTrueColor(); showHelp = true } }
-        .onChange(of: trueColor) { DOLConfigBridge.setGfxEnhanceForceTrueColor($0) }
-      Toggle(isOn: $disableCopyFilter) { labelWithInfo(L("Disable Copy Filter")) { helpMessage = helpTextDisableCopyFilter(); showHelp = true } }
-        .onChange(of: disableCopyFilter) { DOLConfigBridge.setGfxEnhanceDisableCopyFilter($0) }
-      Toggle(isOn: $widescreenHack) { labelWithInfo(L("Widescreen Hack")) { helpMessage = helpTextWidescreenHack(); showHelp = true } }
-        .onChange(of: widescreenHack) { DOLConfigBridge.setGfxWidescreenHack($0) }
-      Toggle(isOn: $hdrOutput) { labelWithInfo(L("HDR Output")) { helpMessage = helpTextHDROutput(); showHelp = true } }
-        .onChange(of: hdrOutput) { DOLConfigBridge.setGfxEnhanceHDROutput($0) }
-    }, header: { Text(L("Enhancements")) })
-    Section(content: {
-      Toggle(isOn: $disableFog) { labelWithInfo(L("Disable Fog")) { helpMessage = helpTextDisableFog(); showHelp = true } }
-        .onChange(of: disableFog) { DOLConfigBridge.setGfxDisableFog($0) }
-      Toggle(isOn: $arbitraryMipmapDetection) { labelWithInfo(L("Arbitrary Mipmap Detection")) { helpMessage = helpTextArbitraryMipmap(); showHelp = true } }
-        .onChange(of: arbitraryMipmapDetection) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetection($0) }
-      if arbitraryMipmapDetection {
-        VStack(alignment: .leading, spacing: 8) {
-          HStack {
-            Text(L("Mipmap Detection Threshold"))
-            Spacer()
-            Text(String(format: "%.2f", arbitraryMipmapThreshold))
-          }
-          #if os(tvOS)
-          TVIntStepper(
-            value: Binding(
-              get: { Int(arbitraryMipmapThreshold * 100) },
-              set: { arbitraryMipmapThreshold = Double($0) / 100.0 }
-            ),
-            range: 0...100,
-            step: 1
-          )
-          .onChange(of: arbitraryMipmapThreshold) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }
-          #else
-          Slider(value: $arbitraryMipmapThreshold, in: 0.0...1.0, step: 0.01)
+  @State private var gpuTextureDecoding: Bool = false
+  @State private var helpMessage: String = ""
+  @State private var showHelp: Bool = false
+  var body: some View {
+    List {
+      Section(content: {
+        NavigationLink(destination: EfbScalePicker(selected: $efbScale, maxScale: efbMaxScale)) {
+          Text("\(L("Internal Resolution")): \(efbScale == 0 ? L("Auto") : "\(efbScale)x")")
+            .overlay(alignment: .trailing) {
+              Button { helpMessage = helpTextInternalResolution(); showHelp = true } label: { Image(systemName: "info.circle") }
+                .buttonStyle(.plain)
+            }
+        }
+        .onChange(of: efbScale) { DOLConfigBridge.setGfxEfbScale($0) }
+      }, header: { Text(L("Internal Resolution")) })
+      Section(content: {
+        NavigationLink(destination: AnisotropyPicker(selected: $anisotropy)) {
+          Text("\(L("Anisotropic Filtering")): \(anisotropy)x")
+            .overlay(alignment: .trailing) {
+              Button { helpMessage = helpTextAnisotropy(); showHelp = true } label: { Image(systemName: "info.circle") }
+                .buttonStyle(.plain)
+            }
+        }
+        .onChange(of: anisotropy) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+      }, header: { Text(L("Texture Filtering")) })
+      Section(content: {
+        Toggle(isOn: $trueColor) { labelWithInfo(L("Force 24-bit Color")) { helpMessage = helpTextForceTrueColor(); showHelp = true } }
+          .onChange(of: trueColor) { DOLConfigBridge.setGfxEnhanceForceTrueColor($0) }
+        Toggle(isOn: $disableCopyFilter) { labelWithInfo(L("Disable Copy Filter")) { helpMessage = helpTextDisableCopyFilter(); showHelp = true } }
+          .onChange(of: disableCopyFilter) { DOLConfigBridge.setGfxEnhanceDisableCopyFilter($0) }
+        Toggle(isOn: $widescreenHack) { labelWithInfo(L("Widescreen Hack")) { helpMessage = helpTextWidescreenHack(); showHelp = true } }
+          .onChange(of: widescreenHack) { DOLConfigBridge.setGfxWidescreenHack($0) }
+        Toggle(isOn: $hdrOutput) { labelWithInfo(L("HDR Output")) { helpMessage = helpTextHDROutput(); showHelp = true } }
+          .onChange(of: hdrOutput) { DOLConfigBridge.setGfxEnhanceHDROutput($0) }
+        Toggle(isOn: $gpuTextureDecoding) { labelWithInfo(L("GPU Texture Decoding")) { helpMessage = L("Decodes textures on the GPU to reduce CPU load. May cause issues with some features such as Arbitrary Mipmap Detection."); showHelp = true } }
+          .onChange(of: gpuTextureDecoding) { DOLConfigBridge.setGfxEnableGPUTextureDecoding($0) }
+      }, header: { Text(L("Enhancements")) })
+      Section(content: {
+        Toggle(isOn: $disableFog) { labelWithInfo(L("Disable Fog")) { helpMessage = helpTextDisableFog(); showHelp = true } }
+          .onChange(of: disableFog) { DOLConfigBridge.setGfxDisableFog($0) }
+        Toggle(isOn: $arbitraryMipmapDetection) { labelWithInfo(L("Arbitrary Mipmap Detection")) { helpMessage = helpTextArbitraryMipmap(); showHelp = true } }
+          .onChange(of: arbitraryMipmapDetection) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetection($0) }
+        if arbitraryMipmapDetection {
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text(L("Mipmap Detection Threshold"))
+              Spacer()
+              Text(String(format: "%.2f", arbitraryMipmapThreshold))
+            }
+            #if os(tvOS)
+            TVIntStepper(
+              value: Binding(
+                get: { Int(arbitraryMipmapThreshold * 100) },
+                set: { arbitraryMipmapThreshold = Double($0) / 100.0 }
+              ),
+              range: 0...100,
+              step: 1
+            )
             .onChange(of: arbitraryMipmapThreshold) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }
-          #endif
-        }
-      }
-    }, header: { Text(L("Compatibility")) })
-  }
-  .navigationTitle(L("Enhancements"))
-  .onAppear { sync() }
-  .sheet(isPresented: $showHelp) {
-    NavigationView {
-      ScrollView { Text(helpMessage).padding() }
-        .navigationTitle(L("Help"))
-        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { showHelp = false } } }
-    }
-  }
-  }
-  private func sync() {
-    efbMaxScale = max(1, DOLConfigBridge.gfxEfbMaxScale())
-    efbScale = DOLConfigBridge.gfxEfbScale()
-    anisotropy = DOLConfigBridge.gfxEnhanceAnisotropySamples()
-    trueColor = DOLConfigBridge.gfxEnhanceForceTrueColor()
-    disableCopyFilter = DOLConfigBridge.gfxEnhanceDisableCopyFilter()
-    widescreenHack = DOLConfigBridge.gfxWidescreenHack()
-    disableFog = DOLConfigBridge.gfxDisableFog()
-    arbitraryMipmapDetection = DOLConfigBridge.gfxEnhanceArbitraryMipmapDetection()
-    arbitraryMipmapThreshold = Double(DOLConfigBridge.gfxEnhanceArbitraryMipmapDetectionThreshold())
-    hdrOutput = DOLConfigBridge.gfxEnhanceHDROutput()
-  }
-  private func labelWithInfo(_ title: String, action: @escaping () -> Void) -> some View {
-    HStack {
-      Text(title)
-      Spacer()
-      Button(action: action) { Image(systemName: "info.circle") }
-        .buttonStyle(.plain)
-    }
-  }
-
-  // MARK: - Help Text (UIKit parity)
-  private func helpTextInternalResolution() -> String {
-    L("Controls the rendering resolution.\n\nA high resolution greatly improves visual quality, but also greatly increases GPU load and can cause issues in certain games. Generally speaking, the lower the internal resolution, the better performance will be.\n\nIf unsure, select Native.")
-  }
-  private func helpTextAnisotropy() -> String {
-    L("Adjust the texture filtering. Anisotropic filtering enhances the visual quality of textures that are at oblique viewing angles. Force Nearest and Force Linear override the texture scaling filter selected by the game.\n\nAny option except 'Default' will alter the look of the game's textures and might cause issues in a small number of games.\n\nIf unsure, select 'Default'.")
-  }
-  private func helpTextDisableFog() -> String {
-    L("Makes distant objects more visible by removing fog, thus increasing the overall detail.\n\nDisabling fog will break some games which rely on proper fog emulation.\n\nIf unsure, leave this unchecked.")
-  }
-  private func helpTextDisableCopyFilter() -> String {
-    L("Disables the blending of adjacent rows when copying the EFB. This is known in some games as \"deflickering\" or \"smoothing\".\n\nDisabling the filter has no effect on performance, but may result in a sharper image. Causes few graphical issues.\n\nIf unsure, leave this checked.")
-  }
-  private func helpTextWidescreenHack() -> String {
-    L("Forces the game to output graphics for any aspect ratio. Use with \"Aspect Ratio\" set to \"Force 16:9\" to force 4:3-only games to run at 16:9.\n\nRarely produces good results and often partially breaks graphics and game UIs. Unnecessary (and detrimental) if using any AR/Gecko-code widescreen patches.\n\nIf unsure, leave this unchecked.")
-  }
-  private func helpTextForceTrueColor() -> String {
-    L("Forces the game to render the RGB color channels in 24-bit, thereby increasing quality by reducing color banding.\n\nHas no impact on performance and causes few graphical issues.\n\nIf unsure, leave this checked.")
-  }
-  private func helpTextArbitraryMipmap() -> String {
-    L("Enables detection of arbitrary mipmaps, which some games use for special distance-based effects.\n\nMay have false positives that result in blurry textures at increased internal resolution, such as in games that use very low resolution mipmaps. Disabling this can also reduce stutter in games that frequently load new textures. This feature is not compatible with GPU Texture Decoding.\n\nIf unsure, leave this checked.")
-  }
-  private func helpTextHDROutput() -> String {
-    L("Enables HDR output on supported displays. May improve perceived dynamic range and color on HDR-capable devices.")
-  }
-}
-
-private struct AnisotropyPicker: View {
-  @Binding var selected: Int
-  private var options: [Int] { [1, 2, 4, 8, 16] }
-  var body: some View {
-    List {
-      ForEach(options, id: \.self) { v in
-        SelectRow(label: "\(v)x", checked: v == selected) { selected = v; DOLConfigBridge.setGfxEnhanceAnisotropySamples(v) }
-      }
-    }
-    .navigationTitle(L("Anisotropic Filtering"))
-  }
-}
-
-private struct EfbScalePicker: View {
-  @Binding var selected: Int
-  let maxScale: Int
-  private var options: [Int] { [0] + Array(1...max(1, maxScale)) }
-  var body: some View {
-    List {
-      ForEach(options, id: \.self) { v in
-        if v == 0 {
-          SelectRow(label: L("Auto"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxEfbScale(0) }
-        } else if v == 1 {
-          SelectRow(label: "1x (\(L("Native")))", checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxEfbScale(1) }
-        } else {
-          SelectRow(label: "\(v)x", checked: selected == v) { selected = v; DOLConfigBridge.setGfxEfbScale(v) }
-        }
-      }
-    }
-    .navigationTitle(L("Internal Resolution"))
-  }
-}
-
-/// Graphics > Hacks placeholder
-struct GraphicsHacksView: View {
-  @State private var efbAccess: Bool = false
-  @State private var skipEfbToRam: Bool = false
-  @State private var skipXfbToRam: Bool = false
-  @State private var immediateXfb: Bool = false
-  @State private var copyEfbScaled: Bool = true
-  @State private var efbFormatChanges: Bool = true
-  @State private var vertexRounding: Bool = false
-  @State private var forceProgressive: Bool = false
-  @State private var deferEfbCopies: Bool = false
-  @State private var viSkipMode: Int = 0 // TriState
-  @State private var fastTextureSampling: Bool = true
-  @State private var fastMath: Bool = false
-  @State private var useComputeEfbXfb: Bool = false
-  @State private var noMipmapping: Bool = false
-  var body: some View {
-    List {
-      Section(header: Text(L("General Hacks"))) {
-        Toggle(L("Enable EFB Access"), isOn: $efbAccess).onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) }
-        Toggle(L("Skip EFB Copy to RAM"), isOn: $skipEfbToRam).onChange(of: skipEfbToRam) { DOLConfigBridge.setGfxHackSkipEfbCopyToRam($0) }
-        Toggle(L("Skip XFB Copy to RAM"), isOn: $skipXfbToRam).onChange(of: skipXfbToRam) { DOLConfigBridge.setGfxHackSkipXfbCopyToRam($0) }
-        Toggle(L("Immediate XFB"), isOn: $immediateXfb).onChange(of: immediateXfb) { DOLConfigBridge.setGfxHackImmediateXfb($0) }
-        Toggle(L("Copy EFB Scaled"), isOn: $copyEfbScaled).onChange(of: copyEfbScaled) { DOLConfigBridge.setGfxHackCopyEfbScaled($0) }
-        Toggle(L("Emulate EFB Format Changes"), isOn: $efbFormatChanges).onChange(of: efbFormatChanges) { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) }
-        Toggle(L("Vertex Rounding"), isOn: $vertexRounding).onChange(of: vertexRounding) { DOLConfigBridge.setGfxHackVertexRounding($0) }
-        Toggle(L("Force Progressive Scan"), isOn: $forceProgressive).onChange(of: forceProgressive) { DOLConfigBridge.setGfxHackForceProgressive($0) }
-        Toggle(L("Defer EFB Copies"), isOn: $deferEfbCopies).onChange(of: deferEfbCopies) { DOLConfigBridge.setGfxHackDeferEfbCopies($0) }
-        NavigationLink("\(L("VI Skip Mode")): \(viSkipLabel(viSkipMode))", destination: ViSkipModePicker(selected: $viSkipMode))
-          .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
-        Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling).onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
-        Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath).onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) }
-        /// Compute path for EFB/XFB; may improve performance but can break some games
-        Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb).onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
-        Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping).onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) }
-      }
-    }
-    .navigationTitle(L("Hacks"))
-    .onAppear { sync() }
-  }
-  private func sync() {
-    efbAccess = DOLConfigBridge.gfxHackEfbAccessEnable()
-    skipEfbToRam = DOLConfigBridge.gfxHackSkipEfbCopyToRam()
-    skipXfbToRam = DOLConfigBridge.gfxHackSkipXfbCopyToRam()
-    immediateXfb = DOLConfigBridge.gfxHackImmediateXfb()
-    copyEfbScaled = DOLConfigBridge.gfxHackCopyEfbScaled()
-    efbFormatChanges = DOLConfigBridge.gfxHackEfbEmulateFormatChanges()
-    vertexRounding = DOLConfigBridge.gfxHackVertexRounding()
-    forceProgressive = DOLConfigBridge.gfxHackForceProgressive()
-    deferEfbCopies = DOLConfigBridge.gfxHackDeferEfbCopies()
-    viSkipMode = DOLConfigBridge.gfxHackViSkipMode()
-    fastTextureSampling = DOLConfigBridge.gfxHackFastTextureSampling()
-    fastMath = DOLConfigBridge.gfxHackFastMath()
-    useComputeEfbXfb = DOLConfigBridge.gfxUseComputeEfbXfb()
-    noMipmapping = DOLConfigBridge.gfxHackNoMipmapping()
-  }
-  private func viSkipLabel(_ v: Int) -> String { switch v { case 1: return L("On"); case 2: return L("Auto"); default: return L("Off") } }
-}
-
-private struct ViSkipModePicker: View {
-  @Binding var selected: Int
-  var body: some View {
-    List {
-      SelectRow(label: L("Off"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxHackViSkipMode(0) }
-      SelectRow(label: L("On"), checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxHackViSkipMode(1) }
-      SelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; DOLConfigBridge.setGfxHackViSkipMode(2) }
-    }
-    .navigationTitle(L("VI Skip Mode"))
-  }
-}
-/// Graphics > Advanced placeholder
-struct GraphicsAdvancedView: View {
-  @State private var fastDepth: Bool = true
-  @State private var pixelLighting: Bool = false
-  @State private var backendMT: Bool = true
-  @State private var shaderCache: Bool = true
-  @State private var saveTexCache: Bool = false
-  @State private var preferVSForLines: Bool = false
-  @State private var cpuCull: Bool = false
-  // Performance Statistics
-  @State private var showFPS: Bool = false
-  @State private var showVPS: Bool = false
-  @State private var showSpeed: Bool = false
-  @State private var showFrameTimes: Bool = false
-  @State private var showVBlankTimes: Bool = false
-  @State private var showGraphs: Bool = false
-  @State private var logRenderTime: Bool = false
-  @State private var speedColors: Bool = false
-  // Debugging
-  @State private var overlayStats: Bool = false
-  @State private var validationLayer: Bool = false
-  // Utility (Custom Textures / Mods / VRAM copy)
-  @State private var hiresTextures: Bool = false
-  @State private var prefetchTextures: Bool = false
-  @State private var disableEfbToVRAM: Bool = false
-  @State private var graphicsMods: Bool = false
-  // Misc
-  @State private var cropPicture: Bool = false
-  @State private var progressiveScan: Bool = false
-  // Shader Threads
-  @State private var compilerThreads: Int = 1
-  @State private var precompilerThreads: Int = 1
-  @State private var maxThreads: Int = 2
-  // Experimental
-  @State private var deferEfbInvalidation: Bool = false
-  @State private var manualTexSampling: Bool = false
-  var body: some View {
-    List {
-      Section(header: Text(L("Performance Statistics"))) {
-        Toggle(L("Show FPS"), isOn: $showFPS).onChange(of: showFPS) { _ in DOLConfigBridge.setGfxShowFPS(showFPS) }
-        Toggle(L("Show VPS"), isOn: $showVPS).onChange(of: showVPS) { _ in DOLConfigBridge.setGfxShowVPS(showVPS) }
-        Toggle(L("Show Speed"), isOn: $showSpeed).onChange(of: showSpeed) { _ in DOLConfigBridge.setGfxShowSpeed(showSpeed) }
-        Toggle(L("Show Frame Times"), isOn: $showFrameTimes).onChange(of: showFrameTimes) { _ in DOLConfigBridge.setGfxShowFTimes(showFrameTimes) }
-        Toggle(L("Show VBlank Times"), isOn: $showVBlankTimes).onChange(of: showVBlankTimes) { _ in DOLConfigBridge.setGfxShowVTimes(showVBlankTimes) }
-        Toggle(L("Show Graphs"), isOn: $showGraphs).onChange(of: showGraphs) { _ in DOLConfigBridge.setGfxShowGraphs(showGraphs) }
-        Toggle(L("Log Render Time to File"), isOn: $logRenderTime).onChange(of: logRenderTime) { _ in DOLConfigBridge.setGfxLogRenderTimeToFile(logRenderTime) }
-        Toggle(L("Speed Colors"), isOn: $speedColors).onChange(of: speedColors) { _ in DOLConfigBridge.setGfxShowSpeedColors(speedColors) }
-      }
-
-      Section(header: Text(L("Debugging"))) {
-        Toggle(L("Overlay Stats"), isOn: $overlayStats).onChange(of: overlayStats) { _ in DOLConfigBridge.setGfxOverlayStats(overlayStats) }
-        Toggle(L("API Validation Layer"), isOn: $validationLayer).onChange(of: validationLayer) { _ in DOLConfigBridge.setGfxEnableValidationLayer(validationLayer) }
-      }
-
-      Section(header: Text(L("Shader Threads"))) {
-        HStack {
-          Text(L("Compiler Threads"))
-          Spacer()
-          #if os(tvOS)
-          TVIntStepper(value: $compilerThreads, range: 1...maxThreads, step: 1)
-          #else
-          Stepper(value: $compilerThreads, in: 1...maxThreads) { Text("\(compilerThreads)") }
-          #endif
-        }
-        .onChange(of: compilerThreads) { v in DOLConfigBridge.setGfxShaderCompilerThreads(v) }
-        HStack {
-          Text(L("Precompiler Threads"))
-          Spacer()
-          #if os(tvOS)
-          TVIntStepper(value: $precompilerThreads, range: 1...maxThreads, step: 1)
-          #else
-          Stepper(value: $precompilerThreads, in: 1...maxThreads) { Text("\(precompilerThreads)") }
-          #endif
-        }
-        .onChange(of: precompilerThreads) { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) }
-      }
-
-      Section(header: Text(L("Utility"))) {
-        Toggle(L("Load Custom Textures"), isOn: $hiresTextures).onChange(of: hiresTextures) { _ in DOLConfigBridge.setGfxHiresTextures(hiresTextures) }
-        Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures)
-          .disabled(!hiresTextures)
-          .onChange(of: prefetchTextures) { _ in DOLConfigBridge.setGfxCacheHiresTextures(prefetchTextures) }
-        Toggle(L("Disable EFB Copy to VRAM"), isOn: $disableEfbToVRAM).onChange(of: disableEfbToVRAM) { _ in DOLConfigBridge.setGfxHackDisableCopyToVRAM(disableEfbToVRAM) }
-        Toggle(L("Enable Graphics Mods"), isOn: $graphicsMods).onChange(of: graphicsMods) { _ in DOLConfigBridge.setGfxModsEnable(graphicsMods) }
-      }
-
-      Section(header: Text(L("Misc"))) {
-        Toggle(L("Crop"), isOn: $cropPicture).onChange(of: cropPicture) { _ in DOLConfigBridge.setGfxCrop(cropPicture) }
-        Toggle(L("Progressive Scan"), isOn: $progressiveScan).onChange(of: progressiveScan) { _ in DOLConfigBridge.setSysconfProgressiveScan(progressiveScan) }
-      }
-
-      Section(header: Text(L("Rendering"))) {
-        Toggle(L("Fast Depth Calculation"), isOn: $fastDepth).onChange(of: fastDepth) { DOLConfigBridge.setGfxFastDepthCalc($0) }
-        Toggle(L("Per-Pixel Lighting"), isOn: $pixelLighting).onChange(of: pixelLighting) { DOLConfigBridge.setGfxEnablePixelLighting($0) }
-        Toggle(L("Backend Multithreading"), isOn: $backendMT).onChange(of: backendMT) { DOLConfigBridge.setGfxBackendMultithreading($0) }
-        Toggle(L("Enable Shader Cache"), isOn: $shaderCache).onChange(of: shaderCache) { DOLConfigBridge.setGfxShaderCache($0) }
-        Toggle(L("Save Texture Cache to State"), isOn: $saveTexCache).onChange(of: saveTexCache) { DOLConfigBridge.setGfxSaveTextureCacheToState($0) }
-        Toggle(L("Prefer Vertex Shader for Line/Point Expansion"), isOn: $preferVSForLines).onChange(of: preferVSForLines) { DOLConfigBridge.setGfxPreferVSForLinePointExpansion($0) }
-        Toggle(L("CPU Culling"), isOn: $cpuCull).onChange(of: cpuCull) { DOLConfigBridge.setGfxCpuCull($0) }
-      }
-
-      Section(header: Text(L("Experimental"))) {
-        Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation).onChange(of: deferEfbInvalidation) { _ in DOLConfigBridge.setGfxHackEfbDeferInvalidation(deferEfbInvalidation) }
-        // Manual Texture Sampling is the inverse of Fast Texture Sampling
-        Toggle(L("Manual Texture Sampling"), isOn: $manualTexSampling).onChange(of: manualTexSampling) { _ in DOLConfigBridge.setGfxHackFastTextureSampling(!manualTexSampling) }
-      }
-    }
-    .navigationTitle(L("Advanced"))
-    .onAppear { sync() }
-  }
-  private func sync() {
-    fastDepth = DOLConfigBridge.gfxFastDepthCalc()
-    pixelLighting = DOLConfigBridge.gfxEnablePixelLighting()
-    backendMT = DOLConfigBridge.gfxBackendMultithreading()
-    shaderCache = DOLConfigBridge.gfxShaderCache()
-    saveTexCache = DOLConfigBridge.gfxSaveTextureCacheToState()
-    preferVSForLines = DOLConfigBridge.gfxPreferVSForLinePointExpansion()
-    cpuCull = DOLConfigBridge.gfxCpuCull()
-    // Performance Statistics
-    showFPS = DOLConfigBridge.gfxShowFPS()
-    showVPS = DOLConfigBridge.gfxShowVPS()
-    showSpeed = DOLConfigBridge.gfxShowSpeed()
-    showFrameTimes = DOLConfigBridge.gfxShowFTimes()
-    showVBlankTimes = DOLConfigBridge.gfxShowVTimes()
-    showGraphs = DOLConfigBridge.gfxShowGraphs()
-    logRenderTime = DOLConfigBridge.gfxLogRenderTimeToFile()
-    speedColors = DOLConfigBridge.gfxShowSpeedColors()
-    // Debugging
-    overlayStats = DOLConfigBridge.gfxOverlayStats()
-    validationLayer = DOLConfigBridge.gfxEnableValidationLayer()
-    // Utility
-    hiresTextures = DOLConfigBridge.gfxHiresTextures()
-    prefetchTextures = DOLConfigBridge.gfxCacheHiresTextures()
-    disableEfbToVRAM = DOLConfigBridge.gfxHackDisableCopyToVRAM()
-    graphicsMods = DOLConfigBridge.gfxModsEnable()
-    // Misc
-    cropPicture = DOLConfigBridge.gfxCrop()
-    progressiveScan = DOLConfigBridge.sysconfProgressiveScan()
-    // Shader threads
-    let cores = max(2, ProcessInfo.processInfo.processorCount)
-    maxThreads = max(1, cores - 1)
-    let ct = DOLConfigBridge.gfxShaderCompilerThreads()
-    compilerThreads = (ct <= 0) ? min(2, maxThreads) : ct
-    let pt = DOLConfigBridge.gfxShaderPrecompilerThreads()
-    precompilerThreads = (pt <= 0) ? min(2, maxThreads) : pt
-    // Experimental
-    deferEfbInvalidation = DOLConfigBridge.gfxHackEfbDeferInvalidation()
-    manualTexSampling = !DOLConfigBridge.gfxHackFastTextureSampling()
-  }
-}
-
-// MARK: - Controllers Port
-private struct ControllersPortView: View {
-  let isGC: Bool
-  let portOneBased: Int
-  var title: String { isGC ? "\(L("GameCube Controller")) \(portOneBased)" : "\(L("Wii Remote")) \(portOneBased)" }
-  @State private var canConfigure: Bool = false
-  var body: some View {
-    List {
-      NavigationLink(L("Type"), destination: ControllersTypePicker(isGC: isGC, portOneBased: portOneBased))
-      NavigationLink(L("Configure"), destination: ControllersMappingView(isGC: isGC, portOneBased: portOneBased))
-        .disabled(!canConfigure)
-    }
-    .navigationTitle(Text(title))
-    .onAppear { sync() }
-  }
-  private func sync() {
-    if isGC {
-      let device = DOLConfigBridge.gcPortDevice(forPort: portOneBased)
-      canConfigure = device != 0
-    } else {
-      let source = DOLConfigBridge.wiimoteSource(for: portOneBased)
-      canConfigure = source != 0
-    }
-  }
-}
-
-private struct ControllersTypePicker: View {
-  let isGC: Bool
-  let portOneBased: Int
-  @State private var selected: Int = 0
-  var body: some View {
-    List {
-      if isGC {
-        // 0: None, 1: GC Controller
-        SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 0) }
-        SelectRow(label: L("GameCube Controller"), checked: selected == 1) {
-          selected = 1
-          DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 1)
-          EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
-          ControllerManager.shared.reconcile()
-        }
-      } else {
-        // 0: None, 1: Emulated
-        SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 0) }
-        SelectRow(label: L("Emulated Wii Remote"), checked: selected == 1) {
-          selected = 1
-          DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 1)
-          EmulationCoordinator.ensureWiimoteDefaultsToTouchscreen(forPort: portOneBased)
-          ControllerManager.shared.reconcile()
-        }
-      }
-    }
-    .navigationTitle(L("Type"))
-    .onAppear { sync() }
-  }
-  private func sync() {
-    if isGC {
-      selected = DOLConfigBridge.gcPortDevice(forPort: portOneBased)
-    } else {
-      selected = DOLConfigBridge.wiimoteSource(for: portOneBased)
-    }
-  }
-}
-
-private struct ControllersMappingPlaceholder: View {
-  var body: some View {
-    List { Text(L("TODO: Mapping")) }
-      .navigationTitle(L("Configure"))
-  }
-}
-
-// UIKit wrapper for the legacy mapping UI (MappingRootViewController in ButtonMapping.storyboard)
-private struct ControllersMappingView: UIViewControllerRepresentable {
-  let isGC: Bool
-  let portOneBased: Int
-
-  func makeUIViewController(context: Context) -> UIViewController {
-    let storyboard = UIStoryboard(name: "ButtonMapping", bundle: nil)
-    let vc = storyboard.instantiateInitialViewController() ?? UIViewController()
-    // Pass mapping context via KVC to avoid additional bridging requirements
-    // DOLMappingType: 0 = Pad, 1 = Wiimote
-    vc.setValue(isGC ? 0 : 1, forKey: "mappingType")
-    vc.setValue(max(0, portOneBased - 1), forKey: "mappingPort")
-    return vc
-  }
-
-  func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-    // No-op; mapping UI manages its own state
-  }
-}
-
-private struct ControllersTurboPicker: View {
-  @State private var selected: Int = 800
-  private let options: [Int] = [200, 400, 800, 1600, 3200]
-  private func label(_ v: Int) -> String { String(format: "%dx", v/100) }
-  var body: some View {
-    List {
-      ForEach(options, id: \.self) { v in
-        SelectRow(label: label(v), checked: v == selected) {
-          selected = v
-          UserDefaults.standard.set(v, forKey: "controller_turbo_multiplier_percent")
-        }
-      }
-    }
-    .navigationTitle(L("Turbo Multiplier"))
-    .onAppear {
-      let v = UserDefaults.standard.integer(forKey: "controller_turbo_multiplier_percent")
-      selected = (v > 0) ? v : 800
-    }
-  }
-}
-
-// MARK: - Audio FX Chain Editor (iOS)
-#if os(iOS)
-import AVFoundation
-
-struct FXChainEditor: View {
-  @State private var effects: [FXItem] = []
-  @State private var showingAU: UIViewController?
-  @State private var showAddSheet = false
-  @State private var searchText = ""
-  @State private var availableCount: Int = 0
-  @State private var showEnableEnginePrompt = false
-
-  struct FXItem: Identifiable, Equatable { let id = UUID(); let name: String; var bypass: Bool; let index: Int }
-
-  var body: some View {
-    Group {
-      HStack {
-        Spacer()
-        Button(action: {
-          NSLog("[FX] Add button tapped")
-          showAddSheet = true
-        }) { Label(L("Add Effect"), systemImage: "plus").padding(.horizontal, 8).padding(.vertical, 6) }
-          .contentShape(Rectangle())
-          .allowsHitTesting(true)
-      }
-      .padding(.top, 4)
-      HStack {
-        Button(action: { refresh() }) { Label(L("Refresh Effects"), systemImage: "arrow.clockwise") }
-          .padding(.vertical, 4)
-        Spacer()
-      }
-      if effects.isEmpty {
-        VStack(alignment: .leading, spacing: 4) {
-          Text(isEngineActive() ? L("No active effects. Tap Add to insert an AUv3 effect.") : L("Requires AVAudioEngine backend.")).foregroundStyle(.secondary)
-          Text(String(format: L("Installed: %d"), availableCount)).foregroundStyle(.secondary)
-        }
-      } else {
-        ForEach(effects) { fx in
-          HStack {
-            Text(fx.name)
-            Spacer()
-            Toggle(L("Bypass"), isOn: Binding(get: { fx.bypass }, set: { v in setBypass(fx.index, v) }))
-              .labelsHidden()
-            Button { showUI(fx.index) } label: { Image(systemName: "slider.horizontal.3") }
-              .buttonStyle(.borderless)
+            #else
+            Slider(value: $arbitraryMipmapThreshold, in: 0.0...1.0, step: 0.01)
+              .onChange(of: arbitraryMipmapThreshold) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }
+            #endif
           }
         }
-        .onMove(perform: move)
-        .onDelete(perform: remove)
+      }, header: { Text(L("Compatibility")) })
+    }
+    .navigationTitle(L("Enhancements"))
+    .onAppear { sync() }
+    .sheet(isPresented: $showHelp) {
+      NavigationView {
+        ScrollView { Text(helpMessage).padding() }
+          .navigationTitle(L("Help"))
+          .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { showHelp = false } } }
       }
     }
-    .onAppear { refresh() }
-    .sheet(isPresented: Binding(get: { showingAU != nil }, set: { if !$0 { showingAU = nil } })) {
-      if let vc = showingAU { UIViewControllerWrapper(controller: vc) }
     }
-    .sheet(isPresented: $showAddSheet) { AUAddSheet(onPick: { name in add(name) }).onDisappear { refresh() } }
-    .alert(L("Enable AVAudioEngine?"), isPresented: $showEnableEnginePrompt) {
-      Button(L("Enable")) {
-        DOLConfigBridge.setAudioBackend("AVAudioEngine")
-        waitUntilEngineActiveThen { showAddSheet = true; refresh() }
+    private func sync() {
+      efbMaxScale = max(1, DOLConfigBridge.gfxEfbMaxScale())
+      efbScale = DOLConfigBridge.gfxEfbScale()
+      anisotropy = DOLConfigBridge.gfxEnhanceAnisotropySamples()
+      trueColor = DOLConfigBridge.gfxEnhanceForceTrueColor()
+      disableCopyFilter = DOLConfigBridge.gfxEnhanceDisableCopyFilter()
+      widescreenHack = DOLConfigBridge.gfxWidescreenHack()
+      disableFog = DOLConfigBridge.gfxDisableFog()
+      gpuTextureDecoding = DOLConfigBridge.gfxEnableGPUTextureDecoding()
+      arbitraryMipmapDetection = DOLConfigBridge.gfxEnhanceArbitraryMipmapDetection()
+      arbitraryMipmapThreshold = Double(DOLConfigBridge.gfxEnhanceArbitraryMipmapDetectionThreshold())
+      hdrOutput = DOLConfigBridge.gfxEnhanceHDROutput()
+    }
+    private func labelWithInfo(_ title: String, action: @escaping () -> Void) -> some View {
+      HStack {
+        Text(title)
+        Spacer()
+        Button(action: action) { Image(systemName: "info.circle") }
+          .buttonStyle(.plain)
       }
-      Button(L("Cancel"), role: .cancel) { }
-    } message: {
-      Text(L("Audio Effects require the AVAudioEngine backend."))
+    }
+
+    // MARK: - Help Text (UIKit parity)
+    private func helpTextInternalResolution() -> String {
+      L("Controls the rendering resolution.\n\nA high resolution greatly improves visual quality, but also greatly increases GPU load and can cause issues in certain games. Generally speaking, the lower the internal resolution, the better performance will be.\n\nIf unsure, select Native.")
+    }
+    private func helpTextAnisotropy() -> String {
+      L("Adjust the texture filtering. Anisotropic filtering enhances the visual quality of textures that are at oblique viewing angles. Force Nearest and Force Linear override the texture scaling filter selected by the game.\n\nAny option except 'Default' will alter the look of the game's textures and might cause issues in a small number of games.\n\nIf unsure, select 'Default'.")
+    }
+    private func helpTextDisableFog() -> String {
+      L("Makes distant objects more visible by removing fog, thus increasing the overall detail.\n\nDisabling fog will break some games which rely on proper fog emulation.\n\nIf unsure, leave this unchecked.")
+    }
+    private func helpTextDisableCopyFilter() -> String {
+      L("Disables the blending of adjacent rows when copying the EFB. This is known in some games as \"deflickering\" or \"smoothing\".\n\nDisabling the filter has no effect on performance, but may result in a sharper image. Causes few graphical issues.\n\nIf unsure, leave this checked.")
+    }
+    private func helpTextWidescreenHack() -> String {
+      L("Forces the game to output graphics for any aspect ratio. Use with \"Aspect Ratio\" set to \"Force 16:9\" to force 4:3-only games to run at 16:9.\n\nRarely produces good results and often partially breaks graphics and game UIs. Unnecessary (and detrimental) if using any AR/Gecko-code widescreen patches.\n\nIf unsure, leave this unchecked.")
+    }
+    private func helpTextForceTrueColor() -> String {
+      L("Forces the game to render the RGB color channels in 24-bit, thereby increasing quality by reducing color banding.\n\nHas no impact on performance and causes few graphical issues.\n\nIf unsure, leave this checked.")
+    }
+    private func helpTextArbitraryMipmap() -> String {
+      L("Enables detection of arbitrary mipmaps, which some games use for special distance-based effects.\n\nMay have false positives that result in blurry textures at increased internal resolution, such as in games that use very low resolution mipmaps. Disabling this can also reduce stutter in games that frequently load new textures. This feature is not compatible with GPU Texture Decoding.\n\nIf unsure, leave this checked.")
+    }
+    private func helpTextHDROutput() -> String {
+      L("Enables HDR output on supported displays. May improve perceived dynamic range and color on HDR-capable devices.")
     }
   }
 
-  private func isEngineActive() -> Bool { AudioFXBridge.isEngineActive() }
-  private func waitUntilEngineActiveThen(_ action: @escaping () -> Void) {
-    func poll(_ attempts: Int) {
-      if AudioFXBridge.isEngineActive() {
-        action()
-      } else if attempts > 0 {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { poll(attempts - 1) }
-      }
-    }
-    poll(20)
-  }
-
-  private func refresh() {
-    let list = AudioFXBridge.currentEffects()
-    effects = list.enumerated().map { (i, d) in FXItem(name: (d["name"] as? String) ?? "Effect", bypass: (d["bypass"] as? Bool) ?? false, index: i) }
-    // Log available AUv3 effects from the system for diagnostics
-    let available = AudioFXBridge.availableEffects()
-    availableCount = available.count
-    NSLog("[FX] Available AUv3 effects count: %d", Int32(available.count))
-    for (idx, entry) in available.enumerated() {
-      if let e = entry as? [AnyHashable: Any], let nm = e["name"] as? String, let ident = e["identifier"] as? String {
-        NSLog("[FX] #%d name=%@ ident=%@", Int32(idx), nm, ident)
-      }
-    }
-  }
-  private func add(_ name: String) {
-    attemptAdd(name, attempts: 8)
-  }
-  private func attemptAdd(_ name: String, attempts: Int) {
-    NSLog("[FX] Request add identifier=%@ attempts=%d", name, Int32(attempts))
-    if AudioFXBridge.addEffect(withName: name) {
-      NSLog("[FX] Add success for ident=%@", name)
-      refresh()
-      return
-    }
-    NSLog("[FX] Add failed for ident=%@ (engineActive=%d)", name, Int32(AudioFXBridge.isEngineActive() ? 1 : 0))
-    if attempts > 0 && AudioFXBridge.isEngineActive() {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-        attemptAdd(name, attempts: attempts - 1)
-      }
-    }
-  }
-  private func remove(at offsets: IndexSet) {
-    for o in offsets { AudioFXBridge.removeEffect(at: UInt(o)) }
-    refresh()
-  }
-  private func move(from src: IndexSet, to dst: Int) {
-    guard let from = src.first else { return }
-    let to = dst > from ? dst - 1 : dst
-    AudioFXBridge.moveEffect(from: UInt(from), to: UInt(to))
-    refresh()
-  }
-  private func setBypass(_ idx: Int, _ v: Bool) { AudioFXBridge.setEffectAt(UInt(idx), bypassed: v); refresh() }
-  private func showUI(_ idx: Int) {
-    AudioFXBridge.requestEffectViewController(at: UInt(idx)) { vc in
-      if let vc = vc {
-        showingAU = vc
-      }
-    }
-  }
-
-  private struct UIViewControllerWrapper: UIViewControllerRepresentable {
-    let controller: UIViewController
-    func makeUIViewController(context: Context) -> UIViewController { controller }
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) { }
-  }
-
-  private struct AUAddSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var search: String = ""
-    @State private var effects: [[String: Any]] = []
-    let onPick: (String) -> Void
+  private struct AnisotropyPicker: View {
+    @Binding var selected: Int
+    private var options: [Int] { [1, 2, 4, 8, 16] }
     var body: some View {
-      NavigationStack {
-        VStack(spacing: 0) {
-          HStack { TextField(L("Search Effects"), text: $search).textFieldStyle(.roundedBorder) }
-            .padding()
-          List(filtered()) { item in
-            Button(action: { NSLog("[FX] (AddSheet) pick name=%@ ident=%@", item.name, item.identifier); onPick(item.identifier); dismiss() }) {
-              VStack(alignment: .leading) {
-                Text(item.name)
-                Text(item.identifier).font(.footnote).foregroundStyle(.secondary)
+      List {
+        ForEach(options, id: \.self) { v in
+          SelectRow(label: "\(v)x", checked: v == selected) { selected = v; DOLConfigBridge.setGfxEnhanceAnisotropySamples(v) }
+        }
+      }
+      .navigationTitle(L("Anisotropic Filtering"))
+    }
+  }
+
+  private struct EfbScalePicker: View {
+    @Binding var selected: Int
+    let maxScale: Int
+    private var options: [Int] { [0] + Array(1...max(1, maxScale)) }
+    var body: some View {
+      List {
+        ForEach(options, id: \.self) { v in
+          if v == 0 {
+            SelectRow(label: L("Auto"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxEfbScale(0) }
+          } else if v == 1 {
+            SelectRow(label: "1x (\(L("Native")))", checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxEfbScale(1) }
+          } else {
+            SelectRow(label: "\(v)x", checked: selected == v) { selected = v; DOLConfigBridge.setGfxEfbScale(v) }
+          }
+        }
+      }
+      .navigationTitle(L("Internal Resolution"))
+    }
+  }
+
+  /// Graphics > Hacks placeholder
+  struct GraphicsHacksView: View {
+    @State private var efbAccess: Bool = false
+    @State private var skipEfbToRam: Bool = false
+    @State private var skipXfbToRam: Bool = false
+    @State private var immediateXfb: Bool = false
+    @State private var copyEfbScaled: Bool = true
+    @State private var efbFormatChanges: Bool = true
+    @State private var vertexRounding: Bool = false
+    @State private var forceProgressive: Bool = false
+    @State private var deferEfbCopies: Bool = false
+    @State private var viSkipMode: Int = 0 // TriState
+    @State private var fastTextureSampling: Bool = true
+    @State private var fastMath: Bool = false
+    @State private var useComputeEfbXfb: Bool = false
+    @State private var noMipmapping: Bool = false
+    @State private var earlyXfbOutput: Bool = true
+    @State private var skipDuplicateXFBs: Bool = true
+    var body: some View {
+      List {
+        Section(header: Text(L("General Hacks"))) {
+          Toggle(L("Enable EFB Access"), isOn: $efbAccess).onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) }
+          Toggle(L("Skip EFB Copy to RAM"), isOn: $skipEfbToRam).onChange(of: skipEfbToRam) { DOLConfigBridge.setGfxHackSkipEfbCopyToRam($0) }
+          Toggle(L("Skip XFB Copy to RAM"), isOn: $skipXfbToRam).onChange(of: skipXfbToRam) { DOLConfigBridge.setGfxHackSkipXfbCopyToRam($0) }
+          Toggle(L("Immediate XFB"), isOn: $immediateXfb).onChange(of: immediateXfb) { DOLConfigBridge.setGfxHackImmediateXfb($0) }
+          Toggle(L("Copy EFB Scaled"), isOn: $copyEfbScaled).onChange(of: copyEfbScaled) { DOLConfigBridge.setGfxHackCopyEfbScaled($0) }
+          Toggle(L("Early XFB Output"), isOn: $earlyXfbOutput).onChange(of: earlyXfbOutput) { DOLConfigBridge.setGfxHackEarlyXfbOutput($0) }
+          Toggle(L("Skip Duplicate XFBs"), isOn: $skipDuplicateXFBs).onChange(of: skipDuplicateXFBs) { DOLConfigBridge.setGfxHackSkipDuplicateXFBs($0) }
+          Toggle(L("Emulate EFB Format Changes"), isOn: $efbFormatChanges).onChange(of: efbFormatChanges) { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) }
+          Toggle(L("Vertex Rounding"), isOn: $vertexRounding).onChange(of: vertexRounding) { DOLConfigBridge.setGfxHackVertexRounding($0) }
+          Toggle(L("Force Progressive Scan"), isOn: $forceProgressive).onChange(of: forceProgressive) { DOLConfigBridge.setGfxHackForceProgressive($0) }
+          Toggle(L("Defer EFB Copies"), isOn: $deferEfbCopies).onChange(of: deferEfbCopies) { DOLConfigBridge.setGfxHackDeferEfbCopies($0) }
+          NavigationLink("\(L("VI Skip Mode")): \(viSkipLabel(viSkipMode))", destination: ViSkipModePicker(selected: $viSkipMode))
+            .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
+          Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling).onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
+          Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath).onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) }
+          /// Compute path for EFB/XFB; may improve performance but can break some games
+          Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb).onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
+          Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping).onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) }
+        }
+      }
+      .navigationTitle(L("Hacks"))
+      .onAppear { sync() }
+    }
+    private func sync() {
+      efbAccess = DOLConfigBridge.gfxHackEfbAccessEnable()
+      skipEfbToRam = DOLConfigBridge.gfxHackSkipEfbCopyToRam()
+      skipXfbToRam = DOLConfigBridge.gfxHackSkipXfbCopyToRam()
+      immediateXfb = DOLConfigBridge.gfxHackImmediateXfb()
+      copyEfbScaled = DOLConfigBridge.gfxHackCopyEfbScaled()
+      efbFormatChanges = DOLConfigBridge.gfxHackEfbEmulateFormatChanges()
+      vertexRounding = DOLConfigBridge.gfxHackVertexRounding()
+      forceProgressive = DOLConfigBridge.gfxHackForceProgressive()
+      deferEfbCopies = DOLConfigBridge.gfxHackDeferEfbCopies()
+      viSkipMode = DOLConfigBridge.gfxHackViSkipMode()
+      fastTextureSampling = DOLConfigBridge.gfxHackFastTextureSampling()
+      fastMath = DOLConfigBridge.gfxHackFastMath()
+      useComputeEfbXfb = DOLConfigBridge.gfxUseComputeEfbXfb()
+      noMipmapping = DOLConfigBridge.gfxHackNoMipmapping()
+    }
+    private func viSkipLabel(_ v: Int) -> String { switch v { case 1: return L("On"); case 2: return L("Auto"); default: return L("Off") } }
+  }
+
+  private struct ViSkipModePicker: View {
+    @Binding var selected: Int
+    var body: some View {
+      List {
+        SelectRow(label: L("Off"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxHackViSkipMode(0) }
+        SelectRow(label: L("On"), checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxHackViSkipMode(1) }
+        SelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; DOLConfigBridge.setGfxHackViSkipMode(2) }
+      }
+      .navigationTitle(L("VI Skip Mode"))
+    }
+  }
+  /// Graphics > Advanced placeholder
+  struct GraphicsAdvancedView: View {
+    @State private var fastDepth: Bool = true
+    @State private var pixelLighting: Bool = false
+    @State private var backendMT: Bool = true
+    @State private var shaderCache: Bool = true
+    @State private var saveTexCache: Bool = false
+    @State private var preferVSForLines: Bool = false
+    @State private var cpuCull: Bool = false
+    // Performance Statistics
+    @State private var showFPS: Bool = false
+    @State private var showVPS: Bool = false
+    @State private var showSpeed: Bool = false
+    @State private var showFrameTimes: Bool = false
+    @State private var showVBlankTimes: Bool = false
+    @State private var showGraphs: Bool = false
+    @State private var logRenderTime: Bool = false
+    @State private var speedColors: Bool = false
+    // Debugging
+    @State private var overlayStats: Bool = false
+    @State private var validationLayer: Bool = false
+    // Utility (Custom Textures / Mods / VRAM copy)
+    @State private var hiresTextures: Bool = false
+    @State private var prefetchTextures: Bool = false
+    @State private var disableEfbToVRAM: Bool = false
+    @State private var graphicsMods: Bool = false
+    // Misc
+    @State private var cropPicture: Bool = false
+    @State private var progressiveScan: Bool = false
+    // Shader Threads
+    @State private var compilerThreads: Int = 1
+    @State private var precompilerThreads: Int = 1
+    @State private var maxThreads: Int = 2
+    // Experimental
+    @State private var deferEfbInvalidation: Bool = false
+    @State private var manualTexSampling: Bool = false
+    var body: some View {
+      List {
+        Section(header: Text(L("Performance Statistics"))) {
+          Toggle(L("Show FPS"), isOn: $showFPS).onChange(of: showFPS) { _ in DOLConfigBridge.setGfxShowFPS(showFPS) }
+          Toggle(L("Show VPS"), isOn: $showVPS).onChange(of: showVPS) { _ in DOLConfigBridge.setGfxShowVPS(showVPS) }
+          Toggle(L("Show Speed"), isOn: $showSpeed).onChange(of: showSpeed) { _ in DOLConfigBridge.setGfxShowSpeed(showSpeed) }
+          Toggle(L("Show Frame Times"), isOn: $showFrameTimes).onChange(of: showFrameTimes) { _ in DOLConfigBridge.setGfxShowFTimes(showFrameTimes) }
+          Toggle(L("Show VBlank Times"), isOn: $showVBlankTimes).onChange(of: showVBlankTimes) { _ in DOLConfigBridge.setGfxShowVTimes(showVBlankTimes) }
+          Toggle(L("Show Graphs"), isOn: $showGraphs).onChange(of: showGraphs) { _ in DOLConfigBridge.setGfxShowGraphs(showGraphs) }
+          Toggle(L("Log Render Time to File"), isOn: $logRenderTime).onChange(of: logRenderTime) { _ in DOLConfigBridge.setGfxLogRenderTimeToFile(logRenderTime) }
+          Toggle(L("Speed Colors"), isOn: $speedColors).onChange(of: speedColors) { _ in DOLConfigBridge.setGfxShowSpeedColors(speedColors) }
+        }
+
+        Section(header: Text(L("Debugging"))) {
+          Toggle(L("Overlay Stats"), isOn: $overlayStats).onChange(of: overlayStats) { _ in DOLConfigBridge.setGfxOverlayStats(overlayStats) }
+          Toggle(L("API Validation Layer"), isOn: $validationLayer).onChange(of: validationLayer) { _ in DOLConfigBridge.setGfxEnableValidationLayer(validationLayer) }
+        }
+
+        Section(header: Text(L("Shader Threads"))) {
+          HStack {
+            Text(L("Compiler Threads"))
+            Spacer()
+            #if os(tvOS)
+            TVIntStepper(value: $compilerThreads, range: 1...maxThreads, step: 1)
+            #else
+            Stepper(value: $compilerThreads, in: 1...maxThreads) { Text("\(compilerThreads)") }
+            #endif
+          }
+          .onChange(of: compilerThreads) { v in DOLConfigBridge.setGfxShaderCompilerThreads(v) }
+          HStack {
+            Text(L("Precompiler Threads"))
+            Spacer()
+            #if os(tvOS)
+            TVIntStepper(value: $precompilerThreads, range: 1...maxThreads, step: 1)
+            #else
+            Stepper(value: $precompilerThreads, in: 1...maxThreads) { Text("\(precompilerThreads)") }
+            #endif
+          }
+          .onChange(of: precompilerThreads) { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) }
+        }
+
+        Section(header: Text(L("Utility"))) {
+          Toggle(L("Load Custom Textures"), isOn: $hiresTextures).onChange(of: hiresTextures) { _ in DOLConfigBridge.setGfxHiresTextures(hiresTextures) }
+          Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures)
+            .disabled(!hiresTextures)
+            .onChange(of: prefetchTextures) { _ in DOLConfigBridge.setGfxCacheHiresTextures(prefetchTextures) }
+          Toggle(L("Disable EFB Copy to VRAM"), isOn: $disableEfbToVRAM).onChange(of: disableEfbToVRAM) { _ in DOLConfigBridge.setGfxHackDisableCopyToVRAM(disableEfbToVRAM) }
+          Toggle(L("Enable Graphics Mods"), isOn: $graphicsMods).onChange(of: graphicsMods) { _ in DOLConfigBridge.setGfxModsEnable(graphicsMods) }
+        }
+
+        Section(header: Text(L("Misc"))) {
+          Toggle(L("Crop"), isOn: $cropPicture).onChange(of: cropPicture) { _ in DOLConfigBridge.setGfxCrop(cropPicture) }
+          Toggle(L("Progressive Scan"), isOn: $progressiveScan).onChange(of: progressiveScan) { _ in DOLConfigBridge.setSysconfProgressiveScan(progressiveScan) }
+        }
+
+        Section(header: Text(L("Rendering"))) {
+          Toggle(L("Fast Depth Calculation"), isOn: $fastDepth).onChange(of: fastDepth) { DOLConfigBridge.setGfxFastDepthCalc($0) }
+          Toggle(L("Per-Pixel Lighting"), isOn: $pixelLighting).onChange(of: pixelLighting) { DOLConfigBridge.setGfxEnablePixelLighting($0) }
+          Toggle(L("Backend Multithreading"), isOn: $backendMT).onChange(of: backendMT) { DOLConfigBridge.setGfxBackendMultithreading($0) }
+          Toggle(L("Enable Shader Cache"), isOn: $shaderCache).onChange(of: shaderCache) { DOLConfigBridge.setGfxShaderCache($0) }
+          Toggle(L("Save Texture Cache to State"), isOn: $saveTexCache).onChange(of: saveTexCache) { DOLConfigBridge.setGfxSaveTextureCacheToState($0) }
+          Toggle(L("Prefer Vertex Shader for Line/Point Expansion"), isOn: $preferVSForLines).onChange(of: preferVSForLines) { DOLConfigBridge.setGfxPreferVSForLinePointExpansion($0) }
+          Toggle(L("CPU Culling"), isOn: $cpuCull).onChange(of: cpuCull) { DOLConfigBridge.setGfxCpuCull($0) }
+        }
+
+        Section(header: Text(L("Experimental"))) {
+          Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation).onChange(of: deferEfbInvalidation) { _ in DOLConfigBridge.setGfxHackEfbDeferInvalidation(deferEfbInvalidation) }
+          // Manual Texture Sampling is the inverse of Fast Texture Sampling
+          Toggle(L("Manual Texture Sampling"), isOn: $manualTexSampling).onChange(of: manualTexSampling) { _ in DOLConfigBridge.setGfxHackFastTextureSampling(!manualTexSampling) }
+        }
+      }
+      .navigationTitle(L("Advanced"))
+      .onAppear { sync() }
+    }
+    private func sync() {
+      fastDepth = DOLConfigBridge.gfxFastDepthCalc()
+      pixelLighting = DOLConfigBridge.gfxEnablePixelLighting()
+      backendMT = DOLConfigBridge.gfxBackendMultithreading()
+      shaderCache = DOLConfigBridge.gfxShaderCache()
+      saveTexCache = DOLConfigBridge.gfxSaveTextureCacheToState()
+      preferVSForLines = DOLConfigBridge.gfxPreferVSForLinePointExpansion()
+      cpuCull = DOLConfigBridge.gfxCpuCull()
+      // Performance Statistics
+      showFPS = DOLConfigBridge.gfxShowFPS()
+      showVPS = DOLConfigBridge.gfxShowVPS()
+      showSpeed = DOLConfigBridge.gfxShowSpeed()
+      showFrameTimes = DOLConfigBridge.gfxShowFTimes()
+      showVBlankTimes = DOLConfigBridge.gfxShowVTimes()
+      showGraphs = DOLConfigBridge.gfxShowGraphs()
+      logRenderTime = DOLConfigBridge.gfxLogRenderTimeToFile()
+      speedColors = DOLConfigBridge.gfxShowSpeedColors()
+      // Debugging
+      overlayStats = DOLConfigBridge.gfxOverlayStats()
+      validationLayer = DOLConfigBridge.gfxEnableValidationLayer()
+      // Utility
+      hiresTextures = DOLConfigBridge.gfxHiresTextures()
+      prefetchTextures = DOLConfigBridge.gfxCacheHiresTextures()
+      disableEfbToVRAM = DOLConfigBridge.gfxHackDisableCopyToVRAM()
+      graphicsMods = DOLConfigBridge.gfxModsEnable()
+      // Misc
+      cropPicture = DOLConfigBridge.gfxCrop()
+      progressiveScan = DOLConfigBridge.sysconfProgressiveScan()
+      // Shader threads
+      let cores = max(2, ProcessInfo.processInfo.processorCount)
+      maxThreads = max(1, cores - 1)
+      let ct = DOLConfigBridge.gfxShaderCompilerThreads()
+      compilerThreads = (ct <= 0) ? min(2, maxThreads) : ct
+      let pt = DOLConfigBridge.gfxShaderPrecompilerThreads()
+      precompilerThreads = (pt <= 0) ? min(2, maxThreads) : pt
+      // Experimental
+      deferEfbInvalidation = DOLConfigBridge.gfxHackEfbDeferInvalidation()
+      manualTexSampling = !DOLConfigBridge.gfxHackFastTextureSampling()
+    }
+  }
+
+  // MARK: - Controllers Port
+  private struct ControllersPortView: View {
+    let isGC: Bool
+    let portOneBased: Int
+    var title: String { isGC ? "\(L("GameCube Controller")) \(portOneBased)" : "\(L("Wii Remote")) \(portOneBased)" }
+    @State private var canConfigure: Bool = false
+    var body: some View {
+      List {
+        NavigationLink(L("Type"), destination: ControllersTypePicker(isGC: isGC, portOneBased: portOneBased))
+        NavigationLink(L("Configure"), destination: ControllersMappingView(isGC: isGC, portOneBased: portOneBased))
+          .disabled(!canConfigure)
+      }
+      .navigationTitle(Text(title))
+      .onAppear { sync() }
+    }
+    private func sync() {
+      if isGC {
+        let device = DOLConfigBridge.gcPortDevice(forPort: portOneBased)
+        canConfigure = device != 0
+      } else {
+        let source = DOLConfigBridge.wiimoteSource(for: portOneBased)
+        canConfigure = source != 0
+      }
+    }
+  }
+
+  private struct ControllersTypePicker: View {
+    let isGC: Bool
+    let portOneBased: Int
+    @State private var selected: Int = 0
+    var body: some View {
+      List {
+        if isGC {
+          // 0: None, 1: GC Controller
+          SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 0) }
+          SelectRow(label: L("GameCube Controller"), checked: selected == 1) {
+            selected = 1
+            DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 1)
+            EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
+            ControllerManager.shared.reconcile()
+          }
+        } else {
+          // 0: None, 1: Emulated
+          SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 0) }
+          SelectRow(label: L("Emulated Wii Remote"), checked: selected == 1) {
+            selected = 1
+            DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 1)
+            EmulationCoordinator.ensureWiimoteDefaultsToTouchscreen(forPort: portOneBased)
+            ControllerManager.shared.reconcile()
+          }
+        }
+      }
+      .navigationTitle(L("Type"))
+      .onAppear { sync() }
+    }
+    private func sync() {
+      if isGC {
+        selected = DOLConfigBridge.gcPortDevice(forPort: portOneBased)
+      } else {
+        selected = DOLConfigBridge.wiimoteSource(for: portOneBased)
+      }
+    }
+  }
+
+  private struct ControllersMappingPlaceholder: View {
+    var body: some View {
+      List { Text(L("TODO: Mapping")) }
+        .navigationTitle(L("Configure"))
+    }
+  }
+
+  // UIKit wrapper for the legacy mapping UI (MappingRootViewController in ButtonMapping.storyboard)
+  private struct ControllersMappingView: UIViewControllerRepresentable {
+    let isGC: Bool
+    let portOneBased: Int
+
+    func makeUIViewController(context: Context) -> UIViewController {
+      let storyboard = UIStoryboard(name: "ButtonMapping", bundle: nil)
+      let vc = storyboard.instantiateInitialViewController() ?? UIViewController()
+      // Pass mapping context via KVC to avoid additional bridging requirements
+      // DOLMappingType: 0 = Pad, 1 = Wiimote
+      vc.setValue(isGC ? 0 : 1, forKey: "mappingType")
+      vc.setValue(max(0, portOneBased - 1), forKey: "mappingPort")
+      return vc
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+      // No-op; mapping UI manages its own state
+    }
+  }
+
+  private struct ControllersTurboPicker: View {
+    @State private var selected: Int = 800
+    private let options: [Int] = [200, 400, 800, 1600, 3200]
+    private func label(_ v: Int) -> String { String(format: "%dx", v/100) }
+    var body: some View {
+      List {
+        ForEach(options, id: \.self) { v in
+          SelectRow(label: label(v), checked: v == selected) {
+            selected = v
+            UserDefaults.standard.set(v, forKey: "controller_turbo_multiplier_percent")
+          }
+        }
+      }
+      .navigationTitle(L("Turbo Multiplier"))
+      .onAppear {
+        let v = UserDefaults.standard.integer(forKey: "controller_turbo_multiplier_percent")
+        selected = (v > 0) ? v : 800
+      }
+    }
+  }
+
+  // MARK: - Audio FX Chain Editor (iOS)
+  #if os(iOS)
+  import AVFoundation
+
+  struct FXChainEditor: View {
+    @State private var effects: [FXItem] = []
+    @State private var showingAU: UIViewController?
+    @State private var showAddSheet = false
+    @State private var searchText = ""
+    @State private var availableCount: Int = 0
+    @State private var showEnableEnginePrompt = false
+
+    struct FXItem: Identifiable, Equatable { let id = UUID(); let name: String; var bypass: Bool; let index: Int }
+
+    var body: some View {
+      Group {
+        HStack {
+          Spacer()
+          Button(action: {
+            NSLog("[FX] Add button tapped")
+            showAddSheet = true
+          }) { Label(L("Add Effect"), systemImage: "plus").padding(.horizontal, 8).padding(.vertical, 6) }
+            .contentShape(Rectangle())
+            .allowsHitTesting(true)
+        }
+        .padding(.top, 4)
+        HStack {
+          Button(action: { refresh() }) { Label(L("Refresh Effects"), systemImage: "arrow.clockwise") }
+            .padding(.vertical, 4)
+          Spacer()
+        }
+        if effects.isEmpty {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(isEngineActive() ? L("No active effects. Tap Add to insert an AUv3 effect.") : L("Requires AVAudioEngine backend.")).foregroundStyle(.secondary)
+            Text(String(format: L("Installed: %d"), availableCount)).foregroundStyle(.secondary)
+          }
+        } else {
+          ForEach(effects) { fx in
+            HStack {
+              Text(fx.name)
+              Spacer()
+              Toggle(L("Bypass"), isOn: Binding(get: { fx.bypass }, set: { v in setBypass(fx.index, v) }))
+                .labelsHidden()
+              Button { showUI(fx.index) } label: { Image(systemName: "slider.horizontal.3") }
+                .buttonStyle(.borderless)
+            }
+          }
+          .onMove(perform: move)
+          .onDelete(perform: remove)
+        }
+      }
+      .onAppear { refresh() }
+      .sheet(isPresented: Binding(get: { showingAU != nil }, set: { if !$0 { showingAU = nil } })) {
+        if let vc = showingAU { UIViewControllerWrapper(controller: vc) }
+      }
+      .sheet(isPresented: $showAddSheet) { AUAddSheet(onPick: { name in add(name) }).onDisappear { refresh() } }
+      .alert(L("Enable AVAudioEngine?"), isPresented: $showEnableEnginePrompt) {
+        Button(L("Enable")) {
+          DOLConfigBridge.setAudioBackend("AVAudioEngine")
+          waitUntilEngineActiveThen { showAddSheet = true; refresh() }
+        }
+        Button(L("Cancel"), role: .cancel) { }
+      } message: {
+        Text(L("Audio Effects require the AVAudioEngine backend."))
+      }
+    }
+
+    private func isEngineActive() -> Bool { AudioFXBridge.isEngineActive() }
+    private func waitUntilEngineActiveThen(_ action: @escaping () -> Void) {
+      func poll(_ attempts: Int) {
+        if AudioFXBridge.isEngineActive() {
+          action()
+        } else if attempts > 0 {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { poll(attempts - 1) }
+        }
+      }
+      poll(20)
+    }
+
+    private func refresh() {
+      let list = AudioFXBridge.currentEffects()
+      effects = list.enumerated().map { (i, d) in FXItem(name: (d["name"] as? String) ?? "Effect", bypass: (d["bypass"] as? Bool) ?? false, index: i) }
+      // Log available AUv3 effects from the system for diagnostics
+      let available = AudioFXBridge.availableEffects()
+      availableCount = available.count
+      NSLog("[FX] Available AUv3 effects count: %d", Int32(available.count))
+      for (idx, entry) in available.enumerated() {
+        if let e = entry as? [AnyHashable: Any], let nm = e["name"] as? String, let ident = e["identifier"] as? String {
+          NSLog("[FX] #%d name=%@ ident=%@", Int32(idx), nm, ident)
+        }
+      }
+    }
+    private func add(_ name: String) {
+      attemptAdd(name, attempts: 8)
+    }
+    private func attemptAdd(_ name: String, attempts: Int) {
+      NSLog("[FX] Request add identifier=%@ attempts=%d", name, Int32(attempts))
+      if AudioFXBridge.addEffect(withName: name) {
+        NSLog("[FX] Add success for ident=%@", name)
+        refresh()
+        return
+      }
+      NSLog("[FX] Add failed for ident=%@ (engineActive=%d)", name, Int32(AudioFXBridge.isEngineActive() ? 1 : 0))
+      if attempts > 0 && AudioFXBridge.isEngineActive() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+          attemptAdd(name, attempts: attempts - 1)
+        }
+      }
+    }
+    private func remove(at offsets: IndexSet) {
+      for o in offsets { AudioFXBridge.removeEffect(at: UInt(o)) }
+      refresh()
+    }
+    private func move(from src: IndexSet, to dst: Int) {
+      guard let from = src.first else { return }
+      let to = dst > from ? dst - 1 : dst
+      AudioFXBridge.moveEffect(from: UInt(from), to: UInt(to))
+      refresh()
+    }
+    private func setBypass(_ idx: Int, _ v: Bool) { AudioFXBridge.setEffectAt(UInt(idx), bypassed: v); refresh() }
+    private func showUI(_ idx: Int) {
+      AudioFXBridge.requestEffectViewController(at: UInt(idx)) { vc in
+        if let vc = vc {
+          showingAU = vc
+        }
+      }
+    }
+
+    private struct UIViewControllerWrapper: UIViewControllerRepresentable {
+      let controller: UIViewController
+      func makeUIViewController(context: Context) -> UIViewController { controller }
+      func updateUIViewController(_ uiViewController: UIViewController, context: Context) { }
+    }
+
+    private struct AUAddSheet: View {
+      @Environment(\.dismiss) private var dismiss
+      @State private var search: String = ""
+      @State private var effects: [[String: Any]] = []
+      let onPick: (String) -> Void
+      var body: some View {
+        NavigationStack {
+          VStack(spacing: 0) {
+            HStack { TextField(L("Search Effects"), text: $search).textFieldStyle(.roundedBorder) }
+              .padding()
+            List(filtered()) { item in
+              Button(action: { NSLog("[FX] (AddSheet) pick name=%@ ident=%@", item.name, item.identifier); onPick(item.identifier); dismiss() }) {
+                VStack(alignment: .leading) {
+                  Text(item.name)
+                  Text(item.identifier).font(.footnote).foregroundStyle(.secondary)
+                }
               }
             }
           }
+          .navigationTitle(L("Add Effect"))
+          .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Close")) { dismiss() } } }
+          .onAppear { reload() }
         }
-        .navigationTitle(L("Add Effect"))
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Close")) { dismiss() } } }
-        .onAppear { reload() }
+      }
+      private func reload() {
+        let arr = AudioFXBridge.availableEffects()
+        NSLog("[FX] (AddSheet) discovered AUv3 effects: %d", Int32(arr.count))
+        effects = arr.compactMap { ($0 as? [String: AnyHashable])?.reduce(into: [String: Any]()) { acc, kv in acc[kv.key] = kv.value } }
+        for (idx, d) in effects.enumerated() {
+          let nm = (d["name"] as? String) ?? "?"
+          let id = (d["identifier"] as? String) ?? "?"
+          NSLog("[FX] (AddSheet) #%d name=%@ ident=%@", Int32(idx), nm, id)
+        }
+      }
+      private func filtered() -> [FXRow] {
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = effects
+        .compactMap { dict -> FXRow? in
+          guard let name = dict["name"] as? String, let id = dict["identifier"] as? String else { return nil }
+          return FXRow(name: name, identifier: id)
+        }
+        if q.isEmpty { return source }
+        return source.filter { $0.name.localizedCaseInsensitiveContains(q) || $0.identifier.localizedCaseInsensitiveContains(q) }
+      }
+      struct FXRow: Identifiable { let id = UUID(); let name: String; let identifier: String }
+    }
+  }
+
+  struct CoreAudioDSPEditor: View {
+    let embedded: Bool
+    init(embedded: Bool = false) { self.embedded = embedded }
+    @State private var delayEnabled = false
+    @State private var delayMs = 200.0
+    @State private var delayFeedback = 0.35
+    @State private var crushEnabled = false
+    @State private var crushBits = 16.0
+    @State private var crushDown = 1.0
+    @State private var eqEnabled = false
+    @State private var low = 0.0
+    @State private var mid = 0.0
+    @State private var high = 0.0
+
+    private func defaults(_ key: String) -> Any? { UserDefaults.standard.object(forKey: key) }
+    private func setDefaults(_ key: String, _ value: Any) { UserDefaults.standard.set(value, forKey: key) }
+    private func applyToEngine() {
+      AudioFXBridge.setCADelayEnabled(delayEnabled)
+      AudioFXBridge.setCADelayMs(Int(delayMs))
+      AudioFXBridge.setCADelayFeedback(delayFeedback)
+      AudioFXBridge.setCABitcrushEnabled(crushEnabled)
+      AudioFXBridge.setCABitcrushBits(Int(crushBits))
+      AudioFXBridge.setCABitcrushDownsample(Int(crushDown))
+      AudioFXBridge.setCAEQEnabled(eqEnabled)
+      AudioFXBridge.setCAEQLowGainDb(low)
+      AudioFXBridge.setCAEQMidGainDb(mid)
+      AudioFXBridge.setCAEQHighGainDb(high)
+    }
+    private func syncFromDefaultsOrEngine() {
+      // Prefer stored defaults if present; else query engine
+      if defaults("ca_fx_delay_enabled") != nil {
+        delayEnabled = UserDefaults.standard.bool(forKey: "ca_fx_delay_enabled")
+        let dms = UserDefaults.standard.double(forKey: "ca_fx_delay_ms"); if dms > 0 { delayMs = dms }
+        let dfb = UserDefaults.standard.double(forKey: "ca_fx_delay_fb"); if dfb > 0 { delayFeedback = dfb }
+        crushEnabled = UserDefaults.standard.bool(forKey: "ca_fx_crush_enabled")
+        let cb = UserDefaults.standard.integer(forKey: "ca_fx_crush_bits"); if cb > 0 { crushBits = Double(cb) }
+        let cd = UserDefaults.standard.integer(forKey: "ca_fx_crush_down"); if cd > 0 { crushDown = Double(cd) }
+        eqEnabled = UserDefaults.standard.bool(forKey: "ca_fx_eq_enabled")
+        low = UserDefaults.standard.double(forKey: "ca_fx_eq_low")
+        mid = UserDefaults.standard.double(forKey: "ca_fx_eq_mid")
+        high = UserDefaults.standard.double(forKey: "ca_fx_eq_high")
+        applyToEngine()
+      } else {
+        syncFromEngine()
       }
     }
-    private func reload() {
-      let arr = AudioFXBridge.availableEffects()
-      NSLog("[FX] (AddSheet) discovered AUv3 effects: %d", Int32(arr.count))
-      effects = arr.compactMap { ($0 as? [String: AnyHashable])?.reduce(into: [String: Any]()) { acc, kv in acc[kv.key] = kv.value } }
-      for (idx, d) in effects.enumerated() {
-        let nm = (d["name"] as? String) ?? "?"
-        let id = (d["identifier"] as? String) ?? "?"
-        NSLog("[FX] (AddSheet) #%d name=%@ ident=%@", Int32(idx), nm, id)
+
+    private func syncFromEngine() {
+      let d = AudioFXBridge.coreAudioDSPState()
+      if let v = d["delayEnabled"] as? Bool { delayEnabled = v }
+      if let v = d["delayMs"] as? NSNumber { delayMs = v.doubleValue }
+      if let v = d["delayFeedback"] as? NSNumber { delayFeedback = v.doubleValue }
+      if let v = d["crushEnabled"] as? Bool { crushEnabled = v }
+      if let v = d["crushBits"] as? NSNumber { crushBits = v.doubleValue }
+      if let v = d["crushDown"] as? NSNumber { crushDown = v.doubleValue }
+      if let v = d["eqEnabled"] as? Bool { eqEnabled = v }
+      if let v = d["low"] as? NSNumber { low = v.doubleValue }
+      if let v = d["mid"] as? NSNumber { mid = v.doubleValue }
+      if let v = d["high"] as? NSNumber { high = v.doubleValue }
+    }
+
+    @ViewBuilder private var sections: some View {
+      Group {
+        VStack(alignment: .leading, spacing: 8) {
+          Text(L("Delay / Echo")).font(.headline)
+          Toggle(L("Enabled"), isOn: Binding(get: { delayEnabled }, set: { v in delayEnabled = v; setDefaults("ca_fx_delay_enabled", v); AudioFXBridge.setCADelayEnabled(v) }))
+          HStack { Text(L("Time")); Slider(value: $delayMs, in: 10...2000, step: 10).onChange(of: delayMs) { setDefaults("ca_fx_delay_ms", $0); AudioFXBridge.setCADelayMs(Int($0)) }; Text("\(Int(delayMs)) ms") }
+          HStack { Text(L("Feedback")); Slider(value: $delayFeedback, in: 0...0.95, step: 0.01).onChange(of: delayFeedback) { setDefaults("ca_fx_delay_fb", $0); AudioFXBridge.setCADelayFeedback($0) }; Text(String(format: "%.2f", delayFeedback)) }
+        }
+        VStack(alignment: .leading, spacing: 8) {
+          Text(L("Bitcrusher")).font(.headline)
+          Toggle(L("Enabled"), isOn: Binding(get: { crushEnabled }, set: { v in crushEnabled = v; setDefaults("ca_fx_crush_enabled", v); AudioFXBridge.setCABitcrushEnabled(v) }))
+          HStack { Text(L("Bits")); Slider(value: $crushBits, in: 4...16, step: 1).onChange(of: crushBits) { setDefaults("ca_fx_crush_bits", Int($0)); AudioFXBridge.setCABitcrushBits(Int($0)) }; Text("\(Int(crushBits))") }
+          HStack { Text(L("Downsample")); Slider(value: $crushDown, in: 1...16, step: 1).onChange(of: crushDown) { setDefaults("ca_fx_crush_down", Int($0)); AudioFXBridge.setCABitcrushDownsample(Int($0)) }; Text("\(Int(crushDown))x") }
+        }
+        VStack(alignment: .leading, spacing: 8) {
+          Text(L("3‑Band EQ")).font(.headline)
+          Toggle(L("Enabled"), isOn: Binding(get: { eqEnabled }, set: { v in eqEnabled = v; setDefaults("ca_fx_eq_enabled", v); AudioFXBridge.setCAEQEnabled(v) }))
+          HStack { Text(L("Low")); Slider(value: $low, in: -24...24, step: 0.5).onChange(of: low) { setDefaults("ca_fx_eq_low", $0); AudioFXBridge.setCAEQLowGainDb($0) }; Text(String(format: "%+.1f dB", low)) }
+          HStack { Text(L("Mid")); Slider(value: $mid, in: -24...24, step: 0.5).onChange(of: mid) { setDefaults("ca_fx_eq_mid", $0); AudioFXBridge.setCAEQMidGainDb($0) }; Text(String(format: "%+.1f dB", mid)) }
+          HStack { Text(L("High")); Slider(value: $high, in: -24...24, step: 0.5).onChange(of: high) { setDefaults("ca_fx_eq_high", $0); AudioFXBridge.setCAEQHighGainDb($0) }; Text(String(format: "%+.1f dB", high)) }
+        }
       }
     }
-    private func filtered() -> [FXRow] {
-      let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
-      let source = effects
-      .compactMap { dict -> FXRow? in
-        guard let name = dict["name"] as? String, let id = dict["identifier"] as? String else { return nil }
-        return FXRow(name: name, identifier: id)
-      }
-      if q.isEmpty { return source }
-      return source.filter { $0.name.localizedCaseInsensitiveContains(q) || $0.identifier.localizedCaseInsensitiveContains(q) }
-    }
-    struct FXRow: Identifiable { let id = UUID(); let name: String; let identifier: String }
-  }
-}
 
-struct CoreAudioDSPEditor: View {
-  let embedded: Bool
-  init(embedded: Bool = false) { self.embedded = embedded }
-  @State private var delayEnabled = false
-  @State private var delayMs = 200.0
-  @State private var delayFeedback = 0.35
-  @State private var crushEnabled = false
-  @State private var crushBits = 16.0
-  @State private var crushDown = 1.0
-  @State private var eqEnabled = false
-  @State private var low = 0.0
-  @State private var mid = 0.0
-  @State private var high = 0.0
-
-  private func defaults(_ key: String) -> Any? { UserDefaults.standard.object(forKey: key) }
-  private func setDefaults(_ key: String, _ value: Any) { UserDefaults.standard.set(value, forKey: key) }
-  private func applyToEngine() {
-    AudioFXBridge.setCADelayEnabled(delayEnabled)
-    AudioFXBridge.setCADelayMs(Int(delayMs))
-    AudioFXBridge.setCADelayFeedback(delayFeedback)
-    AudioFXBridge.setCABitcrushEnabled(crushEnabled)
-    AudioFXBridge.setCABitcrushBits(Int(crushBits))
-    AudioFXBridge.setCABitcrushDownsample(Int(crushDown))
-    AudioFXBridge.setCAEQEnabled(eqEnabled)
-    AudioFXBridge.setCAEQLowGainDb(low)
-    AudioFXBridge.setCAEQMidGainDb(mid)
-    AudioFXBridge.setCAEQHighGainDb(high)
-  }
-  private func syncFromDefaultsOrEngine() {
-    // Prefer stored defaults if present; else query engine
-    if defaults("ca_fx_delay_enabled") != nil {
-      delayEnabled = UserDefaults.standard.bool(forKey: "ca_fx_delay_enabled")
-      let dms = UserDefaults.standard.double(forKey: "ca_fx_delay_ms"); if dms > 0 { delayMs = dms }
-      let dfb = UserDefaults.standard.double(forKey: "ca_fx_delay_fb"); if dfb > 0 { delayFeedback = dfb }
-      crushEnabled = UserDefaults.standard.bool(forKey: "ca_fx_crush_enabled")
-      let cb = UserDefaults.standard.integer(forKey: "ca_fx_crush_bits"); if cb > 0 { crushBits = Double(cb) }
-      let cd = UserDefaults.standard.integer(forKey: "ca_fx_crush_down"); if cd > 0 { crushDown = Double(cd) }
-      eqEnabled = UserDefaults.standard.bool(forKey: "ca_fx_eq_enabled")
-      low = UserDefaults.standard.double(forKey: "ca_fx_eq_low")
-      mid = UserDefaults.standard.double(forKey: "ca_fx_eq_mid")
-      high = UserDefaults.standard.double(forKey: "ca_fx_eq_high")
-      applyToEngine()
-    } else {
-      syncFromEngine()
-    }
-  }
-
-  private func syncFromEngine() {
-    let d = AudioFXBridge.coreAudioDSPState()
-    if let v = d["delayEnabled"] as? Bool { delayEnabled = v }
-    if let v = d["delayMs"] as? NSNumber { delayMs = v.doubleValue }
-    if let v = d["delayFeedback"] as? NSNumber { delayFeedback = v.doubleValue }
-    if let v = d["crushEnabled"] as? Bool { crushEnabled = v }
-    if let v = d["crushBits"] as? NSNumber { crushBits = v.doubleValue }
-    if let v = d["crushDown"] as? NSNumber { crushDown = v.doubleValue }
-    if let v = d["eqEnabled"] as? Bool { eqEnabled = v }
-    if let v = d["low"] as? NSNumber { low = v.doubleValue }
-    if let v = d["mid"] as? NSNumber { mid = v.doubleValue }
-    if let v = d["high"] as? NSNumber { high = v.doubleValue }
-  }
-
-  @ViewBuilder private var sections: some View {
-    Group {
-      VStack(alignment: .leading, spacing: 8) {
-        Text(L("Delay / Echo")).font(.headline)
-        Toggle(L("Enabled"), isOn: Binding(get: { delayEnabled }, set: { v in delayEnabled = v; setDefaults("ca_fx_delay_enabled", v); AudioFXBridge.setCADelayEnabled(v) }))
-        HStack { Text(L("Time")); Slider(value: $delayMs, in: 10...2000, step: 10).onChange(of: delayMs) { setDefaults("ca_fx_delay_ms", $0); AudioFXBridge.setCADelayMs(Int($0)) }; Text("\(Int(delayMs)) ms") }
-        HStack { Text(L("Feedback")); Slider(value: $delayFeedback, in: 0...0.95, step: 0.01).onChange(of: delayFeedback) { setDefaults("ca_fx_delay_fb", $0); AudioFXBridge.setCADelayFeedback($0) }; Text(String(format: "%.2f", delayFeedback)) }
-      }
-      VStack(alignment: .leading, spacing: 8) {
-        Text(L("Bitcrusher")).font(.headline)
-        Toggle(L("Enabled"), isOn: Binding(get: { crushEnabled }, set: { v in crushEnabled = v; setDefaults("ca_fx_crush_enabled", v); AudioFXBridge.setCABitcrushEnabled(v) }))
-        HStack { Text(L("Bits")); Slider(value: $crushBits, in: 4...16, step: 1).onChange(of: crushBits) { setDefaults("ca_fx_crush_bits", Int($0)); AudioFXBridge.setCABitcrushBits(Int($0)) }; Text("\(Int(crushBits))") }
-        HStack { Text(L("Downsample")); Slider(value: $crushDown, in: 1...16, step: 1).onChange(of: crushDown) { setDefaults("ca_fx_crush_down", Int($0)); AudioFXBridge.setCABitcrushDownsample(Int($0)) }; Text("\(Int(crushDown))x") }
-      }
-      VStack(alignment: .leading, spacing: 8) {
-        Text(L("3‑Band EQ")).font(.headline)
-        Toggle(L("Enabled"), isOn: Binding(get: { eqEnabled }, set: { v in eqEnabled = v; setDefaults("ca_fx_eq_enabled", v); AudioFXBridge.setCAEQEnabled(v) }))
-        HStack { Text(L("Low")); Slider(value: $low, in: -24...24, step: 0.5).onChange(of: low) { setDefaults("ca_fx_eq_low", $0); AudioFXBridge.setCAEQLowGainDb($0) }; Text(String(format: "%+.1f dB", low)) }
-        HStack { Text(L("Mid")); Slider(value: $mid, in: -24...24, step: 0.5).onChange(of: mid) { setDefaults("ca_fx_eq_mid", $0); AudioFXBridge.setCAEQMidGainDb($0) }; Text(String(format: "%+.1f dB", mid)) }
-        HStack { Text(L("High")); Slider(value: $high, in: -24...24, step: 0.5).onChange(of: high) { setDefaults("ca_fx_eq_high", $0); AudioFXBridge.setCAEQHighGainDb($0) }; Text(String(format: "%+.1f dB", high)) }
+    var body: some View {
+      if embedded {
+        VStack(alignment: .leading, spacing: 16) { sections }
+          .onAppear { syncFromDefaultsOrEngine() }
+      } else {
+        List { Section { sections } }
+          .navigationTitle(L("Audio Effects"))
+          .onAppear { syncFromDefaultsOrEngine() }
       }
     }
   }
+  #endif
 
-  var body: some View {
-    if embedded {
-      VStack(alignment: .leading, spacing: 16) { sections }
-        .onAppear { syncFromDefaultsOrEngine() }
-    } else {
-      List { Section { sections } }
-        .navigationTitle(L("Audio Effects"))
-        .onAppear { syncFromDefaultsOrEngine() }
+  #if os(iOS)
+  /// Wrapper for presenting SFSafariViewController in SwiftUI
+  private struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) { }
+  }
+  #endif
+
+  private struct WiiAspectRatioPicker: View {
+    @Binding var selectedWide: Bool
+    var body: some View {
+      List {
+        SelectRow(label: "4:3", checked: selectedWide == false) { selectedWide = false; DOLConfigBridge.setSysconfWidescreen(false) }
+        SelectRow(label: "16:9", checked: selectedWide == true) { selectedWide = true; DOLConfigBridge.setSysconfWidescreen(true) }
+      }
+      .navigationTitle(L("Aspect Ratio"))
     }
   }
-}
-#endif
-
-#if os(iOS)
-/// Wrapper for presenting SFSafariViewController in SwiftUI
-private struct SafariView: UIViewControllerRepresentable {
-  let url: URL
-  func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
-  func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) { }
-}
-#endif
-
-private struct WiiAspectRatioPicker: View {
-  @Binding var selectedWide: Bool
-  var body: some View {
-    List {
-      SelectRow(label: "4:3", checked: selectedWide == false) { selectedWide = false; DOLConfigBridge.setSysconfWidescreen(false) }
-      SelectRow(label: "16:9", checked: selectedWide == true) { selectedWide = true; DOLConfigBridge.setSysconfWidescreen(true) }
-    }
-    .navigationTitle(L("Aspect Ratio"))
-  }
-}

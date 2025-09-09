@@ -29,6 +29,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxEfbScale:(NSInteger)scale;
 // Maximum Internal Resolution supported by backend/device
 + (NSInteger)gfxEfbMaxScale;
+// GPU Texture Decoding
++ (BOOL)gfxEnableGPUTextureDecoding;
++ (void)setGfxEnableGPUTextureDecoding:(BOOL)enabled;
 // Widescreen Hack (boolean)
 + (BOOL)gfxWidescreenHack;
 + (void)setGfxWidescreenHack:(BOOL)enabled;
@@ -270,6 +273,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxUseComputeEfbXfb:(BOOL)enabled;
 + (BOOL)gfxHackNoMipmapping;
 + (void)setGfxHackNoMipmapping:(BOOL)enabled;
++ (BOOL)gfxHackEarlyXfbOutput;
++ (void)setGfxHackEarlyXfbOutput:(BOOL)enabled;
++ (BOOL)gfxHackSkipDuplicateXFBs;
++ (void)setGfxHackSkipDuplicateXFBs:(BOOL)enabled;
 
 // Graphics > Advanced
 // Performance Statistics
