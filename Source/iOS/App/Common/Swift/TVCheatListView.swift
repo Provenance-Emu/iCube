@@ -1,4 +1,5 @@
 import SwiftUI
+import NavigationStackBackport
 
 struct TVCheatListView: View {
     let item: TVGameItem

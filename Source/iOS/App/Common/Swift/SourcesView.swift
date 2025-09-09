@@ -1,5 +1,6 @@
 import SwiftUI
 import PVWebServer
+import NavigationStackBackport
 
 struct SourcesView: View {
     @ObservedObject private var store = RemoteSourcesStore.shared

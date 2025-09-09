@@ -3,6 +3,7 @@
 
 import SwiftUI
 import GameController
+import NavigationStackBackport
 
 internal enum PlatformKind { case ios, tvos }
 

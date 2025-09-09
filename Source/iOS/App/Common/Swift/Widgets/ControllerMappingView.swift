@@ -3,6 +3,7 @@
 
 import SwiftUI
 import GameController
+import NavigationStackBackport
 
 internal struct ControllerMappingView: View {
   @State private var controllers: [GCController] = []

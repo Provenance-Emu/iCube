@@ -4,7 +4,7 @@
 import UIKit
 
 class AppDelegate: UIResponder, UIApplicationDelegate {
-  
+
   var window: UIWindow?
 
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -29,8 +29,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     if AppConsts.useSwiftUI {
       let role = connectingSceneSession.role
       let config = UISceneConfiguration(name: "Default Configuration", sessionRole: role)
-      if role == .windowExternalDisplayNonInteractive {
-        config.delegateClass = ExternalDisplaySceneDelegate.self
+      if #available(iOS 16.0, *) {
+        if role == .windowExternalDisplayNonInteractive {
+          config.delegateClass = ExternalDisplaySceneDelegate.self
+        } else {
+          config.delegateClass = MainDisplaySceneDelegate.self
+        }
       } else {
         config.delegateClass = MainDisplaySceneDelegate.self
       }

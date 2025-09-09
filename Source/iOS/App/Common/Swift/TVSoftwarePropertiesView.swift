@@ -1,4 +1,5 @@
 import SwiftUI
+import NavigationStackBackport
 
 struct TVSoftwarePropertiesView: View, Identifiable {
     let id = UUID()

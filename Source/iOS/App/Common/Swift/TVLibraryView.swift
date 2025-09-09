@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import GameController
 import UniformTypeIdentifiers
+import NavigationStackBackport
 
 #if os(iOS) || targetEnvironment(macCatalyst)
 import UniformTypeIdentifiers
@@ -2684,13 +2685,21 @@ private struct KVRow: View {
           .textCase(.uppercase)
         #if os(tvOS)
         if monospaced {
-          Text(value).font(.callout).monospaced().lineLimit(nil)
+          if #available(tvOS 16.0, *) {
+            Text(value).font(.callout).monospaced().lineLimit(nil)
+          } else {
+            Text(value).font(.system(.callout, design: .monospaced)).lineLimit(nil)
+          }
         } else {
           Text(value).font(.callout).lineLimit(nil)
         }
         #else
         if monospaced {
-          Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
+          if #available(iOS 16.0, *) {
+            Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
+          } else {
+            Text(value).font(.system(.callout, design: .monospaced)).lineLimit(nil)
+          }
         } else {
           Text(value).font(.callout).textSelection(.enabled).lineLimit(nil)
         }

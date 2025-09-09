@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import GameController
 import Combine
+import NavigationStackBackport
 
 #if os(tvOS)
 private func setupPauseGestureHandlers() { }
@@ -705,10 +706,7 @@ struct EmulationScreen: View {
                     }
             }
         }
-        .navigationDestination(isPresented: $showSettings) {
-            SettingsRootView()
-                .navigationBarTitleDisplayMode(.inline)
-        }
+        .modifier(SettingsNavigationFallback(showSettings: $showSettings))
         .fullScreenCover(isPresented: $showPauseMenu) {
             PauseMenuView(
                 selectedSlot: $selectedSlot,
@@ -1262,6 +1260,27 @@ struct EmulationScreen: View {
       NSLog("[INPUT] #%d vendor=%@ category=%@ extended=%d micro=%d", idx, c.vendorName ?? "(nil)", c.productCategory, c.extendedGamepad != nil, c.microGamepad != nil)
     }
   }
+}
+
+private struct SettingsNavigationFallback: ViewModifier {
+    @Binding var showSettings: Bool
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 16.0, *) {
+                content
+                    .navigationDestination(isPresented: $showSettings) {
+                        SettingsRootView()
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+            } else {
+                content
+                    .background(
+                        NavigationLink(destination: SettingsRootView(), isActive: $showSettings) { EmptyView() }
+                            .hidden()
+                    )
+            }
+        }
+    }
 }
 
 #if os(iOS)

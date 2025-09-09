@@ -61,6 +61,9 @@
 		B36B519B2E5E46AC009A2303 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519A2E5E46AC009A2303 /* KeychainService.swift */; };
 		B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */; };
 		B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519E2E5E4700009A2303 /* SourcesView.swift */; };
+		B37102AE2E70813B006C1ED7 /* NavigationStackBackport in Frameworks */ = {isa = PBXBuildFile; productRef = B37102AD2E70813B006C1ED7 /* NavigationStackBackport */; };
+		B37102B12E708B3C006C1ED7 /* libobjc.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B37102AF2E708B31006C1ED7 /* libobjc.tbd */; };
+		B37102B22E708B49006C1ED7 /* libswiftObjectiveC.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B37102B02E708B31006C1ED7 /* libswiftObjectiveC.tbd */; };
 		B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38205FF2E57FF0E00D4853F /* CompiledShader.swift */; };
 		B382060D2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */; };
 		B382060E2E57FF0E00D4853F /* Converters.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206012E57FF0E00D4853F /* Converters.metal */; };
@@ -366,6 +369,8 @@
 		B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourcesStore.swift; sourceTree = "<group>"; };
 		B36B519E2E5E4700009A2303 /* SourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesView.swift; sourceTree = "<group>"; };
 		B36B63002E5E56A3009A2303 /* PVlibDolphin.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PVlibDolphin.xcframework; path = ../../../../build/xcframework/PVlibDolphin.xcframework; sourceTree = "<group>"; };
+		B37102AF2E708B31006C1ED7 /* libobjc.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libobjc.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/lib/libobjc.tbd; sourceTree = DEVELOPER_DIR; };
+		B37102B02E708B31006C1ED7 /* libswiftObjectiveC.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libswiftObjectiveC.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/lib/swift/libswiftObjectiveC.tbd; sourceTree = DEVELOPER_DIR; };
 		B38205FF2E57FF0E00D4853F /* CompiledShader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShader.swift; sourceTree = "<group>"; };
 		B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShaderContainer.swift; sourceTree = "<group>"; };
 		B38206012E57FF0E00D4853F /* Converters.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Converters.metal; sourceTree = "<group>"; };
@@ -838,10 +843,12 @@
 				B31E80592E651FD80036EE31 /* libMoltenVK-Catalyst.a in Frameworks */,
 				B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */,
 				B31E921D2E667BE10036EE31 /* ReplayKit.framework in Frameworks */,
+				B37102AE2E70813B006C1ED7 /* NavigationStackBackport in Frameworks */,
 				B34ECCF52E569AF300301907 /* PVWebServer in Frameworks */,
 				B95AC5302D29C7FD0048E48B /* AVFoundation.framework in Frameworks */,
 				B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */,
 				B9FCB7DE28988E7E0020E233 /* AltKit in Frameworks */,
+				B37102B22E708B49006C1ED7 /* libswiftObjectiveC.tbd in Frameworks */,
 				B31E6DC62E6409F90036EE31 /* PVlibDolphin.xcframework in Frameworks */,
 				B9D9389E283EF7AD00B290FC /* MetalKit.framework in Frameworks */,
 				B9FCB7E62898FAC10020E233 /* GameController.framework in Frameworks */,
@@ -850,6 +857,7 @@
 				B900A7D227F5228B000361DD /* UICollectionViewLeftAlignedLayout in Frameworks */,
 				B34F8D102E6A6FAB007C1005 /* CoreMotion.framework in Frameworks */,
 				B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */,
+				B37102B12E708B3C006C1ED7 /* libobjc.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1930,6 +1938,8 @@
 		B9D9389C283EF7AD00B290FC /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				B37102AF2E708B31006C1ED7 /* libobjc.tbd */,
+				B37102B02E708B31006C1ED7 /* libswiftObjectiveC.tbd */,
 				B34F8D0F2E6A6FAB007C1005 /* CoreMotion.framework */,
 				B31E921C2E667BE10036EE31 /* ReplayKit.framework */,
 				B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */,
@@ -2184,6 +2194,7 @@
 				B97E4B4A2964CBA100B3EE9C /* FirebaseCrashlytics */,
 				B34ECCF42E569AF300301907 /* PVWebServer */,
 				B3D89A742E57DEF700EF1CB1 /* Zip */,
+				B37102AD2E70813B006C1ED7 /* NavigationStackBackport */,
 			);
 			productName = DolphiniOS;
 			productReference = B9DC3DF627EFBD2C0084DAA4 /* DolphiniOS.app */;
@@ -2229,6 +2240,7 @@
 				B97E4B472964CBA100B3EE9C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				B34ECCF32E5697FF00301907 /* XCLocalSwiftPackageReference "../PVWebServer" */,
 				B3D89A732E57DEF700EF1CB1 /* XCRemoteSwiftPackageReference "Zip" */,
+				B37102AC2E70813B006C1ED7 /* XCRemoteSwiftPackageReference "navigation-stack-backport" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B9DC3DF727EFBD2C0084DAA4 /* Products */;
@@ -4044,6 +4056,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -4058,7 +4071,7 @@
 				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4149,6 +4162,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -4163,7 +4177,7 @@
 				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4253,6 +4267,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -4267,7 +4282,7 @@
 				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4357,6 +4372,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -4371,7 +4387,7 @@
 				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4520,6 +4536,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -4534,7 +4551,7 @@
 				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4568,6 +4585,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -4582,7 +4600,7 @@
 				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4673,6 +4691,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -4687,7 +4706,7 @@
 				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4777,6 +4796,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DolphiniOS/Info.plist;
 				"INFOPLIST_FILE[sdk=appletv*]" = "DolphiniOS/Info-TV.plist";
@@ -4791,7 +4811,7 @@
 				"INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]" = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -4884,6 +4904,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		B37102AC2E70813B006C1ED7 /* XCRemoteSwiftPackageReference "navigation-stack-backport" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/lm/navigation-stack-backport";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
 		B3D89A732E57DEF700EF1CB1 /* XCRemoteSwiftPackageReference "Zip" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/marmelroy/Zip.git";
@@ -4923,6 +4951,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B34ECCF32E5697FF00301907 /* XCLocalSwiftPackageReference "../PVWebServer" */;
 			productName = PVWebServer;
+		};
+		B37102AD2E70813B006C1ED7 /* NavigationStackBackport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B37102AC2E70813B006C1ED7 /* XCRemoteSwiftPackageReference "navigation-stack-backport" */;
+			productName = NavigationStackBackport;
 		};
 		B3D89A742E57DEF700EF1CB1 /* Zip */ = {
 			isa = XCSwiftPackageProductDependency;
