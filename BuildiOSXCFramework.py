@@ -22,35 +22,35 @@ from typing import List, Dict, Optional, Tuple, Set
 CONFIG = {
     "build_target": "Release",
     "framework_name": "PVlibDolphin",
-    "ios_deployment_target": "16.4",
-    "tvos_deployment_target": "16.4",
+    "ios_deployment_target": "15.6",
+    "tvos_deployment_target": "15.6",
     "platforms": {
         "OS64": {  # iOS device (arm64)
-            "deployment_target": "16.4",
+            "deployment_target": "15.6",
             "arch_flags": "-mcpu=apple-a10 -mtune=apple-a15 -march=armv8-a+simd+crc+crypto",
             "suffix": "-ios",
             "xcode_platform": "iphoneos",
         },
         "SIMULATORARM64": {  # iOS simulator (arm64)
-            "deployment_target": "16.4",
+            "deployment_target": "15.6",
             "arch_flags": "",  # No architecture-specific flags for simulator
             "suffix": "-ios-sim",
             "xcode_platform": "iphonesimulator",
         },
         "TVOS": {  # tvOS device (arm64)
-            "deployment_target": "16.4",
+            "deployment_target": "15.6",
             "arch_flags": "-mcpu=apple-a10 -mtune=apple-a15 -march=armv8-a+simd+crc+crypto",
             "suffix": "-tvos",
             "xcode_platform": "appletvos",
         },
         "SIMULATOR_TVOS": {  # tvOS simulator (arm64)
-            "deployment_target": "16.4",
+            "deployment_target": "15.6",
             "arch_flags": "",  # No architecture-specific flags for simulator
             "suffix": "-tvos-sim",
             "xcode_platform": "appletvsimulator",
         },
         "MAC_CATALYST": {  # Mac Catalyst (arm64)
-            "deployment_target": "16.4",
+            "deployment_target": "15.6",
             "arch_flags": "",  # Avoid device-specific tuning flags for macOS
             "suffix": "-maccatalyst",
             "xcode_platform": "macosx",
@@ -557,7 +557,7 @@ class DolphinBuilder:
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>MinimumOSVersion</key>
-    <string>16.4</string>
+    <string>15.6</string>
 </dict>
 </plist>
 """
