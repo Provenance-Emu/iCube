@@ -216,6 +216,11 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
 
   if (base_ptr) [[likely]]
   {
+    // Prefetch the target line to hide memory latency in hot PIC path
+    #if defined(__GNUC__) || defined(__clang__)
+    __builtin_prefetch(base_ptr + offset, 0, 1);
+    __builtin_prefetch(base_ptr + offset + 32, 0, 1);
+    #endif
     // offset already computed as (ea - base) & mask above; do not recompute with (ea & mask)
     // which would be incorrect for EXRAM and MEM1 logical addresses.
     // Handle D-form by primary opcode, X-form by SUBOP10 under OPCD=31
@@ -297,6 +302,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if ((ea & 0b11) != 0) [[unlikely]]
         break; // misaligned -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u32 val = ppc_state.gpr[inst.RS];
       const u32 raw = Common::swap32(val);
       *reinterpret_cast<u32*>(base_ptr + offset) = raw;
@@ -306,6 +314,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u32 val = ppc_state.gpr[inst.RS];
       const u32 raw = Common::swap32(val);
       *reinterpret_cast<u32*>(base_ptr + offset) = raw;
@@ -314,6 +325,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     }
     case 38: // stb
     {
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u8 val = static_cast<u8>(ppc_state.gpr[inst.RS]);
       *(base_ptr + offset) = val;
       return sizeof(AnyCallback) + sizeof(operands);
@@ -322,6 +336,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if (ra == 0)
         break; // illegal -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u8 val = static_cast<u8>(ppc_state.gpr[inst.RS]);
       *(base_ptr + offset) = val;
       ppc_state.gpr[ra] = ea;
@@ -331,6 +348,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if ((ea & 0b1) != 0) [[unlikely]]
         break; // misaligned -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u16 val = static_cast<u16>(ppc_state.gpr[inst.RS]);
       const u16 raw = Common::swap16(val);
       *reinterpret_cast<u16*>(base_ptr + offset) = raw;
@@ -340,6 +360,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u16 val = static_cast<u16>(ppc_state.gpr[inst.RS]);
       const u16 raw = Common::swap16(val);
       *reinterpret_cast<u16*>(base_ptr + offset) = raw;
@@ -398,6 +421,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if ((ea & 0b11) != 0) [[unlikely]]
         break; // misaligned -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u32 conv = ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64());
       const u32 raw_out = Common::swap32(conv);
       *reinterpret_cast<u32*>(base_ptr + offset) = raw_out;
@@ -407,6 +433,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u32 conv = ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64());
       const u32 raw_out = Common::swap32(conv);
       *reinterpret_cast<u32*>(base_ptr + offset) = raw_out;
@@ -419,6 +448,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if ((ea & 0b11) != 0) [[unlikely]]
         break; // misaligned -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u64 val64 = ppc_state.ps[inst.FS].PS0AsU64();
       const u64 raw64 = Common::swap64(val64);
       std::memcpy(base_ptr + offset, &raw64, sizeof(raw64));
@@ -428,6 +460,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u64 val64 = ppc_state.ps[inst.FS].PS0AsU64();
       const u64 raw64 = Common::swap64(val64);
       std::memcpy(base_ptr + offset, &raw64, sizeof(raw64));
@@ -617,6 +652,11 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& p
 
   if (base_ptr) [[likely]]
   {
+    // Prefetch the target line to hide memory latency in hot PIC path
+    #if defined(__GNUC__) || defined(__clang__)
+    __builtin_prefetch(base_ptr + offset, 0, 1);
+    __builtin_prefetch(base_ptr + offset + 32, 0, 1);
+    #endif
     switch (inst.SUBOP10)
     {
     // Loads (indexed)
@@ -710,6 +750,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& p
       const bool update = (inst.SUBOP10 == 695);
       if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
         break; // misaligned or illegal
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u32 conv = ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64());
       const u32 raw = Common::swap32(conv);
       *reinterpret_cast<u32*>(base_ptr + offset) = raw;
@@ -725,6 +768,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& p
       const bool update = (inst.SUBOP10 == 759);
       if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
         break; // misaligned or illegal
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u64 val = ppc_state.ps[inst.FS].PS0AsU64();
       const u64 raw = Common::swap64(val);
       std::memcpy(base_ptr + offset, &raw, sizeof(raw));
@@ -749,6 +795,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& p
       const bool update = (inst.SUBOP10 == 183);
       if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
         break; // misaligned or illegal
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u32 val = ppc_state.gpr[inst.RS];
       const u32 raw = Common::swap32(val);
       *reinterpret_cast<u32*>(base_ptr + offset) = raw;
@@ -762,6 +811,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& p
       const bool update = (inst.SUBOP10 == 247);
       if (update && ra == 0)
         break; // illegal
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u8 val = static_cast<u8>(ppc_state.gpr[inst.RS]);
       *(base_ptr + offset) = val;
       if (update)
@@ -774,6 +826,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& p
       const bool update = (inst.SUBOP10 == 439);
       if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
         break; // misaligned or illegal
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u16 val = static_cast<u16>(ppc_state.gpr[inst.RS]);
       const u16 raw = Common::swap16(val);
       *reinterpret_cast<u16*>(base_ptr + offset) = raw;
@@ -3326,6 +3381,14 @@ CI_HOT_ONLY s32 CachedInterpreter::DcbzPIC(PowerPC::PowerPCState& ppc_state,
     return sizeof(AnyCallback) + sizeof(operands);
   }
   const u32 offset = CI_RegionOffset(region, line_addr);
+  #if defined(__aarch64__)
+  {
+    uint8x16_t vz = vdupq_n_u8(0);
+    vst1q_u8(reinterpret_cast<uint8_t*>(region.base + offset), vz);
+    vst1q_u8(reinterpret_cast<uint8_t*>(region.base + offset + 16), vz);
+  }
+  #else
   std::memset(region.base + offset, 0, 32);
+  #endif
   return sizeof(AnyCallback) + sizeof(operands);
 }
