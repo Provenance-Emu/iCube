@@ -96,15 +96,27 @@ void AutoIRController::OnAfterPresent(PresentInfo& info)
   if (!m_enabled)
     return;
 
-  // Use global performance metrics FPS (smoothed)
+  // Prefer emulation speed as it reflects CPU bottlenecks under vsync
+  const double speed = g_perf_metrics.GetSpeed(); // 1.0 == full speed
   const double fps = g_perf_metrics.GetFPS();
-  if (fps <= 0.0)
-    return;
+  double effective = 0.0;
+  if (speed > 0.0)
+  {
+    effective = static_cast<double>(m_target_fps) * speed;
+  }
+  else if (fps > 0.0)
+  {
+    effective = fps;
+  }
+  else
+  {
+    return; // no signal yet
+  }
 
-  AdjustScaleIfNeeded(fps);
+  AdjustScaleIfNeeded(effective);
 }
 
-void AutoIRController::AdjustScaleIfNeeded(double fps)
+void AutoIRController::AdjustScaleIfNeeded(double effective_fps)
 {
   // Cooldown handling
   if (m_frames_since_change < m_cooldown_frames)
@@ -119,26 +131,29 @@ void AutoIRController::AdjustScaleIfNeeded(double fps)
 
   int new_scale = current_scale;
 
-  if (fps < low_thresh && current_scale > m_min_scale)
+  if (effective_fps < low_thresh && current_scale > m_min_scale)
   {
-    new_scale = current_scale - 1;
+    // If we are far below target, step by 2 for faster convergence
+    const bool far_below = effective_fps < (low_thresh * 0.85);
+    new_scale = std::max(m_min_scale, current_scale - (far_below ? 2 : 1));
   }
-  else if (fps > high_thresh && current_scale < m_max_scale)
+  else if (effective_fps > high_thresh && current_scale < m_max_scale)
   {
-    new_scale = current_scale + 1;
+    const bool far_above = effective_fps > (high_thresh * 1.10);
+    new_scale = std::min(m_max_scale, current_scale + (far_above ? 2 : 1));
   }
 
   if (new_scale != current_scale)
   {
     // Apply change via Config system so all subsystems react properly
     Config::Set(Config::LayerType::CurrentRun, Config::GFX_EFB_SCALE, new_scale);
-    INFO_LOG_FMT(VIDEO, "AutoIR: fps={:.1f} target={} hysteresis={}%% scale {} -> {}", fps,
-                 m_target_fps, m_hysteresis_pct, current_scale, new_scale);
+    INFO_LOG_FMT(VIDEO, "AutoIR: eff_fps={:.1f} target={} hyst={}%% scale {} -> {}",
+                 effective_fps, m_target_fps, m_hysteresis_pct, current_scale, new_scale);
     if (Config::Get(Config::GFX_AUTO_IR_SHOW_OSD))
     {
       OSD::AddMessage(
-          fmt::format("Auto IR: Internal Resolution {}→{} (FPS {:.1f})", current_scale,
-                      new_scale, fps),
+          fmt::format("Auto IR: Internal Resolution {}→{} (eff {:.1f})", current_scale,
+                      new_scale, effective_fps),
           OSD::Duration::NORMAL);
     }
     m_frames_since_change = 0;

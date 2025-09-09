@@ -408,6 +408,11 @@
 + (BOOL)mainEmulateSkylanderPortal { return Config::Get(Config::MAIN_EMULATE_SKYLANDER_PORTAL); }
 + (void)setMainEmulateSkylanderPortal:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_EMULATE_SKYLANDER_PORTAL, (bool)enabled); }
 
++ (NSInteger)gfxAutoIRCooldownFrames { return (NSInteger)Config::Get(Config::GFX_AUTO_IR_COOLDOWN_FRAMES); }
++ (void)setGfxAutoIRCooldownFrames:(NSInteger)frames { Config::SetBaseOrCurrent(Config::GFX_AUTO_IR_COOLDOWN_FRAMES, (int)frames); }
++ (NSInteger)gfxAutoIRHysteresisPercent { return (NSInteger)Config::Get(Config::GFX_AUTO_IR_HYSTERESIS_PERCENT); }
++ (void)setGfxAutoIRHysteresisPercent:(NSInteger)percent { Config::SetBaseOrCurrent(Config::GFX_AUTO_IR_HYSTERESIS_PERCENT, (int)percent); }
+
 + (void)resetAllToDefaults {
   // Remove user/game override layers so Base defaults take effect
   Config::RemoveLayer(Config::LayerType::GlobalGame);
@@ -416,6 +421,12 @@
   Config::RemoveLayer(Config::LayerType::CurrentRun);
   // Save current configuration; Base defaults remain
   Config::Save();
+}
+
++ (void)clearCurrentRunOverrides {
+  if (Config::GetLayer(Config::LayerType::CurrentRun)) {
+    Config::RemoveLayer(Config::LayerType::CurrentRun);
+  }
 }
 
 + (void)resetPageToDefaults:(NSInteger)page {

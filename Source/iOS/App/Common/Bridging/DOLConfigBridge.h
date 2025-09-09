@@ -54,6 +54,11 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxAutoIRMaxScale:(NSInteger)scale;
 + (BOOL)gfxAutoIRShowOSD;
 + (void)setGfxAutoIRShowOSD:(BOOL)enabled;
+// Auto IR tuning
++ (NSInteger)gfxAutoIRCooldownFrames;
++ (void)setGfxAutoIRCooldownFrames:(NSInteger)frames;
++ (NSInteger)gfxAutoIRHysteresisPercent;
++ (void)setGfxAutoIRHysteresisPercent:(NSInteger)percent;
 
 // Shader compilation
 + (NSInteger)gfxShaderCompilationMode;
@@ -356,6 +361,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSInteger)skylanderLoadFromPath:(NSString*)path;
 + (BOOL)skylanderRemoveAtSlot:(NSInteger)slot;
 + (void)skylanderClearAll;
+
+// Remove ephemeral CurrentRun overrides (per-run). Leaves Base/Global/Local intact.
++ (void)clearCurrentRunOverrides;
 
 @end
 

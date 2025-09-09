@@ -69,6 +69,13 @@ private final class EmuContainerViewController: UIViewController {
     func launchCore() {
       DispatchQueue.main.async {
         TVEmulationBridge.registerMainDisplay(displayContainer)
+        // Clear per-run overrides to avoid residual risky keys
+        DOLConfigBridge.clearCurrentRunOverrides()
+        // Apply safe boot graphics defaults to avoid backend init races
+        DOLConfigBridge.setGfxHackImmediateXfb(false)
+        DOLConfigBridge.setGfxHackEarlyXfbOutput(false)
+        DOLConfigBridge.setGfxHackSkipDuplicateXFBs(false)
+        DOLConfigBridge.setGfxHackCopyEfbScaled(true)
         if TVEmulationBridge.isRunning() {
           NSLog("[INPUT] tvOS Container: core running, skipping relaunch; display registered")
         } else {
@@ -166,6 +173,98 @@ private struct EmulationProgrammaticHost: UIViewControllerRepresentable {
   func updateUIViewController(_ uiViewController: UIViewController, context: Context) { }
 }
 
+/// High-level performance presets mapped to a curated set of Dolphin configuration toggles
+private enum PerformancePreset: Int, CaseIterable, Hashable {
+  case performance
+  case balanced
+  case quality
+  var title: String {
+    switch self {
+    case .performance: return "Performance"
+    case .balanced: return "Balanced"
+    case .quality: return "Quality"
+    }
+  }
+}
+
+/// Applies presets and derives a best-effort current preset from active config
+private enum PerformancePresets {
+  static func apply(_ preset: PerformancePreset) {
+    let maxScale = max(1, Int(DOLConfigBridge.gfxEfbMaxScale()))
+    switch preset {
+    case .performance:
+      DOLConfigBridge.setGfxAutoIREnable(true)
+      DOLConfigBridge.setGfxAutoIRTargetFPS(60)
+      DOLConfigBridge.setGfxAutoIRMinScale(1)
+      DOLConfigBridge.setGfxAutoIRMaxScale(min(2, maxScale))
+      DOLConfigBridge.setGfxEfbScale(1)
+      DOLConfigBridge.setGfxEnhanceForceTrueColor(true)
+      DOLConfigBridge.setGfxEnhanceDisableCopyFilter(true)
+      DOLConfigBridge.setGfxEnhanceAnisotropySamples(1)
+      DOLConfigBridge.setGfxEnablePixelLighting(false)
+      DOLConfigBridge.setGfxHackSkipEfbCopyToRam(true)
+      DOLConfigBridge.setGfxHackSkipXfbCopyToRam(true)
+      DOLConfigBridge.setGfxHackDeferEfbCopies(true)
+      DOLConfigBridge.setGfxHackCopyEfbScaled(true)
+      DOLConfigBridge.setGfxHackForceProgressive(true)
+      DOLConfigBridge.setGfxHackFastTextureSampling(true)
+      DOLConfigBridge.setGfxShaderCache(true)
+      DOLConfigBridge.setGfxWaitForShadersBeforeStarting(true)
+      DOLConfigBridge.setGfxFastDepthCalc(true)
+      DOLConfigBridge.setGfxBackendMultithreading(true)
+    case .balanced:
+      DOLConfigBridge.setGfxAutoIREnable(true)
+      DOLConfigBridge.setGfxAutoIRTargetFPS(60)
+      DOLConfigBridge.setGfxAutoIRMinScale(1)
+      DOLConfigBridge.setGfxAutoIRMaxScale(min(3, maxScale))
+      DOLConfigBridge.setGfxEfbScale(2)
+      DOLConfigBridge.setGfxEnhanceForceTrueColor(true)
+      DOLConfigBridge.setGfxEnhanceDisableCopyFilter(true)
+      DOLConfigBridge.setGfxEnhanceAnisotropySamples(2)
+      DOLConfigBridge.setGfxEnablePixelLighting(false)
+      DOLConfigBridge.setGfxHackSkipEfbCopyToRam(true)
+      DOLConfigBridge.setGfxHackSkipXfbCopyToRam(true)
+      DOLConfigBridge.setGfxHackDeferEfbCopies(true)
+      DOLConfigBridge.setGfxHackCopyEfbScaled(true)
+      DOLConfigBridge.setGfxHackForceProgressive(true)
+      DOLConfigBridge.setGfxHackFastTextureSampling(true)
+      DOLConfigBridge.setGfxShaderCache(true)
+      DOLConfigBridge.setGfxWaitForShadersBeforeStarting(true)
+      DOLConfigBridge.setGfxFastDepthCalc(true)
+      DOLConfigBridge.setGfxBackendMultithreading(true)
+    case .quality:
+      DOLConfigBridge.setGfxAutoIREnable(false)
+      let targetScale = min(maxScale, max(3, maxScale >= 4 ? 4 : 3))
+      DOLConfigBridge.setGfxEfbScale(targetScale)
+      DOLConfigBridge.setGfxEnhanceForceTrueColor(true)
+      DOLConfigBridge.setGfxEnhanceDisableCopyFilter(true)
+      DOLConfigBridge.setGfxEnhanceAnisotropySamples(4)
+      DOLConfigBridge.setGfxEnablePixelLighting(false)
+      DOLConfigBridge.setGfxHackSkipEfbCopyToRam(true)
+      DOLConfigBridge.setGfxHackSkipXfbCopyToRam(true)
+      DOLConfigBridge.setGfxHackDeferEfbCopies(true)
+      DOLConfigBridge.setGfxHackCopyEfbScaled(true)
+      DOLConfigBridge.setGfxHackForceProgressive(true)
+      DOLConfigBridge.setGfxHackFastTextureSampling(true)
+      DOLConfigBridge.setGfxShaderCache(true)
+      DOLConfigBridge.setGfxWaitForShadersBeforeStarting(true)
+      DOLConfigBridge.setGfxFastDepthCalc(true)
+      DOLConfigBridge.setGfxBackendMultithreading(true)
+    }
+  }
+
+  static func detectCurrent() -> PerformancePreset {
+    let autoIR = DOLConfigBridge.gfxAutoIREnable()
+    let efb = Int(DOLConfigBridge.gfxEfbScale())
+    let maxIR = Int(DOLConfigBridge.gfxAutoIRMaxScale())
+    if autoIR {
+      return maxIR <= 2 ? .performance : .balanced
+    } else {
+      return efb >= 3 ? .quality : .performance
+    }
+  }
+}
+
 struct EmulationScreen: View {
   let game: TVGameItem
   @Environment(\.dismiss) private var dismiss
@@ -207,6 +306,7 @@ struct EmulationScreen: View {
   @ObservedObject private var controllerManager = ControllerManager.shared
 #endif
   @State private var elapsedSeconds: Int = 0
+  @State private var rendererReady: Bool = false
   @State private var timer: Timer?
   @State private var isWiiSystem: Bool = false
 
@@ -216,6 +316,18 @@ struct EmulationScreen: View {
   @State private var ocPercent: Int = 100
   @State private var vbiEnabledQuick: Bool = false
   @State private var vbiPercentQuick: Int = 100
+  @State private var selectedPerfPreset: PerformancePreset = .balanced
+  @State private var autoIREnabledQuick: Bool = false
+  @State private var autoIRTargetFPSQuick: Int = 60
+  @State private var autoIRMaxScaleQuick: Int = 2
+  @State private var showFPSEnabledQuick: Bool = false
+  @State private var currentIRScale: Int = 1
+  @State private var lastEfbScale: Int = 1
+  @State private var autoIRCooldownFrames: Int = 90
+  @State private var autoIRHysteresisPct: Int = 12
+  @State private var manualIRScale: Int = 1
+  @AppStorage("prefer_manual_ir") private var preferManualIR: Bool = false
+  @State private var previousAutoIREnabled: Bool = false
 
 #if os(iOS)
   @State private var showSkyMenu = false
@@ -248,11 +360,112 @@ struct EmulationScreen: View {
           }
           Divider().background(.white.opacity(0.2))
 
+          // Preset picker
+          HStack(spacing: 12) {
+            Text("Preset").foregroundColor(.white.opacity(0.9))
+            Spacer()
+            Button {
+              applyJitlessFriendlyPreset()
+            } label: {
+              Label("Jitless-friendly (1x IR)", systemImage: "tortoise.fill")
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(.white.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            Picker("Preset", selection: $selectedPerfPreset) {
+              ForEach(PerformancePreset.allCases, id: \.self) { p in
+                Text(p.title).tag(p)
+              }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 340)
+            .onChange(of: selectedPerfPreset) { p in
+              PerformancePresets.apply(p)
+              if preferManualIR {
+                previousAutoIREnabled = DOLConfigBridge.gfxAutoIREnable()
+                DOLConfigBridge.setGfxAutoIREnable(false)
+                autoIREnabledQuick = false
+              } else {
+                autoIREnabledQuick = DOLConfigBridge.gfxAutoIREnable()
+              }
+              autoIRTargetFPSQuick = DOLConfigBridge.gfxAutoIRTargetFPS()
+              autoIRMaxScaleQuick = DOLConfigBridge.gfxAutoIRMaxScale()
+              if rendererReady, TVEmulationBridge.isRunning() {
+                TVEmulationBridge.reloadShadersNow()
+                TVEmulationBridge.resizeSurfaceNow()
+              }
+            }
+          }
+
+          // Auto IR removed from popover
+          HStack {
+            Toggle("Prefer Manual IR", isOn: Binding(get: { preferManualIR }, set: { v in
+              preferManualIR = v
+              if v {
+                previousAutoIREnabled = autoIREnabledQuick
+                autoIREnabledQuick = false
+                DOLConfigBridge.setGfxAutoIREnable(false)
+              } else {
+                autoIREnabledQuick = previousAutoIREnabled
+                DOLConfigBridge.setGfxAutoIREnable(autoIREnabledQuick)
+              }
+            }))
+            .tint(.blue)
+            .foregroundColor(.white)
+          }
+          HStack {
+            Text("Manual IR: \(manualIRScale)x").foregroundColor(.white.opacity(0.8))
+            Spacer()
+            TVIntStepperOverlay(value: $manualIRScale, range: 1...min(6, Int(DOLConfigBridge.gfxEfbMaxScale())), step: 1)
+              .onChange(of: manualIRScale) {
+                DOLConfigBridge.setGfxEfbScale($0)
+                currentIRScale = Int(DOLConfigBridge.gfxEfbScale())
+                TVEmulationBridge.resizeSurfaceNow()
+              }
+          }
+
+          Button {
+            DOLConfigBridge.resetPage(toDefaults: 1)
+            autoIREnabledQuick = DOLConfigBridge.gfxAutoIREnable()
+            autoIRTargetFPSQuick = DOLConfigBridge.gfxAutoIRTargetFPS()
+            autoIRMaxScaleQuick = DOLConfigBridge.gfxAutoIRMaxScale()
+            ocEnabled = DOLConfigBridge.mainOverclockEnable()
+            ocPercent = DOLConfigBridge.mainOverclockPercent()
+            vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
+            vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+            showFPSEnabledQuick = DOLConfigBridge.gfxShowFPS()
+            currentIRScale = Int(DOLConfigBridge.gfxEfbScale())
+            selectedPerfPreset = PerformancePresets.detectCurrent()
+            if rendererReady, TVEmulationBridge.isRunning() {
+              TVEmulationBridge.reloadShadersNow()
+              TVEmulationBridge.resizeSurfaceNow()
+            }
+          } label: {
+            Label("Reset Graphics to Defaults", systemImage: "arrow.counterclockwise")
+              .foregroundColor(.white)
+          }
+
+          // Current IR
+          HStack {
+            Text("Current IR: \(currentIRScale)x").foregroundColor(.white.opacity(0.8))
+            Spacer()
+          }
+
+          // FPS Display
+          Toggle("Show FPS", isOn: Binding(get: { showFPSEnabledQuick }, set: { v in
+                        showFPSEnabledQuick = v
+                        DOLConfigBridge.setGfxShowFPS(v)
+                    }))
+          .tint(.blue)
+          .foregroundColor(.white)
+
           // CPU Clock
           Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-            ocEnabled = v
-            DOLConfigBridge.setMainOverclockEnable(v)
-          }))
+                        ocEnabled = v
+                        DOLConfigBridge.setMainOverclockEnable(v)
+                    }))
           .tint(.blue)
           .foregroundColor(.white)
           HStack {
@@ -341,6 +554,7 @@ struct EmulationScreen: View {
     }
     .onAppear {
       NSLog("[INPUT] tvOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
+
       let initialCount = GCController.controllers().count
       NSLog("[INPUT] tvOS initial controllers count: %d", initialCount)
       GCController.shouldMonitorBackgroundEvents = true
@@ -361,25 +575,45 @@ struct EmulationScreen: View {
       }
       NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
       endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
+        rendererReady = false
         dismiss()
       }
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
         ControllerManager.shared.registerGCOverride(forController: 0)
         configureAllControllersForTVOS()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { rendererReady = true }
       }
       // Load current OC/VBI state
       ocEnabled = DOLConfigBridge.mainOverclockEnable()
       ocPercent = DOLConfigBridge.mainOverclockPercent()
       vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
       vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+      autoIREnabledQuick = DOLConfigBridge.gfxAutoIREnable()
+      previousAutoIREnabled = autoIREnabledQuick
+      autoIRTargetFPSQuick = DOLConfigBridge.gfxAutoIRTargetFPS()
+      autoIRMaxScaleQuick = DOLConfigBridge.gfxAutoIRMaxScale()
+      autoIRCooldownFrames = DOLConfigBridge.gfxAutoIRCooldownFrames()
+      autoIRHysteresisPct = DOLConfigBridge.gfxAutoIRHysteresisPercent()
+      showFPSEnabledQuick = DOLConfigBridge.gfxShowFPS()
+      currentIRScale = Int(DOLConfigBridge.gfxEfbScale())
+      manualIRScale = Int(DOLConfigBridge.gfxEfbScale())
+      selectedPerfPreset = PerformancePresets.detectCurrent()
       // Live Activity start
       #if canImport(ActivityKit)
       GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
       #endif
       // Start elapsed timer
       timer?.invalidate()
-      timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+      timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
         elapsedSeconds += 1
+        let efb = Int(DOLConfigBridge.gfxEfbScale())
+        if efb != lastEfbScale {
+          lastEfbScale = efb
+          currentIRScale = efb
+          if rendererReady, TVEmulationBridge.isRunning() {
+            TVEmulationBridge.resizeSurfaceNow()
+          }
+        }
         #if canImport(ActivityKit)
         GameActivityManager.update(isPaused: TVEmulationBridge.isPaused(), elapsedSeconds: elapsedSeconds)
         #endif
@@ -649,6 +883,42 @@ struct EmulationScreen: View {
                             .buttonStyle(.plain)
                     }
                     Divider().background(.white.opacity(0.2))
+                    HStack(spacing: 12) {
+                        Text("Preset").foregroundColor(.white.opacity(0.9))
+                        Spacer()
+                        Button {
+                          applyJitlessFriendlyPreset()
+                        } label: {
+                          Label("Jitless-friendly (1x IR)", systemImage: "tortoise.fill")
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(.white.opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        Picker("Preset", selection: $selectedPerfPreset) {
+                            ForEach(PerformancePreset.allCases, id: \.self) { p in
+                                Text(p.title).tag(p)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .onChange(of: selectedPerfPreset) { p in
+                            PerformancePresets.apply(p)
+                            if preferManualIR {
+                                previousAutoIREnabled = DOLConfigBridge.gfxAutoIREnable()
+                                DOLConfigBridge.setGfxAutoIREnable(false)
+                                autoIREnabledQuick = false
+                            } else {
+                                autoIREnabledQuick = DOLConfigBridge.gfxAutoIREnable()
+                            }
+                            autoIRTargetFPSQuick = DOLConfigBridge.gfxAutoIRTargetFPS()
+                            autoIRMaxScaleQuick = DOLConfigBridge.gfxAutoIRMaxScale()
+                            if rendererReady, TVEmulationBridge.isRunning() {
+                              TVEmulationBridge.reloadShadersNow()
+                              TVEmulationBridge.resizeSurfaceNow()
+                            }
+                        }
+                    }
                     Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
                         ocEnabled = v
                         DOLConfigBridge.setMainOverclockEnable(v)
@@ -661,6 +931,37 @@ struct EmulationScreen: View {
                             .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
                         Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                     }
+                    // Auto IR removed from popover
+                    // End Auto IR removal
+                    HStack {
+                        Slider(value: Binding(get: { Double(manualIRScale) }, set: { manualIRScale = Int($0) }), in: 1...Double(min(6, Int(DOLConfigBridge.gfxEfbMaxScale()))), step: 1)
+                            .onChange(of: manualIRScale) {
+                                DOLConfigBridge.setGfxEfbScale($0)
+                                currentIRScale = Int(DOLConfigBridge.gfxEfbScale())
+                                if rendererReady, TVEmulationBridge.isRunning() { TVEmulationBridge.resizeSurfaceNow() }
+                            }
+                        Text("\(manualIRScale)x").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                    }
+                    Button {
+                        DOLConfigBridge.resetPage(toDefaults: 1)
+                        autoIREnabledQuick = DOLConfigBridge.gfxAutoIREnable()
+                        autoIRTargetFPSQuick = DOLConfigBridge.gfxAutoIRTargetFPS()
+                        autoIRMaxScaleQuick = DOLConfigBridge.gfxAutoIRMaxScale()
+                        ocEnabled = DOLConfigBridge.mainOverclockEnable()
+                        ocPercent = DOLConfigBridge.mainOverclockPercent()
+                        vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
+                        vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+                        showFPSEnabledQuick = DOLConfigBridge.gfxShowFPS()
+                        selectedPerfPreset = PerformancePresets.detectCurrent()
+                    } label: {
+                        Label("Reset Graphics to Defaults", systemImage: "arrow.counterclockwise").foregroundColor(.white)
+                    }
+                    Toggle("Show FPS", isOn: Binding(get: { showFPSEnabledQuick }, set: { v in
+                        showFPSEnabledQuick = v
+                        DOLConfigBridge.setGfxShowFPS(v)
+                    }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
                     Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
                         vbiEnabledQuick = v
                         DOLConfigBridge.setMainViOverclockEnable(v)
@@ -759,6 +1060,7 @@ struct EmulationScreen: View {
     }
     .onAppear {
         NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
+
         NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
         ControllerManager.shared.startObserving()
         // Initialize expected system early from metadata to avoid startup races
@@ -834,6 +1136,16 @@ struct EmulationScreen: View {
         ocPercent = DOLConfigBridge.mainOverclockPercent()
         vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
         vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+        autoIREnabledQuick = DOLConfigBridge.gfxAutoIREnable()
+        autoIRTargetFPSQuick = DOLConfigBridge.gfxAutoIRTargetFPS()
+        autoIRMaxScaleQuick = DOLConfigBridge.gfxAutoIRMaxScale()
+        autoIRCooldownFrames = DOLConfigBridge.gfxAutoIRCooldownFrames()
+        autoIRHysteresisPct = DOLConfigBridge.gfxAutoIRHysteresisPercent()
+        showFPSEnabledQuick = DOLConfigBridge.gfxShowFPS()
+        currentIRScale = Int(DOLConfigBridge.gfxEfbScale())
+        manualIRScale = Int(DOLConfigBridge.gfxEfbScale())
+        previousAutoIREnabled = autoIREnabledQuick
+        selectedPerfPreset = PerformancePresets.detectCurrent()
         // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
         let currentIR = DOLConfigBridge.mainTouchPadIRMode()
         if currentIR == 0 { // None
@@ -1313,3 +1625,46 @@ private struct ThermalBadgeView: View {
     }
 }
 #endif
+
+extension EmulationScreen {
+  /// Apply a jitless-friendly configuration: manual 1x IR and CPU-friendly settings
+  fileprivate func applyJitlessFriendlyPreset() {
+    preferManualIR = true
+    previousAutoIREnabled = autoIREnabledQuick
+    autoIREnabledQuick = false
+    DOLConfigBridge.setGfxAutoIREnable(false)
+    DOLConfigBridge.setGfxEfbScale(1)
+    manualIRScale = 1
+    currentIRScale = 1
+
+    DOLConfigBridge.setGfxEnhanceAnisotropySamples(1)
+    DOLConfigBridge.setGfxEnablePixelLighting(false)
+    DOLConfigBridge.setGfxFastDepthCalc(true)
+    DOLConfigBridge.setGfxEnhanceForceTrueColor(true)
+    DOLConfigBridge.setGfxEnhanceDisableCopyFilter(true)
+
+    DOLConfigBridge.setGfxHackSkipEfbCopyToRam(true)
+    DOLConfigBridge.setGfxHackSkipXfbCopyToRam(true)
+    DOLConfigBridge.setGfxHackDeferEfbCopies(true)
+    DOLConfigBridge.setGfxHackCopyEfbScaled(true)
+    DOLConfigBridge.setGfxHackForceProgressive(true)
+    DOLConfigBridge.setGfxHackFastTextureSampling(true)
+    DOLConfigBridge.setGfxHackSkipDuplicateXFBs(false)
+    DOLConfigBridge.setGfxHackEarlyXfbOutput(false)
+
+    DOLConfigBridge.setGfxShaderCache(true)
+    DOLConfigBridge.setGfxWaitForShadersBeforeStarting(true)
+
+    DOLConfigBridge.setMainOverclockEnable(false)
+    ocEnabled = false
+    ocPercent = DOLConfigBridge.mainOverclockPercent()
+    DOLConfigBridge.setMainViOverclockEnable(false)
+    vbiEnabledQuick = false
+    vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+
+    if rendererReady, TVEmulationBridge.isRunning() {
+      TVEmulationBridge.reloadShadersNow()
+      TVEmulationBridge.resizeSurfaceNow()
+    }
+  }
+}
