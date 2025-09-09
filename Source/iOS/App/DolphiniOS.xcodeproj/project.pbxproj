@@ -4076,7 +4076,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b3;
+				MARKETING_VERSION = 4.1.0b4;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-debug";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-debug";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -4182,7 +4182,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b3;
+				MARKETING_VERSION = 4.1.0b4;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = com.joemattiello.DolphiniOS;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.joemattiello.DolphiniOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -4287,7 +4287,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b3;
+				MARKETING_VERSION = 4.1.0b4;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-njb-patreon-beta";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-njb-patreon-beta";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -4392,7 +4392,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b3;
+				MARKETING_VERSION = 4.1.0b4;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-patreon-beta";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-patreon-beta";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -4556,7 +4556,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b3;
+				MARKETING_VERSION = 4.1.0b4;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-njb-debug";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-njb-debug";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -4605,7 +4605,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b3;
+				MARKETING_VERSION = 4.1.0b4;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-njb";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-njb";
@@ -4711,7 +4711,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b3;
+				MARKETING_VERSION = 4.1.0b4;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-ts";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-ts";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -4816,7 +4816,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b3;
+				MARKETING_VERSION = 4.1.0b4;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-ts-patreon-beta";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-ts-patreon-beta";
 				PRODUCT_NAME = "$(TARGET_NAME)";
