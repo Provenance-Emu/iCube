@@ -860,6 +860,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& p
     {
       if ((ea & 0b11) != 0)
         break; // misaligned
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u32 raw = ppc_state.gpr[inst.RS];
       std::memcpy(base_ptr + offset, &raw, sizeof(raw));
       return sizeof(AnyCallback) + sizeof(operands);
@@ -868,6 +871,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& p
     {
       if ((ea & 0b1) != 0)
         break; // misaligned
+      #if defined(__GNUC__) || defined(__clang__)
+      __builtin_prefetch(base_ptr + offset, 1, 1);
+      #endif
       const u16 raw = static_cast<u16>(ppc_state.gpr[inst.RS]);
       std::memcpy(base_ptr + offset, &raw, sizeof(raw));
       return sizeof(AnyCallback) + sizeof(operands);
