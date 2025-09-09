@@ -315,6 +315,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             var totalNodesEstimated = 0
             while let current = queue.first {
                 if Task.isCancelled { break }
+                if !isOnline { break }
                 queue.removeFirst()
                 // Normalize URL by removing trailing slash for comparison
                 let normalizedCurrentString = current.absoluteString.hasSuffix("/") ? String(current.absoluteString.dropLast()) : current.absoluteString
@@ -350,6 +351,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                             let progress = min(1.0, Double(discoveredFiles) / Double(max(1, totalNodesEstimated)))
                             scanningProgressCont?.yield(progress)
                         }
+                        if !isOnline { break }
                     }
                 }
                 processedDirs += 1
@@ -357,6 +359,7 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                 if addedInThisDir > 0 || processedDirs % 5 == 0 {
                     itemsCont?.yield(cumulative)
                 }
+                if !isOnline { break }
             }
             // Final yield to ensure consumers have the complete list
             itemsCont?.yield(cumulative)

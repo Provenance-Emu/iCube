@@ -3,6 +3,7 @@ import UIKit
 import GameController
 import UniformTypeIdentifiers
 import NavigationStackBackport
+import Combine
 
 #if os(iOS) || targetEnvironment(macCatalyst)
 import UniformTypeIdentifiers
@@ -96,6 +97,7 @@ private extension View {
 // MARK: - Clean Game Card Implementation
 // All game card logic is now inline in GameGridItem for better control
 
+@MainActor
 final class TVLibraryViewModel: ObservableObject {
   /// Backing collection of games shown in the grid
   @Published var games: [TVGameItem] = []
@@ -112,34 +114,31 @@ final class TVLibraryViewModel: ObservableObject {
   /// Grouped items by deduplication key
   @Published var groupsByKey: [String: [TVGameItem]] = [:]
 
+  private var cancellables = Set<AnyCancellable>()
+
+  init() {
+    LibraryCoordinator.shared.$games
+      .receive(on: RunLoop.main)
+      .sink { [weak self] items in
+        self?.groupAndDedup(items: items)
+      }
+      .store(in: &cancellables)
+    LibraryCoordinator.shared.start()
+  }
+
   /// Loads the current game list from the bridge
   func load() {
-    let items = TVLibraryBridge.currentGames()
-    print("TVLibraryViewModel.load(): got \(items.count) items from bridge")
-    for (index, item) in items.enumerated() {
-      let isRemote = TVLibraryView.isRemoteURL(item.filePath)
-      print("  [\(index)]: \(item.title) - \(isRemote ? "REMOTE" : "LOCAL") - \(item.filePath)")
-    }
+    let items = LibraryCoordinator.shared.games
     groupAndDedup(items: items)
-    print("TVLibraryViewModel.load(): after dedup, showing \(games.count) games")
   }
 
   /// Initiates a rescan and metadata fetch, then reloads the list
   func rescan() {
     guard !isRescanning else { return }
     isRescanning = true
-
-    // Trigger refresh of remote sources first - they will update the cache when ready
-    NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
-
-    // For refresh, don't clear remote cache immediately - let WebDAV results drive updates
-    // Only rescan local files to update metadata
-    TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
-      DispatchQueue.main.async {
+    LibraryCoordinator.shared.refreshAll { [weak self] in
+      Task { @MainActor in
         self?.isRescanning = false
-        // Remote sources will trigger additional reloads as they complete
-        self?.load()
-        NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Library refreshed")])
       }
     }
   }
@@ -148,12 +147,7 @@ final class TVLibraryViewModel: ObservableObject {
   func kickoffInitialMetadataIfNeeded() {
     guard !didKickoffInitialMetadata, !isRescanning else { return }
     didKickoffInitialMetadata = true
-    // On boot, preserve remote URLs while WebDAV sources are starting up
-    TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
-      DispatchQueue.main.async {
-        self?.load()
-      }
-    }
+    LibraryCoordinator.shared.refreshLocal()
   }
 
   func loadGameCubeMainMenu() {
@@ -868,17 +862,6 @@ struct TVLibraryView: View {
         DispatchQueue.main.async { model.load() }
       }
 
-      // Listen for remote library updates
-      NotificationCenter.default.addObserver(
-        forName: NSNotification.Name("RemoteLibraryUpdated"),
-        object: nil,
-        queue: .main
-      ) { _ in
-        print("TVLibraryView: received RemoteLibraryUpdated notification, reloading library")
-        model.load()
-        print("TVLibraryView: after reload, library has \(model.games.count) games")
-      }
-
       // Deep link from Spotlight: launch by GameID
       NotificationCenter.default.addObserver(
         forName: NSNotification.Name("DOLLaunchGameByGameID"),
@@ -911,7 +894,6 @@ struct TVLibraryView: View {
       }
     }
     .onDisappear {
-      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowImportGame"), object: nil)
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSettings"), object: nil)
@@ -1091,8 +1073,7 @@ struct TVLibraryView: View {
     }
     if anyOffline && !offlineBannerDismissed {
       VStack {
-        // Leave safe area at top for the navigation bar; place banner below it
-        Spacer().frame(height: 8)
+        Spacer()
         HStack(spacing: 10) {
           Image(systemName: "wifi.slash").foregroundStyle(.white)
           Text(L("Some remote sources are offline. Retrying…")).foregroundStyle(.white)
@@ -1108,10 +1089,9 @@ struct TVLibraryView: View {
         .background(Color.orange.opacity(0.9))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(.horizontal, 12)
-        .padding(.top, 8)
-        Spacer()
+        .padding(.bottom, 8)
       }
-      .transition(.move(edge: .top).combined(with: .opacity))
+      .transition(.move(edge: .bottom).combined(with: .opacity))
     } else if !anyOffline && offlineBannerDismissed {
       EmptyView()
         .onAppear { offlineBannerDismissed = false }
@@ -1547,8 +1527,10 @@ struct TVLibraryView: View {
             let now = Date().timeIntervalSince1970
             if now - lastNavMoveTime < navRepeatInterval { return }
             lastNavMoveTime = now
-            let newIndex = max(0, min(index + delta, model.games.count - 1))
-            DispatchQueue.main.async { focusedFilePath = model.games[newIndex].filePath }
+            DispatchQueue.main.async {
+              let newIndex = max(0, min(index + delta, model.games.count - 1))
+              focusedFilePath = model.games[newIndex].filePath
+            }
           }
           let dpad = gamepad.dpad
           if element == dpad.up, dpad.up.isPressed { move(-columns, dir: "up") }
@@ -1594,8 +1576,10 @@ struct TVLibraryView: View {
             let now = Date().timeIntervalSince1970
             if now - lastNavMoveTime < navRepeatInterval { return }
             lastNavMoveTime = now
-            let newIndex = max(0, min(index + delta, model.games.count - 1))
-            DispatchQueue.main.async { focusedFilePath = model.games[newIndex].filePath }
+            DispatchQueue.main.async {
+              let newIndex = max(0, min(index + delta, model.games.count - 1))
+              focusedFilePath = model.games[newIndex].filePath
+            }
           }
           if element == gamepad.dpad {
             let vx = gamepad.dpad.xAxis.value, vy = gamepad.dpad.yAxis.value

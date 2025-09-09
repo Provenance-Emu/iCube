@@ -20,6 +20,7 @@ class RemoteSourcesCoordinator: ObservableObject {
     private var lastPushedURLs: Set<String> = []
     private let debounceInterval: TimeInterval = 0.25
     private let smallDeltaThreshold: Int = 6
+    private var firstScanStartTime: Date? = nil
 
     // Reachability (nonisolated backing)
     private let pathMonitor = NWPathMonitor()
@@ -202,6 +203,7 @@ class RemoteSourcesCoordinator: ObservableObject {
 
         // Start the source FIRST so fresh streams are created
         source.start()
+        if firstScanStartTime == nil { firstScanStartTime = Date() }
         print("RemoteSourcesCoordinator: source \(source.id) start() called, now creating tasks for fresh streams")
 
         let onlineTask = Task {
@@ -255,7 +257,9 @@ class RemoteSourcesCoordinator: ObservableObject {
                 guard let self else { return }
                 for await p in progressStream {
                     await MainActor.run {
-                        self.scanningProgressBySource[source.id] = p
+                        // Clamp to [0,1]
+                        let clamped = max(0.0, min(1.0, p))
+                        self.scanningProgressBySource[source.id] = clamped
                         // Compute aggregate progress as mean of active sources with entries
                         let values = Array(self.scanningProgressBySource.values)
                         if !values.isEmpty {
@@ -265,23 +269,18 @@ class RemoteSourcesCoordinator: ObservableObject {
                             self.scanningProgress = 0
                             self.isScanning = false
                         }
-                    }
-                }
-                await MainActor.run {
-                    self.scanningProgressBySource[source.id] = 1.0
-                    let values = Array(self.scanningProgressBySource.values)
-                    if !values.isEmpty {
-                        self.scanningProgress = values.reduce(0, +) / Double(values.count)
-                        self.isScanning = self.scanningProgress < 1.0
-                    } else {
-                        self.scanningProgress = 0
-                        self.isScanning = false
-                    }
-                    // If this was the last active scan to complete, allow writes and do one final commit
-                    let allDone = self.sources.allSatisfy { self.scanningProgressBySource[$0.id] ?? 1.0 >= 1.0 }
-                    if allDone && self.suppressWritesUntilFirstScanComplete {
-                        self.suppressWritesUntilFirstScanComplete = false
-                        self.pushCacheUpdate(forceUpdate: true)
+                        // When all sources report completion (>=1.0), lift first-scan suppression and commit
+                        let allDone = self.sources.allSatisfy { self.scanningProgressBySource[$0.id] ?? 1.0 >= 1.0 }
+                        if allDone && self.suppressWritesUntilFirstScanComplete {
+                            self.suppressWritesUntilFirstScanComplete = false
+                            self.pushCacheUpdate(forceUpdate: true)
+                        }
+                        // Safety: if first scan is taking too long, force a commit after 15s to avoid partial UI state
+                        if self.suppressWritesUntilFirstScanComplete, let start = self.firstScanStartTime, Date().timeIntervalSince(start) > 15 {
+                            print("DEBUG PUSH: Forcing commit due to slow first scan (>15s)")
+                            self.suppressWritesUntilFirstScanComplete = false
+                            self.pushCacheUpdate(forceUpdate: true)
+                        }
                     }
                 }
             }
@@ -369,11 +368,16 @@ class RemoteSourcesCoordinator: ObservableObject {
 
         // During cold boot, avoid writing to the core cache until the first scan is complete
         if suppressWritesUntilFirstScanComplete && !forceUpdate {
-            print("DEBUG PUSH: Suppressing updateLibrary write until first scan completes; posting UI update only")
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+            // Safety timeout: if we're stuck >15s since first scan start, allow a one-time forced write
+            if let start = firstScanStartTime, Date().timeIntervalSince(start) > 15 {
+                print("DEBUG PUSH: Overriding first-scan suppression due to timeout (>15s)")
+            } else {
+                print("DEBUG PUSH: Suppressing updateLibrary write until first scan completes; posting UI update only")
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+                }
+                return
             }
-            return
         }
 
         // Avoid nuking the cache with an empty remote list during startup/refresh
@@ -414,5 +418,73 @@ class RemoteSourcesCoordinator: ObservableObject {
         lastPushTime = Date()
         // After the first successful push, allow future back-online refreshes
         suppressNextOnlineRefresh = false
+    }
+}
+
+@MainActor
+/// Centralizes library updates across local and remote (WebDAV) sources and publishes the current game list.
+final class LibraryCoordinator: ObservableObject {
+    static let shared = LibraryCoordinator()
+
+    /// Current list of games after merging local cache and remote entries
+    @Published private(set) var games: [TVGameItem] = []
+    /// True while a refresh is running
+    @Published private(set) var isUpdating: Bool = false
+
+    private var cancellables = Set<AnyCancellable>()
+    private let reloadSubject = PassthroughSubject<Void, Never>()
+
+    private init() {
+        NotificationCenter.default.publisher(for: NSNotification.Name("RemoteLibraryUpdated"))
+            .sink { [weak self] _ in self?.triggerReload() }
+            .store(in: &cancellables)
+
+        reloadSubject
+            .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
+            .sink { [weak self] in
+                guard let self else { return }
+                self.loadCurrent()
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Starts the coordinator and loads the current game list immediately
+    func start() {
+        loadCurrent()
+    }
+
+    /// Refreshes only local files and metadata, leaving remote streams intact
+    func refreshLocal(completion: (() -> Void)? = nil) {
+        isUpdating = true
+        TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+            Task { @MainActor in
+                self?.isUpdating = false
+                self?.triggerReload()
+                completion?()
+            }
+        }
+    }
+
+    /// Triggers remote WebDAV refresh and a local rescan; debounced updates are published to subscribers
+    func refreshAll(completion: (() -> Void)? = nil) {
+        isUpdating = true
+        NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
+        TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+            Task { @MainActor in
+                self?.isUpdating = false
+                self?.triggerReload()
+                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Library refreshed")])
+                completion?()
+            }
+        }
+    }
+
+    private func triggerReload() {
+        reloadSubject.send(())
+    }
+
+    private func loadCurrent() {
+        let items = TVLibraryBridge.currentGames()
+        games = items
     }
 }
