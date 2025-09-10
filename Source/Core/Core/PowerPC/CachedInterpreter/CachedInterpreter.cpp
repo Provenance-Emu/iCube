@@ -66,7 +66,7 @@ struct CI_RegionInfo
 };
 
 // Small direct-mapped TLB to cache region lookups by 4KB page
-static constexpr u32 CI_TLB_SIZE = 64;
+static constexpr u32 CI_TLB_SIZE = 256;
 static u32 s_ci_tlb_tags[CI_TLB_SIZE] = {};
 static CI_RegionInfo s_ci_tlb_vals[CI_TLB_SIZE] = {};
 
