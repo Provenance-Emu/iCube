@@ -478,6 +478,17 @@ public:
                                                  options:MTLPipelineOptionArgumentInfo
                                               reflection:&reflection
                                                    error:&err];
+      // Prewarm additional variants for common sample counts to reduce hitching later
+      if (!err && @available(iOS 16.0, tvOS 16.0, *)) {
+        for (NSNumber* samples in @[ @(1), @(2), @(4) ]) {
+          if ([samples unsignedIntegerValue] == fs.samples) continue;
+          [[desc colorAttachments] objectAtIndexedSubscript:0].pixelFormat = Util::FromAbstract(fs.color_texture_format);
+          [desc setSampleCount:[samples unsignedIntegerValue]];
+          NSError* err2 = nil;
+          id<MTLRenderPipelineState> pipe2 = [g_device newRenderPipelineStateWithDescriptor:desc options:MTLPipelineOptionArgumentInfo reflection:nil error:&err2];
+          (void)pipe2; (void)err2;
+        }
+      }
       if (err)
       {
         static int counter;

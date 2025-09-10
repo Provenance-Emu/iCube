@@ -634,6 +634,12 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
         static id<MTLTexture> s_offscreen = nil;
         if (s_offscreen == nil || s_offscreen.width != draw_tex.width || s_offscreen.height != draw_tex.height || s_offscreen.pixelFormat != draw_tex.pixelFormat)
         {
+          if (@available(iOS 16.0, tvOS 16.0, *)) {
+          if (m_texture_heap && desc.storageMode == MTLStorageModePrivate) {
+            s_offscreen = [m_texture_heap newTextureWithDescriptor:desc];
+          }
+        }
+        if (!s_offscreen)
           s_offscreen = [g_device newTextureWithDescriptor:desc];
           [s_offscreen setLabel:@"Dolphin Offscreen Color for PostProcess"];
         }
@@ -686,7 +692,13 @@ void Metal::Gfx::PresentBackbuffer()
 #else
           desc.usage = MTLTextureUsageShaderRead;
 #endif
-          s_src_copy = [g_device newTextureWithDescriptor:desc];
+          if (@available(iOS 16.0, tvOS 16.0, *)) {
+            if (m_texture_heap && desc.storageMode == MTLStorageModePrivate) {
+              s_src_copy = [m_texture_heap newTextureWithDescriptor:desc];
+            }
+          }
+          if (!s_src_copy)
+            s_src_copy = [g_device newTextureWithDescriptor:desc];
           [s_src_copy setLabel:@"Dolphin Post Source Copy"];
         }
         id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
@@ -724,7 +736,13 @@ void Metal::Gfx::PresentBackbuffer()
 #else
           desc.usage = MTLTextureUsageShaderRead;
 #endif
-          s_post_src = [g_device newTextureWithDescriptor:desc];
+          if (@available(iOS 16.0, tvOS 16.0, *)) {
+            if (m_texture_heap && desc.storageMode == MTLStorageModePrivate) {
+              s_post_src = [m_texture_heap newTextureWithDescriptor:desc];
+            }
+          }
+          if (!s_post_src)
+            s_post_src = [g_device newTextureWithDescriptor:desc];
           [s_post_src setLabel:@"Dolphin Post Source Blit"];
         }
         id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
