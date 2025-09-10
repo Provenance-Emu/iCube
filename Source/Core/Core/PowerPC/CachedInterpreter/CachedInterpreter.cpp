@@ -3367,7 +3367,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.imm = 0;
                   goto end_pack_switch;
                 }
-                case 444: // orx (use as mov when RS==RB and immediate identity not available)
+                case 444: // orx (use as mov when RS==RB; preserve Rc behavior)
                 {
                   if (next.inst.RA == next.inst.RS && next.inst.RB == next.inst.RS)
                   {
@@ -3375,7 +3375,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                     mu.rd = next.inst.RA;
                     mu.ra = next.inst.RS;
                     mu.rb = 0;
-                    mu.rc = 0;
+                    mu.rc = static_cast<u8>(next.inst.Rc); // preserve record bit
                     mu.imm = 0;
                     goto end_pack_switch;
                   }
