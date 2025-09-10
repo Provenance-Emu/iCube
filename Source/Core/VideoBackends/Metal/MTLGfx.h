@@ -98,14 +98,16 @@ private:
   // Metal 3+ (iOS/tvOS 16+) optional resources
   MRCOwned<id<MTLCommandQueue>> m_compute_queue = nullptr;
   MRCOwned<id<MTLHeap>> m_texture_heap = nullptr;
+  MRCOwned<id<MTLHeap>> m_staging_heap = nullptr;
 
-   std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
+  std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
   std::unique_ptr<AbstractShader> m_rgba8_scale_cs;
   std::unique_ptr<AbstractShader> m_rgba8_down2x_cs;
   std::unique_ptr<AbstractShader> m_rgba8_gamma_cs;
 
-   void CheckForSurfaceChange();
-   void CheckForSurfaceResize();
-   void SetupSurface();
+  void CheckForSurfaceChange();
+  void CheckForSurfaceResize();
+  void SetupSurface();
+  void PrewarmPipelines();
 };
 }  // namespace Metal

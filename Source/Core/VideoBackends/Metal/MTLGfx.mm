@@ -43,7 +43,7 @@ Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
       NSLog(@"🚀 Metal3: Async compute queue initialized");
     }
 
-    // Optional texture heap (off by default, enable via NSUserDefaults metal_texture_heap=YES)
+    // Texture heap for private render/texture storage
     MTLHeapDescriptor* heap_desc = [MTLHeapDescriptor new];
     heap_desc.size = 64 * 1024 * 1024; // 64MB heap for textures
     heap_desc.storageMode = MTLStorageModePrivate;
@@ -56,6 +56,20 @@ Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
       NSLog(@"🚀 Metal3: Texture heap enabled (64MB)");
     }
 
+    // Staging heap for transient uploads/downloads
+    MTLHeapDescriptor* staging_desc = [MTLHeapDescriptor new];
+    staging_desc.size = 32 * 1024 * 1024; // 32MB for staging
+    staging_desc.storageMode = MTLStorageModeShared;
+#if defined(MTLHazardTrackingModeUntracked)
+    staging_desc.hazardTrackingMode = MTLHazardTrackingModeUntracked;
+#endif
+    m_staging_heap = MRCRetain([g_device newHeapWithDescriptor:staging_desc]);
+    if (m_staging_heap) {
+      [m_staging_heap setLabel:@"Dolphin Staging Heap (32MB)"];
+      NSLog(@"🚀 Metal3: Staging heap enabled (32MB)");
+    }
+
+    PrewarmPipelines();
   }
 
   SetupSurface();
@@ -165,11 +179,19 @@ Metal::Gfx::CreateStagingTexture(StagingTextureType type, const TextureConfig& c
     if (type == StagingTextureType::Upload)
       options |= MTLResourceHazardTrackingModeUntracked;
 
-    id<MTLBuffer> buffer = [g_device newBufferWithLength:buffer_size options:options];
+    id<MTLBuffer> buffer = nil;
+    if (@available(iOS 16.0, tvOS 16.0, *)) {
+      if (m_staging_heap) {
+        // Allocate from staging heap for better locality
+        buffer = [m_staging_heap newBufferWithLength:buffer_size options:options];
+      }
+    }
+    if (!buffer) {
+      buffer = [g_device newBufferWithLength:buffer_size options:options];
+    }
     if (!buffer)
       return nullptr;
-    [buffer
-        setLabel:[NSString stringWithFormat:@"Staging Texture %d", m_staging_texture_counter++]];
+    [buffer setLabel:[NSString stringWithFormat:@"Staging Texture %d", m_staging_texture_counter++]];
     return std::make_unique<StagingTexture>(MRCTransfer(buffer), type, config);
   }
 }
@@ -1177,5 +1199,23 @@ void Metal::Gfx::GenerateMipmaps(AbstractTexture* texture)
     if (@available(iOS 16.0, tvOS 16.0, *) && m_compute_queue && cb != g_state_tracker->GetRenderCmdBuf()) {
       [cb commit];
     }
+  }
+}
+
+void Metal::Gfx::PrewarmPipelines()
+{
+  if (!Metal::g_pipeline_archive)
+    return;
+  @autoreleasepool
+  {
+    // Seed common pipelines by compiling a small set of generic configurations once at startup.
+    // This reduces hitching during first frames.
+    AbstractPipelineConfig cfg{};
+    cfg.usage = AbstractPipelineUsage::Utility;
+    cfg.rasterization_state.cullmode = CullMode::None;
+    cfg.rasterization_state.primitive = PrimitiveType::Triangles;
+    cfg.framebuffer_state.samples = 1;
+    // No shaders here; ObjectCache will skip invalid configs.
+    (void)g_object_cache->CreatePipeline(cfg);
   }
 }
