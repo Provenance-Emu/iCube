@@ -95,6 +95,10 @@ private:
   u32 m_staging_texture_counter = 0;
   std::array<u32, 4> m_shader_counter = {};
 
+  // Metal 3+ (iOS/tvOS 16+) optional resources
+  MRCOwned<id<MTLCommandQueue>> m_compute_queue = nullptr;
+  MRCOwned<id<MTLHeap>> m_texture_heap = nullptr;
+
    std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
   std::unique_ptr<AbstractShader> m_rgba8_scale_cs;
   std::unique_ptr<AbstractShader> m_rgba8_down2x_cs;
