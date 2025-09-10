@@ -2,8 +2,9 @@ import SwiftUI
 import UIKit
 import GameController
 import Combine
+#if os(iOS)
 import NavigationStackBackport
-
+#endif
 #if os(tvOS)
 private func setupPauseGestureHandlers() { }
 private func setupPauseGestureHandler(for controller: GCController) { }
@@ -1356,7 +1357,9 @@ private struct SettingsNavigationFallback: ViewModifier {
                 content
                     .navigationDestination(isPresented: $showSettings) {
                         SettingsRootView()
+                      #if !os(tvOS)
                             .navigationBarTitleDisplayMode(.inline)
+                      #endif
                     }
             } else {
                 content

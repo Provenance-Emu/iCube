@@ -9,7 +9,9 @@ import PVWebServer
 #if os(iOS)
 import SafariServices
 #endif
+#if os(iOS)
 import NavigationStackBackport
+#endif
 
 /// Root Settings page implemented in SwiftUI for iOS/tvOS
 struct SettingsRootView<Background: View>: View {

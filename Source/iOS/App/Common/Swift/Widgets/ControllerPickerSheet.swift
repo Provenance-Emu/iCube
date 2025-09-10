@@ -3,7 +3,9 @@
 
 import SwiftUI
 import GameController
+#if os(iOS)
 import NavigationStackBackport
+#endif
 
 struct ControllerPickerSheet: View {
   let game: TVGameItem

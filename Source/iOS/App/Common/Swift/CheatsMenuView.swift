@@ -3,7 +3,9 @@
 
 import SwiftUI
 import UIKit
+#if os(iOS)
 import NavigationStackBackport
+#endif
 
 struct CheatsMenuView: View {
     let game: TVGameItem

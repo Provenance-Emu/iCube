@@ -1,5 +1,7 @@
 import SwiftUI
+#if os(iOS)
 import NavigationStackBackport
+#endif
 
 struct TVSoftwarePropertiesView: View, Identifiable {
     let id = UUID()

@@ -61,7 +61,7 @@
 		B36B519B2E5E46AC009A2303 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519A2E5E46AC009A2303 /* KeychainService.swift */; };
 		B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */; };
 		B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519E2E5E4700009A2303 /* SourcesView.swift */; };
-		B37102AE2E70813B006C1ED7 /* NavigationStackBackport in Frameworks */ = {isa = PBXBuildFile; productRef = B37102AD2E70813B006C1ED7 /* NavigationStackBackport */; };
+		B37102AE2E70813B006C1ED7 /* NavigationStackBackport in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, maccatalyst, ); productRef = B37102AD2E70813B006C1ED7 /* NavigationStackBackport */; };
 		B37102B12E708B3C006C1ED7 /* libobjc.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B37102AF2E708B31006C1ED7 /* libobjc.tbd */; };
 		B37102B22E708B49006C1ED7 /* libswiftObjectiveC.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B37102B02E708B31006C1ED7 /* libswiftObjectiveC.tbd */; };
 		B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38205FF2E57FF0E00D4853F /* CompiledShader.swift */; };
