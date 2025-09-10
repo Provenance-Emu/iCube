@@ -100,6 +100,11 @@ private:
   MRCOwned<id<MTLHeap>> m_texture_heap = nullptr;
   MRCOwned<id<MTLHeap>> m_staging_heap = nullptr;
 
+  // Argument buffers for bindless textures (A16+/iOS 17+)
+  MRCOwned<id<MTLArgumentEncoder>> m_fragment_arg_encoder = nullptr;
+  MRCOwned<id<MTLBuffer>> m_fragment_arg_buffer = nullptr;
+  bool m_bindless_supported = false;
+
   std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
   std::unique_ptr<AbstractShader> m_rgba8_scale_cs;
   std::unique_ptr<AbstractShader> m_rgba8_down2x_cs;

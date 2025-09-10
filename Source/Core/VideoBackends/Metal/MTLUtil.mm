@@ -17,6 +17,9 @@
 #include "VideoCommon/DriverDetails.h"
 #include "VideoCommon/Spirv.h"
 
+// For Metal::g_device access
+namespace Metal { extern MRCOwned<id<MTLDevice>> g_device; }
+
 Metal::DeviceFeatures Metal::g_features;
 
 std::vector<MRCOwned<id<MTLDevice>>> Metal::Util::GetAdapterList()
@@ -551,7 +554,13 @@ static const std::string_view MSL_HEADER =
     // We know our shader generator leaves unused variables.
     "#pragma clang diagnostic ignored \"-Wunused-variable\"\n"
     // These are usually when the compiler doesn't think a switch is exhaustive
-    "#pragma clang diagnostic ignored \"-Wreturn-type\"\n";
+    "#pragma clang diagnostic ignored \"-Wreturn-type\"\n"
+    // Support for argument buffers (bindless) on A16+/iOS 17+
+    "#if __METAL_MACOS__ || (__METAL_IOS__ && __METAL_VERSION__ >= 300)\n"
+    "#define BINDLESS_SUPPORTED 1\n"
+    "#else\n"
+    "#define BINDLESS_SUPPORTED 0\n"
+    "#endif\n";
 
 static constexpr std::pair<std::string_view, std::string_view> MSL_FIXUPS[] = {
     // Force-unroll the lighting loop in ubershaders, which greatly reduces register pressure on AMD
@@ -652,6 +661,22 @@ std::optional<std::string> Metal::Util::TranslateShaderToMSL(ShaderStage stage,
     options.set_msl_version(2, 1);
   else
     options.set_msl_version(2, 0);
+
+  // Enable argument buffers on A16+/iOS 17+ for fragment shaders
+  bool use_argument_buffers = false;
+  if (@available(iOS 17.0, *)) {
+    // Check if this is A16+ chip (detect using Metal 3.1 features)
+    if (Metal::g_device && [Metal::g_device supportsFamily:MTLGPUFamilyApple8]) {
+      // TODO: Temporarily disabled due to SPIRV-Cross crash in analyze_argument_buffers()
+      // Need to debug resource binding conflicts before re-enabling
+      use_argument_buffers = false; // (stage == ShaderStage::Pixel);
+      if (use_argument_buffers) {
+        options.argument_buffers = true;
+        options.force_active_argument_buffer_resources = true;
+      }
+    }
+  }
+
   options.use_framebuffer_fetch_subpasses = true;
   compiler.set_msl_options(options);
 
@@ -659,10 +684,28 @@ std::optional<std::string> Metal::Util::TranslateShaderToMSL(ShaderStage stage,
     compiler.add_msl_resource_binding(binding);
   if (stage == ShaderStage::Pixel)
   {
-    for (u32 i = 0; i < VideoCommon::MAX_PIXEL_SHADER_SAMPLERS; i++)  // ps/samp0-N
-    {
-      compiler.add_msl_resource_binding(
-          MakeResourceBinding(spv::ExecutionModelFragment, 1, i, 0, i, i));
+    if (use_argument_buffers) {
+      // A16+/iOS 17+: Use argument buffer for bindless texture access
+      // Set up argument buffer at buffer index 10 for fragment textures/samplers
+      spirv_cross::MSLResourceBinding arg_buffer;
+      arg_buffer.stage = spv::ExecutionModelFragment;
+      arg_buffer.desc_set = 1;
+      arg_buffer.binding = 0;
+      arg_buffer.msl_buffer = 10; // Dedicated buffer slot for argument buffer
+      compiler.add_msl_resource_binding(arg_buffer);
+
+      // Still bind individual resources for fallback, but they'll be accessed via argument buffer
+      for (u32 i = 0; i < VideoCommon::MAX_PIXEL_SHADER_SAMPLERS; i++) {
+        compiler.add_msl_resource_binding(
+            MakeResourceBinding(spv::ExecutionModelFragment, 1, i, 10, i, i)); // Buffer 10 contains all textures
+      }
+    } else {
+      // Legacy path: individual texture bindings
+      for (u32 i = 0; i < VideoCommon::MAX_PIXEL_SHADER_SAMPLERS; i++)  // ps/samp0-N
+      {
+        compiler.add_msl_resource_binding(
+            MakeResourceBinding(spv::ExecutionModelFragment, 1, i, 0, i, i));
+      }
     }
   }
   else if (stage == ShaderStage::Compute)
@@ -683,6 +726,27 @@ std::optional<std::string> Metal::Util::TranslateShaderToMSL(ShaderStage stage,
 
   std::string output(MSL_HEADER);
   std::string compiled = compiler.compile();
+
+  // Inject argument buffer structure for fragment shaders on A16+/iOS 17+
+  if (use_argument_buffers && stage == ShaderStage::Pixel) {
+    std::string arg_buffer_header = R"(
+// Argument buffer for bindless textures (A16+/iOS 17+)
+struct FragmentTextures {
+)";
+    for (u32 i = 0; i < VideoCommon::MAX_PIXEL_SHADER_SAMPLERS; i++) {
+      arg_buffer_header += "  texture2d<float> tex" + std::to_string(i) + " [[id(" + std::to_string(i) + ")]];\n";
+      arg_buffer_header += "  sampler samp" + std::to_string(i) + " [[id(" + std::to_string(i + VideoCommon::MAX_PIXEL_SHADER_SAMPLERS) + ")]];\n";
+    }
+    arg_buffer_header += "};\n\n";
+
+    // Insert after #include statements but before main shader code
+    size_t include_end = compiled.find("using namespace metal;");
+    if (include_end != std::string::npos) {
+      include_end = compiled.find('\n', include_end) + 1;
+      compiled.insert(include_end, arg_buffer_header);
+    }
+  }
+
   std::string_view remaining = compiled;
   while (!remaining.empty())
   {

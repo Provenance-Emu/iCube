@@ -480,13 +480,79 @@ public:
                                                    error:&err];
       // Prewarm additional variants for common sample counts to reduce hitching later
       if (!err && @available(iOS 16.0, tvOS 16.0, *)) {
-        for (NSNumber* samples in @[ @(1), @(2), @(4) ]) {
+        for (NSNumber* samples in @[ @(1), @(2), @(4), @(8) ]) {
           if ([samples unsignedIntegerValue] == fs.samples) continue;
-          [[desc colorAttachments] objectAtIndexedSubscript:0].pixelFormat = Util::FromAbstract(fs.color_texture_format);
-          [desc setSampleCount:[samples unsignedIntegerValue]];
+
+                    // Create variant descriptor by copying essential properties
+          auto variant_desc = MRCTransfer([MTLRenderPipelineDescriptor new]);
+          [variant_desc setVertexFunction:[desc vertexFunction]];
+          [variant_desc setFragmentFunction:[desc fragmentFunction]];
+          [variant_desc setLabel:[NSString stringWithFormat:@"%@ (Sample %@)", [desc label], samples]];
+          if ([desc vertexDescriptor])
+            [variant_desc setVertexDescriptor:[desc vertexDescriptor]];
+          [variant_desc setInputPrimitiveTopology:[desc inputPrimitiveTopology]];
+          [variant_desc setRasterSampleCount:[samples unsignedIntegerValue]];
+
+          // Copy color attachment properties
+          MTLRenderPipelineColorAttachmentDescriptor* src_color = [[desc colorAttachments] objectAtIndexedSubscript:0];
+          MTLRenderPipelineColorAttachmentDescriptor* var_color = [[variant_desc colorAttachments] objectAtIndexedSubscript:0];
+          [var_color setPixelFormat:Util::FromAbstract(fs.color_texture_format)];
+          [var_color setWriteMask:[src_color writeMask]];
+          [var_color setBlendingEnabled:[src_color isBlendingEnabled]];
+          if ([src_color isBlendingEnabled]) {
+            [var_color setSourceRGBBlendFactor:[src_color sourceRGBBlendFactor]];
+            [var_color setDestinationRGBBlendFactor:[src_color destinationRGBBlendFactor]];
+            [var_color setSourceAlphaBlendFactor:[src_color sourceAlphaBlendFactor]];
+            [var_color setDestinationAlphaBlendFactor:[src_color destinationAlphaBlendFactor]];
+            [var_color setRgbBlendOperation:[src_color rgbBlendOperation]];
+            [var_color setAlphaBlendOperation:[src_color alphaBlendOperation]];
+          }
+
+          // Copy depth attachment
+          [variant_desc setDepthAttachmentPixelFormat:[desc depthAttachmentPixelFormat]];
+          [variant_desc setStencilAttachmentPixelFormat:[desc stencilAttachmentPixelFormat]];
+
+          // Set binary archives
+          if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *)) {
+            if (s_pipeline_archive)
+              [variant_desc setBinaryArchives:@[ s_pipeline_archive ]];
+          }
+
           NSError* err2 = nil;
-          id<MTLRenderPipelineState> pipe2 = [g_device newRenderPipelineStateWithDescriptor:desc options:MTLPipelineOptionArgumentInfo reflection:nil error:&err2];
+          id<MTLRenderPipelineState> pipe2 = [g_device newRenderPipelineStateWithDescriptor:variant_desc options:MTLPipelineOptionArgumentInfo reflection:nil error:&err2];
           (void)pipe2; (void)err2;
+
+          // Also prewarm common blending variants (only for single-sample)
+          if ([samples unsignedIntegerValue] == 1) {
+            auto blend_desc = MRCTransfer([MTLRenderPipelineDescriptor new]);
+            [blend_desc setVertexFunction:[desc vertexFunction]];
+            [blend_desc setFragmentFunction:[desc fragmentFunction]];
+            [blend_desc setLabel:[NSString stringWithFormat:@"%@ (Alpha Blend)", [desc label]]];
+            if ([desc vertexDescriptor])
+              [blend_desc setVertexDescriptor:[desc vertexDescriptor]];
+            [blend_desc setInputPrimitiveTopology:[desc inputPrimitiveTopology]];
+            [blend_desc setRasterSampleCount:1];
+            [blend_desc setDepthAttachmentPixelFormat:[desc depthAttachmentPixelFormat]];
+            [blend_desc setStencilAttachmentPixelFormat:[desc stencilAttachmentPixelFormat]];
+
+            MTLRenderPipelineColorAttachmentDescriptor* blend_color = [[blend_desc colorAttachments] objectAtIndexedSubscript:0];
+            [blend_color setPixelFormat:Util::FromAbstract(fs.color_texture_format)];
+            [blend_color setWriteMask:[src_color writeMask]];
+            [blend_color setBlendingEnabled:YES];
+            [blend_color setSourceRGBBlendFactor:MTLBlendFactorSourceAlpha];
+            [blend_color setDestinationRGBBlendFactor:MTLBlendFactorOneMinusSourceAlpha];
+            [blend_color setSourceAlphaBlendFactor:MTLBlendFactorOne];
+            [blend_color setDestinationAlphaBlendFactor:MTLBlendFactorOneMinusSourceAlpha];
+
+            if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *)) {
+              if (s_pipeline_archive)
+                [blend_desc setBinaryArchives:@[ s_pipeline_archive ]];
+            }
+
+            NSError* err3 = nil;
+            id<MTLRenderPipelineState> pipe3 = [g_device newRenderPipelineStateWithDescriptor:blend_desc options:MTLPipelineOptionArgumentInfo reflection:nil error:&err3];
+            (void)pipe3; (void)err3;
+          }
         }
       }
       if (err)
