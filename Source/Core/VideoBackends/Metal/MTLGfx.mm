@@ -104,10 +104,15 @@ std::unique_ptr<AbstractTexture> Metal::Gfx::CreateTexture(const TextureConfig& 
     [desc setSampleCount:config.samples];
     [desc setStorageMode:MTLStorageModePrivate];
 
-    // iOS/tvOS 16+ descriptor tuning (no memoryless to preserve sampling compatibility)
+    // iOS/tvOS 16+: prefer memoryless for render targets to leverage tile memory, keep hazard untracked
     if (@available(iOS 16.0, tvOS 16.0, *)) {
 #if defined(MTLHazardTrackingModeUntracked)
       [desc setHazardTrackingMode:MTLHazardTrackingModeUntracked];
+#endif
+#if defined(MTLStorageModeMemoryless)
+      if (config.IsRenderTarget() && !config.IsComputeImage()) {
+        [desc setStorageMode:MTLStorageModeMemoryless];
+      }
 #endif
     }
 
