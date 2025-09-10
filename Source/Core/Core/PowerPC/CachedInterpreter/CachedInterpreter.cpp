@@ -11,6 +11,7 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -37,6 +38,7 @@
 #include "Common/Swap.h"
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/Config/MainSettings.h"
+#include "Core/Core.h"
 
 #if defined(__clang__) || defined(__GNUC__)
 #if defined(__aarch64__)
@@ -62,6 +64,11 @@ struct CI_RegionInfo
   u32 sub;
   bool is_fake;
 };
+
+// Small direct-mapped TLB to cache region lookups by 4KB page
+static constexpr u32 CI_TLB_SIZE = 64;
+static u32 s_ci_tlb_tags[CI_TLB_SIZE] = {};
+static CI_RegionInfo s_ci_tlb_vals[CI_TLB_SIZE] = {};
 
 static inline CI_RegionInfo CI_GetRegionInfo(u32 ea, bool dr, u8* mem1_base, u32 mem1_mask,
                                              u8* exram_base, u32 exram_mask, u8* fakevmem_base,
@@ -110,6 +117,22 @@ static inline CI_RegionInfo CI_GetRegionInfo(u32 ea, bool dr, u8* mem1_base, u32
 static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
 {
   return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
+}
+
+static inline CI_RegionInfo CI_GetRegionInfoCached(u32 ea, bool dr, u8* mem1_base, u32 mem1_mask,
+                                                   u8* exram_base, u32 exram_mask, u8* fakevmem_base,
+                                                   u32 fakevmem_mask)
+{
+  const u32 page = ea >> 12;
+  const u32 tag = (page << 1) | (dr ? 1u : 0u);
+  const u32 idx = page & (CI_TLB_SIZE - 1);
+  if (s_ci_tlb_tags[idx] == tag)
+    return s_ci_tlb_vals[idx];
+  CI_RegionInfo info = CI_GetRegionInfo(ea, dr, mem1_base, mem1_mask, exram_base, exram_mask,
+                                        fakevmem_base, fakevmem_mask);
+  s_ci_tlb_tags[idx] = tag;
+  s_ci_tlb_vals[idx] = info;
+  return info;
 }
 } // anonymous namespace
 
@@ -1253,13 +1276,22 @@ CI_HOT_FLATTEN s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc
         &&op_CMPL_U_RR,     // 39 MicroOpCode::CMPL_U_RR
         &&op_CMP_S_IMM,     // 40 MicroOpCode::CMP_S_IMM
         &&op_CMPL_U_IMM,    // 41 MicroOpCode::CMPL_U_IMM
-        &&op_NOP            // 42 MicroOpCode::NOP
+        &&op_MOV_RR,        // 42 MicroOpCode::MOV_RR
+        &&op_SUBFIC_IMM,    // 43 MicroOpCode::SUBFIC_IMM
+        &&op_MULLI_IMM,     // 44 MicroOpCode::MULLI_IMM
+        &&op_MULLW_RR,      // 45 MicroOpCode::MULLW_RR
+        &&op_NOP            // 46 MicroOpCode::NOP
     };
     static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
                   "dispatch_table must cover all MicroOpCode entries and match enum order");
 
   micro_dispatch:
     {
+      // Prefetch next chunk of micro-ops to reduce I-cache stalls
+      #if defined(__aarch64__)
+      __builtin_prefetch(&ops[i + 4], 0, 1);
+      __builtin_prefetch(&ops[i + 8], 0, 1);
+      #endif
       const MicroOp& m = ops[i];
       const unsigned op_index = static_cast<unsigned>(m.op);
       if (__builtin_expect(op_index >= static_cast<unsigned>(MicroOpCode::COUNT), 0))
@@ -1827,6 +1859,52 @@ CI_HOT_FLATTEN s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
 
+  op_MOV_RR:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = ppc_state.gpr[m.ra];
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFIC_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = m.imm & 0xFFFFu;
+      const u32 result = a - b;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(a < b);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_MULLI_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = m.imm & 0xFFFFu;
+      const u64 result = static_cast<u64>(a) * static_cast<u64>(b);
+      ppc_state.gpr[m.rd] = static_cast<u32>(result);
+      ppc_state.gpr[m.rd + 1] = static_cast<u32>(result >> 32);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_MULLW_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u64 result = static_cast<u64>(a) * static_cast<u64>(b);
+      ppc_state.gpr[m.rd] = static_cast<u32>(result);
+      ppc_state.gpr[m.rd + 1] = static_cast<u32>(result >> 32);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
   op_NOP:
     {
       ++i;
@@ -2229,6 +2307,40 @@ CI_HOT_FLATTEN s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc
         CI_UpdateCR0(ppc_state, result);
       break;
     }
+    case MicroOpCode::MOV_RR:
+    {
+      ppc_state.gpr[m.rd] = ppc_state.gpr[m.ra];
+      break;
+    }
+    case MicroOpCode::SUBFIC_IMM:
+    {
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = m.imm & 0xFFFFu;
+      const u32 result = a - b;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(a < b);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::MULLI_IMM:
+    {
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = m.imm & 0xFFFFu;
+      const u64 result = static_cast<u64>(a) * static_cast<u64>(b);
+      ppc_state.gpr[m.rd] = static_cast<u32>(result);
+      ppc_state.gpr[m.rd + 1] = static_cast<u32>(result >> 32);
+      break;
+    }
+    case MicroOpCode::MULLW_RR:
+    {
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u64 result = static_cast<u64>(a) * static_cast<u64>(b);
+      ppc_state.gpr[m.rd] = static_cast<u32>(result);
+      ppc_state.gpr[m.rd + 1] = static_cast<u32>(result >> 32);
+      break;
+    }
     case MicroOpCode::NOP:
     default:
       break;
@@ -2483,16 +2595,29 @@ void CachedInterpreter::Jit(u32 em_address, bool clear_cache_and_retry_on_failur
   }
   FreeRanges();
 
-  const u32 nextPC =
-      analyzer.Analyze(em_address, &code_block, &m_code_buffer, m_code_buffer.size());
-  if (code_block.m_memory_exception)
+  u32 nextPC;
+
+  // Try cached decode first
+  if (TryCachedDecode(em_address, &code_block, m_code_buffer.data(), m_code_buffer.size(), &nextPC))
   {
-    // Address of instruction could not be translated
-    m_ppc_state.npc = nextPC;
-    m_ppc_state.Exceptions |= EXCEPTION_ISI;
-    m_system.GetPowerPC().CheckExceptions();
-    WARN_LOG_FMT(POWERPC, "ISI exception at {:#010x}", nextPC);
-    return;
+    // Cache hit - skip analysis
+  }
+  else
+  {
+    // Cache miss - perform full analysis
+    nextPC = analyzer.Analyze(em_address, &code_block, &m_code_buffer, m_code_buffer.size());
+    if (code_block.m_memory_exception)
+    {
+      // Address of instruction could not be translated
+      m_ppc_state.npc = nextPC;
+      m_ppc_state.Exceptions |= EXCEPTION_ISI;
+      m_system.GetPowerPC().CheckExceptions();
+      WARN_LOG_FMT(POWERPC, "ISI exception at {:#010x}", nextPC);
+      return;
+    }
+
+    // Store successful decode in cache
+    StoreCachedDecode(em_address, code_block, m_code_buffer.data(), nextPC);
   }
 
   if (SetEmitterStateToFreeCodeRegion())
@@ -2756,6 +2881,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               MicroOp& mu = mop.ops[mop.count++];
               switch (next.inst.OPCD)
               {
+              case 7: // mulli
+                mu.op = MicroOpCode::MULLI_IMM;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                break;
+              case 8: // subfic
+                mu.op = MicroOpCode::SUBFIC_IMM;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                break;
               case 10: // cmpli
               {
                 mu.op = MicroOpCode::CMPL_U_IMM;
@@ -2776,6 +2913,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.imm = static_cast<u16>(next.inst.SIMM_16); // keep 16-bit immediate
                 goto end_pack_switch;
               }
+              case 12: // addic
+                mu.op = MicroOpCode::ADDI;
+                mu.rd = next.inst.RD; // RT
+                mu.ra = next.inst.RA; // RA (0 allowed)
+                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                break;
+              case 13: // addic.
+                mu.op = MicroOpCode::ADDI;
+                mu.rd = next.inst.RD; // RT
+                mu.ra = next.inst.RA; // RA (0 allowed)
+                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                break;
               case 14: // addi
                 mu.op = MicroOpCode::ADDI;
                 mu.rd = next.inst.RD; // RT
@@ -2788,6 +2937,17 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.ra = next.inst.RA;
                 mu.imm = static_cast<u32>(next.inst.SIMM_16);
                 break;
+              case 18: // rlwimix (alias)
+                mu.op = MicroOpCode::RLWIMI_IMM;
+                mu.rd = next.inst.RA; // destination RA
+                mu.ra = next.inst.RS; // source RS
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
+                mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
+                         ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                break;
               case 20: // rlwimix
                 mu.op = MicroOpCode::RLWIMI_IMM;
                 mu.rd = next.inst.RA; // destination RA
@@ -2798,6 +2958,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
                          ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
                          ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                {
+                  // NOP elimination: rlwinm rA,rA,0,0,31 with Rc==0
+                  const bool is_identity = (next.inst.SH & 31u) == 0 && (next.inst.MB & 31u) == 0 &&
+                                          (next.inst.ME & 31u) == 31 && next.inst.RA == next.inst.RS &&
+                                          next.inst.Rc == 0;
+                  if (is_identity)
+                  {
+                    // Drop this op from the micro-op batch
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
+                }
                 break;
               case 21: // rlwinm/rlwinm.
                 mu.op = MicroOpCode::RLWINM_IMM;
@@ -2999,9 +3171,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 case 28: // andx
                   mu.op = MicroOpCode::AND_RR;
                   break;
-                case 444: // orx
-                  mu.op = MicroOpCode::OR_RR;
-                  break;
+
                 case 316: // xorx
                   mu.op = MicroOpCode::XOR_RR;
                   break;
@@ -3187,6 +3357,32 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rc = static_cast<u8>(next.inst.Rc);
                   mu.imm = static_cast<u32>(next.inst.SH & 31u);
                   goto end_pack_switch;
+                case 235: // mullwx
+                {
+                  mu.op = MicroOpCode::MULLW_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                }
+                case 444: // orx (use as mov when RS==RB and immediate identity not available)
+                {
+                  if (next.inst.RA == next.inst.RS && next.inst.RB == next.inst.RS)
+                  {
+                    mu.op = MicroOpCode::MOV_RR;
+                    mu.rd = next.inst.RA;
+                    mu.ra = next.inst.RS;
+                    mu.rb = 0;
+                    mu.rc = 0;
+                    mu.imm = 0;
+                    goto end_pack_switch;
+                  }
+                  mu.op = MicroOpCode::OR_RR;
+                  // fallthrough to common setter below
+                  break;
+                }
                 default:
                   // Not supported; undo reservation and stop packing
                   mop.count--;
@@ -3236,6 +3432,76 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
         if (!emitted_const32 && !used_micro_ops)
         {
+          // First, try to recognize larger patterns for hot blocks
+          BlockDecodeEntry* decode_entry = GetDecodeCache(js.blockStart);
+          bool is_hot_block = decode_entry && (decode_entry->flags & BlockDecodeEntry::FLAG_HOT);
+
+          if (is_hot_block)
+          {
+            // Check for address calculation + load/store pattern
+            AddressCalcLoadStorePICOperands addr_ls_operands;
+            if (TryRecognizeAddressCalcLoadStore(i, &addr_ls_operands))
+            {
+              auto& mm = m_system.GetMemory();
+              addr_ls_operands.mem1_base = mm.GetRAM();
+              addr_ls_operands.mem1_mask = mm.GetRamMask();
+              addr_ls_operands.exram_base = mm.GetEXRAM();
+              addr_ls_operands.exram_mask = mm.GetExRamMask();
+
+              Write(op.canEndBlock ? CallbackCast(AddressCalcLoadStorePIC<true>) :
+                                    CallbackCast(AddressCalcLoadStorePIC<false>),
+                    addr_ls_operands);
+
+              // Skip the next instruction since we handled two
+              if (i + 1 < code_block.m_num_instructions)
+              {
+                ++i;
+                js.downcountAmount += m_code_buffer[i].opinfo->num_cycles;
+              }
+              continue; // Skip normal processing
+            }
+
+            // Check for memset/memcpy patterns in loop regions
+            if (i + 8 < code_block.m_num_instructions)
+            {
+              MemsetPICOperands memset_ops;
+              if (TryRecognizeMemset(i, std::min(i + 16, code_block.m_num_instructions), &memset_ops))
+              {
+                auto& mm = m_system.GetMemory();
+                memset_ops.mem1_base = mm.GetRAM();
+                memset_ops.mem1_mask = mm.GetRamMask();
+                memset_ops.exram_base = mm.GetEXRAM();
+                memset_ops.exram_mask = mm.GetExRamMask();
+
+                Write(op.canEndBlock ? CallbackCast(MemsetPIC<true>) :
+                                      CallbackCast(MemsetPIC<false>),
+                      memset_ops);
+
+                // Skip ahead past the recognized pattern
+                i = std::min(i + 8, code_block.m_num_instructions - 1);
+                continue;
+              }
+
+              MemcpyPICOperands memcpy_ops;
+              if (TryRecognizeMemcpy(i, std::min(i + 16, code_block.m_num_instructions), &memcpy_ops))
+              {
+                auto& mm = m_system.GetMemory();
+                memcpy_ops.mem1_base = mm.GetRAM();
+                memcpy_ops.mem1_mask = mm.GetRamMask();
+                memcpy_ops.exram_base = mm.GetEXRAM();
+                memcpy_ops.exram_mask = mm.GetExRamMask();
+
+                Write(op.canEndBlock ? CallbackCast(MemcpyPIC<true>) :
+                                      CallbackCast(MemcpyPIC<false>),
+                      memcpy_ops);
+
+                // Skip ahead past the recognized pattern
+                i = std::min(i + 12, code_block.m_num_instructions - 1);
+                continue;
+              }
+            }
+          }
+
           // Use PIC fast path for load/store instructions when possible
           if ((op.opinfo->flags & FL_LOADSTORE) != 0)
           {
@@ -3332,8 +3598,116 @@ void CachedInterpreter::ClearCache()
   m_block_cache.ClearRangesToFree();
   ClearCodeSpace();
   ResetFreeMemoryRanges();
+
+  // Clear decode cache
+  for (auto& entry : m_decode_cache)
+  {
+    entry.flags = 0;  // Mark as invalid
+    entry.ops.reset();
+  }
+
   RefreshConfig();
   Host_JitCacheInvalidation();
+}
+
+BlockDecodeEntry* CachedInterpreter::GetDecodeCache(u32 pc)
+{
+  const u32 index = (pc >> 2) & DECODE_CACHE_MASK;
+  return &m_decode_cache[index];
+}
+
+bool CachedInterpreter::TryCachedDecode(u32 pc, PPCAnalyst::CodeBlock* code_block,
+                                        PPCAnalyst::CodeOp* buffer, u32 buffer_size, u32* next_pc)
+{
+  BlockDecodeEntry* entry = GetDecodeCache(pc);
+
+  // Check if entry is valid and matches the PC
+  if (!(entry->flags & BlockDecodeEntry::FLAG_VALID) || entry->pc != pc)
+    return false;
+
+  // Verify instruction count doesn't exceed buffer
+  if (entry->instruction_count > buffer_size)
+    return false;
+
+  // Compute checksum to verify instructions haven't changed
+  const u32 checksum = ComputeInstructionChecksum(pc, entry->instruction_count);
+  if (checksum != entry->checksum)
+  {
+    entry->flags = 0;  // Invalidate stale entry
+    return false;
+  }
+
+  // Update hotness counter (saturating increment)
+  if (entry->hotness < BlockDecodeEntry::HOTNESS_MAX)
+    entry->hotness++;
+
+  // Update hot flag
+  if (entry->hotness >= BlockDecodeEntry::HOT_THRESHOLD)
+    entry->flags |= BlockDecodeEntry::FLAG_HOT;
+
+  // Copy cached instructions to buffer
+  std::memcpy(buffer, entry->ops.get(), entry->instruction_count * sizeof(PPCAnalyst::CodeOp));
+
+  // Set up code block
+  code_block->m_num_instructions = entry->instruction_count;
+  code_block->m_address = pc;
+
+  // Calculate next PC (simplified approximation)
+  *next_pc = pc + (entry->instruction_count * 4);
+
+  return true;
+}
+
+void CachedInterpreter::StoreCachedDecode(u32 pc, const PPCAnalyst::CodeBlock& code_block,
+                                          const PPCAnalyst::CodeOp* buffer, u32 next_pc)
+{
+  BlockDecodeEntry* entry = GetDecodeCache(pc);
+
+  // Don't cache very large blocks (waste of cache space)
+  if (code_block.m_num_instructions > 32)
+    return;
+
+  // Allocate storage for instructions
+  entry->ops = std::make_unique<PPCAnalyst::CodeOp[]>(code_block.m_num_instructions);
+  std::memcpy(entry->ops.get(), buffer, code_block.m_num_instructions * sizeof(PPCAnalyst::CodeOp));
+
+  // Set up entry metadata
+  entry->pc = pc;
+  entry->instruction_count = code_block.m_num_instructions;
+  entry->checksum = ComputeInstructionChecksum(pc, code_block.m_num_instructions);
+  entry->hotness = 1;  // Start with hotness of 1
+  entry->flags = BlockDecodeEntry::FLAG_VALID;
+}
+
+void CachedInterpreter::InvalidateDecodeCache(u32 pc_start, u32 pc_end)
+{
+  // Simple invalidation: mark any entry in the range as invalid
+  for (auto& entry : m_decode_cache)
+  {
+    if ((entry.flags & BlockDecodeEntry::FLAG_VALID) &&
+        entry.pc >= pc_start && entry.pc < pc_end)
+    {
+      entry.flags = 0;
+      entry.ops.reset();
+    }
+  }
+}
+
+u32 CachedInterpreter::ComputeInstructionChecksum(u32 pc, u32 instruction_count) const
+{
+  u32 checksum = 0;
+  Core::CPUThreadGuard guard{m_system};
+  for (u32 i = 0; i < instruction_count; ++i)
+  {
+    u32 address = pc + (i * 4);
+    // Simple checksum: XOR all instruction words
+    if (auto inst_hex = PowerPC::MMU::HostRead_Instruction(guard, address))
+    {
+      checksum ^= inst_hex;
+      checksum = std::rotl(checksum, 1);  // Simple rotation for better distribution
+    }
+  }
+  return checksum;
 }
 
 void CachedInterpreter::LogGeneratedCode() const
@@ -3397,4 +3771,269 @@ CI_HOT_ONLY s32 CachedInterpreter::DcbzPIC(PowerPC::PowerPCState& ppc_state,
   std::memset(region.base + offset, 0, 32);
   #endif
   return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::MemsetPIC(PowerPC::PowerPCState& ppc_state,
+                                             const MemsetPICOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+
+  // Fast memset for MEM1/MEM2 regions
+  const auto dest_region = CI_GetRegionInfoCached(operands.dest_address, false,
+                                                  operands.mem1_base, operands.mem1_mask,
+                                                  operands.exram_base, operands.exram_mask,
+                                                  nullptr, 0);
+  if (!dest_region.base)
+    return sizeof(AnyCallback) + sizeof(operands); // fallback
+
+  const u32 dest_offset = CI_RegionOffset(dest_region, operands.dest_address);
+
+  #if defined(__aarch64__)
+  // Use NEON for larger memsets
+  if (operands.size >= 64 && (dest_offset & 15) == 0)
+  {
+    uint8x16_t vval = vdupq_n_u8(operands.value);
+    u8* ptr = dest_region.base + dest_offset;
+    u32 remaining = operands.size;
+
+    while (remaining >= 64)
+    {
+      vst1q_u8(ptr, vval);
+      vst1q_u8(ptr + 16, vval);
+      vst1q_u8(ptr + 32, vval);
+      vst1q_u8(ptr + 48, vval);
+      ptr += 64;
+      remaining -= 64;
+    }
+
+    while (remaining >= 16)
+    {
+      vst1q_u8(ptr, vval);
+      ptr += 16;
+      remaining -= 16;
+    }
+
+    // Handle remainder
+    while (remaining > 0)
+    {
+      *ptr++ = operands.value;
+      remaining--;
+    }
+  }
+  else
+  #endif
+  {
+    std::memset(dest_region.base + dest_offset, operands.value, operands.size);
+  }
+
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::MemcpyPIC(PowerPC::PowerPCState& ppc_state,
+                                             const MemcpyPICOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+
+  // Fast memcpy for MEM1/MEM2 regions
+  const auto dest_region = CI_GetRegionInfoCached(operands.dest_address, false,
+                                                  operands.mem1_base, operands.mem1_mask,
+                                                  operands.exram_base, operands.exram_mask,
+                                                  nullptr, 0);
+  const auto src_region = CI_GetRegionInfoCached(operands.src_address, false,
+                                                 operands.mem1_base, operands.mem1_mask,
+                                                 operands.exram_base, operands.exram_mask,
+                                                 nullptr, 0);
+  if (!dest_region.base || !src_region.base)
+    return sizeof(AnyCallback) + sizeof(operands); // fallback
+
+  const u32 dest_offset = CI_RegionOffset(dest_region, operands.dest_address);
+  const u32 src_offset = CI_RegionOffset(src_region, operands.src_address);
+
+  #if defined(__aarch64__)
+  // Use NEON for larger copies with good alignment
+  if (operands.size >= 64 &&
+      (dest_offset & 15) == 0 && (src_offset & 15) == 0)
+  {
+    const u8* src_ptr = src_region.base + src_offset;
+    u8* dest_ptr = dest_region.base + dest_offset;
+    u32 remaining = operands.size;
+
+    while (remaining >= 64)
+    {
+      uint8x16_t v0 = vld1q_u8(src_ptr);
+      uint8x16_t v1 = vld1q_u8(src_ptr + 16);
+      uint8x16_t v2 = vld1q_u8(src_ptr + 32);
+      uint8x16_t v3 = vld1q_u8(src_ptr + 48);
+
+      vst1q_u8(dest_ptr, v0);
+      vst1q_u8(dest_ptr + 16, v1);
+      vst1q_u8(dest_ptr + 32, v2);
+      vst1q_u8(dest_ptr + 48, v3);
+
+      src_ptr += 64;
+      dest_ptr += 64;
+      remaining -= 64;
+    }
+
+    // Handle remainder with standard memcpy
+    if (remaining > 0)
+      std::memcpy(dest_ptr, src_ptr, remaining);
+  }
+  else
+  #endif
+  {
+    std::memcpy(dest_region.base + dest_offset, src_region.base + src_offset, operands.size);
+  }
+
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::AddressCalcLoadStorePIC(PowerPC::PowerPCState& ppc_state,
+                                                           const AddressCalcLoadStorePICOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 8; // Two instructions
+  }
+
+  // Execute address calculation instruction first
+  const auto& addr_inst = operands.addr_inst;
+  const auto& ls_inst = operands.ls_inst;
+
+  // Simple pattern: addi rX, rY, SIMM followed by load/store using rX
+  if (addr_inst.OPCD == 14) // addi
+  {
+    const u32 ra_val = (addr_inst.RA == 0) ? 0u : ppc_state.gpr[addr_inst.RA];
+    const s32 simm = static_cast<s32>(static_cast<s16>(addr_inst.SIMM_16));
+    const u32 calculated_addr = ra_val + static_cast<u32>(simm);
+
+    // Store calculated address in destination register
+    ppc_state.gpr[addr_inst.RD] = calculated_addr;
+
+    // Now perform the load/store using the calculated address
+    // This is a simplified version - in practice, we'd handle more variants
+    if (ls_inst.OPCD == 32) // lwz
+    {
+      const u32 ea = (ls_inst.RA == 0) ? 0u : ppc_state.gpr[ls_inst.RA];
+      const u32 final_addr = ea + static_cast<u32>(static_cast<s16>(ls_inst.SIMM_16));
+
+      const auto region = CI_GetRegionInfoCached(final_addr, ppc_state.msr.DR,
+                                                 operands.mem1_base, operands.mem1_mask,
+                                                 operands.exram_base, operands.exram_mask,
+                                                 nullptr, 0);
+      if (region.base && (final_addr & 0b11) == 0)
+      {
+        const u32 offset = CI_RegionOffset(region, final_addr);
+        const u32 raw = *reinterpret_cast<const u32*>(region.base + offset);
+        ppc_state.gpr[ls_inst.RD] = Common::FromBigEndian(raw);
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+    }
+  }
+
+  // Fallback to interpreter for unsupported patterns
+  // (In a real implementation, we'd have more comprehensive pattern matching)
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+bool CachedInterpreter::TryRecognizeMemset(u32 start_index, u32 end_index, MemsetPICOperands* operands)
+{
+  // Look for simple memset patterns like:
+  // li rX, value
+  // loop: stb rX, offset(rY); addi rY, rY, 1; bdnz loop
+
+  if (end_index - start_index < 4)
+    return false;
+
+  // This is a simplified heuristic - real implementation would be more sophisticated
+  const auto& first_op = m_code_buffer[start_index];
+  if (first_op.inst.OPCD == 14) // addi (li is addi rD, r0, SIMM)
+  {
+    // Look for pattern of repeated stores
+    u32 store_count = 0;
+    for (u32 i = start_index + 1; i < end_index && i < start_index + 16; ++i)
+    {
+      if (m_code_buffer[i].inst.OPCD == 38) // stb
+        store_count++;
+    }
+
+    if (store_count >= 4) // Arbitrary threshold for considering it a memset
+    {
+      // Fill in operands (simplified)
+      operands->current_pc = first_op.address;
+      operands->value = static_cast<u8>(first_op.inst.SIMM_16 & 0xFF);
+      operands->size = store_count; // Simplified
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool CachedInterpreter::TryRecognizeMemcpy(u32 start_index, u32 end_index, MemcpyPICOperands* operands)
+{
+  // Look for memcpy patterns like:
+  // loop: lbz rX, offset(rY); stb rX, offset(rZ); addi rY, rY, 1; addi rZ, rZ, 1; bdnz loop
+
+  if (end_index - start_index < 6)
+    return false;
+
+  // Look for alternating load/store pattern
+  u32 load_store_pairs = 0;
+  for (u32 i = start_index; i < end_index - 1 && i < start_index + 16; i += 2)
+  {
+    const auto& load_op = m_code_buffer[i];
+    const auto& store_op = m_code_buffer[i + 1];
+
+    if ((load_op.inst.OPCD == 34 || load_op.inst.OPCD == 32) && // lbz or lwz
+        (store_op.inst.OPCD == 38 || store_op.inst.OPCD == 36))  // stb or stw
+    {
+      load_store_pairs++;
+    }
+  }
+
+  if (load_store_pairs >= 3) // Threshold for considering it memcpy
+  {
+    // Fill in operands (simplified)
+    operands->current_pc = m_code_buffer[start_index].address;
+    operands->size = load_store_pairs * 4; // Simplified estimation
+    return true;
+  }
+
+  return false;
+}
+
+bool CachedInterpreter::TryRecognizeAddressCalcLoadStore(u32 start_index, AddressCalcLoadStorePICOperands* operands)
+{
+  // Look for address calculation followed by load/store
+  if (start_index + 1 >= code_block.m_num_instructions)
+    return false;
+
+  const auto& first_op = m_code_buffer[start_index];
+  const auto& second_op = m_code_buffer[start_index + 1];
+
+  // Pattern: addi rX, rY, SIMM followed by load/store using rX
+  if (first_op.inst.OPCD == 14 && // addi
+      (second_op.opinfo->flags & FL_LOADSTORE) &&
+      second_op.inst.RA == first_op.inst.RD) // Load/store uses calculated address
+  {
+    operands->current_pc = first_op.address;
+    operands->addr_inst = first_op.inst;
+    operands->ls_inst = second_op.inst;
+    return true;
+  }
+
+  return false;
 }

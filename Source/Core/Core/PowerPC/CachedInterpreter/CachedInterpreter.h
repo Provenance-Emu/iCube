@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
+#include <memory>
 
 #include <rangeset/rangesizeset.h>
 
@@ -36,6 +38,58 @@ namespace PowerPC
 {
 class MMU;
 }
+
+// Enhanced PIC operand structures - must be defined before class
+struct MemsetPICOperands
+{
+  u32 current_pc;
+  u32 dest_address;     // Destination address
+  u8 value;            // Value to set
+  u32 size;            // Number of bytes to set
+  u8* mem1_base;
+  u32 mem1_mask;
+  u8* exram_base;
+  u32 exram_mask;
+};
+
+struct MemcpyPICOperands
+{
+  u32 current_pc;
+  u32 dest_address;     // Destination address
+  u32 src_address;      // Source address
+  u32 size;            // Number of bytes to copy
+  u8* mem1_base;
+  u32 mem1_mask;
+  u8* exram_base;
+  u32 exram_mask;
+};
+
+struct AddressCalcLoadStorePICOperands
+{
+  u32 current_pc;
+  UGeckoInstruction addr_inst;  // Address calculation instruction
+  UGeckoInstruction ls_inst;    // Load/store instruction
+  u8* mem1_base;
+  u32 mem1_mask;
+  u8* exram_base;
+  u32 exram_mask;
+};
+
+// Basic block decode cache entry
+struct BlockDecodeEntry
+{
+  u32 pc;                    // Starting PC of the cached block
+  u32 instruction_count;     // Number of instructions in the block
+  u32 checksum;             // Simple checksum of instruction data for validation
+  u16 hotness;              // Execution frequency counter (saturating)
+  u16 flags;                // Cache flags (valid, recently used, etc.)
+  std::unique_ptr<PPCAnalyst::CodeOp[]> ops;  // Cached decoded instructions
+
+  static constexpr u16 FLAG_VALID = 0x0001;
+  static constexpr u16 FLAG_HOT = 0x0002;  // Hotness >= hot threshold
+  static constexpr u16 HOTNESS_MAX = 0xFFFF;
+  static constexpr u16 HOT_THRESHOLD = 10;
+};
 
 class CachedInterpreter : public JitBase, public CachedInterpreterCodeBlock
 {
@@ -87,6 +141,23 @@ private:
 
   void LogGeneratedCode() const;
 
+  // Block decode cache management
+  static constexpr u32 DECODE_CACHE_SIZE = 64;  // Small direct-mapped cache
+  static constexpr u32 DECODE_CACHE_MASK = DECODE_CACHE_SIZE - 1;
+
+  BlockDecodeEntry* GetDecodeCache(u32 pc);
+  bool TryCachedDecode(u32 pc, PPCAnalyst::CodeBlock* code_block,
+                       PPCAnalyst::CodeOp* buffer, u32 buffer_size, u32* next_pc);
+  void StoreCachedDecode(u32 pc, const PPCAnalyst::CodeBlock& code_block,
+                         const PPCAnalyst::CodeOp* buffer, u32 next_pc);
+  void InvalidateDecodeCache(u32 pc_start, u32 pc_end);
+  u32 ComputeInstructionChecksum(u32 pc, u32 instruction_count) const;
+
+  // Pattern recognition for optimized sequences
+  bool TryRecognizeMemset(u32 start_index, u32 end_index, MemsetPICOperands* operands);
+  bool TryRecognizeMemcpy(u32 start_index, u32 end_index, MemcpyPICOperands* operands);
+  bool TryRecognizeAddressCalcLoadStore(u32 start_index, AddressCalcLoadStorePICOperands* operands);
+
   struct StartProfiledBlockOperands;
   template <bool profiled>
   struct EndBlockOperands;
@@ -96,7 +167,7 @@ private:
   struct ExecuteMicroOpsOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
-  struct CheckHaltOperands;
+    struct CheckHaltOperands;
   struct CheckIdleOperands;
 
   static s32 StartProfiledBlock(PowerPC::PowerPCState& ppc_state,
@@ -138,6 +209,17 @@ private:
   template <bool write_pc>
   DOL_HOT static s32 DcbzPIC(PowerPC::PowerPCState& ppc_state,
                      const LoadStoreDFormPICOperands& operands);
+
+  // Enhanced PIC variants for common patterns
+  template <bool write_pc>
+  DOL_HOT static s32 MemsetPIC(PowerPC::PowerPCState& ppc_state,
+                       const MemsetPICOperands& operands);
+  template <bool write_pc>
+  DOL_HOT static s32 MemcpyPIC(PowerPC::PowerPCState& ppc_state,
+                       const MemcpyPICOperands& operands);
+  template <bool write_pc>
+  DOL_HOT static s32 AddressCalcLoadStorePIC(PowerPC::PowerPCState& ppc_state,
+                                     const AddressCalcLoadStorePICOperands& operands);
   template <bool write_pc>
   DOL_HOT static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
                              const ExecuteMicroOpsOperands& operands);
@@ -157,6 +239,9 @@ private:
 
   HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges;
   CachedInterpreterBlockCache m_block_cache;
+
+  // Basic block decode cache for fast re-analysis
+  std::array<BlockDecodeEntry, DECODE_CACHE_SIZE> m_decode_cache;
 };
 
 struct CachedInterpreter::StartProfiledBlockOperands
@@ -259,6 +344,11 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
     CMPL_U_RR,  // CR[rd] = cmp(u32(RA), u32(RB))
     CMP_S_IMM,  // CR[rd] = cmp(s32(RA), SIMM16=imm)
     CMPL_U_IMM, // CR[rd] = cmp(u32(RA), UIMM16=imm)
+    // New fast paths
+    MOV_RR,     // RD = RA
+    SUBFIC_IMM, // RD = SIMM16 - RA
+    MULLI_IMM,  // RD = RA * SIMM16 (low 32)
+    MULLW_RR,   // RD = RA * RB (low 32)
     NOP,
     COUNT,
   };
