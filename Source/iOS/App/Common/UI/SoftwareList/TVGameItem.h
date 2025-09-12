@@ -25,6 +25,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, nullable) NSString *titleIDHex;
 @property (nonatomic, readonly) NSString *gametdbID;
 @property (nonatomic, readonly) NSUInteger fileSize;
+@property (nonatomic, readonly) NSInteger platform; // DiscIO::Platform enum value
 
 /// User flag for Favorites (persisted via NSUserDefaults)
 @property (nonatomic, getter=isFavorite) BOOL favorite;

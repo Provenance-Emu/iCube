@@ -24,6 +24,7 @@
     NSString *_Nullable _titleIDHex;
     NSString *_gametdbID;
     NSUInteger _fileSize;
+    NSInteger _platform;
 }
 
 - (instancetype)initWithWrapper:(GameFilePtrWrapper *)wrapper {
@@ -126,11 +127,12 @@
         _gametdbID = CppToFoundationString(gametdbID);
 
         _fileSize = (NSUInteger)game.GetFileSize();
+        _platform = (NSInteger)game.GetPlatform();
 
         // Debug logging for file size
 #ifdef DEBUG
-        NSLog(@"TVGameItem: %@ - GameFile.GetFileSize() = %llu, TVGameItem.fileSize = %lu",
-              _title, game.GetFileSize(), (unsigned long)_fileSize);
+        NSLog(@"TVGameItem: %@ - GameFile.GetFileSize() = %llu, TVGameItem.fileSize = %lu, Platform = %ld",
+              _title, game.GetFileSize(), (unsigned long)_fileSize, (long)_platform);
 #endif
     }
     return self;
@@ -151,6 +153,7 @@
 - (NSString * _Nullable)titleIDHex { return _titleIDHex; }
 - (NSString *)gametdbID { return _gametdbID; }
 - (NSUInteger)fileSize { return _fileSize; }
+- (NSInteger)platform { return _platform; }
 
 - (BOOL)isFavorite {
     if (!_gameID) return NO;

@@ -747,7 +747,11 @@ struct TVLibraryView: View {
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { model.rescan() }) {
-        if model.isRescanning { ProgressView() } else { Label("", systemImage: "arrow.clockwise") }
+        if model.isRescanning {
+          DolphinCircularSpinner(size: 20, lineWidth: 2, dolphinSize: 8)
+        } else {
+          Label("", systemImage: "arrow.clockwise")
+        }
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
@@ -801,7 +805,11 @@ struct TVLibraryView: View {
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { model.rescan() }) {
-        if model.isRescanning { ProgressView() } else { Label(L("Rescan"), systemImage: "arrow.clockwise") }
+        if model.isRescanning {
+          DolphinCircularSpinner(size: 22, lineWidth: 2, dolphinSize: 9)
+        } else {
+          Label(L("Rescan"), systemImage: "arrow.clockwise")
+        }
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
@@ -1687,6 +1695,7 @@ private struct GameGridItem: View {
   @State private var showPreCacheProgress = false
   @State private var preCacheProgress: Double = 0.0
   @State private var isPreCaching = false
+  @State private var cacheStateVersion = 0 // Force UI updates when cache state changes
 
 #if os(tvOS)
   @State private var isFocused: Bool = false
@@ -1783,6 +1792,7 @@ private struct GameGridItem: View {
 
   /// Check if this remote game is cached locally
   private var isCached: Bool {
+    let _ = cacheStateVersion // Force dependency on cache state changes
     guard let source = getWebDAVSource(),
           let url = URL(string: item.filePath) else { return false }
 
@@ -1790,20 +1800,35 @@ private struct GameGridItem: View {
     return source.isCached(remoteItem)
   }
 
-  /// Detect if this is a GameCube or Wii game based on Game ID
+    /// Detect if this is a GameCube or Wii game based on DiscIO::Platform
   private var gameSystem: GameSystem {
-    let gameID = item.gameID.uppercased()
-
-    // Wii games typically start with R, S, or have specific patterns
-    if gameID.hasPrefix("R") || gameID.hasPrefix("S") || gameID.count > 6 {
-      return .wii
-    }
-    // GameCube games are typically 6 characters and start with G
-    else if gameID.count == 6 && gameID.hasPrefix("G") {
+    // DiscIO::Platform enum values:
+    // GameCubeDisc = 0, WiiDisc = 1, WiiWAD = 2, ELFOrDOL = 3
+    switch item.platform {
+    case 0: // GameCubeDisc
+      #if DEBUG
+      print("DEBUG: Platform-detected GameCube game: '\(item.gameID)' for '\(item.title)'")
+      #endif
       return .gamecube
-    }
-    // Default to GameCube for unknown patterns
-    else {
+
+    case 1, 2: // WiiDisc, WiiWAD
+      #if DEBUG
+      print("DEBUG: Platform-detected Wii game: '\(item.gameID)' for '\(item.title)' (platform: \(item.platform))")
+      #endif
+      return .wii
+
+    case 3: // ELFOrDOL
+      // ELF/DOL files can be either GameCube or Wii, but are typically GameCube homebrew
+      #if DEBUG
+      print("DEBUG: Platform-detected ELF/DOL: '\(item.gameID)' for '\(item.title)' - defaulting to GameCube")
+      #endif
+      return .gamecube
+
+    default:
+      // Unknown platform, default to GameCube as fallback
+      #if DEBUG
+      print("DEBUG: Unknown platform \(item.platform) for '\(item.gameID)' '\(item.title)' - defaulting to GameCube")
+      #endif
       return .gamecube
     }
   }
@@ -1825,13 +1850,21 @@ private struct GameGridItem: View {
     let image = item.coverImage
     let desc = image.description.lowercased()
 
-    return image.size.width <= 1 ||
+    let isPlaceholder = image.size.width <= 1 ||
            image.size.height <= 1 ||
            desc.contains("nocover") ||
            desc.contains("placeholder") ||
            desc.contains("default") ||
            // Check for very small images that are likely placeholders
            (image.size.width < 50 && image.size.height < 50)
+
+    #if DEBUG
+    if isPlaceholder {
+      print("DEBUG: Using placeholder cover for '\(item.title)' (gameID: '\(item.gameID)'), system: \(gameSystem)")
+    }
+    #endif
+
+    return isPlaceholder
   }
 
     /// Custom templated cover view for games without artwork
@@ -2007,8 +2040,7 @@ private struct GameGridItem: View {
           // Auto pre-cache progress indicator
           if isAutoPreCaching {
             HStack(spacing: 4) {
-              ProgressView()
-                .scaleEffect(0.6)
+              CompactDolphinCircularSpinner()
               Text("\(Int(autoPreCacheProgress * 100))%")
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -2292,12 +2324,14 @@ private struct GameGridItem: View {
         DispatchQueue.main.async {
           self.isPreCaching = false
           self.showPreCacheProgress = false
+          self.cacheStateVersion += 1 // Force UI update
           print("Pre-cache completed for: \(self.item.title)")
         }
       } catch {
         DispatchQueue.main.async {
           self.isPreCaching = false
           self.showPreCacheProgress = false
+          self.cacheStateVersion += 1 // Force UI update even on error
 
           // Show user-friendly error message
           let message: String
@@ -2337,6 +2371,7 @@ private struct GameGridItem: View {
       DispatchQueue.main.async {
         self.isPreCaching = false
         self.showPreCacheProgress = false
+        self.cacheStateVersion += 1 // Force UI update
       }
     }
   }
@@ -2354,7 +2389,9 @@ private struct GameGridItem: View {
     Task {
       do {
         try await source.removeCachedItem(remoteItem)
-        // The UI will automatically update when isCached changes
+        DispatchQueue.main.async {
+          self.cacheStateVersion += 1 // Force UI update for cache state
+        }
       } catch {
         print("Error: \(error.localizedDescription)")
       }

@@ -1369,7 +1369,7 @@ struct ConfigAdvancedView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("CPU Options"))) {
+      Section(header: Text(L("CPU Options")), footer: Text(L("CPU Emulation Engine: ARM64 JIT is fastest on modern devices. MMU: Enables memory management (required for some games, reduces performance). Adaptive Clock: Automatically adjusts timing (experimental). Accurate CPU Cache: More precise emulation but slower."))) {
         NavigationLink("\(L("CPU Emulation Engine")): \(cpuEngine.label)", destination: CpuEnginePicker(selected: $cpuEngine))
           .onChange(of: cpuEngine) { DOLConfigBridge.setMainCpuCore($0.rawValue) }
         Toggle(L("Enable MMU"), isOn: $mmu)
@@ -1422,7 +1422,7 @@ struct ConfigAdvancedView: View {
         .onChange(of: vbiPercent) { DOLConfigBridge.setMainViOverclockPercent($0) }
       }
 
-      Section(header: Text(L("Memory Override")), footer: Text(L("Adjusts the amount of RAM in the emulated console.\n\nWARNING: Enabling this will completely break many games. Only a small number of games can benefit from this. Save states with different than current memory sizes will not work."))) {
+      Section(header: Text(L("Memory Override")), footer: Text(L("Adjusts the amount of RAM in the emulated console. MEM1: Main system memory (24-64 MB). MEM2: Extended memory for Wii (64-128 MB).\n\n⚠️ WARNING: Enabling this will completely break many games. Only a small number of games can benefit from this. Save states with different memory sizes will not work."))) {
         Toggle(L("Enable Emulated Memory Size Override"), isOn: $memOverride)
           .onChange(of: memOverride) { DOLConfigBridge.setMainRamOverrideEnable($0) }
         HStack {
@@ -1775,10 +1775,20 @@ struct ConfigWiiView: View {
 
       Section(header: Text(L("General"))) {
         Toggle(L("Enable Screen Saver"), isOn: $screensaver).onChange(of: screensaver) { DOLConfigBridge.setSysconfScreensaver($0) }
-        NavigationLink(L("System Language"), destination: WiiLanguagePicker(selected: $language))
-          .onChange(of: language) { DOLConfigBridge.setSysconfLanguage($0) }
-        NavigationLink(L("Audio Settings"), destination: WiiAudioModePicker(selected: $soundMode))
-          .onChange(of: soundMode) { DOLConfigBridge.setSysconfSoundMode($0) }
+        HStack {
+          Text(L("System Language"))
+          Spacer()
+          NavigationLink(languageLabel(language), destination: WiiLanguagePicker(selected: $language))
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .onChange(of: language) { DOLConfigBridge.setSysconfLanguage($0) }
+        HStack {
+          Text(L("Audio Settings"))
+          Spacer()
+          NavigationLink(audioModeLabel(soundMode), destination: WiiAudioModePicker(selected: $soundMode))
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .onChange(of: soundMode) { DOLConfigBridge.setSysconfSoundMode($0) }
       }
 
       Section(header: Text(L("Wii Remotes"))) {
@@ -1843,6 +1853,18 @@ struct ConfigWiiView: View {
   }
 
   private func posLabel(_ v: Int) -> String { v == 0 ? L("Bottom") : L("Top") }
+
+  private func languageLabel(_ v: Int) -> String {
+    switch v {
+    case 0: return L("Japanese"); case 1: return L("English"); case 2: return L("German"); case 3: return L("French"); case 4: return L("Spanish"); case 5: return L("Italian"); case 6: return L("Dutch"); case 7: return L("Simplified Chinese"); case 8: return L("Traditional Chinese"); case 9: return L("Korean"); default: return L("Error")
+    }
+  }
+
+  private func audioModeLabel(_ v: Int) -> String {
+    switch v {
+    case 0: return L("Mono"); case 1: return L("Stereo"); case 2: return L("Surround"); default: return L("Error")
+    }
+  }
 }
 
 private struct WiiLanguagePicker: View {
@@ -1899,24 +1921,33 @@ struct ConfigAchievementsView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("RetroAchievements"))) {
-        Toggle(L("Enable Integration"), isOn: $enabled).onChange(of: enabled) { DOLConfigBridge.setRaEnabled($0) }
+      Section(header: Text(L("RetroAchievements")), footer: Text(L("Connect to RetroAchievements.org to unlock achievements, compete with friends, and track your gaming progress across all supported games."))) {
         HStack {
-          Text(L("Username"))
+          Label(L("Enable Integration"), systemImage: "trophy.fill")
+          Spacer()
+          Toggle("", isOn: $enabled).onChange(of: enabled) { DOLConfigBridge.setRaEnabled($0) }
+        }
+
+        HStack {
+          Label(L("Username"), systemImage: "person.fill")
           Spacer()
           TextField(L("Username"), text: $username)
             .multilineTextAlignment(.trailing)
             .disabled(hasToken || !enabled)
             .onChange(of: username) { DOLConfigBridge.setRaUsername($0) }
         }
+        .disabled(!enabled)
+
         HStack {
-          Text(L("Password"))
+          Label(L("Password"), systemImage: "key.fill")
           Spacer()
           SecureField(L("Password"), text: $password)
             .multilineTextAlignment(.trailing)
             .disabled(hasToken || !enabled)
         }
-        Button(hasToken ? L("Log Out") : L("Log In")) {
+        .disabled(!enabled)
+
+        Button(action: {
           if hasToken {
             DOLConfigBridge.raLogout()
           } else {
@@ -1924,22 +1955,61 @@ struct ConfigAchievementsView: View {
             DOLConfigBridge.raLogin(password)
           }
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sync() }
+        }) {
+          Label(hasToken ? L("Log Out") : L("Log In"), systemImage: hasToken ? "person.badge.minus" : "person.badge.plus")
         }
         .disabled(!enabled)
       }
 
-      Section(header: Text(L("Options"))) {
-        Toggle(L("Hardcore Mode"), isOn: $hardcore).onChange(of: hardcore) { DOLConfigBridge.setRaHardcoreEnabled($0) }
-        Toggle(L("Enable Unofficial"), isOn: $unofficial).onChange(of: unofficial) { DOLConfigBridge.setRaUnofficialEnabled($0) }
-        Toggle(L("Encore Mode"), isOn: $encore).onChange(of: encore) { DOLConfigBridge.setRaEncoreEnabled($0) }
-        Toggle(L("Spectator Mode"), isOn: $spectator).onChange(of: spectator) { DOLConfigBridge.setRaSpectatorEnabled($0) }
-        Toggle(L("Discord Presence"), isOn: $discordPresence).onChange(of: discordPresence) { DOLConfigBridge.setRaDiscordPresenceEnabled($0) }
-        Toggle(L("Show Progress Popups"), isOn: $progress).onChange(of: progress) { DOLConfigBridge.setRaProgressEnabled($0) }
+      Section(header: Text(L("Game Mode Options")), footer: Text(L("Hardcore Mode: Disables save states, cheats, and other emulator features for authentic difficulty. Encore Mode: Re-enables completed achievements. Spectator Mode: View achievements without earning them."))) {
+        HStack {
+          Label(L("Hardcore Mode"), systemImage: "flame.fill")
+            .foregroundColor(.orange)
+          Spacer()
+          Toggle("", isOn: $hardcore).onChange(of: hardcore) { DOLConfigBridge.setRaHardcoreEnabled($0) }
+        }
+
+        HStack {
+          Label(L("Enable Unofficial"), systemImage: "person.3.sequence.fill")
+            .foregroundColor(.purple)
+          Spacer()
+          Toggle("", isOn: $unofficial).onChange(of: unofficial) { DOLConfigBridge.setRaUnofficialEnabled($0) }
+        }
+
+        HStack {
+          Label(L("Encore Mode"), systemImage: "arrow.clockwise.circle.fill")
+            .foregroundColor(.green)
+          Spacer()
+          Toggle("", isOn: $encore).onChange(of: encore) { DOLConfigBridge.setRaEncoreEnabled($0) }
+        }
+
+        HStack {
+          Label(L("Spectator Mode"), systemImage: "eye.fill")
+            .foregroundColor(.blue)
+          Spacer()
+          Toggle("", isOn: $spectator).onChange(of: spectator) { DOLConfigBridge.setRaSpectatorEnabled($0) }
+        }
       }
 
-      Section(header: Text(L("Advanced"))) {
+      Section(header: Text(L("Interface & Sharing")), footer: Text(L("Discord Presence: Shows your current achievements in Discord status. Progress Popups: Display achievement progress notifications during gameplay."))) {
         HStack {
-          Text(L("Server URL"))
+          Label(L("Discord Presence"), systemImage: "bubble.left.and.bubble.right.fill")
+            .foregroundColor(.indigo)
+          Spacer()
+          Toggle("", isOn: $discordPresence).onChange(of: discordPresence) { DOLConfigBridge.setRaDiscordPresenceEnabled($0) }
+        }
+
+        HStack {
+          Label(L("Show Progress Popups"), systemImage: "bell.badge.fill")
+            .foregroundColor(.orange)
+          Spacer()
+          Toggle("", isOn: $progress).onChange(of: progress) { DOLConfigBridge.setRaProgressEnabled($0) }
+        }
+      }
+
+      Section(header: Text(L("Advanced")), footer: Text(L("Custom server URL for RetroAchievements API. Only change this if you know what you're doing or are using a custom server."))) {
+        HStack {
+          Label(L("Server URL"), systemImage: "server.rack")
           Spacer()
           TextField("https://retroachievements.org", text: $hostURL)
             .textInputAutocapitalization(.never)
@@ -2503,7 +2573,7 @@ struct GraphicsAdvancedView: View {
   @State private var manualTexSampling: Bool = false
   var body: some View {
     List {
-      Section(header: Text(L("Performance Statistics")), footer: Text(L("Performance overlays can also be toggled during gameplay using the in-game menu (pause during emulation)."))) {
+      Section(header: Text(L("Performance Statistics")), footer: Text(L("Performance overlays can also be toggled during gameplay using the in-game menu (pause during emulation). These overlays help monitor performance and identify bottlenecks."))) {
         Toggle(L("Show FPS"), isOn: $showFPS).onChange(of: showFPS) { _ in DOLConfigBridge.setGfxShowFPS(showFPS) }
         Toggle(L("Show VPS"), isOn: $showVPS).onChange(of: showVPS) { _ in DOLConfigBridge.setGfxShowVPS(showVPS) }
         Toggle(L("Show Speed"), isOn: $showSpeed).onChange(of: showSpeed) { _ in DOLConfigBridge.setGfxShowSpeed(showSpeed) }
@@ -2514,12 +2584,12 @@ struct GraphicsAdvancedView: View {
         Toggle(L("Speed Colors"), isOn: $speedColors).onChange(of: speedColors) { _ in DOLConfigBridge.setGfxShowSpeedColors(speedColors) }
       }
 
-      Section(header: Text(L("Debugging"))) {
+      Section(header: Text(L("Debugging")), footer: Text(L("Developer tools for troubleshooting graphics issues. Overlay Stats shows detailed rendering information. API Validation Layer enables extra error checking (reduces performance)."))) {
         Toggle(L("Overlay Stats"), isOn: $overlayStats).onChange(of: overlayStats) { _ in DOLConfigBridge.setGfxOverlayStats(overlayStats) }
         Toggle(L("API Validation Layer"), isOn: $validationLayer).onChange(of: validationLayer) { _ in DOLConfigBridge.setGfxEnableValidationLayer(validationLayer) }
       }
 
-      Section(header: Text(L("Shader Threads"))) {
+      Section(header: Text(L("Shader Threads")), footer: Text(L("Adjust how many CPU threads are used for compiling shaders. More threads can reduce stuttering but may increase CPU usage. Recommended: 2-4 threads on most devices."))) {
         HStack {
           Text(L("Compiler Threads"))
           Spacer()
@@ -2542,7 +2612,7 @@ struct GraphicsAdvancedView: View {
         .onChange(of: precompilerThreads) { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) }
       }
 
-      Section(header: Text(L("Utility"))) {
+      Section(header: Text(L("Utility")), footer: Text(L("Custom Textures: Load high-resolution texture packs for enhanced visuals. Prefetch loads them into memory for better performance. Graphics Mods enable community-created visual enhancements."))) {
         Toggle(L("Load Custom Textures"), isOn: $hiresTextures).onChange(of: hiresTextures) { _ in DOLConfigBridge.setGfxHiresTextures(hiresTextures) }
         Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures)
           .disabled(!hiresTextures)
@@ -2551,12 +2621,12 @@ struct GraphicsAdvancedView: View {
         Toggle(L("Enable Graphics Mods"), isOn: $graphicsMods).onChange(of: graphicsMods) { _ in DOLConfigBridge.setGfxModsEnable(graphicsMods) }
       }
 
-      Section(header: Text(L("Misc"))) {
+      Section(header: Text(L("Misc")), footer: Text(L("Crop: Removes black borders from some games. Progressive Scan: Enables progressive scan mode for supported games (reduces flickering)."))) {
         Toggle(L("Crop"), isOn: $cropPicture).onChange(of: cropPicture) { _ in DOLConfigBridge.setGfxCrop(cropPicture) }
         Toggle(L("Progressive Scan"), isOn: $progressiveScan).onChange(of: progressiveScan) { _ in DOLConfigBridge.setSysconfProgressiveScan(progressiveScan) }
       }
 
-      Section(header: Text(L("Rendering"))) {
+      Section(header: Text(L("Rendering")), footer: Text(L("Advanced rendering options that affect performance and compatibility. Fast Depth improves speed but may cause issues. Per-Pixel Lighting enhances visual quality at performance cost."))) {
         Toggle(L("Fast Depth Calculation"), isOn: $fastDepth).onChange(of: fastDepth) { DOLConfigBridge.setGfxFastDepthCalc($0) }
         Toggle(L("Per-Pixel Lighting"), isOn: $pixelLighting).onChange(of: pixelLighting) { DOLConfigBridge.setGfxEnablePixelLighting($0) }
         Toggle(L("Backend Multithreading"), isOn: $backendMT).onChange(of: backendMT) { DOLConfigBridge.setGfxBackendMultithreading($0) }

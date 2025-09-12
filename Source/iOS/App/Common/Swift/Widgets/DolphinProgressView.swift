@@ -176,6 +176,120 @@ struct WaveProgressShape: Shape {
   }
 }
 
+// MARK: - Circular Dolphin Spinner
+
+/// Cute circular loading spinner with dolphin swimming around a circular path
+struct DolphinCircularSpinner: View {
+    let size: CGFloat
+    let lineWidth: CGFloat
+    let dolphinSize: CGFloat
+
+    @State private var rotationAngle: Double = 0
+    @State private var waveOffset: Double = 0
+    @State private var isAnimating: Bool = false
+
+    init(size: CGFloat = 44, lineWidth: CGFloat = 3, dolphinSize: CGFloat = 16) {
+        self.size = size
+        self.lineWidth = lineWidth
+        self.dolphinSize = dolphinSize
+    }
+
+    var body: some View {
+        ZStack {
+            // Background circle track (water path)
+            Circle()
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.blue.opacity(0.2),
+                            Color.cyan.opacity(0.3),
+                            Color.blue.opacity(0.2)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+                .frame(width: size, height: size)
+
+            // Animated water waves around the circle
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .stroke(
+                        Color.cyan.opacity(0.3 - Double(index) * 0.1),
+                        style: StrokeStyle(lineWidth: 1, lineCap: .round)
+                    )
+                    .frame(
+                        width: size + CGFloat(index) * 8,
+                        height: size + CGFloat(index) * 8
+                    )
+                    .opacity(isAnimating ? 0.3 : 0.0)
+                    .scaleEffect(isAnimating ? 1.2 : 0.8)
+                    .animation(
+                        .easeInOut(duration: 2.0)
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(index) * 0.3),
+                        value: isAnimating
+                    )
+            }
+
+            // Swimming dolphin
+            Image("DolphinLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: dolphinSize, height: dolphinSize)
+                .foregroundColor(.blue)
+                // Position dolphin on the circular path
+                .offset(x: size/2 - dolphinSize/2)
+                .rotationEffect(.degrees(rotationAngle))
+                // Slight bobbing animation
+                .offset(y: sin(waveOffset) * 2)
+                .animation(
+                    .easeInOut(duration: 0.8)
+                    .repeatForever(autoreverses: true),
+                    value: waveOffset
+                )
+
+            // Water splash effects at dolphin position
+            ForEach(0..<2, id: \.self) { index in
+                Circle()
+                    .fill(Color.cyan.opacity(0.4))
+                    .frame(width: 3, height: 3)
+                    .offset(x: size/2 - dolphinSize/2 + CGFloat(index * 6 - 3))
+                    .rotationEffect(.degrees(rotationAngle))
+                    .opacity(isAnimating ? 1.0 : 0.0)
+                    .scaleEffect(isAnimating ? 1.5 : 0.5)
+                    .animation(
+                        .easeInOut(duration: 0.6)
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(index) * 0.2),
+                        value: isAnimating
+                    )
+            }
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 3.0).repeatForever(autoreverses: false)) {
+                rotationAngle = 360
+            }
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                waveOffset = .pi
+            }
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                isAnimating = true
+            }
+        }
+    }
+}
+
+/// Compact version of the circular spinner
+struct CompactDolphinCircularSpinner: View {
+    var body: some View {
+        DolphinCircularSpinner(size: 24, lineWidth: 2, dolphinSize: 10)
+    }
+}
+
+// MARK: - Preview
+
 #if DEBUG
 struct DolphinProgressView_Previews: PreviewProvider {
   static var previews: some View {
@@ -194,5 +308,22 @@ struct DolphinProgressView_Previews: PreviewProvider {
     .padding()
     .previewLayout(.sizeThatFits)
   }
+}
+
+struct DolphinCircularSpinner_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack(spacing: 40) {
+            DolphinCircularSpinner()
+                .previewDisplayName("Default Size")
+
+            DolphinCircularSpinner(size: 60, lineWidth: 4, dolphinSize: 20)
+                .previewDisplayName("Large Size")
+
+            CompactDolphinCircularSpinner()
+                .previewDisplayName("Compact Size")
+        }
+        .padding()
+        .background(Color(.systemBackground))
+    }
 }
 #endif
