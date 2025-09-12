@@ -1193,17 +1193,12 @@ struct TVLibraryView: View {
             .lineLimit(2)
             .frame(maxWidth: 280)
 
-          ZStack {
-            Circle()
-              .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 8))
-              .frame(width: 64, height: 64)
-            Circle()
-              .trim(from: 0, to: CGFloat(blockingPrecacheProgress))
-              .stroke(Color.white, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-              .rotationEffect(.degrees(-90))
-              .frame(width: 64, height: 64)
-              .animation(.easeInOut(duration: 0.2), value: blockingPrecacheProgress)
-          }
+          DolphinCircularSpinner(
+            size: 64,
+            lineWidth: 8,
+            dolphinSize: 20,
+            progress: blockingPrecacheProgress
+          )
           .padding(.top, 6)
 
           Text("\(Int(blockingPrecacheProgress * 100))%")
@@ -1973,24 +1968,16 @@ private struct GameGridItem: View {
         }
 
         if let icon = remoteIconName {
-          ZStack {
-            if isPreCaching {
-              // Show manual pre-cache progress indicator
-              Circle()
-                .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                .frame(width: 24, height: 24)
-
-              Circle()
-                .trim(from: 0, to: preCacheProgress)
-                .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .frame(width: 24, height: 24)
-                .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 0.2), value: preCacheProgress)
-
-              Image(systemName: "arrow.down")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.white)
-            } else {
+                      ZStack {
+              if isPreCaching {
+                // Show manual pre-cache progress indicator
+                DolphinCircularSpinner(
+                  size: 24,
+                  lineWidth: 2,
+                  dolphinSize: 8,
+                  progress: preCacheProgress
+                )
+              } else {
               Image(systemName: icon)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.white)
@@ -2018,6 +2005,19 @@ private struct GameGridItem: View {
             .background(.ultraThinMaterial, in: Circle())
             .padding(8)
             .frame(width: Layout.cardSize.width, height: Layout.cardSize.height, alignment: .topLeading)
+            .allowsHitTesting(false)
+        }
+
+        // Game banner/icon overlay (bottom-right corner) - if available
+        if let bannerImage = item.bannerImage {
+          Image(uiImage: bannerImage)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 32, height: 32)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .padding(8)
+            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height, alignment: .bottomTrailing)
             .allowsHitTesting(false)
         }
       }
@@ -2143,24 +2143,16 @@ private struct GameGridItem: View {
               .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
           }
 
-          if let icon = remoteIconName {
+                    if let icon = remoteIconName {
             ZStack {
               if isPreCaching {
                 // Show progress indicator
-                Circle()
-                  .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                  .frame(width: 20, height: 20)
-
-                Circle()
-                  .trim(from: 0, to: preCacheProgress)
-                  .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                  .frame(width: 20, height: 20)
-                  .rotationEffect(.degrees(-90))
-                  .animation(.linear(duration: 0.2), value: preCacheProgress)
-
-                Image(systemName: "arrow.down")
-                  .font(.system(size: 10, weight: .semibold))
-                  .foregroundColor(.white)
+                DolphinCircularSpinner(
+                  size: 20,
+                  lineWidth: 2,
+                  dolphinSize: 7,
+                  progress: preCacheProgress
+                )
               } else {
                 Image(systemName: icon)
                   .font(.system(size: 16, weight: .semibold))
@@ -2179,6 +2171,25 @@ private struct GameGridItem: View {
             .padding(8)
             .background(.ultraThinMaterial, in: Circle())
             .padding(8)
+          }
+
+          // Game banner/icon overlay (bottom-left corner for iOS) - if available
+          if let bannerImage = item.bannerImage {
+            VStack {
+              Spacer()
+              HStack {
+                Image(uiImage: bannerImage)
+                  .resizable()
+                  .aspectRatio(contentMode: .fit)
+                  .frame(width: 24, height: 24)
+                  .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                  .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                Spacer()
+              }
+            }
+            .padding(8)
+            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
+            .allowsHitTesting(false)
           }
         }
 

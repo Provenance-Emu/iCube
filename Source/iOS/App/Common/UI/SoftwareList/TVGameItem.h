@@ -15,6 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) NSString *filePath;
 @property (nonatomic, readonly) BOOL isNKit;
 @property (nonatomic, readonly) UIImage *coverImage;
+@property (nonatomic, readonly, nullable) UIImage *bannerImage; // Animated game banner/icon
 @property (nonatomic, readonly) GameFilePtrWrapper *wrapper;
 @property (nonatomic, readonly) NSString *gameID;
 @property (nonatomic, readonly) NSInteger discNumber;

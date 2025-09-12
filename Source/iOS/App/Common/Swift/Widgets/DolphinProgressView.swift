@@ -183,15 +183,17 @@ struct DolphinCircularSpinner: View {
     let size: CGFloat
     let lineWidth: CGFloat
     let dolphinSize: CGFloat
+    let progress: Double? // Optional progress (nil = indeterminate spinner)
 
     @State private var rotationAngle: Double = 0
     @State private var waveOffset: Double = 0
     @State private var isAnimating: Bool = false
 
-    init(size: CGFloat = 44, lineWidth: CGFloat = 3, dolphinSize: CGFloat = 16) {
+    init(size: CGFloat = 44, lineWidth: CGFloat = 3, dolphinSize: CGFloat = 16, progress: Double? = nil) {
         self.size = size
         self.lineWidth = lineWidth
         self.dolphinSize = dolphinSize
+        self.progress = progress
     }
 
     var body: some View {
@@ -211,6 +213,23 @@ struct DolphinCircularSpinner: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .frame(width: size, height: size)
+
+            // Progress circle (if progress is specified)
+            if let progress = progress {
+                Circle()
+                    .trim(from: 0, to: CGFloat(progress))
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.blue, Color.cyan],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    )
+                    .frame(width: size, height: size)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.2), value: progress)
+            }
 
             // Animated water waves around the circle
             ForEach(0..<3, id: \.self) { index in
@@ -241,7 +260,7 @@ struct DolphinCircularSpinner: View {
                 .foregroundColor(.blue)
                 // Position dolphin on the circular path
                 .offset(x: size/2 - dolphinSize/2)
-                .rotationEffect(.degrees(rotationAngle))
+                .rotationEffect(.degrees(progress != nil ? (progress! * 360 - 90) : rotationAngle))
                 // Slight bobbing animation
                 .offset(y: sin(waveOffset) * 2)
                 .animation(
@@ -268,8 +287,11 @@ struct DolphinCircularSpinner: View {
             }
         }
         .onAppear {
-            withAnimation(.linear(duration: 3.0).repeatForever(autoreverses: false)) {
-                rotationAngle = 360
+            // Only rotate continuously if no progress is specified (indeterminate mode)
+            if progress == nil {
+                withAnimation(.linear(duration: 3.0).repeatForever(autoreverses: false)) {
+                    rotationAngle = 360
+                }
             }
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 waveOffset = .pi

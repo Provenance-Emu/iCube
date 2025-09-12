@@ -15,6 +15,7 @@
     NSString *_filePath;
     BOOL _isNKit;
     UIImage *_coverImage;
+    UIImage *_Nullable _bannerImage;
     NSString *_gameID;
     NSInteger _discNumber;
     NSInteger _revision;
@@ -95,6 +96,58 @@
 
         _coverImage = result;
 
+        // Extract banner image (animated game icon)
+        const UICommon::GameBanner &banner = game.GetBannerImage();
+        UIImage *bannerResult = nil;
+        if (!banner.buffer.empty() && banner.width > 0 && banner.height > 0) {
+            const size_t maxBannerBytes = 4 * 1024 * 1024; // 4MB sanity cap
+            const size_t expectedSize = banner.width * banner.height * sizeof(u32);
+            const size_t actualSize = banner.buffer.size() * sizeof(u32);
+
+            if (actualSize <= maxBannerBytes && actualSize == expectedSize) {
+                // Convert ARGB data to UIImage
+                CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+                CGDataProviderRef provider = CGDataProviderCreateWithData(
+                    NULL,
+                    banner.buffer.data(),
+                    actualSize,
+                    NULL
+                );
+
+                CGImageRef cgImage = CGImageCreate(
+                    banner.width,
+                    banner.height,
+                    8,
+                    32,
+                    banner.width * 4,
+                    colorSpace,
+                    kCGImageAlphaFirst | kCGBitmapByteOrder32Big,
+                    provider,
+                    NULL,
+                    false,
+                    kCGRenderingIntentDefault
+                );
+
+                if (cgImage) {
+                    bannerResult = [UIImage imageWithCGImage:cgImage];
+                    CGImageRelease(cgImage);
+                }
+
+                CGDataProviderRelease(provider);
+                CGColorSpaceRelease(colorSpace);
+
+#ifdef DEBUG
+                NSLog(@"TVGameItem: extracted banner %dx%d for '%@'", banner.width, banner.height, _title);
+#endif
+            } else {
+#ifdef DEBUG
+                NSLog(@"TVGameItem: banner size mismatch for '%@' - expected: %zu, actual: %zu", _title, expectedSize, actualSize);
+#endif
+            }
+        }
+
+        _bannerImage = bannerResult;
+
         // Protected string conversions for all GameFile properties
         std::string gameID = game.GetGameID();
         std::string countryName = DiscIO::GetName(game.GetCountry(), true);
@@ -143,6 +196,7 @@
 - (NSString *)filePath { return _filePath; }
 - (BOOL)isNKit { return _isNKit; }
 - (UIImage *)coverImage { return _coverImage; }
+- (UIImage * _Nullable)bannerImage { return _bannerImage; }
 - (GameFilePtrWrapper *)wrapper { return _wrapper; }
 - (NSString *)gameID { return _gameID; }
 - (NSInteger)discNumber { return _discNumber; }
