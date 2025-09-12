@@ -524,36 +524,54 @@ NSUInteger webDavPort = 81;
 }
 
 - (NSString *)IPAddress {
+    static NSString* lastAddress = nil;
+    static CFAbsoluteTime lastFetch = 0;
+    const CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    // 1-second cache to avoid tight refresh loops from UI
+    if (lastAddress && (now - lastFetch) < 1.0) {
+        return lastAddress;
+    }
+
     NSString *address = @"error";
     struct ifaddrs *interfaces = NULL;
     struct ifaddrs *temp_addr = NULL;
-    int success = 0;
-    // retrieve the current interfaces - returns 0 on success
-    success = getifaddrs(&interfaces);
-    if (success == 0)
-    {
-        // Loop through linked list of interfaces
+    if (getifaddrs(&interfaces) == 0 && interfaces) {
+        // Prefer Wi‑Fi (en0) or Ethernet (en1)
         temp_addr = interfaces;
-        while (temp_addr != NULL)
-        {
-            if (temp_addr->ifa_addr->sa_family == AF_INET)
-            {
-                // Check if interface is en0 which is the wifi connection on the iPhone
-                NSString *interfaceName = [NSString stringWithUTF8String:temp_addr->ifa_name];
+        while (temp_addr) {
+            if (temp_addr->ifa_addr && temp_addr->ifa_addr->sa_family == AF_INET) {
+                NSString *interfaceName = [NSString stringWithUTF8String:temp_addr->ifa_name ?: "?"];
+#if DEBUG
                 NSLog(@"Interface name: %@", interfaceName);
-                if ([interfaceName isEqualToString:@"en0"] || [interfaceName isEqualToString:@"en1"])
-                {
-                    // Get NSString from C String
+#endif
+                if ([interfaceName isEqualToString:@"en0"] || [interfaceName isEqualToString:@"en1"]) {
                     address = [NSString stringWithUTF8String:inet_ntoa(((struct sockaddr_in *)temp_addr->ifa_addr)->sin_addr)];
+                    break; // found best match
                 }
             }
-
             temp_addr = temp_addr->ifa_next;
         }
+
+        // Fallback: first non-loopback IPv4
+        if ([address isEqualToString:@"error"]) {
+            temp_addr = interfaces;
+            while (temp_addr) {
+                if (temp_addr->ifa_addr && temp_addr->ifa_addr->sa_family == AF_INET) {
+                    NSString *name = [NSString stringWithUTF8String:temp_addr->ifa_name ?: "?"];
+                    if (![name isEqualToString:@"lo0"]) {
+                        address = [NSString stringWithUTF8String:inet_ntoa(((struct sockaddr_in *)temp_addr->ifa_addr)->sin_addr)];
+                        break;
+                    }
+                }
+                temp_addr = temp_addr->ifa_next;
+            }
+        }
+        freeifaddrs(interfaces);
     }
 
-    // Free memory
-    freeifaddrs(interfaces);
+    // Update cache
+    lastAddress = address;
+    lastFetch = now;
     return address;
 }
 
