@@ -16,6 +16,9 @@ class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       let window = UIWindow(windowScene: windowScene)
       // Placeholder content for external display on tvOS
       window.rootViewController = UIHostingController(rootView: Color.black)
+      if let tint = UIColor(named: "DolphinTint") {
+        window.tintColor = tint
+      }
       self.window = window
       window.makeKeyAndVisible()
     }

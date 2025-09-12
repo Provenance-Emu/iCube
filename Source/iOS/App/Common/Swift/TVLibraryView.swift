@@ -1948,7 +1948,7 @@ struct TVLibraryView: View {
               .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.blue)
+            .tint(Color("DolphinTint"))
 
             Button(action: {
               showSources = true

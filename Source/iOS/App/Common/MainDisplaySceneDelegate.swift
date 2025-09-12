@@ -21,6 +21,10 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       let window = UIWindow(windowScene: windowScene)
       let rootView = TVRootView()
       window.rootViewController = UIHostingController(rootView: rootView)
+      // Apply global tint from asset catalog (DolphinTint)
+      if let tint = UIColor(named: "DolphinTint") {
+        window.tintColor = tint
+      }
       self.window = window
       window.makeKeyAndVisible()
       applyFrameCap(to: windowScene)
