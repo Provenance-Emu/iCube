@@ -639,7 +639,7 @@ struct EmulationScreen: View {
                         }
 
                         Menu {
-                            Menu("Save State") {
+                            Menu {
                                 ForEach(1...10, id: \.self) { slot in
                                     Button("Slot \(slot)") {
                                         hasTopBarInteraction = true
@@ -647,8 +647,10 @@ struct EmulationScreen: View {
                                         TVEmulationBridge.saveState(toSlot: slot, wait: true)
                                     }
                                 }
+                            } label: {
+                                Label("Save State", systemImage: "square.and.arrow.down")
                             }
-                            Menu("Load State") {
+                            Menu {
                                 ForEach(1...10, id: \.self) { slot in
                                     Button("Slot \(slot)") {
                                         hasTopBarInteraction = true
@@ -656,9 +658,11 @@ struct EmulationScreen: View {
                                         TVEmulationBridge.loadState(fromSlot: slot)
                                     }
                                 }
+                            } label: {
+                                Label("Load State", systemImage: "square.and.arrow.up")
                             }
                             #if os(iOS)
-                            Menu("Touch Cursor Mode") {
+                            Menu {
                                 let currentIR = DOLConfigBridge.mainTouchPadIRMode()
                                 Button {
                                     hasTopBarInteraction = true
@@ -667,7 +671,7 @@ struct EmulationScreen: View {
                                     userOverrideTouchControls = true
                                     touchPadsRefreshToken = UUID()
                                 } label: {
-                                    Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "")
+                                    Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
                                 }
                                 Button {
                                     hasTopBarInteraction = true
@@ -676,7 +680,7 @@ struct EmulationScreen: View {
                                     userOverrideTouchControls = true
                                     touchPadsRefreshToken = UUID()
                                 } label: {
-                                    Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "")
+                                    Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
                                 }
                                 Button {
                                     hasTopBarInteraction = true
@@ -685,8 +689,10 @@ struct EmulationScreen: View {
                                     userOverrideTouchControls = true
                                     touchPadsRefreshToken = UUID()
                                 } label: {
-                                    Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "")
+                                    Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
                                 }
+                            } label: {
+                                Label("Touch Cursor Mode", systemImage: "cursor.rays")
                             }
                             #endif
                             Button {

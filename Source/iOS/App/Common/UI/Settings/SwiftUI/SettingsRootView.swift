@@ -180,11 +180,33 @@ struct SettingsRootView<Background: View>: View {
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.8))
                 Spacer()
+#if os(iOS)
+                if !webURLString.isEmpty {
+                  Button(action: {
+                    if let u = URL(string: webURLString) {
+                      safariURL = u
+                      showSafari = true
+                    }
+                  }) {
+                    Text(webURLString)
+                      .font(.system(size: 16, weight: .medium))
+                      .foregroundColor(.blue)
+                      .lineLimit(1)
+                      .truncationMode(.middle)
+                  }
+                  .buttonStyle(.plain)
+                } else {
+                  Text(L("Not Running"))
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                }
+#else
                 Text(webURLString.isEmpty ? L("Not Running") : webURLString)
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.6))
                   .lineLimit(1)
                   .truncationMode(.middle)
+#endif
               }
               HStack {
                 Text("WebDAV")
@@ -197,23 +219,6 @@ struct SettingsRootView<Background: View>: View {
                   .lineLimit(1)
                   .truncationMode(.middle)
               }
-#if os(iOS)
-              Button(action: {
-                if !webURLString.isEmpty, let u = URL(string: webURLString) {
-                  safariURL = u
-                  showSafari = true
-                }
-              }) {
-                Text(L("Open Web UI"))
-                  .font(.system(size: 16, weight: .semibold))
-                  .foregroundColor(.white)
-                  .padding(.horizontal, 16)
-                  .padding(.vertical, 10)
-                  .background(.blue.opacity(0.3))
-                  .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-              }
-              .buttonStyle(.plain)
-#endif
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -288,6 +293,9 @@ struct SettingsRootView<Background: View>: View {
             }
           }
           HStack {
+            Image("DolphinLogo")
+              .resizable()
+              .scaledToFit()
             Text(L("Dolphin Core"))
             Spacer()
             if #available(iOS 15.0, *) {
@@ -314,10 +322,30 @@ struct SettingsRootView<Background: View>: View {
             Text(L("Web UI"))
             Spacer()
             let s = webURLString
+#if os(iOS)
+            if !s.isEmpty {
+              Button(action: {
+                if let u = URL(string: s) {
+                  safariURL = u
+                  showSafari = true
+                }
+              }) {
+                Text(s)
+                  .foregroundStyle(.blue)
+                  .lineLimit(1)
+                  .truncationMode(.middle)
+              }
+              .buttonStyle(.plain)
+            } else {
+              Text(L("Not Running"))
+                .foregroundStyle(.secondary)
+            }
+#else
             Text(s.isEmpty ? L("Not Running") : s)
               .foregroundStyle(.secondary)
               .lineLimit(1)
               .truncationMode(.middle)
+#endif
           }
           HStack {
             Text(L("WebDAV"))
@@ -328,14 +356,6 @@ struct SettingsRootView<Background: View>: View {
               .lineLimit(1)
               .truncationMode(.middle)
           }
-#if os(iOS)
-          Button(L("Open Web UI")) {
-            if !webURLString.isEmpty, let u = URL(string: webURLString) {
-              safariURL = u
-              showSafari = true
-            }
-          }
-#endif
         }
       }
       .navigationTitle(L("Settings"))
@@ -599,7 +619,7 @@ struct ConfigRootView: View {
         Label(L("GameCube"), systemImage: "cube")
       }
       NavigationLink(destination: ConfigWiiView()) {
-        Label(L("Wii"), systemImage: "tv.and.hifispeaker")
+        Label(L("Wii"), systemImage: "tv.and.hifispeaker.fill")
       }
       NavigationLink(destination: ConfigAdvancedView()) {
         Label(L("Advanced"), systemImage: "cpu")
@@ -685,7 +705,7 @@ struct ControllersRootView: View {
         }
       }
 
-      Section(header: Text(L("General"))) {
+      Section(header: Text(L("General")), footer: Text(L("Background Input: Allows controller input when DolphiniOS is in the background.\nAuto-select On-Screen Controller: Automatically chooses GameCube or Wii controller layout based on the game being played."))) {
         Toggle(L("Background Input"), isOn: $backgroundInput)
           .onChange(of: backgroundInput) { newValue in DOLConfigBridge.setMainBackgroundInput(newValue) }
         Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
@@ -698,7 +718,7 @@ struct ControllersRootView: View {
 #endif
       }
 
-      Section(header: Text(L("Wii Remotes"))) {
+      Section(header: Text(L("Wii Remotes")), footer: Text(L("Continuous Scanning: Keeps looking for new Wiimotes to connect.\nEnable Speaker: Plays audio through the Wiimote speaker (requires real Wiimote).\nConnect Wiimotes for Controller Interface: Automatically pairs Wiimotes when controller interface is used."))) {
         Toggle(L("Continuous Scanning"), isOn: $wiimoteScan)
           .onChange(of: wiimoteScan) { newValue in DOLConfigBridge.setWiimoteContinuousScanning(newValue) }
         Toggle(L("Enable Speaker"), isOn: $wiimoteSpeaker)
@@ -707,7 +727,7 @@ struct ControllersRootView: View {
           .onChange(of: connectWiimotes) { newValue in DOLConfigBridge.setConnectWiimotesForControllerInterface(newValue) }
       }
 
-      Section(header: Text(L("Alternate Input Sources"))) {
+      Section(header: Text(L("Alternate Input Sources")), footer: Text(L("Opacity: Controls transparency of on-screen touch controls.\nTouch IR Pointer: Choose how the Wiimote pointer is controlled - Gyro uses device motion, Follow/Drag use touch gestures."))) {
 #if os(iOS)
         HStack {
           Text(L("Opacity"))
@@ -782,11 +802,13 @@ struct ControllersRootView: View {
 #if os(iOS)
   /// Test rumble/haptic feedback on device and connected controllers
   private func testRumble() {
-    var tested = false
+    var controllersTestedCount = 0
+    var deviceTested = false
 
-    // Test external controller haptics first
-    if let controller = GCController.controllers().first, #available(iOS 14.0, *) {
-      if let haptics = controller.haptics {
+    // Test ALL connected external controller haptics
+    let controllers = GCController.controllers()
+    for controller in controllers {
+      if #available(iOS 14.0, *), let haptics = controller.haptics {
         do {
           let engine = try haptics.createEngine(withLocality: .default)
           try engine?.start()
@@ -803,11 +825,10 @@ struct ControllersRootView: View {
           if let engine = engine {
             let player = try engine.makePlayer(with: pattern)
             try player.start(atTime: 0)
-            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Controller rumble tested")])
-            tested = true
+            controllersTestedCount += 1
           }
         } catch {
-          // Controller haptics failed, continue to device haptics
+          // Controller haptics failed for this controller, continue to next
         }
       }
     }
@@ -832,24 +853,31 @@ struct ControllersRootView: View {
 
         let player = try engine.makePlayer(with: pattern)
         try player.start(atTime: 0)
-
-        if tested {
-          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Device + Controller rumble tested")])
-        } else {
-          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Device rumble tested")])
-        }
-        tested = true
-
+        deviceTested = true
       } catch {
-        // Device haptics failed, fall back to legacy vibration
+        // Device haptics failed, try fallback
       }
     }
 
-    // Fallback: Use legacy UIKit vibration if CoreHaptics isn't available
-    if !tested {
+    // Fallback: Use legacy UIKit vibration if device CoreHaptics isn't available
+    if !deviceTested {
       AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
-      NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Basic vibration tested")])
+      deviceTested = true
     }
+
+    // Show appropriate message based on what was tested
+    let message: String
+    if controllersTestedCount > 0 && deviceTested {
+      message = String(format: L("Tested %d controller(s) + device rumble"), controllersTestedCount)
+    } else if controllersTestedCount > 0 {
+      message = String(format: L("Tested %d controller(s) rumble"), controllersTestedCount)
+    } else if deviceTested {
+      message = L("Tested device rumble")
+    } else {
+      message = L("No haptic feedback available")
+    }
+
+    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": message])
   }
 #endif
 }
@@ -1355,7 +1383,7 @@ struct ConfigAdvancedView: View {
         .onChange(of: vbiPercent) { DOLConfigBridge.setMainViOverclockPercent($0) }
       }
 
-      Section(header: Text(L("Memory Override")), footer: Text(L("Adjusts the amount of RAM in the emulated console.\n\nWARNING: Enabling this will completely break many games. Only a small number of games can benefit from this."))) {
+      Section(header: Text(L("Memory Override")), footer: Text(L("Adjusts the amount of RAM in the emulated console.\n\nWARNING: Enabling this will completely break many games. Only a small number of games can benefit from this. Save states with different than current memory sizes will not work."))) {
         Toggle(L("Enable Emulated Memory Size Override"), isOn: $memOverride)
           .onChange(of: memOverride) { DOLConfigBridge.setMainRamOverrideEnable($0) }
         HStack {

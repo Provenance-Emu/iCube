@@ -755,6 +755,11 @@ struct TVLibraryView: View {
       Button(action: { showSettings = true }) { Image(systemName: "gearshape") }
     }
 #else
+    ToolbarItem(placement: .topBarLeading) {
+      Image("DolphinLogo")
+        .resizable()
+        .scaledToFit()
+    }
     ToolbarItem(placement: .navigationBarLeading) {
       let store = RemoteSourcesStore.shared
       if store.isScanning {

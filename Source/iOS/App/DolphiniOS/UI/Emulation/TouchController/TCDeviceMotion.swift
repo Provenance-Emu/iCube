@@ -69,19 +69,31 @@ import Foundation
       y *= accelGain
       z *= accelGain
 
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: self.port, value: clamp(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: self.port, value: clamp(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: self.port, value: clamp(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: self.port, value: clamp(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: self.port, value: clamp(z))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: self.port, value: clamp(z))
+      // Check if 6DOF motion mapping is enabled - if so, skip original IMU mappings to avoid conflicts
+      let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
+      let wiimoteIMUEnabled = UserDefaults.standard.bool(forKey: "motion_wiimote_imu_enabled")
+      let nunchuckIMUEnabled = UserDefaults.standard.bool(forKey: "motion_nunchuck_imu_enabled")
+      let isGyroIRMode = (DOLConfigBridge.mainTouchPadIRMode() == 0)
 
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelLeft.rawValue, controller: self.port, value: clamp(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelRight.rawValue, controller: self.port, value: clamp(x))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelForward.rawValue, controller: self.port, value: clamp(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelBackward.rawValue, controller: self.port, value: clamp(y))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelUp.rawValue, controller: self.port, value: clamp(z))
-      TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelDown.rawValue, controller: self.port, value: clamp(z))
+      // Only use original Wiimote accelerometer mapping if 6DOF is disabled OR Wiimote IMU is disabled
+      if !full6DOFEnabled || !wiimoteIMUEnabled || isGyroIRMode {
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: self.port, value: clamp(x))
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: self.port, value: clamp(x))
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: self.port, value: clamp(y))
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: self.port, value: clamp(y))
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: self.port, value: clamp(z))
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: self.port, value: clamp(z))
+      }
+
+      // Only use original Nunchuk accelerometer mapping if 6DOF is disabled OR Nunchuk IMU is disabled
+      if !full6DOFEnabled || !nunchuckIMUEnabled || isGyroIRMode {
+        TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelLeft.rawValue, controller: self.port, value: clamp(x))
+        TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelRight.rawValue, controller: self.port, value: clamp(x))
+        TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelForward.rawValue, controller: self.port, value: clamp(y))
+        TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelBackward.rawValue, controller: self.port, value: clamp(y))
+        TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelUp.rawValue, controller: self.port, value: clamp(z))
+        TCManagerInterface.setAxisValueFor(TCButtonType.nunchukAccelDown.rawValue, controller: self.port, value: clamp(z))
+      }
     }
 
     self.motionManager.startGyroUpdates(to: operationQueue) { (data, error) in
@@ -112,13 +124,21 @@ import Foundation
       horiz *= gyroGain
       vert  *= gyroGain
 
-      // Map to Wii gyro axes: yaw drives horizontal, pitch drives vertical, roll unused (0)
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: self.port, value: clamp(vert))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: self.port, value: clamp(vert))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: self.port, value: 0)
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: self.port, value: 0)
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: self.port, value: clamp(horiz))
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: self.port, value: clamp(horiz))
+      // Check if 6DOF motion mapping is enabled - if so, skip original gyro mappings to avoid conflicts
+      let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
+      let wiimoteIMUEnabled = UserDefaults.standard.bool(forKey: "motion_wiimote_imu_enabled")
+      let isGyroIRMode = (DOLConfigBridge.mainTouchPadIRMode() == 0)
+
+      // Only use original Wiimote gyro mapping if 6DOF is disabled OR Wiimote IMU is disabled
+      if !full6DOFEnabled || !wiimoteIMUEnabled || isGyroIRMode {
+        // Map to Wii gyro axes: yaw drives horizontal, pitch drives vertical, roll unused (0)
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: self.port, value: clamp(vert))
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: self.port, value: clamp(vert))
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: self.port, value: 0)
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: self.port, value: 0)
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: self.port, value: clamp(horiz))
+        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: self.port, value: clamp(horiz))
+      }
     }
 
     // Enhanced device motion updates for shake detection, IR cursor, and 6DOF motion
@@ -139,12 +159,16 @@ import Foundation
     }
 
     // IR cursor mapping (when gyro mode is active)
-    if DOLConfigBridge.mainTouchPadIRMode() == 0 {
+    let irMode = DOLConfigBridge.mainTouchPadIRMode()
+    if irMode == 0 {
       handleIRCursorMapping(motion: motion)
     }
 
     // Full 6DOF motion mapping (when not using gyro IR)
-    if DOLConfigBridge.mainTouchPadIRMode() != 0 && UserDefaults.standard.bool(forKey: "motion_enable_full_6dof") {
+    let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
+    if irMode != 0 && full6DOFEnabled {
+      // Debug logging to verify this is being called
+      NSLog("[MOTION] 6DOF mapping active: IR mode=\(irMode), 6DOF enabled=\(full6DOFEnabled)")
       handle6DOFMotionMapping(motion: motion)
     }
   }
@@ -216,7 +240,7 @@ import Foundation
     let wiimoteEnabled = UserDefaults.standard.bool(forKey: "motion_wiimote_imu_enabled")
     let nunchuckEnabled = UserDefaults.standard.bool(forKey: "motion_nunchuck_imu_enabled")
 
-        if wiimoteEnabled {
+    if wiimoteEnabled {
       let accel = motion.userAcceleration
       let gyro = motion.rotationRate
 
