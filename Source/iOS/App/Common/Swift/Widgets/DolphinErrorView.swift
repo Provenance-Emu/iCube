@@ -17,27 +17,27 @@ struct DolphinErrorView: View {
   var body: some View {
     VStack(spacing: 24) {
       // Sad but cute dolphin
-      ZStack {
-        // Subtle wave background
-        RoundedRectangle(cornerRadius: 16)
-          .fill(LinearGradient(
-            colors: [Color.red.opacity(0.1), Color.orange.opacity(0.1)],
-            startPoint: .leading,
-            endPoint: .trailing
-          ))
-          .frame(width: 120, height: 80)
-
-        // Dolphin with sad expression (using rotation to suggest sadness)
-        Image("DolphinLogo")
-          .resizable()
-          .scaledToFit()
-          .frame(width: 48, height: 48)
-          .foregroundColor(.orange)
-          .rotationEffect(.degrees(isWiggling ? -5 : 5))
-          .scaleEffect(isWiggling ? 0.95 : 1.0)
-          .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isWiggling)
-      }
-      .clipShape(RoundedRectangle(cornerRadius: 16))
+//      ZStack {
+//        // Subtle wave background
+//        RoundedRectangle(cornerRadius: 16)
+//          .fill(LinearGradient(
+//            colors: [Color.red.opacity(0.1), Color.orange.opacity(0.1)],
+//            startPoint: .leading,
+//            endPoint: .trailing
+//          ))
+//          .frame(width: 120, height: 80)
+//
+//        // Dolphin with sad expression (using rotation to suggest sadness)
+//        Image("DolphinLogo")
+//          .resizable()
+//          .scaledToFit()
+//          .frame(width: 48, height: 48)
+//          .foregroundColor(.orange)
+//          .rotationEffect(.degrees(isWiggling ? -5 : 5))
+//          .scaleEffect(isWiggling ? 0.95 : 1.0)
+//          .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isWiggling)
+//      }
+//      .clipShape(RoundedRectangle(cornerRadius: 16))
 
       VStack(spacing: 12) {
         // Error title with emoji
