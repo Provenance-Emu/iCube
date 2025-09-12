@@ -422,7 +422,7 @@ class DolphinRSSFeedManager: ObservableObject {
   }
 }
 
-/// Simple RSS Parser for Dolphin blog feed
+/// Simple Atom/RSS Parser for Dolphin blog feed
 class DolphinRSSParser: NSObject, XMLParserDelegate {
   private var posts: [BlogPost] = []
   private var currentElement = ""
@@ -433,7 +433,8 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
   private var currentPubDate = ""
   private var currentGuid = ""
 
-  private var isInItem = false
+  private var isInEntry = false
+  private var isInAuthor = false
 
   func parse(data: Data) throws -> [BlogPost] {
     posts.removeAll()
@@ -442,7 +443,7 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
     parser.delegate = self
 
     guard parser.parse() else {
-      throw NSError(domain: "RSSParseError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to parse RSS feed"])
+      throw NSError(domain: "RSSParseError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to parse Atom/RSS feed"])
     }
 
     return posts
@@ -451,8 +452,9 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
   func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String] = [:]) {
     currentElement = elementName
 
-    if elementName == "item" {
-      isInItem = true
+    // Handle both RSS <item> and Atom <entry>
+    if elementName == "item" || elementName == "entry" {
+      isInEntry = true
       // Reset current item data
       currentTitle = ""
       currentLink = ""
@@ -461,24 +463,44 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
       currentPubDate = ""
       currentGuid = ""
     }
+
+    // Handle Atom <author> container
+    if elementName == "author" && isInEntry {
+      isInAuthor = true
+    }
+
+    // Handle Atom <link> with href attribute
+    if elementName == "link" && isInEntry {
+      if let href = attributeDict["href"], attributeDict["rel"] == "alternate" {
+        currentLink = href
+      }
+    }
   }
 
   func parser(_ parser: XMLParser, foundCharacters string: String) {
     let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty && isInItem else { return }
+    guard !trimmed.isEmpty && isInEntry else { return }
 
     switch currentElement {
     case "title":
       currentTitle += trimmed
     case "link":
-      currentLink += trimmed
-    case "description":
+      if currentLink.isEmpty { // Only use character data if no href attribute
+        currentLink += trimmed
+      }
+    case "description", "summary":
       currentDescription += trimmed
+    case "name":
+      if isInAuthor { // Atom <author><name>
+        currentAuthor += trimmed
+      }
     case "author", "dc:creator":
-      currentAuthor += trimmed
-    case "pubDate":
+      if !isInAuthor { // RSS <author> or <dc:creator>
+        currentAuthor += trimmed
+      }
+    case "pubDate", "published":
       currentPubDate += trimmed
-    case "guid":
+    case "guid", "id":
       currentGuid += trimmed
     default:
       break
@@ -486,32 +508,53 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
   }
 
   func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-    if elementName == "item" && isInItem {
+    if elementName == "author" && isInEntry {
+      isInAuthor = false
+    }
+
+    if (elementName == "item" || elementName == "entry") && isInEntry {
       // Create blog post
       let dateFormatter = DateFormatter()
-      dateFormatter.dateFormat = "E, dd MMM yyyy HH:mm:ss Z"
-      let pubDate = dateFormatter.date(from: currentPubDate) ?? Date()
 
-      // Clean up HTML from description
+      // Try multiple date formats (RSS and Atom)
+      let dateFormats = [
+        "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ", // Atom with microseconds
+        "yyyy-MM-dd'T'HH:mm:ssZZZZZ",        // Atom standard
+        "yyyy-MM-dd'T'HH:mm:ss'Z'",          // Atom UTC
+        "E, dd MMM yyyy HH:mm:ss Z"          // RSS
+      ]
+
+      var pubDate = Date()
+      for format in dateFormats {
+        dateFormatter.dateFormat = format
+        if let date = dateFormatter.date(from: currentPubDate) {
+          pubDate = date
+          break
+        }
+      }
+
+      // Clean up HTML from description/summary
       let cleanDescription = currentDescription
         .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
         .replacingOccurrences(of: "&nbsp;", with: " ")
         .replacingOccurrences(of: "&amp;", with: "&")
         .replacingOccurrences(of: "&lt;", with: "<")
         .replacingOccurrences(of: "&gt;", with: ">")
+        .replacingOccurrences(of: "&quot;", with: "\"")
+        .replacingOccurrences(of: "&#39;", with: "'")
         .trimmingCharacters(in: .whitespacesAndNewlines)
 
       let post = BlogPost(
         title: currentTitle,
         link: currentLink,
-        summary: String(cleanDescription.prefix(200)),
+        summary: String(cleanDescription.prefix(300)), // Increased from 200 to 300 chars
         author: currentAuthor,
         pubDate: pubDate,
-        guid: currentGuid
+        guid: currentGuid.isEmpty ? currentLink : currentGuid
       )
 
       posts.append(post)
-      isInItem = false
+      isInEntry = false
     }
 
     currentElement = ""
@@ -743,8 +786,6 @@ struct BlogPostDetailView: View {
     }
   }
 }
-
-// SafariView is already defined in SettingsRootView.swift
 
 #if DEBUG
 struct DolphinBlogView_Previews: PreviewProvider {
