@@ -718,20 +718,33 @@ struct BlogPostDetailView: View {
     }
     .padding(.top, 20)
   }
+
+  private func sharePost(url: String, title: String) {
+    guard let urlToShare = URL(string: url) else { return }
+
+    let activityViewController = UIActivityViewController(
+      activityItems: [title, urlToShare],
+      applicationActivities: nil
+    )
+
+    // Get the current window scene and present the share sheet
+    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+       let window = windowScene.windows.first,
+       let rootViewController = window.rootViewController {
+
+      // Handle iPad popover
+      if let popover = activityViewController.popoverPresentationController {
+        popover.sourceView = window
+        popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+        popover.permittedArrowDirections = []
+      }
+
+      rootViewController.present(activityViewController, animated: true)
+    }
+  }
 }
 
-#if canImport(SafariServices)
-struct SafariView: UIViewControllerRepresentable {
-  let url: URL
-
-  func makeUIViewController(context: Context) -> SFSafariViewController {
-    return SFSafariViewController(url: url)
-  }
-
-  func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
-  }
-}
-#endif
+// SafariView is already defined in SettingsRootView.swift
 
 #if DEBUG
 struct DolphinBlogView_Previews: PreviewProvider {
