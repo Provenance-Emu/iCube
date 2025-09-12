@@ -33,8 +33,9 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
       guard let address = ip, let p = port, p >= 1 && p <= 65535 else { return false }
       DOLConfigBridge.addDsuServer(desc, address: address, port: p)
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": "Added DSU server: \(address):\(p)"])
-      // Optionally open Settings
+      // Open Settings and jump directly to Controllers page
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSettings"), object: nil)
+      NotificationCenter.default.post(name: NSNotification.Name("DOLSettingsSelectControllers"), object: nil)
       return true
     }
 
@@ -46,6 +47,7 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
       DOLConfigBridge.addDsuServer("DSU", address: host, port: p)
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": "Added DSU server: \(host):\(p)"])
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSettings"), object: nil)
+      NotificationCenter.default.post(name: NSNotification.Name("DOLSettingsSelectControllers"), object: nil)
       return true
     }
 

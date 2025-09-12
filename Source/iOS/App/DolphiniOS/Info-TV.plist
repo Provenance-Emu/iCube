@@ -281,5 +281,16 @@
 			</dict>
 		</dict>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>me.oatmealdome.dolphinios.tv</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dolphinios</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

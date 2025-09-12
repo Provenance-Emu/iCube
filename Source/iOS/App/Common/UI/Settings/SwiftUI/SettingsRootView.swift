@@ -63,6 +63,9 @@ struct SettingsRootView<Background: View>: View {
         }
       }
     }
+    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLSettingsSelectControllers"))) { _ in
+      currentSettingsPage = .controllers
+    }
   }
 
   @State private var currentSettingsPage: SettingsPage? = nil

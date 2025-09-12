@@ -100,15 +100,15 @@ private struct DSUSessionView: View {
         if running && !ip.isEmpty {
           Section(header: Text(L("Share"))) {
             HStack {
-              Text(L("Copy IP:Port"))
+              Text(L("Copy Link"))
               Spacer()
               Button(action: {
                 let p = running ? port : (Int(portText) ?? 26760)
-                let text = "\(ip):\(p)"
-                UIPasteboard.general.string = text
+                let link = "dolphinios://dsu/add?ip=\(ip)&port=\(p)"
+                UIPasteboard.general.string = link
                 NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Copied")])
               }) {
-                Label(L("Copy"), systemImage: "doc.on.doc")
+                Label(L("Copy Link"), systemImage: "doc.on.doc")
               }
               .buttonStyle(.bordered)
             }

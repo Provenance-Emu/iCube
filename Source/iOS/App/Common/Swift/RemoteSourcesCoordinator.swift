@@ -436,13 +436,21 @@ final class LibraryCoordinator: ObservableObject {
 
     private init() {
         NotificationCenter.default.publisher(for: NSNotification.Name("RemoteLibraryUpdated"))
-            .sink { [weak self] _ in self?.triggerReload() }
+            .sink { [weak self] _ in
+#if DEBUG
+                print("LibraryCoordinator: RemoteLibraryUpdated notification received")
+#endif
+                self?.triggerReload()
+            }
             .store(in: &cancellables)
 
         reloadSubject
             .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
             .sink { [weak self] in
                 guard let self else { return }
+#if DEBUG
+                print("LibraryCoordinator: Debounced reload executing loadCurrent()")
+#endif
                 self.loadCurrent()
             }
             .store(in: &cancellables)
@@ -480,6 +488,9 @@ final class LibraryCoordinator: ObservableObject {
     }
 
     private func triggerReload() {
+#if DEBUG
+        print("LibraryCoordinator.triggerReload(): Triggering reload")
+#endif
         reloadSubject.send(())
     }
 
