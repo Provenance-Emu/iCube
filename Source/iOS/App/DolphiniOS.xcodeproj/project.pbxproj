@@ -31,6 +31,7 @@
 		B31EAC822E67743D0036EE31 /* ModernCheatItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */; };
 		B31EAC8B2E67E9050036EE31 /* DOLWiimoteBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */; };
 		B346BBEC2E73973E00B3C00B /* MotionDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */; };
+		B346BBF62E73C27000B3C00B /* DolphinBlogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346BBF52E73C27000B3C00B /* DolphinBlogView.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -333,6 +334,7 @@
 		B31EAC892E67E9050036EE31 /* DOLWiimoteBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLWiimoteBridge.h; sourceTree = "<group>"; };
 		B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLWiimoteBridge.mm; sourceTree = "<group>"; };
 		B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionDebugView.swift; sourceTree = "<group>"; };
+		B346BBF52E73C27000B3C00B /* DolphinBlogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DolphinBlogView.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -1236,6 +1238,7 @@
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
 				B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */,
+				B346BBF52E73C27000B3C00B /* DolphinBlogView.swift */,
 				B31E921A2E665F530036EE31 /* ControllerManager.swift */,
 				B31E804E2E6504940036EE31 /* ControllerPresets.swift */,
 				B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */,
@@ -2481,6 +2484,7 @@
 				B9661F362D23190300FB2AAB /* MappingInputDisplayInputCell.m in Sources */,
 				B9FCB7B9289670830020E233 /* JitManager.m in Sources */,
 				B99137882881486200588446 /* WiiSystemLanguageViewController.mm in Sources */,
+				B346BBF62E73C27000B3C00B /* DolphinBlogView.swift in Sources */,
 				B3F216672E5F6DEC00AF38F3 /* RemoteSourceFactory.swift in Sources */,
 				B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */,
 				B900A7CF27F4DB9A000361DD /* SoftwareListCell.swift in Sources */,

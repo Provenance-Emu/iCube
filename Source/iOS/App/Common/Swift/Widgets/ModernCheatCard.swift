@@ -94,11 +94,19 @@ internal struct ModernCheatCard: View {
 
 // MARK: - Modern Empty State
 internal struct ModernEmptyState: View {
+  @State private var isAnimating = false
+
   var body: some View {
     VStack(spacing: 20) {
-      Image(systemName: "gamecontroller")
-        .font(.system(size: 48, weight: .light))
-        .foregroundColor(.white.opacity(0.4))
+      Image("DolphinLogo")
+        .resizable()
+        .scaledToFit()
+        .frame(width: 64, height: 64)
+        .foregroundColor(.white.opacity(0.6))
+        .scaleEffect(isAnimating ? 1.1 : 1.0)
+        .rotationEffect(.degrees(isAnimating ? 5 : -5))
+        .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: isAnimating)
+        .onAppear { isAnimating = true }
 
       VStack(spacing: 8) {
         Text(L("No Cheats Available"))

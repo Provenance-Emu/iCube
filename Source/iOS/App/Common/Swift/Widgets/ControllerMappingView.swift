@@ -47,7 +47,8 @@ internal struct ControllerMappingView: View {
         }
         Section(header: Text(L("Connected Controllers"))) {
           if controllers.isEmpty {
-            Text(L("No controllers connected")).foregroundStyle(.secondary)
+            CompactDolphinError(message: L("No controllers connected"))
+              .padding(.vertical, 8)
           } else {
             ForEach(Array(controllers.enumerated()), id: \.offset) { _, c in
               HStack {
@@ -232,16 +233,10 @@ internal struct ControllerMappingView: View {
             .foregroundColor(.white)
 
           if controllers.isEmpty {
-            VStack(spacing: 12) {
-              Image(systemName: "gamecontroller")
-                .font(.system(size: 32, weight: .medium))
-                .foregroundColor(.white.opacity(0.5))
-
-              Text(L("No controllers connected"))
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
-            }
-            .padding(24)
+            DolphinErrorView(
+              title: L("No Controllers"),
+              message: L("Connect external controllers to configure button mappings and enjoy the full DolphiniOS experience! 🎮")
+            )
             .background(.white.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
           } else {
@@ -329,13 +324,13 @@ private func makePreviewGame() -> TVGameItem {
 
 #Preview("iPhone Portrait") {
   ControllerMappingView(game: makePreviewGame(), onBack: {
-    
+
   })
 }
 
 #Preview("iPhone Landscape") {
   ControllerMappingView(game: makePreviewGame(), onBack: {
-    
+
   })
   .previewInterfaceOrientation(.landscapeLeft)
 }

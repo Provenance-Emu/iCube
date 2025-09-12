@@ -324,8 +324,8 @@ struct ShaderParameterEditor: View {
     var body: some View {
         List {
             if params.isEmpty {
-                if isLoadingPreset {
-                    HStack { ProgressView(); Text(L("Loading preset…")).foregroundStyle(.secondary) }
+                        if isLoadingPreset {
+          DolphinLoadingView(message: L("Loading preset…"))
                 } else {
                     Text(L("No adjustable parameters in the current shader")).foregroundStyle(.secondary)
                 }

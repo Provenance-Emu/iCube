@@ -39,7 +39,8 @@ struct ControllerPickerSheet: View {
           }
 
           if controllers.isEmpty {
-            Text(L("No external controllers connected")).foregroundStyle(.secondary)
+            CompactDolphinError(message: L("No external controllers connected"))
+              .padding(.vertical, 8)
           } else {
             ForEach(Array(controllers.enumerated()), id: \.offset) { idx, c in
               Button(action: {

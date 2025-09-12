@@ -122,6 +122,42 @@ struct MotionDebugView: View {
                 }
             }
 
+            // MARK: - Interactive Swimming Dolphin
+            Section(header: Text("🐬 Swimming Dolphin Visualizer")) {
+                VStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(LinearGradient(
+                                colors: [Color.blue.opacity(0.1), Color.cyan.opacity(0.2)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                            .frame(height: 100)
+
+                        Image("DolphinLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 36, height: 36)
+                            .foregroundColor(.blue)
+                            .rotationEffect(.degrees(motionData.attitude.roll * 180 / .pi))
+                            .offset(
+                                x: motionData.attitude.yaw * 80,
+                                y: -motionData.attitude.pitch * 40
+                            )
+                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: motionData.attitude.roll)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: motionData.attitude.yaw)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: motionData.attitude.pitch)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    Text("Tilt your device to see the dolphin swim around! 🌊")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 4)
+            }
+
             // MARK: - Live Gyroscope Data
             Section(header: Text("Gyroscope (rad/s)")) {
                 MotionValueRow(label: "X (Roll)", value: motionData.gyroX, range: -5...5)
@@ -301,14 +337,8 @@ struct MotionDebugView: View {
                 }
 
                 if GCController.controllers().isEmpty {
-                  if #available(iOS 16.0, *) {
-                    Text("No external controllers connected")
-                      .foregroundStyle(.secondary)
-                      .italic()
-                  } else {
-                    Text("No external controllers connected")
-                      .foregroundStyle(.secondary)
-                  }
+                                  CompactDolphinError(message: "No external controllers connected")
+                  .padding(.vertical, 4)
                 }
             }
         }

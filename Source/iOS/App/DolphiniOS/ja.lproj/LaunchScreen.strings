@@ -1,1 +1,14 @@
+/* Class = "UILabel"; text = "DolphiniOS"; ObjectID = "APP-na-me"; */
+"APP-na-me.text" = "DolphiniOS";
 
+/* Class = "UILabel"; text = "© 2003-2015+ Dolphin Team"; ObjectID = "COP-yr-ight1"; */
+"COP-yr-ight1.text" = "© 2003-2015+ Dolphin Team";
+
+/* Class = "UILabel"; text = "© 2019-2025+ DolphiniOS Project"; ObjectID = "COP-yr-ight2"; */
+"COP-yr-ight2.text" = "© 2019-2025+ DolphiniOS Project";
+
+/* Class = "UILabel"; text = "Loading..."; ObjectID = "LOA-di-ng"; */
+"LOA-di-ng.text" = "Loading...";
+
+/* Class = "UILabel"; text = "🐬 GameCube & Wii emulator 🌊"; ObjectID = "SUB-ti-tle"; */
+"SUB-ti-tle.text" = "🐬 GameCube & Wii emulator 🌊";

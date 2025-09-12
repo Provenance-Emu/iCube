@@ -713,10 +713,11 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private var emptyLibraryView: some View {
-    VStack(spacing: 16) {
-      ProgressView()
-      Text(L("No games found. Add ROMs to your library."))
-        .foregroundStyle(.secondary)
+    VStack(spacing: 20) {
+      DolphinErrorView(
+        title: L("Library Empty"),
+        message: L("No games found. Add GameCube & Wii ROMs to your library to get started with this adorable emulator! 🎮")
+      )
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -732,8 +733,12 @@ struct TVLibraryView: View {
     ToolbarItem(placement: .navigationBarTrailing) {
       let store = RemoteSourcesStore.shared
       if store.isScanning {
-        HStack(spacing: 6) {
-          ProgressView(value: store.scanningProgress).frame(width: 80)
+        VStack(spacing: 2) {
+          DolphinProgressView(
+            progress: store.scanningProgress,
+            width: 80,
+            direction: .leftToRight
+          )
           Text("Refreshing…")
             .font(.caption2)
             .foregroundColor(.secondary)
@@ -756,16 +761,19 @@ struct TVLibraryView: View {
     }
 #else
     ToolbarItem(placement: .topBarLeading) {
-      Image("DolphinLogo")
-        .resizable()
-        .scaledToFit()
-    }
-    ToolbarItem(placement: .navigationBarLeading) {
       let store = RemoteSourcesStore.shared
       if store.isScanning {
-        ProgressView(value: store.scanningProgress)
-          .progressViewStyle(.linear)
-          .frame(width: 140)
+        // Show swimming dolphin progress instead of static logo
+        DolphinProgressView(
+          progress: store.scanningProgress,
+          width: 140,
+          direction: .leftToRight
+        )
+      } else {
+        // Show static dolphin logo when not scanning
+        Image("DolphinLogo")
+          .resizable()
+          .scaledToFit()
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
@@ -1961,7 +1969,8 @@ private struct GameGridItem: View {
             }
           }
         } else {
-          Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
+          // Show cute dolphin error for unavailable source
+          CompactDolphinError(message: L("Remote Source Unavailable"))
         }
       }
       if item.isFavorite {
@@ -2093,7 +2102,8 @@ private struct GameGridItem: View {
             }
           }
         } else {
-          Label(L("Remote Source Unavailable"), systemImage: "icloud.slash").disabled(true)
+          // Show cute dolphin error for unavailable source
+          CompactDolphinError(message: L("Remote Source Unavailable"))
         }
       }
       if item.isFavorite {
@@ -2359,24 +2369,15 @@ private struct CacheInfoView: View {
             .ignoresSafeArea()
 
           if isLoading {
-            VStack(spacing: 12) {
-              ProgressView()
-              Text("Loading cache information...")
-                .foregroundColor(.secondary)
-            }
-            .padding(24)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
+            DolphinLoadingView(message: "Loading cache information...")
+              .padding(24)
+              .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+              .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
           } else if let errorMessage = errorMessage {
-            VStack(spacing: 14) {
-              Image(systemName: "icloud.slash")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundColor(.orange)
-              Text(errorMessage)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            }
-            .padding(24)
+            DolphinErrorView(
+              title: "Cache Error",
+              message: errorMessage
+            )
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
           } else if let info = cacheInfo {
@@ -2440,8 +2441,13 @@ private struct CacheInfoView: View {
 
                     Button { performRedownload() } label: {
                       if isWorking && redownloadProgress > 0 {
-                        HStack(spacing: 6) { ProgressView(value: redownloadProgress); Text("\(Int(redownloadProgress * 100))%") }
-                          .frame(maxWidth: .infinity)
+                        DolphinProgressView(
+                          progress: redownloadProgress,
+                          width: 120,
+                          showPercentage: true,
+                          direction: .leftToRight
+                        )
+                        .frame(maxWidth: .infinity)
                       } else {
                         HStack { Image(systemName: "arrow.down.circle"); Text(L("Re-download")) }
                           .frame(maxWidth: .infinity)
@@ -2718,9 +2724,13 @@ private struct RemoteScanProgressView: View {
   @StateObject private var store = RemoteSourcesStore.shared
   var body: some View {
     if store.isScanning {
-      ProgressView(value: store.scanningProgress)
-        .progressViewStyle(.linear)
-        .frame(maxWidth: .infinity)
+      DolphinProgressView(
+        progress: store.scanningProgress,
+        width: 200,
+        showPercentage: true,
+        direction: .leftToRight
+      )
+      .frame(maxWidth: .infinity)
     }
   }
 }

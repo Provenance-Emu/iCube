@@ -41,9 +41,15 @@ internal struct ModernCheatsContent: View {
 
       // Status Message
       if !statusMessage.isEmpty {
-        Text(statusMessage)
-          .font(.system(size: 16, weight: .medium))
-          .foregroundColor(.white.opacity(0.8))
+        if statusMessage.contains("✗") || statusMessage.contains("Failed") {
+          // Show cute dolphin error for failures
+          CompactDolphinError(message: statusMessage.replacingOccurrences(of: "✗ ", with: ""))
+            .padding(.vertical, 8)
+        } else {
+          Text(statusMessage)
+            .font(.system(size: 16, weight: .medium))
+            .foregroundColor(.white.opacity(0.8))
+        }
       }
 
       // Cheats List - Scrollable

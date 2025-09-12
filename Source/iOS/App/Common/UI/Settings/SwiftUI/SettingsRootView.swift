@@ -296,7 +296,8 @@ struct SettingsRootView<Background: View>: View {
             Image("DolphinLogo")
               .resizable()
               .scaledToFit()
-            Text(L("Dolphin Core"))
+              .frame(height: 24)
+            Text(L("Core"))
             Spacer()
             if #available(iOS 15.0, *) {
               Text(coreVersion).foregroundStyle(.secondary)
@@ -304,6 +305,9 @@ struct SettingsRootView<Background: View>: View {
           }
           NavigationLink(destination: AboutView()) {
             Label(L("About"), systemImage: "info.circle")
+          }
+          NavigationLink(destination: DolphinBlogView()) {
+            Label("Dolphin Blog", systemImage: "newspaper")
           }
 #if os(tvOS)
           NavigationLink(L("Help"), destination: HelpPlaceholderView())
@@ -993,15 +997,44 @@ struct DebugRootView: View {
 
 struct AboutView: View {
   @Environment(\.openURL) private var openURL
+  @State private var logoScale: CGFloat = 1.0
+  @State private var logoRotation: Double = 0.0
+  @State private var sparkleOpacity: Double = 0.3
+
   var body: some View {
     ScrollView {
       VStack(spacing: 20) {
         // Top spacer to mimic storyboard padding
         Color.clear.frame(height: 0)
-        Image("DolphinLogo")
-          .resizable()
-          .scaledToFit()
-          .frame(height: 128)
+        // Animated dolphin with sparkle effects
+        ZStack {
+          // Subtle sparkles around the dolphin
+          ForEach(0..<6, id: \.self) { index in
+            Image(systemName: "sparkle")
+              .font(.system(size: 12))
+              .foregroundColor(.blue.opacity(0.6))
+              .offset(
+                x: cos(Double(index) * .pi / 3) * 80,
+                y: sin(Double(index) * .pi / 3) * 80
+              )
+              .opacity(sparkleOpacity)
+              .animation(.easeInOut(duration: 2.0).delay(Double(index) * 0.2).repeatForever(autoreverses: true), value: sparkleOpacity)
+          }
+
+          // Main dolphin logo with gentle animation
+          Image("DolphinLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(height: 128)
+            .scaleEffect(logoScale)
+            .rotationEffect(.degrees(logoRotation))
+            .animation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true), value: logoScale)
+            .animation(.easeInOut(duration: 4.0).repeatForever(autoreverses: true), value: logoRotation)
+        }
+        .frame(height: 160)
+        .onAppear {
+          startAboutAnimation()
+        }
 
         Text("DolphiniOS")
           .font(.system(size: 28, weight: .semibold))
@@ -1040,6 +1073,12 @@ struct AboutView: View {
       .frame(maxWidth: .infinity)
     }
     .navigationTitle(L("About Dolphin"))
+  }
+
+  private func startAboutAnimation() {
+    logoScale = 1.05
+    logoRotation = 3.0
+    sparkleOpacity = 0.8
   }
 }
 
