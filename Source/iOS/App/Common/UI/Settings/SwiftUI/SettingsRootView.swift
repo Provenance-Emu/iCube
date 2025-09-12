@@ -747,6 +747,8 @@ struct ControllersRootView: View {
   @State private var newDsuAddr: String = ""
   @State private var newDsuPort: String = "26760"
   @StateObject private var dsuBrowser = DSUDiscoveryBrowser()
+  @State private var recentlyAdded: Set<String> = [] // address:port keys
+  @AppStorage("dsu_role") private var dsuRole: String = "receiver" // "receiver" or "sender"
 
   // Touchscreen
 #if os(iOS)
@@ -802,8 +804,19 @@ struct ControllersRootView: View {
         },
         footer: Text(L("Enable the DSU (Cemuhook DualShock UDP) client to receive input from compatible servers on your network. Add servers as IP:Port. Bonjour discovery will be added in a future update."))
       ) {
+        Picker(L("Role"), selection: $dsuRole) {
+          Text(L("Receiver")).tag("receiver")
+          Text(L("Sender")).tag("sender")
+        }
+        .onChange(of: dsuRole) { role in
+          if role == "sender" {
+            dsuEnabled = false
+            DOLConfigBridge.setDsuClientEnabled(false)
+          }
+        }
         Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
           .onChange(of: dsuEnabled) { DOLConfigBridge.setDsuClientEnabled($0) }
+          .disabled(dsuRole == "sender")
         if dsuServers.isEmpty {
           HStack {
             Text(L("Servers"))
@@ -813,9 +826,19 @@ struct ControllersRootView: View {
         } else {
           ForEach(0..<dsuServers.count, id: \.self) { idx in
             HStack {
-              Text(dsuServerTitle(idx))
+              VStack(alignment: .leading, spacing: 2) {
+                Text(dsuServerTitle(idx))
+                Text(dsuServerAddressPort(idx)).font(.caption).foregroundStyle(.secondary)
+              }
               Spacer()
-              Text(dsuServerAddressPort(idx)).foregroundStyle(.secondary)
+              Button(L("Test")) {
+                let addr = (dsuServers[idx]["address"] as? String) ?? ""
+                let port = (dsuServers[idx]["port"] as? NSNumber)?.intValue ?? 26760
+                DSUPingBridge.pingServerAddress(addr, port: port, timeout: 1.0) { ok, info in
+                  NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": ok ? String(format: L("Reachable: %@"), info ?? "") : L("No response")])
+                }
+              }
+              .buttonStyle(.bordered)
             }
             #if !os(tvOS)
             .swipeActions(edge: .trailing) {
@@ -833,13 +856,6 @@ struct ControllersRootView: View {
           Label(L("Add Server"), systemImage: "plus")
         }
 
-#if os(tvOS)
-        // Help row for tvOS users
-        Text(L("Tip: Open the DSU Controller on your iPhone (Library ▸ Start DSU Controller). Scan its QR or enter the shown IP:Port here if not discovered automatically."))
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-#endif
-
         NavigationLink(destination: MotionSettingsView()) {
           Label(L("Advanced Motion Settings"), systemImage: "gyroscope")
         }
@@ -848,17 +864,39 @@ struct ControllersRootView: View {
       if !dsuBrowser.servers.isEmpty {
         Section(header: Text(L("Discovered on Network"))) {
           ForEach(dsuBrowser.servers) { s in
+            let key = "\(s.address):\(s.port)"
+            let isSaved = dsuServers.contains { server in
+              ((server["address"] as? String) == s.address) && ((server["port"] as? NSNumber)?.intValue == s.port)
+            }
             HStack {
-              VStack(alignment: .leading) {
-                Text(s.name)
-                Text("\(s.address):\(s.port)").font(.caption).foregroundStyle(.secondary)
+              VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                  Text(s.name)
+                  if recentlyAdded.contains(key) {
+                    Text(L("New"))
+                      .font(.caption2)
+                      .padding(.horizontal, 6).padding(.vertical, 2)
+                      .background(Color.green.opacity(0.15), in: Capsule())
+                  }
+                }
+                Text(key).font(.caption).foregroundStyle(.secondary)
               }
               Spacer()
-              Button(L("Add")) {
-                DOLConfigBridge.addDsuServer(s.name, address: s.address, port: s.port)
-                refreshDsuServers()
+              if isSaved {
+                Text(L("Saved"))
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                  .padding(.horizontal, 8).padding(.vertical, 4)
+                  .background(Color.blue.opacity(0.1), in: Capsule())
+              } else {
+                Button(L("Add")) {
+                  DOLConfigBridge.addDsuServer(s.name, address: s.address, port: s.port)
+                  refreshDsuServers()
+                  recentlyAdded.insert(key)
+                  NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Added DSU server: %@"), key)])
+                }
+                .buttonStyle(.bordered)
               }
-              .buttonStyle(.bordered)
             }
           }
         }

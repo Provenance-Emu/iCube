@@ -31,6 +31,25 @@ NS_ASSUME_NONNULL_BEGIN
 /// Returns best-effort LAN IPv4 address (for display/QR).
 + (NSString *)ipAddress;
 
+/// Receiver connection status (best-effort)
++ (BOOL)hasClient;
++ (NSString *)lastClientAddress; // empty if none seen yet
+/// List of recently seen clients (address:port), newest first
++ (NSArray<NSString *> *)clients;
+/// Restrict sending to a specific client (address:port). Pass nil/empty to allow all.
++ (void)setRestrictToClient:(NSString * _Nullable)addr;
++ (NSString * _Nullable)restrictedClient;
+
+/// Send a frame immediately to the last client (if any)
++ (void)sendNow;
+
+/// Approval/allowlist control
++ (void)setApprovalRequired:(BOOL)required;
++ (BOOL)approvalRequired;
++ (NSSet<NSString *> *)allowedClients;
++ (void)setClient:(NSString *)addr allowed:(BOOL)allowed;
++ (BOOL)isClientAllowed:(NSString *)addr;
+
 /// Input updates from the touch controller (or other sources)
 + (void)setButton:(NSInteger)button controller:(NSInteger)controller state:(BOOL)state;
 + (void)setAxis:(NSInteger)axis controller:(NSInteger)controller value:(float)value;

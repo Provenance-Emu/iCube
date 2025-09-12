@@ -30,6 +30,7 @@ private struct KeyCommandHostView: UIViewRepresentable {
     DispatchQueue.main.async { _ = v.becomeFirstResponder() }
     return v
   }
+
   func updateUIView(_ uiView: KeyInputView, context: Context) { }
 }
 
@@ -51,6 +52,13 @@ private struct DSUSessionView: View {
   @State private var rxCount: UInt = 0
   @State private var tick: Int = 0
   @State private var showController: Bool = false
+  @State private var hasClient: Bool = false
+  @State private var clientAddr: String = ""
+  @State private var clients: [String] = []
+  @State private var approvalRequired: Bool = false
+  @State private var pendingApprovalAddr: String? = nil
+  @State private var showApprovalAlert: Bool = false
+
   var body: some View {
     NavigationStack {
       Form {
@@ -60,6 +68,32 @@ private struct DSUSessionView: View {
             Spacer()
             Text("\(ip.isEmpty ? "-" : ip) : \((running ? port : (Int(portText) ?? 26760)))")
               .foregroundStyle(.secondary)
+          }
+    .alert(isPresented: $showApprovalAlert) {
+      Alert(
+        title: Text(L("Receiver requests input")),
+        message: Text(pendingApprovalAddr ?? ""),
+        primaryButton: .default(Text(L("Allow"))) {
+          if let addr = pendingApprovalAddr { DSUServerBridge.setClient(addr, allowed: true) }
+          pendingApprovalAddr = nil
+        },
+        secondaryButton: .destructive(Text(L("Block"))) {
+          if let addr = pendingApprovalAddr { DSUServerBridge.setClient(addr, allowed: false) }
+          pendingApprovalAddr = nil
+        }
+      )
+    }
+          HStack {
+            Text(L("Client"))
+            Spacer()
+            if hasClient {
+              Circle().fill(Color.green).frame(width: 10, height: 10)
+              Text(clientAddr.isEmpty ? L("Connected") : clientAddr)
+                .foregroundStyle(.secondary)
+            } else {
+              Circle().fill(Color.red).frame(width: 10, height: 10)
+              Text(L("Waiting for client…")).foregroundStyle(.secondary)
+            }
           }
           HStack {
             Text(L("Port"))
@@ -88,6 +122,7 @@ private struct DSUSessionView: View {
               }
             }
           Toggle(L("Auto‑start when opening"), isOn: $autoStart)
+            .onChange(of: autoStart) { UserDefaults.standard.set($0, forKey: "dsu_server_autostart") }
         }
 
         Section(header: Text(L("Quick Links"))) {
@@ -128,6 +163,34 @@ private struct DSUSessionView: View {
           }
         }
 
+        Section(header: Text(L("Connected Receivers")), footer: Text(L("When approval is required, only allowed receivers will receive input. Version pings are still answered so clients can detect this server."))) {
+          Toggle(L("Approval Required"), isOn: $approvalRequired)
+            .onChange(of: approvalRequired) { DSUServerBridge.setApprovalRequired($0) }
+          if clients.isEmpty {
+            Text(L("No receivers seen yet")).foregroundStyle(.secondary)
+          } else {
+            ForEach(clients, id: \.self) { addr in
+              HStack {
+                Text(addr)
+                Spacer()
+                let allowed = DSUServerBridge.isClientAllowed(addr)
+                Toggle(L("Allow"), isOn: Binding(get: { allowed }, set: { v in DSUServerBridge.setClient(addr, allowed: v) }))
+                  .labelsHidden()
+              }
+            }
+            HStack {
+              Button(L("Allow All")) {
+                for a in clients { DSUServerBridge.setClient(a, allowed: true) }
+              }
+              .buttonStyle(.bordered)
+              Button(L("Block All")) {
+                for a in clients { DSUServerBridge.setClient(a, allowed: false) }
+              }
+              .buttonStyle(.bordered)
+            }
+          }
+        }
+
         Section {
           Button {
             showController = true
@@ -147,6 +210,7 @@ private struct DSUSessionView: View {
         if UserDefaults.standard.object(forKey: "dsu_server_autostart") != nil {
           autoStart = UserDefaults.standard.bool(forKey: "dsu_server_autostart")
         }
+        approvalRequired = DSUServerBridge.approvalRequired()
         if running {
           ip = DSUServerBridge.ipAddress(); let cur = DSUServerBridge.port(); port = Int(cur); portText = String(cur)
         } else if autoStart {
@@ -159,12 +223,26 @@ private struct DSUSessionView: View {
             NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
           }
         }
+        // Approval prompt observer
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("DSUNewClientApproval"), object: nil, queue: .main) { note in
+          if let addr = note.userInfo?["address"] as? String {
+            pendingApprovalAddr = addr
+            showApprovalAlert = true
+          }
+        }
       }
       .onDisappear { if running { DSUServerBridge.stop() } }
       .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
         if showDebug {
           txCount = UInt(DSUServerBridge.txCount())
           rxCount = UInt(DSUServerBridge.rxCount())
+        }
+        let prev = hasClient
+        hasClient = DSUServerBridge.hasClient()
+        clientAddr = DSUServerBridge.lastClientAddress()
+        clients = (DSUServerBridge.clients() as? [String]) ?? []
+        if !prev && hasClient {
+          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Receiver connected")])
         }
       }
       .onChange(of: autoStart) { UserDefaults.standard.set($0, forKey: "dsu_server_autostart") }
@@ -390,6 +468,8 @@ final class TVLibraryViewModel: ObservableObject {
 }
 
 struct TVLibraryView: View {
+
+  @Environment(\.colorScheme) private var colorScheme
 
   // MARK: - UI Settings
 
@@ -644,34 +724,61 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private var gradientBackground: some View {
-    LinearGradient(
-      colors: [
-        Color(red: 0.08, green: 0.12, blue: 0.22),
-        Color(red: 0.04, green: 0.06, blue: 0.15),
-        Color.black
-      ],
-      startPoint: .topLeading,
-      endPoint: .bottomTrailing
-    )
-    .ignoresSafeArea()
+    if colorScheme == .dark {
+      LinearGradient(
+        colors: [
+          Color(red: 0.08, green: 0.12, blue: 0.22),
+          Color(red: 0.04, green: 0.06, blue: 0.15),
+          Color.black
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+      .ignoresSafeArea()
+    } else {
+      LinearGradient(
+        colors: [
+          Color(red: 0.90, green: 0.93, blue: 0.98), // light top
+          Color(red: 0.84, green: 0.89, blue: 0.98), // mid
+          Color(red: 0.96, green: 0.97, blue: 1.00)  // near white
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+      .ignoresSafeArea()
+    }
   }
 
   @ViewBuilder
   private var animatedBackground: some View {
     ZStack {
-      // Premium deep space gradient inspired by GameCube menu
-      RadialGradient(
-        colors: [
-          Color(red: 0.12, green: 0.15, blue: 0.28),
-          Color(red: 0.08, green: 0.12, blue: 0.22),
-          Color(red: 0.04, green: 0.06, blue: 0.15),
-          Color.black
-        ],
-        center: .topLeading,
-        startRadius: 100,
-        endRadius: 800
-      )
-      .ignoresSafeArea()
+      // Premium gradient switches for light/dark
+      if colorScheme == .dark {
+        RadialGradient(
+          colors: [
+            Color(red: 0.12, green: 0.15, blue: 0.28),
+            Color(red: 0.08, green: 0.12, blue: 0.22),
+            Color(red: 0.04, green: 0.06, blue: 0.15),
+            Color.black
+          ],
+          center: .topLeading,
+          startRadius: 100,
+          endRadius: 800
+        )
+        .ignoresSafeArea()
+      } else {
+        RadialGradient(
+          colors: [
+            Color(red: 0.92, green: 0.95, blue: 1.00),
+            Color(red: 0.88, green: 0.93, blue: 1.00),
+            Color(red: 0.98, green: 0.99, blue: 1.00)
+          ],
+          center: .topLeading,
+          startRadius: 100,
+          endRadius: 800
+        )
+        .ignoresSafeArea()
+      }
 
       // Elegant animated orbs with GameCube/Wii theming
       ForEach(0..<5, id: \.self) { index in
@@ -679,8 +786,10 @@ struct TVLibraryView: View {
           .fill(
             RadialGradient(
               colors: [
-                index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05),
-                index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025),
+                (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05))
+                                       : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10))),
+                (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025))
+                                       : Color.white.opacity(0.0)),
                 Color.clear
               ],
               center: .center,
@@ -702,14 +811,14 @@ struct TVLibraryView: View {
           )
       }
 
-      // Sophisticated grid pattern with GameCube authenticity
+      // Subtle grid pattern
       Canvas { context, size in
         let spacing: CGFloat = 80
         let lineWidth: CGFloat = 0.5
         let gradient = Gradient(colors: [
-          .white.opacity(0.08),
+          (colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.06)),
           .clear,
-          .white.opacity(0.04)
+          (colorScheme == .dark ? .white.opacity(0.04) : .black.opacity(0.03))
         ])
 
         context.stroke(
@@ -732,36 +841,48 @@ struct TVLibraryView: View {
         )
       }
       .ignoresSafeArea()
-      .opacity(0.6)
+      .opacity(colorScheme == .dark ? 0.6 : 0.25)
 
-      // Subtle floating GameCube/Wii inspired elements
+      // Minor grid checks (subtle)
+      Canvas { context, size in
+        let spacing: CGFloat = 20
+        let lineWidth: CGFloat = 0.25
+        let strokeColor = (colorScheme == .dark ? Color.white.opacity(0.02) : Color.black.opacity(0.02))
+        context.stroke(
+          Path { path in
+            for x in stride(from: 0, through: size.width, by: spacing) {
+              path.move(to: CGPoint(x: x, y: 0))
+              path.addLine(to: CGPoint(x: x, y: size.height))
+            }
+            for y in stride(from: 0, through: size.height, by: spacing) {
+              path.move(to: CGPoint(x: 0, y: y))
+              path.addLine(to: CGPoint(x: size.width, y: y))
+            }
+          },
+          with: .color(strokeColor),
+          lineWidth: lineWidth
+        )
+      }
+      .ignoresSafeArea()
+      .opacity(colorScheme == .dark ? 0.25 : 0.12)
+
+      // Floating elements
       ForEach(0..<8, id: \.self) { index in
         RoundedRectangle(cornerRadius: 4, style: .continuous)
           .fill(
             LinearGradient(
               colors: [
-                Color.white.opacity(0.03),
+                (colorScheme == .dark ? Color.white.opacity(0.03) : Color.white.opacity(0.5)),
                 Color.clear
               ],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             )
           )
-          .frame(
-            width: CGFloat.random(in: 20...40),
-            height: CGFloat.random(in: 20...40)
-          )
-          .offset(
-            x: CGFloat.random(in: -200...200),
-            y: CGFloat.random(in: -300...300)
-          )
+          .frame(width: CGFloat.random(in: 20...40), height: CGFloat.random(in: 20...40))
+          .offset(x: CGFloat.random(in: -200...200), y: CGFloat.random(in: -300...300))
           .rotationEffect(.degrees(Double.random(in: 0...360)))
-          .animation(
-            Animation.linear(duration: Double.random(in: 20...30))
-              .repeatForever(autoreverses: false)
-              .delay(Double(index) * 2),
-            value: UUID()
-          )
+          .animation(Animation.linear(duration: Double.random(in: 20...30)).repeatForever(autoreverses: false).delay(Double(index) * 2), value: UUID())
       }
     }
     .clipped()
@@ -1291,7 +1412,18 @@ struct TVLibraryView: View {
         Button(action: { model.performOnlineSystemUpdate() }) {
           Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
         }
-        Button(action: { showDSUSession = true }) {
+        Button(action: {
+#if os(iOS)
+          let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "receiver"
+          if role == "receiver" {
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Switch role to Sender to start DSU Controller")])
+          } else {
+            showDSUSession = true
+          }
+#else
+          showDSUSession = true
+#endif
+        }) {
           Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
         }
         Button(action: {
@@ -1395,6 +1527,10 @@ struct TVLibraryView: View {
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation { snackbarVisible = false } }
         }
       }
+      // Global DSU approval toast
+      NotificationCenter.default.addObserver(forName: NSNotification.Name("DSUNewClientApproval"), object: nil, queue: .main) { note in
+        if let addr = note.userInfo?["address"] as? String { approvalBannerAddr = addr }
+      }
       // First-run onboarding
       if !UserDefaults.standard.bool(forKey: "onboarding_seen_v1") {
         withAnimation { showOnboarding = true }
@@ -1406,6 +1542,7 @@ struct TVLibraryView: View {
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSettings"), object: nil)
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
       NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSnackbar"), object: nil)
+      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DSUNewClientApproval"), object: nil)
     }
 #if os(tvOS)
     .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
@@ -1537,6 +1674,7 @@ struct TVLibraryView: View {
 #endif
       .overlay(searchHintBanner)
       .overlay(snackbar)
+      .overlay(dsuApprovalBanner)
       .overlay(onboardingOverlay)
 #if os(iOS)
       .sheet(isPresented: Binding(get: { showGeckoEditorFor != nil }, set: { if !$0 { showGeckoEditorFor = nil } })) {
@@ -1553,6 +1691,8 @@ struct TVLibraryView: View {
   @State private var showOnboarding: Bool = false
   @StateObject private var storeForBanner = RemoteSourcesStore.shared
   @State private var offlineBannerDismissed: Bool = false
+  // DSU approval banner state
+  @State private var approvalBannerAddr: String? = nil
 #if os(tvOS)
   @State private var showSearchSheet: Bool = false
 #endif
@@ -1571,6 +1711,39 @@ struct TVLibraryView: View {
         .padding(.bottom, 16)
       }
       .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+  }
+
+  @ViewBuilder private var dsuApprovalBanner: some View {
+    if let addr = approvalBannerAddr {
+      VStack {
+        HStack(spacing: 12) {
+          Image(systemName: "antenna.radiowaves.left.and.right").foregroundColor(.white)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(L("Receiver requests input")).foregroundColor(.white).font(.subheadline)
+            Text(addr).foregroundColor(.white.opacity(0.9)).font(.caption)
+          }
+          Spacer()
+          Button(L("Allow")) {
+            DSUServerBridge.setClient(addr, allowed: true)
+            approvalBannerAddr = nil
+          }
+          .buttonStyle(.borderedProminent)
+          Button(L("Block")) {
+            DSUServerBridge.setClient(addr, allowed: false)
+            approvalBannerAddr = nil
+          }
+          .buttonStyle(.bordered)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.top, 8)
+        .padding(.horizontal, 12)
+        Spacer()
+      }
+      .transition(.move(edge: .top).combined(with: .opacity))
     }
   }
 

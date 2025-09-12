@@ -14,6 +14,12 @@ struct DSUControllerView: View {
   @State private var showLayoutSheet = false
   @AppStorage("dsu_controller_layout") private var layoutRaw: String = DSUControllerLayout.appleVirtual.rawValue
   @AppStorage("dsu_apple_left_is_dpad") private var appleLeftIsDPad: Bool = false
+  @AppStorage("dsu_restrict_client") private var restrictClient: String = ""
+  @State private var hasClient: Bool = false
+  @State private var clientAddr: String = ""
+  @State private var txCount: UInt = 0
+  @State private var rxCount: UInt = 0
+  @State private var clients: [String] = []
 
   var body: some View {
     Group {
@@ -49,6 +55,31 @@ struct DSUControllerView: View {
             .onAppear { stopVirtualController() }
         }
       }
+
+      // Status HUD
+      VStack {
+        HStack(spacing: 12) {
+          // Connection indicator
+          Circle().fill(hasClient ? Color.green : Color.red).frame(width: 10, height: 10)
+          Text(hasClient ? (clientAddr.isEmpty ? L("Receiver connected") : clientAddr) : L("Waiting for receiver…"))
+            .foregroundColor(.white)
+            .font(.footnote)
+            .lineLimit(1)
+          Spacer()
+          // Counters
+          Text("TX: \(txCount)  RX: \(rxCount)")
+            .foregroundColor(.white.opacity(0.8))
+            .font(.caption2)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.black.opacity(0.35))
+        .clipShape(Capsule())
+        .padding(.top, 12)
+        .padding(.horizontal, 12)
+        Spacer()
+      }
+      .allowsHitTesting(false)
     }
     .onAppear { refreshIRLabel() }
     .toolbar {
@@ -60,6 +91,24 @@ struct DSUControllerView: View {
       ToolbarItem(placement: .navigationBarLeading) {
         Button(action: { showLayoutSheet = true }) {
           Label(L("Layout"), systemImage: "rectangle.3.offgrid")
+        }
+      }
+      // Target receiver selection
+      ToolbarItem(placement: .navigationBarLeading) {
+        Menu {
+          Button(action: {
+            restrictClient = ""; DSUServerBridge.setRestrictToClient(nil)
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Target: All receivers")])
+          }) { Label(L("All Receivers"), systemImage: restrictClient.isEmpty ? "checkmark" : "person.3") }
+          if clients.isEmpty { Text(L("No receivers seen yet")).foregroundColor(.secondary) }
+          ForEach(clients, id: \.self) { addr in
+            Button(action: {
+              restrictClient = addr; DSUServerBridge.setRestrictToClient(addr)
+              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Target: %@"), addr)])
+            }) { Label(addr, systemImage: (restrictClient == addr ? "checkmark" : "antenna.radiowaves.left.and.right")) }
+          }
+        } label: {
+          Label(L("Target"), systemImage: "antenna.radiowaves.left.and.right")
         }
       }
       // Apple controller: toggle between Left Stick and D-Pad (mutually exclusive)
@@ -79,6 +128,9 @@ struct DSUControllerView: View {
         }
       }
       ToolbarItem(placement: .navigationBarTrailing) {
+        Button(action: { DSUServerBridge.sendNow() }) { Label(L("Send Test Frame"), systemImage: "paperplane") }
+      }
+      ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: onClose) { Label(L("Exit"), systemImage: "xmark") }
       }
     }
@@ -86,6 +138,18 @@ struct DSUControllerView: View {
     .sheet(isPresented: $showMotionSheet) { MotionQuickSettingsView() }
     .sheet(isPresented: $showLayoutSheet) { LayoutPickerSheet(selectedRaw: $layoutRaw) }
     .onChange(of: layoutRaw) { _ in reconfigureVirtualControllerIfNeeded() }
+    .onChange(of: restrictClient) { newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
+    .onAppear {
+      DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
+    }
+    .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+      hasClient = DSUServerBridge.hasClient()
+      clientAddr = DSUServerBridge.lastClientAddress()
+      txCount = UInt(DSUServerBridge.txCount())
+      rxCount = UInt(DSUServerBridge.rxCount())
+      clients = DSUServerBridge.clients() as? [String] ?? []
+      if !hasClient { DSUServerBridge.sendNow() }
+    }
   }
 
   private func startVirtualController() {
@@ -110,6 +174,8 @@ struct DSUControllerView: View {
     let vc = GCVirtualController(configuration: cfg)
     vc.connect()
     virtualController = vc
+    // Attempt to bind handlers shortly after connect
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { bindVirtualControllerHandlers() }
   }
 
   private func stopVirtualController() {
@@ -145,6 +211,50 @@ struct DSUControllerView: View {
     // Recreate with new configuration
     stopVirtualController()
     startVirtualController()
+  }
+
+  private func bindVirtualControllerHandlers() {
+    guard (DSUControllerLayout(rawValue: layoutRaw) ?? .appleVirtual) == .appleVirtual else { return }
+    guard let gp = virtualController?.controller?.extendedGamepad else { return }
+    // Ensure reports absolute for predictable values
+    gp.dpad.valueChangedHandler = nil
+    gp.leftThumbstick.valueChangedHandler = nil
+    gp.rightThumbstick.valueChangedHandler = nil
+    gp.valueChangedHandler = { gamepad, element in
+      // Left control: either D-Pad or Left Stick
+      if appleLeftIsDPad {
+        let dx = gamepad.dpad.xAxis.value
+        let dy = gamepad.dpad.yAxis.value
+        if element == gamepad.dpad || element == gamepad.dpad.xAxis || element == gamepad.dpad.yAxis {
+          DSUServerBridge.setAxis(0, controller: 0, value: dx)
+          DSUServerBridge.setAxis(1, controller: 0, value: dy)
+        }
+      } else {
+        if element == gamepad.leftThumbstick || element == gamepad.leftThumbstick.xAxis || element == gamepad.leftThumbstick.yAxis {
+          DSUServerBridge.setAxis(0, controller: 0, value: gamepad.leftThumbstick.xAxis.value)
+          DSUServerBridge.setAxis(1, controller: 0, value: gamepad.leftThumbstick.yAxis.value)
+        }
+      }
+
+      // Right stick
+      if element == gamepad.rightThumbstick || element == gamepad.rightThumbstick.xAxis || element == gamepad.rightThumbstick.yAxis {
+        DSUServerBridge.setAxis(2, controller: 0, value: gamepad.rightThumbstick.xAxis.value)
+        DSUServerBridge.setAxis(3, controller: 0, value: gamepad.rightThumbstick.yAxis.value)
+      }
+
+      // Triggers (0..1) -> (-1..1)
+      if element == gamepad.leftTrigger { DSUServerBridge.setAxis(4, controller: 0, value: (gamepad.leftTrigger.value * 2.0) - 1.0) }
+      if element == gamepad.rightTrigger { DSUServerBridge.setAxis(5, controller: 0, value: (gamepad.rightTrigger.value * 2.0) - 1.0) }
+
+      // Face buttons: map A,B,X,Y -> Cross,Circle,Square,Triangle indices 1,2,0,3
+      if element == gamepad.buttonA { DSUServerBridge.setButton(1, controller: 0, state: gamepad.buttonA.isPressed) }
+      if element == gamepad.buttonB { DSUServerBridge.setButton(2, controller: 0, state: gamepad.buttonB.isPressed) }
+      if element == gamepad.buttonX { DSUServerBridge.setButton(0, controller: 0, state: gamepad.buttonX.isPressed) }
+      if element == gamepad.buttonY { DSUServerBridge.setButton(3, controller: 0, state: gamepad.buttonY.isPressed) }
+
+      // Push a frame immediately so TX updates promptly
+      DSUServerBridge.sendNow()
+    }
   }
 }
 

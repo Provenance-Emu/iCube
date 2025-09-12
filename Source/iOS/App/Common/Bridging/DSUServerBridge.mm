@@ -40,6 +40,17 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   struct sockaddr_in _lastClient;
   socklen_t _lastClientLen;
 
+  // list of recent clients (address:port), newest first
+  NSMutableArray<NSString*>* _clients;
+  // optional restriction to a specific client address (address:port)
+  NSString* _restrictTo;
+  // approval required? if YES, only send to clients in _allowed
+  BOOL _approvalRequired;
+  // allowlist of clients (address:port)
+  NSMutableSet<NSString*>* _allowed;
+  // track prompted addresses to avoid spamming alerts
+  NSMutableSet<NSString*>* _prompted;
+
   // simple pad state (pad 0)
   ciface::DualShockUDPClient::Proto::MessageType::PadDataResponse _pad;
 }
@@ -56,7 +67,59 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 }
 + (NSUInteger)txCount { return [self shared]->_txCount; }
 + (NSUInteger)rxCount { return [self shared]->_rxCount; }
+// Return best-effort LAN IPv4 address for display/QR
 + (NSString*)ipAddress { return [[self shared] bestIPv4Address]; }
++ (NSArray<NSString*>*)clients {
+  NSArray<NSString*>* arr = [[self shared]->_clients copy];
+  return arr ?: @[];
+}
++ (NSString * _Nullable)restrictedClient {
+  return [self shared]->_restrictTo;
+}
++ (void)setRestrictToClient:(NSString * _Nullable)addr {
+  DSUServerBridge* s = [self shared];
+  s->_restrictTo = (addr && addr.length > 0) ? [addr copy] : nil;
+}
+
++ (void)setApprovalRequired:(BOOL)required {
+  DSUServerBridge* s = [self shared];
+  s->_approvalRequired = required;
+  [NSUserDefaults.standardUserDefaults setBool:required forKey:@"dsu_approval_required"];
+}
++ (BOOL)approvalRequired { return [self shared]->_approvalRequired; }
++ (NSSet<NSString*>*)allowedClients { return [[self shared]->_allowed copy]; }
++ (void)setClient:(NSString*)addr allowed:(BOOL)allowed {
+  if (addr.length == 0) return;
+  DSUServerBridge* s = [self shared];
+  if (allowed) { [s->_allowed addObject:addr]; }
+  else { [s->_allowed removeObject:addr]; }
+  // Persist allowlist
+  NSArray* arr = [s->_allowed allObjects];
+  [NSUserDefaults.standardUserDefaults setObject:arr forKey:@"dsu_allowed_clients"];
+}
++ (BOOL)isClientAllowed:(NSString*)addr {
+  if (addr.length == 0) return NO;
+  DSUServerBridge* s = [self shared];
+  return [s->_allowed containsObject:addr];
+}
++ (BOOL)hasClient {
+  DSUServerBridge* s = [self shared];
+  return s->_lastClient.sin_port != 0;
+}
+
++ (NSString*)lastClientAddress {
+  DSUServerBridge* s = [self shared];
+  if (s->_lastClient.sin_port == 0) return @"";
+  char buf[INET_ADDRSTRLEN] = {0};
+  const char* ip = inet_ntop(AF_INET, &s->_lastClient.sin_addr, buf, sizeof(buf));
+  if (!ip) return @"";
+  uint16_t port = ntohs(s->_lastClient.sin_port);
+  return [NSString stringWithFormat:@"%s:%hu", ip, port];
+}
+
++ (void)sendNow {
+  [[self shared] sendPadData];
+}
 
 + (void)setButton:(NSInteger)button controller:(NSInteger)controller state:(BOOL)state {
   // Map generic buttons to DSU bitfields roughly (PS layout)
@@ -95,6 +158,17 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     [self resetPad];
     _lastError = @"";
     _txCount = 0; _rxCount = 0;
+    _clients = [NSMutableArray array];
+    _restrictTo = nil;
+    // Load persisted approval state & allowlist
+    NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;
+    _approvalRequired = [defs boolForKey:@"dsu_approval_required"];
+    _allowed = [NSMutableSet set];
+    NSArray* persisted = [defs arrayForKey:@"dsu_allowed_clients"];
+    if ([persisted isKindOfClass:[NSArray class]]) {
+      for (id item in persisted) { if ([item isKindOfClass:[NSString class]]) { [_allowed addObject:(NSString*)item]; } }
+    }
+    _prompted = [NSMutableSet set];
   }
   return self;
 }
@@ -154,6 +228,27 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     if (n <= 0) return;
     selfRef->_lastClient = src; selfRef->_lastClientLen = slen;
     selfRef->_rxCount++;
+    // Track client list (address:port), newest first, unique
+    char abuf[INET_ADDRSTRLEN] = {0};
+    const char* ip = inet_ntop(AF_INET, &src.sin_addr, abuf, sizeof(abuf));
+    if (ip) {
+      uint16_t prt = ntohs(src.sin_port);
+      NSString* addr = [NSString stringWithFormat:@"%s:%hu", ip, prt];
+      BOOL wasPresent = [selfRef->_clients containsObject:addr];
+      // Remove existing occurrence
+      [selfRef->_clients removeObject:addr];
+      // Insert at front
+      [selfRef->_clients insertObject:addr atIndex:0];
+      // Cap list size
+      if (selfRef->_clients.count > 8) { [selfRef->_clients removeLastObject]; }
+      // If approval required and not allowed and newly seen, post approval prompt once
+      if (selfRef->_approvalRequired && ![selfRef->_allowed containsObject:addr] && !wasPresent && ![selfRef->_prompted containsObject:addr]) {
+        [selfRef->_prompted addObject:addr];
+        dispatch_async(dispatch_get_main_queue(), ^{
+          [[NSNotificationCenter defaultCenter] postNotificationName:@"DSUNewClientApproval" object:nil userInfo:@{ @"address": addr }];
+        });
+      }
+    }
     [selfRef handlePacket:buf length:(size_t)n from:&src];
   });
   dispatch_resume(_recvSource);
@@ -178,10 +273,18 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
       Proto::Message<Proto::MessageType::VersionResponse> resp(0);
       resp.m_message.max_protocol_version = Proto::CEMUHOOK_PROTOCOL_VERSION;
       resp.Finish();
+      // Always allow VersionResponse so clients can detect us
       sendto(_sock, &resp.m_message, sizeof(resp.m_message), 0, (const struct sockaddr*)src, sizeof(*src));
       break;
     }
     case Proto::MessageType::ListPorts::TYPE: {
+      // If approval required, only advertise ports to allowed clients
+      if (_approvalRequired) {
+        char buf[INET_ADDRSTRLEN] = {0};
+        const char* ip = inet_ntop(AF_INET, &src->sin_addr, buf, sizeof(buf));
+        NSString* cur = ip ? [NSString stringWithFormat:@"%s:%hu", ip, ntohs(src->sin_port)] : @"";
+        if (![_allowed containsObject:cur]) break;
+      }
       // advertise only pad 0
       Proto::Message<Proto::MessageType::PortInfo> pi(0);
       pi.m_message.pad_id = 0;
@@ -195,6 +298,13 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
       break;
     }
     case Proto::MessageType::PadDataRequest::TYPE: {
+      // Only respond if allowed (or approval not required)
+      if (_approvalRequired) {
+        char buf[INET_ADDRSTRLEN] = {0};
+        const char* ip = inet_ntop(AF_INET, &src->sin_addr, buf, sizeof(buf));
+        NSString* cur = ip ? [NSString stringWithFormat:@"%s:%hu", ip, ntohs(src->sin_port)] : @"";
+        if (![_allowed containsObject:cur]) break;
+      }
       // On request, respond immediately with a frame; regular frames are sent by timer
       [self sendPadDataTo:src];
       break;
@@ -208,6 +318,23 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 
 - (void)sendPadDataTo:(const struct sockaddr_in*)dst {
   if (!_running || _sock < 0 || !dst) return;
+  // If restricting to a specific client, ensure this destination matches
+  if (_restrictTo && _restrictTo.length > 0) {
+    char buf[INET_ADDRSTRLEN] = {0};
+    const char* ip = inet_ntop(AF_INET, &dst->sin_addr, buf, sizeof(buf));
+    if (ip) {
+      uint16_t port = ntohs(dst->sin_port);
+      NSString* cur = [NSString stringWithFormat:@"%s:%hu", ip, port];
+      if (![cur isEqualToString:_restrictTo]) return;
+    }
+  }
+  // If approval required, only send to allowed clients
+  if (_approvalRequired) {
+    char buf2[INET_ADDRSTRLEN] = {0};
+    const char* ip2 = inet_ntop(AF_INET, &dst->sin_addr, buf2, sizeof(buf2));
+    NSString* cur2 = ip2 ? [NSString stringWithFormat:@"%s:%hu", ip2, ntohs(dst->sin_port)] : @"";
+    if (![_allowed containsObject:cur2]) return;
+  }
   // Build response
   Proto::Message<Proto::MessageType::PadDataResponse> pd(0);
   pd.m_message = _pad; // copy

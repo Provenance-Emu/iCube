@@ -37,6 +37,7 @@
 #import "TVEmulationBridge.h"
 #import "DOLConfigBridge.h"
 #import "DSUServerBridge.h"
+#import "DSUPingBridge.h"
 #import "DOLPathsBridge.h"
 #import "TVCheatsBridge.h"
 #import "TVControllerMappingBridge.h"
