@@ -67,7 +67,7 @@ struct DolphinProgressView: View {
             .foregroundColor(.blue)
             .scaleEffect(isAnimating ? 1.1 : 0.9, anchor: .center)
             .rotationEffect(.degrees(isAnimating ? 2 : -2))
-            .scaleEffect(x: direction == .leftToRight ? 1 : -1) // Mirror for right-to-left
+            .scaleEffect(x: direction == .leftToRight ? -1 : 1) // Mirror for left-to-right to face right
             .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
             .offset(x: (width - 20) * CGFloat(progress) * (direction == .leftToRight ? 1 : -1))
             .animation(.easeInOut(duration: 0.3), value: progress)
@@ -114,7 +114,7 @@ struct CompactDolphinProgress: View {
         .frame(width: 16, height: 16)
         .foregroundColor(.blue)
         .scaleEffect(isSwimming ? 1.1 : 0.9)
-        .scaleEffect(x: direction == .leftToRight ? 1 : -1)
+        .scaleEffect(x: direction == .leftToRight ? -1 : 1)
         .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isSwimming)
         .onAppear { isSwimming = true }
 
