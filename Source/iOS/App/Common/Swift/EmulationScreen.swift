@@ -907,6 +907,7 @@ struct EmulationScreen: View {
         GCController.shouldMonitorBackgroundEvents = false
         for c in GCController.controllers() {
             c.controllerPausedHandler = { _ in }
+            c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _ in /* swallow to avoid Game Center */ }
             if let gp = c.extendedGamepad {
                 if #available(iOS 14.0, *) {
                     gp.buttonMenu.preferredSystemGestureState = .alwaysReceive

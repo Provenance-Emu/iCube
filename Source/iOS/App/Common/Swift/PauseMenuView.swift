@@ -124,7 +124,8 @@ internal struct PauseMenuView: View {
   // iOS: compact layout with adaptive grid and safe-area background
   private var iosMainMenu: some View {
     let backgroundView = ZStack {
-      Image(uiImage: game.coverImage)
+      // Use GameBanner if available, otherwise fallback to cover
+      Image(uiImage: game.bannerImage ?? game.coverImage)
         .resizable()
         .scaledToFill()
         .blur(radius: 24)
@@ -281,8 +282,8 @@ internal struct PauseMenuView: View {
   // tvOS: original layout preserved
   private var tvMainMenu: some View {
     ZStack {
-      // Beautiful blurred background
-      Image(uiImage: game.coverImage)
+      // Beautiful blurred background - use GameBanner if available
+      Image(uiImage: game.bannerImage ?? game.coverImage)
         .resizable()
         .scaledToFill()
         .blur(radius: 25)
@@ -621,8 +622,8 @@ internal struct PauseMenuView: View {
         }
       } else {
         ZStack {
-          // Beautiful blurred background
-          Image(uiImage: game.coverImage)
+          // Beautiful blurred background - use GameBanner if available
+          Image(uiImage: game.bannerImage ?? game.coverImage)
             .resizable()
             .scaledToFill()
             .blur(radius: 25)

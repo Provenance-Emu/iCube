@@ -358,6 +358,72 @@ struct TVLibraryView: View {
     return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
   }
 
+  /// Beautiful GameCube/Wii inspired background with skeumorphic elements
+  @ViewBuilder
+  private var backgroundGradient: some View {
+    ZStack {
+      // Base gradient inspired by GameCube menu
+      LinearGradient(
+        colors: [
+          Color(red: 0.05, green: 0.08, blue: 0.15),
+          Color(red: 0.1, green: 0.15, blue: 0.25),
+          Color(red: 0.08, green: 0.12, blue: 0.22)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+      .ignoresSafeArea()
+
+      // Subtle animated orbs reminiscent of GameCube particle effects
+      ForEach(0..<3, id: \.self) { index in
+        Circle()
+          .fill(
+            RadialGradient(
+              colors: [
+                Color.blue.opacity(0.03),
+                Color.purple.opacity(0.02),
+                Color.clear
+              ],
+              center: .center,
+              startRadius: 10,
+              endRadius: 150
+            )
+          )
+          .frame(width: 300, height: 300)
+          .offset(
+            x: CGFloat.random(in: -100...100),
+            y: CGFloat.random(in: -100...100)
+          )
+          .animation(
+            Animation.easeInOut(duration: Double.random(in: 8...12))
+              .repeatForever(autoreverses: true)
+              .delay(Double(index) * 2),
+            value: UUID()
+          )
+      }
+
+      // Subtle grid pattern like GameCube interface
+      Canvas { context, size in
+        let spacing: CGFloat = 60
+        context.stroke(
+          Path { path in
+            for x in stride(from: 0, through: size.width, by: spacing) {
+              path.move(to: CGPoint(x: x, y: 0))
+              path.addLine(to: CGPoint(x: x, y: size.height))
+            }
+            for y in stride(from: 0, through: size.height, by: spacing) {
+              path.move(to: CGPoint(x: 0, y: y))
+              path.addLine(to: CGPoint(x: size.width, y: y))
+            }
+          },
+          with: .color(.white.opacity(0.02)),
+          lineWidth: 1
+        )
+      }
+      .ignoresSafeArea()
+    }
+  }
+
   private enum CheatType { case gecko, ar }
 
   /// Helper function to check if a URL is a remote URL (HTTP/HTTPS/WebDAV)
@@ -411,6 +477,9 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var mainContent: some View {
     ZStack {
+      // Beautiful GameCube/Wii inspired background
+      backgroundGradient
+
       if model.games.isEmpty {
         emptyLibraryView
       } else {
@@ -593,6 +662,7 @@ struct TVLibraryView: View {
             c.extendedGamepad?.valueChangedHandler = nil
             c.microGamepad?.valueChangedHandler = nil
             c.controllerPausedHandler = { _ in }
+            c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _ in /* swallow to avoid Game Center */ }
             if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] cleared handlers for \(c.vendorName ?? "(nil)")") }
             // Ensure microGamepad behaves sanely for library nav
             if let mg = c.microGamepad { mg.reportsAbsoluteDpadValues = true; mg.allowsRotation = true }
@@ -1532,6 +1602,8 @@ struct TVLibraryView: View {
     GCController.shouldMonitorBackgroundEvents = false
     for c in GCController.controllers() {
       c.controllerPausedHandler = { _ in /* swallow to avoid Game Center */ }
+      c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _ in /* swallow to avoid Game Center */ }
+
       if let egp = c.extendedGamepad {
         let cid = ObjectIdentifier(c)
         if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
@@ -1636,6 +1708,7 @@ struct TVLibraryView: View {
         }
       }
       c.controllerPausedHandler = nil
+      c.extendedGamepad?.buttonMenu.pressedChangedHandler = nil
       prevEGPHandlers.removeValue(forKey: cid)
       prevMGPHandlers.removeValue(forKey: cid)
     }
@@ -1862,48 +1935,140 @@ private struct GameGridItem: View {
     return isPlaceholder
   }
 
-    /// Custom templated cover view for games without artwork
+    /// Custom templated cover view for games without artwork - now with beautiful skeumorphism!
   @ViewBuilder
   private var templatedCoverView: some View {
     ZStack {
-      // Background gradient matching the system
-      let bgColor: Color = gameSystem == .gamecube ? .purple : .blue
-      LinearGradient(
-        colors: [bgColor.opacity(0.4), bgColor.opacity(0.8)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
+      // Skeumorphic game case background
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .fill(
+          LinearGradient(
+            colors: gameSystem == .gamecube ?
+              [Color(red: 0.4, green: 0.3, blue: 0.8), Color(red: 0.2, green: 0.15, blue: 0.6)] :
+              [Color(red: 0.3, green: 0.6, blue: 0.9), Color(red: 0.1, green: 0.4, blue: 0.8)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+        )
+        .overlay(
+          // Subtle case reflection
+          LinearGradient(
+            colors: [Color.white.opacity(0.3), Color.clear, Color.black.opacity(0.2)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+        )
+        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
+        .overlay(
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
 
-      // Game title text background
-      VStack {
-        Spacer()
-        VStack(spacing: 3) {
-          Text(item.title.isEmpty ? "Unknown Game" : item.title)
-            .font(.system(size: screenScaledFontSize(base: 16), weight: .bold, design: .rounded))
-            .foregroundColor(.white)
-            .multilineTextAlignment(.center)
-            .lineLimit(4)
-            .minimumScaleFactor(0.6)
-            .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 1)
-
-          if !item.gameID.isEmpty {
-            Text(item.gameID)
-              .font(.system(size: screenScaledFontSize(base: 11), weight: .medium, design: .monospaced))
-              .foregroundColor(.white.opacity(0.9))
-              .shadow(color: .black.opacity(0.7), radius: 2, x: 0, y: 0.5)
-          }
+      // GameCube disc case spine details (left side)
+      if gameSystem == .gamecube {
+        HStack {
+          RoundedRectangle(cornerRadius: 2)
+            .fill(
+              LinearGradient(
+                colors: [Color.white.opacity(0.4), Color.white.opacity(0.1)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+            .frame(width: 4)
+            .padding(.leading, 8)
+          Spacer()
         }
-        .padding(.horizontal, screenScaledPadding(base: 8))
-        .padding(.bottom, screenScaledPadding(base: 16))
       }
 
-      // Template overlay with alpha
-      Image(gameSystem.templateImageName)
-        .resizable()
-        .aspectRatio(contentMode: .fit)
+      // System logo watermark
+      VStack {
+        HStack {
+          Spacer()
+          Image(gameSystem.templateImageName)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: screenScaledFontSize(base: 40), height: screenScaledFontSize(base: 40))
+            .opacity(0.15)
+            .padding(.top, screenScaledPadding(base: 12))
+            .padding(.trailing, screenScaledPadding(base: 12))
+        }
+        Spacer()
+      }
+
+      // Game info with elegant typography
+      VStack(spacing: screenScaledPadding(base: 8)) {
+        Spacer()
+
+        // Title with enhanced typography
+        Text(item.title.isEmpty ? "Unknown Game" : item.title)
+          .font(.system(
+            size: screenScaledFontSize(base: 17),
+            weight: .bold,
+            design: .rounded
+          ))
+          .foregroundStyle(
+            LinearGradient(
+              colors: [.white, Color.white.opacity(0.9)],
+              startPoint: .top,
+              endPoint: .bottom
+            )
+          )
+          .multilineTextAlignment(.center)
+          .lineLimit(4)
+          .minimumScaleFactor(0.6)
+          .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
+
+        // Game ID with metallic effect
+        if !item.gameID.isEmpty {
+          Text(item.gameID)
+            .font(.system(
+              size: screenScaledFontSize(base: 12),
+              weight: .medium,
+              design: .monospaced
+            ))
+            .foregroundStyle(
+              LinearGradient(
+                colors: [Color.white.opacity(0.95), Color.white.opacity(0.7)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+            .padding(.horizontal, screenScaledPadding(base: 8))
+            .padding(.vertical, screenScaledPadding(base: 4))
+            .background(
+              Capsule()
+                .fill(Color.black.opacity(0.3))
+                .overlay(
+                  Capsule()
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                )
+            )
+            .shadow(color: .black.opacity(0.6), radius: 1, x: 0, y: 1)
+        }
+
+        // System badge
+        Text(gameSystem == .gamecube ? "NINTENDO GAMECUBE" : "NINTENDO Wii")
+          .font(.system(
+            size: screenScaledFontSize(base: 9),
+            weight: .bold,
+            design: .monospaced
+          ))
+          .foregroundColor(.white.opacity(0.8))
+          .tracking(1.2)
+          .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
+      }
+      .padding(.horizontal, screenScaledPadding(base: 12))
+      .padding(.bottom, screenScaledPadding(base: 16))
     }
     .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    // Add subtle 3D perspective
+    .rotation3DEffect(
+      .degrees(2),
+      axis: (x: 0.1, y: 1.0, z: 0),
+      perspective: 1.0
+    )
   }
 
   /// Scale font sizes appropriately for tvOS vs iOS
@@ -1924,21 +2089,62 @@ private struct GameGridItem: View {
 #endif
   }
 
+  /// Enhanced headline font with iOS version compatibility
+  private var enhancedHeadlineFont: Font {
+    if #available(iOS 16.0, tvOS 16.0, *) {
+      return .system(.headline, design: .rounded, weight: .semibold)
+    } else {
+      return .system(size: 17, weight: .semibold, design: .rounded)
+    }
+  }
+
+  /// Enhanced caption font with iOS version compatibility
+  private var enhancedCaptionFont: Font {
+    if #available(iOS 16.0, tvOS 16.0, *) {
+      return .system(.caption, design: .monospaced, weight: .medium)
+    } else {
+      return .system(size: 12, weight: .medium, design: .monospaced)
+    }
+  }
+
   var body: some View {
 #if os(tvOS)
     // Clean, simple approach for tvOS
     VStack(alignment: .leading, spacing: 12) {
       ZStack(alignment: .topTrailing) {
-        // Show templated cover if using placeholder, otherwise show real cover
+        // Show templated cover if using placeholder, otherwise show real cover with skeumorphism
         if isUsingPlaceholderCover {
           templatedCoverView
         } else {
-          Image(uiImage: item.coverImage)
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fill)
-            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+          ZStack {
+            // Skeumorphic game case for real covers
+            Image(uiImage: item.coverImage)
+              .resizable()
+              .interpolation(.high)
+              .aspectRatio(contentMode: .fill)
+              .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
+              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+              .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+              .overlay(
+                // Subtle case reflection
+                LinearGradient(
+                  colors: [Color.white.opacity(0.15), Color.clear, Color.black.opacity(0.1)],
+                  startPoint: .topLeading,
+                  endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+              )
+              .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                  .stroke(Color.white.opacity(0.1), lineWidth: 1)
+              )
+              // Add subtle 3D perspective to real covers too
+              .rotation3DEffect(
+                .degrees(1),
+                axis: (x: 0.05, y: 1.0, z: 0),
+                perspective: 1.2
+              )
+          }
         }
           .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -2008,49 +2214,83 @@ private struct GameGridItem: View {
             .allowsHitTesting(false)
         }
 
-        // Game banner/icon overlay (bottom-right corner) - if available
-        if let bannerImage = item.bannerImage {
-          Image(uiImage: bannerImage)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 32, height: 32)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .padding(8)
-            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height, alignment: .bottomTrailing)
-            .allowsHitTesting(false)
-        }
+
       }
 
-      VStack(alignment: .leading, spacing: 4) {
+      VStack(alignment: .leading, spacing: 6) {
+        // Enhanced title with better typography
         Text(item.title)
-          .font(.headline)
+          .font(.system(.headline, design: .rounded, weight: .semibold))
           .lineLimit(1)
           .minimumScaleFactor(0.75)
-          .foregroundColor(.primary)
+          .foregroundStyle(
+            LinearGradient(
+              colors: [Color.primary, Color.primary.opacity(0.8)],
+              startPoint: .top,
+              endPoint: .bottom
+            )
+          )
+          .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
 
         HStack {
-          // Game ID only (flag moved to artwork overlay)
+          // Game ID with enhanced styling
           Text(item.gameID)
-            .font(.caption)
-            .foregroundColor(.secondary)
+            .font(enhancedCaptionFont)
+            .foregroundStyle(
+              LinearGradient(
+                colors: [Color.secondary, Color.secondary.opacity(0.8)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+              Capsule()
+                .fill(Color.primary.opacity(0.05))
+                .overlay(
+                  Capsule()
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+                )
+            )
 
           Spacer()
 
-          // Auto pre-cache progress indicator
+          // Auto pre-cache progress indicator with better styling
           if isAutoPreCaching {
             HStack(spacing: 4) {
               CompactDolphinCircularSpinner()
               Text("\(Int(autoPreCacheProgress * 100))%")
-                .font(.caption2)
+                .font(.system(.caption2, design: .monospaced, weight: .medium))
                 .foregroundColor(.secondary)
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+              Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(
+                  Capsule()
+                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                )
+            )
           }
         }
       }
     }
     .frame(width: Layout.cardSize.width)
     .scaleEffect(isFocused ? 1.08 : 1.0)
+    .rotation3DEffect(
+      .degrees(isFocused ? 5 : 2),
+      axis: (x: 0.1, y: 1.0, z: 0),
+      perspective: isFocused ? 0.8 : 1.0
+    )
+    .shadow(
+      color: .black.opacity(isFocused ? 0.4 : 0.2),
+      radius: isFocused ? 20 : 8,
+      x: 0,
+      y: isFocused ? 12 : 4
+    )
     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isFocused)
     .focusable(true) { focused in
       withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -2132,16 +2372,39 @@ private struct GameGridItem: View {
     Button(action: { select(item) }) {
       VStack(alignment: .leading, spacing: 12) {
         ZStack(alignment: .topTrailing) {
-          // Show templated cover if using placeholder, otherwise show real cover
-          if isUsingPlaceholderCover {
-            templatedCoverView
-          } else {
+                  // Show templated cover if using placeholder, otherwise show real cover with skeumorphism
+        if isUsingPlaceholderCover {
+          templatedCoverView
+        } else {
+          ZStack {
+            // Skeumorphic game case for real covers
             Image(uiImage: item.coverImage)
               .resizable()
               .aspectRatio(contentMode: .fill)
               .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
               .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+              .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
+              .overlay(
+                // Subtle case reflection
+                LinearGradient(
+                  colors: [Color.white.opacity(0.12), Color.clear, Color.black.opacity(0.08)],
+                  startPoint: .topLeading,
+                  endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+              )
+              .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                  .stroke(Color.white.opacity(0.1), lineWidth: 1)
+              )
+              // Add subtle 3D perspective to real covers too
+              .rotation3DEffect(
+                .degrees(0.8),
+                axis: (x: 0.05, y: 1.0, z: 0),
+                perspective: 1.5
+              )
           }
+        }
 
                     if let icon = remoteIconName {
             ZStack {
@@ -2173,41 +2436,56 @@ private struct GameGridItem: View {
             .padding(8)
           }
 
-          // Game banner/icon overlay (bottom-left corner for iOS) - if available
-          if let bannerImage = item.bannerImage {
-            VStack {
-              Spacer()
-              HStack {
-                Image(uiImage: bannerImage)
-                  .resizable()
-                  .aspectRatio(contentMode: .fit)
-                  .frame(width: 24, height: 24)
-                  .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                  .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-                Spacer()
-              }
-            }
-            .padding(8)
-            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-            .allowsHitTesting(false)
-          }
+
         }
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
+          // Enhanced title with better typography
           Text(item.title)
-            .font(.headline)
+            .font(enhancedHeadlineFont)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
+            .foregroundStyle(
+              LinearGradient(
+                colors: [Color.primary, Color.primary.opacity(0.8)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+            .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
 
-          // Game ID only (flag moved to artwork overlay)
+          // Game ID with enhanced styling
           Text(item.gameID)
-            .font(.caption)
-            .foregroundColor(.secondary)
+            .font(enhancedCaptionFont)
+            .foregroundStyle(
+              LinearGradient(
+                colors: [Color.secondary, Color.secondary.opacity(0.8)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+              Capsule()
+                .fill(Color.primary.opacity(0.05))
+                .overlay(
+                  Capsule()
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+                )
+            )
         }
       }
       .frame(width: Layout.cardSize.width)
     }
     .buttonStyle(.plain)
+    .scaleEffect(1.0)
+    .animation(.easeInOut(duration: 0.1), value: UUID())
+    .onLongPressGesture(minimumDuration: 0.0, maximumDistance: .infinity) { } onPressingChanged: { pressing in
+      withAnimation(.easeInOut(duration: 0.1)) {
+        // Add subtle press animation for tactile feedback
+      }
+    }
     .contextMenu {
       // Align with tvOS context menu
       Button(action: { showProperties(item) }) {
