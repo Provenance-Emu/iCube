@@ -1790,17 +1790,128 @@ private struct GameGridItem: View {
     return source.isCached(remoteItem)
   }
 
+  /// Detect if this is a GameCube or Wii game based on Game ID
+  private var gameSystem: GameSystem {
+    let gameID = item.gameID.uppercased()
+
+    // Wii games typically start with R, S, or have specific patterns
+    if gameID.hasPrefix("R") || gameID.hasPrefix("S") || gameID.count > 6 {
+      return .wii
+    }
+    // GameCube games are typically 6 characters and start with G
+    else if gameID.count == 6 && gameID.hasPrefix("G") {
+      return .gamecube
+    }
+    // Default to GameCube for unknown patterns
+    else {
+      return .gamecube
+    }
+  }
+
+  private enum GameSystem {
+    case gamecube, wii
+
+    var templateImageName: String {
+      switch self {
+      case .gamecube: return "GCCoverTemplate"
+      case .wii: return "WiiCoverTemplate"
+      }
+    }
+  }
+
+      /// Check if we're using the default placeholder cover
+  private var isUsingPlaceholderCover: Bool {
+    // This is a heuristic - check if the cover image is the default "NoCover" placeholder
+    let image = item.coverImage
+    let desc = image.description.lowercased()
+
+    return image.size.width <= 1 ||
+           image.size.height <= 1 ||
+           desc.contains("nocover") ||
+           desc.contains("placeholder") ||
+           desc.contains("default") ||
+           // Check for very small images that are likely placeholders
+           (image.size.width < 50 && image.size.height < 50)
+  }
+
+    /// Custom templated cover view for games without artwork
+  @ViewBuilder
+  private var templatedCoverView: some View {
+    ZStack {
+      // Background gradient matching the system
+      let bgColor: Color = gameSystem == .gamecube ? .purple : .blue
+      LinearGradient(
+        colors: [bgColor.opacity(0.4), bgColor.opacity(0.8)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+
+      // Game title text background
+      VStack {
+        Spacer()
+        VStack(spacing: 3) {
+          Text(item.title.isEmpty ? "Unknown Game" : item.title)
+            .font(.system(size: screenScaledFontSize(base: 16), weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+            .multilineTextAlignment(.center)
+            .lineLimit(4)
+            .minimumScaleFactor(0.6)
+            .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 1)
+
+          if !item.gameID.isEmpty {
+            Text(item.gameID)
+              .font(.system(size: screenScaledFontSize(base: 11), weight: .medium, design: .monospaced))
+              .foregroundColor(.white.opacity(0.9))
+              .shadow(color: .black.opacity(0.7), radius: 2, x: 0, y: 0.5)
+          }
+        }
+        .padding(.horizontal, screenScaledPadding(base: 8))
+        .padding(.bottom, screenScaledPadding(base: 16))
+      }
+
+      // Template overlay with alpha
+      Image(gameSystem.templateImageName)
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+    }
+    .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+  }
+
+  /// Scale font sizes appropriately for tvOS vs iOS
+  private func screenScaledFontSize(base: CGFloat) -> CGFloat {
+#if os(tvOS)
+    return base * 1.4
+#else
+    return base
+#endif
+  }
+
+  /// Scale padding appropriately for tvOS vs iOS
+  private func screenScaledPadding(base: CGFloat) -> CGFloat {
+#if os(tvOS)
+    return base * 1.5
+#else
+    return base
+#endif
+  }
+
   var body: some View {
 #if os(tvOS)
     // Clean, simple approach for tvOS
     VStack(alignment: .leading, spacing: 12) {
       ZStack(alignment: .topTrailing) {
-        Image(uiImage: item.coverImage)
-          .resizable()
-          .interpolation(.high)
-          .aspectRatio(contentMode: .fill)
-          .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        // Show templated cover if using placeholder, otherwise show real cover
+        if isUsingPlaceholderCover {
+          templatedCoverView
+        } else {
+          Image(uiImage: item.coverImage)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fill)
+            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
           .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
               .stroke(
@@ -1989,11 +2100,16 @@ private struct GameGridItem: View {
     Button(action: { select(item) }) {
       VStack(alignment: .leading, spacing: 12) {
         ZStack(alignment: .topTrailing) {
-          Image(uiImage: item.coverImage)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+          // Show templated cover if using placeholder, otherwise show real cover
+          if isUsingPlaceholderCover {
+            templatedCoverView
+          } else {
+            Image(uiImage: item.coverImage)
+              .resizable()
+              .aspectRatio(contentMode: .fill)
+              .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
+              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+          }
 
           if let icon = remoteIconName {
             ZStack {
