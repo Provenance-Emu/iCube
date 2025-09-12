@@ -1346,7 +1346,7 @@ struct TVLibraryView: View {
       VStack(spacing: 20) {
         DolphinErrorView(
           title: L("Library Empty"),
-          message: L("No games found. Add GameCube & Wii ROMs to your library to get started with this adorable emulator! 🎮")
+          message: L("No games found. Add GameCube & Wii ROMs to your library to get started! 🎮")
         )
       }
       .padding()
@@ -1794,14 +1794,16 @@ struct TVLibraryView: View {
             Text(addr).foregroundColor(.white.opacity(0.9)).font(.caption)
           }
           Spacer()
-          Button(L("Allow")) {
+          Button(L("Always Allow")) {
             DSUServerBridge.setClient(addr, allowed: true)
             approvalBannerAddr = nil
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Always allowed %@"), addr)])
           }
           .buttonStyle(.borderedProminent)
           Button(L("Block")) {
             DSUServerBridge.setClient(addr, allowed: false)
             approvalBannerAddr = nil
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Blocked %@"), addr)])
           }
           .buttonStyle(.bordered)
         }
@@ -1812,6 +1814,15 @@ struct TVLibraryView: View {
         .padding(.top, 8)
         .padding(.horizontal, 12)
         Spacer()
+      }
+      .contentShape(Rectangle())
+      .onTapGesture {
+        // Open DSU Controller sheet for details
+#if os(iOS)
+        showDSUSession = true
+#endif
+        // Dismiss the banner after opening
+        approvalBannerAddr = nil
       }
       .transition(.move(edge: .top).combined(with: .opacity))
     }

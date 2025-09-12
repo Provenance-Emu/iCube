@@ -749,6 +749,7 @@ struct ControllersRootView: View {
   @StateObject private var dsuBrowser = DSUDiscoveryBrowser()
   @State private var recentlyAdded: Set<String> = [] // address:port keys
   @AppStorage("dsu_role") private var dsuRole: String = "receiver" // "receiver" or "sender"
+  @State private var pingingServerKey: String? = nil
 
   // Touchscreen
 #if os(iOS)
@@ -831,14 +832,33 @@ struct ControllersRootView: View {
                 Text(dsuServerAddressPort(idx)).font(.caption).foregroundStyle(.secondary)
               }
               Spacer()
-              Button(L("Test")) {
-                let addr = (dsuServers[idx]["address"] as? String) ?? ""
-                let port = (dsuServers[idx]["port"] as? NSNumber)?.intValue ?? 26760
-                DSUPingBridge.pingServerAddress(addr, port: port, timeout: 1.0) { ok, info in
-                  NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": ok ? String(format: L("Reachable: %@"), info ?? "") : L("No response")])
+              let addr = (dsuServers[idx]["address"] as? String) ?? ""
+              let port = (dsuServers[idx]["port"] as? NSNumber)?.intValue ?? 26760
+              let key = "\(addr):\(port)"
+              if pingingServerKey == key {
+                ProgressView().padding(.vertical, 4)
+              } else {
+                Button {
+                  // Enlarge hit target and give quick feedback
+                  pingingServerKey = key
+                  NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Pinging %@…"), key)])
+                  #if DEBUG
+                  print("[DSU-PING] tapping Test for \(key)")
+                  #endif
+                  DSUPingBridge.pingServerAddress(addr, port: port, timeout: 1.0) { ok, info in
+                    pingingServerKey = nil
+                    let msg = ok ? String(format: L("Reachable: %@"), info ?? key) : L("No response")
+                    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": msg])
+                  }
+                } label: {
+                  Label(L("Test"), systemImage: "paperplane")
+                    .labelStyle(.titleAndIcon)
+                    .frame(minWidth: 72)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .padding(.vertical, 4)
               }
-              .buttonStyle(.bordered)
             }
             #if !os(tvOS)
             .swipeActions(edge: .trailing) {

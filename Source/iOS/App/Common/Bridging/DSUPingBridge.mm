@@ -23,7 +23,7 @@ namespace DSUPB = ciface::DualShockUDPClient::Proto;
                completion:(void(^)(BOOL ok, NSString * _Nullable info))completion {
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
     int sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) { dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, @"socket() failed"); }); return; }
+    if (sockfd < 0) { NSLog(@"[DSU-PING] socket() failed"); dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, @"socket() failed"); }); return; }
 
     // non-blocking
     int flags = fcntl(sockfd, F_GETFL, 0);
@@ -33,6 +33,7 @@ namespace DSUPB = ciface::DualShockUDPClient::Proto;
     dst.sin_family = AF_INET;
     dst.sin_port = htons((uint16_t)(port > 0 ? port : 26760));
     if (inet_pton(AF_INET, address.UTF8String, &dst.sin_addr) != 1) {
+      NSLog(@"[DSU-PING] invalid address: %@", address);
       close(sockfd);
       dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, @"invalid address"); });
       return;
@@ -42,8 +43,10 @@ namespace DSUPB = ciface::DualShockUDPClient::Proto;
     DSUPB::Message<DSUPB::MessageType::VersionRequest> req(0);
     req.Finish();
 
+    NSLog(@"[DSU-PING] sending VersionRequest to %@:%d", address, (int)ntohs(dst.sin_port));
     ssize_t sent = sendto(sockfd, &req.m_message, sizeof(req.m_message), 0, (const struct sockaddr*)&dst, sizeof(dst));
     if (sent <= 0) {
+      NSLog(@"[DSU-PING] sendto failed (errno=%d)", errno);
       close(sockfd);
       dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, @"send failed"); });
       return;
@@ -65,12 +68,16 @@ namespace DSUPB = ciface::DualShockUDPClient::Proto;
         const char* ip = inet_ntop(AF_INET, &src.sin_addr, abuf, sizeof(abuf));
         uint16_t p = ntohs(src.sin_port);
         if (ip) info = [NSString stringWithFormat:@"%s:%hu", ip, p];
+        NSLog(@"[DSU-PING] received %zd bytes from %s:%hu", n, ip ? ip : "<unknown>", p);
         break;
       }
       // sleep 10ms
       struct timespec ts; ts.tv_sec = 0; ts.tv_nsec = 10 * 1000 * 1000; nanosleep(&ts, NULL);
     }
 
+    if (!ok) {
+      NSLog(@"[DSU-PING] timeout after %.0f ms to %@:%d", timeout * 1000.0, address, (int)ntohs(dst.sin_port));
+    }
     close(sockfd);
     dispatch_async(dispatch_get_main_queue(), ^{ completion(ok, info); });
   });
