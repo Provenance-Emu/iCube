@@ -1485,7 +1485,7 @@ struct TVLibraryView: View {
     .onAppear {
       // Tips setup
       if #available(iOS 17, tvOS 17, *) {
-        _ = (Environment(\.tipsService).wrappedValue).configure()
+        tipsService.configure()
       }
       // Initialize shared remote sources store to start querying immediately
       print("TVLibraryView: initializing RemoteSourcesStore.shared")
