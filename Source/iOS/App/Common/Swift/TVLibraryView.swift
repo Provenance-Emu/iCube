@@ -1337,13 +1337,83 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private var emptyLibraryView: some View {
-    VStack(spacing: 20) {
-      DolphinErrorView(
-        title: L("Library Empty"),
-        message: L("No games found. Add GameCube & Wii ROMs to your library to get started with this adorable emulator! 🎮")
-      )
+    ZStack {
+      // Ambient swimming dolphins in the background
+      SwimmingDolphinsView(count: 3, direction: .leftToRight, maxSize: 120, opacity: 0.22)
+      SwimmingDolphinsView(count: 2, direction: .rightToLeft, maxSize: 100, opacity: 0.16)
+
+      // Centered friendly message
+      VStack(spacing: 20) {
+        DolphinErrorView(
+          title: L("Library Empty"),
+          message: L("No games found. Add GameCube & Wii ROMs to your library to get started with this adorable emulator! 🎮")
+        )
+      }
+      .padding()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  // Subtle animated background of swimming dolphins
+  private struct SwimmingDolphinsView: View {
+    enum Direction { case leftToRight, rightToLeft }
+    let count: Int
+    let direction: Direction
+    let maxSize: CGFloat
+    let opacity: Double
+
+    init(count: Int = 3, direction: Direction = .leftToRight, maxSize: CGFloat = 110, opacity: Double = 0.2) {
+      self.count = count
+      self.direction = direction
+      self.maxSize = max(60, maxSize)
+      self.opacity = opacity
+    }
+
+    private func size(for i: Int) -> CGFloat { maxSize * (0.85 + CGFloat((i % 3)) * 0.08) }
+
+    var body: some View {
+      GeometryReader { geo in
+        let w = max(geo.size.width, 1)
+        let h = max(geo.size.height, 1)
+        TimelineView(.animation) { timeline in
+          let t = timeline.date.timeIntervalSinceReferenceDate
+          ZStack {
+            ForEach(0..<count, id: \.self) { i in
+              // Deterministic parameters per dolphin
+              let base = Double(h) * (0.35 + Double((i % 5)) * 0.1) // baseline swim height
+              let amplitude = 16.0 + Double((i % 3)) * 10.0         // vertical wave
+              let speed = 35.0 + Double(i) * 14.0                   // px per second
+              let phase = Double(i) * .pi / 3.0
+
+              // Horizontal motion with wrap-around
+              let travel = (t * speed + Double(i) * 120.0)
+              let span = Double(w + 220.0)
+              let prog = travel.truncatingRemainder(dividingBy: span)
+              let x = (direction == .leftToRight) ? (-110.0 + prog) : (Double(w) + 110.0 - prog)
+
+              // Gentle sine wave and heading angle
+              let theta = (x / Double(w)) * 2.0 * .pi + phase
+              let y = base + amplitude * sin(theta)
+              let dydx = amplitude * cos(theta) * (2.0 * .pi / Double(w))
+              let angle = atan(dydx) * 180.0 / .pi
+
+              Image("DolphinLogo")
+                .resizable()
+                .renderingMode(.original)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size(for: i))
+                .position(x: CGFloat(x), y: CGFloat(y))
+                .rotationEffect(.degrees(direction == .leftToRight ? angle : -angle))
+                .scaleEffect(x: direction == .leftToRight ? 1 : -1, y: 1)
+                .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                .opacity(opacity)
+                .blendMode(.plusLighter)
+            }
+          }
+        }
+      }
+      .allowsHitTesting(false)
+    }
   }
 
   @ToolbarContentBuilder
