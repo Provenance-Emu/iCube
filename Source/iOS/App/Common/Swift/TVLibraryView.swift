@@ -661,8 +661,8 @@ struct TVLibraryView: View {
           for c in GCController.controllers() {
             c.extendedGamepad?.valueChangedHandler = nil
             c.microGamepad?.valueChangedHandler = nil
-            c.controllerPausedHandler = { _ in }
-            c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _ in /* swallow to avoid Game Center */ }
+            c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
+            c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
             if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] cleared handlers for \(c.vendorName ?? "(nil)")") }
             // Ensure microGamepad behaves sanely for library nav
             if let mg = c.microGamepad { mg.reportsAbsoluteDpadValues = true; mg.allowsRotation = true }
@@ -1601,8 +1601,8 @@ struct TVLibraryView: View {
 #if !os(tvOS)
     GCController.shouldMonitorBackgroundEvents = false
     for c in GCController.controllers() {
-      c.controllerPausedHandler = { _ in /* swallow to avoid Game Center */ }
-      c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _ in /* swallow to avoid Game Center */ }
+      c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
+      c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
 
       if let egp = c.extendedGamepad {
         let cid = ObjectIdentifier(c)
@@ -1707,8 +1707,8 @@ struct TVLibraryView: View {
           mgp.valueChangedHandler = nil
         }
       }
-      c.controllerPausedHandler = nil
       c.extendedGamepad?.buttonMenu.pressedChangedHandler = nil
+      c.microGamepad?.buttonMenu.pressedChangedHandler = nil
       prevEGPHandlers.removeValue(forKey: cid)
       prevMGPHandlers.removeValue(forKey: cid)
     }

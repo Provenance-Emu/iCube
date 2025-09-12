@@ -462,6 +462,8 @@ struct EmulationScreen: View {
         c.extendedGamepad?.valueChangedHandler = nil
         c.gamepad?.valueChangedHandler = nil
         c.microGamepad?.valueChangedHandler = nil
+        c.extendedGamepad?.buttonMenu.pressedChangedHandler = nil
+        c.microGamepad?.buttonMenu.pressedChangedHandler = nil
       }
       #if !os(tvOS)
       arPollTask?.cancel(); arPollTask = nil
@@ -895,10 +897,8 @@ struct EmulationScreen: View {
         // Reconcile and ensure Pad 1 defaults to touchscreen if needed
         ControllerManager.shared.reconcile()
         EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
-        // Ensure only Wiimote 1 is Emulated; disable Wiimote 2-4
-        DOLConfigBridge.setWiimoteSourceFor(2, source: 0)
-        DOLConfigBridge.setWiimoteSourceFor(3, source: 0)
-        DOLConfigBridge.setWiimoteSourceFor(4, source: 0)
+        // Configure Wiimote sources based on connected controllers
+        ControllerManager.shared.updateWiimoteEmulationForExternalControllers()
         #if os(iOS)
         ReplayKitManager.shared.startBufferingIfEnabled()
         if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
@@ -906,8 +906,8 @@ struct EmulationScreen: View {
         // On iOS, do not hand controller button presses to the system while in-game
         GCController.shouldMonitorBackgroundEvents = false
         for c in GCController.controllers() {
-            c.controllerPausedHandler = { _ in }
-            c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _ in /* swallow to avoid Game Center */ }
+            c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
+            c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
             if let gp = c.extendedGamepad {
                 if #available(iOS 14.0, *) {
                     gp.buttonMenu.preferredSystemGestureState = .alwaysReceive
@@ -1018,13 +1018,8 @@ struct EmulationScreen: View {
     .onReceive(controllerManager.$overlayMode) { _ in
         touchPadsRefreshToken = UUID()
         if controllerManager.overlayMode == .wii {
-            DOLConfigBridge.setWiimoteSourceFor(1, source: 1)
-            // Ensure only Wiimote 1 enabled for overlay
-            DOLConfigBridge.setWiimoteSourceFor(2, source: 0)
-            DOLConfigBridge.setWiimoteSourceFor(3, source: 0)
-            DOLConfigBridge.setWiimoteSourceFor(4, source: 0)
-            DOLConfigBridge.setConnectWiimotesForControllerInterface(true)
-            EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
+            // Ensure Wiimote1 uses touchscreen and configure external controllers appropriately
+            controllerManager.ensureWiimote1EmulatedTouchscreen()
         }
     }
     .onReceive(controllerManager.$overlayVisible) { v in
