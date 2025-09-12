@@ -32,6 +32,8 @@
 		B31EAC8B2E67E9050036EE31 /* DOLWiimoteBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */; };
 		B346BBEC2E73973E00B3C00B /* MotionDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */; };
 		B346BBF62E73C27000B3C00B /* DolphinBlogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346BBF52E73C27000B3C00B /* DolphinBlogView.swift */; };
+		B346BBF92E73E45800B3C00B /* DSUServerBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B346BBF82E73E45800B3C00B /* DSUServerBridge.mm */; };
+		B346BBFF2E73FA5400B3C00B /* URLRouterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346BBFE2E73FA5300B3C00B /* URLRouterService.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -335,6 +337,9 @@
 		B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLWiimoteBridge.mm; sourceTree = "<group>"; };
 		B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionDebugView.swift; sourceTree = "<group>"; };
 		B346BBF52E73C27000B3C00B /* DolphinBlogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DolphinBlogView.swift; sourceTree = "<group>"; };
+		B346BBF72E73E36F00B3C00B /* DSUServerBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DSUServerBridge.h; sourceTree = "<group>"; };
+		B346BBF82E73E45800B3C00B /* DSUServerBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DSUServerBridge.mm; sourceTree = "<group>"; };
+		B346BBFE2E73FA5300B3C00B /* URLRouterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLRouterService.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -883,6 +888,8 @@
 				B3F216692E5F73B900AF38F3 /* DOLPathsBridge.mm */,
 				B34EDDDE2E57B2E200301907 /* DOLConfigBridge.h */,
 				B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */,
+				B346BBF72E73E36F00B3C00B /* DSUServerBridge.h */,
+				B346BBF82E73E45800B3C00B /* DSUServerBridge.mm */,
 			);
 			path = Bridging;
 			sourceTree = "<group>";
@@ -971,6 +978,7 @@
 				B974924329603A8A00794509 /* LegacyInputConfigMigrationService.mm */,
 				B9B2C64C288E170600CB6569 /* ServiceManager.swift */,
 				B950CFBE29620C8900197719 /* UpdateCheckService.swift */,
+				B346BBFE2E73FA5300B3C00B /* URLRouterService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -2596,6 +2604,7 @@
 				B97492472960CD2B00794509 /* FirstRunInitializationService.mm in Sources */,
 				B36B48D12E5D6AFB009A2303 /* ControllerExtensions.swift in Sources */,
 				B904ACD22885561E008B6BE9 /* InternalResolutionCell.m in Sources */,
+				B346BBFF2E73FA5400B3C00B /* URLRouterService.swift in Sources */,
 				B9447B052841901200BC9110 /* TCGameCubePad.swift in Sources */,
 				B9B2C5E5288D0C5500CB6569 /* MappingLoadProfileIniCell.m in Sources */,
 				B3F2166A2E5F73B900AF38F3 /* DOLPathsBridge.mm in Sources */,
@@ -2638,6 +2647,7 @@
 				B31E80502E6504940036EE31 /* ControllerGlyphs.swift in Sources */,
 				B31E80512E6504940036EE31 /* ControllerPresets.swift in Sources */,
 				B31E80522E6504940036EE31 /* GameProfiles.swift in Sources */,
+				B346BBF92E73E45800B3C00B /* DSUServerBridge.mm in Sources */,
 				B904AD1A2888AB5E008B6BE9 /* MappingDeviceCell.m in Sources */,
 				B900A7BD27F4CDD3000361DD /* SwiftStringUtil.swift in Sources */,
 				B9D9388C283DD86100B290FC /* EmulationBootParameter.mm in Sources */,

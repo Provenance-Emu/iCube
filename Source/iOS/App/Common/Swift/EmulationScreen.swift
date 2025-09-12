@@ -348,12 +348,12 @@ struct EmulationScreen: View {
         SettingsRootView(backgroundView: AnyView(Color.clear), isPauseMenuStyle: true, game: game)
       }
     }
-    .sheet(isPresented: $showMotionDebug) {
-      NavigationStack {
-        MotionDebugView()
-      }
-      .environment(\.colorScheme, .dark)
-    }
+//    .sheet(isPresented: $showMotionDebug) {
+//      NavigationStack {
+//        MotionDebugView()
+//      }
+//      .environment(\.colorScheme, .dark)
+//    }
     .fullScreenCover(isPresented: $showPauseMenu) {
       ZStack {
         PauseMenuView(
@@ -1062,21 +1062,21 @@ struct EmulationScreen: View {
         Button("Save & Quit") {
             TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
             TVEmulationBridge.stop()
-            #if canImport(ActivityKit)
+            #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
             GameActivityManager.end()
             #endif
             NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
         }
         Button("Quit", role: .destructive) {
             TVEmulationBridge.stop()
-            #if canImport(ActivityKit)
+            #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
             GameActivityManager.end()
             #endif
             NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
         }
         Button("Continue", role: .cancel) {
             TVEmulationBridge.resume()
-            #if canImport(ActivityKit)
+            #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
             GameActivityManager.update(isPaused: false, elapsedSeconds: elapsedSeconds)
             #endif
             withAnimation { showTopBar = false }

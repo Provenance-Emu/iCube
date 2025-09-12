@@ -1,6 +1,7 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#if canImport(CoreMotion)
 import SwiftUI
 import CoreMotion
 import GameController
@@ -1121,3 +1122,4 @@ struct MotionDebugView_Previews: PreviewProvider {
     }
 }
 #endif
+#endif // canImport(CoreMotion)

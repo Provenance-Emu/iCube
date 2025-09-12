@@ -100,7 +100,10 @@
 	<array>
 		<string>_altserver._tcp</string>
 		<string>_webdav._tcp</string>
+		<string>_dolphin-dsu._udp</string>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>DolphiniOS uses the local network to discover and connect to DSU controllers and devices.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

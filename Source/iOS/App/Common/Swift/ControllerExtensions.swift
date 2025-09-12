@@ -134,7 +134,7 @@ func installInputDebugHandlers(_ c: GCController) {
                         PauseGestureTracker.shared.menuOrStartPressed()
                         #if os(iOS)
                         TVEmulationBridge.pause()
-                        #if canImport(ActivityKit)
+                        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
                         GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
                         #endif
                         NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
@@ -274,7 +274,7 @@ func installInputDebugHandlers(_ c: GCController) {
             if #available(iOS 14.0, *) {
                 if let options = gamepad.buttonOptions, options.isPressed {
                     TVEmulationBridge.pause()
-                    #if canImport(ActivityKit)
+                    #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
                     GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
                     #endif
                     NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)

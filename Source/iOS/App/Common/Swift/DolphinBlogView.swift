@@ -51,7 +51,9 @@ struct DolphinBlogView: View {
         }
       }
       .navigationTitle("Dolphin Blog")
+      #if !os(tvOS)
       .navigationBarTitleDisplayMode(.large)
+      #endif
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button(action: {
@@ -592,7 +594,9 @@ struct BlogPostDetailView: View {
         )
       )
       .navigationTitle("Blog Post")
+#if !os(tvOS)
       .navigationBarTitleDisplayMode(.inline)
+#endif
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
           Button("Done") {
@@ -728,6 +732,7 @@ struct BlogPostDetailView: View {
       }
 
       // Share button
+#if !os(tvOS)
       if #available(iOS 16.0, *) {
         ShareLink(item: URL(string: post.link)!, subject: Text(post.title)) {
           HStack {
@@ -758,6 +763,7 @@ struct BlogPostDetailView: View {
           .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
       }
+#endif // !tvOS
     }
     .padding(.top, 20)
   }
@@ -765,6 +771,7 @@ struct BlogPostDetailView: View {
   private func sharePost(url: String, title: String) {
     guard let urlToShare = URL(string: url) else { return }
 
+#if !os(tvOS)
     let activityViewController = UIActivityViewController(
       activityItems: [title, urlToShare],
       applicationActivities: nil
@@ -784,6 +791,7 @@ struct BlogPostDetailView: View {
 
       rootViewController.present(activityViewController, animated: true)
     }
+#endif // !os(tvOS)
   }
 }
 

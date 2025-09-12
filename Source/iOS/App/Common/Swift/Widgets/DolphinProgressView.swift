@@ -345,7 +345,9 @@ struct DolphinCircularSpinner_Previews: PreviewProvider {
                 .previewDisplayName("Compact Size")
         }
         .padding()
+      #if !os(tvOS)
         .background(Color(.systemBackground))
+      #endif
     }
 }
 #endif

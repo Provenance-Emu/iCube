@@ -3,7 +3,7 @@ import Foundation
 import ActivityKit
 #endif
 
-#if canImport(ActivityKit)
+#if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
 public struct GameActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         public let title: String

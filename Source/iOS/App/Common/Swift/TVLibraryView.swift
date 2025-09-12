@@ -33,6 +33,156 @@ private struct KeyCommandHostView: UIViewRepresentable {
   func updateUIView(_ uiView: KeyInputView, context: Context) { }
 }
 
+// MARK: - DSU Controller Session (iOS)
+#if os(iOS)
+import Foundation
+import CoreImage
+import CoreImage.CIFilterBuiltins
+
+private struct DSUSessionView: View {
+  @Environment(\.dismiss) private var dismiss
+  @State private var ip: String = ""
+  @State private var port: Int = 26760
+  @State private var portText: String = "26760"
+  @State private var running: Bool = false
+  @State private var autoStart: Bool = true
+  @State private var showDebug: Bool = false
+  @State private var txCount: UInt = 0
+  @State private var rxCount: UInt = 0
+  @State private var tick: Int = 0
+  @State private var showController: Bool = false
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section(header: Text(L("Server"))) {
+          HStack {
+            Text(L("Address"))
+            Spacer()
+            Text("\(ip.isEmpty ? "-" : ip) : \((running ? port : (Int(portText) ?? 26760)))")
+              .foregroundStyle(.secondary)
+          }
+          HStack {
+            Text(L("Port"))
+            Spacer()
+            TextField("26760", text: $portText)
+              .multilineTextAlignment(.trailing)
+              .keyboardType(.numberPad)
+              .frame(maxWidth: 120)
+              .disabled(running)
+          }
+          Toggle(L("Start Server"), isOn: $running)
+            .onChange(of: running) { v in
+              if v {
+                let p = validatedPort()
+                let ok = DSUServerBridge.start(onPort: NSNumber(value: p).intValue)
+                if ok {
+                  ip = DSUServerBridge.ipAddress(); port = p
+                  UserDefaults.standard.set(p, forKey: "dsu_server_port")
+                } else {
+                  let err = DSUServerBridge.lastError()
+                  NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+                  running = false
+                }
+              } else {
+                DSUServerBridge.stop(); ip = ""
+              }
+            }
+          Toggle(L("Auto‑start when opening"), isOn: $autoStart)
+        }
+
+        Section(header: Text(L("Quick Links"))) {
+          NavigationLink(destination: ControllersRootView()) {
+            Label(L("Controller Settings"), systemImage: "gamecontroller")
+          }
+          Toggle(L("Show DSU Debug"), isOn: $showDebug)
+        }
+
+        if running && !ip.isEmpty {
+          Section(header: Text(L("Share"))) {
+            HStack {
+              Text(L("Copy IP:Port"))
+              Spacer()
+              Button(action: {
+                let p = running ? port : (Int(portText) ?? 26760)
+                let text = "\(ip):\(p)"
+                UIPasteboard.general.string = text
+                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Copied")])
+              }) {
+                Label(L("Copy"), systemImage: "doc.on.doc")
+              }
+              .buttonStyle(.bordered)
+            }
+            VStack(alignment: .center) {
+              let p = running ? port : (Int(portText) ?? 26760)
+              let payload = "dolphinios://dsu/add?ip=\(ip)&port=\(p)"
+              HStack { Spacer(); QRCodeView(text: payload).frame(width: 160, height: 160); Spacer() }
+              Text(payload).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+          }
+        }
+
+        if showDebug {
+          Section(header: Text(L("DSU Debug"))) {
+            HStack { Text("TX"); Spacer(); Text("\(txCount)").foregroundStyle(.secondary) }
+            HStack { Text("RX"); Spacer(); Text("\(rxCount)").foregroundStyle(.secondary) }
+          }
+        }
+
+        Section {
+          Button {
+            showController = true
+          } label: {
+            Label(L("Open On‑Screen Controller"), systemImage: "rectangle.and.hand.point.up.left.filled")
+          }
+          .disabled(!running)
+        }
+      }
+      .navigationTitle(L("DSU Controller"))
+      .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { dismiss() } } }
+      .onAppear {
+        running = DSUServerBridge.isRunning()
+        // Load persisted defaults
+        let savedPort = UserDefaults.standard.integer(forKey: "dsu_server_port")
+        if savedPort > 0 { portText = String(savedPort) }
+        if UserDefaults.standard.object(forKey: "dsu_server_autostart") != nil {
+          autoStart = UserDefaults.standard.bool(forKey: "dsu_server_autostart")
+        }
+        if running {
+          ip = DSUServerBridge.ipAddress(); let cur = DSUServerBridge.port(); port = Int(cur); portText = String(cur)
+        } else if autoStart {
+          let p = validatedPort()
+          if DSUServerBridge.start(onPort: NSNumber(value: p).intValue) {
+            running = true; ip = DSUServerBridge.ipAddress(); port = p
+            UserDefaults.standard.set(p, forKey: "dsu_server_port")
+          } else {
+            let err = DSUServerBridge.lastError()
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+          }
+        }
+      }
+      .onDisappear { if running { DSUServerBridge.stop() } }
+      .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+        if showDebug {
+          txCount = UInt(DSUServerBridge.txCount())
+          rxCount = UInt(DSUServerBridge.rxCount())
+        }
+      }
+      .onChange(of: autoStart) { UserDefaults.standard.set($0, forKey: "dsu_server_autostart") }
+      .onChange(of: portText) { if let p = Int($0), p >= 1 && p <= 65535 { UserDefaults.standard.set(p, forKey: "dsu_server_port") } }
+      .fullScreenCover(isPresented: $showController) { DSUControllerView(onClose: { showController = false }) }
+    }
+  }
+}
+
+extension DSUSessionView {
+  private func validatedPort() -> Int {
+    if let p = Int(portText), p >= 1 && p <= 65535 { return p }
+    portText = "26760"
+    return 26760
+  }
+}
+#endif
+
 private final class KeyInputView: UIView {
   var onLeft: (() -> Void)?
   var onRight: (() -> Void)?
@@ -172,44 +322,44 @@ final class TVLibraryViewModel: ObservableObject {
   }
 
   private func groupAndDedup(items: [TVGameItem]) {
-    #if DEBUG
+#if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): processing \(items.count) items")
-    #endif
+#endif
     var grouped: [String: [TVGameItem]] = [:]
     for it in items {
       let itemKey = key(for: it)
       let isRemote = !isLocal(it)
-      #if DEBUG
+#if DEBUG
       print("  Item: '\(it.title)' -> Key: '\(itemKey)' (gameID: '\(it.gameID)', discNumber: \(it.discNumber), revision: \(it.revision), isRemote: \(isRemote), titleEmpty: \(it.title.isEmpty))")
-      #endif
+#endif
       grouped[itemKey, default: []].append(it)
     }
-    #if DEBUG
+#if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): created \(grouped.count) groups")
-    #endif
+#endif
     groupsByKey = grouped
     var representatives: [TVGameItem] = []
     for (groupKey, group) in grouped {
-      #if DEBUG
+#if DEBUG
       print("  Group '\(groupKey)': \(group.count) items")
       for (idx, item) in group.enumerated() {
         print("    [\(idx)]: '\(item.title)' (isLocal: \(isLocal(item)), titleEmpty: \(item.title.isEmpty))")
       }
-      #endif
+#endif
       if let local = group.first(where: { isLocal($0) }) {
-        #if DEBUG
+#if DEBUG
         print("    -> Using local representative: '\(local.title)'")
-        #endif
+#endif
         representatives.append(local)
       } else if let any = group.first {
-        #if DEBUG
+#if DEBUG
         print("    -> Using first representative: '\(any.title)' (titleEmpty: \(any.title.isEmpty))")
-        #endif
+#endif
         representatives.append(any)
       } else {
-        #if DEBUG
+#if DEBUG
         print("    -> No representative found (empty group)")
-        #endif
+#endif
       }
     }
 #if DEBUG
@@ -241,6 +391,63 @@ final class TVLibraryViewModel: ObservableObject {
 
 struct TVLibraryView: View {
 
+  // MARK: - UI Settings
+
+  @AppStorage("library_background_style") private var backgroundStyle: BackgroundStyle = .gradient
+  @AppStorage("library_show_subtitles") private var showSubtitles: Bool = true
+
+  enum BackgroundStyle: String, CaseIterable {
+    case clean = "clean"
+    case gradient = "gradient"
+    case animated = "animated"
+
+    var displayName: String {
+      switch self {
+      case .clean: return "Clean"
+      case .gradient: return "GameCube Gradient"
+      case .animated: return "Animated (Full Effects)"
+      }
+    }
+  }
+
+  // MARK: - Enhanced Font Properties for iOS 16.0+ compatibility
+
+  /// Enhanced title2 font with iOS version compatibility for favorites headers
+  private var enhancedTitle2BoldFont: Font {
+    if #available(iOS 16.0, tvOS 16.0, *) {
+      return .system(.title2, design: .rounded, weight: .bold)
+    } else {
+      return .system(size: 22, weight: .bold, design: .rounded)
+    }
+  }
+
+  /// Enhanced caption medium font with iOS version compatibility
+  private var enhancedCaptionMediumFont: Font {
+    if #available(iOS 16.0, tvOS 16.0, *) {
+      return .system(.caption, design: .rounded, weight: .medium)
+    } else {
+      return .system(size: 12, weight: .medium, design: .rounded)
+    }
+  }
+
+  /// Enhanced large title font with iOS version compatibility for tvOS favorites
+  private var enhancedLargeTitleFont: Font {
+    if #available(iOS 16.0, tvOS 16.0, *) {
+      return .system(.largeTitle, design: .rounded, weight: .bold)
+    } else {
+      return .system(size: 34, weight: .bold, design: .rounded)
+    }
+  }
+
+  /// Enhanced title3 font with iOS version compatibility for tvOS favorites
+  private var enhancedTitle3Font: Font {
+    if #available(iOS 16.0, tvOS 16.0, *) {
+      return .system(.title3, design: .rounded, weight: .medium)
+    } else {
+      return .system(size: 20, weight: .medium, design: .rounded)
+    }
+  }
+
   @Environment(\.tipsService) private var tipsService
 
   @StateObject private var model = TVLibraryViewModel()
@@ -249,6 +456,64 @@ struct TVLibraryView: View {
   @State private var navigateTo: TVGameItem?
   @State private var showMoreMenu = false
   @State private var showUpdateRegions = false
+  @State private var showDSUSession = false
+
+    // MARK: - Computed Bindings (extracted to prevent compiler timeout)
+
+  private struct NavigationItem: Identifiable {
+    let id = UUID()
+  }
+
+#if os(iOS) || targetEnvironment(macCatalyst)
+  private var settingsBinding: Binding<NavigationItem?> {
+    Binding(
+      get: { navigateToSettings ? NavigationItem() : nil },
+      set: { navigateToSettings = ($0 != nil) }
+    )
+  }
+#endif
+
+  // MARK: - Navigation Configuration (extracted to prevent compiler timeout)
+
+  @ViewBuilder
+  private var navigationContent: some View {
+    mainContent
+#if os(iOS) || targetEnvironment(macCatalyst)
+      .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
+        handleDrop(providers: providers)
+        return true
+      }
+#endif
+      .modifier(iOS16NavigationStyleModifier())
+      .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
+        SaveStateFilmstripView(gameID: route.id)
+      }
+      .navigationDestinationItemCompat(item: $navigateTo) { item in
+        EmulationScreen(game: item)
+          .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
+      }
+  }
+
+  @ViewBuilder
+  private var navigationConfiguration: some View {
+    navigationContent
+      .navigationTitle(storeForBanner.isScanning ? "" : "DolphiniOS Library")
+      .toolbar { libraryToolbar }
+    #if !os(tvOS)
+      .navigationBarTitleDisplayMode(.large)
+    #endif
+#if os(iOS) || targetEnvironment(macCatalyst)
+      .navigationDestinationItemCompat(item: settingsBinding) { _ in
+        TVSettingsPage()
+          .navigationBarTitleDisplayMode(.inline)
+      }
+      .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
+      .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+#endif
+      .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FavoritesChanged"))) { _ in
+        favoritesVersion &+= 1
+      }
+  }
   /// Game to present in the SwiftUI properties sheet
   @State private var showPropertiesFor: TVGameItem?
   /// Game pending deletion confirmation
@@ -358,53 +623,95 @@ struct TVLibraryView: View {
     return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
   }
 
-  /// Beautiful GameCube/Wii inspired background with skeumorphic elements
+  /// Customizable background based on user preference
   @ViewBuilder
   private var backgroundGradient: some View {
+    switch backgroundStyle {
+    case .clean:
+      cleanBackground
+    case .gradient:
+      gradientBackground
+    case .animated:
+      animatedBackground
+    }
+  }
+
+  @ViewBuilder
+  private var cleanBackground: some View {
+    Color.black
+      .ignoresSafeArea()
+  }
+
+  @ViewBuilder
+  private var gradientBackground: some View {
+    LinearGradient(
+      colors: [
+        Color(red: 0.08, green: 0.12, blue: 0.22),
+        Color(red: 0.04, green: 0.06, blue: 0.15),
+        Color.black
+      ],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+    .ignoresSafeArea()
+  }
+
+  @ViewBuilder
+  private var animatedBackground: some View {
     ZStack {
-      // Base gradient inspired by GameCube menu
-      LinearGradient(
+      // Premium deep space gradient inspired by GameCube menu
+      RadialGradient(
         colors: [
-          Color(red: 0.05, green: 0.08, blue: 0.15),
-          Color(red: 0.1, green: 0.15, blue: 0.25),
-          Color(red: 0.08, green: 0.12, blue: 0.22)
+          Color(red: 0.12, green: 0.15, blue: 0.28),
+          Color(red: 0.08, green: 0.12, blue: 0.22),
+          Color(red: 0.04, green: 0.06, blue: 0.15),
+          Color.black
         ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
+        center: .topLeading,
+        startRadius: 100,
+        endRadius: 800
       )
       .ignoresSafeArea()
 
-      // Subtle animated orbs reminiscent of GameCube particle effects
-      ForEach(0..<3, id: \.self) { index in
+      // Elegant animated orbs with GameCube/Wii theming
+      ForEach(0..<5, id: \.self) { index in
         Circle()
           .fill(
             RadialGradient(
               colors: [
-                Color.blue.opacity(0.03),
-                Color.purple.opacity(0.02),
+                index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05),
+                index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025),
                 Color.clear
               ],
               center: .center,
-              startRadius: 10,
-              endRadius: 150
+              startRadius: 20,
+              endRadius: 180
             )
           )
-          .frame(width: 300, height: 300)
+          .frame(width: CGFloat.random(in: 200...400), height: CGFloat.random(in: 200...400))
           .offset(
-            x: CGFloat.random(in: -100...100),
-            y: CGFloat.random(in: -100...100)
+            x: CGFloat.random(in: -150...150),
+            y: CGFloat.random(in: -200...200)
           )
+          .scaleEffect(0.8 + CGFloat(index) * 0.1)
           .animation(
-            Animation.easeInOut(duration: Double.random(in: 8...12))
+            Animation.easeInOut(duration: Double.random(in: 10...18))
               .repeatForever(autoreverses: true)
-              .delay(Double(index) * 2),
+              .delay(Double(index) * 1.5),
             value: UUID()
           )
       }
 
-      // Subtle grid pattern like GameCube interface
+      // Sophisticated grid pattern with GameCube authenticity
       Canvas { context, size in
-        let spacing: CGFloat = 60
+        let spacing: CGFloat = 80
+        let lineWidth: CGFloat = 0.5
+        let gradient = Gradient(colors: [
+          .white.opacity(0.08),
+          .clear,
+          .white.opacity(0.04)
+        ])
+
         context.stroke(
           Path { path in
             for x in stride(from: 0, through: size.width, by: spacing) {
@@ -416,12 +723,48 @@ struct TVLibraryView: View {
               path.addLine(to: CGPoint(x: size.width, y: y))
             }
           },
-          with: .color(.white.opacity(0.02)),
-          lineWidth: 1
+          with: .linearGradient(
+            gradient,
+            startPoint: CGPoint(x: 0, y: 0),
+            endPoint: CGPoint(x: size.width, y: size.height)
+          ),
+          lineWidth: lineWidth
         )
       }
       .ignoresSafeArea()
+      .opacity(0.6)
+
+      // Subtle floating GameCube/Wii inspired elements
+      ForEach(0..<8, id: \.self) { index in
+        RoundedRectangle(cornerRadius: 4, style: .continuous)
+          .fill(
+            LinearGradient(
+              colors: [
+                Color.white.opacity(0.03),
+                Color.clear
+              ],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            )
+          )
+          .frame(
+            width: CGFloat.random(in: 20...40),
+            height: CGFloat.random(in: 20...40)
+          )
+          .offset(
+            x: CGFloat.random(in: -200...200),
+            y: CGFloat.random(in: -300...300)
+          )
+          .rotationEffect(.degrees(Double.random(in: 0...360)))
+          .animation(
+            Animation.linear(duration: Double.random(in: 20...30))
+              .repeatForever(autoreverses: false)
+              .delay(Double(index) * 2),
+            value: UUID()
+          )
+      }
     }
+    .clipped()
   }
 
   private enum CheatType { case gecko, ar }
@@ -438,37 +781,37 @@ struct TVLibraryView: View {
   private enum Constants {
     static let gridVerticalSpacing: CGFloat = {
 #if os(tvOS)
-      return 32
+      return 40  // More breathing room for focus effects
 #else
-      return 16
+      return 20  // Enhanced spacing for iOS
 #endif
     }()
     static let gridHorizontalSpacing: CGFloat = {
 #if os(tvOS)
-      return 48
+      return 52  // Better visual balance
 #else
-      return 12
+      return 16  // Modern iOS spacing
 #endif
     }()
 #if os(tvOS)
-    static let gridNumberOfColumns = 6
+    static let gridNumberOfColumns = 5  // Better proportion for wide screens
 #else
     static let gridNumberOfColumns = 3
 #endif
     static let gridHorizontalPadding: CGFloat = {
 #if os(tvOS)
-      return 64
+      return 80  // More immersive padding
 #else
-      return 24
+      return 20  // Clean iOS margins
 #endif
     }()
     static let gridVerticalPadding: CGFloat = {
 #if os(tvOS)
-      return 80
+      return 100  // Premium spacing for focus effects
 #else
-      return 24
+      return 28   // Modern iOS vertical rhythm
 #endif
-    }()  // Increased for focus scale effect
+    }()
     static var columns: [GridItem] {
       return Array(repeating: GridItem(.flexible(), spacing: gridHorizontalSpacing), count: gridNumberOfColumns)
     }
@@ -487,13 +830,13 @@ struct TVLibraryView: View {
       }
     }
     .task {
-      #if canImport(TipKit)
+#if canImport(TipKit)
       if #available(iOS 17, tvOS 17, *), !didReloadOnce {
         // Wait for first load to complete before showing tips
         // Simple debounce: small delay after initial load to allow UI to settle
         try? await Task.sleep(nanoseconds: 300_000_000)
       }
-      #endif
+#endif
     }
   }
 
@@ -536,40 +879,81 @@ struct TVLibraryView: View {
       ScrollViewReader { scr in
         ScrollView {
           if !isSearching, let favs = favorites(), !favs.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-              HStack(spacing: spacingH) {
-                ForEach(favs, id: \.filePath) { fav in
-                  GameGridItem(
-                    item: fav,
-                    select: selectGame,
-                    focusedFilePath: $focusedFilePath,
-                    showProperties: { showPropertiesFor = $0 },
-                    showCheatList: { showCheatListFor = $0 },
-                    downloadGeckoAction: { downloadGecko(for: $0) },
-                    presentCheatGecko: { showGeckoEditorFor = $0 },
-                    presentCheatAR: { showAREditorFor = $0 },
-                    requestDelete: { itemPendingDelete = $0 },
-                    showFavoriteToggle: { toggleFavorite(for: $0) },
-                    showStorageAlert: { message in
-                      storageAlertMessage = message
-                      showStorageErrorAlert = true
-                    },
-                    showCacheInfo: { item in
-                      showCacheInfoFor = item
-                    },
-                    showSaveStates: { item in
-                      let gid = item.gameID
-                      if !gid.isEmpty {
-                        navigateToSaveStates = GameIDRoute(id: gid)
-                      }
-                    },
-                    autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
-                    isAutoPreCaching: autoPreCacheActive.contains(fav.filePath)
-                  )
+            VStack(alignment: .leading, spacing: 12) {
+              // Premium favorites header
+              HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text("⭐ Favorites")
+                    .font(enhancedTitle2BoldFont)
+                    .foregroundStyle(
+                      LinearGradient(
+                        colors: [Color.primary, Color.primary.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                      )
+                    )
+
+                  Text("Your most-loved games")
+                    .font(enhancedCaptionMediumFont)
+                    .foregroundColor(.secondary)
                 }
+                Spacer()
+
+                // Subtle floating sparkle
+                Image(systemName: "sparkles")
+                  .font(.system(size: 16, weight: .light))
+                  .foregroundColor(.yellow.opacity(0.7))
+                  .scaleEffect(0.9)
               }
               .padding(.horizontal, paddingH)
-              .padding(.vertical, Constants.gridVerticalSpacing)
+
+              ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: spacingH) {
+                  ForEach(favs, id: \.filePath) { fav in
+                    GameGridItem(
+                      item: fav,
+                      select: selectGame,
+                      focusedFilePath: $focusedFilePath,
+                      showProperties: { showPropertiesFor = $0 },
+                      showCheatList: { showCheatListFor = $0 },
+                      downloadGeckoAction: { downloadGecko(for: $0) },
+                      presentCheatGecko: { showGeckoEditorFor = $0 },
+                      presentCheatAR: { showAREditorFor = $0 },
+                      requestDelete: { itemPendingDelete = $0 },
+                      showFavoriteToggle: { toggleFavorite(for: $0) },
+                      showStorageAlert: { message in
+                        storageAlertMessage = message
+                        showStorageErrorAlert = true
+                      },
+                      showCacheInfo: { item in
+                        showCacheInfoFor = item
+                      },
+                      showSaveStates: { item in
+                        let gid = item.gameID
+                        if !gid.isEmpty {
+                          navigateToSaveStates = GameIDRoute(id: gid)
+                        }
+                      },
+                      autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
+                      isAutoPreCaching: autoPreCacheActive.contains(fav.filePath),
+                      showSubtitles: showSubtitles
+                    )
+                  }
+                }
+                .padding(.horizontal, paddingH)
+                .padding(.vertical, Constants.gridVerticalSpacing)
+              }
+                          .background(
+              // Refined material backdrop for favorites with proper clipping
+              RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial.opacity(0.2))
+                .overlay(
+                  RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(.white.opacity(0.1), lineWidth: 1)
+                )
+                .padding(.horizontal, 12)
+                .clipped()
+            )
             }
           }
           LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
@@ -599,7 +983,8 @@ struct TVLibraryView: View {
                   }
                 },
                 autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
-                isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
+                isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
+                showSubtitles: showSubtitles
               )
               .id(item.filePath)
               .overlay(
@@ -710,73 +1095,121 @@ struct TVLibraryView: View {
 #else
     ScrollView {
       if !isSearching, let favs = favorites(), !favs.isEmpty {
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: Constants.gridHorizontalSpacing) {
-            ForEach(favs, id: \.filePath) { fav in
-              GameGridItem(
-                item: fav,
-                select: selectGame,
-                focusedFilePath: $focusedFilePath,
-                showProperties: { showPropertiesFor = $0 },
-                showCheatList: { showCheatListFor = $0 },
-                downloadGeckoAction: { downloadGecko(for: $0) },
-                presentCheatGecko: { showGeckoEditorFor = $0 },
-                presentCheatAR: { showAREditorFor = $0 },
-                requestDelete: { itemPendingDelete = $0 },
-                showFavoriteToggle: { toggleFavorite(for: $0) },
-                showStorageAlert: { message in
-                  storageAlertMessage = message
-                  showStorageErrorAlert = true
-                },
-                showCacheInfo: { item in
-                  showCacheInfoFor = item
-                },
-                showSaveStates: { item in
-                  let gid = item.gameID
-                  if !gid.isEmpty {
-                    navigateToSaveStates = GameIDRoute(id: gid)
-                  }
-                },
-                autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
-                isAutoPreCaching: autoPreCacheActive.contains(fav.filePath)
-              )
+        VStack(alignment: .leading, spacing: 16) {
+          // Stunning tvOS favorites header
+          HStack {
+            VStack(alignment: .leading, spacing: 6) {
+              Text("⭐ Favorites")
+                .font(enhancedLargeTitleFont)
+                .foregroundStyle(
+                  LinearGradient(
+                    colors: [Color.primary, Color.primary.opacity(0.8)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                  )
+                )
+
+              Text("Your championship collection")
+                .font(enhancedTitle3Font)
+                .foregroundColor(.secondary)
+            }
+            Spacer()
+
+            // Elegant floating elements
+            HStack(spacing: 8) {
+              Image(systemName: "sparkles")
+                .font(.system(size: 24, weight: .light))
+                .foregroundColor(.yellow.opacity(0.8))
+              Image("DolphinLogo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .opacity(0.7)
             }
           }
-        }
-      }
-      LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
-        ForEach(displayGames, id: \.filePath) { item in
-          GameGridItem(
-            item: item,
-            select: selectGame,
-            focusedFilePath: $focusedFilePath,
-            showProperties: { showPropertiesFor = $0 },
-            showCheatList: { showCheatListFor = $0 },
-            downloadGeckoAction: { downloadGecko(for: $0) },
-            presentCheatGecko: { showGeckoEditorFor = $0 },
-            presentCheatAR: { showAREditorFor = $0 },
-            requestDelete: { itemPendingDelete = $0 },
-            showFavoriteToggle: { toggleFavorite(for: $0) },
-            showStorageAlert: { message in
-              storageAlertMessage = message
-              showStorageErrorAlert = true
-            },
-            showCacheInfo: { item in
-              showCacheInfoFor = item
-            },
-            showSaveStates: { item in
-              let gid = item.gameID
-              if !gid.isEmpty {
-                navigateToSaveStates = GameIDRoute(id: gid)
+          .padding(.horizontal, Constants.gridHorizontalPadding)
+
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Constants.gridHorizontalSpacing) {
+              ForEach(favs, id: \.filePath) { fav in
+                GameGridItem(
+                  item: fav,
+                  select: selectGame,
+                  focusedFilePath: $focusedFilePath,
+                  showProperties: { showPropertiesFor = $0 },
+                  showCheatList: { showCheatListFor = $0 },
+                  downloadGeckoAction: { downloadGecko(for: $0) },
+                  presentCheatGecko: { showGeckoEditorFor = $0 },
+                  presentCheatAR: { showAREditorFor = $0 },
+                  requestDelete: { itemPendingDelete = $0 },
+                  showFavoriteToggle: { toggleFavorite(for: $0) },
+                  showStorageAlert: { message in
+                    storageAlertMessage = message
+                    showStorageErrorAlert = true
+                  },
+                  showCacheInfo: { item in
+                    showCacheInfoFor = item
+                  },
+                  showSaveStates: { item in
+                    let gid = item.gameID
+                    if !gid.isEmpty {
+                      navigateToSaveStates = GameIDRoute(id: gid)
+                    }
+                  },
+                  autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
+                  isAutoPreCaching: autoPreCacheActive.contains(fav.filePath),
+                  showSubtitles: showSubtitles
+                )
               }
-            },
-            autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
-            isAutoPreCaching: autoPreCacheActive.contains(item.filePath)
+            }
+                      .background(
+            // Elegant material backdrop for tvOS favorites with proper clipping
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+              .fill(.ultraThinMaterial.opacity(0.15))
+              .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                  .stroke(.white.opacity(0.08), lineWidth: 1.5)
+              )
+              .padding(.horizontal, 20)
+              .clipped()
           )
+          }
         }
+        LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
+          ForEach(displayGames, id: \.filePath) { item in
+            GameGridItem(
+              item: item,
+              select: selectGame,
+              focusedFilePath: $focusedFilePath,
+              showProperties: { showPropertiesFor = $0 },
+              showCheatList: { showCheatListFor = $0 },
+              downloadGeckoAction: { downloadGecko(for: $0) },
+              presentCheatGecko: { showGeckoEditorFor = $0 },
+              presentCheatAR: { showAREditorFor = $0 },
+              requestDelete: { itemPendingDelete = $0 },
+              showFavoriteToggle: { toggleFavorite(for: $0) },
+              showStorageAlert: { message in
+                storageAlertMessage = message
+                showStorageErrorAlert = true
+              },
+              showCacheInfo: { item in
+                showCacheInfoFor = item
+              },
+              showSaveStates: { item in
+                let gid = item.gameID
+                if !gid.isEmpty {
+                  navigateToSaveStates = GameIDRoute(id: gid)
+                }
+              },
+              autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
+              isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
+              showSubtitles: showSubtitles
+            )
+          }
+        }
+        .padding(.horizontal, Constants.gridHorizontalPadding)
+        .padding(.vertical, Constants.gridVerticalPadding)
       }
-      .padding(.horizontal, Constants.gridHorizontalPadding)
-      .padding(.vertical, Constants.gridVerticalPadding)
     }
 #endif
   }
@@ -858,6 +1291,9 @@ struct TVLibraryView: View {
         Button(action: { model.performOnlineSystemUpdate() }) {
           Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
         }
+        Button(action: { showDSUSession = true }) {
+          Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
+        }
         Button(action: {
 #if os(iOS) || targetEnvironment(macCatalyst)
           showImportNANDPicker = true
@@ -905,37 +1341,15 @@ struct TVLibraryView: View {
 
   var body: some View {
     NavigationStack {
-      mainContent
-#if os(iOS) || targetEnvironment(macCatalyst)
-        .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
-          handleDrop(providers: providers)
-          return true
-        }
-#endif
-        .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
-          SaveStateFilmstripView(gameID: route.id)
-        }
-        .navigationDestinationItemCompat(item: $navigateTo) { item in
-          EmulationScreen(game: item)
-            .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
-        }
-        .navigationTitle(storeForBanner.isScanning ? "" : "DolphiniOS Library")
-        .toolbar { libraryToolbar }
-#if os(iOS) || targetEnvironment(macCatalyst)
-        .navigationDestinationItemCompat(item: Binding(get: { navigateToSettings ? trueWrapper : nil }, set: { v in navigateToSettings = (v != nil) })) { _ in
-          TVSettingsPage()
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-#endif
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FavoritesChanged"))) { _ in
-          favoritesVersion &+= 1
-        }
+      navigationConfiguration
     }
     .sheet(isPresented: $showSaveStatesBrowser) {
       NavigationStack { SaveStatesBrowserView() }
     }
+    // DSU controller session (iOS only)
+#if os(iOS)
+    .sheet(isPresented: $showDSUSession) { DSUSessionView() }
+#endif
     .onAppear {
       // Tips setup
       if #available(iOS 17, tvOS 17, *) {
@@ -1114,24 +1528,24 @@ struct TVLibraryView: View {
         Button(L("Cancel"), role: .cancel) {}
       } message: { Text(storageAlertMessage) }
       .sheet(item: $showCacheInfoFor) { item in
-        CacheInfoView(item: item)
+        CacheInfoView(item: item, showSubtitles: showSubtitles)
       }
       .overlay(blockingPrecacheOverlay)
       .overlay(offlineBanner)
-      #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
       .overlay(dropHighlight)
-      #endif
+#endif
       .overlay(searchHintBanner)
       .overlay(snackbar)
       .overlay(onboardingOverlay)
-      #if os(iOS)
+#if os(iOS)
       .sheet(isPresented: Binding(get: { showGeckoEditorFor != nil }, set: { if !$0 { showGeckoEditorFor = nil } })) {
         if let item = showGeckoEditorFor { GeckoCodesModal(item: item) }
       }
       .sheet(isPresented: Binding(get: { showAREditorFor != nil }, set: { if !$0 { showAREditorFor = nil } })) {
         if let item = showAREditorFor { ActionReplayCodesModal(item: item) }
       }
-      #endif
+#endif
   }
 
   @State private var snackbarText: String = ""
@@ -1139,9 +1553,9 @@ struct TVLibraryView: View {
   @State private var showOnboarding: Bool = false
   @StateObject private var storeForBanner = RemoteSourcesStore.shared
   @State private var offlineBannerDismissed: Bool = false
-  #if os(tvOS)
+#if os(tvOS)
   @State private var showSearchSheet: Bool = false
-  #endif
+#endif
 
   @ViewBuilder private var snackbar: some View {
     if snackbarVisible {
@@ -1194,7 +1608,7 @@ struct TVLibraryView: View {
   }
 
   @ViewBuilder private var searchHintBanner: some View {
-    #if os(tvOS)
+#if os(tvOS)
     let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     if !q.isEmpty {
       let needle = q.lowercased()
@@ -1236,9 +1650,9 @@ struct TVLibraryView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
       } else { EmptyView() }
     } else { EmptyView() }
-    #else
+#else
     EmptyView()
-    #endif
+#endif
   }
 
   @ViewBuilder
@@ -1570,7 +1984,7 @@ struct TVLibraryView: View {
     GameProfiles.shared.applyProfileIfAvailable(for: item)
     if let url = URL(string: item.filePath), Self.isRemoteURL(item.filePath) {
       if let webdav = getMatchingWebDAVSource(for: url), webdav.isPreCachingEnabled {
-        let remoteItem = RemoteLibraryItem(url: url, displayName: item.title, sizeBytes: Int64(item.fileSize), etag: nil, lastModified: nil)
+        let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: 0)
         if !webdav.isCached(remoteItem) {
           blockingPrecacheItem = item
           blockingPrecacheProgress = 0
@@ -1759,6 +2173,7 @@ private struct GameGridItem: View {
   let showSaveStates: (TVGameItem) -> Void
   let autoPreCacheProgress: Double
   let isAutoPreCaching: Bool
+  let showSubtitles: Bool
 
   @State private var showPreCacheProgress = false
   @State private var preCacheProgress: Double = 0.0
@@ -1782,18 +2197,18 @@ private struct GameGridItem: View {
   /// Check if this is a remote game
   private var isRemoteGame: Bool {
     let result = remoteIconName != nil
-    #if DEBUG
+#if DEBUG
     print("DEBUG: isRemoteGame for '\(item.title)' (path: '\(item.filePath)') = \(result)")
-    #endif
+#endif
     return result
   }
 
   /// Get the WebDAV source for this game (if any)
   private func getWebDAVSource() -> WebDAVSource? {
     guard isRemoteGame, let url = URL(string: item.filePath) else {
-      #if DEBUG
+#if DEBUG
       print("DEBUG: getWebDAVSource early return - isRemoteGame: \(isRemoteGame), url valid: \(URL(string: item.filePath) != nil)")
-      #endif
+#endif
       return nil
     }
 
@@ -1868,35 +2283,35 @@ private struct GameGridItem: View {
     return source.isCached(remoteItem)
   }
 
-    /// Detect if this is a GameCube or Wii game based on DiscIO::Platform
+  /// Detect if this is a GameCube or Wii game based on DiscIO::Platform
   private var gameSystem: GameSystem {
     // DiscIO::Platform enum values:
     // GameCubeDisc = 0, WiiDisc = 1, WiiWAD = 2, ELFOrDOL = 3
     switch item.platform {
     case 0: // GameCubeDisc
-      #if DEBUG
+#if DEBUG
       print("DEBUG: Platform-detected GameCube game: '\(item.gameID)' for '\(item.title)'")
-      #endif
+#endif
       return .gamecube
 
     case 1, 2: // WiiDisc, WiiWAD
-      #if DEBUG
+#if DEBUG
       print("DEBUG: Platform-detected Wii game: '\(item.gameID)' for '\(item.title)' (platform: \(item.platform))")
-      #endif
+#endif
       return .wii
 
     case 3: // ELFOrDOL
       // ELF/DOL files can be either GameCube or Wii, but are typically GameCube homebrew
-      #if DEBUG
+#if DEBUG
       print("DEBUG: Platform-detected ELF/DOL: '\(item.gameID)' for '\(item.title)' - defaulting to GameCube")
-      #endif
+#endif
       return .gamecube
 
     default:
       // Unknown platform, default to GameCube as fallback
-      #if DEBUG
+#if DEBUG
       print("DEBUG: Unknown platform \(item.platform) for '\(item.gameID)' '\(item.title)' - defaulting to GameCube")
-      #endif
+#endif
       return .gamecube
     }
   }
@@ -1912,162 +2327,256 @@ private struct GameGridItem: View {
     }
   }
 
-      /// Check if we're using the default placeholder cover
+  /// Check if we're using the default placeholder cover
   private var isUsingPlaceholderCover: Bool {
     // This is a heuristic - check if the cover image is the default "NoCover" placeholder
     let image = item.coverImage
     let desc = image.description.lowercased()
 
     let isPlaceholder = image.size.width <= 1 ||
-           image.size.height <= 1 ||
-           desc.contains("nocover") ||
-           desc.contains("placeholder") ||
-           desc.contains("default") ||
-           // Check for very small images that are likely placeholders
-           (image.size.width < 50 && image.size.height < 50)
+    image.size.height <= 1 ||
+    desc.contains("nocover") ||
+    desc.contains("placeholder") ||
+    desc.contains("default") ||
+    // Check for very small images that are likely placeholders
+    (image.size.width < 50 && image.size.height < 50)
 
-    #if DEBUG
+#if DEBUG
     if isPlaceholder {
       print("DEBUG: Using placeholder cover for '\(item.title)' (gameID: '\(item.gameID)'), system: \(gameSystem)")
     }
-    #endif
+#endif
 
     return isPlaceholder
   }
 
-    /// Custom templated cover view for games without artwork - now with beautiful skeumorphism!
+  /// Stunning templated cover view with authentic GameCube/Wii theming! 🎮✨
   @ViewBuilder
   private var templatedCoverView: some View {
     ZStack {
-      // Skeumorphic game case background
+      // Authentic game case background with system-specific theming
       RoundedRectangle(cornerRadius: 16, style: .continuous)
         .fill(
-          LinearGradient(
+          RadialGradient(
             colors: gameSystem == .gamecube ?
-              [Color(red: 0.4, green: 0.3, blue: 0.8), Color(red: 0.2, green: 0.15, blue: 0.6)] :
-              [Color(red: 0.3, green: 0.6, blue: 0.9), Color(red: 0.1, green: 0.4, blue: 0.8)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+            [
+              Color(red: 0.35, green: 0.25, blue: 0.75), // GameCube purple
+              Color(red: 0.25, green: 0.15, blue: 0.65),
+              Color(red: 0.15, green: 0.08, blue: 0.55)
+            ] : [
+              Color(red: 0.25, green: 0.55, blue: 0.95), // Wii blue
+              Color(red: 0.15, green: 0.45, blue: 0.85),
+              Color(red: 0.08, green: 0.35, blue: 0.75)
+            ],
+            center: .topLeading,
+            startRadius: 20,
+            endRadius: 200
           )
         )
         .overlay(
-          // Subtle case reflection
+          // Enhanced case reflection with depth
           LinearGradient(
-            colors: [Color.white.opacity(0.3), Color.clear, Color.black.opacity(0.2)],
+            colors: [
+              Color.white.opacity(0.4),
+              Color.white.opacity(0.15),
+              Color.clear,
+              Color.black.opacity(0.15),
+              Color.black.opacity(0.25)
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
           )
         )
-        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
         .overlay(
           RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            .stroke(
+              LinearGradient(
+                colors: [Color.white.opacity(0.3), Color.clear, Color.white.opacity(0.1)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              ),
+              lineWidth: 1.5
+            )
         )
 
-      // GameCube disc case spine details (left side)
+      // Authentic GameCube disc case details
       if gameSystem == .gamecube {
-        HStack {
-          RoundedRectangle(cornerRadius: 2)
-            .fill(
-              LinearGradient(
-                colors: [Color.white.opacity(0.4), Color.white.opacity(0.1)],
-                startPoint: .top,
-                endPoint: .bottom
+        VStack {
+          // Top edge highlight
+          HStack {
+            Rectangle()
+              .fill(
+                LinearGradient(
+                  colors: [Color.white.opacity(0.6), Color.clear],
+                  startPoint: .leading,
+                  endPoint: .trailing
+                )
               )
-            )
-            .frame(width: 4)
-            .padding(.leading, 8)
+              .frame(height: 2)
+              .padding(.horizontal, 16)
+            Spacer()
+          }
           Spacer()
         }
-      }
+        .padding(.top, 4)
 
-      // System logo watermark
-      VStack {
+        // Left spine with authentic GameCube styling
         HStack {
+          VStack(spacing: 2) {
+            Rectangle()
+              .fill(Color.white.opacity(0.5))
+              .frame(width: 6, height: 20)
+            Rectangle()
+              .fill(Color.white.opacity(0.3))
+              .frame(width: 4, height: 40)
+            Rectangle()
+              .fill(Color.white.opacity(0.5))
+              .frame(width: 6, height: 20)
+          }
+          .padding(.leading, 6)
           Spacer()
-          Image(gameSystem.templateImageName)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: screenScaledFontSize(base: 40), height: screenScaledFontSize(base: 40))
-            .opacity(0.15)
-            .padding(.top, screenScaledPadding(base: 12))
-            .padding(.trailing, screenScaledPadding(base: 12))
         }
-        Spacer()
       }
 
-      // Game info with elegant typography
-      VStack(spacing: screenScaledPadding(base: 8)) {
+            // Authentic full-cover template image like real GameCube/Wii box art
+      Image(gameSystem.templateImageName)
+        .resizable()
+        .aspectRatio(contentMode: .fill)
+        .frame(
+          width: Layout.cardSize.width * 0.95,
+          height: Layout.cardSize.height * 0.95
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .blendMode(.overlay)
+//        .offset(y: -5)
+
+      // Authentic Nintendo branding
+//      VStack {
+//        HStack {
+//          Spacer()
+//          VStack(spacing: 2) {
+//            Text("NINTENDO")
+//              .font(.system(
+//                size: screenScaledFontSize(base: 8),
+//                weight: .black,
+//                design: .rounded
+//              ))
+//              .foregroundStyle(
+//                LinearGradient(
+//                  colors: [Color.white, Color.white.opacity(0.8)],
+//                  startPoint: .top,
+//                  endPoint: .bottom
+//                )
+//              )
+//              .modifier(iOS16TrackingModifier(tracking: 2))
+//              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
+
+//            Text(gameSystem == .gamecube ? "GAMECUBE" : "Wii")
+//              .font(.system(
+//                size: screenScaledFontSize(base: 7),
+//                weight: .bold,
+//                design: .rounded
+//              ))
+//              .foregroundColor(.white.opacity(0.9))
+//              .modifier(iOS16TrackingModifier(tracking: 1.5))
+//              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
+//          }
+//          .padding(.top, screenScaledPadding(base: 12))
+//          .padding(.trailing, screenScaledPadding(base: 12))
+//        }
+//        Spacer()
+//      }
+
+      // Enhanced game info with award-winning typography
+      VStack(spacing: screenScaledPadding(base: 10)) {
         Spacer()
 
-        // Title with enhanced typography
+        // Title with stunning effect
         Text(item.title.isEmpty ? "Unknown Game" : item.title)
           .font(.system(
-            size: screenScaledFontSize(base: 17),
-            weight: .bold,
+            size: screenScaledFontSize(base: 18),
+            weight: .black,
             design: .rounded
           ))
           .foregroundStyle(
             LinearGradient(
-              colors: [.white, Color.white.opacity(0.9)],
+              colors: [
+                Color.white,
+                Color.white.opacity(0.95),
+                Color.white.opacity(0.9)
+              ],
               startPoint: .top,
               endPoint: .bottom
             )
           )
           .multilineTextAlignment(.center)
-          .lineLimit(4)
+          .lineLimit(3)
           .minimumScaleFactor(0.6)
-          .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
+          .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 2)
+          .shadow(color: gameSystem == .gamecube ? .purple.opacity(0.5) : .blue.opacity(0.5),
+                  radius: 8, x: 0, y: 0)
 
-        // Game ID with metallic effect
-        if !item.gameID.isEmpty {
+        // Enhanced Game ID with authentic styling
+        if !item.gameID.isEmpty && showSubtitles {
           Text(item.gameID)
             .font(.system(
-              size: screenScaledFontSize(base: 12),
-              weight: .medium,
+              size: screenScaledFontSize(base: 11),
+              weight: .bold,
               design: .monospaced
             ))
             .foregroundStyle(
               LinearGradient(
-                colors: [Color.white.opacity(0.95), Color.white.opacity(0.7)],
+                colors: [Color.white, Color.white.opacity(0.85)],
                 startPoint: .top,
                 endPoint: .bottom
               )
             )
-            .padding(.horizontal, screenScaledPadding(base: 8))
-            .padding(.vertical, screenScaledPadding(base: 4))
+            .padding(.horizontal, screenScaledPadding(base: 10))
+            .padding(.vertical, screenScaledPadding(base: 5))
             .background(
-              Capsule()
-                .fill(Color.black.opacity(0.3))
-                .overlay(
-                  Capsule()
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+              RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                  LinearGradient(
+                    colors: [
+                      Color.black.opacity(0.4),
+                      Color.black.opacity(0.6)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                  )
                 )
+                .overlay(
+                  RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
             )
-            .shadow(color: .black.opacity(0.6), radius: 1, x: 0, y: 1)
         }
-
-        // System badge
-        Text(gameSystem == .gamecube ? "NINTENDO GAMECUBE" : "NINTENDO Wii")
-          .font(.system(
-            size: screenScaledFontSize(base: 9),
-            weight: .bold,
-            design: .monospaced
-          ))
-          .foregroundColor(.white.opacity(0.8))
-          .tracking(1.2)
-          .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
       }
       .padding(.horizontal, screenScaledPadding(base: 12))
       .padding(.bottom, screenScaledPadding(base: 16))
+
+      // Subtle animated sparkles for magic ✨
+      ForEach(0..<3, id: \.self) { index in
+        Image(systemName: "sparkle")
+          .font(.system(size: screenScaledFontSize(base: 8), weight: .light))
+          .foregroundColor(.white.opacity(0.4))
+          .offset(
+            x: CGFloat([20, -25, 15][index]),
+            y: CGFloat([-30, -45, -35][index])
+          )
+          .opacity(0.6)
+          .scaleEffect(0.8)
+      }
     }
     .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    // Add subtle 3D perspective
+    // Enhanced 3D perspective
     .rotation3DEffect(
-      .degrees(2),
+      .degrees(3),
       axis: (x: 0.1, y: 1.0, z: 0),
-      perspective: 1.0
+      perspective: 0.8
     )
   }
 
@@ -2107,60 +2616,81 @@ private struct GameGridItem: View {
     }
   }
 
+
   var body: some View {
 #if os(tvOS)
     // Clean, simple approach for tvOS
     VStack(alignment: .leading, spacing: 12) {
       ZStack(alignment: .topTrailing) {
         // Show templated cover if using placeholder, otherwise show real cover with skeumorphism
-        if isUsingPlaceholderCover {
-          templatedCoverView
-        } else {
-          ZStack {
-            // Skeumorphic game case for real covers
-            Image(uiImage: item.coverImage)
-              .resizable()
-              .interpolation(.high)
-              .aspectRatio(contentMode: .fill)
-              .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-              .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
-              .overlay(
-                // Subtle case reflection
-                LinearGradient(
-                  colors: [Color.white.opacity(0.15), Color.clear, Color.black.opacity(0.1)],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                )
+        Group {
+          if isUsingPlaceholderCover {
+            templatedCoverView
+          } else {
+            ZStack {
+              // Skeumorphic game case for real covers
+              Image(uiImage: item.coverImage)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fill)
+                .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-              )
-              .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                  .stroke(Color.white.opacity(0.1), lineWidth: 1)
-              )
+                .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+                .overlay(
+                  // Subtle case reflection
+                  LinearGradient(
+                    colors: [Color.white.opacity(0.15), Color.clear, Color.black.opacity(0.1)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                  )
+                  .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                )
+                .overlay(
+                  RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
               // Add subtle 3D perspective to real covers too
-              .rotation3DEffect(
-                .degrees(1),
-                axis: (x: 0.05, y: 1.0, z: 0),
-                perspective: 1.2
-              )
+                .rotation3DEffect(
+                  .degrees(1),
+                  axis: (x: 0.05, y: 1.0, z: 0),
+                  perspective: 1.2
+                )
+            }
           }
         }
-          .overlay(
+        .overlay(
+            // Award-winning focus glow with GameCube/Wii theming
             RoundedRectangle(cornerRadius: 16, style: .continuous)
               .stroke(
                 LinearGradient(
-                  colors: [Color.cyan.opacity(0.9), Color.purple.opacity(0.9)],
+                  colors: isFocused ? [
+                    Color.cyan.opacity(0.95),
+                    Color.blue.opacity(0.9),
+                    Color.purple.opacity(0.95),
+                    Color.cyan.opacity(0.95)
+                  ] : [Color.clear],
                   startPoint: .topLeading,
                   endPoint: .bottomTrailing
                 ),
-                lineWidth: isFocused ? 6 : 0
+                lineWidth: isFocused ? 8 : 0
               )
-              .shadow(color: .cyan.opacity(isFocused ? 0.6 : 0), radius: isFocused ? 20 : 0)
-              .shadow(color: .purple.opacity(isFocused ? 0.5 : 0), radius: isFocused ? 28 : 0)
+              .shadow(color: .cyan.opacity(isFocused ? 0.8 : 0), radius: isFocused ? 25 : 0)
+              .shadow(color: .blue.opacity(isFocused ? 0.6 : 0), radius: isFocused ? 35 : 0)
+              .shadow(color: .purple.opacity(isFocused ? 0.7 : 0), radius: isFocused ? 45 : 0)
+              .animation(.easeInOut(duration: 0.6), value: isFocused)
+          )
+          .overlay(
+            // Inner highlight for premium feel
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+              .stroke(
+                Color.white.opacity(isFocused ? 0.4 : 0),
+                lineWidth: isFocused ? 2 : 0
+              )
+              .padding(4)
+              .animation(.easeInOut(duration: 0.4), value: isFocused)
           )
           .shadow(
-            color: .black.opacity(isFocused ? 0.4 : 0.2),
+            color: Color.black.opacity(isFocused ? 0.4 : 0.2),
             radius: isFocused ? 20 : 8,
             x: 0,
             y: isFocused ? 12 : 6
@@ -2174,16 +2704,16 @@ private struct GameGridItem: View {
         }
 
         if let icon = remoteIconName {
-                      ZStack {
-              if isPreCaching {
-                // Show manual pre-cache progress indicator
-                DolphinCircularSpinner(
-                  size: 24,
-                  lineWidth: 2,
-                  dolphinSize: 8,
-                  progress: preCacheProgress
-                )
-              } else {
+          ZStack {
+            if isPreCaching {
+              // Show manual pre-cache progress indicator
+              DolphinCircularSpinner(
+                size: 24,
+                lineWidth: 2,
+                dolphinSize: 8,
+                progress: preCacheProgress
+              )
+            } else {
               Image(systemName: icon)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.white)
@@ -2232,9 +2762,10 @@ private struct GameGridItem: View {
           )
           .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
 
-        HStack {
-          // Game ID with enhanced styling
-          Text(item.gameID)
+        if showSubtitles {
+          HStack {
+            // Game ID with enhanced styling
+            Text(item.gameID)
             .font(enhancedCaptionFont)
             .foregroundStyle(
               LinearGradient(
@@ -2276,6 +2807,7 @@ private struct GameGridItem: View {
             )
           }
         }
+      }
       }
     }
     .frame(width: Layout.cardSize.width)
@@ -2372,41 +2904,41 @@ private struct GameGridItem: View {
     Button(action: { select(item) }) {
       VStack(alignment: .leading, spacing: 12) {
         ZStack(alignment: .topTrailing) {
-                  // Show templated cover if using placeholder, otherwise show real cover with skeumorphism
-        if isUsingPlaceholderCover {
-          templatedCoverView
-        } else {
-          ZStack {
-            // Skeumorphic game case for real covers
-            Image(uiImage: item.coverImage)
-              .resizable()
-              .aspectRatio(contentMode: .fill)
-              .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-              .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
-              .overlay(
-                // Subtle case reflection
-                LinearGradient(
-                  colors: [Color.white.opacity(0.12), Color.clear, Color.black.opacity(0.08)],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                )
+          // Show templated cover if using placeholder, otherwise show real cover with skeumorphism
+          if isUsingPlaceholderCover {
+            templatedCoverView
+          } else {
+            ZStack {
+              // Skeumorphic game case for real covers
+              Image(uiImage: item.coverImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-              )
-              .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                  .stroke(Color.white.opacity(0.1), lineWidth: 1)
-              )
+                .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
+                .overlay(
+                  // Subtle case reflection
+                  LinearGradient(
+                    colors: [Color.white.opacity(0.12), Color.clear, Color.black.opacity(0.08)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                  )
+                  .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                )
+                .overlay(
+                  RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
               // Add subtle 3D perspective to real covers too
-              .rotation3DEffect(
-                .degrees(0.8),
-                axis: (x: 0.05, y: 1.0, z: 0),
-                perspective: 1.5
-              )
+                .rotation3DEffect(
+                  .degrees(0.8),
+                  axis: (x: 0.05, y: 1.0, z: 0),
+                  perspective: 1.5
+                )
+            }
           }
-        }
 
-                    if let icon = remoteIconName {
+          if let icon = remoteIconName {
             ZStack {
               if isPreCaching {
                 // Show progress indicator
@@ -2455,36 +2987,45 @@ private struct GameGridItem: View {
             .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
 
           // Game ID with enhanced styling
-          Text(item.gameID)
-            .font(enhancedCaptionFont)
-            .foregroundStyle(
-              LinearGradient(
-                colors: [Color.secondary, Color.secondary.opacity(0.8)],
-                startPoint: .top,
-                endPoint: .bottom
-              )
-            )
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-              Capsule()
-                .fill(Color.primary.opacity(0.05))
-                .overlay(
-                  Capsule()
-                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+          if showSubtitles {
+            Text(item.gameID)
+              .font(enhancedCaptionFont)
+              .foregroundStyle(
+                LinearGradient(
+                  colors: [Color.secondary, Color.secondary.opacity(0.8)],
+                  startPoint: .top,
+                  endPoint: .bottom
                 )
-            )
+              )
+              .padding(.horizontal, 6)
+              .padding(.vertical, 2)
+              .background(
+                Capsule()
+                  .fill(Color.primary.opacity(0.05))
+                  .overlay(
+                    Capsule()
+                      .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+                  )
+              )
+          }
         }
       }
       .frame(width: Layout.cardSize.width)
     }
     .buttonStyle(.plain)
     .scaleEffect(1.0)
-    .animation(.easeInOut(duration: 0.1), value: UUID())
-    .onLongPressGesture(minimumDuration: 0.0, maximumDistance: .infinity) { } onPressingChanged: { pressing in
-      withAnimation(.easeInOut(duration: 0.1)) {
-        // Add subtle press animation for tactile feedback
-      }
+    .overlay(
+      // Subtle iOS press highlight
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .fill(Color.white.opacity(0.1))
+        .opacity(0)
+        .animation(.easeInOut(duration: 0.15), value: UUID())
+    )
+    .onTapGesture {
+      // Haptic feedback for premium feel
+      let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+      impactFeedback.impactOccurred()
+      select(item)
     }
     .contextMenu {
       // Align with tvOS context menu
@@ -2775,6 +3316,7 @@ private struct SourcePickerView: View {
 /// View showing cache information for a remote game
 private struct CacheInfoView: View {
   let item: TVGameItem
+  let showSubtitles: Bool
   @Environment(\.dismiss) private var dismiss
   @State private var cacheInfo: CacheInfo?
   @State private var isLoading = true
@@ -2837,9 +3379,11 @@ private struct CacheInfoView: View {
                     Text(item.title)
                       .font(.title3).fontWeight(.semibold)
                       .lineLimit(2)
-                    Text(item.gameID)
-                      .font(.footnote)
-                      .foregroundColor(.secondary)
+                    if showSubtitles {
+                      Text(item.gameID)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    }
                     HStack(spacing: 6) {
                       Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
                       Text("Cached \(DateFormatter.localizedString(from: info.cachedDate, dateStyle: .medium, timeStyle: .short))")
@@ -2910,7 +3454,7 @@ private struct CacheInfoView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    #if os(iOS)
+#if os(iOS)
                     if FileManager.default.fileExists(atPath: info.localPath) {
                       Button { shareFile(path: info.localPath) } label: {
                         HStack { Image(systemName: "square.and.arrow.up"); Text(L("Share")) }
@@ -2918,7 +3462,7 @@ private struct CacheInfoView: View {
                       }
                       .buttonStyle(.bordered)
                     }
-                    #endif
+#endif
                   }
                   .padding(.top, 8)
                 }
@@ -2952,7 +3496,7 @@ private struct CacheInfoView: View {
       .onAppear {
         loadCacheInfo()
       }
-    #if os(iOS)
+#if os(iOS)
       .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
         Group {
           if let url = shareURL {
@@ -2963,7 +3507,7 @@ private struct CacheInfoView: View {
           }
         }
       }
-    #endif
+#endif
       .overlay(
         Group {
           if let toast = toastText {
@@ -3096,12 +3640,12 @@ private struct CacheInfoView: View {
 #endif
   }
 
-  #if os(iOS)
+#if os(iOS)
   private func shareFile(path: String) {
     let url = URL(fileURLWithPath: path)
     shareURL = url
   }
-  #endif
+#endif
 }
 
 
@@ -3122,7 +3666,7 @@ private struct KVRow: View {
           .font(.caption)
           .foregroundColor(.secondary)
           .textCase(.uppercase)
-        #if os(tvOS)
+#if os(tvOS)
         if monospaced {
           if #available(tvOS 16.0, *) {
             Text(value).font(.callout).monospaced().lineLimit(nil)
@@ -3132,7 +3676,7 @@ private struct KVRow: View {
         } else {
           Text(value).font(.callout).lineLimit(nil)
         }
-        #else
+#else
         if monospaced {
           if #available(iOS 16.0, *) {
             Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
@@ -3142,7 +3686,7 @@ private struct KVRow: View {
         } else {
           Text(value).font(.callout).textSelection(.enabled).lineLimit(nil)
         }
-        #endif
+#endif
       }
       Spacer(minLength: 0)
     }
@@ -3261,7 +3805,7 @@ extension TVLibraryView {
           .padding(.top, 8)
           Spacer()
         }
-        .transition(.move(edge: .top).combined(with: .opacity))
+          .transition(.move(edge: .top).combined(with: .opacity))
       )
     }
     return AnyView(EmptyView())
@@ -3343,8 +3887,6 @@ private struct AttachTipModifier: ViewModifier {
 #endif
 
 // MARK: - Compatibility Helpers (iOS 16)
-private struct TrueWrapper: Identifiable { let id = UUID() }
-private var trueWrapper: TrueWrapper { TrueWrapper() }
 
 private enum TipKind { case importGame, addSource, search }
 
@@ -3361,7 +3903,7 @@ private extension View {
 
   @ViewBuilder
   func navigationDestinationItemCompat<Item: Identifiable, Destination: View>(item: Binding<Item?>,
-                                                                               @ViewBuilder destination: @escaping (Item) -> Destination) -> some View {
+                                                                              @ViewBuilder destination: @escaping (Item) -> Destination) -> some View {
     self.background(
       NavigationLink(
         destination: Group {
@@ -3369,13 +3911,13 @@ private extension View {
         },
         isActive: Binding(get: { item.wrappedValue != nil }, set: { active in if !active { item.wrappedValue = nil } })
       ) { EmptyView() }
-      .hidden()
+        .hidden()
     )
   }
 
   @ViewBuilder
   func tipAttachCompat(_ kind: TipKind) -> some View {
-    #if canImport(TipKit)
+#if canImport(TipKit)
     if #available(iOS 17, tvOS 17, *) {
       let mapped: AttachTipModifier.Kind = {
         switch kind {
@@ -3388,8 +3930,41 @@ private extension View {
     } else {
       self
     }
-    #else
+#else
     self
-    #endif
+#endif
+  }
+}
+
+/// iOS 16.0+ tracking modifier for backward compatibility
+struct iOS16TrackingModifier: ViewModifier {
+  let tracking: CGFloat
+
+  func body(content: Content) -> some View {
+    if #available(iOS 16.0, tvOS 16.0, *) {
+      content.tracking(tracking)
+    } else {
+      // For iOS 13-15, we'll use a minimal approach since kerning is also iOS 16+
+      // The text will still look great without tracking
+      content
+    }
+  }
+}
+
+/// iOS 16.0+ navigation styling modifier for backward compatibility
+struct iOS16NavigationStyleModifier: ViewModifier {
+  func body(content: Content) -> some View {
+    if #available(iOS 16.0, tvOS 16.0, *) {
+      content
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+#if !os(tvOS)
+        .scrollContentBackground(.hidden)
+#endif
+    } else {
+      // For iOS 13-15, use basic styling
+      content
+        .preferredColorScheme(.dark)
+    }
   }
 }

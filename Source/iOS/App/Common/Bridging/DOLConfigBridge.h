@@ -357,6 +357,18 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)skylanderRemoveAtSlot:(NSInteger)slot;
 + (void)skylanderClearAll;
 
+// DSU (Cemuhook DualShock UDP) Client Settings
+// Enable/disable DSU client backend in ControllerInterface
++ (BOOL)dsuClientEnabled;
++ (void)setDsuClientEnabled:(BOOL)enabled;
+// Raw servers string (format: "desc:address:port;...")
++ (NSString*)dsuServersString;
++ (void)setDsuServersString:(NSString*)servers;
+// Parsed helpers for Swift UI
++ (NSArray<NSDictionary<NSString*, id>*>*)dsuServersParsed; // keys: description, address, port(NSNumber)
++ (void)addDsuServer:(NSString*)desc address:(NSString*)address port:(NSInteger)port;
++ (void)removeDsuServerAtIndex:(NSInteger)index;
+
 @end
 
 NS_ASSUME_NONNULL_END

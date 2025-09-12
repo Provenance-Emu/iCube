@@ -37,7 +37,19 @@ internal struct ControllerMappingView: View {
             HStack {
               VStack(alignment: .leading, spacing: 2) {
                 Text(String(format: L("Player %d"), port)).font(.headline)
-                Text((currentQualifiers[port] ?? "").isEmpty ? L("No controller assigned") : (currentQualifiers[port] ?? "")).font(.caption).foregroundStyle(.secondary)
+                let q = currentQualifiers[port] ?? ""
+                HStack(spacing: 6) {
+                  Text(q.isEmpty ? L("No controller assigned") : q)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                  if !q.isEmpty && q.localizedCaseInsensitiveContains("DSUClient") {
+                    Text("DSU")
+                      .font(.caption2)
+                      .padding(.horizontal, 6)
+                      .padding(.vertical, 2)
+                      .background(Color.blue.opacity(0.2), in: Capsule())
+                  }
+                }
               }
               Spacer()
               Button(L("Assign")) { showPickerForPort = port }
@@ -170,10 +182,21 @@ internal struct ControllerMappingView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.white)
 
-                  Text((currentQualifiers[port] ?? "").isEmpty ? L("No controller assigned") : (currentQualifiers[port] ?? ""))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                    .lineLimit(1)
+                  let q2 = currentQualifiers[port] ?? ""
+                  HStack(spacing: 8) {
+                    Text(q2.isEmpty ? L("No controller assigned") : q2)
+                      .font(.system(size: 14, weight: .medium))
+                      .foregroundColor(.white.opacity(0.7))
+                      .lineLimit(1)
+                    if !q2.isEmpty && q2.localizedCaseInsensitiveContains("DSUClient") {
+                      Text("DSU")
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.blue.opacity(0.35))
+                        .clipShape(Capsule())
+                    }
+                  }
                 }
 
                 Spacer()

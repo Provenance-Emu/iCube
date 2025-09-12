@@ -19,6 +19,7 @@
 #include "Core/HW/Wiimote.h"
 #include "Core/Config/AchievementSettings.h"
 #include "Core/AchievementManager.h"
+#include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
 #include "Common/Logging/Log.h"
 #include "Core/System.h"
 #include "Common/IOFile.h"
@@ -493,6 +494,85 @@
   auto& system = Core::System::GetInstance();
   for (int i = 0; i < 16; i++)
     system.GetSkylanderPortal().RemoveSkylander((u8)i);
+}
+
+@end
+
+// MARK: - DSU Client (Cemuhook DualShock UDP) bridging
+
+@implementation DOLConfigBridge (DSU)
+
++ (BOOL)dsuClientEnabled
+{
+  return Config::Get(ciface::DualShockUDPClient::Settings::SERVERS_ENABLED);
+}
+
++ (void)setDsuClientEnabled:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(ciface::DualShockUDPClient::Settings::SERVERS_ENABLED, (bool)enabled);
+}
+
++ (NSString*)dsuServersString
+{
+  const std::string v = Config::Get(ciface::DualShockUDPClient::Settings::SERVERS);
+  return [NSString stringWithUTF8String:v.c_str()];
+}
+
++ (void)setDsuServersString:(NSString*)servers
+{
+  const char* cstr = servers ? servers.UTF8String : "";
+  Config::SetBaseOrCurrent(ciface::DualShockUDPClient::Settings::SERVERS, std::string(cstr));
+}
+
++ (NSArray<NSDictionary<NSString*, id>*>*)dsuServersParsed
+{
+  NSMutableArray* arr = [NSMutableArray array];
+  NSString* raw = [self dsuServersString];
+  if (raw.length == 0) return arr;
+  NSArray<NSString*>* entries = [raw componentsSeparatedByString:@";"];
+  for (NSString* e in entries) {
+    if (e.length == 0) continue;
+    NSArray<NSString*>* parts = [e componentsSeparatedByString:@":"];
+    if (parts.count < 3) continue;
+    NSString* desc = parts[0];
+    NSString* addr = parts[1];
+    NSInteger port = (parts[2].integerValue);
+    [arr addObject:@{ @"description": desc, @"address": addr, @"port": @(port) }];
+  }
+  return arr;
+}
+
++ (void)addDsuServer:(NSString*)desc address:(NSString*)address port:(NSInteger)port
+{
+  if (desc.length == 0) desc = @"DS4";
+  if (address.length == 0) return;
+  if (port <= 0 || port >= 65536) return;
+  NSString* raw = [self dsuServersString];
+  NSString* entry = [NSString stringWithFormat:@"%@@%c%@@%c%ld;", desc, ':', address, ':', (long)port];
+  // Avoid duplicate exact entries
+  if (raw && [raw containsString:entry]) return;
+  NSString* updated = raw ? [raw stringByAppendingString:entry] : entry;
+  [self setDsuServersString:updated];
+}
+
++ (void)removeDsuServerAtIndex:(NSInteger)index
+{
+  if (index < 0) return;
+  NSString* raw = [self dsuServersString];
+  if (raw.length == 0) return;
+  NSMutableArray<NSString*>* entries = [[raw componentsSeparatedByString:@";"] mutableCopy];
+  // Remove empty tail element if present due to trailing ';'
+  if (entries.lastObject.length == 0) [entries removeLastObject];
+  if (index >= (NSInteger)entries.count) return;
+  [entries removeObjectAtIndex:index];
+  // Rebuild string ensuring trailing ';'
+  NSMutableString* rebuilt = [NSMutableString string];
+  for (NSString* e in entries) {
+    if (e.length == 0) continue;
+    [rebuilt appendString:e];
+    [rebuilt appendString:@";"];
+  }
+  [self setDsuServersString:rebuilt];
 }
 
 @end

@@ -13,6 +13,7 @@ import AudioToolbox
 #if os(iOS)
 import NavigationStackBackport
 #endif
+import Foundation
 
 /// Root Settings page implemented in SwiftUI for iOS/tvOS
 struct SettingsRootView<Background: View>: View {
@@ -383,6 +384,73 @@ struct SettingsRootView<Background: View>: View {
   }
 }
 
+// MARK: - Motion Settings (DSU)
+
+private struct MotionSettingsView: View {
+  @State private var gain: Double = UserDefaults.standard.object(forKey: "dsu_gyro_gain") as? Double ?? 1.0
+  @State private var deadzone: Double = UserDefaults.standard.object(forKey: "dsu_deadzone") as? Double ?? 0.05
+  @State private var smoothing: Double = UserDefaults.standard.object(forKey: "dsu_smoothing") as? Double ?? 0.0
+  var body: some View {
+    Form {
+      Section(header: Text(L("Gyro Gain")), footer: Text(L("Scales motion intensity. Higher values increase sensitivity."))) {
+#if os(tvOS)
+        TVFloatStepper(
+          value: Binding(
+            get: { CGFloat(gain) },
+            set: { gain = Double($0) }
+          ),
+          range: 0.1...3.0,
+          step: 0.05
+        )
+#else
+        HStack {
+          Slider(value: $gain, in: 0.1...3.0, step: 0.05)
+          Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
+        }
+#endif
+      }
+      Section(header: Text(L("Deadzone")), footer: Text(L("Ignores small movements to reduce jitter."))) {
+#if os(tvOS)
+        TVFloatStepper(
+          value: Binding(
+            get: { CGFloat(deadzone) },
+            set: { deadzone = Double($0) }
+          ),
+          range: 0.0...0.49,
+          step: 0.01
+        )
+#else
+        HStack {
+          Slider(value: $deadzone, in: 0.0...0.49, step: 0.01)
+          Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
+        }
+#endif
+      }
+      Section(header: Text(L("Smoothing")), footer: Text(L("Applies exponential smoothing. 0 disables smoothing."))) {
+#if os(tvOS)
+        TVFloatStepper(
+          value: Binding(
+            get: { CGFloat(smoothing) },
+            set: { smoothing = Double($0) }
+          ),
+          range: 0.0...0.9,
+          step: 0.05
+        )
+#else
+        HStack {
+          Slider(value: $smoothing, in: 0.0...0.9, step: 0.05)
+          Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
+        }
+#endif
+      }
+    }
+    .navigationTitle(L("Advanced Motion Settings"))
+    .onChange(of: gain) { UserDefaults.standard.set($0, forKey: "dsu_gyro_gain") }
+    .onChange(of: deadzone) { UserDefaults.standard.set($0, forKey: "dsu_deadzone") }
+    .onChange(of: smoothing) { UserDefaults.standard.set($0, forKey: "dsu_smoothing") }
+  }
+}
+
 // Convenience initializer for no background
 extension SettingsRootView where Background == EmptyView {
   init() {
@@ -668,6 +736,14 @@ struct ControllersRootView: View {
   @State private var wiimoteSpeaker: Bool = false
   @State private var connectWiimotes: Bool = false
   @State private var autoSelectOnScreenBySystem: Bool = true
+  // DSU client
+  @State private var dsuEnabled: Bool = false
+  @State private var dsuServers: [[String: Any]] = [] // keys: description, address, port
+  @State private var showAddDsuServer: Bool = false
+  @State private var newDsuDesc: String = "DS4"
+  @State private var newDsuAddr: String = ""
+  @State private var newDsuPort: String = "26760"
+  @StateObject private var dsuBrowser = DSUDiscoveryBrowser()
 
   // Touchscreen
 #if os(iOS)
@@ -704,6 +780,82 @@ struct ControllersRootView: View {
               Spacer()
               Text(localizedWiimoteSource(wiiSources[port - 1]))
                 .foregroundStyle(.secondary)
+            }
+          }
+        }
+      }
+
+      // DSU Client
+      Section(
+        header: HStack {
+          Text("DSU Client")
+          if !dsuBrowser.servers.isEmpty {
+            Text("\(dsuBrowser.servers.count) \(dsuBrowser.servers.count == 1 ? L("found") : L("found"))")
+              .font(.caption)
+              .padding(.horizontal, 6)
+              .padding(.vertical, 2)
+              .background(Color.blue.opacity(0.15), in: Capsule())
+          }
+        },
+        footer: Text(L("Enable the DSU (Cemuhook DualShock UDP) client to receive input from compatible servers on your network. Add servers as IP:Port. Bonjour discovery will be added in a future update."))
+      ) {
+        Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
+          .onChange(of: dsuEnabled) { DOLConfigBridge.setDsuClientEnabled($0) }
+        if dsuServers.isEmpty {
+          HStack {
+            Text(L("Servers"))
+            Spacer()
+            Text(L("None")).foregroundStyle(.secondary)
+          }
+        } else {
+          ForEach(0..<dsuServers.count, id: \.self) { idx in
+            HStack {
+              Text(dsuServerTitle(idx))
+              Spacer()
+              Text(dsuServerAddressPort(idx)).foregroundStyle(.secondary)
+            }
+            #if !os(tvOS)
+            .swipeActions(edge: .trailing) {
+              Button(role: .destructive) {
+                DOLConfigBridge.removeDsuServer(at: idx)
+                refreshDsuServers()
+              } label: { Label(L("Delete"), systemImage: "trash") }
+            }
+            #else
+            // TODO: TVOS Deletion @JoeMatt
+            #endif // !os(tvOS)
+          }
+        }
+        Button(action: { newDsuDesc = "DS4"; newDsuAddr = ""; newDsuPort = "26760"; showAddDsuServer = true }) {
+          Label(L("Add Server"), systemImage: "plus")
+        }
+
+#if os(tvOS)
+        // Help row for tvOS users
+        Text(L("Tip: Open the DSU Controller on your iPhone (Library ▸ Start DSU Controller). Scan its QR or enter the shown IP:Port here if not discovered automatically."))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+#endif
+
+        NavigationLink(destination: MotionSettingsView()) {
+          Label(L("Advanced Motion Settings"), systemImage: "gyroscope")
+        }
+      }
+
+      if !dsuBrowser.servers.isEmpty {
+        Section(header: Text(L("Discovered on Network"))) {
+          ForEach(dsuBrowser.servers) { s in
+            HStack {
+              VStack(alignment: .leading) {
+                Text(s.name)
+                Text("\(s.address):\(s.port)").font(.caption).foregroundStyle(.secondary)
+              }
+              Spacer()
+              Button(L("Add")) {
+                DOLConfigBridge.addDsuServer(s.name, address: s.address, port: s.port)
+                refreshDsuServers()
+              }
+              .buttonStyle(.bordered)
             }
           }
         }
@@ -758,6 +910,41 @@ struct ControllersRootView: View {
         UserDefaults.standard.set(true, forKey: "auto_touchpad_by_system")
       }
       autoSelectOnScreenBySystem = UserDefaults.standard.bool(forKey: "auto_touchpad_by_system")
+      dsuBrowser.start()
+    }
+    .onDisappear { dsuBrowser.stop() }
+    .sheet(isPresented: $showAddDsuServer) {
+      NavigationStack {
+        Form {
+          Section(header: Text(L("Description"))) {
+            TextField("DS4", text: $newDsuDesc)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled(true)
+          }
+          Section(header: Text(L("Server Address"))) {
+            TextField("192.168.1.100", text: $newDsuAddr)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled(true)
+              .keyboardType(.numbersAndPunctuation)
+          }
+          Section(header: Text(L("Port"))) {
+            TextField("26760", text: $newDsuPort)
+              .keyboardType(.numberPad)
+          }
+        }
+        .navigationTitle("Add DSU Server")
+        .toolbar {
+          ToolbarItem(placement: .topBarLeading) { Button(L("Cancel")) { showAddDsuServer = false } }
+          ToolbarItem(placement: .topBarTrailing) {
+            Button(L("Add")) {
+              let port = Int(newDsuPort) ?? 26760
+              DOLConfigBridge.addDsuServer(newDsuDesc, address: newDsuAddr, port: port)
+              refreshDsuServers()
+              showAddDsuServer = false
+            }.disabled(newDsuAddr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          }
+        }
+      }
     }
   }
 
@@ -770,6 +957,27 @@ struct ControllersRootView: View {
     touchOpacity = DOLConfigBridge.mainTouchPadOpacity()
 #endif
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
+    // DSU
+    dsuEnabled = DOLConfigBridge.dsuClientEnabled()
+    refreshDsuServers()
+  }
+
+  private func refreshDsuServers() {
+    let arr = DOLConfigBridge.dsuServersParsed() as? [[String: Any]] ?? []
+    dsuServers = arr
+  }
+
+  private func dsuServerTitle(_ idx: Int) -> String {
+    if idx < 0 || idx >= dsuServers.count { return "Server \(idx+1)" }
+    let desc = (dsuServers[idx]["description"] as? String) ?? ""
+    return desc.isEmpty ? "Server \(idx+1)" : desc
+  }
+
+  private func dsuServerAddressPort(_ idx: Int) -> String {
+    if idx < 0 || idx >= dsuServers.count { return "" }
+    let addr = (dsuServers[idx]["address"] as? String) ?? ""
+    let port = (dsuServers[idx]["port"] as? NSNumber)?.intValue ?? 0
+    return port > 0 ? "\(addr):\(port)" : addr
   }
 
   private func syncPortTypes() {
@@ -951,9 +1159,11 @@ struct DebugRootView: View {
       Section(header: Text(L("Diagnostics"))) {
         HStack { Text(L("Launch Times")); Spacer(); Text("\(launchTimes)").foregroundStyle(.secondary) }
         Button(L("Reset Launch Times")) { launchTimes = 0; UserDefaults.standard.set(0, forKey: "launch_times") }
+        #if canImport(CoreMotion)
         NavigationLink(destination: MotionDebugView()) {
           Label(L("Motion Debug"), systemImage: "sensor.tag.radiowaves.forward")
         }
+        #endif // canImport(CoreMotion)
       }
 
       Section(header: Text(L("Logging"))) {
@@ -1102,7 +1312,7 @@ struct ConfigGeneralView: View {
   @State private var dspThread: Bool = false
   @State private var speedLimitPercent: Int = 0
   @State private var fastForwardSpeedPercent: Int = 300
-  @State private var fallbackRegion: Region = .unknown
+  @State private var fallbackRegion: Region = .ntscU
 
   var body: some View {
     List {
@@ -1528,6 +1738,24 @@ struct ConfigInterfaceView: View {
   @State private var usePanicHandlers: Bool = true
   @State private var osdMessages: Bool = true
 
+  // Library UI Settings
+  @AppStorage("library_background_style") private var backgroundStyle: LibraryBackgroundStyle = .gradient
+  @AppStorage("library_show_subtitles") private var showSubtitles: Bool = true
+
+  enum LibraryBackgroundStyle: String, CaseIterable {
+    case clean = "clean"
+    case gradient = "gradient"
+    case animated = "animated"
+
+    var displayName: String {
+      switch self {
+      case .clean: return "Clean"
+      case .gradient: return "GameCube Gradient"
+      case .animated: return "Animated (Full Effects)"
+      }
+    }
+  }
+
   var body: some View {
     List {
       Section(header: Text(L("Game List"))) {
@@ -1535,6 +1763,24 @@ struct ConfigInterfaceView: View {
           .onChange(of: useNamesDB) { DOLConfigBridge.setMainUseBuiltInTitleDatabase($0) }
         Toggle(L("Download Game Covers from GameTDB.com for Use in Grid Mode"), isOn: $useCovers)
           .onChange(of: useCovers) { DOLConfigBridge.setMainUseGameCovers($0) }
+      }
+
+            Section(header: Text(L("Library UI")), footer: Text("Customize the appearance and behavior of the game library interface.")) {
+        HStack {
+          Label("Background Style", systemImage: "paintbrush.fill")
+          Spacer()
+          Picker("Background Style", selection: $backgroundStyle) {
+            ForEach(LibraryBackgroundStyle.allCases, id: \.self) { style in
+              Text(style.displayName).tag(style)
+            }
+          }
+          .pickerStyle(.menu)
+          .labelsHidden()
+        }
+
+        Toggle(isOn: $showSubtitles) {
+          Label("Show Game ID Subtitles", systemImage: "textformat.123")
+        }
       }
 
       Section(header: Text(L("General"))) {
@@ -3255,3 +3501,84 @@ private struct HideListBackgroundIfAvailable: ViewModifier {
   }
 }
 #endif
+
+// MARK: - DSU Bonjour Discovery
+
+struct DSUDiscoveredServer: Identifiable, Equatable {
+  let id = UUID()
+  let name: String
+  let address: String
+  let port: Int
+
+  static func == (lhs: DSUDiscoveredServer, rhs: DSUDiscoveredServer) -> Bool {
+    return lhs.address == rhs.address && lhs.port == rhs.port
+  }
+}
+
+@MainActor
+final class DSUDiscoveryBrowser: NSObject, ObservableObject {
+  @Published var servers: [DSUDiscoveredServer] = []
+
+  private var browser: NetServiceBrowser?
+  private var services: [NetService] = []
+
+  func start() {
+    stop()
+    servers.removeAll()
+    services.removeAll()
+    let b = NetServiceBrowser()
+    b.delegate = self
+    browser = b
+    b.searchForServices(ofType: "_dolphin-dsu._udp", inDomain: "local.")
+  }
+
+  func stop() {
+    browser?.stop()
+    browser = nil
+    services.forEach { $0.stop() }
+    services.removeAll()
+  }
+}
+
+extension DSUDiscoveryBrowser: NetServiceBrowserDelegate {
+  func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+    service.delegate = self
+    services.append(service)
+    service.resolve(withTimeout: 5.0)
+  }
+
+  func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
+    services.removeAll { $0 == service }
+    // Remove matching server entry if exists
+    if let name = service.name as String? {
+      servers.removeAll { $0.name == name }
+    }
+  }
+}
+
+extension DSUDiscoveryBrowser: NetServiceDelegate {
+  func netServiceDidResolveAddress(_ sender: NetService) {
+    guard let addresses = sender.addresses, !addresses.isEmpty else { return }
+    var ipv4: String?
+    for data in addresses {
+      data.withUnsafeBytes { (rawPtr: UnsafeRawBufferPointer) in
+        guard let sa = rawPtr.bindMemory(to: sockaddr.self).baseAddress else { return }
+        if sa.pointee.sa_family == sa_family_t(AF_INET) {
+          let sin = UnsafeRawPointer(sa).assumingMemoryBound(to: sockaddr_in.self).pointee
+          var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+          var addr = sin.sin_addr
+          inet_ntop(AF_INET, &addr, &buf, socklen_t(INET_ADDRSTRLEN))
+          ipv4 = String(cString: buf)
+        }
+      }
+      if ipv4 != nil { break }
+    }
+    guard let ip = ipv4 else { return }
+    let port = sender.port
+    let name = sender.name
+    let item = DSUDiscoveredServer(name: name.isEmpty ? "DSU" : name, address: ip, port: port)
+    if !servers.contains(item) {
+      servers.append(item)
+    }
+  }
+}
