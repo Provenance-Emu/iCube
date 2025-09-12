@@ -30,6 +30,7 @@
 		B31EAC702E6697FD0036EE31 /* ControllerStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */; };
 		B31EAC822E67743D0036EE31 /* ModernCheatItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */; };
 		B31EAC8B2E67E9050036EE31 /* DOLWiimoteBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */; };
+		B346BBEC2E73973E00B3C00B /* MotionDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -331,6 +332,7 @@
 		B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernCheatItem.swift; sourceTree = "<group>"; };
 		B31EAC892E67E9050036EE31 /* DOLWiimoteBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLWiimoteBridge.h; sourceTree = "<group>"; };
 		B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLWiimoteBridge.mm; sourceTree = "<group>"; };
+		B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionDebugView.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -1241,6 +1243,7 @@
 				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
+				B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */,
 				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
 				B31E804F2E6504940036EE31 /* GameProfiles.swift */,
 				B36B519A2E5E46AC009A2303 /* KeychainService.swift */,
@@ -2599,6 +2602,7 @@
 				B9DC5FAB28849535004BD94A /* GraphicsRootViewController.mm in Sources */,
 				B3F216742E5F742400AF38F3 /* SaveStatesViewModel.swift in Sources */,
 				B36B48CA2E5D07D4009A2303 /* Localized.swift in Sources */,
+				B346BBEC2E73973E00B3C00B /* MotionDebugView.swift in Sources */,
 				B9447B0128418F2600BC9110 /* TCJoystick.swift in Sources */,
 				B31EAC6F2E6697FD0036EE31 /* AssignmentEngine.swift in Sources */,
 				B31EAC702E6697FD0036EE31 /* ControllerStateStore.swift in Sources */,

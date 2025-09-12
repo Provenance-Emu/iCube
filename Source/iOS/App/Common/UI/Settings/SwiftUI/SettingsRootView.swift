@@ -8,6 +8,7 @@ import QuartzCore
 import PVWebServer
 #if os(iOS)
 import SafariServices
+import AudioToolbox
 #endif
 #if os(iOS)
 import NavigationStackBackport
@@ -20,31 +21,31 @@ struct SettingsRootView<Background: View>: View {
   private let backgroundView: Background?
   private let isPauseMenuStyle: Bool
   private let game: TVGameItem?
-  
+
   init(backgroundView: Background? = nil, isPauseMenuStyle: Bool = false, game: TVGameItem? = nil) {
     self.backgroundView = backgroundView
     self.isPauseMenuStyle = isPauseMenuStyle
     self.game = game
   }
-  
+
   private var appVersion: String {
     VersionManager.shared().appVersion.userFacing
   }
-  
+
   private var coreVersion: String {
     VersionManager.shared().coreVersion
   }
-  
+
   /// Web UI URL string from PVWebServer; empty if not running
   private var webURLString: String {
     PVWebServer.shared.urlString ?? ""
   }
-  
+
   /// WebDAV URL string from PVWebServer; empty if not running
   private var webDavURLString: String {
     PVWebServer.shared.webDavURLString ?? ""
   }
-  
+
   var body: some View {
     ZStack {
       // Optional background
@@ -52,7 +53,7 @@ struct SettingsRootView<Background: View>: View {
         background
           .ignoresSafeArea()
       }
-      
+
       if isPauseMenuStyle {
         pauseMenuStyleContent
       } else {
@@ -62,14 +63,14 @@ struct SettingsRootView<Background: View>: View {
       }
     }
   }
-  
+
   @State private var currentSettingsPage: SettingsPage? = nil
   @State private var showGlobalResetAlert: Bool = false
 #if os(iOS)
   @State private var showSafari: Bool = false
   @State private var safariURL: URL? = nil
 #endif
-  
+
   @ViewBuilder
   private var pauseMenuStyleContent: some View {
     if let page = currentSettingsPage {
@@ -92,19 +93,19 @@ struct SettingsRootView<Background: View>: View {
               .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
               .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
           }
-          
+
           VStack(alignment: .leading, spacing: 6) {
             Text("Settings")
               .font(.system(size: 24, weight: .bold))
               .foregroundColor(.white)
-            
+
             Text("Game & system options")
               .font(.system(size: 14, weight: .medium))
               .foregroundColor(.white.opacity(0.7))
           }
         }
         .frame(width: 180)
-        
+
         // Right side - Settings menu
         VStack(alignment: .leading, spacing: 32) {
           // Back button
@@ -122,29 +123,29 @@ struct SettingsRootView<Background: View>: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
           }
           .buttonStyle(.plain)
-          
+
           // Settings sections
           VStack(spacing: 16) {
             SettingsMenuRow(icon: "gearshape", title: "Config", subtitle: "General configuration") {
               currentSettingsPage = .config
             }
-            
+
             SettingsMenuRow(icon: "display", title: "Graphics", subtitle: "Video & rendering settings") {
               currentSettingsPage = .graphics
             }
-            
+
             SettingsMenuRow(icon: "gamecontroller", title: "Controllers", subtitle: "Input & controller setup") {
               currentSettingsPage = .controllers
             }
-            
+
             SettingsMenuRow(icon: "ladybug", title: "Debug", subtitle: "Developer options") {
               currentSettingsPage = .debug
             }
-            
+
             Divider()
               .background(.white.opacity(0.3))
               .padding(.vertical, 8)
-            
+
             // Version info
             VStack(spacing: 12) {
               HStack {
@@ -156,7 +157,7 @@ struct SettingsRootView<Background: View>: View {
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.6))
               }
-              
+
               HStack {
                 Text("Dolphin Core")
                   .font(.system(size: 16, weight: .medium))
@@ -171,7 +172,7 @@ struct SettingsRootView<Background: View>: View {
             .padding(.vertical, 16)
             .background(.white.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            
+
             // Network info
             VStack(spacing: 12) {
               HStack {
@@ -218,7 +219,7 @@ struct SettingsRootView<Background: View>: View {
             .padding(.vertical, 16)
             .background(.white.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            
+
             SettingsMenuRow(icon: "info.circle", title: "About", subtitle: "App information") {
               currentSettingsPage = .about
             }
@@ -230,7 +231,7 @@ struct SettingsRootView<Background: View>: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
   }
-  
+
   private func titleForPage(_ page: SettingsPage) -> String {
     switch page {
     case .config: return "Config"
@@ -240,7 +241,7 @@ struct SettingsRootView<Background: View>: View {
     case .about: return "About"
     }
   }
-  
+
   @ViewBuilder
   private func contentForPage(_ page: SettingsPage) -> some View {
     switch page {
@@ -256,18 +257,28 @@ struct SettingsRootView<Background: View>: View {
       AboutView()
     }
   }
-  
+
   @ViewBuilder
   private var settingsContent: some View {
     NavigationStack {
       List {
         Section {
-          NavigationLink(L("Config"), destination: ConfigRootView())
-          NavigationLink(L("Graphics"), destination: GraphicsRootView())
-          NavigationLink(L("Controllers"), destination: ControllersRootView())
-          NavigationLink(L("Debug"), destination: DebugRootView())
+          NavigationLink(destination: ConfigRootView()) {
+            Label(L("Config"), systemImage: "gear")
+              .accessibilityLabel(L("Config Settings"))
+          }
+          NavigationLink(destination: GraphicsRootView()) {
+            Label(L("Graphics"), systemImage: "display")
+              .accessibilityLabel(L("Graphics Settings"))
+          }
+          NavigationLink(destination: ControllersRootView()) {
+            Label(L("Controllers"), systemImage: "gamecontroller")
+          }
+          NavigationLink(destination: DebugRootView()) {
+            Label(L("Debug"), systemImage: "ladybug")
+          }
         }
-        
+
         Section(footer: EmptyView()) {
           HStack {
             Text(L("Version"))
@@ -283,7 +294,9 @@ struct SettingsRootView<Background: View>: View {
               Text(coreVersion).foregroundStyle(.secondary)
             }
           }
-          NavigationLink(L("About"), destination: AboutView())
+          NavigationLink(destination: AboutView()) {
+            Label(L("About"), systemImage: "info.circle")
+          }
 #if os(tvOS)
           NavigationLink(L("Help"), destination: HelpPlaceholderView())
 #else
@@ -294,7 +307,7 @@ struct SettingsRootView<Background: View>: View {
           }
 #endif
         }
-        
+
         // Network
         Section(header: Text(L("Network"))) {
           HStack {
@@ -367,7 +380,7 @@ private struct SettingsSubMenuView: View {
   let onBack: () -> Void
   @State private var showResetAll = false
   @State private var showResetPage = false
-  
+
   var body: some View {
     HStack(spacing: 80) {
       // Left side - Game cover (smaller)
@@ -380,19 +393,19 @@ private struct SettingsSubMenuView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
         }
-        
+
         VStack(alignment: .leading, spacing: 6) {
           Text(titleForPage(page))
             .font(.system(size: 24, weight: .bold))
             .foregroundColor(.white)
-          
+
           Text(subtitleForPage(page))
             .font(.system(size: 14, weight: .medium))
             .foregroundColor(.white.opacity(0.7))
         }
       }
       .frame(width: 180)
-      
+
       // Right side - Settings content
       VStack(alignment: .leading, spacing: 32) {
         // Back + Reset actions
@@ -411,9 +424,9 @@ private struct SettingsSubMenuView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
           }
           .buttonStyle(.plain)
-          
+
           Spacer()
-          
+
           Button(action: { showResetPage = true }) {
             Text(L("Reset Page"))
               .font(.system(size: 16, weight: .semibold))
@@ -424,7 +437,7 @@ private struct SettingsSubMenuView: View {
               .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
           }
           .buttonStyle(.plain)
-          
+
           Button(action: { showResetAll = true }) {
             Text(L("Reset All"))
               .font(.system(size: 16, weight: .semibold))
@@ -436,7 +449,7 @@ private struct SettingsSubMenuView: View {
           }
           .buttonStyle(.plain)
         }
-        
+
         // Settings content - ensure NavigationStack for NavigationLink to work, and focus enabled
         NavigationStack { contentForPage(page) }
           .environment(\.colorScheme, .dark)
@@ -481,7 +494,7 @@ private struct SettingsSubMenuView: View {
       Text(L("This resets only the settings on this page to defaults."))
     }
   }
-  
+
   private func titleForPage(_ page: SettingsPage) -> String {
     switch page {
     case .config: return "Config"
@@ -491,7 +504,7 @@ private struct SettingsSubMenuView: View {
     case .about: return "About"
     }
   }
-  
+
   private func subtitleForPage(_ page: SettingsPage) -> String {
     switch page {
     case .config: return "General configuration"
@@ -501,7 +514,7 @@ private struct SettingsSubMenuView: View {
     case .about: return "App information"
     }
   }
-  
+
   @ViewBuilder
   private func contentForPage(_ page: SettingsPage) -> some View {
     switch page {
@@ -525,7 +538,7 @@ private struct SettingsMenuRow: View {
   let title: String
   let subtitle: String
   let action: () -> Void
-  
+
   var body: some View {
     Button(action: action) {
       HStack(spacing: 20) {
@@ -534,25 +547,25 @@ private struct SettingsMenuRow: View {
           RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(.white.opacity(0.1))
             .frame(width: 48, height: 48)
-          
+
           Image(systemName: icon)
             .font(.system(size: 20, weight: .medium))
             .foregroundColor(.white)
         }
-        
+
         // Text content
         VStack(alignment: .leading, spacing: 4) {
           Text(title)
             .font(.system(size: 18, weight: .semibold))
             .foregroundColor(.white)
-          
+
           Text(subtitle)
             .font(.system(size: 14, weight: .medium))
             .foregroundColor(.white.opacity(0.7))
         }
-        
+
         Spacer()
-        
+
         // Chevron
         Image(systemName: "chevron.right")
           .font(.system(size: 14, weight: .medium))
@@ -567,29 +580,32 @@ private struct SettingsMenuRow: View {
   }
 }
 
-/// A simple type-erased menu item model for easy reordering/refactoring
-struct SettingsMenuItem: Identifiable {
-  let id = UUID()
-  let title: String
-  let destination: AnyView
-  init<V: View>(_ title: String, destination: V) { self.title = title; self.destination = AnyView(destination) }
-}
+
 
 /// Config top-level menu with easily re-orderable items
 struct ConfigRootView: View {
-  private let items: [SettingsMenuItem] = [
-    SettingsMenuItem(L("General"), destination: ConfigGeneralView()),
-    SettingsMenuItem(L("Interface"), destination: ConfigInterfaceView()),
-    SettingsMenuItem(L("Audio"), destination: ConfigAudioView()),
-    SettingsMenuItem(L("GameCube"), destination: ConfigGameCubeView()),
-    SettingsMenuItem(L("Wii"), destination: ConfigWiiView()),
-    SettingsMenuItem(L("Advanced"), destination: ConfigAdvancedView()),
-    SettingsMenuItem(L("Achievements"), destination: ConfigAchievementsView())
-  ]
   var body: some View {
     List {
-      ForEach(items) { item in
-        NavigationLink(item.title, destination: item.destination)
+      NavigationLink(destination: ConfigGeneralView()) {
+        Label(L("General"), systemImage: "gear")
+      }
+      NavigationLink(destination: ConfigInterfaceView()) {
+        Label(L("Interface"), systemImage: "menubar.rectangle")
+      }
+      NavigationLink(destination: ConfigAudioView()) {
+        Label(L("Audio"), systemImage: "speaker.wave.3")
+      }
+      NavigationLink(destination: ConfigGameCubeView()) {
+        Label(L("GameCube"), systemImage: "cube")
+      }
+      NavigationLink(destination: ConfigWiiView()) {
+        Label(L("Wii"), systemImage: "tv.and.hifispeaker")
+      }
+      NavigationLink(destination: ConfigAdvancedView()) {
+        Label(L("Advanced"), systemImage: "cpu")
+      }
+      NavigationLink(destination: ConfigAchievementsView()) {
+        Label(L("Achievements"), systemImage: "trophy")
       }
     }
     .navigationTitle(L("Config"))
@@ -598,17 +614,22 @@ struct ConfigRootView: View {
 
 /// Graphics top-level menu with easily re-orderable items
 struct GraphicsRootView: View {
-  private let items: [SettingsMenuItem] = [
-    SettingsMenuItem(L("General"), destination: GraphicsGeneralView()),
-    SettingsMenuItem(L("Enhancements"), destination: GraphicsEnhancementsView()),
-    SettingsMenuItem(L("Hacks"), destination: GraphicsHacksView()),
-    SettingsMenuItem(L("Advanced"), destination: GraphicsAdvancedView()),
-    SettingsMenuItem(L("Shaders"), destination: ShaderSettingsView())
-  ]
   var body: some View {
     List {
-      ForEach(items) { item in
-        NavigationLink(item.title, destination: item.destination)
+      NavigationLink(destination: GraphicsGeneralView()) {
+        Label(L("General"), systemImage: "display")
+      }
+      NavigationLink(destination: GraphicsEnhancementsView()) {
+        Label(L("Enhancements"), systemImage: "sparkles")
+      }
+      NavigationLink(destination: GraphicsHacksView()) {
+        Label(L("Hacks"), systemImage: "wrench.and.screwdriver")
+      }
+      NavigationLink(destination: GraphicsAdvancedView()) {
+        Label(L("Advanced"), systemImage: "slider.horizontal.3")
+      }
+      NavigationLink(destination: ShaderSettingsView()) {
+        Label(L("Shaders"), systemImage: "paintbrush")
       }
     }
     .navigationTitle(L("Graphics"))
@@ -623,7 +644,7 @@ struct ControllersRootView: View {
   @State private var wiimoteSpeaker: Bool = false
   @State private var connectWiimotes: Bool = false
   @State private var autoSelectOnScreenBySystem: Bool = true
-  
+
   // Touchscreen
 #if os(iOS)
   @State private var touchOpacity: Float = 0.5
@@ -631,7 +652,7 @@ struct ControllersRootView: View {
   @State private var touchIRMode: TouchIRMode = .drag
   @State private var gcPortDevices: [Int] = [0, 0, 0, 0]   // 0 None, 1 Standard Controller, etc.
   @State private var wiiSources: [Int] = [0, 0, 0, 0]      // 0 None, 1 Emulated, 2 Real
-  
+
   var body: some View {
     List {
       Section(header: Text(L("GameCube Controllers"))) {
@@ -648,7 +669,7 @@ struct ControllersRootView: View {
           }
         }
       }
-      
+
       Section(header: Text(L("Wii Remotes"))) {
         ForEach(1...4, id: \.self) { port in
           NavigationLink {
@@ -663,43 +684,20 @@ struct ControllersRootView: View {
           }
         }
       }
-      
+
       Section(header: Text(L("General"))) {
         Toggle(L("Background Input"), isOn: $backgroundInput)
           .onChange(of: backgroundInput) { newValue in DOLConfigBridge.setMainBackgroundInput(newValue) }
         Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
           .onChange(of: autoSelectOnScreenBySystem) { newValue in UserDefaults.standard.set(newValue, forKey: "auto_touchpad_by_system") }
-        NavigationLink(L("Turbo Multiplier"), destination: ControllersTurboPicker())
+
 #if os(iOS)
-        Button(L("Test Rumble")) {
-          if let controller = GCController.controllers().first, #available(iOS 14.0, *) {
-            if let h = controller.haptics {
-              do {
-                let engine = try h.createEngine(withLocality: .default)
-                try engine?.start()
-                let pattern = try CHHapticPattern(events: [
-                  CHHapticEvent(eventType: .hapticTransient, parameters: [
-                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
-                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5)
-                  ], relativeTime: 0)
-                ], parameters: [])
-                if let engine = engine {
-                  let player = try engine.makePlayer(with: pattern)
-                  try player.start(atTime: 0)
-                }
-              } catch {
-                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Rumble not available")])
-              }
-            } else {
-              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Rumble not available")])
-            }
-          } else {
-            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("No controller connected")])
-          }
+        Button(action: { testRumble() }) {
+          Label(L("Test Rumble"), systemImage: "iphone.radiowaves.left.and.right")
         }
 #endif
       }
-      
+
       Section(header: Text(L("Wii Remotes"))) {
         Toggle(L("Continuous Scanning"), isOn: $wiimoteScan)
           .onChange(of: wiimoteScan) { newValue in DOLConfigBridge.setWiimoteContinuousScanning(newValue) }
@@ -708,7 +706,7 @@ struct ControllersRootView: View {
         Toggle(L("Connect Wiimotes for Controller Interface"), isOn: $connectWiimotes)
           .onChange(of: connectWiimotes) { newValue in DOLConfigBridge.setConnectWiimotesForControllerInterface(newValue) }
       }
-      
+
       Section(header: Text(L("Alternate Input Sources"))) {
 #if os(iOS)
         HStack {
@@ -721,6 +719,10 @@ struct ControllersRootView: View {
 #endif
         NavigationLink("\(L("Touch IR Pointer")): \(touchIRMode.label)", destination: TouchIRModePicker(selected: $touchIRMode))
           .onChange(of: touchIRMode) { DOLConfigBridge.setMainTouchPadIRMode($0.rawValue) }
+
+        NavigationLink(destination: EnhancedMotionControlsView()) {
+          Label(L("Advanced Motion Settings"), systemImage: "gyroscope")
+        }
       }
     }
     .navigationTitle(L("Controllers"))
@@ -734,7 +736,7 @@ struct ControllersRootView: View {
       autoSelectOnScreenBySystem = UserDefaults.standard.bool(forKey: "auto_touchpad_by_system")
     }
   }
-  
+
   private func syncFromConfig() {
     backgroundInput = DOLConfigBridge.mainBackgroundInput()
     wiimoteScan = DOLConfigBridge.wiimoteContinuousScanning()
@@ -745,14 +747,14 @@ struct ControllersRootView: View {
 #endif
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
   }
-  
+
   private func syncPortTypes() {
     for i in 0..<4 {
       gcPortDevices[i] = DOLConfigBridge.gcPortDevice(forPort: i + 1)
       wiiSources[i] = DOLConfigBridge.wiimoteSource(for: i + 1)
     }
   }
-  
+
   // If all GC ports are None, default Player 1 to Standard Controller
   private func ensureDefaultGCPlayer1() {
     if gcPortDevices.allSatisfy({ $0 == 0 }) {
@@ -760,7 +762,7 @@ struct ControllersRootView: View {
       gcPortDevices[0] = 1
     }
   }
-  
+
   private func localizedSIDevice(_ device: Int) -> String {
     switch device {
     case 0: return L("<Nothing>")
@@ -768,7 +770,7 @@ struct ControllersRootView: View {
     default: return L("Unknown")
     }
   }
-  
+
   private func localizedWiimoteSource(_ source: Int) -> String {
     switch source {
     case 0: return L("<Nothing>")
@@ -776,6 +778,80 @@ struct ControllersRootView: View {
     default: return L("Unknown")
     }
   }
+
+#if os(iOS)
+  /// Test rumble/haptic feedback on device and connected controllers
+  private func testRumble() {
+    var tested = false
+
+    // Test external controller haptics first
+    if let controller = GCController.controllers().first, #available(iOS 14.0, *) {
+      if let haptics = controller.haptics {
+        do {
+          let engine = try haptics.createEngine(withLocality: .default)
+          try engine?.start()
+          let pattern = try CHHapticPattern(events: [
+            CHHapticEvent(eventType: .hapticTransient, parameters: [
+              CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
+              CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.8)
+            ], relativeTime: 0),
+            CHHapticEvent(eventType: .hapticTransient, parameters: [
+              CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.6),
+              CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.4)
+            ], relativeTime: 0.15)
+          ], parameters: [])
+          if let engine = engine {
+            let player = try engine.makePlayer(with: pattern)
+            try player.start(atTime: 0)
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Controller rumble tested")])
+            tested = true
+          }
+        } catch {
+          // Controller haptics failed, continue to device haptics
+        }
+      }
+    }
+
+    // Test device haptics (iPhone vibration)
+    if CHHapticEngine.capabilitiesForHardware().supportsHaptics {
+      do {
+        let engine = try CHHapticEngine()
+        try engine.start()
+
+        // Create a strong rumble pattern
+        let pattern = try CHHapticPattern(events: [
+          CHHapticEvent(eventType: .hapticTransient, parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0)
+          ], relativeTime: 0),
+          CHHapticEvent(eventType: .hapticContinuous, parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.8),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5)
+          ], relativeTime: 0.1, duration: 0.3)
+        ], parameters: [])
+
+        let player = try engine.makePlayer(with: pattern)
+        try player.start(atTime: 0)
+
+        if tested {
+          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Device + Controller rumble tested")])
+        } else {
+          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Device rumble tested")])
+        }
+        tested = true
+
+      } catch {
+        // Device haptics failed, fall back to legacy vibration
+      }
+    }
+
+    // Fallback: Use legacy UIKit vibration if CoreHaptics isn't available
+    if !tested {
+      AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+      NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Basic vibration tested")])
+    }
+  }
+#endif
 }
 
 private enum TouchIRMode: Int, CaseIterable { case gyro = 0, follow = 1, drag = 2
@@ -808,7 +884,7 @@ struct DebugRootView: View {
   @State private var loggingVerbosity: Int = 4
   @State private var inputDebug: Bool = false
   @State private var instantReplay: Bool = false
-  
+
   var body: some View {
     List {
       Section(header: Text(L("CPU / Memory"))) {
@@ -818,33 +894,36 @@ struct DebugRootView: View {
         Toggle(L("Sync on Skip Idle"), isOn: $syncOnSkipIdle)
           .onChange(of: syncOnSkipIdle) { DOLConfigBridge.setMainSyncOnSkipIdle($0) }
       }
-      
+
       Section(header: Text(L("Controllers"))) {
         Toggle(L("Connect MFi Controllers"), isOn: $mfiConnect)
           .onChange(of: mfiConnect) { _ in
             UserDefaults.standard.set(mfiConnect, forKey: "virtual_mfi_connect")
           }
       }
-      
+
       Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
 #if os(iOS)
         Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
           .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }
 #endif
       }
-      
+
       Section(header: Text(L("Environment"))) {
         HStack { Text(L("User Folder")); Spacer(); Text(userFolder).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
         HStack { Text(L("JIT")); Spacer(); Text(jitAcquired ? L("Acquired") : L("Not Acquired")).foregroundStyle(.secondary) }
         HStack { Text(L("JIT Error")); Spacer(); Text(jitError.isEmpty ? "(none)" : jitError).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
         HStack { Text(L("Fastmem")); Spacer(); Text(fastmemAvailable ? L("Available") : L("Not Available")).foregroundStyle(.secondary) }
       }
-      
+
       Section(header: Text(L("Diagnostics"))) {
         HStack { Text(L("Launch Times")); Spacer(); Text("\(launchTimes)").foregroundStyle(.secondary) }
         Button(L("Reset Launch Times")) { launchTimes = 0; UserDefaults.standard.set(0, forKey: "launch_times") }
+        NavigationLink(destination: MotionDebugView()) {
+          Label(L("Motion Debug"), systemImage: "sensor.tag.radiowaves.forward")
+        }
       }
-      
+
       Section(header: Text(L("Logging"))) {
         Toggle(L("Enable Console Logging"), isOn: $loggingEnabled)
           .onChange(of: loggingEnabled) { UserDefaults.standard.set($0, forKey: "logger_console_enabled") }
@@ -866,7 +945,7 @@ struct DebugRootView: View {
     .navigationTitle(L("Debug"))
     .onAppear { syncDebug() }
   }
-  
+
   private func syncDebug() {
     fastmem = DOLConfigBridge.mainFastmem()
     syncOnSkipIdle = DOLConfigBridge.mainSyncOnSkipIdle()
@@ -895,38 +974,38 @@ struct AboutView: View {
           .resizable()
           .scaledToFit()
           .frame(height: 128)
-        
+
         Text("DolphiniOS")
           .font(.system(size: 28, weight: .semibold))
           .foregroundColor(.blue)
-        
+
         Text("© 2003-2015+ Dolphin Team.\n© 2019-2025+ DolphiniOS Project.")
           .multilineTextAlignment(.center)
-        
+
         Text("SwiftUI version by Joe Mattiello")
           .multilineTextAlignment(.center)
-        
+
         Button("github.com/JoeMatt") {
           if let url = URL(string: "https://github.com/JoeMatt") {
             openURL(url)
           }
         }
-        
+
         Text("DolphiniOS is an unofficial and separately maintained port of Dolphin to iOS. The DolphiniOS Project has no relation to Dolphin Team.")
           .multilineTextAlignment(.center)
-        
+
         Text("\"GameCube\" and \"Wii\" are trademarks of Nintendo. DolphiniOS is not affiliated with Nintendo in any way.")
           .multilineTextAlignment(.center)
-        
+
         Text("This software should not be used to play games you do not legally own.")
           .multilineTextAlignment(.center)
-        
+
         Button(L("Source Code")) {
           if let url = URL(string: "https://github.com/OatmealDome/dolphinios") {
             openURL(url)
           }
         }
-        
+
         Color.clear.frame(height: 0)
       }
       .padding(.horizontal, 20)
@@ -955,30 +1034,48 @@ struct ConfigGeneralView: View {
   @State private var fastDiscSpeed: Bool = false
   @State private var dspThread: Bool = false
   @State private var speedLimitPercent: Int = 0
+  @State private var fastForwardSpeedPercent: Int = 300
   @State private var fallbackRegion: Region = .unknown
-  
+
   var body: some View {
     List {
-      Section(header: Text(L("Basic Settings"))) {
+      Section(header: Text(L("Basic Settings")), footer: Text(L("These settings provide performance improvements for most games. Dual Core and DSP Thread offer significant speedups on multi-core devices."))) {
         Toggle(L("Enable Dual Core (speedup)"), isOn: $dualCore)
           .onChange(of: dualCore) { DOLConfigBridge.setMainCpuThread($0) }
         Toggle(L("Enable Cheats"), isOn: $cheats)
           .onChange(of: cheats) { DOLConfigBridge.setMainEnableCheats($0) }
-        Toggle(L("Allow Mismatched Region Settings"), isOn: $mismatchedRegion)
+        Toggle(L("Override Region Mismatch"), isOn: $mismatchedRegion)
           .onChange(of: mismatchedRegion) { DOLConfigBridge.setMainOverrideRegionSettings($0) }
-        Toggle(L("Change Discs Automatically"), isOn: $autoDiscChange)
+        Toggle(L("Auto Disc Change"), isOn: $autoDiscChange)
           .onChange(of: autoDiscChange) { DOLConfigBridge.setMainAutoDiscChange($0) }
         Toggle(L("Fast Disc Speed (speedup)"), isOn: $fastDiscSpeed)
           .onChange(of: fastDiscSpeed) { DOLConfigBridge.setMainFastDiscSpeed($0) }
         Toggle(L("DSP Thread (speedup)"), isOn: $dspThread)
           .onChange(of: dspThread) { DOLConfigBridge.setMainDSPThread($0) }
       }
-      
+
       Section(header: Text(L("Speed"))) {
-        NavigationLink("\(L("Speed Limit")): \(speedLimitLabel(percent: speedLimitPercent))", destination: SpeedLimitPicker(selectedPercent: $speedLimitPercent))
-          .onChange(of: speedLimitPercent) { DOLConfigBridge.setMainEmulationSpeedPercent($0) }
+        NavigationLink(destination: SpeedLimitPicker(selectedPercent: $speedLimitPercent)) {
+          HStack {
+            Label(L("Speed Limit"), systemImage: "speedometer")
+            Spacer()
+            Text(speedLimitLabel(percent: speedLimitPercent))
+              .foregroundStyle(.secondary)
+          }
+        }
+        .onChange(of: speedLimitPercent) { DOLConfigBridge.setMainEmulationSpeedPercent($0) }
+
+        NavigationLink(destination: FastForwardSpeedPicker(selectedPercent: $fastForwardSpeedPercent)) {
+          HStack {
+            Label(L("Fast Forward Speed"), systemImage: "forward.fill")
+            Spacer()
+            Text(fastForwardSpeedLabel(percent: fastForwardSpeedPercent))
+              .foregroundStyle(.secondary)
+          }
+        }
+        .onChange(of: fastForwardSpeedPercent) { UserDefaults.standard.set($0, forKey: "fast_forward_speed_percent") }
       }
-      
+
       Section(header: Text(L("Fallback Region")), footer: Text(L("Dolphin will use this for titles whose region cannot be determined automatically."))) {
         NavigationLink("\(L("Fallback Region")): \(fallbackRegion.label)", destination: FallbackRegionPicker(selected: $fallbackRegion))
           .onChange(of: fallbackRegion) { DOLConfigBridge.setMainFallbackRegion($0.rawValue) }
@@ -987,7 +1084,7 @@ struct ConfigGeneralView: View {
     .navigationTitle(L("General"))
     .onAppear { syncFromConfig() }
   }
-  
+
   private func syncFromConfig() {
     dualCore = DOLConfigBridge.mainCpuThread()
     cheats = DOLConfigBridge.mainEnableCheats()
@@ -996,6 +1093,8 @@ struct ConfigGeneralView: View {
     fastDiscSpeed = DOLConfigBridge.mainFastDiscSpeed()
     dspThread = DOLConfigBridge.mainDSPThread()
     speedLimitPercent = DOLConfigBridge.mainEmulationSpeedPercent()
+    let ffSpeed = UserDefaults.standard.integer(forKey: "fast_forward_speed_percent")
+    fastForwardSpeedPercent = (ffSpeed > 0) ? ffSpeed : 300 // Default to 3x speed
     let regionRaw = DOLConfigBridge.mainFallbackRegion()
     let regionVal = Region.from(raw: regionRaw)
     if regionVal == .unknown {
@@ -1005,8 +1104,14 @@ struct ConfigGeneralView: View {
       fallbackRegion = regionVal
     }
   }
-  
+
   private func speedLimitLabel(percent: Int) -> String {
+    if percent == 0 { return L("Unlimited") }
+    if percent == 100 { return String(format: "%d%% (%@)", percent, L("Normal Speed")) }
+    return "\(percent)%"
+  }
+
+  private func fastForwardSpeedLabel(percent: Int) -> String {
     if percent == 0 { return L("Unlimited") }
     if percent == 100 { return String(format: "%d%% (%@)", percent, L("Normal Speed")) }
     return "\(percent)%"
@@ -1033,6 +1138,23 @@ private struct SpeedLimitPicker: View {
     .navigationTitle(L("Speed Limit"))
     .toolbar { HelpButton(helpKey:
                             "Controls how fast emulation runs relative to the original hardware.<br><br>Values higher than 100% will emulate faster than the original hardware can run, if your hardware is able to keep up. Values lower than 100% will slow emulation instead. Unlimited will emulate as fast as your hardware is able to.<br><br><dolphin_emphasis>If unsure, select 100%.</dolphin_emphasis>") }
+  }
+}
+
+private struct FastForwardSpeedPicker: View {
+  @Binding var selectedPercent: Int
+  @State private var showHelp = false
+  var body: some View {
+    List {
+      SelectRow(label: L("Unlimited"), checked: selectedPercent == 0) { selectedPercent = 0 }
+      ForEach([200, 300, 400, 500, 600, 800, 1000], id: \.self) { value in
+        let text = "\(value)% (\(value/100)x)"
+        SelectRow(label: text, checked: selectedPercent == value) { selectedPercent = value }
+      }
+    }
+    .navigationTitle(L("Fast Forward Speed"))
+    .toolbar { HelpButton(helpKey:
+                            "Controls the speed multiplier when fast forward is enabled.<br><br>Higher values will run the game faster, but may impact performance. 300% (3x speed) is recommended for most games.<br><br><dolphin_emphasis>If unsure, select 300% (3x).</dolphin_emphasis>") }
   }
 }
 
@@ -1164,20 +1286,20 @@ struct ConfigAdvancedView: View {
   @State private var writeBackCache: Bool = false
   @State private var disableICache: Bool = false
   @State private var lowDCBZ: Bool = false
-  
+
   @State private var cpuClockEnabled: Bool = false
   @State private var cpuClockPercent: Int = 100
-  
+
   @State private var vbiEnabled: Bool = false
   @State private var vbiPercent: Int = 100
-  
+
   @State private var memOverride: Bool = false
   @State private var mem1MB: Int = 24
   @State private var mem2MB: Int = 64
-  
+
   @State private var rtcEnabled: Bool = false
   @State private var rtcDate: Date = Date(timeIntervalSince1970: 946684800) // 2000-01-01 UTC
-  
+
   var body: some View {
     List {
       Section(header: Text(L("CPU Options"))) {
@@ -1189,15 +1311,15 @@ struct ConfigAdvancedView: View {
           .onChange(of: adaptiveClock) { UserDefaults.standard.set($0, forKey: "adaptive_clock_enable") }
         Toggle(L("Pause on Panic"), isOn: $pauseOnPanic)
           .onChange(of: pauseOnPanic) { DOLConfigBridge.setMainPauseOnPanic($0) }
-        Toggle(L("Enable Write-Back Cache (slow)"), isOn: $writeBackCache)
+        Toggle(L("Accurate CPU Cache (slower)"), isOn: $writeBackCache)
           .onChange(of: writeBackCache) { DOLConfigBridge.setMainAccurateCpuCache($0) }
-        Toggle(L("Disable I-Cache"), isOn: $disableICache)
+        Toggle(L("Bypass Instruction Cache"), isOn: $disableICache)
           .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) }
-        Toggle(L("Low DCBZ Hack"), isOn: $lowDCBZ)
+        Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
           .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) }
       }
-      
-      Section(header: Text(L("Clock Override")), footer: Text(L("Adjusts the emulated CPU's clock rate.\n\nHigher values may make variable-framerate games run at a higher framerate, at the expense of performance. Lower values may activate a game's internal frameskip, potentially improving performance.\n\nWARNING: Changing this from the default (100%) can and will break games and cause glitches. Do so at your own risk. Please do not report bugs that occur with a non-default clock."))) {
+
+      Section(header: Text(L("Clock Override")), footer: Text(L("Adjusts the emulated CPU's clock rate. Can also be adjusted during gameplay via the in-game menu.\n\nHigher values may make variable-framerate games run at a higher framerate, at the expense of performance. Lower values may activate a game's internal frameskip, potentially improving performance.\n\nWARNING: Changing this from the default (100%) can and will break games and cause glitches. Do so at your own risk. Please do not report bugs that occur with a non-default clock."))) {
         Toggle(L("Enable Emulated CPU Clock Override"), isOn: $cpuClockEnabled)
           .onChange(of: cpuClockEnabled) { DOLConfigBridge.setMainOverclockEnable($0) }
         HStack {
@@ -1214,8 +1336,8 @@ struct ConfigAdvancedView: View {
         .disabled(!cpuClockEnabled)
         .onChange(of: cpuClockPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
       }
-      
-      Section(header: Text(L("Override VBI Frequency")), footer: Text(L("Makes games run at a different frame rate, making the emulation less demanding when lowered, or improving smoothness when increased. This may affect gameplay speed, as it is often tied to the frame rate."))) {
+
+      Section(header: Text(L("Override VBI Frequency")), footer: Text(L("Makes games run at a different frame rate. Can also be adjusted during gameplay via the in-game menu.\n\nMakes emulation less demanding when lowered, or improves smoothness when increased. This may affect gameplay speed, as it is often tied to the frame rate."))) {
         Toggle(L("Enable VBI Frequency Override"), isOn: $vbiEnabled)
           .onChange(of: vbiEnabled) { DOLConfigBridge.setMainViOverclockEnable($0) }
         HStack {
@@ -1232,9 +1354,9 @@ struct ConfigAdvancedView: View {
         .disabled(!vbiEnabled)
         .onChange(of: vbiPercent) { DOLConfigBridge.setMainViOverclockPercent($0) }
       }
-      
+
       Section(header: Text(L("Memory Override")), footer: Text(L("Adjusts the amount of RAM in the emulated console.\n\nWARNING: Enabling this will completely break many games. Only a small number of games can benefit from this."))) {
-        Toggle(L("Enable Emulated Memory SIze Override"), isOn: $memOverride)
+        Toggle(L("Enable Emulated Memory Size Override"), isOn: $memOverride)
           .onChange(of: memOverride) { DOLConfigBridge.setMainRamOverrideEnable($0) }
         HStack {
           Text("MEM1")
@@ -1261,7 +1383,7 @@ struct ConfigAdvancedView: View {
         .disabled(!memOverride)
         .onChange(of: mem2MB) { DOLConfigBridge.setMainMem2SizeMB($0) }
       }
-      
+
       Section(header: Text(L("Custom RTC Options")), footer: Text(L("This setting allows you to set a custom real time clock (RTC) separate from your current system time.\n\nIf unsure, leave this unchecked."))) {
         Toggle(L("Enable Custom RTC"), isOn: $rtcEnabled)
           .onChange(of: rtcEnabled) { DOLConfigBridge.setMainCustomRtcEnable($0) }
@@ -1276,7 +1398,7 @@ struct ConfigAdvancedView: View {
     .navigationTitle(L("Advanced"))
     .onAppear { syncAdvanced() }
   }
-  
+
   private func syncAdvanced() {
     cpuEngine = CpuEngine.from(raw: DOLConfigBridge.mainCpuCore())
     mmu = DOLConfigBridge.mainMMU()
@@ -1285,17 +1407,17 @@ struct ConfigAdvancedView: View {
     writeBackCache = DOLConfigBridge.mainAccurateCpuCache()
     disableICache = DOLConfigBridge.mainDisableICache()
     lowDCBZ = DOLConfigBridge.mainLowDCBZHack()
-    
+
     cpuClockEnabled = DOLConfigBridge.mainOverclockEnable()
     cpuClockPercent = DOLConfigBridge.mainOverclockPercent()
-    
+
     vbiEnabled = DOLConfigBridge.mainViOverclockEnable()
     vbiPercent = DOLConfigBridge.mainViOverclockPercent()
-    
+
     memOverride = DOLConfigBridge.mainRamOverrideEnable()
     mem1MB = DOLConfigBridge.mainMem1SizeMB()
     mem2MB = DOLConfigBridge.mainMem2SizeMB()
-    
+
     rtcEnabled = DOLConfigBridge.mainCustomRtcEnable()
     rtcDate = Date(timeIntervalSince1970: TimeInterval(DOLConfigBridge.mainCustomRtcValue()))
   }
@@ -1338,7 +1460,7 @@ struct ConfigInterfaceView: View {
   @State private var confirmOnStop: Bool = true
   @State private var usePanicHandlers: Bool = true
   @State private var osdMessages: Bool = true
-  
+
   var body: some View {
     List {
       Section(header: Text(L("Game List"))) {
@@ -1347,7 +1469,7 @@ struct ConfigInterfaceView: View {
         Toggle(L("Download Game Covers from GameTDB.com for Use in Grid Mode"), isOn: $useCovers)
           .onChange(of: useCovers) { DOLConfigBridge.setMainUseGameCovers($0) }
       }
-      
+
       Section(header: Text(L("General"))) {
         Toggle(L("Confirm on Stop"), isOn: $confirmOnStop)
           .onChange(of: confirmOnStop) { DOLConfigBridge.setMainConfirmOnStop($0) }
@@ -1360,7 +1482,7 @@ struct ConfigInterfaceView: View {
     .navigationTitle(L("Interface"))
     .onAppear { sync() }
   }
-  
+
   private func sync() {
     useNamesDB = DOLConfigBridge.mainUseBuiltInTitleDatabase()
     useCovers = DOLConfigBridge.mainUseGameCovers()
@@ -1378,7 +1500,7 @@ struct ConfigAudioView: View {
   @State private var stretchLatency: Int = 30
   @State private var muteOnNoSpeedLimit: Bool = false
   @State private var obeyMuteSwitch: Bool = true
-  
+
   var body: some View {
     List {
       Section(header: Text(L("Audio Backend"))) {
@@ -1389,7 +1511,7 @@ struct ConfigAudioView: View {
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
-      
+
 #if os(iOS)
       if backend.contains("AVAudioEngine") {
         Section(header: Text(L("Master Effects Chain")), footer: Text(L("Effects apply post‑environment. Requires AVAudioEngine backend."))) {
@@ -1401,7 +1523,7 @@ struct ConfigAudioView: View {
         }
       }
 #endif
-      
+
       Section(header: Text(L("Volume"))) {
         HStack {
 #if os(tvOS)
@@ -1415,7 +1537,7 @@ struct ConfigAudioView: View {
         }
         .onChange(of: volume) { DOLConfigBridge.setAudioVolume($0) }
       }
-      
+
       Section(header: Text(L("Audio Stretching Settings"))) {
         Toggle(L("Enable Audio Stretching"), isOn: $stretch)
           .onChange(of: stretch) { DOLConfigBridge.setAudioStretch($0) }
@@ -1432,7 +1554,7 @@ struct ConfigAudioView: View {
         .disabled(!stretch)
         .onChange(of: stretchLatency) { DOLConfigBridge.setAudioStretchLatencyMs($0) }
       }
-      
+
       Section(header: Text(L("Misc. Controls"))) {
         Toggle(L("Mute When Disabling Speed Limit"), isOn: $muteOnNoSpeedLimit)
           .onChange(of: muteOnNoSpeedLimit) { DOLConfigBridge.setAudioMuteOnDisabledSpeedLimit($0) }
@@ -1443,7 +1565,7 @@ struct ConfigAudioView: View {
     .navigationTitle(L("Audio"))
     .onAppear { syncAudio() }
   }
-  
+
   private func syncAudio() {
     availableBackends = DOLConfigBridge.audioBackends()
     // Annotate entries to surface capabilities
@@ -1511,7 +1633,7 @@ struct ConfigGameCubeView: View {
         Toggle(L("Load GameCube Main Menu"), isOn: Binding(get: { !skipIPL }, set: { skipIPL = !$0 }))
           .onChange(of: skipIPL) { DOLConfigBridge.setMainSkipIPL($0) }
       }
-      
+
       Section(header: Text(L("System Language"))) {
         NavigationLink(languageLabel(for: gcLanguage), destination: GCLanguagePicker(selected: $gcLanguage))
           .onChange(of: gcLanguage) { DOLConfigBridge.setMainGCLanguage($0) }
@@ -1520,7 +1642,7 @@ struct ConfigGameCubeView: View {
     .navigationTitle(L("GameCube"))
     .onAppear { syncGC() }
   }
-  
+
   private func syncGC() {
     skipIPL = DOLConfigBridge.mainSkipIPL()
     let lang = DOLConfigBridge.mainGCLanguage()
@@ -1531,7 +1653,7 @@ struct ConfigGameCubeView: View {
       DOLConfigBridge.setMainGCLanguage(1)
     }
   }
-  
+
   private func languageLabel(for value: Int) -> String {
     switch value { case 0: return L("Japanese"); case 1: return L("English"); case 2: return L("German"); case 3: return L("French"); case 4: return L("Spanish"); case 5: return L("Italian"); case 6: return L("Dutch"); default: return L("Error") }
   }
@@ -1569,7 +1691,7 @@ struct ConfigWiiView: View {
   @State private var speakerVol: Int = 4
   @State private var wiimoteRumble: Bool = true
   @State private var touchpadIRFollowWithoutClick: Bool = false
-  
+
   var body: some View {
     List {
       Section(header: Text(L("Video"))) {
@@ -1583,7 +1705,7 @@ struct ConfigWiiView: View {
         }
         .onChange(of: widescreen) { DOLConfigBridge.setSysconfWidescreen($0) }
       }
-      
+
       Section(header: Text(L("General"))) {
         Toggle(L("Enable Screen Saver"), isOn: $screensaver).onChange(of: screensaver) { DOLConfigBridge.setSysconfScreensaver($0) }
         NavigationLink(L("System Language"), destination: WiiLanguagePicker(selected: $language))
@@ -1591,7 +1713,7 @@ struct ConfigWiiView: View {
         NavigationLink(L("Audio Settings"), destination: WiiAudioModePicker(selected: $soundMode))
           .onChange(of: soundMode) { DOLConfigBridge.setSysconfSoundMode($0) }
       }
-      
+
       Section(header: Text(L("Wii Remotes"))) {
         HStack {
           Text(L("Sensor Bar Position")); Spacer(); NavigationLink(posLabel(sensorBarPos), destination: WiiSensorBarPosPicker(selected: $sensorBarPos)).frame(maxWidth: .infinity, alignment: .trailing)
@@ -1621,7 +1743,7 @@ struct ConfigWiiView: View {
         Toggle(L("Allow Touchpad IR Follow Without Click"), isOn: $touchpadIRFollowWithoutClick)
           .onChange(of: touchpadIRFollowWithoutClick) { UserDefaults.standard.set($0, forKey: "touchpad_ir_follow_without_click") }
       }
-      
+
       Section(header: Text(L("USB / SD"))) {
         Toggle(L("Emulate Skylander Portal"), isOn: Binding(get: { DOLConfigBridge.mainEmulateSkylanderPortal() }, set: { DOLConfigBridge.setMainEmulateSkylanderPortal($0) }))
         Toggle(L("Connect USB Keyboard"), isOn: $keyboard).onChange(of: keyboard) { DOLConfigBridge.setMainWiiKeyboard($0) }
@@ -1634,7 +1756,7 @@ struct ConfigWiiView: View {
     .navigationTitle(L("Wii"))
     .onAppear { syncWii() }
   }
-  
+
   private func syncWii() {
     pal60 = DOLConfigBridge.sysconfPAL60()
     widescreen = DOLConfigBridge.sysconfWidescreen()
@@ -1652,7 +1774,7 @@ struct ConfigWiiView: View {
     sdWrites = DOLConfigBridge.mainAllowSDWrites()
     sdFolderSync = DOLConfigBridge.mainWiiSDCardEnableFolderSync()
   }
-  
+
   private func posLabel(_ v: Int) -> String { v == 0 ? L("Bottom") : L("Top") }
 }
 
@@ -1707,7 +1829,7 @@ struct ConfigAchievementsView: View {
   @State private var discordPresence: Bool = false
   @State private var progress: Bool = true
   @State private var hostURL: String = ""
-  
+
   var body: some View {
     List {
       Section(header: Text(L("RetroAchievements"))) {
@@ -1738,7 +1860,7 @@ struct ConfigAchievementsView: View {
         }
         .disabled(!enabled)
       }
-      
+
       Section(header: Text(L("Options"))) {
         Toggle(L("Hardcore Mode"), isOn: $hardcore).onChange(of: hardcore) { DOLConfigBridge.setRaHardcoreEnabled($0) }
         Toggle(L("Enable Unofficial"), isOn: $unofficial).onChange(of: unofficial) { DOLConfigBridge.setRaUnofficialEnabled($0) }
@@ -1747,7 +1869,7 @@ struct ConfigAchievementsView: View {
         Toggle(L("Discord Presence"), isOn: $discordPresence).onChange(of: discordPresence) { DOLConfigBridge.setRaDiscordPresenceEnabled($0) }
         Toggle(L("Show Progress Popups"), isOn: $progress).onChange(of: progress) { DOLConfigBridge.setRaProgressEnabled($0) }
       }
-      
+
       Section(header: Text(L("Advanced"))) {
         HStack {
           Text(L("Server URL"))
@@ -1764,7 +1886,7 @@ struct ConfigAchievementsView: View {
     .navigationTitle(L("Achievements"))
     .onAppear { sync() }
   }
-  
+
   private func sync() {
     enabled = DOLConfigBridge.raEnabled()
     username = DOLConfigBridge.raUsername()
@@ -1798,11 +1920,11 @@ struct GraphicsGeneralView: View {
   @State private var instantReplay: Bool = false
   @State private var clipSeconds: Int = 15
 #endif
-  
+
   // Shader compilation
   @State private var shaderType: ShaderCompileType = .asynchronousUber
   @State private var compileBeforeStart: Bool = false
-  
+
   var body: some View {
     List {
       Section {
@@ -1855,7 +1977,7 @@ struct GraphicsGeneralView: View {
         }
 #endif
       }
-      
+
 #if os(iOS)
       Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
         Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
@@ -1871,7 +1993,7 @@ struct GraphicsGeneralView: View {
         .onChange(of: clipSeconds) { v in UserDefaults.standard.set(v, forKey: "replaykit_clip_seconds") }
       }
 #endif
-      
+
       Section(header: Text(L("Shader Compilation"))) {
         NavigationLink(destination: GraphicsShaderTypeView(selected: $shaderType)) {
           Text("\(L("Type")): \(shaderType.label)")
@@ -1891,7 +2013,7 @@ struct GraphicsGeneralView: View {
     }
 #endif
   }
-  
+
   private func syncFromConfig() {
     let keyFromConfig = DOLConfigBridge.gfxBackend()
     let keyFromDefaults = UserDefaults.standard.string(forKey: "ui_gfx_backend")
@@ -2141,7 +2263,7 @@ struct GraphicsEnhancementsView: View {
         .buttonStyle(.plain)
     }
   }
-  
+
   // MARK: - Help Text (UIKit parity)
   private func helpTextInternalResolution() -> String {
     L("Controls the rendering resolution.\n\nA high resolution greatly improves visual quality, but also greatly increases GPU load and can cause issues in certain games. Generally speaking, the lower the internal resolution, the better performance will be.\n\nIf unsure, select Native.")
@@ -2314,7 +2436,7 @@ struct GraphicsAdvancedView: View {
   @State private var manualTexSampling: Bool = false
   var body: some View {
     List {
-      Section(header: Text(L("Performance Statistics"))) {
+      Section(header: Text(L("Performance Statistics")), footer: Text(L("Performance overlays can also be toggled during gameplay using the in-game menu (pause during emulation)."))) {
         Toggle(L("Show FPS"), isOn: $showFPS).onChange(of: showFPS) { _ in DOLConfigBridge.setGfxShowFPS(showFPS) }
         Toggle(L("Show VPS"), isOn: $showVPS).onChange(of: showVPS) { _ in DOLConfigBridge.setGfxShowVPS(showVPS) }
         Toggle(L("Show Speed"), isOn: $showSpeed).onChange(of: showSpeed) { _ in DOLConfigBridge.setGfxShowSpeed(showSpeed) }
@@ -2324,12 +2446,12 @@ struct GraphicsAdvancedView: View {
         Toggle(L("Log Render Time to File"), isOn: $logRenderTime).onChange(of: logRenderTime) { _ in DOLConfigBridge.setGfxLogRenderTimeToFile(logRenderTime) }
         Toggle(L("Speed Colors"), isOn: $speedColors).onChange(of: speedColors) { _ in DOLConfigBridge.setGfxShowSpeedColors(speedColors) }
       }
-      
+
       Section(header: Text(L("Debugging"))) {
         Toggle(L("Overlay Stats"), isOn: $overlayStats).onChange(of: overlayStats) { _ in DOLConfigBridge.setGfxOverlayStats(overlayStats) }
         Toggle(L("API Validation Layer"), isOn: $validationLayer).onChange(of: validationLayer) { _ in DOLConfigBridge.setGfxEnableValidationLayer(validationLayer) }
       }
-      
+
       Section(header: Text(L("Shader Threads"))) {
         HStack {
           Text(L("Compiler Threads"))
@@ -2352,7 +2474,7 @@ struct GraphicsAdvancedView: View {
         }
         .onChange(of: precompilerThreads) { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) }
       }
-      
+
       Section(header: Text(L("Utility"))) {
         Toggle(L("Load Custom Textures"), isOn: $hiresTextures).onChange(of: hiresTextures) { _ in DOLConfigBridge.setGfxHiresTextures(hiresTextures) }
         Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures)
@@ -2361,12 +2483,12 @@ struct GraphicsAdvancedView: View {
         Toggle(L("Disable EFB Copy to VRAM"), isOn: $disableEfbToVRAM).onChange(of: disableEfbToVRAM) { _ in DOLConfigBridge.setGfxHackDisableCopyToVRAM(disableEfbToVRAM) }
         Toggle(L("Enable Graphics Mods"), isOn: $graphicsMods).onChange(of: graphicsMods) { _ in DOLConfigBridge.setGfxModsEnable(graphicsMods) }
       }
-      
+
       Section(header: Text(L("Misc"))) {
         Toggle(L("Crop"), isOn: $cropPicture).onChange(of: cropPicture) { _ in DOLConfigBridge.setGfxCrop(cropPicture) }
         Toggle(L("Progressive Scan"), isOn: $progressiveScan).onChange(of: progressiveScan) { _ in DOLConfigBridge.setSysconfProgressiveScan(progressiveScan) }
       }
-      
+
       Section(header: Text(L("Rendering"))) {
         Toggle(L("Fast Depth Calculation"), isOn: $fastDepth).onChange(of: fastDepth) { DOLConfigBridge.setGfxFastDepthCalc($0) }
         Toggle(L("Per-Pixel Lighting"), isOn: $pixelLighting).onChange(of: pixelLighting) { DOLConfigBridge.setGfxEnablePixelLighting($0) }
@@ -2376,8 +2498,8 @@ struct GraphicsAdvancedView: View {
         Toggle(L("Prefer Vertex Shader for Line/Point Expansion"), isOn: $preferVSForLines).onChange(of: preferVSForLines) { DOLConfigBridge.setGfxPreferVSForLinePointExpansion($0) }
         Toggle(L("CPU Culling"), isOn: $cpuCull).onChange(of: cpuCull) { DOLConfigBridge.setGfxCpuCull($0) }
       }
-      
-      Section(header: Text(L("Experimental"))) {
+
+      Section(header: Text(L("Experimental")), footer: Text(L("⚠️ These settings are experimental and may cause instability, graphical glitches, or crashes in some games. Use with caution."))) {
         Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation).onChange(of: deferEfbInvalidation) { _ in DOLConfigBridge.setGfxHackEfbDeferInvalidation(deferEfbInvalidation) }
         // Manual Texture Sampling is the inverse of Fast Texture Sampling
         Toggle(L("Manual Texture Sampling"), isOn: $manualTexSampling).onChange(of: manualTexSampling) { _ in DOLConfigBridge.setGfxHackFastTextureSampling(!manualTexSampling) }
@@ -2502,7 +2624,7 @@ private struct ControllersMappingPlaceholder: View {
 private struct ControllersMappingView: UIViewControllerRepresentable {
   let isGC: Bool
   let portOneBased: Int
-  
+
   func makeUIViewController(context: Context) -> UIViewController {
     let storyboard = UIStoryboard(name: "ButtonMapping", bundle: nil)
     let vc = storyboard.instantiateInitialViewController() ?? UIViewController()
@@ -2512,32 +2634,13 @@ private struct ControllersMappingView: UIViewControllerRepresentable {
     vc.setValue(max(0, portOneBased - 1), forKey: "mappingPort")
     return vc
   }
-  
+
   func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
     // No-op; mapping UI manages its own state
   }
 }
 
-private struct ControllersTurboPicker: View {
-  @State private var selected: Int = 800
-  private let options: [Int] = [200, 400, 800, 1600, 3200]
-  private func label(_ v: Int) -> String { String(format: "%dx", v/100) }
-  var body: some View {
-    List {
-      ForEach(options, id: \.self) { v in
-        SelectRow(label: label(v), checked: v == selected) {
-          selected = v
-          UserDefaults.standard.set(v, forKey: "controller_turbo_multiplier_percent")
-        }
-      }
-    }
-    .navigationTitle(L("Turbo Multiplier"))
-    .onAppear {
-      let v = UserDefaults.standard.integer(forKey: "controller_turbo_multiplier_percent")
-      selected = (v > 0) ? v : 800
-    }
-  }
-}
+
 
 // MARK: - Audio FX Chain Editor (iOS)
 #if os(iOS)
@@ -2550,9 +2653,9 @@ struct FXChainEditor: View {
   @State private var searchText = ""
   @State private var availableCount: Int = 0
   @State private var showEnableEnginePrompt = false
-  
+
   struct FXItem: Identifiable, Equatable { let id = UUID(); let name: String; var bypass: Bool; let index: Int }
-  
+
   var body: some View {
     Group {
       HStack {
@@ -2605,7 +2708,7 @@ struct FXChainEditor: View {
       Text(L("Audio Effects require the AVAudioEngine backend."))
     }
   }
-  
+
   private func isEngineActive() -> Bool { AudioFXBridge.isEngineActive() }
   private func waitUntilEngineActiveThen(_ action: @escaping () -> Void) {
     func poll(_ attempts: Int) {
@@ -2617,7 +2720,7 @@ struct FXChainEditor: View {
     }
     poll(20)
   }
-  
+
   private func refresh() {
     let list = AudioFXBridge.currentEffects()
     effects = list.enumerated().map { (i, d) in FXItem(name: (d["name"] as? String) ?? "Effect", bypass: (d["bypass"] as? Bool) ?? false, index: i) }
@@ -2666,13 +2769,13 @@ struct FXChainEditor: View {
       }
     }
   }
-  
+
   private struct UIViewControllerWrapper: UIViewControllerRepresentable {
     let controller: UIViewController
     func makeUIViewController(context: Context) -> UIViewController { controller }
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) { }
   }
-  
+
   private struct AUAddSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var search: String = ""
@@ -2734,7 +2837,7 @@ struct CoreAudioDSPEditor: View {
   @State private var low = 0.0
   @State private var mid = 0.0
   @State private var high = 0.0
-  
+
   private func defaults(_ key: String) -> Any? { UserDefaults.standard.object(forKey: key) }
   private func setDefaults(_ key: String, _ value: Any) { UserDefaults.standard.set(value, forKey: key) }
   private func applyToEngine() {
@@ -2767,7 +2870,7 @@ struct CoreAudioDSPEditor: View {
       syncFromEngine()
     }
   }
-  
+
   private func syncFromEngine() {
     let d = AudioFXBridge.coreAudioDSPState()
     if let v = d["delayEnabled"] as? Bool { delayEnabled = v }
@@ -2781,7 +2884,7 @@ struct CoreAudioDSPEditor: View {
     if let v = d["mid"] as? NSNumber { mid = v.doubleValue }
     if let v = d["high"] as? NSNumber { high = v.doubleValue }
   }
-  
+
   @ViewBuilder private var sections: some View {
     Group {
       VStack(alignment: .leading, spacing: 8) {
@@ -2805,7 +2908,7 @@ struct CoreAudioDSPEditor: View {
       }
     }
   }
-  
+
   var body: some View {
     if embedded {
       VStack(alignment: .leading, spacing: 16) { sections }
@@ -2836,6 +2939,171 @@ private struct WiiAspectRatioPicker: View {
       SelectRow(label: "16:9", checked: selectedWide == true) { selectedWide = true; DOLConfigBridge.setSysconfWidescreen(true) }
     }
     .navigationTitle(L("Aspect Ratio"))
+  }
+}
+
+struct EnhancedMotionControlsView: View {
+  // Use @AppStorage for automatic UI updates and better SwiftUI integration
+  @AppStorage("motion_use_yaw_for_horizontal") private var useYawForHorizontal: Bool = false
+  @AppStorage("motion_invert_roll") private var invertRoll: Bool = false
+  @AppStorage("motion_invert_pitch") private var invertPitch: Bool = false
+  @AppStorage("motion_enhanced_shake_detection") private var enhancedShakeEnabled: Bool = true
+  @AppStorage("motion_enable_full_6dof") private var fullMotionEnabled: Bool = true
+  @AppStorage("motion_wiimote_imu_enabled") private var wiimoteIMUEnabled: Bool = true
+  @AppStorage("motion_nunchuck_imu_enabled") private var nunchuckIMUEnabled: Bool = false
+
+  @State private var horizontalMotionMode: HorizontalMotionMode = .roll
+  @State private var currentIRMode: TouchIRMode = .drag
+
+  enum HorizontalMotionMode: Int, CaseIterable {
+    case roll = 0, yaw = 1
+    var label: String {
+      switch self {
+      case .roll: return L("Roll (Tilt Left/Right)")
+      case .yaw: return L("Yaw (Turn Left/Right)")
+      }
+    }
+    var description: String {
+      switch self {
+      case .roll: return L("Tilt device left/right to move cursor")
+      case .yaw: return L("Rotate device left/right to move cursor")
+      }
+    }
+  }
+
+  var body: some View {
+    List {
+      Section(header: Text(L("Motion IR Cursor")), footer: Text(L("Control method for Wiimote IR pointer. Gyro mode uses device motion for enhanced precision. Configure motion-specific settings when gyro is active."))) {
+        NavigationLink(L("IR Control Method"), destination: TouchIRModePicker(selected: $currentIRMode))
+          .onChange(of: currentIRMode) { mode in
+            DOLConfigBridge.setMainTouchPadIRMode(mode.rawValue)
+            notifyMotionSettingsChanged()
+          }
+
+        if currentIRMode == .gyro {
+          NavigationLink(L("Horizontal Movement"), destination: HorizontalMotionPicker(selected: $horizontalMotionMode))
+            .onAppear { syncHorizontalMode() }
+            .onChange(of: horizontalMotionMode) { mode in
+              useYawForHorizontal = (mode == .yaw)
+            }
+
+          Toggle(L("Invert Horizontal (Left/Right)"), isOn: $invertRoll)
+
+          Toggle(L("Invert Vertical (Up/Down)"), isOn: $invertPitch)
+        }
+      }
+
+      Section(header: Text(L("Shake Detection")), footer: Text(L("Modern algorithm analyzes motion patterns to detect shake gestures more reliably than the basic shake detection. Replaces Dolphin's built-in shake detection with improved sensitivity and accuracy."))) {
+        Toggle(L("Enable Advanced Shake Detection"), isOn: $enhancedShakeEnabled)
+      }
+
+      Section(header: Text(L("Full Motion Mapping")), footer: Text(L("Maps device motion to all 6 degrees of freedom (3-axis rotation + 3-axis acceleration). Only active when IR control is not using gyro mode. Enables motion-controlled games like Wii Sports, Mario Kart steering, etc."))) {
+        Toggle(L("Enable 6DOF Motion Controls"), isOn: $fullMotionEnabled)
+
+        if fullMotionEnabled {
+          VStack(alignment: .leading, spacing: 8) {
+            Toggle(L("Wiimote Motion Controls"), isOn: $wiimoteIMUEnabled)
+            Text(L("Maps device motion to Wiimote's built-in accelerometer and gyroscope. Required for most motion-controlled Wii games."))
+              .font(.caption)
+              .foregroundColor(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          .padding(.leading)
+
+          VStack(alignment: .leading, spacing: 8) {
+            Toggle(L("Nunchuck Motion Controls"), isOn: $nunchuckIMUEnabled)
+            Text(L("Maps device motion to Nunchuck's accelerometer. Used by fewer games, mainly for secondary motion controls when using Nunchuck + Wiimote."))
+              .font(.caption)
+              .foregroundColor(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          .padding(.leading)
+        }
+      }
+
+      Section(header: Text(L("Quick Setup"))) {
+        Button(L("Apply Recommended Settings")) {
+          // Set improved defaults based on user feedback
+          enhancedShakeEnabled = true
+          currentIRMode = .gyro // Use gyro IR mode
+          DOLConfigBridge.setMainTouchPadIRMode(TouchIRMode.gyro.rawValue)
+          fullMotionEnabled = true
+          useYawForHorizontal = false // Use roll by default
+          wiimoteIMUEnabled = true
+          nunchuckIMUEnabled = false
+          invertRoll = false
+          invertPitch = false
+
+          // Update local state
+          horizontalMotionMode = .roll
+
+          // Show confirmation
+          #if os(iOS)
+          let generator = UINotificationFeedbackGenerator()
+          generator.notificationOccurred(.success)
+          #endif
+        }
+      }
+    }
+    .navigationTitle(L("Advanced Motion Settings"))
+    .onAppear {
+      syncHorizontalMode()
+      syncIRMode()
+    }
+    // CRITICAL: Notify running emulator when settings change
+    .onChange(of: useYawForHorizontal) { _ in notifyMotionSettingsChanged() }
+    .onChange(of: invertRoll) { _ in notifyMotionSettingsChanged() }
+    .onChange(of: invertPitch) { _ in notifyMotionSettingsChanged() }
+    .onChange(of: enhancedShakeEnabled) { _ in notifyMotionSettingsChanged() }
+    .onChange(of: fullMotionEnabled) { _ in notifyMotionSettingsChanged() }
+    .onChange(of: wiimoteIMUEnabled) { _ in notifyMotionSettingsChanged() }
+    .onChange(of: nunchuckIMUEnabled) { _ in notifyMotionSettingsChanged() }
+  }
+
+  private func syncHorizontalMode() {
+    horizontalMotionMode = useYawForHorizontal ? .yaw : .roll
+  }
+
+  private func syncIRMode() {
+    let irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
+    currentIRMode = TouchIRMode.from(raw: irModeRaw)
+  }
+
+  /// Notify running emulator that motion settings have changed
+  private func notifyMotionSettingsChanged() {
+    NotificationCenter.default.post(
+      name: Notification.Name("DOLMotionSettingsChanged"),
+      object: nil
+    )
+  }
+}
+
+private struct HorizontalMotionPicker: View {
+  @Binding var selected: EnhancedMotionControlsView.HorizontalMotionMode
+
+  var body: some View {
+    List {
+      ForEach(EnhancedMotionControlsView.HorizontalMotionMode.allCases, id: \.rawValue) { mode in
+        Button(action: { selected = mode }) {
+          HStack {
+            VStack(alignment: .leading, spacing: 4) {
+              Text(mode.label)
+                .foregroundColor(.primary)
+              Text(mode.description)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+            Spacer()
+            if selected == mode {
+              Image(systemName: "checkmark")
+                .foregroundColor(.accentColor)
+            }
+          }
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .navigationTitle(L("Horizontal Movement"))
   }
 }
 

@@ -238,11 +238,12 @@ func installInputDebugHandlers(_ c: GCController) {
             if allFour && !wasActive {
                 activeTurboControllers.insert(controllerId)
                 if activeTurboControllers.count == 1 {
-                    let configuredTurbo = UserDefaults.standard.integer(forKey: "controller_turbo_multiplier_percent")
-                    let turboPercent = (configuredTurbo > 0) ? configuredTurbo : 800
+                    // Use the same fast forward speed setting as the UI toggle for consistency
+                    let ffSpeed = UserDefaults.standard.integer(forKey: "fast_forward_speed_percent")
+                    let turboPercent = (ffSpeed > 0) ? ffSpeed : 300 // Default to 3x speed
                     DOLConfigBridge.setMainEmulationSpeedPercent(turboPercent)
                     if UserDefaults.standard.bool(forKey: "input_debug") {
-                        NSLog("[INPUT][Turbo] ENTER turbo at %d%%", turboPercent)
+                        NSLog("[INPUT][Turbo] ENTER turbo at %d%% (fast forward speed)", turboPercent)
                     }
                     NotificationCenter.default.post(name: Notification.Name("DOLFastForwardToggled"), object: nil, userInfo: ["enabled": true])
                 }

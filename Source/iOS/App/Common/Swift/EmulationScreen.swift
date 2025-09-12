@@ -173,6 +173,7 @@ struct EmulationScreen: View {
   @State private var endObserver: NSObjectProtocol?
 #if os(tvOS)
   @State private var exitObserver: NSObjectProtocol?
+  @State private var showMotionDebug = false
 #endif
 
   // Pause menu state
@@ -192,6 +193,7 @@ struct EmulationScreen: View {
   @State private var showShaderSheet = false
   @State private var showShaderParams = false
   @State private var showFXSheet = false
+  @State private var showMotionDebug = false
   // Auto-hide coordination
   @State private var hasTopBarInteraction: Bool = false
   @State private var autoHideScheduled: Bool = false
@@ -346,6 +348,12 @@ struct EmulationScreen: View {
         SettingsRootView(backgroundView: AnyView(Color.clear), isPauseMenuStyle: true, game: game)
       }
     }
+    .sheet(isPresented: $showMotionDebug) {
+      NavigationStack {
+        MotionDebugView()
+      }
+      .environment(\.colorScheme, .dark)
+    }
     .fullScreenCover(isPresented: $showPauseMenu) {
       ZStack {
         PauseMenuView(
@@ -359,6 +367,19 @@ struct EmulationScreen: View {
         VStack {
           HStack {
             Spacer()
+            Button {
+              showMotionDebug = true
+            } label: {
+              Image(systemName: "gyroscope")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(.white)
+                .padding(12)
+                .background(.white.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .focusable(true)
+            .padding([.top, .trailing], 8)
             Button {
               showPerfOverlay = true
             } label: {
@@ -668,6 +689,12 @@ struct EmulationScreen: View {
                                 }
                             }
                             #endif
+                            Button {
+                                hasTopBarInteraction = true
+                                showMotionDebug = true
+                            } label: {
+                                Label("Motion Controls", systemImage: "gyroscope")
+                            }
                         } label: {
                             Image(systemName: "square.stack.3d.up").font(.title2)
                         }
@@ -846,6 +873,16 @@ struct EmulationScreen: View {
         let useIMU = (irModeRaw == 0)
         TVEmulationBridge.setWiiIMUPointEnabled(useIMU)
         TCDeviceMotion.shared.setMotionEnabled(isTouchControlsActive && useIMU)
+
+        // Enable enhanced motion controls for touchscreen by default (Wii games)
+        if isWiiSystem {
+            setupEnhancedMotionControls()
+        }
+
+        // Listen for motion settings changes during gameplay
+        NotificationCenter.default.addObserver(forName: Notification.Name("DOLMotionSettingsChanged"), object: nil, queue: .main) { _ in
+            restartMotionSystemForSettingsChange()
+        }
         // Ensure touch controls start visible
         isTouchControlsActive = controllerManager.overlayVisible
         desiredTouchControls = true
@@ -1014,6 +1051,11 @@ struct EmulationScreen: View {
             }
         }
     }
+    .sheet(isPresented: $showMotionDebug) {
+        NavigationStack {
+            MotionDebugView()
+        }
+    }
     .alert("Exit Game?", isPresented: $showExitConfirm) {
         Button("Save & Quit") {
             TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
@@ -1122,6 +1164,53 @@ struct EmulationScreen: View {
     if has("ca_fx_eq_low") { AudioFXBridge.setCAEQLowGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_low")) }
     if has("ca_fx_eq_mid") { AudioFXBridge.setCAEQMidGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_mid")) }
     if has("ca_fx_eq_high") { AudioFXBridge.setCAEQHighGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_high")) }
+  }
+
+  /// Setup enhanced motion controls optimized for touchscreen usage
+  private func setupEnhancedMotionControls() {
+    // Enable enhanced motion controls by default for touchscreen Wii games
+    UserDefaults.standard.set(true, forKey: "motion_enhanced_shake_detection")
+    UserDefaults.standard.set(true, forKey: "motion_enable_ir_cursor")
+
+    // Set sensible defaults for axis inversion (can be adjusted by user)
+    if UserDefaults.standard.object(forKey: "motion_invert_roll") == nil {
+      UserDefaults.standard.set(false, forKey: "motion_invert_roll")
+    }
+    if UserDefaults.standard.object(forKey: "motion_invert_pitch") == nil {
+      UserDefaults.standard.set(false, forKey: "motion_invert_pitch")
+    }
+
+    NSLog("[MOTION] Enhanced motion controls enabled for Wii game - roll/pitch → IR cursor, improved shake detection")
+
+    // CRITICAL: Restart motion system to pick up the newly enabled settings
+    // Small delay to ensure UserDefaults are synchronized
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+      NotificationCenter.default.post(
+        name: Notification.Name("DOLMotionSettingsChanged"),
+        object: nil
+      )
+      NSLog("[MOTION] Triggered motion system restart after enabling enhanced controls")
+    }
+  }
+
+    /// Restart motion system when settings change during gameplay
+  private func restartMotionSystemForSettingsChange() {
+    NSLog("[MOTION] Motion settings changed during gameplay - restarting motion system")
+
+    // If we're using TCDeviceMotion, restart it to pick up new settings
+    if isTouchControlsActive {
+        let currentMotionEnabled = TCDeviceMotion.shared.motionEnabled
+        TCDeviceMotion.shared.setMotionEnabled(false)
+
+        // Small delay to ensure clean restart
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            TCDeviceMotion.shared.setMotionEnabled(currentMotionEnabled)
+            NSLog("[MOTION] TCDeviceMotion restarted with new settings - cursor reset to center")
+        }
+    }
+
+    // The PVDolphinCore instance will handle its own motion system restart
+    // and cursor reset via the notification observer
   }
 
   /// Heuristic: infer Wii vs GC from game metadata (gameID prefix, file extension)

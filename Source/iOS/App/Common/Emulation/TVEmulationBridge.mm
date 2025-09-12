@@ -92,32 +92,62 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   }
 }
 
-// Fast-forward (temporary throttler disable)
+// Fast-forward (configurable speed multiplier)
 + (BOOL)toggleFastForward {
-  const bool enableTurbo = !Core::GetIsThrottlerTempDisabled();
-  Core::SetIsThrottlerTempDisabled(enableTurbo);
+  static float originalSpeed = 1.0f;
+  static bool isFastForwarding = false;
 
-  if (enableTurbo) {
+  if (!isFastForwarding) {
+    // Store original speed and enable fast forward
+    originalSpeed = Config::Get(Config::MAIN_EMULATION_SPEED);
+
+    // Get configured fast forward speed from UserDefaults
+    NSInteger ffSpeedPercent = [[NSUserDefaults standardUserDefaults] integerForKey:@"fast_forward_speed_percent"];
+    if (ffSpeedPercent <= 0) {
+      ffSpeedPercent = 300; // Default to 3x speed
+    }
+
+    if (ffSpeedPercent == 0) {
+      // Unlimited speed - use throttler disable
+      Core::SetIsThrottlerTempDisabled(true);
+    } else {
+      // Use configured speed multiplier
+      float speedMultiplier = (float)ffSpeedPercent / 100.0f;
+      Config::SetCurrent(Config::MAIN_EMULATION_SPEED, speedMultiplier);
+    }
+
+    // Mute audio if configured
     if (!Config::Get(Config::MAIN_AUDIO_MUTED) &&
         Config::Get(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT)) {
       Config::SetCurrent(Config::MAIN_AUDIO_MUTED, true);
     }
+
+    isFastForwarding = true;
   } else {
+    // Restore original speed and disable fast forward
+    Core::SetIsThrottlerTempDisabled(false);
+    Config::SetCurrent(Config::MAIN_EMULATION_SPEED, originalSpeed);
+
+    // Unmute audio if we muted it
     if (Config::Get(Config::MAIN_AUDIO_MUTED) &&
         Config::GetActiveLayerForConfig(Config::MAIN_AUDIO_MUTED) == Config::LayerType::CurrentRun) {
       Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_AUDIO_MUTED);
     }
+
+    isFastForwarding = false;
   }
 
-  const BOOL enabled = Core::GetIsThrottlerTempDisabled() ? YES : NO;
   dispatch_async(dispatch_get_main_queue(), ^{
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLFastForwardToggled" object:nil userInfo:@{ @"enabled": @(enabled) }];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLFastForwardToggled" object:nil userInfo:@{ @"enabled": @(isFastForwarding) }];
   });
-  return enabled;
+  return isFastForwarding;
 }
 
 + (BOOL)isFastForwardEnabled {
-  return Core::GetIsThrottlerTempDisabled();
+  // Check if current emulation speed is different from base speed or throttler is disabled
+  float currentSpeed = Config::Get(Config::MAIN_EMULATION_SPEED);
+  float baseSpeed = Config::GetBase(Config::MAIN_EMULATION_SPEED);
+  return (currentSpeed != baseSpeed) || Core::GetIsThrottlerTempDisabled();
 }
 
 + (BOOL)isCurrentSystemWii {
