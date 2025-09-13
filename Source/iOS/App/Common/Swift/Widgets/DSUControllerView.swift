@@ -21,8 +21,7 @@ struct DSUControllerView: View {
   @State private var rxCount: UInt = 0
   @State private var clients: [String] = []
   @AppStorage("dsu_show_touch_area") private var showTouchArea: Bool = false
-  @State private var motorStates: [Int: Int] = [0: 0, 1: 0] // motorId -> intensity
-  @State private var rumbleTimer: Timer?
+  @State private var showingTooltip: String? = nil
 
   /// Whether to show the touch area overlay for the current layout
   private var shouldShowTouchArea: Bool {
@@ -114,11 +113,13 @@ struct DSUControllerView: View {
         Button(action: toggleIRMode) {
           Label(irModeLabel, systemImage: "gyroscope")
         }
+        .modifier(TooltipModifier(text: L("Toggle IR pointer mode for Wiimote games")))
       }
       ToolbarItem(placement: .navigationBarLeading) {
         Button(action: { showLayoutSheet = true }) {
           Label(L("Layout"), systemImage: "rectangle.3.offgrid")
         }
+        .modifier(TooltipModifier(text: L("Choose controller layout (Apple, GameCube, Wii)")))
       }
       // Target receiver selection
       ToolbarItem(placement: .navigationBarLeading) {
@@ -137,6 +138,7 @@ struct DSUControllerView: View {
         } label: {
           Label(L("Target"), systemImage: "antenna.radiowaves.left.and.right")
         }
+        .modifier(TooltipModifier(text: L("Select which receiver to send input to")))
       }
       // Apple controller: toggle between Left Stick and D-Pad (mutually exclusive)
       ToolbarItem(placement: .navigationBarLeading) {
@@ -147,23 +149,32 @@ struct DSUControllerView: View {
           }) {
             Label(appleLeftIsDPad ? L("Left=D‑Pad") : L("Left=Stick"), systemImage: appleLeftIsDPad ? "circle.grid.cross" : "circle")
           }
+          .modifier(TooltipModifier(text: L("Toggle left control between analog stick and D-pad")))
         }
       }
       ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: { showMotionSheet = true }) {
           Label(L("Motion"), systemImage: "slider.horizontal.3")
         }
+        .modifier(TooltipModifier(text: L("Adjust motion sensitivity and deadzone settings")))
       }
       ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: { showTouchArea.toggle() }) {
           Label(L("Touch"), systemImage: showTouchArea ? "hand.tap.fill" : "hand.tap")
         }
+        .modifier(TooltipModifier(text: L("Toggle touchpad area for DS4-style touch input")))
       }
       ToolbarItem(placement: .navigationBarTrailing) {
-        Button(action: { DSUServerBridge.sendNow() }) { Label(L("Send Test Frame"), systemImage: "paperplane") }
+        Button(action: { DSUServerBridge.sendNow() }) {
+          Label(L("Send Test Frame"), systemImage: "paperplane")
+        }
+        .modifier(TooltipModifier(text: L("Send a test frame to verify connection")))
       }
       ToolbarItem(placement: .navigationBarTrailing) {
-        Button(action: onClose) { Label(L("Exit"), systemImage: "xmark") }
+        Button(action: onClose) {
+          Label(L("Exit"), systemImage: "xmark")
+        }
+        .modifier(TooltipModifier(text: L("Close DSU controller and return to game")))
       }
     }
     .navigationBarTitleDisplayMode(.inline)
@@ -509,6 +520,11 @@ private struct TouchAreaOverlay: View {
 
   var body: some View {
     GeometryReader { geometry in
+      let isLandscape = geometry.size.width > geometry.size.height
+      let touchAreaHeight: CGFloat = isLandscape ? 150 : 180
+      let alignment: Alignment = isLandscape ? .center : .top
+      let topPadding: CGFloat = isLandscape ? 0 : 60 // Safe area padding for portrait
+
       ZStack {
         // Semi-transparent touch area background
         Rectangle()
@@ -543,38 +559,42 @@ private struct TouchAreaOverlay: View {
           }
         }
       }
+      .frame(maxWidth: .infinity, maxHeight: touchAreaHeight)
+      .frame(maxHeight: .infinity, alignment: alignment)
+      .padding(.top, topPadding)
+      .gesture(
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+          .onChanged { value in
+            handleTouchChanged(value, geometry: geometry)
+          }
+          .onEnded { value in
+            handleTouchEnded(value)
+          }
+          .simultaneously(with:
+            // Support multi-touch
+            DragGesture(minimumDistance: 0, coordinateSpace: .local)
+              .onChanged { value in
+                handleTouchChanged(value, touchId: 1, geometry: geometry)
+              }
+              .onEnded { value in
+                handleTouchEnded(value, touchId: 1)
+              }
+          )
+      )
     }
-    .frame(maxWidth: .infinity, maxHeight: 200) // Limit height to bottom portion
-    .frame(maxHeight: .infinity, alignment: .bottom)
-    .gesture(
-      DragGesture(minimumDistance: 0, coordinateSpace: .local)
-        .onChanged { value in
-          handleTouchChanged(value)
-        }
-        .onEnded { value in
-          handleTouchEnded(value)
-        }
-        .simultaneously(with:
-          // Support multi-touch
-          DragGesture(minimumDistance: 0, coordinateSpace: .local)
-            .onChanged { value in
-              handleTouchChanged(value, touchId: 1)
-            }
-            .onEnded { value in
-              handleTouchEnded(value, touchId: 1)
-            }
-        )
-    )
   }
 
-  private func handleTouchChanged(_ value: DragGesture.Value, touchId: Int = 0) {
+    private func handleTouchChanged(_ value: DragGesture.Value, touchId: Int = 0, geometry: GeometryProxy) {
     let location = value.location
     touchPoints[touchId] = location
 
     // Convert to DSU touch coordinates (0-1920 x 0-1080)
-    // Assume the touch area represents the full DS4 touchpad
-    let x = Int(location.x / 300.0 * 1920.0) // Assuming ~300pt wide touch area
-    let y = Int(location.y / 200.0 * 1080.0) // Assuming ~200pt tall touch area
+    // Use actual touch area dimensions for accurate mapping
+    let touchAreaWidth = geometry.size.width
+    let touchAreaHeight = geometry.size.width > geometry.size.height ? 150.0 : 180.0
+
+    let x = Int(location.x / touchAreaWidth * 1920.0)
+    let y = Int(location.y / touchAreaHeight * 1080.0)
 
     DSUServerBridge.setTouchPoint(touchId, controller: 0, active: true, x: x, y: y)
   }
@@ -582,7 +602,32 @@ private struct TouchAreaOverlay: View {
   private func handleTouchEnded(_ value: DragGesture.Value, touchId: Int = 0) {
     touchPoints.removeValue(forKey: touchId)
     DSUServerBridge.setTouchPoint(touchId, controller: 0, active: false, x: 0, y: 0)
+  }
+}
+
+// MARK: - Tooltip Support
+
+/// ViewModifier that adds tooltips with fallback for older iOS versions
+private struct TooltipModifier: ViewModifier {
+  let text: String
+  @State private var showingAlert = false
+
+  func body(content: Content) -> some View {
+    if #available(iOS 15.0, *) {
+      content
+        .help(text)
+    } else {
+      content
+        .onLongPressGesture {
+          showingAlert = true
+        }
+        .alert(L("Help"), isPresented: $showingAlert) {
+          Button(L("OK")) { }
+        } message: {
+          Text(text)
+        }
     }
+  }
 }
 
 #endif

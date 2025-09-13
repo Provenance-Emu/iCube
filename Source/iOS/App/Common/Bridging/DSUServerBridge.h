@@ -76,6 +76,16 @@ NS_ASSUME_NONNULL_BEGIN
 /// Touch points (DSU supports 2 touch points with X/Y coordinates)
 /// Coordinates are in range [0, 1920] x [0, 1080] (DS4 touchpad resolution)
 + (void)setTouchPoint:(NSInteger)touchId controller:(NSInteger)controller active:(BOOL)active x:(NSInteger)x y:(NSInteger)y;
+
+/// Rumble support (unofficial DSU extension)
++ (void)setRumbleHandler:(void (^_Nullable)(NSInteger controller, NSInteger motorId, NSInteger intensity))handler;
+
+/// Gyro/Motion support for Wiimote DSU (degrees per second)
++ (void)setGyro:(NSInteger)controller pitch:(float)pitch yaw:(float)yaw roll:(float)roll;
+
+/// Accelerometer support for Wiimote DSU (g-force units)
++ (void)setAccelerometer:(NSInteger)controller x:(float)x y:(float)y z:(float)z;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -84,6 +84,37 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
   ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis, v);
   // Also forward to DSU server if running
   if ([DSUServerBridge isRunning]) {
+    // Forward Wiimote gyro data to DSU (axes 631-636 are IMU gyro)
+    if (axis >= 631 && axis <= 636) {
+      static float gyro_pitch = 0.0f, gyro_yaw = 0.0f, gyro_roll = 0.0f;
+      // Convert radians/sec to degrees/sec for DSU protocol
+      float deg_per_sec = v * (180.0f / M_PI);
+
+      if (axis == 631 || axis == 632) { // Pitch Up/Down
+        gyro_pitch = (axis == 632) ? deg_per_sec : -deg_per_sec;
+      } else if (axis == 635 || axis == 636) { // Yaw Left/Right
+        gyro_yaw = (axis == 636) ? deg_per_sec : -deg_per_sec;
+      } else if (axis == 633 || axis == 634) { // Roll Left/Right
+        gyro_roll = (axis == 634) ? deg_per_sec : -deg_per_sec;
+      }
+
+      [DSUServerBridge setGyro:controllerId pitch:gyro_pitch yaw:gyro_yaw roll:gyro_roll];
+    }
+
+    // Forward Wiimote accelerometer data to DSU (axes 625-630 are IMU accel)
+    if (axis >= 625 && axis <= 630) {
+      static float accel_x = 0.0f, accel_y = 0.0f, accel_z = 0.0f;
+
+      if (axis == 625 || axis == 626) { // Accel Left/Right
+        accel_x = (axis == 626) ? v : -v;
+      } else if (axis == 627 || axis == 628) { // Accel Forward/Backward
+        accel_y = (axis == 628) ? v : -v;
+      } else if (axis == 629 || axis == 630) { // Accel Up/Down
+        accel_z = (axis == 630) ? v : -v;
+      }
+
+      [DSUServerBridge setAccelerometer:controllerId x:accel_x y:accel_y z:accel_z];
+    }
     // GC analog triggers: L(20)->DSU axis 4, R(21)->DSU axis 5, map [0..1] to [-1..1]
     if (axis == 20 || axis == 21) {
       float t = (v * 2.f) - 1.f;
@@ -101,25 +132,66 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
       int aidx = (int)axis;
       s_splitAxes[ci][aidx] = clamp11(v);
 
-      auto combLR = ^(int leftIdx, int rightIdx) {
-        // Split-stick axes: negative values mean the direction is active
-        float l = s_splitAxes[ci][leftIdx];   // Left: negative when active
-        float r = s_splitAxes[ci][rightIdx];  // Right: negative when active
-        // Convert: left active (negative) -> negative result, right active (negative) -> positive result
-        float result = clamp11(-r - (-l)); // Simplifies to: clamp11(l - r)
+      // Debug: log raw axis values to understand NIB behavior
+      if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+        NSLog(@"[DSU] Raw axis %d = %.3f -> stored %.3f", aidx, value, v);
+      }
+
+            auto combLR = ^(int leftIdx, int rightIdx) {
+        float leftRaw = s_splitAxes[ci][leftIdx];
+        float rightRaw = s_splitAxes[ci][rightIdx];
+
+        // NIB bug: all directions report negative when pressed
+        // Use the strongest (most negative) signal to determine actual direction
+        float leftMag = fabsf(leftRaw);
+        float rightMag = fabsf(rightRaw);
+
+        float result = 0.0f;
+        if (leftMag > 0.5f && rightMag > 0.5f) {
+          // Both pressed - use the stronger one
+          if (leftMag > rightMag) {
+            result = -leftMag; // Left negative
+          } else {
+            result = rightMag;  // Right positive
+          }
+        } else if (leftMag > 0.5f) {
+          result = -leftMag; // Left negative
+        } else if (rightMag > 0.5f) {
+          result = rightMag;  // Right positive
+        }
+
+        result = clamp11(result);
         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-          NSLog(@"[DSU] combLR: l=%.3f r=%.3f result=%.3f (leftIdx=%d rightIdx=%d)", l, r, result, leftIdx, rightIdx);
+          NSLog(@"[DSU] combLR: leftRaw=%.3f rightRaw=%.3f leftMag=%.3f rightMag=%.3f result=%.3f", leftRaw, rightRaw, leftMag, rightMag, result);
         }
         return result;
       };
       auto combUD = ^(int upIdx, int downIdx) {
-        // Split-stick axes: negative values mean the direction is active
-        float u = s_splitAxes[ci][upIdx];     // Up: negative when active
-        float d = s_splitAxes[ci][downIdx];   // Down: negative when active
-        // Convert: up active (negative) -> negative result, down active (negative) -> positive result
-        float result = clamp11(-d - (-u)); // Simplifies to: clamp11(u - d)
+        float upRaw = s_splitAxes[ci][upIdx];
+        float downRaw = s_splitAxes[ci][downIdx];
+
+        // NIB bug: all directions report negative when pressed
+        // Use the strongest (most negative) signal to determine actual direction
+        float upMag = fabsf(upRaw);
+        float downMag = fabsf(downRaw);
+
+        float result = 0.0f;
+        if (upMag > 0.5f && downMag > 0.5f) {
+          // Both pressed - use the stronger one
+          if (upMag > downMag) {
+            result = -upMag;   // Up negative
+          } else {
+            result = downMag;  // Down positive
+          }
+        } else if (upMag > 0.5f) {
+          result = -upMag;   // Up negative
+        } else if (downMag > 0.5f) {
+          result = downMag;  // Down positive
+        }
+
+        result = clamp11(result);
         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-          NSLog(@"[DSU] combUD: u=%.3f d=%.3f result=%.3f (upIdx=%d downIdx=%d)", u, d, result, upIdx, downIdx);
+          NSLog(@"[DSU] combUD: upRaw=%.3f downRaw=%.3f upMag=%.3f downMag=%.3f result=%.3f", upRaw, downRaw, upMag, downMag, result);
         }
         return result;
       };

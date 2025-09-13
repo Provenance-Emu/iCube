@@ -554,4 +554,21 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   return result;
 }
 
++ (void)setGyro:(NSInteger)controller pitch:(float)pitch yaw:(float)yaw roll:(float)roll {
+  auto& p = [self shared]->_pad;
+  p.gyro_pitch_deg_s = pitch;
+  p.gyro_yaw_deg_s = yaw;
+  p.gyro_roll_deg_s = roll;
+  [[self shared] sendPadData];
+}
+
++ (void)setAccelerometer:(NSInteger)controller x:(float)x y:(float)y z:(float)z {
+  auto& p = [self shared]->_pad;
+  p.accelerometer_x_g = x;
+  p.accelerometer_y_g = y;
+  p.accelerometer_z_g = z;
+  p.accelerometer_timestamp_us = (uint64_t)(CACurrentMediaTime() * 1000000.0); // Convert to microseconds
+  [[self shared] sendPadData];
+}
+
 @end
