@@ -183,13 +183,16 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 
 + (void)setAxis:(NSInteger)axis controller:(NSInteger)controller value:(float)value {
   // Map to left/right sticks 0..255 and triggers
+  // DSU protocol: X-axis: 0=left, 128=center, 255=right
+  //               Y-axis: 0=up, 128=center, 255=down (hence "y_inverted" field names)
+  // Input value range: [-1, +1] where -1=left/up, 0=center, +1=right/down
   auto clamp01 = [](float v) { if (v < 0.f) v = 0.f; if (v > 1.f) v = 1.f; return v; };
   auto& p = [self shared]->_pad;
   switch (axis) {
     case 0: p.left_stick_x = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
-    case 1: p.left_stick_y_inverted = (uint8_t)lroundf(clamp01((1.f-value)/2.f)*255.f); break;
+    case 1: p.left_stick_y_inverted = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
     case 2: p.right_stick_x = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
-    case 3: p.right_stick_y_inverted = (uint8_t)lroundf(clamp01((1.f-value)/2.f)*255.f); break;
+    case 3: p.right_stick_y_inverted = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
     case 4: p.trigger_l2 = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
     case 5: p.trigger_r2 = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
     default: break;

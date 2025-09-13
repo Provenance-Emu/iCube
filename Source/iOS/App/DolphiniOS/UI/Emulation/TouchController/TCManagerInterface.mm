@@ -70,10 +70,11 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
   v *= gain;
   if (v > 1.f) v = 1.f; if (v < -1.f) v = -1.f;
 
-  // Smoothing (EMA)
+  // Smoothing (EMA). Disable for split-stick axes to avoid clamping/angle bias.
   int ci = (int)MAX(0, MIN(3, (int)controllerId));
   int ai = (int)MAX(0, MIN(255, (int)axis));
-  if (alpha > 0.f) {
+  const bool is_split_stick = ((ai >= 11 && ai <= 14) || (ai >= 16 && ai <= 19) || (ai >= 203 && ai <= 206));
+  if (alpha > 0.f && !is_split_stick) {
     v = alpha * s_last[ci][ai] + (1.f - alpha) * v;
     s_last[ci][ai] = v;
   } else {
@@ -92,29 +93,55 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
       if (axis == 21) { [DSUServerBridge setShoulderR:controllerId state:pressed]; }
     }
 
-    // Aggregate NIB split sticks to DSU sticks
+    // Aggregate NIB split sticks to DSU sticks (use magnitude-based signed combination)
     // Main stick: 11 (Up-), 12 (Down+), 13 (Left-), 14 (Right+)
     // C-stick:    16 (Up-), 17 (Down+), 18 (Left-), 19 (Right+)
     // Nunchuk:    203 (Up-), 204 (Down+), 205 (Left-), 206 (Right+)
     if ((axis >= 11 && axis <= 14) || (axis >= 16 && axis <= 19) || (axis >= 203 && axis <= 206)) {
-      // reuse indices
       int aidx = (int)axis;
       s_splitAxes[ci][aidx] = clamp11(v);
+
+      auto combLR = ^(int leftIdx, int rightIdx) {
+        // Split-stick axes: negative values mean the direction is active
+        float l = s_splitAxes[ci][leftIdx];   // Left: negative when active
+        float r = s_splitAxes[ci][rightIdx];  // Right: negative when active
+        // Convert: left active (negative) -> negative result, right active (negative) -> positive result
+        float result = clamp11(-r - (-l)); // Simplifies to: clamp11(l - r)
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+          NSLog(@"[DSU] combLR: l=%.3f r=%.3f result=%.3f (leftIdx=%d rightIdx=%d)", l, r, result, leftIdx, rightIdx);
+        }
+        return result;
+      };
+      auto combUD = ^(int upIdx, int downIdx) {
+        // Split-stick axes: negative values mean the direction is active
+        float u = s_splitAxes[ci][upIdx];     // Up: negative when active
+        float d = s_splitAxes[ci][downIdx];   // Down: negative when active
+        // Convert: up active (negative) -> negative result, down active (negative) -> positive result
+        float result = clamp11(-d - (-u)); // Simplifies to: clamp11(u - d)
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+          NSLog(@"[DSU] combUD: u=%.3f d=%.3f result=%.3f (upIdx=%d downIdx=%d)", u, d, result, upIdx, downIdx);
+        }
+        return result;
+      };
+
       if (axis >= 11 && axis <= 14) {
-        float lx = clamp11(s_splitAxes[ci][14] - s_splitAxes[ci][13]); // Right+ - Left-
-        float ly = clamp11(s_splitAxes[ci][11] - s_splitAxes[ci][12]); // Up- - Down+
+        float lx = combLR(13, 14); // Left-, Right+
+        float ly = combUD(11, 12); // Up-, Down+
         [DSUServerBridge setAxis:0 controller:controllerId value:lx];
         [DSUServerBridge setAxis:1 controller:controllerId value:ly];
       } else if (axis >= 16 && axis <= 19) {
-        float rx = clamp11(s_splitAxes[ci][19] - s_splitAxes[ci][18]); // Right+ - Left-
-        float ry = clamp11(s_splitAxes[ci][16] - s_splitAxes[ci][17]); // Up- - Down+
+        float rx = combLR(18, 19); // Left-, Right+
+        float ry = combUD(16, 17); // Up-, Down+
         [DSUServerBridge setAxis:2 controller:controllerId value:rx];
         [DSUServerBridge setAxis:3 controller:controllerId value:ry];
       } else {
-        float lx2 = clamp11(s_splitAxes[ci][206] - s_splitAxes[ci][205]); // Right+ - Left-
-        float ly2 = clamp11(s_splitAxes[ci][203] - s_splitAxes[ci][204]); // Up- - Down+
-        [DSUServerBridge setAxis:0 controller:controllerId value:lx2];
-        [DSUServerBridge setAxis:1 controller:controllerId value:ly2];
+        // Nunchuk stick - only send if there's actual input to avoid overwriting main stick
+        float lx2 = combLR(205, 206); // Left-, Right+
+        float ly2 = combUD(203, 204); // Up-, Down+
+        if (fabsf(lx2) > 0.01f || fabsf(ly2) > 0.01f) {
+          [DSUServerBridge setAxis:0 controller:controllerId value:lx2];
+          [DSUServerBridge setAxis:1 controller:controllerId value:ly2];
+        }
       }
     }
   }
