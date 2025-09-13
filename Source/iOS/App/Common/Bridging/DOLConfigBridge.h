@@ -368,6 +368,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSArray<NSDictionary<NSString*, id>*>*)dsuServersParsed; // keys: description, address, port(NSNumber)
 + (void)addDsuServer:(NSString*)desc address:(NSString*)address port:(NSInteger)port;
 + (void)removeDsuServerAtIndex:(NSInteger)index;
+// Debug metrics
++ (NSUInteger)dsuClientRxCount;
 
 @end
 
