@@ -4,6 +4,8 @@
 import SwiftUI
 import GameController
 import UIKit
+import CoreHaptics
+import AudioToolbox
 
 #if os(iOS)
 struct DSUControllerView: View {
@@ -108,6 +110,13 @@ struct DSUControllerView: View {
           NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
         }
       }
+
+      // Set up rumble handler for haptic feedback
+      DSUServerBridge.setRumbleHandler { controller, motorId, intensity in
+        DispatchQueue.main.async {
+          updateMotorState(motorId: Int(motorId), intensity: Int(intensity))
+        }
+      }
     }
     .toolbar {
       ToolbarItem(placement: .navigationBarLeading) {
@@ -184,6 +193,71 @@ struct DSUControllerView: View {
       rxCount = UInt(DSUServerBridge.rxCount())
       clients = DSUServerBridge.clients() as? [String] ?? []
       if !hasClient { DSUServerBridge.sendNow() }
+    }
+  }
+
+  // MARK: - Rumble/Haptic Feedback
+
+  /// Update motor state and trigger haptic feedback
+  /// Following the unofficial DSU rumble protocol: clients send periodic updates
+  private func updateMotorState(motorId: Int, intensity: Int) {
+    motorStates[motorId] = intensity
+
+    // Reset timeout timer - motors should stop if no updates received for ~5 seconds
+    rumbleTimer?.invalidate()
+    rumbleTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+      motorStates = [0: 0, 1: 0] // Reset all motors to zero
+    }
+
+    // Trigger haptic feedback based on current motor states
+    triggerHapticFeedback()
+  }
+
+  /// Trigger iOS haptic feedback based on current motor states
+  private func triggerHapticFeedback() {
+    let leftIntensity = Float(motorStates[0] ?? 0) / 255.0   // Motor 0 = left
+    let rightIntensity = Float(motorStates[1] ?? 0) / 255.0  // Motor 1 = right
+    let maxIntensity = max(leftIntensity, rightIntensity)
+
+    // Skip if intensity is too low
+    guard maxIntensity > 0.05 else { return }
+
+    if #available(iOS 13.0, *), CHHapticEngine.capabilitiesForHardware().supportsHaptics {
+      // Use CoreHaptics for precise rumble
+      do {
+        let engine = try CHHapticEngine()
+        try engine.start()
+
+        // Create simple haptic pattern
+        // For iOS, we combine both motors into a single haptic event
+        // with intensity based on the stronger motor and sharpness based on motor balance
+        let combinedIntensity = maxIntensity
+        let sharpness = leftIntensity > rightIntensity ? 0.3 : 0.7 // Left=low freq, Right=high freq
+
+        let event = CHHapticEvent(
+          eventType: .hapticTransient,
+          parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: combinedIntensity),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(sharpness))
+          ],
+          relativeTime: 0
+        )
+
+        let pattern = try CHHapticPattern(events: [event], parameters: [])
+        let player = try engine.makePlayer(with: pattern)
+        try player.start(atTime: 0)
+
+      } catch {
+        // Fallback to basic vibration
+        if maxIntensity > 0.3 {
+          AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+      }
+    } else {
+      // Fallback to basic vibration for older devices
+      if maxIntensity > 0.3 {
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+      }
     }
   }
 

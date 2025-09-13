@@ -54,6 +54,9 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 
   // simple pad state (pad 0)
   ciface::DualShockUDPClient::Proto::MessageType::PadDataResponse _pad;
+
+  // rumble callback (unofficial DSU extension)
+  void (^_rumbleHandler)(NSInteger controller, NSInteger motorId, NSInteger intensity);
 }
 
 + (instancetype)shared { static DSUServerBridge* s; static dispatch_once_t once; dispatch_once(&once, ^{ s = [DSUServerBridge new]; }); return s; }
@@ -278,6 +281,10 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   [[self shared] sendPadData];
 }
 
++ (void)setRumbleHandler:(void (^_Nullable)(NSInteger controller, NSInteger motorId, NSInteger intensity))handler {
+  [self shared]->_rumbleHandler = [handler copy];
+}
+
 - (instancetype)init {
   if (self = [super init]) {
     _running = NO; _sock = -1; _port = ciface::DualShockUDPClient::DEFAULT_SERVER_PORT;
@@ -449,6 +456,29 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
       }
       // On request, respond immediately with a frame; regular frames are sent by timer
       [self sendPadDataTo:src];
+      break;
+    }
+        case Proto::MessageType::MotorInfoRequest::TYPE: {
+      // Unofficial rumble extension: respond with motor capabilities
+      Proto::Message<Proto::MessageType::MotorInfoResponse> resp(0);
+      resp.m_message.pad_id = 0;
+      memset(resp.m_message.pad_mac_address.data(), 0, resp.m_message.pad_mac_address.size());
+      resp.m_message.motor_count = 2; // iOS supports dual-motor simulation (left/right)
+      resp.Finish();
+      sendto(_sock, &resp.m_message, sizeof(resp.m_message), 0, (const struct sockaddr*)src, sizeof(*src));
+      break;
+    }
+    case Proto::MessageType::RumbleRequest::TYPE: {
+      // Unofficial rumble extension: handle rumble command
+      if (len >= sizeof(Proto::MessageType::RumbleRequest)) {
+        Proto::MessageType::RumbleRequest rumble{};
+        memcpy(&rumble, data, sizeof(rumble));
+
+        // Call rumble handler if set
+        if (_rumbleHandler) {
+          _rumbleHandler(rumble.pad_id, rumble.motor_id, rumble.intensity);
+        }
+      }
       break;
     }
     default:
