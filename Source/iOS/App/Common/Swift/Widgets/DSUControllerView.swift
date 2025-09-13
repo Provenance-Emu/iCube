@@ -4,6 +4,8 @@
 import SwiftUI
 import GameController
 import UIKit
+import CoreHaptics
+import AudioToolbox
 
 #if os(iOS)
 struct DSUControllerView: View {
@@ -20,6 +22,17 @@ struct DSUControllerView: View {
   @State private var txCount: UInt = 0
   @State private var rxCount: UInt = 0
   @State private var clients: [String] = []
+  @AppStorage("dsu_show_touch_area") private var showTouchArea: Bool = false
+  @State private var motorStates: [Int: Int] = [0: 0, 1: 0] // motorId -> intensity
+  @State private var rumbleTimer: Timer?
+
+  /// Whether to show the touch area overlay for the current layout
+  private var shouldShowTouchArea: Bool {
+    guard showTouchArea else { return false }
+    let layout = DSUControllerLayout(rawValue: layoutRaw) ?? .appleVirtual
+    // Show touch area for layouts that could benefit from touch input
+    return layout == .appleVirtual || layout == .wiiRemote
+  }
 
   var body: some View {
     Group {
@@ -56,6 +69,11 @@ struct DSUControllerView: View {
         }
       }
 
+      // Touch area overlay (for layouts that support touch)
+      if shouldShowTouchArea {
+        TouchAreaOverlay()
+      }
+
       // Status HUD
       VStack {
         HStack(spacing: 12) {
@@ -90,6 +108,13 @@ struct DSUControllerView: View {
         if !ok {
           let err = DSUServerBridge.lastError()
           NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+        }
+      }
+
+      // Set up rumble handler for haptic feedback
+      DSUServerBridge.setRumbleHandler { controller, motorId, intensity in
+        DispatchQueue.main.async {
+          updateMotorState(motorId: Int(motorId), intensity: Int(intensity))
         }
       }
     }
@@ -139,6 +164,11 @@ struct DSUControllerView: View {
         }
       }
       ToolbarItem(placement: .navigationBarTrailing) {
+        Button(action: { showTouchArea.toggle() }) {
+          Label(L("Touch"), systemImage: showTouchArea ? "hand.tap.fill" : "hand.tap")
+        }
+      }
+      ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: { DSUServerBridge.sendNow() }) { Label(L("Send Test Frame"), systemImage: "paperplane") }
       }
       ToolbarItem(placement: .navigationBarTrailing) {
@@ -163,6 +193,71 @@ struct DSUControllerView: View {
       rxCount = UInt(DSUServerBridge.rxCount())
       clients = DSUServerBridge.clients() as? [String] ?? []
       if !hasClient { DSUServerBridge.sendNow() }
+    }
+  }
+
+  // MARK: - Rumble/Haptic Feedback
+
+  /// Update motor state and trigger haptic feedback
+  /// Following the unofficial DSU rumble protocol: clients send periodic updates
+  private func updateMotorState(motorId: Int, intensity: Int) {
+    motorStates[motorId] = intensity
+
+    // Reset timeout timer - motors should stop if no updates received for ~5 seconds
+    rumbleTimer?.invalidate()
+    rumbleTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+      motorStates = [0: 0, 1: 0] // Reset all motors to zero
+    }
+
+    // Trigger haptic feedback based on current motor states
+    triggerHapticFeedback()
+  }
+
+  /// Trigger iOS haptic feedback based on current motor states
+  private func triggerHapticFeedback() {
+    let leftIntensity = Float(motorStates[0] ?? 0) / 255.0   // Motor 0 = left
+    let rightIntensity = Float(motorStates[1] ?? 0) / 255.0  // Motor 1 = right
+    let maxIntensity = max(leftIntensity, rightIntensity)
+
+    // Skip if intensity is too low
+    guard maxIntensity > 0.05 else { return }
+
+    if #available(iOS 13.0, *), CHHapticEngine.capabilitiesForHardware().supportsHaptics {
+      // Use CoreHaptics for precise rumble
+      do {
+        let engine = try CHHapticEngine()
+        try engine.start()
+
+        // Create simple haptic pattern
+        // For iOS, we combine both motors into a single haptic event
+        // with intensity based on the stronger motor and sharpness based on motor balance
+        let combinedIntensity = maxIntensity
+        let sharpness = leftIntensity > rightIntensity ? 0.3 : 0.7 // Left=low freq, Right=high freq
+
+        let event = CHHapticEvent(
+          eventType: .hapticTransient,
+          parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: combinedIntensity),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(sharpness))
+          ],
+          relativeTime: 0
+        )
+
+        let pattern = try CHHapticPattern(events: [event], parameters: [])
+        let player = try engine.makePlayer(with: pattern)
+        try player.start(atTime: 0)
+
+      } catch {
+        // Fallback to basic vibration
+        if maxIntensity > 0.3 {
+          AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+      }
+    } else {
+      // Fallback to basic vibration for older devices
+      if maxIntensity > 0.3 {
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+      }
     }
   }
 
@@ -480,4 +575,88 @@ private final class TouchControllerHostViewController: UIViewController {
     }
   }
 }
+
+// MARK: - Touch Area Overlay
+
+private struct TouchAreaOverlay: View {
+  @State private var touchPoints: [Int: CGPoint] = [:] // touchId -> position
+
+  var body: some View {
+    GeometryReader { geometry in
+      ZStack {
+        // Semi-transparent touch area background
+        Rectangle()
+          .fill(Color.white.opacity(0.1))
+          .overlay(
+            Rectangle()
+              .stroke(Color.white.opacity(0.3), lineWidth: 2)
+              .overlay(
+                Text(L("Touch Area"))
+                  .font(.caption)
+                  .foregroundColor(.white.opacity(0.6))
+                  .padding(4)
+                  .background(Color.black.opacity(0.3))
+                  .clipShape(RoundedRectangle(cornerRadius: 4))
+                  .position(x: geometry.size.width / 2, y: 20)
+              )
+          )
+
+        // Active touch points
+        ForEach(Array(touchPoints.keys), id: \.self) { touchId in
+          if let point = touchPoints[touchId] {
+            Circle()
+              .fill(Color.cyan.opacity(0.6))
+              .frame(width: 44, height: 44)
+              .position(point)
+              .overlay(
+                Text("\(touchId + 1)")
+                  .font(.caption2.bold())
+                  .foregroundColor(.white)
+                  .position(point)
+              )
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: 200) // Limit height to bottom portion
+    .frame(maxHeight: .infinity, alignment: .bottom)
+    .gesture(
+      DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        .onChanged { value in
+          handleTouchChanged(value)
+        }
+        .onEnded { value in
+          handleTouchEnded(value)
+        }
+        .simultaneously(with:
+          // Support multi-touch
+          DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+              handleTouchChanged(value, touchId: 1)
+            }
+            .onEnded { value in
+              handleTouchEnded(value, touchId: 1)
+            }
+        )
+    )
+  }
+
+  private func handleTouchChanged(_ value: DragGesture.Value, touchId: Int = 0) {
+    let location = value.location
+    touchPoints[touchId] = location
+
+    // Convert to DSU touch coordinates (0-1920 x 0-1080)
+    // Assume the touch area represents the full DS4 touchpad
+    let x = Int(location.x / 300.0 * 1920.0) // Assuming ~300pt wide touch area
+    let y = Int(location.y / 200.0 * 1080.0) // Assuming ~200pt tall touch area
+
+    DSUServerBridge.setTouchPoint(touchId, controller: 0, active: true, x: x, y: y)
+  }
+
+  private func handleTouchEnded(_ value: DragGesture.Value, touchId: Int = 0) {
+    touchPoints.removeValue(forKey: touchId)
+    DSUServerBridge.setTouchPoint(touchId, controller: 0, active: false, x: 0, y: 0)
+    }
+}
+
 #endif

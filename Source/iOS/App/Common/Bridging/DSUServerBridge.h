@@ -73,6 +73,16 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setPS:(NSInteger)controller state:(BOOL)state;
 + (void)setTouch:(NSInteger)controller state:(BOOL)state;
 
+/// Touch points (DSU supports 2 touch points with X/Y coordinates)
+/// Coordinates are in range [0, 1920] x [0, 1080] (DS4 touchpad resolution)
++ (void)setTouchPoint:(NSInteger)touchId controller:(NSInteger)controller active:(BOOL)active x:(NSInteger)x y:(NSInteger)y;
+
+/// Rumble callback (unofficial DSU extension)
+/// Block will be called when client sends rumble commands
+/// motorId: 0=left motor, 1=right motor (for dual-motor controllers)
+/// intensity: 0-255 vibration strength
++ (void)setRumbleHandler:(void (^_Nullable)(NSInteger controller, NSInteger motorId, NSInteger intensity))handler;
+
 @end
 
 NS_ASSUME_NONNULL_END

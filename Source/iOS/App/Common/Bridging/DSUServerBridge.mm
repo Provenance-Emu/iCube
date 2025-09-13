@@ -54,6 +54,9 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 
   // simple pad state (pad 0)
   ciface::DualShockUDPClient::Proto::MessageType::PadDataResponse _pad;
+
+  // rumble callback (unofficial DSU extension)
+  void (^_rumbleHandler)(NSInteger controller, NSInteger motorId, NSInteger intensity);
 }
 
 + (instancetype)shared { static DSUServerBridge* s; static dispatch_once_t once; dispatch_once(&once, ^{ s = [DSUServerBridge new]; }); return s; }
@@ -183,13 +186,16 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 
 + (void)setAxis:(NSInteger)axis controller:(NSInteger)controller value:(float)value {
   // Map to left/right sticks 0..255 and triggers
+  // DSU protocol: X-axis: 0=left, 128=center, 255=right
+  //               Y-axis: 0=up, 128=center, 255=down (hence "y_inverted" field names)
+  // Input value range: [-1, +1] where -1=left/up, 0=center, +1=right/down
   auto clamp01 = [](float v) { if (v < 0.f) v = 0.f; if (v > 1.f) v = 1.f; return v; };
   auto& p = [self shared]->_pad;
   switch (axis) {
     case 0: p.left_stick_x = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
-    case 1: p.left_stick_y_inverted = (uint8_t)lroundf(clamp01((1.f-value)/2.f)*255.f); break;
+    case 1: p.left_stick_y_inverted = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
     case 2: p.right_stick_x = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
-    case 3: p.right_stick_y_inverted = (uint8_t)lroundf(clamp01((1.f-value)/2.f)*255.f); break;
+    case 3: p.right_stick_y_inverted = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
     case 4: p.trigger_l2 = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
     case 5: p.trigger_r2 = (uint8_t)lroundf(clamp01((value+1.f)/2.f)*255.f); break;
     default: break;
@@ -257,6 +263,26 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   auto& touch = [self shared]->_pad.button_touch;
   touch = state ? 1 : 0;
   [[self shared] sendPadData];
+}
+
++ (void)setTouchPoint:(NSInteger)touchId controller:(NSInteger)controller active:(BOOL)active x:(NSInteger)x y:(NSInteger)y {
+  auto& p = [self shared]->_pad;
+  if (touchId == 0) {
+    p.touch1.active = active ? 1 : 0;
+    p.touch1.id = (u8)touchId;
+    p.touch1.x = (s16)x;
+    p.touch1.y = (s16)y;
+  } else if (touchId == 1) {
+    p.touch2.active = active ? 1 : 0;
+    p.touch2.id = (u8)touchId;
+    p.touch2.x = (s16)x;
+    p.touch2.y = (s16)y;
+  }
+  [[self shared] sendPadData];
+}
+
++ (void)setRumbleHandler:(void (^_Nullable)(NSInteger controller, NSInteger motorId, NSInteger intensity))handler {
+  [self shared]->_rumbleHandler = [handler copy];
 }
 
 - (instancetype)init {
@@ -430,6 +456,29 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
       }
       // On request, respond immediately with a frame; regular frames are sent by timer
       [self sendPadDataTo:src];
+      break;
+    }
+        case Proto::MessageType::MotorInfoRequest::TYPE: {
+      // Unofficial rumble extension: respond with motor capabilities
+      Proto::Message<Proto::MessageType::MotorInfoResponse> resp(0);
+      resp.m_message.pad_id = 0;
+      memset(resp.m_message.pad_mac_address.data(), 0, resp.m_message.pad_mac_address.size());
+      resp.m_message.motor_count = 2; // iOS supports dual-motor simulation (left/right)
+      resp.Finish();
+      sendto(_sock, &resp.m_message, sizeof(resp.m_message), 0, (const struct sockaddr*)src, sizeof(*src));
+      break;
+    }
+    case Proto::MessageType::RumbleRequest::TYPE: {
+      // Unofficial rumble extension: handle rumble command
+      if (len >= sizeof(Proto::MessageType::RumbleRequest)) {
+        Proto::MessageType::RumbleRequest rumble{};
+        memcpy(&rumble, data, sizeof(rumble));
+
+        // Call rumble handler if set
+        if (_rumbleHandler) {
+          _rumbleHandler(rumble.pad_id, rumble.motor_id, rumble.intensity);
+        }
+      }
       break;
     }
     default:

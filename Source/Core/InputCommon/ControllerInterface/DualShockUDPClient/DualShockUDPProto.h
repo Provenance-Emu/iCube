@@ -142,6 +142,40 @@ struct PadDataRequest
   std::array<u8, 6> mac_address_to_register;
 };
 
+// Unofficial rumble extension
+struct MotorInfoRequest
+{
+  static constexpr auto FROM = CLIENT;
+  static constexpr auto TYPE = 0x110001U;
+  MessageHeader header;
+  u32 message_type;
+  u8 pad_id;
+  std::array<u8, 3> padding; // Align to match "Controller identification header"
+};
+
+struct MotorInfoResponse
+{
+  static constexpr auto FROM = SERVER;
+  static constexpr auto TYPE = 0x110001U;
+  MessageHeader header;
+  u32 message_type;
+  u8 pad_id;
+  std::array<u8, 6> pad_mac_address;
+  u8 motor_count; // 0=no rumble, 1=single motor, 2=left/right motors
+};
+
+struct RumbleRequest
+{
+  static constexpr auto FROM = CLIENT;
+  static constexpr auto TYPE = 0x110002U;
+  MessageHeader header;
+  u32 message_type;
+  u8 pad_id;
+  std::array<u8, 6> pad_mac_address;
+  u8 motor_id;     // 0 to motor_count-1
+  u8 intensity;    // 0-255 vibration intensity
+};
+
 struct PadDataResponse
 {
   static constexpr auto FROM = SERVER;
@@ -199,6 +233,7 @@ struct FromServer
     MessageType::VersionResponse version_response;
     MessageType::PortInfo port_info;
     MessageType::PadDataResponse pad_data_response;
+    MessageType::MotorInfoResponse motor_info_response;
   };
 };
 
@@ -214,6 +249,8 @@ struct FromClient
     MessageType::VersionRequest version_request;
     MessageType::ListPorts list_ports;
     MessageType::PadDataRequest pad_data_request;
+    MessageType::MotorInfoRequest motor_info_request;
+    MessageType::RumbleRequest rumble_request;
   };
 };
 }  // namespace MessageType
