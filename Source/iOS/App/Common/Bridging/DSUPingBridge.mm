@@ -8,6 +8,8 @@
 #import <sys/socket.h>
 #import <arpa/inet.h>
 #import <fcntl.h>
+#import <os/object.h>
+#include <netdb.h>
 
 // C++ DSU proto
 #include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
@@ -22,6 +24,13 @@ namespace DSUPB = ciface::DualShockUDPClient::Proto;
                   timeout:(NSTimeInterval)timeout
                completion:(void(^)(BOOL ok, NSString * _Nullable info))completion {
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+#if DEBUG
+    auto postToast = ^(NSString* msg){
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar" object:nil userInfo:@{ @"text": msg ?: @"" }];
+      });
+    };
+#endif
     int sockfd = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) { NSLog(@"[DSU-PING] socket() failed"); dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, @"socket() failed"); }); return; }
 
@@ -32,18 +41,39 @@ namespace DSUPB = ciface::DualShockUDPClient::Proto;
     struct sockaddr_in dst; memset(&dst, 0, sizeof(dst));
     dst.sin_family = AF_INET;
     dst.sin_port = htons((uint16_t)(port > 0 ? port : 26760));
-    if (inet_pton(AF_INET, address.UTF8String, &dst.sin_addr) != 1) {
-      NSLog(@"[DSU-PING] invalid address: %@", address);
-      close(sockfd);
-      dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, @"invalid address"); });
-      return;
+    // Sanitize address: trim and strip anything after '@'
+    NSString* host = [address stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSRange atRange = [host rangeOfString:@"@"]; if (atRange.location != NSNotFound) { host = [host substringToIndex:atRange.location]; }
+    if (inet_pton(AF_INET, host.UTF8String, &dst.sin_addr) != 1) {
+      // Try resolve hostname to IPv4
+      struct addrinfo hints; memset(&hints, 0, sizeof(hints));
+      hints.ai_family = AF_INET; hints.ai_socktype = SOCK_DGRAM;
+      struct addrinfo* res = NULL;
+      int gai = getaddrinfo(host.UTF8String, NULL, &hints, &res);
+      if (gai == 0 && res) {
+        struct sockaddr_in* a = (struct sockaddr_in*)res->ai_addr;
+        dst.sin_addr = a->sin_addr; // copy IPv4
+        char ipbuf[INET_ADDRSTRLEN];
+        const char* ip = inet_ntop(AF_INET, &dst.sin_addr, ipbuf, sizeof(ipbuf));
+        NSLog(@"[DSU-PING] resolved %@ -> %s", host, ip ? ip : "<unknown>");
+        freeaddrinfo(res);
+      } else {
+        NSLog(@"[DSU-PING] invalid address/resolve failed: %@ (%d)", host, gai);
+        if (res) freeaddrinfo(res);
+        close(sockfd);
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, @"invalid address"); });
+        return;
+      }
     }
 
     // Build VersionRequest
     DSUPB::Message<DSUPB::MessageType::VersionRequest> req(0);
     req.Finish();
 
-    NSLog(@"[DSU-PING] sending VersionRequest to %@:%d", address, (int)ntohs(dst.sin_port));
+    NSLog(@"[DSU-PING] sending VersionRequest to %@:%d", host, (int)ntohs(dst.sin_port));
+#if DEBUG
+    postToast([NSString stringWithFormat:@"[Ping] Sent to %@:%d", host, (int)ntohs(dst.sin_port)]);
+#endif
     ssize_t sent = sendto(sockfd, &req.m_message, sizeof(req.m_message), 0, (const struct sockaddr*)&dst, sizeof(dst));
     if (sent <= 0) {
       NSLog(@"[DSU-PING] sendto failed (errno=%d)", errno);
@@ -69,6 +99,9 @@ namespace DSUPB = ciface::DualShockUDPClient::Proto;
         uint16_t p = ntohs(src.sin_port);
         if (ip) info = [NSString stringWithFormat:@"%s:%hu", ip, p];
         NSLog(@"[DSU-PING] received %zd bytes from %s:%hu", n, ip ? ip : "<unknown>", p);
+#if DEBUG
+        postToast([NSString stringWithFormat:@"[Ping] Reply from %s:%hu", ip ? ip : "<unknown>", p]);
+#endif
         break;
       }
       // sleep 10ms
@@ -76,7 +109,10 @@ namespace DSUPB = ciface::DualShockUDPClient::Proto;
     }
 
     if (!ok) {
-      NSLog(@"[DSU-PING] timeout after %.0f ms to %@:%d", timeout * 1000.0, address, (int)ntohs(dst.sin_port));
+      NSLog(@"[DSU-PING] timeout after %.0f ms to %@:%d", timeout * 1000.0, host, (int)ntohs(dst.sin_port));
+#if DEBUG
+      postToast([NSString stringWithFormat:@"[Ping] Timeout to %@:%d", host, (int)ntohs(dst.sin_port)]);
+#endif
     }
     close(sockfd);
     dispatch_async(dispatch_get_main_queue(), ^{ completion(ok, info); });
