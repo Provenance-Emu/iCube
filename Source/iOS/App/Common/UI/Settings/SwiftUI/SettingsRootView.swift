@@ -833,8 +833,12 @@ struct ControllersRootView: View {
               }
               Spacer()
               let addr = (dsuServers[idx]["address"] as? String) ?? ""
+              let sanAddr: String = {
+                let trimmed = addr.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let at = trimmed.firstIndex(of: "@") { return String(trimmed[..<at]) } else { return trimmed }
+              }()
               let port = (dsuServers[idx]["port"] as? NSNumber)?.intValue ?? 26760
-              let key = "\(addr):\(port)"
+              let key = "\(sanAddr):\(port)"
               if pingingServerKey == key {
                 ProgressView().padding(.vertical, 4)
               } else {
@@ -845,7 +849,7 @@ struct ControllersRootView: View {
                   #if DEBUG
                   print("[DSU-PING] tapping Test for \(key)")
                   #endif
-                  DSUPingBridge.pingServerAddress(addr, port: port, timeout: 1.0) { ok, info in
+                  DSUPingBridge.pingServerAddress(sanAddr, port: port, timeout: 1.0) { ok, info in
                     pingingServerKey = nil
                     let msg = ok ? String(format: L("Reachable: %@"), info ?? key) : L("No response")
                     NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": msg])
@@ -910,7 +914,9 @@ struct ControllersRootView: View {
                   .background(Color.blue.opacity(0.1), in: Capsule())
               } else {
                 Button(L("Add")) {
-                  DOLConfigBridge.addDsuServer(s.name, address: s.address, port: s.port)
+                  let trimmed = s.address.trimmingCharacters(in: .whitespacesAndNewlines)
+                  let addr = (trimmed.firstIndex(of: "@").map { String(trimmed[..<$0]) } ) ?? trimmed
+                  DOLConfigBridge.addDsuServer(s.name, address: addr, port: s.port)
                   refreshDsuServers()
                   recentlyAdded.insert(key)
                   NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Added DSU server: %@"), key)])
