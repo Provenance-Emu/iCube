@@ -73,6 +73,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setPS:(NSInteger)controller state:(BOOL)state;
 + (void)setTouch:(NSInteger)controller state:(BOOL)state;
 
+/// Touch points (DSU supports 2 touch points with X/Y coordinates)
+/// Coordinates are in range [0, 1920] x [0, 1080] (DS4 touchpad resolution)
++ (void)setTouchPoint:(NSInteger)touchId controller:(NSInteger)controller active:(BOOL)active x:(NSInteger)x y:(NSInteger)y;
 @end
 
 NS_ASSUME_NONNULL_END

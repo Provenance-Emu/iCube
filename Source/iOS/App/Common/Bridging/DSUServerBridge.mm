@@ -259,6 +259,22 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   [[self shared] sendPadData];
 }
 
++ (void)setTouchPoint:(NSInteger)touchId controller:(NSInteger)controller active:(BOOL)active x:(NSInteger)x y:(NSInteger)y {
+  auto& p = [self shared]->_pad;
+  if (touchId == 0) {
+    p.touch1.active = active ? 1 : 0;
+    p.touch1.id = (u8)touchId;
+    p.touch1.x = (s16)x;
+    p.touch1.y = (s16)y;
+  } else if (touchId == 1) {
+    p.touch2.active = active ? 1 : 0;
+    p.touch2.id = (u8)touchId;
+    p.touch2.x = (s16)x;
+    p.touch2.y = (s16)y;
+  }
+  [[self shared] sendPadData];
+}
+
 - (instancetype)init {
   if (self = [super init]) {
     _running = NO; _sock = -1; _port = ciface::DualShockUDPClient::DEFAULT_SERVER_PORT;

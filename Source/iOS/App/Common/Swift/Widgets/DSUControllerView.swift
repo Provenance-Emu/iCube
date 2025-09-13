@@ -20,6 +20,17 @@ struct DSUControllerView: View {
   @State private var txCount: UInt = 0
   @State private var rxCount: UInt = 0
   @State private var clients: [String] = []
+  @AppStorage("dsu_show_touch_area") private var showTouchArea: Bool = false
+  @State private var motorStates: [Int: Int] = [0: 0, 1: 0] // motorId -> intensity
+  @State private var rumbleTimer: Timer?
+
+  /// Whether to show the touch area overlay for the current layout
+  private var shouldShowTouchArea: Bool {
+    guard showTouchArea else { return false }
+    let layout = DSUControllerLayout(rawValue: layoutRaw) ?? .appleVirtual
+    // Show touch area for layouts that could benefit from touch input
+    return layout == .appleVirtual || layout == .wiiRemote
+  }
 
   var body: some View {
     Group {
@@ -54,6 +65,11 @@ struct DSUControllerView: View {
           TouchControllerNibHost(layout: .wiiSideways)
             .onAppear { stopVirtualController() }
         }
+      }
+
+      // Touch area overlay (for layouts that support touch)
+      if shouldShowTouchArea {
+        TouchAreaOverlay()
       }
 
       // Status HUD
@@ -136,6 +152,11 @@ struct DSUControllerView: View {
       ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: { showMotionSheet = true }) {
           Label(L("Motion"), systemImage: "slider.horizontal.3")
+        }
+      }
+      ToolbarItem(placement: .navigationBarTrailing) {
+        Button(action: { showTouchArea.toggle() }) {
+          Label(L("Touch"), systemImage: showTouchArea ? "hand.tap.fill" : "hand.tap")
         }
       }
       ToolbarItem(placement: .navigationBarTrailing) {
@@ -480,4 +501,88 @@ private final class TouchControllerHostViewController: UIViewController {
     }
   }
 }
+
+// MARK: - Touch Area Overlay
+
+private struct TouchAreaOverlay: View {
+  @State private var touchPoints: [Int: CGPoint] = [:] // touchId -> position
+
+  var body: some View {
+    GeometryReader { geometry in
+      ZStack {
+        // Semi-transparent touch area background
+        Rectangle()
+          .fill(Color.white.opacity(0.1))
+          .overlay(
+            Rectangle()
+              .stroke(Color.white.opacity(0.3), lineWidth: 2)
+              .overlay(
+                Text(L("Touch Area"))
+                  .font(.caption)
+                  .foregroundColor(.white.opacity(0.6))
+                  .padding(4)
+                  .background(Color.black.opacity(0.3))
+                  .clipShape(RoundedRectangle(cornerRadius: 4))
+                  .position(x: geometry.size.width / 2, y: 20)
+              )
+          )
+
+        // Active touch points
+        ForEach(Array(touchPoints.keys), id: \.self) { touchId in
+          if let point = touchPoints[touchId] {
+            Circle()
+              .fill(Color.cyan.opacity(0.6))
+              .frame(width: 44, height: 44)
+              .position(point)
+              .overlay(
+                Text("\(touchId + 1)")
+                  .font(.caption2.bold())
+                  .foregroundColor(.white)
+                  .position(point)
+              )
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: 200) // Limit height to bottom portion
+    .frame(maxHeight: .infinity, alignment: .bottom)
+    .gesture(
+      DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        .onChanged { value in
+          handleTouchChanged(value)
+        }
+        .onEnded { value in
+          handleTouchEnded(value)
+        }
+        .simultaneously(with:
+          // Support multi-touch
+          DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+              handleTouchChanged(value, touchId: 1)
+            }
+            .onEnded { value in
+              handleTouchEnded(value, touchId: 1)
+            }
+        )
+    )
+  }
+
+  private func handleTouchChanged(_ value: DragGesture.Value, touchId: Int = 0) {
+    let location = value.location
+    touchPoints[touchId] = location
+
+    // Convert to DSU touch coordinates (0-1920 x 0-1080)
+    // Assume the touch area represents the full DS4 touchpad
+    let x = Int(location.x / 300.0 * 1920.0) // Assuming ~300pt wide touch area
+    let y = Int(location.y / 200.0 * 1080.0) // Assuming ~200pt tall touch area
+
+    DSUServerBridge.setTouchPoint(touchId, controller: 0, active: true, x: x, y: y)
+  }
+
+  private func handleTouchEnded(_ value: DragGesture.Value, touchId: Int = 0) {
+    touchPoints.removeValue(forKey: touchId)
+    DSUServerBridge.setTouchPoint(touchId, controller: 0, active: false, x: 0, y: 0)
+    }
+}
+
 #endif
