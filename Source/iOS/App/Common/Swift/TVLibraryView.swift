@@ -1346,7 +1346,7 @@ struct TVLibraryView: View {
       VStack(spacing: 20) {
         DolphinErrorView(
           title: L("Library Empty"),
-          message: L("No games found. Add GameCube & Wii ROMs to your library to get started! 🎮")
+          message: L("No games found. Add GameCube & Wii ROMs to your library to get started with this adorable emulator! 🎮")
         )
       }
       .padding()
@@ -1371,6 +1371,17 @@ struct TVLibraryView: View {
 
     private func size(for i: Int) -> CGFloat { maxSize * (0.85 + CGFloat((i % 3)) * 0.08) }
 
+    // Pre-mirrored sprites to avoid runtime flipping artifacts
+    private enum SpriteCache {
+      static let normal: UIImage = UIImage(named: "DolphinLogo") ?? UIImage()
+      static let mirrored: UIImage = {
+        if let img = UIImage(named: "DolphinLogo") {
+          return img.withHorizontallyFlippedOrientation()
+        }
+        return UIImage()
+      }()
+    }
+
     var body: some View {
       GeometryReader { geo in
         let w = max(geo.size.width, 1)
@@ -1379,32 +1390,39 @@ struct TVLibraryView: View {
           let t = timeline.date.timeIntervalSinceReferenceDate
           ZStack {
             ForEach(0..<count, id: \.self) { i in
-              // Deterministic parameters per dolphin
-              let base = Double(h) * (0.35 + Double((i % 5)) * 0.1) // baseline swim height
-              let amplitude = 16.0 + Double((i % 3)) * 10.0         // vertical wave
-              let speed = 35.0 + Double(i) * 14.0                   // px per second
+              // Parameters per dolphin
+              let base = Double(h) * (0.35 + Double((i % 5)) * 0.1)
+              let amplitude = 16.0 + Double((i % 3)) * 10.0
               let phase = Double(i) * .pi / 3.0
 
-              // Horizontal motion with wrap-around
-              let travel = (t * speed + Double(i) * 120.0)
-              let span = Double(w + 220.0)
-              let prog = travel.truncatingRemainder(dividingBy: span)
-              let x = (direction == .leftToRight) ? (-110.0 + prog) : (Double(w) + 110.0 - prog)
+              // Progress 0..1 controls full path traversal per dolphin
+              let pad = 110.0
+              let pathLen = Double(w) + 2.0 * pad
+              let cyclesPerSecond = 0.03 + Double(i % 4) * 0.012
+              let prog = (t * cyclesPerSecond + Double(i) * 0.173)
+              let p = prog - floor(prog) // normalize
 
-              // Gentle sine wave and heading angle
-              let theta = (x / Double(w)) * 2.0 * .pi + phase
+              // Position by direction (no ambiguity)
+              let x = (direction == .leftToRight)
+              ? (-pad + p * pathLen)
+              : (Double(w) + pad - p * pathLen)
+
+              // Vertical wave + subtle wag; no heading flips
+              let theta = p * 2.0 * .pi + phase
               let y = base + amplitude * sin(theta)
-              let dydx = amplitude * cos(theta) * (2.0 * .pi / Double(w))
-              let angle = atan(dydx) * 180.0 / .pi
+              let wag = (direction == .leftToRight ? 12.0 : -12.0) * sin(theta)
 
-              Image("DolphinLogo")
+              // Choose pre-mirrored sprite once per direction
+              let uiImage = (direction == .leftToRight) ? SpriteCache.mirrored : SpriteCache.normal
+              let sprite = Image(uiImage: uiImage)
+
+              sprite
                 .resizable()
                 .renderingMode(.original)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size(for: i))
                 .position(x: CGFloat(x), y: CGFloat(y))
-                .rotationEffect(.degrees(direction == .leftToRight ? angle : -angle))
-                .scaleEffect(x: direction == .leftToRight ? 1 : -1, y: 1)
+                .rotationEffect(.degrees(wag))
                 .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
                 .opacity(opacity)
                 .blendMode(.plusLighter)
@@ -1555,7 +1573,7 @@ struct TVLibraryView: View {
     .onAppear {
       // Tips setup
       if #available(iOS 17, tvOS 17, *) {
-        tipsService.configure()
+        _ = (Environment(\.tipsService).wrappedValue).configure()
       }
       // Initialize shared remote sources store to start querying immediately
       print("TVLibraryView: initializing RemoteSourcesStore.shared")

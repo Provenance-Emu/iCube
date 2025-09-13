@@ -44,14 +44,26 @@ struct DolphinLoadingView: View {
 
       // Loading message
       if showMessage {
-        HStack(spacing: 8) {
-          ProgressView()
-            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-            .scaleEffect(0.8)
+        VStack(spacing: 8) {
+          HStack(spacing: 8) {
+            ProgressView()
+              .progressViewStyle(CircularProgressViewStyle(tint: Color("DolphinTint")))
+              .scaleEffect(0.8)
 
-          Text(message)
-            .font(.system(size: 16, weight: .medium))
+            Text(message)
+              .font(.system(size: 16, weight: .medium))
+              .foregroundColor(.secondary)
+          }
+
+          // Copyright footer (no clipping)
+          Text("© DolphiniOS Team")
+            .font(.footnote)
             .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(nil)
+            .minimumScaleFactor(0.75)
+            .allowsTightening(true)
+            .frame(maxWidth: 240)
         }
       }
     }
