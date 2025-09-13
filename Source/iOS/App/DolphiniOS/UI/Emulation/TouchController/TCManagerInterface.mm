@@ -17,6 +17,28 @@
   if ([DSUServerBridge isRunning]) {
     [DSUServerBridge setButton:button controller:controllerId state:state];
   }
+  // Mirror D-Pad presses to DSU analog dpad fields so DSU clients receive them
+  // GameCube D-Pad (Up=6,Down=7,Left=8,Right=9)
+  if (button == 6)  { [DSUServerBridge setDPadUpForController:controllerId state:state]; }
+  if (button == 7)  { [DSUServerBridge setDPadDownForController:controllerId state:state]; }
+  if (button == 8)  { [DSUServerBridge setDPadLeftForController:controllerId state:state]; }
+  if (button == 9)  { [DSUServerBridge setDPadRightForController:controllerId state:state]; }
+  // Wii Remote D-Pad (Up=107,Down=108,Left=109,Right=110)
+  if (button == 107) { [DSUServerBridge setDPadUpForController:controllerId state:state]; }
+  if (button == 108) { [DSUServerBridge setDPadDownForController:controllerId state:state]; }
+  if (button == 109) { [DSUServerBridge setDPadLeftForController:controllerId state:state]; }
+  if (button == 110) { [DSUServerBridge setDPadRightForController:controllerId state:state]; }
+  // Map GC/Wii face buttons to DSU face analogs: indices (Square=0, Cross=1, Circle=2, Triangle=3)
+  // GameCube: A->Cross(1), B->Circle(2), X->Square(0), Y->Triangle(3)
+  if (button == 0)  { [DSUServerBridge setButton:1 controller:controllerId state:state]; }
+  if (button == 1)  { [DSUServerBridge setButton:2 controller:controllerId state:state]; }
+  if (button == 3)  { [DSUServerBridge setButton:0 controller:controllerId state:state]; }
+  if (button == 4)  { [DSUServerBridge setButton:3 controller:controllerId state:state]; }
+  // Wii Remote: A->Cross(1), B->Circle(2), 1->Square(0), 2->Triangle(3)
+  if (button == 100) { [DSUServerBridge setButton:1 controller:controllerId state:state]; }
+  if (button == 101) { [DSUServerBridge setButton:2 controller:controllerId state:state]; }
+  if (button == 105) { [DSUServerBridge setButton:0 controller:controllerId state:state]; }
+  if (button == 106) { [DSUServerBridge setButton:3 controller:controllerId state:state]; }
 }
 
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
@@ -50,7 +72,12 @@
   ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis, v);
   // Also forward to DSU server if running
   if ([DSUServerBridge isRunning]) {
-    [DSUServerBridge setAxis:axis controller:controllerId value:v];
+    // GC analog triggers: L(20)->DSU axis 4, R(21)->DSU axis 5, map [0..1] to [-1..1]
+    if (axis == 20 || axis == 21) {
+      float t = (v * 2.f) - 1.f;
+      [DSUServerBridge setAxis:(axis == 20 ? 4 : 5) controller:controllerId value:t];
+    }
+    // Note: GC/Wii sticks from NIB use split directional axes; we leave DSU sticks to other sources for now
   }
 }
 

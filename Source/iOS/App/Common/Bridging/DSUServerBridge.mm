@@ -70,15 +70,28 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 // Return best-effort LAN IPv4 address for display/QR
 + (NSString*)ipAddress { return [[self shared] bestIPv4Address]; }
 + (NSArray<NSString*>*)clients {
-  NSArray<NSString*>* arr = [[self shared]->_clients copy];
-  return arr ?: @[];
+  DSUServerBridge* s = [self shared];
+  NSMutableArray<NSString*>* unique = [NSMutableArray array];
+  NSMutableSet<NSString*>* seen = [NSMutableSet set];
+  for (NSString* addr in s->_clients) {
+    NSArray<NSString*>* parts = [addr componentsSeparatedByString:@":"]; if (parts.count < 1) continue;
+    NSString* ip = parts[0]; if (ip.length == 0) continue;
+    if (![seen containsObject:ip]) { [seen addObject:ip]; [unique addObject:ip]; }
+  }
+  return [unique copy];
 }
 + (NSString * _Nullable)restrictedClient {
   return [self shared]->_restrictTo;
 }
 + (void)setRestrictToClient:(NSString * _Nullable)addr {
   DSUServerBridge* s = [self shared];
-  s->_restrictTo = (addr && addr.length > 0) ? [addr copy] : nil;
+  // Accept bare IPs from UI; treat empty as no restriction
+  if (addr && addr.length > 0) {
+    NSString* trimmed = [addr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    s->_restrictTo = trimmed;
+  } else {
+    s->_restrictTo = nil;
+  }
 }
 
 + (void)setApprovalRequired:(BOOL)required {
@@ -151,6 +164,9 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   }
   // Push an immediate frame so clients react without waiting for the tick
   [[self shared] sendPadData];
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+    NSLog(@"[DSU] setButton idx=%ld state=%d -> b1=%02x b2=%02x", (long)button, state, b1, b2);
+  }
 }
 
 + (void)setAxis:(NSInteger)axis controller:(NSInteger)controller value:(float)value {
@@ -167,6 +183,35 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     default: break;
   }
   // Push an immediate frame so clients react without waiting for the tick
+  [[self shared] sendPadData];
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+    NSLog(@"[DSU] setAxis idx=%ld value=%.3f -> LX=%u LY=%u RX=%u RY=%u L2=%u R2=%u",
+          (long)axis, value, p.left_stick_x, p.left_stick_y_inverted,
+          p.right_stick_x, p.right_stick_y_inverted, p.trigger_l2, p.trigger_r2);
+  }
+}
+
++ (void)setDPadUpForController:(NSInteger)controller state:(BOOL)state {
+  auto& p = [self shared]->_pad;
+  p.button_dpad_up_analog = state ? 255 : 0;
+  [[self shared] sendPadData];
+}
+
++ (void)setDPadDownForController:(NSInteger)controller state:(BOOL)state {
+  auto& p = [self shared]->_pad;
+  p.button_dpad_down_analog = state ? 255 : 0;
+  [[self shared] sendPadData];
+}
+
++ (void)setDPadLeftForController:(NSInteger)controller state:(BOOL)state {
+  auto& p = [self shared]->_pad;
+  p.button_dpad_left_analog = state ? 255 : 0;
+  [[self shared] sendPadData];
+}
+
++ (void)setDPadRightForController:(NSInteger)controller state:(BOOL)state {
+  auto& p = [self shared]->_pad;
+  p.button_dpad_right_analog = state ? 255 : 0;
   [[self shared] sendPadData];
 }
 
@@ -351,7 +396,19 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 - (void)sendPadData {
   // If restricted, send only to last client seen (if any)
   if (_restrictTo && _restrictTo.length > 0) {
-    if (_lastClientLen > 0) [self sendPadDataTo:&_lastClient];
+    // Send to all recently seen ports for the restricted IP
+    NSString* rest = _restrictTo;
+    NSRange c = [rest rangeOfString:@":"]; if (c.location != NSNotFound) rest = [rest substringToIndex:c.location];
+    for (NSString* addr in _clients) {
+      NSArray<NSString*>* parts = [addr componentsSeparatedByString:@":"]; if (parts.count != 2) continue;
+      if (![parts[0] isEqualToString:rest]) continue;
+      const char* ip = [parts[0] UTF8String];
+      int prt = parts[1].intValue; if (prt <= 0 || prt > 65535) continue;
+      struct sockaddr_in dst; memset(&dst, 0, sizeof(dst));
+      dst.sin_family = AF_INET; dst.sin_port = htons((uint16_t)prt);
+      if (inet_pton(AF_INET, ip, &dst.sin_addr) != 1) continue;
+      [self sendPadDataTo:&dst];
+    }
     return;
   }
   // Broadcast to all recently seen clients when not restricted
@@ -375,9 +432,11 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     char buf[INET_ADDRSTRLEN] = {0};
     const char* ip = inet_ntop(AF_INET, &dst->sin_addr, buf, sizeof(buf));
     if (ip) {
-      uint16_t port = ntohs(dst->sin_port);
-      NSString* cur = [NSString stringWithFormat:@"%s:%hu", ip, port];
-      if (![cur isEqualToString:_restrictTo]) return;
+      // Accept match by IP only, ignoring destination port to handle ephemeral client ports
+      NSString* curIP = [NSString stringWithUTF8String:ip];
+      NSString* rest = _restrictTo;
+      NSRange c = [rest rangeOfString:@":"]; if (c.location != NSNotFound) rest = [rest substringToIndex:c.location];
+      if (![curIP isEqualToString:rest]) return;
     }
   }
   // If approval required, only send to allowed clients
@@ -391,10 +450,24 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   // Increment packet counter per send so clients see changing HID counter
   _pad.hid_packet_counter++;
   Proto::Message<Proto::MessageType::PadDataResponse> pd(0);
-  pd.m_message = _pad; // copy
+  // Preserve header and message_type initialized by constructor; copy only payload after message_type
+  size_t header_and_type_size = sizeof(pd.m_message.header) + sizeof(pd.m_message.message_type);
+  memcpy((uint8_t*)&pd.m_message + header_and_type_size,
+         (const uint8_t*)&_pad + header_and_type_size,
+         sizeof(pd.m_message) - header_and_type_size);
   pd.Finish();
   ssize_t sent = sendto(_sock, &pd.m_message, sizeof(pd.m_message), 0, (const struct sockaddr*)dst, sizeof(*dst));
   if (sent > 0) { _txCount++; }
+  // Debug logging
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+    char ipbuf[INET_ADDRSTRLEN] = {0};
+    const char* ip = inet_ntop(AF_INET, &dst->sin_addr, ipbuf, sizeof(ipbuf));
+    uint16_t p = ntohs(dst->sin_port);
+    NSLog(@"[DSU] Sent PadDataResponse %zd bytes to %s:%hu hid_counter=%u buttons1=%02x buttons2=%02x L2=%u R2=%u",
+          sent, ip ? ip : "<unknown>", p, pd.m_message.hid_packet_counter,
+          pd.m_message.button_states1, pd.m_message.button_states2,
+          pd.m_message.trigger_l2, pd.m_message.trigger_r2);
+  }
 }
 
 - (void)publishBonjour {

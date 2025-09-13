@@ -54,6 +54,12 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setButton:(NSInteger)button controller:(NSInteger)controller state:(BOOL)state;
 + (void)setAxis:(NSInteger)axis controller:(NSInteger)controller value:(float)value;
 
+/// D-Pad helpers (255 when pressed, 0 when released)
++ (void)setDPadUpForController:(NSInteger)controller state:(BOOL)state;
++ (void)setDPadDownForController:(NSInteger)controller state:(BOOL)state;
++ (void)setDPadLeftForController:(NSInteger)controller state:(BOOL)state;
++ (void)setDPadRightForController:(NSInteger)controller state:(BOOL)state;
+
 @end
 
 NS_ASSUME_NONNULL_END

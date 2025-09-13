@@ -81,7 +81,18 @@ struct DSUControllerView: View {
       }
       .allowsHitTesting(false)
     }
-    .onAppear { refreshIRLabel() }
+    .onAppear {
+      refreshIRLabel()
+      if !DSUServerBridge.isRunning() {
+        let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
+        let port = (p > 0 && p < 65536) ? p : 26760
+        let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
+        if !ok {
+          let err = DSUServerBridge.lastError()
+          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+        }
+      }
+    }
     .toolbar {
       ToolbarItem(placement: .navigationBarLeading) {
         Button(action: toggleIRMode) {

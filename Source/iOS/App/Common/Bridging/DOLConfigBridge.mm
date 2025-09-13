@@ -514,6 +514,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setDsuClientEnabled:(BOOL)enabled
 {
   Config::SetBaseOrCurrent(ciface::DualShockUDPClient::Settings::SERVERS_ENABLED, (bool)enabled);
+  Config::Save();
 }
 
 + (NSString*)dsuServersString
@@ -526,6 +527,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 {
   const char* cstr = servers ? servers.UTF8String : "";
   Config::SetBaseOrCurrent(ciface::DualShockUDPClient::Settings::SERVERS, std::string(cstr));
+  Config::Save();
 }
 
 + (NSArray<NSDictionary<NSString*, id>*>*)dsuServersParsed
@@ -533,15 +535,23 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   NSMutableArray* arr = [NSMutableArray array];
   NSString* raw = [self dsuServersString];
   if (raw.length == 0) return arr;
+  // One-time normalization: strip stray '@' characters introduced by older builds
+  if ([raw containsString:@"@"]) {
+    NSString* normalized = [raw stringByReplacingOccurrencesOfString:@"@" withString:@""];
+    if (![normalized isEqualToString:raw]) {
+      [self setDsuServersString:normalized]; // also saves
+      raw = normalized;
+    }
+  }
   NSArray<NSString*>* entries = [raw componentsSeparatedByString:@";"];
   for (NSString* e in entries) {
     if (e.length == 0) continue;
     NSArray<NSString*>* parts = [e componentsSeparatedByString:@":"];
     if (parts.count < 3) continue;
-    NSString* desc = parts[0];
-    NSString* addr = parts[1];
+    NSString* desc = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString* addr = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     NSInteger port = (parts[2].integerValue);
-    [arr addObject:@{ @"description": desc, @"address": addr, @"port": @(port) }];
+    [arr addObject:@{ @"description": desc ?: @"", @"address": addr ?: @"", @"port": @(port) }];
   }
   return arr;
 }
@@ -551,12 +561,15 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   if (desc.length == 0) desc = @"DS4";
   if (address.length == 0) return;
   if (port <= 0 || port >= 65536) return;
+  // Sanitize address (remove stray '@')
+  NSString* addr = [address stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  NSRange at = [addr rangeOfString:@"@"]; if (at.location != NSNotFound) { addr = [addr substringToIndex:at.location]; }
   NSString* raw = [self dsuServersString];
-  NSString* entry = [NSString stringWithFormat:@"%@@%c%@@%c%ld;", desc, ':', address, ':', (long)port];
+  NSString* entry = [NSString stringWithFormat:@"%@:%@:%ld;", desc, addr, (long)port];
   // Avoid duplicate exact entries
   if (raw && [raw containsString:entry]) return;
   NSString* updated = raw ? [raw stringByAppendingString:entry] : entry;
-  [self setDsuServersString:updated];
+  [self setDsuServersString:updated]; // also saves
 }
 
 + (void)removeDsuServerAtIndex:(NSInteger)index
@@ -576,7 +589,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
     [rebuilt appendString:e];
     [rebuilt appendString:@";"];
   }
-  [self setDsuServersString:rebuilt];
+  [self setDsuServersString:rebuilt]; // also saves
 }
 
 + (NSUInteger)dsuClientRxCount

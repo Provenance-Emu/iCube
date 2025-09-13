@@ -539,8 +539,9 @@ struct EmulationScreen: View {
             #if DEBUG
             DSUDebugHUD()
               .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-              .padding(.top, 64)
-              .allowsHitTesting(false)
+              .padding(.top, 96)
+              .zIndex(1000)
+              .allowsHitTesting(true)
             #endif
 
             if showTopBar {
@@ -1266,7 +1267,7 @@ private struct DSUDebugHUD: View {
            let port = (first["port"] as? NSNumber)?.intValue {
           Button("Ping") {
             DSUPingBridge.pingServerAddress(addr, port: port, timeout: 1.0) { ok, info in
-              let msg = ok ? 
+              let msg = ok ?
               "[DSU] Ping OK: \(info ?? "" )" :
               "[DSU] Ping Timeout"
               NSLog("%@", msg)
