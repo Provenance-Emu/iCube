@@ -426,6 +426,15 @@ struct EmulationScreen: View {
         ControllerManager.shared.registerGCOverride(forController: 0)
         configureAllControllersForTVOS()
       }
+      // Auto-pause when app goes to background on tvOS
+      NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
+        NSLog("[INPUT] tvOS app backgrounded - showing pause menu")
+        showPauseMenu = true
+      }
+      NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
+        NSLog("[INPUT] tvOS app foregrounded - keeping pause menu visible")
+        // Keep pause menu visible when returning to foreground so user can choose to resume
+      }
       // Load current OC/VBI state
       ocEnabled = DOLConfigBridge.mainOverclockEnable()
       ocPercent = DOLConfigBridge.mainOverclockPercent()
