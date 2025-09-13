@@ -69,20 +69,20 @@ private struct DSUSessionView: View {
             Text("\(ip.isEmpty ? "-" : ip) : \((running ? port : (Int(portText) ?? 26760)))")
               .foregroundStyle(.secondary)
           }
-    .alert(isPresented: $showApprovalAlert) {
-      Alert(
-        title: Text(L("Receiver requests input")),
-        message: Text(pendingApprovalAddr ?? ""),
-        primaryButton: .default(Text(L("Allow"))) {
-          if let addr = pendingApprovalAddr { DSUServerBridge.setClient(addr, allowed: true) }
-          pendingApprovalAddr = nil
-        },
-        secondaryButton: .destructive(Text(L("Block"))) {
-          if let addr = pendingApprovalAddr { DSUServerBridge.setClient(addr, allowed: false) }
-          pendingApprovalAddr = nil
-        }
-      )
-    }
+          .alert(isPresented: $showApprovalAlert) {
+            Alert(
+              title: Text(L("Receiver requests input")),
+              message: Text(pendingApprovalAddr ?? ""),
+              primaryButton: .default(Text(L("Allow"))) {
+                if let addr = pendingApprovalAddr { DSUServerBridge.setClient(addr, allowed: true) }
+                pendingApprovalAddr = nil
+              },
+              secondaryButton: .destructive(Text(L("Block"))) {
+                if let addr = pendingApprovalAddr { DSUServerBridge.setClient(addr, allowed: false) }
+                pendingApprovalAddr = nil
+              }
+            )
+          }
           HStack {
             Text(L("Client"))
             Spacer()
@@ -538,7 +538,7 @@ struct TVLibraryView: View {
   @State private var showUpdateRegions = false
   @State private var showDSUSession = false
 
-    // MARK: - Computed Bindings (extracted to prevent compiler timeout)
+  // MARK: - Computed Bindings (extracted to prevent compiler timeout)
 
   private struct NavigationItem: Identifiable {
     let id = UUID()
@@ -579,9 +579,9 @@ struct TVLibraryView: View {
     navigationContent
       .navigationTitle(storeForBanner.isScanning ? "" : "DolphiniOS Library")
       .toolbar { libraryToolbar }
-    #if !os(tvOS)
+#if !os(tvOS)
       .navigationBarTitleDisplayMode(.large)
-    #endif
+#endif
 #if os(iOS) || targetEnvironment(macCatalyst)
       .navigationDestinationItemCompat(item: settingsBinding) { _ in
         TVSettingsPage()
@@ -787,9 +787,9 @@ struct TVLibraryView: View {
             RadialGradient(
               colors: [
                 (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05))
-                                       : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10))),
+                 : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10))),
                 (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025))
-                                       : Color.white.opacity(0.0)),
+                 : Color.white.opacity(0.0)),
                 Color.clear
               ],
               center: .center,
@@ -1064,17 +1064,17 @@ struct TVLibraryView: View {
                 .padding(.horizontal, paddingH)
                 .padding(.vertical, Constants.gridVerticalSpacing)
               }
-                          .background(
-              // Refined material backdrop for favorites with proper clipping
-              RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.ultraThinMaterial.opacity(0.2))
-                .overlay(
-                  RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(.white.opacity(0.1), lineWidth: 1)
-                )
-                .padding(.horizontal, 12)
-                .clipped()
-            )
+              .background(
+                // Refined material backdrop for favorites with proper clipping
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                  .fill(.ultraThinMaterial.opacity(0.2))
+                  .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                      .stroke(.white.opacity(0.1), lineWidth: 1)
+                  )
+                  .padding(.horizontal, 12)
+                  .clipped()
+              )
             }
           }
           LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
@@ -1283,17 +1283,17 @@ struct TVLibraryView: View {
                 )
               }
             }
-                      .background(
-            // Elegant material backdrop for tvOS favorites with proper clipping
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-              .fill(.ultraThinMaterial.opacity(0.15))
-              .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                  .stroke(.white.opacity(0.08), lineWidth: 1.5)
-              )
-              .padding(.horizontal, 20)
-              .clipped()
-          )
+            .background(
+              // Elegant material backdrop for tvOS favorites with proper clipping
+              RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial.opacity(0.15))
+                .overlay(
+                  RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(.white.opacity(0.08), lineWidth: 1.5)
+                )
+                .padding(.horizontal, 20)
+                .clipped()
+            )
           }
         }
         LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
@@ -1390,47 +1390,131 @@ struct TVLibraryView: View {
           let t = timeline.date.timeIntervalSinceReferenceDate
           ZStack {
             ForEach(0..<count, id: \.self) { i in
-              // Parameters per dolphin
-              let base = Double(h) * (0.35 + Double((i % 5)) * 0.1)
-              let amplitude = 16.0 + Double((i % 3)) * 10.0
-              let phase = Double(i) * .pi / 3.0
+              Group {
+                // Parameters per dolphin
+                let base = Double(h) * (0.35 + Double((i % 5)) * 0.1)
+                let amplitude = 16.0 + Double((i % 3)) * 10.0
+                let phase = Double(i) * .pi / 3.0
 
-              // Progress 0..1 controls full path traversal per dolphin
-              let pad = 110.0
-              let pathLen = Double(w) + 2.0 * pad
-              let cyclesPerSecond = 0.03 + Double(i % 4) * 0.012
-              let prog = (t * cyclesPerSecond + Double(i) * 0.173)
-              let p = prog - floor(prog) // normalize
+                // Progress 0..1 controls full path traversal per dolphin
+                let pad = 110.0
+                let pathLen = Double(w) + 2.0 * pad
+                let cyclesPerSecond = 0.03 + Double(i % 4) * 0.012
+                let prog = (t * cyclesPerSecond + Double(i) * 0.173)
+                let p = prog - floor(prog) // normalize
 
-              // Position by direction (no ambiguity)
-              let x = (direction == .leftToRight)
-              ? (-pad + p * pathLen)
-              : (Double(w) + pad - p * pathLen)
+                // Position by direction (no ambiguity)
+                let x = (direction == .leftToRight)
+                ? (-pad + p * pathLen)
+                : (Double(w) + pad - p * pathLen)
 
-              // Vertical wave + subtle wag; no heading flips
-              let theta = p * 2.0 * .pi + phase
-              let y = base + amplitude * sin(theta)
-              let wag = (direction == .leftToRight ? 12.0 : -12.0) * sin(theta)
+                // Per-dolphin pseudo-random to de-sync cycles
+                let r1 = abs(sin(Double(i) * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1.0)
+                let r2 = abs(sin(Double(i) * 78.233) * 19341.923).truncatingRemainder(dividingBy: 1.0)
+                let r3 = abs(sin((Double(i) + 0.37) * 42.131) * 9182.12).truncatingRemainder(dividingBy: 1.0)
+                let speedMul = 0.85 + 0.45 * r1
+                let phaseExtra = r2 * 2.0 * .pi
+                let ampMul = 0.85 + 0.45 * r3
 
-              // Choose pre-mirrored sprite once per direction
-              let uiImage = (direction == .leftToRight) ? SpriteCache.mirrored : SpriteCache.normal
-              let sprite = Image(uiImage: uiImage)
+                              // Vertical wave + occasional jump; subtle yaw/pitch
+              let theta = p * 2.0 * .pi * speedMul + phase + phaseExtra
+              let baseWave = (amplitude * ampMul) * sin(theta)
+              // Jump window per-dolphin (no mutation)
+              let jRaw = (p + Double(i) * 0.17)
+              let jMod = jRaw - floor(jRaw)
+              let isJump = (jMod > 0.05 && jMod < 0.18)
+              let tJump = isJump ? (jMod - 0.05) / 0.13 : 0.0
+              let amplitudeWithBoost = amplitude * (1.0 + 0.4 * r2)
+              let jumpDelta = isJump ? (amplitudeWithBoost * 1.1 * sin(tJump * .pi)) : 0.0
+              let yPos = base + baseWave - jumpDelta
+                let motionMul = 0.75 + 0.5 * r3
+                let wag = (direction == .leftToRight ? 10.0 : -10.0) * motionMul * sin(theta)
+                let yaw = (direction == .leftToRight ? 8.0 : -8.0) * motionMul * sin(theta * 1.2)
+                let pitch = 6.0 * motionMul * cos(theta * 1.3)
 
-              sprite
-                .resizable()
-                .renderingMode(.original)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: size(for: i))
-                .position(x: CGFloat(x), y: CGFloat(y))
-                .rotationEffect(.degrees(wag))
-                .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
-                .opacity(opacity)
-                .blendMode(.plusLighter)
+                // Choose pre-mirrored sprite once per direction
+                let uiImage = (direction == .leftToRight) ? SpriteCache.mirrored : SpriteCache.normal
+                let sprite = Image(uiImage: uiImage)
+
+                // Depth factor
+                let depth = 0.90 + Double(i % 3) * 0.06
+                let baseSize = size(for: i) * depth
+                let alpha = opacity * (0.9 - Double(i % 3) * 0.08)
+
+                // Caustic shimmer under-body
+                let shimmer = 0.55 + 0.45 * sin(theta * 0.6 + 2.0)
+                Group {
+                  Ellipse()
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.0), Color.white.opacity(0.22 * shimmer), Color.cyan.opacity(0.10)], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: baseSize * 0.85, height: baseSize * 0.22)
+                    .position(x: CGFloat(x), y: CGFloat(yPos + baseSize * 0.18))
+                    .blur(radius: 8)
+                    .opacity(alpha * 0.6)
+                    .blendMode(.screen)
+                }
+
+                // Trail ghosts (simple motion blur)
+                ForEach(1...2, id: \.self) { g in
+                  let pTrail = (p - Double(g) * 0.03)
+                  let pT = pTrail - floor(pTrail)
+                  let xT = (direction == .leftToRight) ? (-pad + pT * pathLen) : (Double(w) + pad - pT * pathLen)
+                  let thetaT = pT * 2.0 * .pi * speedMul + phase + phaseExtra
+                  let yT = base + (amplitude * ampMul) * sin(thetaT)
+                  Group {
+                    sprite
+                      .resizable()
+                      .renderingMode(.original)
+                      .aspectRatio(contentMode: .fit)
+                      .frame(width: baseSize * (1.0 - 0.15 * Double(g)))
+                      .position(x: CGFloat(xT), y: CGFloat(yT))
+                      .rotationEffect(.degrees(wag))
+                      .opacity(alpha * (g == 1 ? 0.35 : 0.18))
+                      .blur(radius: g == 1 ? 0.7 : 1.2)
+                  }
+                }
+
+                // Main sprite
+                Group {
+                  sprite
+                    .resizable()
+                    .renderingMode(.original)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: baseSize)
+                    .position(x: CGFloat(x), y: CGFloat(yPos))
+                    .rotationEffect(.degrees(wag))
+                    .rotation3DEffect(.degrees(yaw), axis: (x: 0, y: 1, z: 0), perspective: 0.9)
+                    .rotation3DEffect(.degrees(pitch), axis: (x: 1, y: 0, z: 0), perspective: 0.9)
+                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                    .opacity(alpha)
+                    .blendMode(.plusLighter)
+                }
+
+                              // Leap splashes (particles) when jumping
+              if isJump {
+                let tJump = (jMod - 0.05) / 0.13
+                ForEach(0..<5, id: \.self) { k in
+                    let rk = abs(sin(Double(k) * 17.23 + Double(i) * 3.11))
+                    let ang = 2.0 * .pi * rk
+                    let radius = (baseSize * 0.06) * (0.6 + rk) * (0.3 + tJump) * 2.0
+                    let xOff = radius * cos(ang) * (direction == .leftToRight ? 1.0 : -1.0)
+                    let yOff = -radius * 0.7 * (0.5 + 0.5 * rk)
+                    Group {
+                      Circle()
+                        .fill(LinearGradient(colors: [Color.white.opacity(0.75 * (1.0 - tJump)), Color.cyan.opacity(0.35 * (1.0 - tJump))], startPoint: .top, endPoint: .bottom))
+                        .frame(width: baseSize * 0.05 * (0.9 - 0.6 * tJump), height: baseSize * 0.05 * (0.9 - 0.6 * tJump))
+                        .position(x: CGFloat(x + xOff), y: CGFloat(yPos + yOff))
+                        .blur(radius: 0.8 + 1.6 * tJump)
+                        .opacity(alpha * (0.85 - 0.8 * tJump))
+                        .blendMode(.screen)
+                    }
+                  }
+                }
+              }
             }
           }
         }
+        .allowsHitTesting(false)
       }
-      .allowsHitTesting(false)
     }
   }
 
@@ -2711,7 +2795,7 @@ private struct GameGridItem: View {
         }
       }
 
-            // Authentic full-cover template image like real GameCube/Wii box art
+      // Authentic full-cover template image like real GameCube/Wii box art
       Image(gameSystem.templateImageName)
         .resizable()
         .aspectRatio(contentMode: .fill)
@@ -2721,44 +2805,44 @@ private struct GameGridItem: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .blendMode(.overlay)
-//        .offset(y: -5)
+      //        .offset(y: -5)
 
       // Authentic Nintendo branding
-//      VStack {
-//        HStack {
-//          Spacer()
-//          VStack(spacing: 2) {
-//            Text("NINTENDO")
-//              .font(.system(
-//                size: screenScaledFontSize(base: 8),
-//                weight: .black,
-//                design: .rounded
-//              ))
-//              .foregroundStyle(
-//                LinearGradient(
-//                  colors: [Color.white, Color.white.opacity(0.8)],
-//                  startPoint: .top,
-//                  endPoint: .bottom
-//                )
-//              )
-//              .modifier(iOS16TrackingModifier(tracking: 2))
-//              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
+      //      VStack {
+      //        HStack {
+      //          Spacer()
+      //          VStack(spacing: 2) {
+      //            Text("NINTENDO")
+      //              .font(.system(
+      //                size: screenScaledFontSize(base: 8),
+      //                weight: .black,
+      //                design: .rounded
+      //              ))
+      //              .foregroundStyle(
+      //                LinearGradient(
+      //                  colors: [Color.white, Color.white.opacity(0.8)],
+      //                  startPoint: .top,
+      //                  endPoint: .bottom
+      //                )
+      //              )
+      //              .modifier(iOS16TrackingModifier(tracking: 2))
+      //              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
 
-//            Text(gameSystem == .gamecube ? "GAMECUBE" : "Wii")
-//              .font(.system(
-//                size: screenScaledFontSize(base: 7),
-//                weight: .bold,
-//                design: .rounded
-//              ))
-//              .foregroundColor(.white.opacity(0.9))
-//              .modifier(iOS16TrackingModifier(tracking: 1.5))
-//              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
-//          }
-//          .padding(.top, screenScaledPadding(base: 12))
-//          .padding(.trailing, screenScaledPadding(base: 12))
-//        }
-//        Spacer()
-//      }
+      //            Text(gameSystem == .gamecube ? "GAMECUBE" : "Wii")
+      //              .font(.system(
+      //                size: screenScaledFontSize(base: 7),
+      //                weight: .bold,
+      //                design: .rounded
+      //              ))
+      //              .foregroundColor(.white.opacity(0.9))
+      //              .modifier(iOS16TrackingModifier(tracking: 1.5))
+      //              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
+      //          }
+      //          .padding(.top, screenScaledPadding(base: 12))
+      //          .padding(.trailing, screenScaledPadding(base: 12))
+      //        }
+      //        Spacer()
+      //      }
 
       // Enhanced game info with award-winning typography
       VStack(spacing: screenScaledPadding(base: 10)) {
@@ -2931,42 +3015,42 @@ private struct GameGridItem: View {
           }
         }
         .overlay(
-            // Award-winning focus glow with GameCube/Wii theming
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-              .stroke(
-                LinearGradient(
-                  colors: isFocused ? [
-                    Color.cyan.opacity(0.95),
-                    Color.blue.opacity(0.9),
-                    Color.purple.opacity(0.95),
-                    Color.cyan.opacity(0.95)
-                  ] : [Color.clear],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                ),
-                lineWidth: isFocused ? 8 : 0
-              )
-              .shadow(color: .cyan.opacity(isFocused ? 0.8 : 0), radius: isFocused ? 25 : 0)
-              .shadow(color: .blue.opacity(isFocused ? 0.6 : 0), radius: isFocused ? 35 : 0)
-              .shadow(color: .purple.opacity(isFocused ? 0.7 : 0), radius: isFocused ? 45 : 0)
-              .animation(.easeInOut(duration: 0.6), value: isFocused)
-          )
-          .overlay(
-            // Inner highlight for premium feel
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-              .stroke(
-                Color.white.opacity(isFocused ? 0.4 : 0),
-                lineWidth: isFocused ? 2 : 0
-              )
-              .padding(4)
-              .animation(.easeInOut(duration: 0.4), value: isFocused)
-          )
-          .shadow(
-            color: Color.black.opacity(isFocused ? 0.4 : 0.2),
-            radius: isFocused ? 20 : 8,
-            x: 0,
-            y: isFocused ? 12 : 6
-          )
+          // Award-winning focus glow with GameCube/Wii theming
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(
+              LinearGradient(
+                colors: isFocused ? [
+                  Color.cyan.opacity(0.95),
+                  Color.blue.opacity(0.9),
+                  Color.purple.opacity(0.95),
+                  Color.cyan.opacity(0.95)
+                ] : [Color.clear],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              ),
+              lineWidth: isFocused ? 8 : 0
+            )
+            .shadow(color: .cyan.opacity(isFocused ? 0.8 : 0), radius: isFocused ? 25 : 0)
+            .shadow(color: .blue.opacity(isFocused ? 0.6 : 0), radius: isFocused ? 35 : 0)
+            .shadow(color: .purple.opacity(isFocused ? 0.7 : 0), radius: isFocused ? 45 : 0)
+            .animation(.easeInOut(duration: 0.6), value: isFocused)
+        )
+        .overlay(
+          // Inner highlight for premium feel
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(
+              Color.white.opacity(isFocused ? 0.4 : 0),
+              lineWidth: isFocused ? 2 : 0
+            )
+            .padding(4)
+            .animation(.easeInOut(duration: 0.4), value: isFocused)
+        )
+        .shadow(
+          color: Color.black.opacity(isFocused ? 0.4 : 0.2),
+          radius: isFocused ? 20 : 8,
+          x: 0,
+          y: isFocused ? 12 : 6
+        )
 
         if isFocused {
           VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center); Spacer() }
@@ -3038,48 +3122,48 @@ private struct GameGridItem: View {
           HStack {
             // Game ID with enhanced styling
             Text(item.gameID)
-            .font(enhancedCaptionFont)
-            .foregroundStyle(
-              LinearGradient(
-                colors: [Color.secondary, Color.secondary.opacity(0.8)],
-                startPoint: .top,
-                endPoint: .bottom
+              .font(enhancedCaptionFont)
+              .foregroundStyle(
+                LinearGradient(
+                  colors: [Color.secondary, Color.secondary.opacity(0.8)],
+                  startPoint: .top,
+                  endPoint: .bottom
+                )
               )
-            )
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-              Capsule()
-                .fill(Color.primary.opacity(0.05))
-                .overlay(
-                  Capsule()
-                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
-                )
-            )
+              .padding(.horizontal, 6)
+              .padding(.vertical, 2)
+              .background(
+                Capsule()
+                  .fill(Color.primary.opacity(0.05))
+                  .overlay(
+                    Capsule()
+                      .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+                  )
+              )
 
-          Spacer()
+            Spacer()
 
-          // Auto pre-cache progress indicator with better styling
-          if isAutoPreCaching {
-            HStack(spacing: 4) {
-              CompactDolphinCircularSpinner()
-              Text("\(Int(autoPreCacheProgress * 100))%")
-                .font(.system(.caption2, design: .monospaced, weight: .medium))
-                .foregroundColor(.secondary)
+            // Auto pre-cache progress indicator with better styling
+            if isAutoPreCaching {
+              HStack(spacing: 4) {
+                CompactDolphinCircularSpinner()
+                Text("\(Int(autoPreCacheProgress * 100))%")
+                  .font(.system(.caption2, design: .monospaced, weight: .medium))
+                  .foregroundColor(.secondary)
+              }
+              .padding(.horizontal, 8)
+              .padding(.vertical, 4)
+              .background(
+                Capsule()
+                  .fill(.ultraThinMaterial)
+                  .overlay(
+                    Capsule()
+                      .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                  )
+              )
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-              Capsule()
-                .fill(.ultraThinMaterial)
-                .overlay(
-                  Capsule()
-                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                )
-            )
           }
         }
-      }
       }
     }
     .frame(width: Layout.cardSize.width)
@@ -3581,7 +3665,6 @@ private struct SourcePickerView: View {
   }
 }
 
-
 // MARK: - Unified Game Card
 // Both iOS and tvOS now use the same clean implementation in GameGridItem
 
@@ -3919,7 +4002,6 @@ private struct CacheInfoView: View {
   }
 #endif
 }
-
 
 /// Labeled row with SF Symbol and value, used in cache details card
 private struct KVRow: View {
