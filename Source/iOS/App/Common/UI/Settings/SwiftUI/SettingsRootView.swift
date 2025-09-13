@@ -750,7 +750,13 @@ struct ControllersRootView: View {
   @State private var newDsuPort: String = "26760"
   @StateObject private var dsuBrowser = DSUDiscoveryBrowser()
   @State private var recentlyAdded: Set<String> = [] // address:port keys
-  @AppStorage("dsu_role") private var dsuRole: String = "receiver" // "receiver" or "sender"
+  @AppStorage("dsu_role") private var dsuRole: String = {
+    #if os(iOS)
+    return "sender" // iOS devices are natural senders (touchscreen, accelerometer)
+    #else
+    return "receiver" // tvOS devices are natural receivers (connected to TV)
+    #endif
+  }() // "receiver" or "sender"
   @State private var pingingServerKey: String? = nil
 
   // Touchscreen
@@ -807,6 +813,7 @@ struct ControllersRootView: View {
         },
         footer: Text(L("Enable the DSU (Cemuhook DualShock UDP) client to receive input from compatible servers on your network. Add servers as IP:Port. Bonjour discovery will be added in a future update."))
       ) {
+#if os(iOS)
         Picker(L("Role"), selection: $dsuRole) {
           Text(L("Receiver")).tag("receiver")
           Text(L("Sender")).tag("sender")
@@ -817,9 +824,19 @@ struct ControllersRootView: View {
             DOLConfigBridge.setDsuClientEnabled(false)
           }
         }
+#else
+        // tvOS can only be a receiver (no touchscreen, meant for TV connection)
+        HStack {
+          Text(L("Role"))
+          Spacer()
+          Text(L("Receiver")).foregroundStyle(.secondary)
+        }
+#endif
         Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
           .onChange(of: dsuEnabled) { DOLConfigBridge.setDsuClientEnabled($0) }
+#if os(iOS)
           .disabled(dsuRole == "sender")
+#endif
         if dsuServers.isEmpty {
           HStack {
             Text(L("Servers"))
@@ -3606,6 +3623,7 @@ final class DSUDiscoveryBrowser: NSObject, ObservableObject {
     services.removeAll()
   }
 }
+
 
 extension DSUDiscoveryBrowser: NetServiceBrowserDelegate {
   func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
