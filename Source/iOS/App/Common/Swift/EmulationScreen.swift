@@ -539,6 +539,7 @@ struct EmulationScreen: View {
             #if DEBUG
             DSUDebugHUD()
               .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+              .padding(.top, 64)
               .allowsHitTesting(false)
             #endif
 
