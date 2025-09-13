@@ -84,9 +84,22 @@
       try {
         updated |= self->_cache->UpdateAdditionalMetadata();
       } catch (const std::exception& e) {
-        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s", e.what());
+        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s -- attempting cache rebuild", e.what());
+        // One-shot rebuild on metadata failure
+        delete self->_cache;
+        self->_cache = new UICommon::GameFileCache();
+        bool rebuiltUpdated = self->_cache->Update(all);
+        try { rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata(); }
+        catch (...) { NSLog(@"GameFileCache metadata failed again after rebuild"); }
+        updated |= rebuiltUpdated;
       } catch (...) {
-        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception");
+        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception -- attempting cache rebuild");
+        delete self->_cache;
+        self->_cache = new UICommon::GameFileCache();
+        bool rebuiltUpdated = self->_cache->Update(all);
+        try { rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata(); }
+        catch (...) { NSLog(@"GameFileCache metadata failed again after rebuild"); }
+        updated |= rebuiltUpdated;
       }
     } @catch (NSException* ex) {
       NSLog(@"GameFileCache rescan exception: %@", ex);
@@ -144,9 +157,21 @@
       try {
         updated |= self->_cache->UpdateAdditionalMetadata();
       } catch (const std::exception& e) {
-        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s", e.what());
+        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s -- attempting cache rebuild", e.what());
+        delete self->_cache;
+        self->_cache = new UICommon::GameFileCache();
+        bool rebuiltUpdated = self->_cache->Update(all);
+        try { rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata(); }
+        catch (...) { NSLog(@"GameFileCache metadata failed again after rebuild"); }
+        updated |= rebuiltUpdated;
       } catch (...) {
-        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception");
+        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception -- attempting cache rebuild");
+        delete self->_cache;
+        self->_cache = new UICommon::GameFileCache();
+        bool rebuiltUpdated = self->_cache->Update(all);
+        try { rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata(); }
+        catch (...) { NSLog(@"GameFileCache metadata failed again after rebuild"); }
+        updated |= rebuiltUpdated;
       }
     } @catch (NSException* ex) {
       NSLog(@"GameFileCache rescanLocal exception: %@", ex);

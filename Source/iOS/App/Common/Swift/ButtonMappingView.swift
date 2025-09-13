@@ -103,10 +103,16 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "InputDisplayCell")
   }
 
-  private func initializeDolphinConfig() {
-    // This would need to call into the Dolphin C++ code
-    // For now, we'll create placeholder sections
-    // In a real implementation, this would call Pad::GetConfig() or Wiimote::GetConfig()
+    private func initializeDolphinConfig() {
+    // Nothing needed here in Swift; we will access config via bridges when needed
+  }
+
+  private func currentDefaultDeviceQualifier() -> String {
+    if mappingType == .DOLMappingTypePad {
+      return TVControllerMappingBridge.defaultDevice(forGCPort: Int(mappingPort + 1))
+    } else {
+      return TVControllerMappingBridge.defaultDevice(forWiimote: Int(mappingPort + 1))
+    }
   }
 
   private func populateSections() {
@@ -146,21 +152,21 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
         ]
       ])
     } else {
-      // Wii Remote sections
-      sections.append([
-        "title": L("General"),
-        "items": [
-          ["type": "group", "title": L("Buttons"), "subtitle": ""],
-          ["type": "group", "title": L("D-Pad"), "subtitle": ""],
-          ["type": "group", "title": L("IR"), "subtitle": ""],
-          ["type": "group", "title": L("Swing"), "subtitle": ""],
-          ["type": "group", "title": L("Tilt"), "subtitle": ""],
-          ["type": "group", "title": L("Shake"), "subtitle": ""],
-          ["type": "extension", "title": L("Extension"), "subtitle": L("None")],
-          ["type": "group", "title": L("Rumble"), "subtitle": ""],
-          ["type": "group", "title": L("Options"), "subtitle": ""]
-        ]
-      ])
+          // Wii Remote sections
+    sections.append([
+      "title": L("General"),
+      "items": [
+        ["type": "group", "title": L("Buttons"), "subtitle": ""],
+        ["type": "group", "title": L("D-Pad"), "subtitle": ""],
+        ["type": "group", "title": L("IR"), "subtitle": ""],
+        ["type": "group", "title": L("Swing"), "subtitle": ""],
+        ["type": "group", "title": L("Tilt"), "subtitle": ""],
+        ["type": "group", "title": L("Shake"), "subtitle": ""],
+        ["type": "extension", "title": L("Extension"), "subtitle": currentDefaultWiimoteExtensionDisplayName()],
+        ["type": "group", "title": L("Rumble"), "subtitle": ""],
+        ["type": "group", "title": L("Options"), "subtitle": ""]
+      ]
+    ])
     }
 
     tableView.reloadData()
@@ -194,9 +200,11 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
 
     switch type {
     case "device":
-      let cell = tableView.dequeueReusableCell(withIdentifier: "DeviceCell", for: indexPath)
+      // Use a value1 style to show current device qualifier as subtitle
+      let cell = UITableViewCell(style: .value1, reuseIdentifier: "DeviceCell")
       cell.textLabel?.text = title
-      cell.detailTextLabel?.text = subtitle
+      let current = currentDefaultDeviceQualifier()
+      cell.detailTextLabel?.text = current.isEmpty ? "—" : friendlyName(forQualified: current)
       cell.accessoryType = .disclosureIndicator
       return cell
 
@@ -284,31 +292,59 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
   // MARK: - Navigation Methods
 
   private func showDeviceSelection() {
-    // Placeholder for device selection
-    let alert = UIAlertController(title: L("Device Selection"), message: L("Device selection not yet implemented in programmatic version"), preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: L("OK"), style: .default))
-    present(alert, animated: true)
+    // Create programmatic device selection view controller
+    let deviceVC = DeviceSelectionViewController()
+    deviceVC.mappingType = mappingType
+    deviceVC.mappingPort = mappingPort
+    deviceVC.delegate = self
+
+    navigationController?.pushViewController(deviceVC, animated: true)
   }
 
-  private func showExtensionSelection() {
-    // Placeholder for extension selection
-    let alert = UIAlertController(title: L("Extension Selection"), message: L("Extension selection not yet implemented in programmatic version"), preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: L("OK"), style: .default))
-    present(alert, animated: true)
+    private func showExtensionSelection() {
+    // Create programmatic extension selection view controller
+    let extensionVC = ExtensionSelectionViewController()
+    extensionVC.mappingType = mappingType
+    extensionVC.mappingPort = mappingPort
+    extensionVC.delegate = self
+
+    navigationController?.pushViewController(extensionVC, animated: true)
+  }
+
+  private func currentDefaultWiimoteExtensionDisplayName() -> String {
+    let names = TVControllerMappingBridge.wiimoteAttachmentDisplayNames(for: Int(mappingPort + 1))
+    let idx = TVControllerMappingBridge.selectedWiimoteAttachment(for: Int(mappingPort + 1))
+    guard !names.isEmpty, idx >= 0, idx < names.count else { return L("None") }
+    return names[idx]
   }
 
   private func showGroupEdit(for groupName: String) {
-    // Placeholder for group editing
-    let alert = UIAlertController(title: L("Group Edit"), message: L("Group editing for '\(groupName)' not yet implemented in programmatic version"), preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: L("OK"), style: .default))
-    present(alert, animated: true)
+    // Create programmatic group edit view controller
+    let groupEditVC = GroupEditViewController()
+    groupEditVC.title = groupName
+    groupEditVC.groupName = groupName
+    groupEditVC.mappingType = mappingType
+    groupEditVC.mappingPort = mappingPort
+    groupEditVC.delegate = self
+
+    navigationController?.pushViewController(groupEditVC, animated: true)
   }
 
   private func showProfileLoad() {
-    // Placeholder for profile loading
-    let alert = UIAlertController(title: L("Load Profile"), message: L("Profile loading not yet implemented in programmatic version"), preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: L("OK"), style: .default))
-    present(alert, animated: true)
+    // Create programmatic profile load view controller
+    let profileLoadVC = ProfileLoadViewController()
+    profileLoadVC.mappingType = mappingType
+    profileLoadVC.mappingPort = mappingPort
+    profileLoadVC.delegate = self
+
+        let navController = UINavigationController(rootViewController: profileLoadVC)
+    #if os(tvOS)
+    navController.modalPresentationStyle = .fullScreen
+    #else
+    navController.modalPresentationStyle = .formSheet
+    #endif
+
+    present(navController, animated: true)
   }
 
   private func showProfileSave() {
@@ -336,10 +372,504 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
   }
 
   private func showInputDisplay() {
-    // Placeholder for input display
-    let alert = UIAlertController(title: L("Input Display"), message: L("Input display not yet implemented in programmatic version"), preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: L("OK"), style: .default))
+    // Create programmatic input display view controller
+    let inputDisplayVC = InputDisplayViewController()
+    inputDisplayVC.mappingType = mappingType
+    inputDisplayVC.mappingPort = mappingPort
+
+    navigationController?.pushViewController(inputDisplayVC, animated: true)
+  }
+}
+
+// MARK: - Delegate Extensions
+
+extension MappingRootViewController: DeviceSelectionDelegate, GroupEditDelegate, ProfileLoadDelegate, ExtensionSelectionDelegate {
+  func deviceDidChange() {
+    // Reload sections to update device display
+    populateSections()
+  }
+
+  func groupDidChange() {
+    // Save configuration changes
+    // In C++: _config->SaveConfig()
+  }
+
+  func profileDidLoad() {
+    // Reload sections after profile load
+    populateSections()
+  }
+
+  func extensionDidChange() {
+    // Reload sections to update extension display
+    populateSections()
+  }
+}
+
+// MARK: - Delegate Protocols
+
+protocol DeviceSelectionDelegate: AnyObject {
+  func deviceDidChange()
+}
+
+protocol GroupEditDelegate: AnyObject {
+  func groupDidChange()
+}
+
+protocol ProfileLoadDelegate: AnyObject {
+  func profileDidLoad()
+}
+
+protocol ExtensionSelectionDelegate: AnyObject {
+  func extensionDidChange()
+}
+
+// MARK: - Supporting View Controllers
+
+/// Programmatic device selection view controller
+class DeviceSelectionViewController: UITableViewController {
+  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingPort: Int32 = 0
+  weak var delegate: DeviceSelectionDelegate?
+
+  private var devices: [String] = []
+  private var selectedIndex: Int = -1
+
+      override func viewDidLoad() {
+    super.viewDidLoad()
+    title = L("Device")
+
+    // Register cell type
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "DeviceCell")
+
+    // Ensure DSU client is enabled on tvOS so DSU devices enumerate
+    #if os(tvOS)
+    if !DOLConfigBridge.dsuClientEnabled() { DOLConfigBridge.setDsuClientEnabled(true) }
+    #endif
+
+    // Observe device changes
+    NotificationCenter.default.addObserver(self, selector: #selector(devicesChanged), name: NSNotification.Name("TVControllerDevicesChangedNotification"), object: nil)
+    TVControllerMappingBridge.beginPostingDevicesChangedNotifications()
+
+        // Load available devices
+    loadDevices()
+
+    // Nudge device discovery and schedule a couple delayed reloads
+    TVControllerMappingBridge.refreshDevices()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+      TVControllerMappingBridge.refreshDevices(); self.loadDevices()
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+      TVControllerMappingBridge.refreshDevices(); self.loadDevices()
+    }
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+    TVControllerMappingBridge.endPostingDevicesChangedNotifications()
+  }
+
+  @objc private func devicesChanged() {
+    loadDevices()
+  }
+
+      private func loadDevices() {
+    // Enumerate devices via bridge
+    devices = TVControllerMappingBridge.allQualifiedDevices() as [String]
+
+    // tvOS: filter out iOS Touchscreen devices (not available on tvOS)
+    #if os(tvOS)
+    devices = devices.filter { !$0.hasPrefix("iOS/") }
+    #endif
+
+    // Sort with DSU first for visibility
+    devices.sort { a, b in
+      let aIsDSU = a.hasPrefix("DSUClient/")
+      let bIsDSU = b.hasPrefix("DSUClient/")
+      if aIsDSU != bIsDSU { return aIsDSU }
+      return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+    }
+
+    // Set current selection based on current default device
+    let current = (mappingType == .DOLMappingTypePad)
+      ? TVControllerMappingBridge.defaultDevice(forGCPort: Int(mappingPort + 1))
+      : TVControllerMappingBridge.defaultDevice(forWiimote: Int(mappingPort + 1))
+    selectedIndex = devices.firstIndex(of: current) ?? -1
+    tableView.reloadData()
+  }
+
+  override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    return devices.count
+  }
+
+  override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "DeviceCell", for: indexPath)
+    let q = devices[indexPath.row]
+    cell.textLabel?.text = friendlyName(forQualified: q)
+    cell.detailTextLabel?.text = q
+    cell.accessoryType = indexPath.row == selectedIndex ? .checkmark : .none
+    return cell
+  }
+
+      override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    tableView.deselectRow(at: indexPath, animated: true)
+
+    // Update selection and persist via bridge
+    if selectedIndex != indexPath.row {
+      selectedIndex = indexPath.row
+      let qualified = devices[indexPath.row]
+      if mappingType == .DOLMappingTypePad {
+        TVControllerMappingBridge.setDefaultDevice(qualified, forGCPort: Int(mappingPort + 1))
+      } else {
+        TVControllerMappingBridge.setDefaultDevice(qualified, forWiimote: Int(mappingPort + 1))
+      }
+
+      // Auto-load a default profile for known device types and restore the device binding
+      if let profile = defaultProfileName(forQualified: qualified) {
+        if mappingType == .DOLMappingTypePad {
+          _ = TVControllerMappingBridge.loadProfile(profile, forGCPort: Int(mappingPort + 1), restoreDevice: true)
+        } else {
+          _ = TVControllerMappingBridge.loadProfile(profile, forWiimote: Int(mappingPort + 1), restoreDevice: true)
+        }
+      }
+
+      tableView.reloadData()
+      delegate?.deviceDidChange()
+    }
+  }
+}
+
+private func friendlyName(forQualified q: String) -> String {
+  if q.hasPrefix("DSUClient/") { return "DualShock UDP" }
+  if q.hasPrefix("MFi/") { return "MFi Controller" }
+  if q.hasPrefix("iOS/") { return "Touchscreen" }
+  return q
+}
+
+private func defaultProfileName(forQualified q: String) -> String? {
+  if q.hasPrefix("DSUClient/") { return "DSU" }
+  if q.hasPrefix("iOS/" ) { return "Touchscreen" }
+  return nil
+}
+
+/// Programmatic group edit view controller
+class GroupEditViewController: UITableViewController {
+  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingPort: Int32 = 0
+  var groupName: String = ""
+  weak var delegate: GroupEditDelegate?
+
+    private var controls: [String] = []
+  private var controlExpressions: [String] = []
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+
+    // Register cell types
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "ControlCell")
+
+    // Load controls for this group
+    loadControls()
+  }
+
+  private func loadControls() {
+    // Query Dolphin for control names based on mapping type and group
+    let groupId = groupIdForName(groupName)
+    if mappingType == .DOLMappingTypePad {
+      controls = TVControllerMappingBridge.padControlNames(forGroup: Int(mappingPort + 1), group: groupId)
+      controlExpressions = TVControllerMappingBridge.padControlExpressions(forGroup: Int(mappingPort + 1), group: groupId)
+    } else {
+      controls = TVControllerMappingBridge.wiimoteControlNames(forGroup: Int(mappingPort + 1), group: groupId)
+      controlExpressions = TVControllerMappingBridge.wiimoteControlExpressions(forGroup: Int(mappingPort + 1), group: groupId)
+    }
+    tableView.reloadData()
+  }
+
+  private func groupIdForName(_ name: String) -> Int {
+    if mappingType == .DOLMappingTypePad {
+      switch name {
+      case L("Buttons"): return 0
+      case L("D-Pad"): return 1
+      case L("Control Stick"): return 2
+      case L("C Stick"): return 3
+      case L("Triggers"): return 4
+      case L("Rumble"): return 5
+      case L("Options"): return 6
+      default: return 0
+      }
+    } else {
+      switch name {
+      case L("Buttons"): return 0
+      case L("D-Pad"): return 1
+      case L("IR"): return 2
+      case L("Swing"): return 3
+      case L("Tilt"): return 4
+      case L("Shake"): return 5
+      case L("Extension"): return 6
+      case L("Rumble"): return 7
+      case L("Options"): return 8
+      default: return 0
+      }
+    }
+  }
+
+  override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    return controls.count
+  }
+
+  override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "ControlCell", for: indexPath)
+    cell.textLabel?.text = controls[indexPath.row]
+    let expr = controlExpressions[safe: indexPath.row] ?? "—"
+    cell.detailTextLabel?.text = expr
+    cell.accessoryType = .disclosureIndicator
+    return cell
+  }
+
+  override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    tableView.deselectRow(at: indexPath, animated: true)
+
+        // Start input detection via MappingCommon dialog on UIKit controller
+    let alert = UIAlertController(title: L("Press Input"), message: L("Press the input you want to map to \(controls[indexPath.row])"), preferredStyle: .alert)
+    alert.addTextField { tf in tf.placeholder = L("Enter expression or press input") }
+    alert.addAction(UIAlertAction(title: L("Cancel"), style: .cancel))
+    alert.addAction(UIAlertAction(title: L("OK"), style: .default, handler: { _ in
+      let expr = alert.textFields?.first?.text ?? ""
+      guard !expr.isEmpty else { return }
+      let groupId = self.groupIdForName(self.groupName)
+      if self.mappingType == .DOLMappingTypePad {
+        TVControllerMappingBridge.setPadControlExpressionForPort(Int(self.mappingPort + 1), group: groupId, index: indexPath.row, expression: expr)
+        self.controlExpressions = TVControllerMappingBridge.padControlExpressions(forGroup: Int(self.mappingPort + 1), group: groupId)
+      } else {
+        TVControllerMappingBridge.setWiimoteControlExpressionFor(Int(self.mappingPort + 1), group: groupId, index: indexPath.row, expression: expr)
+        self.controlExpressions = TVControllerMappingBridge.wiimoteControlExpressions(forGroup: Int(self.mappingPort + 1), group: groupId)
+      }
+      self.tableView.reloadRows(at: [indexPath], with: .automatic)
+    }))
     present(alert, animated: true)
+  }
+}
+
+/// Programmatic profile load view controller
+class ProfileLoadViewController: UITableViewController {
+  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingPort: Int32 = 0
+  weak var delegate: ProfileLoadDelegate?
+
+  private var profiles: [String] = []
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = L("Load")
+
+    // Add cancel button
+    navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(cancelPressed))
+
+    // Register cell type
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "ProfileCell")
+
+    // Load available profiles
+    loadProfiles()
+  }
+
+  @objc private func cancelPressed() {
+    dismiss(animated: true)
+  }
+
+    private func loadProfiles() {
+    if mappingType == .DOLMappingTypePad {
+      profiles = TVControllerMappingBridge.profiles(forGCPort: Int(mappingPort + 1))
+    } else {
+      profiles = TVControllerMappingBridge.profiles(forWiimote: Int(mappingPort + 1))
+    }
+    tableView.reloadData()
+  }
+
+  override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    return profiles.count
+  }
+
+  override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "ProfileCell", for: indexPath)
+    cell.textLabel?.text = profiles[indexPath.row]
+    return cell
+  }
+
+  override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    tableView.deselectRow(at: indexPath, animated: true)
+
+        // Load the selected profile
+    let name = profiles[indexPath.row]
+    let ok: Bool
+    if mappingType == .DOLMappingTypePad {
+      ok = TVControllerMappingBridge.loadProfile(name, forGCPort: Int(mappingPort + 1), restoreDevice: true)
+    } else {
+      ok = TVControllerMappingBridge.loadProfile(name, forWiimote: Int(mappingPort + 1), restoreDevice: true)
+    }
+    if ok { delegate?.profileDidLoad() }
+    dismiss(animated: true)
+  }
+}
+
+/// Programmatic extension selection view controller
+class ExtensionSelectionViewController: UITableViewController {
+  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingPort: Int32 = 0
+  weak var delegate: ExtensionSelectionDelegate?
+
+  private var extensions: [String] = []
+  private var selectedIndex: Int = 0
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = L("Extension")
+
+    // Register cell type
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "ExtensionCell")
+
+    // Load available extensions
+    loadExtensions()
+  }
+
+  private func loadExtensions() {
+        // Wii Remote extensions via bridge
+    extensions = TVControllerMappingBridge.wiimoteAttachmentDisplayNames(for: Int(mappingPort + 1))
+    selectedIndex = TVControllerMappingBridge.selectedWiimoteAttachment(for: Int(mappingPort + 1))
+    tableView.reloadData()
+  }
+
+  override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    return extensions.count
+  }
+
+  override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "ExtensionCell", for: indexPath)
+    cell.textLabel?.text = extensions[indexPath.row]
+    cell.accessoryType = indexPath.row == selectedIndex ? .checkmark : .none
+    return cell
+  }
+
+  override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    tableView.deselectRow(at: indexPath, animated: true)
+
+    // Update selection and persist via bridge
+    if selectedIndex != indexPath.row {
+      selectedIndex = indexPath.row
+      TVControllerMappingBridge.setSelectedWiimoteAttachment(selectedIndex, forWiimote: Int(mappingPort + 1))
+      tableView.reloadData()
+      delegate?.extensionDidChange()
+    }
+  }
+}
+
+/// Programmatic input display view controller
+class InputDisplayViewController: UITableViewController {
+  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingPort: Int32 = 0
+
+  private var inputs: [(String, String)] = [] // (name, value)
+  private var updateTimer: Timer?
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = L("Input Display")
+
+    // Register cell type
+    tableView.register(UITableViewCell.self, forCellReuseIdentifier: "InputCell")
+
+    // Load inputs
+    loadInputs()
+  }
+
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+
+    // Start update timer
+    updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { _ in
+      self.updateInputValues()
+    }
+  }
+
+  override func viewWillDisappear(_ animated: Bool) {
+    super.viewWillDisappear(animated)
+
+    // Stop update timer
+    updateTimer?.invalidate()
+    updateTimer = nil
+  }
+
+  private func loadInputs() {
+    // Seed from current device names
+    let qualified: String
+    if mappingType == .DOLMappingTypePad {
+      qualified = TVControllerMappingBridge.defaultDevice(forGCPort: Int(mappingPort + 1))
+    } else {
+      qualified = TVControllerMappingBridge.defaultDevice(forWiimote: Int(mappingPort + 1))
+    }
+    if !qualified.isEmpty {
+      let names = TVControllerMappingBridge.inputs(forQualifiedDevice: qualified)
+      inputs = names.map { ($0, "0.00") }
+    } else {
+      inputs.removeAll()
+    }
+    tableView.reloadData()
+  }
+
+  private func groupIdForName(_ name: String) -> Int {
+    if mappingType == .DOLMappingTypePad {
+      switch name {
+      case L("Buttons"): return 0
+      case L("D-Pad"): return 1
+      case L("Control Stick"): return 2
+      case L("C Stick"): return 3
+      case L("Triggers"): return 4
+      case L("Rumble"): return 5
+      case L("Options"): return 6
+      default: return 0
+      }
+    } else {
+      switch name {
+      case L("Buttons"): return 0
+      case L("D-Pad"): return 1
+      case L("IR"): return 2
+      case L("Swing"): return 3
+      case L("Tilt"): return 4
+      case L("Shake"): return 5
+      case L("Extension"): return 6
+      case L("Rumble"): return 7
+      case L("Options"): return 8
+      default: return 0
+      }
+    }
+  }
+
+    private func updateInputValues() {
+    // Read states from the current default device via bridge when possible
+    let qualified: String
+    if mappingType == .DOLMappingTypePad {
+      qualified = TVControllerMappingBridge.defaultDevice(forGCPort: Int(mappingPort + 1))
+    } else {
+      qualified = TVControllerMappingBridge.defaultDevice(forWiimote: Int(mappingPort + 1))
+    }
+    if !qualified.isEmpty {
+      let names = TVControllerMappingBridge.inputs(forQualifiedDevice: qualified)
+      let values = TVControllerMappingBridge.inputStates(forQualifiedDevice: qualified)
+      inputs = zip(names, values).map { ($0.0, String(format: "%.2f", $0.1.floatValue)) }
+    } else {
+      inputs.removeAll()
+    }
+    tableView.reloadData()
+  }
+
+  override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    return inputs.count
+  }
+
+  override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "InputCell", for: indexPath)
+    let input = inputs[indexPath.row]
+    cell.textLabel?.text = input.0
+    cell.detailTextLabel?.text = input.1
+    return cell
   }
 }
 
