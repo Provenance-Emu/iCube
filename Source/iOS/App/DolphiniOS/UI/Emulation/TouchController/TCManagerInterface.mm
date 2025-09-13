@@ -132,66 +132,27 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
       int aidx = (int)axis;
       s_splitAxes[ci][aidx] = clamp11(v);
 
-      // Debug: log raw axis values to understand NIB behavior
-      if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-        NSLog(@"[DSU] Raw axis %d = %.3f -> stored %.3f", aidx, value, v);
-      }
-
-            auto combLR = ^(int leftIdx, int rightIdx) {
-        float leftRaw = s_splitAxes[ci][leftIdx];
-        float rightRaw = s_splitAxes[ci][rightIdx];
-
-        // NIB bug: all directions report negative when pressed
-        // Use the strongest (most negative) signal to determine actual direction
-        float leftMag = fabsf(leftRaw);
-        float rightMag = fabsf(rightRaw);
-
-        float result = 0.0f;
-        if (leftMag > 0.5f && rightMag > 0.5f) {
-          // Both pressed - use the stronger one
-          if (leftMag > rightMag) {
-            result = -leftMag; // Left negative
-          } else {
-            result = rightMag;  // Right positive
-          }
-        } else if (leftMag > 0.5f) {
-          result = -leftMag; // Left negative
-        } else if (rightMag > 0.5f) {
-          result = rightMag;  // Right positive
-        }
-
-        result = clamp11(result);
+      auto combLR = ^(int leftIdx, int rightIdx) {
+        // Match TCJoystick: left axis reports negative, right axis reports positive
+        float leftValue = s_splitAxes[ci][leftIdx];   // negative when left
+        float rightValue = s_splitAxes[ci][rightIdx]; // positive when right, negative when left
+        float leftMag = leftValue < 0.f ? -leftValue : 0.f;    // 0..1
+        float rightMag = rightValue > 0.f ? rightValue : 0.f;  // 0..1
+        float result = clamp11(rightMag - leftMag); // right positive, left negative
         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-          NSLog(@"[DSU] combLR: leftRaw=%.3f rightRaw=%.3f leftMag=%.3f rightMag=%.3f result=%.3f", leftRaw, rightRaw, leftMag, rightMag, result);
+          NSLog(@"[DSU] combLR: leftVal=%.3f rightVal=%.3f leftMag=%.3f rightMag=%.3f result=%.3f", leftValue, rightValue, leftMag, rightMag, result);
         }
         return result;
       };
       auto combUD = ^(int upIdx, int downIdx) {
-        float upRaw = s_splitAxes[ci][upIdx];
-        float downRaw = s_splitAxes[ci][downIdx];
-
-        // NIB bug: all directions report negative when pressed
-        // Use the strongest (most negative) signal to determine actual direction
-        float upMag = fabsf(upRaw);
-        float downMag = fabsf(downRaw);
-
-        float result = 0.0f;
-        if (upMag > 0.5f && downMag > 0.5f) {
-          // Both pressed - use the stronger one
-          if (upMag > downMag) {
-            result = -upMag;   // Up negative
-          } else {
-            result = downMag;  // Down positive
-          }
-        } else if (upMag > 0.5f) {
-          result = -upMag;   // Up negative
-        } else if (downMag > 0.5f) {
-          result = downMag;  // Down positive
-        }
-
-        result = clamp11(result);
+        // Match TCJoystick: up axis reports negative, down axis reports positive
+        float upValue = s_splitAxes[ci][upIdx];     // negative when up
+        float downValue = s_splitAxes[ci][downIdx]; // positive when down, negative when up
+        float upMag = upValue < 0.f ? -upValue : 0.f;       // 0..1
+        float downMag = downValue > 0.f ? downValue : 0.f;  // 0..1
+        float result = clamp11(downMag - upMag); // down positive, up negative
         if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-          NSLog(@"[DSU] combUD: upRaw=%.3f downRaw=%.3f upMag=%.3f downMag=%.3f result=%.3f", upRaw, downRaw, upMag, downMag, result);
+          NSLog(@"[DSU] combUD: upVal=%.3f downVal=%.3f upMag=%.3f downMag=%.3f result=%.3f", upValue, downValue, upMag, downMag, result);
         }
         return result;
       };
