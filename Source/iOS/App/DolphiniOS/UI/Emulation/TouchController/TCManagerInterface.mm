@@ -49,12 +49,12 @@
 }
 
 // Aggregate split stick inputs (Up/Down/Left/Right) into full X/Y for DSU
-static float s_splitAxes[4][32] = {{0}}; // [controller][axisIndex] last values in [-1,1]
+static float s_splitAxes[4][256] = {{0}}; // [controller][axisIndex] last values in [-1,1] (size covers up to 255)
 static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); }
 
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
   // Apply DSU scaling parameters (gain, deadzone, smoothing) to analog axes before forwarding
-  static float s_last[4][8] = {{0}}; // simple per-controller/per-axis smoothing
+  static float s_last[4][256] = {{0}}; // simple per-controller/per-axis smoothing
   NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;
   float gain = (float)[defs floatForKey:@"dsu_gyro_gain"]; if (gain <= 0.f) gain = 1.f;
   float dead = (float)[defs floatForKey:@"dsu_deadzone"]; if (dead < 0.f) dead = 0.f; if (dead > 0.49f) dead = 0.49f;
@@ -72,7 +72,7 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
 
   // Smoothing (EMA)
   int ci = (int)MAX(0, MIN(3, (int)controllerId));
-  int ai = (int)MAX(0, MIN(7, (int)axis));
+  int ai = (int)MAX(0, MIN(255, (int)axis));
   if (alpha > 0.f) {
     v = alpha * s_last[ci][ai] + (1.f - alpha) * v;
     s_last[ci][ai] = v;
@@ -101,18 +101,18 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
       int aidx = (int)axis;
       s_splitAxes[ci][aidx] = clamp11(v);
       if (axis >= 11 && axis <= 14) {
-        float lx = clamp11(s_splitAxes[ci][14] + s_splitAxes[ci][13]); // Right+ + Left-
-        float ly = clamp11(s_splitAxes[ci][12] - s_splitAxes[ci][11]); // Down+ - Up- (Up positive)
+        float lx = clamp11(s_splitAxes[ci][14] - s_splitAxes[ci][13]); // Right+ - Left-
+        float ly = clamp11(s_splitAxes[ci][11] - s_splitAxes[ci][12]); // Up- - Down+
         [DSUServerBridge setAxis:0 controller:controllerId value:lx];
         [DSUServerBridge setAxis:1 controller:controllerId value:ly];
       } else if (axis >= 16 && axis <= 19) {
-        float rx = clamp11(s_splitAxes[ci][19] + s_splitAxes[ci][18]); // Right+ + Left-
-        float ry = clamp11(s_splitAxes[ci][17] - s_splitAxes[ci][16]); // Down+ - Up- (Up positive)
+        float rx = clamp11(s_splitAxes[ci][19] - s_splitAxes[ci][18]); // Right+ - Left-
+        float ry = clamp11(s_splitAxes[ci][16] - s_splitAxes[ci][17]); // Up- - Down+
         [DSUServerBridge setAxis:2 controller:controllerId value:rx];
         [DSUServerBridge setAxis:3 controller:controllerId value:ry];
       } else {
-        float lx2 = clamp11(s_splitAxes[ci][206] + s_splitAxes[ci][205]);
-        float ly2 = clamp11(s_splitAxes[ci][204] - s_splitAxes[ci][203]); // Down+ - Up- (Up positive)
+        float lx2 = clamp11(s_splitAxes[ci][206] - s_splitAxes[ci][205]); // Right+ - Left-
+        float ly2 = clamp11(s_splitAxes[ci][203] - s_splitAxes[ci][204]); // Up- - Down+
         [DSUServerBridge setAxis:0 controller:controllerId value:lx2];
         [DSUServerBridge setAxis:1 controller:controllerId value:ly2];
       }

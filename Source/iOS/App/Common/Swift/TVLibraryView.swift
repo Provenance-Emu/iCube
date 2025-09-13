@@ -33,233 +33,19 @@ private struct KeyCommandHostView: UIViewRepresentable {
 
   func updateUIView(_ uiView: KeyInputView, context: Context) { }
 }
+#endif // os(iOS) || targetEnvironment(macCatalyst)
 
-// MARK: - DSU Controller Session (iOS)
-#if os(iOS)
-import Foundation
-import CoreImage
-import CoreImage.CIFilterBuiltins
+// MARK: - Game Grid Item with Focus Management
 
-private struct DSUSessionView: View {
-  @Environment(\.dismiss) private var dismiss
-  @State private var ip: String = ""
-  @State private var port: Int = 26760
-  @State private var portText: String = "26760"
-  @State private var running: Bool = false
-  @State private var autoStart: Bool = true
-  @State private var showDebug: Bool = false
-  @State private var txCount: UInt = 0
-  @State private var rxCount: UInt = 0
-  @State private var tick: Int = 0
-  @State private var showController: Bool = false
-  @State private var hasClient: Bool = false
-  @State private var clientAddr: String = ""
-  @State private var clients: [String] = []
-  @State private var approvalRequired: Bool = false
-  @State private var pendingApprovalAddr: String? = nil
-  @State private var showApprovalAlert: Bool = false
-
-  var body: some View {
-    NavigationStack {
-      Form {
-        Section(header: Text(L("Server"))) {
-          HStack {
-            Text(L("Address"))
-            Spacer()
-            Text("\(ip.isEmpty ? "-" : ip) : \((running ? port : (Int(portText) ?? 26760)))")
-              .foregroundStyle(.secondary)
-          }
-          .alert(isPresented: $showApprovalAlert) {
-            Alert(
-              title: Text(L("Receiver requests input")),
-              message: Text(pendingApprovalAddr ?? ""),
-              primaryButton: .default(Text(L("Allow"))) {
-                if let addr = pendingApprovalAddr { DSUServerBridge.setClient(addr, allowed: true) }
-                pendingApprovalAddr = nil
-              },
-              secondaryButton: .destructive(Text(L("Block"))) {
-                if let addr = pendingApprovalAddr { DSUServerBridge.setClient(addr, allowed: false) }
-                pendingApprovalAddr = nil
-              }
-            )
-          }
-          HStack {
-            Text(L("Client"))
-            Spacer()
-            if hasClient {
-              Circle().fill(Color.green).frame(width: 10, height: 10)
-              Text(clientAddr.isEmpty ? L("Connected") : clientAddr)
-                .foregroundStyle(.secondary)
-            } else {
-              Circle().fill(Color.red).frame(width: 10, height: 10)
-              Text(L("Waiting for client…")).foregroundStyle(.secondary)
-            }
-          }
-          HStack {
-            Text(L("Port"))
-            Spacer()
-            TextField("26760", text: $portText)
-              .multilineTextAlignment(.trailing)
-              .keyboardType(.numberPad)
-              .frame(maxWidth: 120)
-              .disabled(running)
-          }
-          Toggle(L("Start Server"), isOn: $running)
-            .onChange(of: running) { v in
-              if v {
-                let p = validatedPort()
-                let ok = DSUServerBridge.start(onPort: NSNumber(value: p).intValue)
-                if ok {
-                  ip = DSUServerBridge.ipAddress(); port = p
-                  UserDefaults.standard.set(p, forKey: "dsu_server_port")
-                } else {
-                  let err = DSUServerBridge.lastError()
-                  NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
-                  running = false
-                }
-              } else {
-                DSUServerBridge.stop(); ip = ""
-              }
-            }
-          Toggle(L("Auto‑start when opening"), isOn: $autoStart)
-            .onChange(of: autoStart) { UserDefaults.standard.set($0, forKey: "dsu_server_autostart") }
-        }
-
-        Section(header: Text(L("Quick Links"))) {
-          NavigationLink(destination: ControllersRootView()) {
-            Label(L("Controller Settings"), systemImage: "gamecontroller")
-          }
-          Toggle(L("Show DSU Debug"), isOn: $showDebug)
-        }
-
-        if running && !ip.isEmpty {
-          Section(header: Text(L("Share"))) {
-            HStack {
-              Text(L("Copy Link"))
-              Spacer()
-              Button(action: {
-                let p = running ? port : (Int(portText) ?? 26760)
-                let link = "dolphinios://dsu/add?ip=\(ip)&port=\(p)"
-                UIPasteboard.general.string = link
-                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Copied")])
-              }) {
-                Label(L("Copy Link"), systemImage: "doc.on.doc")
-              }
-              .buttonStyle(.bordered)
-            }
-            VStack(alignment: .center) {
-              let p = running ? port : (Int(portText) ?? 26760)
-              let payload = "dolphinios://dsu/add?ip=\(ip)&port=\(p)"
-              HStack { Spacer(); QRCodeView(text: payload).frame(width: 160, height: 160); Spacer() }
-              Text(payload).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            }
-          }
-        }
-
-        if showDebug {
-          Section(header: Text(L("DSU Debug"))) {
-            HStack { Text("TX"); Spacer(); Text("\(txCount)").foregroundStyle(.secondary) }
-            HStack { Text("RX"); Spacer(); Text("\(rxCount)").foregroundStyle(.secondary) }
-          }
-        }
-
-        Section(header: Text(L("Connected Receivers")), footer: Text(L("When approval is required, only allowed receivers will receive input. Version pings are still answered so clients can detect this server."))) {
-          Toggle(L("Approval Required"), isOn: $approvalRequired)
-            .onChange(of: approvalRequired) { DSUServerBridge.setApprovalRequired($0) }
-          if clients.isEmpty {
-            Text(L("No receivers seen yet")).foregroundStyle(.secondary)
-          } else {
-            ForEach(clients, id: \.self) { addr in
-              HStack {
-                Text(addr)
-                Spacer()
-                let allowed = DSUServerBridge.isClientAllowed(addr)
-                Toggle(L("Allow"), isOn: Binding(get: { allowed }, set: { v in DSUServerBridge.setClient(addr, allowed: v) }))
-                  .labelsHidden()
-              }
-            }
-            HStack {
-              Button(L("Allow All")) {
-                for a in clients { DSUServerBridge.setClient(a, allowed: true) }
-              }
-              .buttonStyle(.bordered)
-              Button(L("Block All")) {
-                for a in clients { DSUServerBridge.setClient(a, allowed: false) }
-              }
-              .buttonStyle(.bordered)
-            }
-          }
-        }
-
-        Section {
-          Button {
-            showController = true
-          } label: {
-            Label(L("Open On‑Screen Controller"), systemImage: "rectangle.and.hand.point.up.left.filled")
-          }
-          .disabled(!running)
-        }
-      }
-      .navigationTitle(L("DSU Controller"))
-      .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { dismiss() } } }
-      .onAppear {
-        running = DSUServerBridge.isRunning()
-        // Load persisted defaults
-        let savedPort = UserDefaults.standard.integer(forKey: "dsu_server_port")
-        if savedPort > 0 { portText = String(savedPort) }
-        if UserDefaults.standard.object(forKey: "dsu_server_autostart") != nil {
-          autoStart = UserDefaults.standard.bool(forKey: "dsu_server_autostart")
-        }
-        approvalRequired = DSUServerBridge.approvalRequired()
-        if running {
-          ip = DSUServerBridge.ipAddress(); let cur = DSUServerBridge.port(); port = Int(cur); portText = String(cur)
-        } else if autoStart {
-          let p = validatedPort()
-          if DSUServerBridge.start(onPort: NSNumber(value: p).intValue) {
-            running = true; ip = DSUServerBridge.ipAddress(); port = p
-            UserDefaults.standard.set(p, forKey: "dsu_server_port")
-          } else {
-            let err = DSUServerBridge.lastError()
-            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
-          }
-        }
-        // Approval prompt observer
-        NotificationCenter.default.addObserver(forName: NSNotification.Name("DSUNewClientApproval"), object: nil, queue: .main) { note in
-          if let addr = note.userInfo?["address"] as? String {
-            pendingApprovalAddr = addr
-            showApprovalAlert = true
-          }
-        }
-      }
-      .onDisappear { if running { DSUServerBridge.stop() } }
-      .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
-        if showDebug {
-          txCount = UInt(DSUServerBridge.txCount())
-          rxCount = UInt(DSUServerBridge.rxCount())
-        }
-        let prev = hasClient
-        hasClient = DSUServerBridge.hasClient()
-        clientAddr = DSUServerBridge.lastClientAddress()
-        clients = (DSUServerBridge.clients() as? [String]) ?? []
-        if !prev && hasClient {
-          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Receiver connected")])
-        }
-      }
-      .onChange(of: autoStart) { UserDefaults.standard.set($0, forKey: "dsu_server_autostart") }
-      .onChange(of: portText) { if let p = Int($0), p >= 1 && p <= 65535 { UserDefaults.standard.set(p, forKey: "dsu_server_port") } }
-      .fullScreenCover(isPresented: $showController) { DSUControllerView(onClose: { showController = false }) }
-    }
-  }
-}
-
-extension DSUSessionView {
-  private func validatedPort() -> Int {
-    if let p = Int(portText), p >= 1 && p <= 65535 { return p }
-    portText = "26760"
-    return 26760
-  }
-}
+enum LibraryLayout {
+  static var cardSize: CGSize {
+#if os(tvOS)
+    return CGSize(width: 260, height: 390)
+#else
+    return CGSize(width: 140, height: 210)
 #endif
+  }
+}
 
 private final class KeyInputView: UIView {
   var onLeft: (() -> Void)?
@@ -286,31 +72,10 @@ private final class KeyInputView: UIView {
   @objc private func handleEnter() { onEnter?() }
   @objc private func handleSpace() { onSpace?() }
 }
-#endif
 
 // MARK: - Retro UI Helpers
 
 extension TVGameItem: Identifiable {}
-
-private struct NeonGlowBorder: ViewModifier {
-  let active: Bool
-  let cornerRadius: CGFloat
-  func body(content: Content) -> some View {
-    content
-      .overlay(
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-          .stroke(
-            LinearGradient(
-              colors: [Color.cyan.opacity(0.9), Color.purple.opacity(0.9)],
-              startPoint: .topLeading, endPoint: .bottomTrailing
-            ), lineWidth: active ? 6 : 0
-          )
-          .opacity(active ? 1.0 : 0.0)
-          .shadow(color: .cyan.opacity(active ? 0.6 : 0.0), radius: active ? 20 : 0, x: 0, y: 0)
-          .shadow(color: .purple.opacity(active ? 0.5 : 0.0), radius: active ? 28 : 0, x: 0, y: 0)
-      )
-  }
-}
 
 private extension View {
   func neonGlowBorder(active: Bool, cornerRadius: CGFloat = 16) -> some View {
@@ -960,6 +725,10 @@ struct TVLibraryView: View {
 #endif
     }
   }
+  
+  private var isSearching: Bool {
+    !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 
   @ViewBuilder
   private var libraryView: some View {
@@ -987,13 +756,153 @@ struct TVLibraryView: View {
         return false
       }
     }()
-    let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
 #if os(iOS) || targetEnvironment(macCatalyst)
+    libraryView_iOS(displayGames)
+#else
+    libraryView_tvOS(displayGames)
+#endif
+  }
+  
+  #if os(tvOS)
+  private func libraryView_tvOS(_ displayGames: [TVGameItem]) -> some View {
+    ScrollView {
+      libraryToolbar_tvOS_favorites
+      libraryToolbar_tvOS_main(displayGames)
+    }
+  }
+  
+  @ViewBuilder
+  private var libraryToolbar_tvOS_favorites: some View {
+    if !isSearching, let favs = favorites(), !favs.isEmpty {
+      VStack(alignment: .leading, spacing: 16) {
+        // Stunning tvOS favorites header
+        HStack {
+          VStack(alignment: .leading, spacing: 6) {
+            Text("⭐ Favorites")
+              .font(enhancedLargeTitleFont)
+              .foregroundStyle(
+                LinearGradient(
+                  colors: [Color.primary, Color.primary.opacity(0.8)],
+                  startPoint: .leading,
+                  endPoint: .trailing
+                )
+              )
+
+            Text("Your championship collection")
+              .font(enhancedTitle3Font)
+              .foregroundColor(.secondary)
+          }
+          Spacer()
+
+          // Elegant floating elements
+          HStack(spacing: 8) {
+            Image(systemName: "sparkles")
+              .font(.system(size: 24, weight: .light))
+              .foregroundColor(.yellow.opacity(0.8))
+            Image("DolphinLogo")
+              .resizable()
+              .aspectRatio(contentMode: .fit)
+              .frame(width: 32, height: 32)
+              .opacity(0.7)
+          }
+        }
+        .padding(.horizontal, Constants.gridHorizontalPadding)
+
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: Constants.gridHorizontalSpacing) {
+            ForEach(favs, id: \.filePath) { fav in
+              GameGridItem(
+                item: fav,
+                select: selectGame,
+                focusedFilePath: $focusedFilePath,
+                showProperties: { showPropertiesFor = $0 },
+                showCheatList: { showCheatListFor = $0 },
+                downloadGeckoAction: { downloadGecko(for: $0) },
+                presentCheatGecko: { showGeckoEditorFor = $0 },
+                presentCheatAR: { showAREditorFor = $0 },
+                requestDelete: { itemPendingDelete = $0 },
+                showFavoriteToggle: { toggleFavorite(for: $0) },
+                showStorageAlert: { message in
+                  storageAlertMessage = message
+                  showStorageErrorAlert = true
+                },
+                showCacheInfo: { item in
+                  showCacheInfoFor = item
+                },
+                showSaveStates: { item in
+                  let gid = item.gameID
+                  if !gid.isEmpty {
+                    navigateToSaveStates = GameIDRoute(id: gid)
+                  }
+                },
+                autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
+                isAutoPreCaching: autoPreCacheActive.contains(fav.filePath),
+                showSubtitles: showSubtitles
+              )
+            }
+          }
+          .background(
+            // Elegant material backdrop for tvOS favorites with proper clipping
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+              .fill(.ultraThinMaterial.opacity(0.15))
+              .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                  .stroke(.white.opacity(0.08), lineWidth: 1.5)
+              )
+              .padding(.horizontal, 20)
+              .clipped()
+          )
+        }
+      }
+    }
+  }
+  
+  @ViewBuilder
+  private func libraryToolbar_tvOS_main(_ displayGames: [TVGameItem]) -> some View {
+    LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
+      ForEach(displayGames, id: \.filePath) { item in
+        GameGridItem(
+          item: item,
+          select: selectGame,
+          focusedFilePath: $focusedFilePath,
+          showProperties: { showPropertiesFor = $0 },
+          showCheatList: { showCheatListFor = $0 },
+          downloadGeckoAction: { downloadGecko(for: $0) },
+          presentCheatGecko: { showGeckoEditorFor = $0 },
+          presentCheatAR: { showAREditorFor = $0 },
+          requestDelete: { itemPendingDelete = $0 },
+          showFavoriteToggle: { toggleFavorite(for: $0) },
+          showStorageAlert: { message in
+            storageAlertMessage = message
+            showStorageErrorAlert = true
+          },
+          showCacheInfo: { item in
+            showCacheInfoFor = item
+          },
+          showSaveStates: { item in
+            let gid = item.gameID
+            if !gid.isEmpty {
+              navigateToSaveStates = GameIDRoute(id: gid)
+            }
+          },
+          autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
+          isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
+          showSubtitles: showSubtitles
+        )
+      }
+    }
+    .padding(.horizontal, Constants.gridHorizontalPadding)
+    .padding(.vertical, Constants.gridVerticalPadding)
+  }
+  #endif // os(tvOS)
+  
+  #if !os(tvOS)
+  @ViewBuilder
+  private func libraryView_iOS(_ displayGames: [TVGameItem]) -> some View {
     GeometryReader { proxy in
       let paddingH = Constants.gridHorizontalPadding
       let spacingH = Constants.gridHorizontalSpacing
-      let cardW = Layout.cardSize.width
+      let cardW = LibraryLayout.cardSize.width
       let available = max(0, proxy.size.width - (paddingH * 2))
       let count = max(2, Int((available + spacingH) / (cardW + spacingH)))
       let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
@@ -1213,127 +1122,8 @@ struct TVLibraryView: View {
         }
       }
     }
-#else
-    ScrollView {
-      if !isSearching, let favs = favorites(), !favs.isEmpty {
-        VStack(alignment: .leading, spacing: 16) {
-          // Stunning tvOS favorites header
-          HStack {
-            VStack(alignment: .leading, spacing: 6) {
-              Text("⭐ Favorites")
-                .font(enhancedLargeTitleFont)
-                .foregroundStyle(
-                  LinearGradient(
-                    colors: [Color.primary, Color.primary.opacity(0.8)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                  )
-                )
-
-              Text("Your championship collection")
-                .font(enhancedTitle3Font)
-                .foregroundColor(.secondary)
-            }
-            Spacer()
-
-            // Elegant floating elements
-            HStack(spacing: 8) {
-              Image(systemName: "sparkles")
-                .font(.system(size: 24, weight: .light))
-                .foregroundColor(.yellow.opacity(0.8))
-              Image("DolphinLogo")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 32, height: 32)
-                .opacity(0.7)
-            }
-          }
-          .padding(.horizontal, Constants.gridHorizontalPadding)
-
-          ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Constants.gridHorizontalSpacing) {
-              ForEach(favs, id: \.filePath) { fav in
-                GameGridItem(
-                  item: fav,
-                  select: selectGame,
-                  focusedFilePath: $focusedFilePath,
-                  showProperties: { showPropertiesFor = $0 },
-                  showCheatList: { showCheatListFor = $0 },
-                  downloadGeckoAction: { downloadGecko(for: $0) },
-                  presentCheatGecko: { showGeckoEditorFor = $0 },
-                  presentCheatAR: { showAREditorFor = $0 },
-                  requestDelete: { itemPendingDelete = $0 },
-                  showFavoriteToggle: { toggleFavorite(for: $0) },
-                  showStorageAlert: { message in
-                    storageAlertMessage = message
-                    showStorageErrorAlert = true
-                  },
-                  showCacheInfo: { item in
-                    showCacheInfoFor = item
-                  },
-                  showSaveStates: { item in
-                    let gid = item.gameID
-                    if !gid.isEmpty {
-                      navigateToSaveStates = GameIDRoute(id: gid)
-                    }
-                  },
-                  autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
-                  isAutoPreCaching: autoPreCacheActive.contains(fav.filePath),
-                  showSubtitles: showSubtitles
-                )
-              }
-            }
-            .background(
-              // Elegant material backdrop for tvOS favorites with proper clipping
-              RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(.ultraThinMaterial.opacity(0.15))
-                .overlay(
-                  RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(.white.opacity(0.08), lineWidth: 1.5)
-                )
-                .padding(.horizontal, 20)
-                .clipped()
-            )
-          }
-        }
-        LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
-          ForEach(displayGames, id: \.filePath) { item in
-            GameGridItem(
-              item: item,
-              select: selectGame,
-              focusedFilePath: $focusedFilePath,
-              showProperties: { showPropertiesFor = $0 },
-              showCheatList: { showCheatListFor = $0 },
-              downloadGeckoAction: { downloadGecko(for: $0) },
-              presentCheatGecko: { showGeckoEditorFor = $0 },
-              presentCheatAR: { showAREditorFor = $0 },
-              requestDelete: { itemPendingDelete = $0 },
-              showFavoriteToggle: { toggleFavorite(for: $0) },
-              showStorageAlert: { message in
-                storageAlertMessage = message
-                showStorageErrorAlert = true
-              },
-              showCacheInfo: { item in
-                showCacheInfoFor = item
-              },
-              showSaveStates: { item in
-                let gid = item.gameID
-                if !gid.isEmpty {
-                  navigateToSaveStates = GameIDRoute(id: gid)
-                }
-              },
-              autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
-              isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
-              showSubtitles: showSubtitles
-            )
-          }
-        }
-        .padding(.horizontal, Constants.gridHorizontalPadding)
-        .padding(.vertical, Constants.gridVerticalPadding)
-      }
-    }
-#endif
   }
+  #endif // !os(tvOS)
 
   @ViewBuilder
   private var emptyLibraryView: some View {
@@ -1354,173 +1144,9 @@ struct TVLibraryView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  // Subtle animated background of swimming dolphins
-  private struct SwimmingDolphinsView: View {
-    enum Direction { case leftToRight, rightToLeft }
-    let count: Int
-    let direction: Direction
-    let maxSize: CGFloat
-    let opacity: Double
-
-    init(count: Int = 3, direction: Direction = .leftToRight, maxSize: CGFloat = 110, opacity: Double = 0.2) {
-      self.count = count
-      self.direction = direction
-      self.maxSize = max(60, maxSize)
-      self.opacity = opacity
-    }
-
-    private func size(for i: Int) -> CGFloat { maxSize * (0.85 + CGFloat((i % 3)) * 0.08) }
-
-    // Pre-mirrored sprites to avoid runtime flipping artifacts
-    private enum SpriteCache {
-      static let normal: UIImage = UIImage(named: "DolphinLogo") ?? UIImage()
-      static let mirrored: UIImage = {
-        if let img = UIImage(named: "DolphinLogo") {
-          return img.withHorizontallyFlippedOrientation()
-        }
-        return UIImage()
-      }()
-    }
-
-    var body: some View {
-      GeometryReader { geo in
-        let w = max(geo.size.width, 1)
-        let h = max(geo.size.height, 1)
-        TimelineView(.animation) { timeline in
-          let t = timeline.date.timeIntervalSinceReferenceDate
-          ZStack {
-            ForEach(0..<count, id: \.self) { i in
-              Group {
-                // Parameters per dolphin
-                let base = Double(h) * (0.35 + Double((i % 5)) * 0.1)
-                let amplitude = 16.0 + Double((i % 3)) * 10.0
-                let phase = Double(i) * .pi / 3.0
-
-                // Progress 0..1 controls full path traversal per dolphin
-                let pad = 110.0
-                let pathLen = Double(w) + 2.0 * pad
-                let cyclesPerSecond = 0.03 + Double(i % 4) * 0.012
-                let prog = (t * cyclesPerSecond + Double(i) * 0.173)
-                let p = prog - floor(prog) // normalize
-
-                // Position by direction (no ambiguity)
-                let x = (direction == .leftToRight)
-                ? (-pad + p * pathLen)
-                : (Double(w) + pad - p * pathLen)
-
-                // Per-dolphin pseudo-random to de-sync cycles
-                let r1 = abs(sin(Double(i) * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1.0)
-                let r2 = abs(sin(Double(i) * 78.233) * 19341.923).truncatingRemainder(dividingBy: 1.0)
-                let r3 = abs(sin((Double(i) + 0.37) * 42.131) * 9182.12).truncatingRemainder(dividingBy: 1.0)
-                let speedMul = 0.85 + 0.45 * r1
-                let phaseExtra = r2 * 2.0 * .pi
-                let ampMul = 0.85 + 0.45 * r3
-
-                              // Vertical wave + occasional jump; subtle yaw/pitch
-              let theta = p * 2.0 * .pi * speedMul + phase + phaseExtra
-              let baseWave = (amplitude * ampMul) * sin(theta)
-              // Jump window per-dolphin (no mutation)
-              let jRaw = (p + Double(i) * 0.17)
-              let jMod = jRaw - floor(jRaw)
-              let isJump = (jMod > 0.05 && jMod < 0.18)
-              let tJump = isJump ? (jMod - 0.05) / 0.13 : 0.0
-              let amplitudeWithBoost = amplitude * (1.0 + 0.4 * r2)
-              let jumpDelta = isJump ? (amplitudeWithBoost * 1.1 * sin(tJump * .pi)) : 0.0
-              let yPos = base + baseWave - jumpDelta
-                let motionMul = 0.75 + 0.5 * r3
-                let wag = (direction == .leftToRight ? 10.0 : -10.0) * motionMul * sin(theta)
-                let yaw = (direction == .leftToRight ? 8.0 : -8.0) * motionMul * sin(theta * 1.2)
-                let pitch = 6.0 * motionMul * cos(theta * 1.3)
-
-                // Choose pre-mirrored sprite once per direction
-                let uiImage = (direction == .leftToRight) ? SpriteCache.mirrored : SpriteCache.normal
-                let sprite = Image(uiImage: uiImage)
-
-                // Depth factor
-                let depth = 0.90 + Double(i % 3) * 0.06
-                let baseSize = size(for: i) * depth
-                let alpha = opacity * (0.9 - Double(i % 3) * 0.08)
-
-                // Caustic shimmer under-body
-                let shimmer = 0.55 + 0.45 * sin(theta * 0.6 + 2.0)
-                Group {
-                  Ellipse()
-                    .fill(LinearGradient(colors: [Color.white.opacity(0.0), Color.white.opacity(0.22 * shimmer), Color.cyan.opacity(0.10)], startPoint: .leading, endPoint: .trailing))
-                    .frame(width: baseSize * 0.85, height: baseSize * 0.22)
-                    .position(x: CGFloat(x), y: CGFloat(yPos + baseSize * 0.18))
-                    .blur(radius: 8)
-                    .opacity(alpha * 0.6)
-                    .blendMode(.screen)
-                }
-
-                // Trail ghosts (simple motion blur)
-                ForEach(1...2, id: \.self) { g in
-                  let pTrail = (p - Double(g) * 0.03)
-                  let pT = pTrail - floor(pTrail)
-                  let xT = (direction == .leftToRight) ? (-pad + pT * pathLen) : (Double(w) + pad - pT * pathLen)
-                  let thetaT = pT * 2.0 * .pi * speedMul + phase + phaseExtra
-                  let yT = base + (amplitude * ampMul) * sin(thetaT)
-                  Group {
-                    sprite
-                      .resizable()
-                      .renderingMode(.original)
-                      .aspectRatio(contentMode: .fit)
-                      .frame(width: baseSize * (1.0 - 0.15 * Double(g)))
-                      .position(x: CGFloat(xT), y: CGFloat(yT))
-                      .rotationEffect(.degrees(wag))
-                      .opacity(alpha * (g == 1 ? 0.35 : 0.18))
-                      .blur(radius: g == 1 ? 0.7 : 1.2)
-                  }
-                }
-
-                // Main sprite
-                Group {
-                  sprite
-                    .resizable()
-                    .renderingMode(.original)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: baseSize)
-                    .position(x: CGFloat(x), y: CGFloat(yPos))
-                    .rotationEffect(.degrees(wag))
-                    .rotation3DEffect(.degrees(yaw), axis: (x: 0, y: 1, z: 0), perspective: 0.9)
-                    .rotation3DEffect(.degrees(pitch), axis: (x: 1, y: 0, z: 0), perspective: 0.9)
-                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
-                    .opacity(alpha)
-                    .blendMode(.plusLighter)
-                }
-
-                              // Leap splashes (particles) when jumping
-              if isJump {
-                let tJump = (jMod - 0.05) / 0.13
-                ForEach(0..<5, id: \.self) { k in
-                    let rk = abs(sin(Double(k) * 17.23 + Double(i) * 3.11))
-                    let ang = 2.0 * .pi * rk
-                    let radius = (baseSize * 0.06) * (0.6 + rk) * (0.3 + tJump) * 2.0
-                    let xOff = radius * cos(ang) * (direction == .leftToRight ? 1.0 : -1.0)
-                    let yOff = -radius * 0.7 * (0.5 + 0.5 * rk)
-                    Group {
-                      Circle()
-                        .fill(LinearGradient(colors: [Color.white.opacity(0.75 * (1.0 - tJump)), Color.cyan.opacity(0.35 * (1.0 - tJump))], startPoint: .top, endPoint: .bottom))
-                        .frame(width: baseSize * 0.05 * (0.9 - 0.6 * tJump), height: baseSize * 0.05 * (0.9 - 0.6 * tJump))
-                        .position(x: CGFloat(x + xOff), y: CGFloat(yPos + yOff))
-                        .blur(radius: 0.8 + 1.6 * tJump)
-                        .opacity(alpha * (0.85 - 0.8 * tJump))
-                        .blendMode(.screen)
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        .allowsHitTesting(false)
-      }
-    }
-  }
-
+  #if os(tvOS)
   @ToolbarContentBuilder
-  private var libraryToolbar: some ToolbarContent {
-#if os(tvOS)
+  private var libraryToolbar_tvOS: some ToolbarContent {
     ToolbarItem(placement: .navigationBarTrailing) {
       Button { showMoreMenu = true } label: { Image(systemName: "ellipsis.circle") }
         .buttonStyle(.automatic)
@@ -1559,7 +1185,10 @@ struct TVLibraryView: View {
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { showSettings = true }) { Image(systemName: "gearshape") }
     }
-#else
+  }
+  #else // iOS
+  @ToolbarContentBuilder
+  private var libraryToolbar_iOS: some ToolbarContent {
     ToolbarItem(placement: .topBarLeading) {
       let store = RemoteSourcesStore.shared
       if store.isScanning {
@@ -1640,7 +1269,17 @@ struct TVLibraryView: View {
 #endif
       }) { Image(systemName: "gearshape") }
     }
-#endif
+
+  }
+  #endif
+  
+  @ToolbarContentBuilder
+  private var libraryToolbar: some ToolbarContent {
+    #if os(tvOS)
+    libraryToolbar_tvOS
+    #else
+    libraryToolbar_iOS
+    #endif
   }
 
   var body: some View {
@@ -1652,7 +1291,13 @@ struct TVLibraryView: View {
     }
     // DSU controller session (iOS only)
 #if os(iOS)
-    .sheet(isPresented: $showDSUSession) { DSUSessionView() }
+    .sheet(isPresented: $showDSUSession) {
+      if #available(iOS 17.0, *) {
+        DSUSessionView()
+      } else {
+        // Fallback on earlier versions
+      }
+    }
 #endif
     .onAppear {
       // Tips setup
@@ -2499,1108 +2144,10 @@ struct TVLibraryView: View {
   }
 }
 
-// MARK: - Game Grid Item with Focus Management
-
-private enum Layout {
-  static var cardSize: CGSize {
-#if os(tvOS)
-    return CGSize(width: 260, height: 390)
-#else
-    return CGSize(width: 140, height: 210)
-#endif
-  }
-}
-
-private struct GameGridItem: View {
-  let item: TVGameItem
-  let select: (TVGameItem) -> Void
-  @Binding var focusedFilePath: String?
-
-  // Context menu action closures provided by parent view
-  let showProperties: (TVGameItem) -> Void
-  let showCheatList: (TVGameItem) -> Void
-  let downloadGeckoAction: (TVGameItem) -> Void
-  let presentCheatGecko: (TVGameItem) -> Void
-  let presentCheatAR: (TVGameItem) -> Void
-  let requestDelete: (TVGameItem) -> Void
-  let showFavoriteToggle: (TVGameItem) -> Void
-  let showStorageAlert: (String) -> Void
-  let showCacheInfo: (TVGameItem) -> Void
-  let showSaveStates: (TVGameItem) -> Void
-  let autoPreCacheProgress: Double
-  let isAutoPreCaching: Bool
-  let showSubtitles: Bool
-
-  @State private var showPreCacheProgress = false
-  @State private var preCacheProgress: Double = 0.0
-  @State private var isPreCaching = false
-  @State private var cacheStateVersion = 0 // Force UI updates when cache state changes
-
-#if os(tvOS)
-  @State private var isFocused: Bool = false
-#endif
-
-  /// Determines remote source type and appropriate icon
-  private var remoteIconName: String? {
-    guard let url = URL(string: item.filePath), let scheme = url.scheme?.lowercased() else { return nil }
-    switch scheme {
-    case "webdav", "webdavs": return "externaldrive"
-    case "http", "https": return "cloud"
-    default: return nil
-    }
-  }
-
-  /// Check if this is a remote game
-  private var isRemoteGame: Bool {
-    let result = remoteIconName != nil
-#if DEBUG
-    print("DEBUG: isRemoteGame for '\(item.title)' (path: '\(item.filePath)') = \(result)")
-#endif
-    return result
-  }
-
-  /// Get the WebDAV source for this game (if any)
-  private func getWebDAVSource() -> WebDAVSource? {
-    guard isRemoteGame, let url = URL(string: item.filePath) else {
-#if DEBUG
-      print("DEBUG: getWebDAVSource early return - isRemoteGame: \(isRemoteGame), url valid: \(URL(string: item.filePath) != nil)")
-#endif
-      return nil
-    }
-
-    func defaultPort(for scheme: String?) -> Int {
-      switch (scheme?.lowercased()) {
-      case "https", "webdavs": return 443
-      default: return 80
-      }
-    }
-
-    guard let urlHost = url.host?.lowercased() else {
-#if DEBUG
-      print("DEBUG: getWebDAVSource no host for URL: \(url)")
-#endif
-      return nil
-    }
-    let urlPort = url.port ?? defaultPort(for: url.scheme)
-    let urlPath = url.path
-
-#if DEBUG
-    print("DEBUG: Looking for WebDAV source matching host: \(urlHost), port: \(urlPort), path: \(urlPath)")
-    print("DEBUG: Available sources: \(RemoteSourcesStore.shared.sources.count)")
-#endif
-
-    var bestMatch: (source: WebDAVSource, score: Int)? = nil
-
-    for (index, source) in RemoteSourcesStore.shared.sources.enumerated() {
-#if DEBUG
-      print("DEBUG: Source \(index): \(type(of: source))")
-#endif
-      guard let webdavSource = source as? WebDAVSource else { continue }
-      let base = webdavSource.baseURL
-#if DEBUG
-      print("DEBUG: WebDAV source base URL: \(base)")
-#endif
-      guard let baseHost = base.host?.lowercased() else { continue }
-      let basePort = base.port ?? defaultPort(for: base.scheme)
-#if DEBUG
-      print("DEBUG: Comparing - base host: \(baseHost), port: \(basePort) vs url host: \(urlHost), port: \(urlPort)")
-#endif
-      guard urlHost == baseHost && urlPort == basePort else { continue }
-
-      // Prefer the source with the longest base path prefix match
-      let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
-      let score: Int
-      if basePath == "/" { score = 1 }
-      else if urlPath.hasPrefix(basePath) { score = max(2, basePath.count) }
-      else { score = 1 } // host/port match only
-
-#if DEBUG
-      print("DEBUG: Found matching source with score \(score), basePath: '\(basePath)', isPreCachingEnabled: \(webdavSource.isPreCachingEnabled)")
-#endif
-      if bestMatch == nil || score > bestMatch!.score {
-        bestMatch = (webdavSource, score)
-      }
-    }
-
-    let result = bestMatch?.source
-#if DEBUG
-    print("DEBUG: getWebDAVSource result: \(result != nil ? "found" : "nil"), final isPreCachingEnabled: \(result?.isPreCachingEnabled ?? false)")
-#endif
-    return result
-  }
-
-  /// Check if this remote game is cached locally
-  private var isCached: Bool {
-    let _ = cacheStateVersion // Force dependency on cache state changes
-    guard let source = getWebDAVSource(),
-          let url = URL(string: item.filePath) else { return false }
-
-    let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: 0)
-    return source.isCached(remoteItem)
-  }
-
-  /// Detect if this is a GameCube or Wii game based on DiscIO::Platform
-  private var gameSystem: GameSystem {
-    // DiscIO::Platform enum values:
-    // GameCubeDisc = 0, WiiDisc = 1, WiiWAD = 2, ELFOrDOL = 3
-    switch item.platform {
-    case 0: // GameCubeDisc
-#if DEBUG
-      print("DEBUG: Platform-detected GameCube game: '\(item.gameID)' for '\(item.title)'")
-#endif
-      return .gamecube
-
-    case 1, 2: // WiiDisc, WiiWAD
-#if DEBUG
-      print("DEBUG: Platform-detected Wii game: '\(item.gameID)' for '\(item.title)' (platform: \(item.platform))")
-#endif
-      return .wii
-
-    case 3: // ELFOrDOL
-      // ELF/DOL files can be either GameCube or Wii, but are typically GameCube homebrew
-#if DEBUG
-      print("DEBUG: Platform-detected ELF/DOL: '\(item.gameID)' for '\(item.title)' - defaulting to GameCube")
-#endif
-      return .gamecube
-
-    default:
-      // Unknown platform, default to GameCube as fallback
-#if DEBUG
-      print("DEBUG: Unknown platform \(item.platform) for '\(item.gameID)' '\(item.title)' - defaulting to GameCube")
-#endif
-      return .gamecube
-    }
-  }
-
-  private enum GameSystem {
-    case gamecube, wii
-
-    var templateImageName: String {
-      switch self {
-      case .gamecube: return "GCCoverTemplate"
-      case .wii: return "WiiCoverTemplate"
-      }
-    }
-  }
-
-  /// Check if we're using the default placeholder cover
-  private var isUsingPlaceholderCover: Bool {
-    // This is a heuristic - check if the cover image is the default "NoCover" placeholder
-    let image = item.coverImage
-    let desc = image.description.lowercased()
-
-    let isPlaceholder = image.size.width <= 1 ||
-    image.size.height <= 1 ||
-    desc.contains("nocover") ||
-    desc.contains("placeholder") ||
-    desc.contains("default") ||
-    // Check for very small images that are likely placeholders
-    (image.size.width < 50 && image.size.height < 50)
-
-#if DEBUG
-    if isPlaceholder {
-      print("DEBUG: Using placeholder cover for '\(item.title)' (gameID: '\(item.gameID)'), system: \(gameSystem)")
-    }
-#endif
-
-    return isPlaceholder
-  }
-
-  /// Stunning templated cover view with authentic GameCube/Wii theming! 🎮✨
-  @ViewBuilder
-  private var templatedCoverView: some View {
-    ZStack {
-      // Authentic game case background with system-specific theming
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .fill(
-          RadialGradient(
-            colors: gameSystem == .gamecube ?
-            [
-              Color(red: 0.35, green: 0.25, blue: 0.75), // GameCube purple
-              Color(red: 0.25, green: 0.15, blue: 0.65),
-              Color(red: 0.15, green: 0.08, blue: 0.55)
-            ] : [
-              Color(red: 0.25, green: 0.55, blue: 0.95), // Wii blue
-              Color(red: 0.15, green: 0.45, blue: 0.85),
-              Color(red: 0.08, green: 0.35, blue: 0.75)
-            ],
-            center: .topLeading,
-            startRadius: 20,
-            endRadius: 200
-          )
-        )
-        .overlay(
-          // Enhanced case reflection with depth
-          LinearGradient(
-            colors: [
-              Color.white.opacity(0.4),
-              Color.white.opacity(0.15),
-              Color.clear,
-              Color.black.opacity(0.15),
-              Color.black.opacity(0.25)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-          )
-        )
-        .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
-        .overlay(
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(
-              LinearGradient(
-                colors: [Color.white.opacity(0.3), Color.clear, Color.white.opacity(0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              ),
-              lineWidth: 1.5
-            )
-        )
-
-      // Authentic GameCube disc case details
-      if gameSystem == .gamecube {
-        VStack {
-          // Top edge highlight
-          HStack {
-            Rectangle()
-              .fill(
-                LinearGradient(
-                  colors: [Color.white.opacity(0.6), Color.clear],
-                  startPoint: .leading,
-                  endPoint: .trailing
-                )
-              )
-              .frame(height: 2)
-              .padding(.horizontal, 16)
-            Spacer()
-          }
-          Spacer()
-        }
-        .padding(.top, 4)
-
-        // Left spine with authentic GameCube styling
-        HStack {
-          VStack(spacing: 2) {
-            Rectangle()
-              .fill(Color.white.opacity(0.5))
-              .frame(width: 6, height: 20)
-            Rectangle()
-              .fill(Color.white.opacity(0.3))
-              .frame(width: 4, height: 40)
-            Rectangle()
-              .fill(Color.white.opacity(0.5))
-              .frame(width: 6, height: 20)
-          }
-          .padding(.leading, 6)
-          Spacer()
-        }
-      }
-
-      // Authentic full-cover template image like real GameCube/Wii box art
-      Image(gameSystem.templateImageName)
-        .resizable()
-        .aspectRatio(contentMode: .fill)
-        .frame(
-          width: Layout.cardSize.width * 0.95,
-          height: Layout.cardSize.height * 0.95
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .blendMode(.overlay)
-      //        .offset(y: -5)
-
-      // Authentic Nintendo branding
-      //      VStack {
-      //        HStack {
-      //          Spacer()
-      //          VStack(spacing: 2) {
-      //            Text("NINTENDO")
-      //              .font(.system(
-      //                size: screenScaledFontSize(base: 8),
-      //                weight: .black,
-      //                design: .rounded
-      //              ))
-      //              .foregroundStyle(
-      //                LinearGradient(
-      //                  colors: [Color.white, Color.white.opacity(0.8)],
-      //                  startPoint: .top,
-      //                  endPoint: .bottom
-      //                )
-      //              )
-      //              .modifier(iOS16TrackingModifier(tracking: 2))
-      //              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
-
-      //            Text(gameSystem == .gamecube ? "GAMECUBE" : "Wii")
-      //              .font(.system(
-      //                size: screenScaledFontSize(base: 7),
-      //                weight: .bold,
-      //                design: .rounded
-      //              ))
-      //              .foregroundColor(.white.opacity(0.9))
-      //              .modifier(iOS16TrackingModifier(tracking: 1.5))
-      //              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
-      //          }
-      //          .padding(.top, screenScaledPadding(base: 12))
-      //          .padding(.trailing, screenScaledPadding(base: 12))
-      //        }
-      //        Spacer()
-      //      }
-
-      // Enhanced game info with award-winning typography
-      VStack(spacing: screenScaledPadding(base: 10)) {
-        Spacer()
-
-        // Title with stunning effect
-        Text(item.title.isEmpty ? "Unknown Game" : item.title)
-          .font(.system(
-            size: screenScaledFontSize(base: 18),
-            weight: .black,
-            design: .rounded
-          ))
-          .foregroundStyle(
-            LinearGradient(
-              colors: [
-                Color.white,
-                Color.white.opacity(0.95),
-                Color.white.opacity(0.9)
-              ],
-              startPoint: .top,
-              endPoint: .bottom
-            )
-          )
-          .multilineTextAlignment(.center)
-          .lineLimit(3)
-          .minimumScaleFactor(0.6)
-          .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 2)
-          .shadow(color: gameSystem == .gamecube ? .purple.opacity(0.5) : .blue.opacity(0.5),
-                  radius: 8, x: 0, y: 0)
-
-        // Enhanced Game ID with authentic styling
-        if !item.gameID.isEmpty && showSubtitles {
-          Text(item.gameID)
-            .font(.system(
-              size: screenScaledFontSize(base: 11),
-              weight: .bold,
-              design: .monospaced
-            ))
-            .foregroundStyle(
-              LinearGradient(
-                colors: [Color.white, Color.white.opacity(0.85)],
-                startPoint: .top,
-                endPoint: .bottom
-              )
-            )
-            .padding(.horizontal, screenScaledPadding(base: 10))
-            .padding(.vertical, screenScaledPadding(base: 5))
-            .background(
-              RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(
-                  LinearGradient(
-                    colors: [
-                      Color.black.opacity(0.4),
-                      Color.black.opacity(0.6)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                  )
-                )
-                .overlay(
-                  RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
-            )
-        }
-      }
-      .padding(.horizontal, screenScaledPadding(base: 12))
-      .padding(.bottom, screenScaledPadding(base: 16))
-
-      // Subtle animated sparkles for magic ✨
-      ForEach(0..<3, id: \.self) { index in
-        Image(systemName: "sparkle")
-          .font(.system(size: screenScaledFontSize(base: 8), weight: .light))
-          .foregroundColor(.white.opacity(0.4))
-          .offset(
-            x: CGFloat([20, -25, 15][index]),
-            y: CGFloat([-30, -45, -35][index])
-          )
-          .opacity(0.6)
-          .scaleEffect(0.8)
-      }
-    }
-    .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    // Enhanced 3D perspective
-    .rotation3DEffect(
-      .degrees(3),
-      axis: (x: 0.1, y: 1.0, z: 0),
-      perspective: 0.8
-    )
-  }
-
-  /// Scale font sizes appropriately for tvOS vs iOS
-  private func screenScaledFontSize(base: CGFloat) -> CGFloat {
-#if os(tvOS)
-    return base * 1.4
-#else
-    return base
-#endif
-  }
-
-  /// Scale padding appropriately for tvOS vs iOS
-  private func screenScaledPadding(base: CGFloat) -> CGFloat {
-#if os(tvOS)
-    return base * 1.5
-#else
-    return base
-#endif
-  }
-
-  /// Enhanced headline font with iOS version compatibility
-  private var enhancedHeadlineFont: Font {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      return .system(.headline, design: .rounded, weight: .semibold)
-    } else {
-      return .system(size: 17, weight: .semibold, design: .rounded)
-    }
-  }
-
-  /// Enhanced caption font with iOS version compatibility
-  private var enhancedCaptionFont: Font {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      return .system(.caption, design: .monospaced, weight: .medium)
-    } else {
-      return .system(size: 12, weight: .medium, design: .monospaced)
-    }
-  }
-
-
-  var body: some View {
-#if os(tvOS)
-    // Clean, simple approach for tvOS
-    VStack(alignment: .leading, spacing: 12) {
-      ZStack(alignment: .topTrailing) {
-        // Show templated cover if using placeholder, otherwise show real cover with skeumorphism
-        Group {
-          if isUsingPlaceholderCover {
-            templatedCoverView
-          } else {
-            ZStack {
-              // Skeumorphic game case for real covers
-              Image(uiImage: item.coverImage)
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fill)
-                .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
-                .overlay(
-                  // Subtle case reflection
-                  LinearGradient(
-                    colors: [Color.white.opacity(0.15), Color.clear, Color.black.opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                  )
-                  .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                )
-                .overlay(
-                  RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-              // Add subtle 3D perspective to real covers too
-                .rotation3DEffect(
-                  .degrees(1),
-                  axis: (x: 0.05, y: 1.0, z: 0),
-                  perspective: 1.2
-                )
-            }
-          }
-        }
-        .overlay(
-          // Award-winning focus glow with GameCube/Wii theming
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(
-              LinearGradient(
-                colors: isFocused ? [
-                  Color.cyan.opacity(0.95),
-                  Color.blue.opacity(0.9),
-                  Color.purple.opacity(0.95),
-                  Color.cyan.opacity(0.95)
-                ] : [Color.clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              ),
-              lineWidth: isFocused ? 8 : 0
-            )
-            .shadow(color: .cyan.opacity(isFocused ? 0.8 : 0), radius: isFocused ? 25 : 0)
-            .shadow(color: .blue.opacity(isFocused ? 0.6 : 0), radius: isFocused ? 35 : 0)
-            .shadow(color: .purple.opacity(isFocused ? 0.7 : 0), radius: isFocused ? 45 : 0)
-            .animation(.easeInOut(duration: 0.6), value: isFocused)
-        )
-        .overlay(
-          // Inner highlight for premium feel
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(
-              Color.white.opacity(isFocused ? 0.4 : 0),
-              lineWidth: isFocused ? 2 : 0
-            )
-            .padding(4)
-            .animation(.easeInOut(duration: 0.4), value: isFocused)
-        )
-        .shadow(
-          color: Color.black.opacity(isFocused ? 0.4 : 0.2),
-          radius: isFocused ? 20 : 8,
-          x: 0,
-          y: isFocused ? 12 : 6
-        )
-
-        if isFocused {
-          VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center); Spacer() }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-            .allowsHitTesting(false)
-        }
-
-        if let icon = remoteIconName {
-          ZStack {
-            if isPreCaching {
-              // Show manual pre-cache progress indicator
-              DolphinCircularSpinner(
-                size: 24,
-                lineWidth: 2,
-                dolphinSize: 8,
-                progress: preCacheProgress
-              )
-            } else {
-              Image(systemName: icon)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.white)
-
-              // Show checkmark if cached
-              if isCached {
-                Image(systemName: "checkmark.circle.fill")
-                  .font(.system(size: 12, weight: .bold))
-                  .foregroundColor(.green)
-                  .background(Color.white, in: Circle())
-                  .offset(x: 8, y: -8)
-              }
-            }
-          }
-          .padding(8)
-          .background(.ultraThinMaterial, in: Circle())
-          .padding(8)
-        }
-
-        // Region flag badge (top-left), styled like the cloud indicator
-        if !item.countryName.isEmpty {
-          Text(RegionFlagMapper.compactFlag(for: item.countryName))
-            .font(.system(size: 18))
-            .padding(8)
-            .background(.ultraThinMaterial, in: Circle())
-            .padding(8)
-            .frame(width: Layout.cardSize.width, height: Layout.cardSize.height, alignment: .topLeading)
-            .allowsHitTesting(false)
-        }
-
-
-      }
-
-      VStack(alignment: .leading, spacing: 6) {
-        // Enhanced title with better typography
-        Text(item.title)
-          .font(.system(.headline, design: .rounded, weight: .semibold))
-          .lineLimit(1)
-          .minimumScaleFactor(0.75)
-          .foregroundStyle(
-            LinearGradient(
-              colors: [Color.primary, Color.primary.opacity(0.8)],
-              startPoint: .top,
-              endPoint: .bottom
-            )
-          )
-          .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
-
-        if showSubtitles {
-          HStack {
-            // Game ID with enhanced styling
-            Text(item.gameID)
-              .font(enhancedCaptionFont)
-              .foregroundStyle(
-                LinearGradient(
-                  colors: [Color.secondary, Color.secondary.opacity(0.8)],
-                  startPoint: .top,
-                  endPoint: .bottom
-                )
-              )
-              .padding(.horizontal, 6)
-              .padding(.vertical, 2)
-              .background(
-                Capsule()
-                  .fill(Color.primary.opacity(0.05))
-                  .overlay(
-                    Capsule()
-                      .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
-                  )
-              )
-
-            Spacer()
-
-            // Auto pre-cache progress indicator with better styling
-            if isAutoPreCaching {
-              HStack(spacing: 4) {
-                CompactDolphinCircularSpinner()
-                Text("\(Int(autoPreCacheProgress * 100))%")
-                  .font(.system(.caption2, design: .monospaced, weight: .medium))
-                  .foregroundColor(.secondary)
-              }
-              .padding(.horizontal, 8)
-              .padding(.vertical, 4)
-              .background(
-                Capsule()
-                  .fill(.ultraThinMaterial)
-                  .overlay(
-                    Capsule()
-                      .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                  )
-              )
-            }
-          }
-        }
-      }
-    }
-    .frame(width: Layout.cardSize.width)
-    .scaleEffect(isFocused ? 1.08 : 1.0)
-    .rotation3DEffect(
-      .degrees(isFocused ? 5 : 2),
-      axis: (x: 0.1, y: 1.0, z: 0),
-      perspective: isFocused ? 0.8 : 1.0
-    )
-    .shadow(
-      color: .black.opacity(isFocused ? 0.4 : 0.2),
-      radius: isFocused ? 20 : 8,
-      x: 0,
-      y: isFocused ? 12 : 4
-    )
-    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isFocused)
-    .focusable(true) { focused in
-      withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-        isFocused = focused
-        if focused { focusedFilePath = item.filePath } else if focusedFilePath == item.filePath { focusedFilePath = nil }
-      }
-    }
-    .onTapGesture { select(item) }
-    .onPlayPauseCommand { select(item) }
-    .contextMenu {
-      Button(action: { showProperties(item) }) {
-        Label(L("Properties"), systemImage: "info.circle")
-      }
-      //            Button(L("View Save States")) { showSaveStates(item) }
-      Menu {
-        Button(action: { showCheatList(item) }) {
-          Label(L("Manage..."), systemImage: "slider.horizontal.3")
-        }
-        Button(action: { downloadGeckoAction(item) }) {
-          Label(L("Download Codes"), systemImage: "arrow.down.doc")
-        }
-        Divider()
-        Menu {
-          Button(action: { presentCheatGecko(item) }) {
-            Label(L("Add..."), systemImage: "plus.circle")
-          }
-        } label: {
-          Label(L("Gecko"), systemImage: "chevron.left.slash.chevron.right")
-        }
-        Menu {
-          Button(action: { presentCheatAR(item) }) {
-            Label(L("Add..."), systemImage: "plus.circle")
-          }
-        } label: {
-          Label(L("Action Replay"), systemImage: "number")
-        }
-      } label: {
-        Label(L("Cheats"), systemImage: "wand.and.stars")
-      }
-      if isRemoteGame {
-        if let source = getWebDAVSource() {
-          if isCached {
-            Button(action: { removeCachedFile() }) {
-              Label(L("Remove from Cache"), systemImage: "trash")
-            }
-            Button(action: { showCacheInfo(item) }) {
-              Label(L("Cache Info"), systemImage: "info.circle")
-            }
-          } else {
-            Button(action: { startPreCache() }) {
-              Label(L("Download to Cache"), systemImage: "arrow.down.circle")
-            }
-            .disabled(isPreCaching)
-
-            if isPreCaching {
-              Button(action: { cancelPreCache() }) {
-                Label(L("Cancel Download"), systemImage: "xmark.circle")
-              }
-            }
-          }
-        } else {
-          // Show cute dolphin error for unavailable source
-          CompactDolphinError(message: L("Remote Source Unavailable"))
-        }
-      }
-      if item.isFavorite {
-        Button(action: { showFavoriteToggle(item) }) {
-          Label(L("Unfavorite"), systemImage: "star.fill")
-        }
-      } else {
-        Button(action: { showFavoriteToggle(item) }) {
-          Label(L("Favorite"), systemImage: "star")
-        }
-      }
-      Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
-    }
-    .zIndex(isFocused ? 1 : 0)
-#else
-    Button(action: { select(item) }) {
-      VStack(alignment: .leading, spacing: 12) {
-        ZStack(alignment: .topTrailing) {
-          // Show templated cover if using placeholder, otherwise show real cover with skeumorphism
-          if isUsingPlaceholderCover {
-            templatedCoverView
-          } else {
-            ZStack {
-              // Skeumorphic game case for real covers
-              Image(uiImage: item.coverImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: Layout.cardSize.width, height: Layout.cardSize.height)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
-                .overlay(
-                  // Subtle case reflection
-                  LinearGradient(
-                    colors: [Color.white.opacity(0.12), Color.clear, Color.black.opacity(0.08)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                  )
-                  .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                )
-                .overlay(
-                  RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-              // Add subtle 3D perspective to real covers too
-                .rotation3DEffect(
-                  .degrees(0.8),
-                  axis: (x: 0.05, y: 1.0, z: 0),
-                  perspective: 1.5
-                )
-            }
-          }
-
-          if let icon = remoteIconName {
-            ZStack {
-              if isPreCaching {
-                // Show progress indicator
-                DolphinCircularSpinner(
-                  size: 20,
-                  lineWidth: 2,
-                  dolphinSize: 7,
-                  progress: preCacheProgress
-                )
-              } else {
-                Image(systemName: icon)
-                  .font(.system(size: 16, weight: .semibold))
-                  .foregroundColor(.white)
-
-                // Show checkmark if cached
-                if isCached {
-                  Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.green)
-                    .background(Color.white, in: Circle())
-                    .offset(x: 6, y: -6)
-                }
-              }
-            }
-            .padding(8)
-            .background(.ultraThinMaterial, in: Circle())
-            .padding(8)
-          }
-
-
-        }
-
-        VStack(alignment: .leading, spacing: 6) {
-          // Enhanced title with better typography
-          Text(item.title)
-            .font(enhancedHeadlineFont)
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .foregroundStyle(
-              LinearGradient(
-                colors: [Color.primary, Color.primary.opacity(0.8)],
-                startPoint: .top,
-                endPoint: .bottom
-              )
-            )
-            .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
-
-          // Game ID with enhanced styling
-          if showSubtitles {
-            Text(item.gameID)
-              .font(enhancedCaptionFont)
-              .foregroundStyle(
-                LinearGradient(
-                  colors: [Color.secondary, Color.secondary.opacity(0.8)],
-                  startPoint: .top,
-                  endPoint: .bottom
-                )
-              )
-              .padding(.horizontal, 6)
-              .padding(.vertical, 2)
-              .background(
-                Capsule()
-                  .fill(Color.primary.opacity(0.05))
-                  .overlay(
-                    Capsule()
-                      .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
-                  )
-              )
-          }
-        }
-      }
-      .frame(width: Layout.cardSize.width)
-    }
-    .buttonStyle(.plain)
-    .scaleEffect(1.0)
-    .overlay(
-      // Subtle iOS press highlight
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .fill(Color.white.opacity(0.1))
-        .opacity(0)
-        .animation(.easeInOut(duration: 0.15), value: UUID())
-    )
-    .onTapGesture {
-      // Haptic feedback for premium feel
-      let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-      impactFeedback.impactOccurred()
-      select(item)
-    }
-    .contextMenu {
-      // Align with tvOS context menu
-      Button(action: { showProperties(item) }) {
-        Label(L("Properties"), systemImage: "info.circle")
-      }
-      //            Button(L("View Save States")) { showSaveStates(item) }
-      Menu {
-        Button(action: { showCheatList(item) }) {
-          Label(L("Manage..."), systemImage: "slider.horizontal.3")
-        }
-        Button(action: { downloadGeckoAction(item) }) {
-          Label(L("Download Codes"), systemImage: "arrow.down.doc")
-        }
-        Divider()
-        Menu {
-          Button(action: { presentCheatGecko(item) }) {
-            Label(L("Add..."), systemImage: "plus.circle")
-          }
-        } label: {
-          Label(L("Gecko"), systemImage: "chevron.left.slash.chevron.right")
-        }
-        Menu {
-          Button(action: { presentCheatAR(item) }) {
-            Label(L("Add..."), systemImage: "plus.circle")
-          }
-        } label: {
-          Label(L("Action Replay"), systemImage: "number")
-        }
-      } label: {
-        Label(L("Cheats"), systemImage: "wand.and.stars")
-      }
-      if isRemoteGame {
-        if let _ = getWebDAVSource() {
-          if isCached {
-            Button(action: { removeCachedFile() }) {
-              Label(L("Remove from Cache"), systemImage: "trash")
-            }
-            Button(action: { showCacheInfo(item) }) {
-              Label(L("Cache Info"), systemImage: "info.circle")
-            }
-          } else {
-            Button(action: { startPreCache() }) {
-              Label(L("Download to Cache"), systemImage: "arrow.down.circle")
-            }
-            .disabled(isPreCaching)
-
-            if isPreCaching {
-              Button(action: { cancelPreCache() }) {
-                Label(L("Cancel Download"), systemImage: "xmark.circle")
-              }
-            }
-          }
-        } else {
-          // Show cute dolphin error for unavailable source
-          CompactDolphinError(message: L("Remote Source Unavailable"))
-        }
-      }
-      if item.isFavorite {
-        Button(action: { showFavoriteToggle(item) }) {
-          Label(L("Unfavorite"), systemImage: "star.fill")
-        }
-      } else {
-        Button(action: { showFavoriteToggle(item) }) {
-          Label(L("Favorite"), systemImage: "star")
-        }
-      }
-      Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
-    }
-#endif
-  }
-
-  // MARK: - Pre-cache Methods
-
-  private func startPreCache() {
-    guard let source = getWebDAVSource(),
-          let url = URL(string: item.filePath) else { return }
-
-    isPreCaching = true
-    preCacheProgress = 0.0
-    showPreCacheProgress = true
-
-    Task {
-      do {
-        // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
-        let fileSize = Int64(item.fileSize)
-#if DEBUG
-        print("Using cached file size for \(item.title): \(fileSize) bytes")
-        print("DEBUG: TVGameItem.fileSize = \(item.fileSize)")
-#endif
-
-        // Check if we have enough storage space (file size + 100MB buffer)
-        if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
-          let availableSpace = TVLibraryView.getAvailableStorageSpace()
-          let requiredSpace = fileSize + TVLibraryView.STORAGE_BUFFER_MB
-
-          DispatchQueue.main.async {
-            self.isPreCaching = false
-            self.showPreCacheProgress = false
-            let message = """
-                        Not enough storage space to download \(self.item.title).
-
-                        Available: \(TVLibraryView.formatStorageSpace(availableSpace))
-                        Required: \(TVLibraryView.formatStorageSpace(requiredSpace))
-
-                        Please free up some space and try again.
-                        """
-            self.showStorageAlert(message)
-          }
-          return
-        }
-
-        // Create RemoteLibraryItem with correct size
-        let remoteItem = RemoteLibraryItem(
-          url: url,
-          name: item.title,
-          size: fileSize
-        )
-
-        let _ = try await source.preCacheItem(remoteItem) { progress in
-          DispatchQueue.main.async {
-            self.preCacheProgress = progress
-          }
-        }
-
-        DispatchQueue.main.async {
-          self.isPreCaching = false
-          self.showPreCacheProgress = false
-          self.cacheStateVersion += 1 // Force UI update
-          print("Pre-cache completed for: \(self.item.title)")
-        }
-      } catch {
-        DispatchQueue.main.async {
-          self.isPreCaching = false
-          self.showPreCacheProgress = false
-          self.cacheStateVersion += 1 // Force UI update even on error
-
-          // Show user-friendly error message
-          let message: String
-          if let nsError = error as NSError?, nsError.domain == NSPOSIXErrorDomain && nsError.code == 28 {
-            message = """
-                        Download failed: Not enough storage space.
-
-                        The device ran out of space while downloading \(self.item.title).
-                        Please free up some space and try again.
-                        """
-          } else {
-            message = """
-                        Download failed: \(error.localizedDescription)
-
-                        Unable to download \(self.item.title) to cache.
-                        """
-          }
-          self.showStorageAlert(message)
-          print("Pre-cache failed for \(self.item.title): \(error)")
-        }
-      }
-    }
-  }
-
-  private func cancelPreCache() {
-    guard let source = getWebDAVSource(),
-          let url = URL(string: item.filePath) else { return }
-
-    let remoteItem = RemoteLibraryItem(
-      url: url,
-      name: item.title,
-      size: 0
-    )
-
-    Task {
-      await source.cancelPreCache(remoteItem)
-      DispatchQueue.main.async {
-        self.isPreCaching = false
-        self.showPreCacheProgress = false
-        self.cacheStateVersion += 1 // Force UI update
-      }
-    }
-  }
-
-  private func removeCachedFile() {
-    guard let source = getWebDAVSource(),
-          let url = URL(string: item.filePath) else { return }
-
-    let remoteItem = RemoteLibraryItem(
-      url: url,
-      name: item.title,
-      size: 0
-    )
-
-    Task {
-      do {
-        try await source.removeCachedItem(remoteItem)
-        DispatchQueue.main.async {
-          self.cacheStateVersion += 1 // Force UI update for cache state
-        }
-      } catch {
-        print("Error: \(error.localizedDescription)")
-      }
-    }
-  }
-
-  private func presentCheatGecko(_ item: TVGameItem) {
-    Task { @MainActor in
-      showCheatList(item)
-    }
-  }
-
-  private func presentCheatAR(_ item: TVGameItem) {
-    Task { @MainActor in
-      showCheatList(item)
-    }
-  }
-}
-
 // MARK: - Source Picker
 
 @MainActor
-private func getMatchingWebDAVSource(for url: URL) -> WebDAVSource? {
+func getMatchingWebDAVSource(for url: URL) -> WebDAVSource? {
   func defaultPort(for scheme: String?) -> Int { (scheme?.lowercased() == "https" || scheme?.lowercased() == "webdavs") ? 443 : 80 }
   guard let urlHost = url.host?.lowercased() else { return nil }
   let urlPort = url.port ?? defaultPort(for: url.scheme)
@@ -3665,392 +2212,9 @@ private struct SourcePickerView: View {
   }
 }
 
-// MARK: - Unified Game Card
-// Both iOS and tvOS now use the same clean implementation in GameGridItem
-
-/// View showing cache information for a remote game
-private struct CacheInfoView: View {
-  let item: TVGameItem
-  let showSubtitles: Bool
-  @Environment(\.dismiss) private var dismiss
-  @State private var cacheInfo: CacheInfo?
-  @State private var isLoading = true
-  @State private var errorMessage: String?
-  @State private var isWorking = false
-  @State private var redownloadProgress: Double = 0
-  @State private var showCopiedToast: Bool = false
-  @State private var shareURL: URL?
-  @State private var toastText: String?
-  @State private var showAlert = false
-  @State private var alertTitle = ""
-  @State private var alertMessage = ""
-
-  private struct CacheInfo {
-    let localPath: String
-    let fileSize: Int64
-    let cachedDate: Date
-    let originalURL: String
-    let etag: String?
-    let lastModified: Date?
-  }
-
-  var body: some View {
-    NavigationView {
-      GeometryReader { proxy in
-        let w = max(320.0, min(proxy.size.width - 32.0, 680.0))
-        ZStack {
-          /// Blurred artwork background for visual depth
-          Image(uiImage: item.coverImage)
-            .resizable()
-            .scaledToFill()
-            .blur(radius: 20)
-            .opacity(0.35)
-            .ignoresSafeArea()
-
-          if isLoading {
-            DolphinLoadingView(message: "Loading cache information...")
-              .padding(24)
-              .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-              .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
-          } else if let errorMessage = errorMessage {
-            DolphinErrorView(
-              title: "Cache Error",
-              message: errorMessage
-            )
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
-          } else if let info = cacheInfo {
-            ScrollView {
-              VStack(alignment: .leading, spacing: 16) {
-                /// Header card with cover and basic details
-                HStack(alignment: .top, spacing: 16) {
-                  Image(uiImage: item.coverImage)
-                    .resizable()
-                    .aspectRatio(2.0/3.0, contentMode: .fit)
-                    .frame(width: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 6)
-                  VStack(alignment: .leading, spacing: 6) {
-                    Text(item.title)
-                      .font(.title3).fontWeight(.semibold)
-                      .lineLimit(2)
-                    if showSubtitles {
-                      Text(item.gameID)
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                    }
-                    HStack(spacing: 6) {
-                      Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
-                      Text("Cached \(DateFormatter.localizedString(from: info.cachedDate, dateStyle: .medium, timeStyle: .short))")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                    }
-                  }
-                  Spacer(minLength: 0)
-                }
-                .padding(14)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))
-
-                /// Details card
-                VStack(spacing: 10) {
-                  KVRow(icon: "externaldrive", label: "Original URL", value: info.originalURL)
-                  KVRow(icon: "internaldrive", label: "Local Path", value: info.localPath, monospaced: true)
-                  KVRow(icon: "externaldrive.badge.person.crop", label: "ETag", value: info.etag ?? "-")
-                  KVRow(icon: "clock", label: "Last Modified", value: info.lastModified.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short) } ?? "-")
-                  KVRow(icon: "archivebox", label: "File Size", value: TVLibraryView.formatStorageSpace(info.fileSize))
-                }
-                .padding(16)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))
-
-                // Actions grid (fits better than toolbar on small widths)
-                let gridCols: [GridItem] = {
-                  if proxy.size.width < 370 { return [GridItem(.flexible(), spacing: 12)] }
-                  if proxy.size.width < 700 { return [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)] }
-                  return [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-                }()
-                if let info = cacheInfo {
-                  LazyVGrid(columns: gridCols, spacing: 12) {
-                    Button(role: .destructive) { performRemove() } label: {
-                      HStack { Image(systemName: "trash"); Text(L("Remove")) }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                    .disabled(isWorking)
-
-                    Button { performRedownload() } label: {
-                      if isWorking && redownloadProgress > 0 {
-                        DolphinProgressView(
-                          progress: redownloadProgress,
-                          width: 120,
-                          showPercentage: true,
-                          direction: .leftToRight
-                        )
-                        .frame(maxWidth: .infinity)
-                      } else {
-                        HStack { Image(systemName: "arrow.down.circle"); Text(L("Re-download")) }
-                          .frame(maxWidth: .infinity)
-                      }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isWorking)
-
-                    Button { copyToPasteboard(info.originalURL) } label: {
-                      HStack { Image(systemName: "doc.on.doc"); Text(L("Copy URL")) }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button { copyToPasteboard(info.localPath) } label: {
-                      HStack { Image(systemName: "folder"); Text(L("Copy Path")) }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-#if os(iOS)
-                    if FileManager.default.fileExists(atPath: info.localPath) {
-                      Button { shareFile(path: info.localPath) } label: {
-                        HStack { Image(systemName: "square.and.arrow.up"); Text(L("Share")) }
-                          .frame(maxWidth: .infinity)
-                      }
-                      .buttonStyle(.bordered)
-                    }
-#endif
-                  }
-                  .padding(.top, 8)
-                }
-              }
-              .frame(maxWidth: w)
-              .padding(.horizontal, 16)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.vertical, 16)
-
-            }
-          } else {
-            VStack(spacing: 12) {
-              Image(systemName: "questionmark.circle")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundColor(.secondary)
-              Text("No cache information available")
-                .foregroundColor(.secondary)
-            }
-            .padding(24)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 6)
-          }
-        }
-      }
-      .navigationTitle("Cache Info")
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Done") { dismiss() }
-        }
-      }
-      .onAppear {
-        loadCacheInfo()
-      }
-#if os(iOS)
-      .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
-        Group {
-          if let url = shareURL {
-            ShareSheet(activityItems: [url])
-              .ignoresSafeArea()
-          } else {
-            EmptyView()
-          }
-        }
-      }
-#endif
-      .overlay(
-        Group {
-          if let toast = toastText {
-            VStack {
-              Spacer()
-              Text(toast)
-                .font(.footnote)
-                .foregroundColor(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(.black.opacity(0.7), in: Capsule())
-                .padding(.bottom, 20)
-            }
-            .transition(.opacity)
-            .animation(.easeInOut(duration: 0.2), value: toastText)
-          }
-        }
-      )
-      .alert(alertTitle, isPresented: $showAlert) {
-        Button(L("OK"), role: .cancel) {}
-      } message: {
-        Text(alertMessage)
-      }
-    }
-  }
-
-  private func loadCacheInfo() {
-    // Find the WebDAV source for this item
-    guard let url = URL(string: item.filePath) else {
-      errorMessage = "Invalid file path"
-      isLoading = false
-      return
-    }
-
-    if let source = getMatchingWebDAVSource(for: url) {
-      let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
-      // Check if cached and get info
-      Task {
-        let info = await getCacheInfo(from: source, for: remoteItem)
-        await MainActor.run {
-          self.cacheInfo = info
-          self.isLoading = false
-          self.errorMessage = info == nil ? "This game is not currently cached" : nil
-        }
-      }
-    } else {
-      errorMessage = "No WebDAV source found for this game"
-      isLoading = false
-      cacheInfo = nil
-    }
-  }
-
-  private func getCacheInfo(from source: WebDAVSource, for item: RemoteLibraryItem) async -> CacheInfo? {
-    // Get actual cache information from the WebDAV source
-    guard let cachedFileInfo = source.getCacheInfo(for: item) else {
-      return nil
-    }
-
-    return CacheInfo(
-      localPath: cachedFileInfo.localPath,
-      fileSize: cachedFileInfo.fileSize,
-      cachedDate: cachedFileInfo.cachedDate,
-      originalURL: cachedFileInfo.originalURL,
-      etag: cachedFileInfo.etag,
-      lastModified: cachedFileInfo.lastModified
-    )
-  }
-
-  private func performRemove() {
-    guard let url = URL(string: item.filePath), let source = getMatchingWebDAVSource(for: url) else { return }
-    let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
-    isWorking = true
-    Task {
-      do {
-        try await source.removeCachedItem(remoteItem)
-        await MainActor.run {
-          isWorking = false
-          // Optimistically clear current info
-          self.cacheInfo = nil
-          self.errorMessage = "This game is not currently cached"
-          loadCacheInfo()
-          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Removed from cache")])
-          toastText = L("Removed from cache")
-          DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { toastText = nil }
-          alertTitle = L("Removed")
-          alertMessage = L("The cached file was removed.")
-          showAlert = true
-        }
-      } catch {
-        await MainActor.run { isWorking = false }
-      }
-    }
-  }
-
-  private func performRedownload() {
-    guard let url = URL(string: item.filePath), let source = getMatchingWebDAVSource(for: url) else { return }
-    let remoteItem = RemoteLibraryItem(url: url, name: item.title, size: Int64(item.fileSize))
-    isWorking = true
-    redownloadProgress = 0
-    Task {
-      do {
-        let _ = try await source.forcePreCacheItem(remoteItem) { progress in
-          DispatchQueue.main.async { self.redownloadProgress = progress }
-        }
-        await MainActor.run {
-          isWorking = false
-          loadCacheInfo()
-          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Downloaded to cache")])
-          toastText = L("Downloaded to cache")
-          DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { toastText = nil }
-          alertTitle = L("Downloaded")
-          alertMessage = L("The file has been downloaded to cache.")
-          showAlert = true
-        }
-      } catch {
-        await MainActor.run { isWorking = false }
-      }
-    }
-  }
-
-  private func copyToPasteboard(_ text: String) {
-#if os(iOS)
-    UIPasteboard.general.string = text
-    showCopiedToast = true
-    toastText = L("Copied")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { showCopiedToast = false; toastText = nil }
-    alertTitle = L("Copied")
-    alertMessage = text
-    showAlert = true
-#endif
-  }
-
-#if os(iOS)
-  private func shareFile(path: String) {
-    let url = URL(fileURLWithPath: path)
-    shareURL = url
-  }
-#endif
-}
-
-/// Labeled row with SF Symbol and value, used in cache details card
-private struct KVRow: View {
-  let icon: String
-  let label: String
-  let value: String
-  var monospaced: Bool = false
-
-  var body: some View {
-    HStack(alignment: .top, spacing: 12) {
-      Image(systemName: icon)
-        .frame(width: 18)
-        .foregroundStyle(.secondary)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(label)
-          .font(.caption)
-          .foregroundColor(.secondary)
-          .textCase(.uppercase)
-#if os(tvOS)
-        if monospaced {
-          if #available(tvOS 16.0, *) {
-            Text(value).font(.callout).monospaced().lineLimit(nil)
-          } else {
-            Text(value).font(.system(.callout, design: .monospaced)).lineLimit(nil)
-          }
-        } else {
-          Text(value).font(.callout).lineLimit(nil)
-        }
-#else
-        if monospaced {
-          if #available(iOS 16.0, *) {
-            Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
-          } else {
-            Text(value).font(.system(.callout, design: .monospaced)).lineLimit(nil)
-          }
-        } else {
-          Text(value).font(.callout).textSelection(.enabled).lineLimit(nil)
-        }
-#endif
-      }
-      Spacer(minLength: 0)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-}
-
 #if os(iOS)
 /// Minimal share sheet wrapper
-private struct ShareSheet: UIViewControllerRepresentable {
+struct ShareSheet: UIViewControllerRepresentable {
   let activityItems: [Any]
   func makeUIViewController(context: Context) -> UIActivityViewController {
     UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
@@ -4081,58 +2245,6 @@ private extension Array {
     return indices.contains(index) ? self[index] : nil
   }
 }
-
-#if os(iOS)
-private struct GeckoCodesModal: UIViewControllerRepresentable {
-  let item: TVGameItem
-  func makeUIViewController(context: Context) -> UIViewController {
-    let sb = UIStoryboard(name: "Gecko", bundle: nil)
-    let vc = sb.instantiateInitialViewController()!
-    let list: UIViewController = (vc as? UINavigationController)?.topViewController ?? vc
-    // Bridge C++ property types
-    if let gcv = list as? NSObject {
-      // gameId std::string
-      let gid = item.gameID as NSString
-      if gcv.responds(to: Selector(("setGameIdString:"))) { gcv.perform(Selector(("setGameIdString:")), with: gid) } else { gcv.setValue(gid, forKey: "gameId") }
-      // gametdbId std::string
-      let gtdb = item.gametdbID as NSString
-      if gcv.responds(to: Selector(("setGametdbIdString:"))) { gcv.perform(Selector(("setGametdbIdString:")), with: gtdb) } else { gcv.setValue(gtdb, forKey: "gametdbId") }
-      // revision u16
-      let rev = NSNumber(value: Int(item.revision))
-      if gcv.responds(to: Selector(("setRevisionNumber:"))) { gcv.perform(Selector(("setRevisionNumber:")), with: rev) } else { gcv.setValue(rev, forKey: "revision") }
-    }
-    let nav = (vc as? UINavigationController) ?? UINavigationController(rootViewController: list)
-    list.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .close, target: context.coordinator, action: #selector(Coordinator.close))
-    return nav
-  }
-  func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
-  func makeCoordinator() -> Coordinator { Coordinator() }
-  final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil); if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) } } }
-}
-
-private struct ActionReplayCodesModal: UIViewControllerRepresentable {
-  let item: TVGameItem
-  func makeUIViewController(context: Context) -> UIViewController {
-    let sb = UIStoryboard(name: "ActionReplay", bundle: nil)
-    let vc = sb.instantiateInitialViewController()!
-    let list: UIViewController = (vc as? UINavigationController)?.topViewController ?? vc
-    if let ar = list as? NSObject {
-      // gameId std::string
-      let gid = item.gameID as NSString
-      if ar.responds(to: Selector(("setGameIdString:"))) { ar.perform(Selector(("setGameIdString:")), with: gid) } else { ar.setValue(gid, forKey: "gameId") }
-      // revision u16
-      let rev = NSNumber(value: Int(item.revision))
-      if ar.responds(to: Selector(("setRevisionNumber:"))) { ar.perform(Selector(("setRevisionNumber:")), with: rev) } else { ar.setValue(rev, forKey: "revision") }
-    }
-    let nav = (vc as? UINavigationController) ?? UINavigationController(rootViewController: list)
-    list.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .close, target: context.coordinator, action: #selector(Coordinator.close))
-    return nav
-  }
-  func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
-  func makeCoordinator() -> Coordinator { Coordinator() }
-  final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil); if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) } } }
-}
-#endif
 
 #if os(iOS) || targetEnvironment(macCatalyst)
 extension TVLibraryView {
