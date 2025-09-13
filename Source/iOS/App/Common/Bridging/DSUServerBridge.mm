@@ -32,6 +32,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   dispatch_source_t _recvSource;
   dispatch_source_t _tickSource;
   NSNetService* _service;
+  NSDictionary<NSString*, NSData*>* _txt;
   NSString* _lastError;
   NSUInteger _txCount;
   NSUInteger _rxCount;
@@ -139,6 +140,17 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   [[self shared] sendPadData];
 }
 
++ (void)setLayout:(NSString *)layout extension:(NSString * _Nullable)ext sideways:(BOOL)sideways {
+  DSUServerBridge* s = [self shared];
+  if (!layout) layout = @"unknown";
+  NSMutableDictionary* txt = [NSMutableDictionary dictionaryWithDictionary:s->_txt ?: @{}];
+  txt[@"layout"] = [layout dataUsingEncoding:NSUTF8StringEncoding];
+  if (ext && ext.length > 0) txt[@"ext"] = [ext dataUsingEncoding:NSUTF8StringEncoding]; else [txt removeObjectForKey:@"ext"];
+  txt[@"sideways"] = [[NSString stringWithFormat:@"%d", sideways ? 1 : 0] dataUsingEncoding:NSUTF8StringEncoding];
+  s->_txt = [txt copy];
+  if (s->_service) { [s->_service setTXTRecordData:[NSNetService dataFromTXTRecordDictionary:s->_txt]]; }
+}
+
 + (void)setButton:(NSInteger)button controller:(NSInteger)controller state:(BOOL)state {
   // Map generic buttons to DSU bitfields roughly (PS layout)
   auto& b1 = [self shared]->_pad.button_states1;
@@ -212,6 +224,38 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 + (void)setDPadRightForController:(NSInteger)controller state:(BOOL)state {
   auto& p = [self shared]->_pad;
   p.button_dpad_right_analog = state ? 255 : 0;
+  [[self shared] sendPadData];
+}
+
++ (void)setShoulderL:(NSInteger)controller state:(BOOL)state {
+  auto& p = [self shared]->_pad;
+  p.button_l1_analog = state ? 255 : 0;
+  [[self shared] sendPadData];
+}
++ (void)setShoulderR:(NSInteger)controller state:(BOOL)state {
+  auto& p = [self shared]->_pad;
+  p.button_r1_analog = state ? 255 : 0;
+  [[self shared] sendPadData];
+}
+
++ (void)setShare:(NSInteger)controller state:(BOOL)state {
+  auto& b1 = [self shared]->_pad.button_states1;
+  if (state) b1 |= 0x1; else b1 &= ~0x1;
+  [[self shared] sendPadData];
+}
++ (void)setOptions:(NSInteger)controller state:(BOOL)state {
+  auto& b1 = [self shared]->_pad.button_states1;
+  if (state) b1 |= 0x8; else b1 &= ~0x8;
+  [[self shared] sendPadData];
+}
++ (void)setPS:(NSInteger)controller state:(BOOL)state {
+  auto& ps = [self shared]->_pad.button_ps;
+  ps = state ? 1 : 0;
+  [[self shared] sendPadData];
+}
++ (void)setTouch:(NSInteger)controller state:(BOOL)state {
+  auto& touch = [self shared]->_pad.button_touch;
+  touch = state ? 1 : 0;
   [[self shared] sendPadData];
 }
 
@@ -475,6 +519,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   // _dolphin-dsu._udp is custom; clients in our apps can browse this
   _service = [[NSNetService alloc] initWithDomain:@"local." type:@"_dolphin-dsu._udp" name:[[UIDevice currentDevice] name] port:_port];
   _service.delegate = self; [_service publishWithOptions:0];
+  if (_txt) { [_service setTXTRecordData:[NSNetService dataFromTXTRecordDictionary:_txt]]; }
 }
 
 - (NSString*)bestIPv4Address {

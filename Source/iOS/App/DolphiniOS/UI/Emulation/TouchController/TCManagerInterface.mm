@@ -13,10 +13,6 @@
 
 + (void)setButtonStateFor:(NSInteger)button controller:(NSInteger)controllerId state:(BOOL)state {
   ciface::iOS::StateManager::GetInstance()->SetButtonPressed((int)controllerId, (ciface::iOS::ButtonType)button, state);
-  // Also forward to DSU server if running
-  if ([DSUServerBridge isRunning]) {
-    [DSUServerBridge setButton:button controller:controllerId state:state];
-  }
   // Mirror D-Pad presses to DSU analog dpad fields so DSU clients receive them
   // GameCube D-Pad (Up=6,Down=7,Left=8,Right=9)
   if (button == 6)  { [DSUServerBridge setDPadUpForController:controllerId state:state]; }
@@ -28,18 +24,33 @@
   if (button == 108) { [DSUServerBridge setDPadDownForController:controllerId state:state]; }
   if (button == 109) { [DSUServerBridge setDPadLeftForController:controllerId state:state]; }
   if (button == 110) { [DSUServerBridge setDPadRightForController:controllerId state:state]; }
-  // Map GC/Wii face buttons to DSU face analogs: indices (Square=0, Cross=1, Circle=2, Triangle=3)
-  // GameCube: A->Cross(1), B->Circle(2), X->Square(0), Y->Triangle(3)
-  if (button == 0)  { [DSUServerBridge setButton:1 controller:controllerId state:state]; }
-  if (button == 1)  { [DSUServerBridge setButton:2 controller:controllerId state:state]; }
-  if (button == 3)  { [DSUServerBridge setButton:0 controller:controllerId state:state]; }
-  if (button == 4)  { [DSUServerBridge setButton:3 controller:controllerId state:state]; }
+  // Map only Wii face buttons to DSU shapes; GC mapping will be handled by profiles
   // Wii Remote: A->Cross(1), B->Circle(2), 1->Square(0), 2->Triangle(3)
   if (button == 100) { [DSUServerBridge setButton:1 controller:controllerId state:state]; }
   if (button == 101) { [DSUServerBridge setButton:2 controller:controllerId state:state]; }
   if (button == 105) { [DSUServerBridge setButton:0 controller:controllerId state:state]; }
   if (button == 106) { [DSUServerBridge setButton:3 controller:controllerId state:state]; }
+  // Wii special: - / + / Home
+  if (button == 102) { [DSUServerBridge setShare:controllerId state:state]; }
+  if (button == 103) { [DSUServerBridge setOptions:controllerId state:state]; }
+  if (button == 104) { [DSUServerBridge setPS:controllerId state:state]; }
+  // Wii shoulders as convenience for classic/nunchuk in DSU receiver
+  if (button == 200) { [DSUServerBridge setShoulderL:controllerId state:state]; }
+  if (button == 201) { [DSUServerBridge setShoulderR:controllerId state:state]; }
+  // GC convenience: Start -> DSU PS for Start mapping via profile; do not map Z here to avoid double bindings
+  if (button == 2) { [DSUServerBridge setPS:controllerId state:state]; }
+  // GC face to DSU shapes for DSU profiles
+  if (button == 0) { [DSUServerBridge setButton:1 controller:controllerId state:state]; } // A -> Cross
+  if (button == 1) { [DSUServerBridge setButton:2 controller:controllerId state:state]; } // B -> Circle
+  if (button == 3) { [DSUServerBridge setButton:0 controller:controllerId state:state]; } // X -> Square
+  if (button == 4) { [DSUServerBridge setButton:3 controller:controllerId state:state]; } // Y -> Triangle
+  // GC Z -> DSU Touch Button
+  if (button == 5) { [DSUServerBridge setTouch:controllerId state:state]; }
 }
+
+// Aggregate split stick inputs (Up/Down/Left/Right) into full X/Y for DSU
+static float s_splitAxes[4][32] = {{0}}; // [controller][axisIndex] last values in [-1,1]
+static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); }
 
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
   // Apply DSU scaling parameters (gain, deadzone, smoothing) to analog axes before forwarding
@@ -76,8 +87,36 @@
     if (axis == 20 || axis == 21) {
       float t = (v * 2.f) - 1.f;
       [DSUServerBridge setAxis:(axis == 20 ? 4 : 5) controller:controllerId value:t];
+      BOOL pressed = v > 0.7f;
+      if (axis == 20) { [DSUServerBridge setShoulderL:controllerId state:pressed]; }
+      if (axis == 21) { [DSUServerBridge setShoulderR:controllerId state:pressed]; }
     }
-    // Note: GC/Wii sticks from NIB use split directional axes; we leave DSU sticks to other sources for now
+
+    // Aggregate NIB split sticks to DSU sticks
+    // Main stick: 11 (Up-), 12 (Down+), 13 (Left-), 14 (Right+)
+    // C-stick:    16 (Up-), 17 (Down+), 18 (Left-), 19 (Right+)
+    // Nunchuk:    203 (Up-), 204 (Down+), 205 (Left-), 206 (Right+)
+    if ((axis >= 11 && axis <= 14) || (axis >= 16 && axis <= 19) || (axis >= 203 && axis <= 206)) {
+      // reuse indices
+      int aidx = (int)axis;
+      s_splitAxes[ci][aidx] = clamp11(v);
+      if (axis >= 11 && axis <= 14) {
+        float lx = clamp11(s_splitAxes[ci][14] + s_splitAxes[ci][13]); // Right+ + Left-
+        float ly = clamp11(s_splitAxes[ci][12] - s_splitAxes[ci][11]); // Down+ - Up- (Up positive)
+        [DSUServerBridge setAxis:0 controller:controllerId value:lx];
+        [DSUServerBridge setAxis:1 controller:controllerId value:ly];
+      } else if (axis >= 16 && axis <= 19) {
+        float rx = clamp11(s_splitAxes[ci][19] + s_splitAxes[ci][18]); // Right+ + Left-
+        float ry = clamp11(s_splitAxes[ci][17] - s_splitAxes[ci][16]); // Down+ - Up- (Up positive)
+        [DSUServerBridge setAxis:2 controller:controllerId value:rx];
+        [DSUServerBridge setAxis:3 controller:controllerId value:ry];
+      } else {
+        float lx2 = clamp11(s_splitAxes[ci][206] + s_splitAxes[ci][205]);
+        float ly2 = clamp11(s_splitAxes[ci][204] - s_splitAxes[ci][203]); // Down+ - Up- (Up positive)
+        [DSUServerBridge setAxis:0 controller:controllerId value:lx2];
+        [DSUServerBridge setAxis:1 controller:controllerId value:ly2];
+      }
+    }
   }
 }
 

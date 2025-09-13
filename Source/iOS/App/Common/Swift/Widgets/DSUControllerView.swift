@@ -150,9 +150,12 @@ struct DSUControllerView: View {
     .sheet(isPresented: $showLayoutSheet) { LayoutPickerSheet(selectedRaw: $layoutRaw) }
     .onChange(of: layoutRaw) { _ in reconfigureVirtualControllerIfNeeded() }
     .onChange(of: restrictClient) { newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
-    .onAppear {
+        .onAppear {
       DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
+      // Publish layout metadata for auto-profile selection on receivers
+      publishLayoutTXT(raw: layoutRaw)
     }
+     .onChange(of: layoutRaw) { newVal in publishLayoutTXT(raw: newVal) }
     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
       hasClient = DSUServerBridge.hasClient()
       clientAddr = DSUServerBridge.lastClientAddress()
@@ -266,6 +269,22 @@ struct DSUControllerView: View {
       // Push a frame immediately so TX updates promptly
       DSUServerBridge.sendNow()
     }
+  }
+}
+
+private func publishLayoutTXT(raw: String) {
+  let layout = (DSUControllerLayout(rawValue: raw) ?? .appleVirtual)
+  switch layout {
+  case .gamecube:
+    DSUServerBridge.setLayout("gc", extension: nil, sideways: false)
+  case .wiiRemote:
+    DSUServerBridge.setLayout("wii", extension: nil, sideways: false)
+  case .wiiClassic:
+    DSUServerBridge.setLayout("wii", extension: "classic", sideways: false)
+  case .wiiSideways:
+    DSUServerBridge.setLayout("wii", extension: nil, sideways: true)
+  case .appleVirtual:
+    DSUServerBridge.setLayout("appleVirtual", extension: nil, sideways: false)
   }
 }
 

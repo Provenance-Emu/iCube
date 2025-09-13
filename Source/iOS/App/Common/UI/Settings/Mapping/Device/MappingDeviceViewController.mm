@@ -148,7 +148,9 @@ struct Device {
     ciface::Core::DeviceQualifier qualifier;
     qualifier.FromString(device);
 
-    self.emulatedController->SetDefaultDevice(device);
+    // Remember selected device before any profile loads
+    const std::string selectedDevice = device;
+    self.emulatedController->SetDefaultDevice(selectedDevice);
     self.emulatedController->UpdateReferences(g_controller_interface);
 
     MappingDeviceCell* cell = [tableView cellForRowAtIndexPath:indexPath];
@@ -163,28 +165,31 @@ struct Device {
 
     bool isTouchscreen = qualifier.source == "iOS";
     bool isMFiPhysicalController = qualifier.source == "MFi" && qualifier.name != "Keyboard";
-
-    if (isTouchscreen || isMFiPhysicalController) {
+    bool isDSU = (qualifier.source == "DSUClient");
+    if (isTouchscreen || isMFiPhysicalController || isDSU) {
       UIAlertController* alertController = [UIAlertController alertControllerWithTitle:@"Load Defaults" message:@"Would you like to load the default profile for this device type?\n\nWARNING: If you choose to proceed, your current configuration will be overwritten." preferredStyle:UIAlertControllerStyleAlert];
 
-      [alertController addAction:[UIAlertAction actionWithTitle:@"Load" style:UIAlertActionStyleDestructive handler:^(UIAlertAction*) {
-        std::string iniName;
+       [alertController addAction:[UIAlertAction actionWithTitle:@"Load" style:UIAlertActionStyleDestructive handler:^(UIAlertAction*) {
+         std::string iniName;
 
         if (isTouchscreen) {
           iniName = "Touchscreen";
-        } else {
+        } else if (isMFiPhysicalController) {
           iniName = "Physical Controller";
+        } else {
+          iniName = "DSU";
         }
 
-        const std::string profilePath = self.inputConfig->GetSysProfileDirectoryPath() + iniName + ".ini";
+         const std::string profilePath = self.inputConfig->GetSysProfileDirectoryPath() + iniName + ".ini";
 
-        Common::IniFile iniFile;
-        iniFile.Load(profilePath);
+         Common::IniFile iniFile;
+         iniFile.Load(profilePath);
 
-        self.emulatedController->LoadConfig(iniFile.GetOrCreateSection("Profile"));
-        self.emulatedController->SetDefaultDevice(device);
-        self.emulatedController->UpdateReferences(g_controller_interface);
-      }]];
+         self.emulatedController->LoadConfig(iniFile.GetOrCreateSection("Profile"));
+        // Restore selected device in case profile specifies a different Device
+        self.emulatedController->SetDefaultDevice(selectedDevice);
+         self.emulatedController->UpdateReferences(g_controller_interface);
+       }]];
 
       [alertController addAction:[UIAlertAction actionWithTitle:@"Don't Load" style:UIAlertActionStyleCancel handler:nil]];
 

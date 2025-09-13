@@ -60,6 +60,19 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setDPadLeftForController:(NSInteger)controller state:(BOOL)state;
 + (void)setDPadRightForController:(NSInteger)controller state:(BOOL)state;
 
+/// Layout metadata for Bonjour TXT record
++ (void)setLayout:(NSString *)layout extension:(NSString * _Nullable)ext sideways:(BOOL)sideways;
+
+/// Shoulders (L1/R1) as analog (255/0)
++ (void)setShoulderL:(NSInteger)controller state:(BOOL)state;
++ (void)setShoulderR:(NSInteger)controller state:(BOOL)state;
+
+/// Special buttons
++ (void)setShare:(NSInteger)controller state:(BOOL)state;
++ (void)setOptions:(NSInteger)controller state:(BOOL)state;
++ (void)setPS:(NSInteger)controller state:(BOOL)state;
++ (void)setTouch:(NSInteger)controller state:(BOOL)state;
+
 @end
 
 NS_ASSUME_NONNULL_END
