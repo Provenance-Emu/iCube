@@ -3,6 +3,7 @@ import UIKit
 
 /// Monitors device thermal state and auto-tunes graphics settings when enabled
 final class ThermalManager {
+  @MainActor
 	static let shared = ThermalManager()
 	private init() {}
 

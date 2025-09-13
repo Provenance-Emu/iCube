@@ -5,6 +5,7 @@ import Photos
 
 /// Simple facade for ReplayKit rolling clips
 final class ReplayKitManager {
+  @MainActor
 	static let shared = ReplayKitManager()
 	private init() {}
 	private var isBuffering = false

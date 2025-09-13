@@ -2,6 +2,7 @@ import Foundation
 
 /// Factory for creating and managing remote source instances
 /// Ensures single instance per unique source configuration
+@MainActor
 class RemoteSourceFactory {
     private static var sources: [String: any RemoteLibrarySource] = [:]
 

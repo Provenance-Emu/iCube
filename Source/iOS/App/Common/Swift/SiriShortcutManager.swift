@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 
 #if os(iOS)
+@MainActor
 final class SiriShortcutManager {
 	static let shared = SiriShortcutManager()
 	private init() {}

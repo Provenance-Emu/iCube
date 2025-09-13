@@ -6,6 +6,7 @@ import CoreMotion
 import Foundation
 
 @objc public class TCDeviceMotion: NSObject {
+  @MainActor
   @objc public static let shared = TCDeviceMotion()
 
   private let motionManager = CMMotionManager()
@@ -25,7 +26,9 @@ import Foundation
 
   @objc func registerMotionHandlers() {
     // Set our orientation properly
-    self.statusBarOrientationChanged()
+    Task { @MainActor in
+      statusBarOrientationChanged()
+    }
 
     // Set the sensor update times
     // 200Hz is the Wiimote update interval
@@ -309,6 +312,7 @@ import Foundation
   @objc func setPort(_ port: Int) { self.port = port }
 
   // UIApplicationDidChangeStatusBarOrientationNotification is deprecated...
+  @MainActor
   @objc func statusBarOrientationChanged() {
     if #available(iOS 13.0, *) {
       if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {

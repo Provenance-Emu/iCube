@@ -4,6 +4,7 @@
 import Foundation
 import UIKit
 
+@MainActor
 class ServiceManager {
   static let shared = ServiceManager()
 

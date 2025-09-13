@@ -122,31 +122,37 @@ func installInputDebugHandlers(_ c: GCController) {
         if #available(iOS 14.0, tvOS 14.0, *) {
             /// Map Menu button to Start reliably and trigger pause chord when applicable
             gp.buttonMenu.pressedChangedHandler = { _, _, pressed in
+              Task { @MainActor in
                 InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: pressed ? 1.0 : 0.0)
                 if pressed {
                     PauseGestureTracker.shared.menuOrStartPressed()
                 }
+              }
             }
-            /// Treat Options as Start-equivalent for pause chord and quick menu on iOS
+          /// Treat Options as Start-equivalent for pause chord and quick menu on iOS
             if let options = gp.buttonOptions {
-                options.pressedChangedHandler = { _, _, pressed in
-                    if pressed {
-                        PauseGestureTracker.shared.menuOrStartPressed()
-                        #if os(iOS)
-                        TVEmulationBridge.pause()
-                        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-                        GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
-                        #endif
-                        NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
-                        #endif
-                    }
+              options.pressedChangedHandler = { _, _, pressed in
+                if pressed {
+                  Task { @MainActor in
+                    PauseGestureTracker.shared.menuOrStartPressed()
+  #if os(iOS)
+                    TVEmulationBridge.pause()
+  #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+                    GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+  #endif
+                    NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+  #endif
+                  }
                 }
+              }
             }
             /// Home can also act as Start for chord if available and not reserved
             if let home = gp.buttonHome {
                 home.pressedChangedHandler = { _, _, pressed in
                     if pressed {
+                      Task { @MainActor in
                         PauseGestureTracker.shared.menuOrStartPressed()
+                      }
                     }
                 }
             }
@@ -259,13 +265,19 @@ func installInputDebugHandlers(_ c: GCController) {
             }
 
             // Shoulder + Menu/Options -> Pause
-            PauseGestureTracker.shared.updateShoulderState(allPressed: allFour)
+            Task { @MainActor in
+              PauseGestureTracker.shared.updateShoulderState(allPressed: allFour)
+            }
             if #available(tvOS 14.0, iOS 14.0, *) {
                 if element === gamepad.buttonMenu, gamepad.buttonMenu.isPressed {
+                  Task { @MainActor in
                     PauseGestureTracker.shared.menuOrStartPressed()
+                  }
                 }
                 if let options = gamepad.buttonOptions, element === options, options.isPressed {
+                  Task { @MainActor in
                     PauseGestureTracker.shared.menuOrStartPressed()
+                  }
                 }
             }
 
@@ -483,7 +495,9 @@ func installInputDebugHandlers(_ c: GCController) {
             mg.buttonMenu.pressedChangedHandler = { _, _, pressed in
                 InputOverriderBridge.setControl(.gcPadStart, controller: 0, value: pressed ? 1.0 : 0.0)
                 if pressed {
+                  Task { @MainActor in
                     PauseGestureTracker.shared.menuOrStartPressed()
+                  }
                 }
             }
         }

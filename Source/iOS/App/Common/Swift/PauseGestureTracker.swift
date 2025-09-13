@@ -8,6 +8,7 @@ import GameController
 /// - While holding all four shoulder buttons AND pressing Menu/Start: show the pause menu
 /// - No long-hold gesture on shoulders alone
 final class PauseGestureTracker {
+    @MainActor
     static let shared = PauseGestureTracker()
 
     /// Notification posted when fast forward active state changes.
@@ -54,6 +55,7 @@ final class PauseGestureTracker {
         }
     }
 
+    @MainActor
     @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
         if gesture.state == .began {
             TVEmulationBridge.pause()

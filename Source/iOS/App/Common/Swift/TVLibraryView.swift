@@ -725,7 +725,7 @@ struct TVLibraryView: View {
 #endif
     }
   }
-  
+
   private var isSearching: Bool {
     !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
@@ -762,7 +762,7 @@ struct TVLibraryView: View {
     libraryView_tvOS(displayGames)
 #endif
   }
-  
+
   #if os(tvOS)
   private func libraryView_tvOS(_ displayGames: [TVGameItem]) -> some View {
     ScrollView {
@@ -770,7 +770,7 @@ struct TVLibraryView: View {
       libraryToolbar_tvOS_main(displayGames)
     }
   }
-  
+
   @ViewBuilder
   private var libraryToolbar_tvOS_favorites: some View {
     if !isSearching, let favs = favorites(), !favs.isEmpty {
@@ -856,7 +856,7 @@ struct TVLibraryView: View {
       }
     }
   }
-  
+
   @ViewBuilder
   private func libraryToolbar_tvOS_main(_ displayGames: [TVGameItem]) -> some View {
     LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
@@ -895,7 +895,7 @@ struct TVLibraryView: View {
     .padding(.vertical, Constants.gridVerticalPadding)
   }
   #endif // os(tvOS)
-  
+
   #if !os(tvOS)
   @ViewBuilder
   private func libraryView_iOS(_ displayGames: [TVGameItem]) -> some View {
@@ -1213,20 +1213,18 @@ struct TVLibraryView: View {
         Button(action: { model.performOnlineSystemUpdate() }) {
           Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
         }
-        Button(action: {
 #if os(iOS)
-          let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "receiver"
+        Button(action: {
+          let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
           if role == "receiver" {
             NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Switch role to Sender to start DSU Controller")])
           } else {
             showDSUSession = true
           }
-#else
-          showDSUSession = true
-#endif
         }) {
           Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
         }
+#endif
         Button(action: {
 #if os(iOS) || targetEnvironment(macCatalyst)
           showImportNANDPicker = true
@@ -1272,7 +1270,7 @@ struct TVLibraryView: View {
 
   }
   #endif
-  
+
   @ToolbarContentBuilder
   private var libraryToolbar: some ToolbarContent {
     #if os(tvOS)

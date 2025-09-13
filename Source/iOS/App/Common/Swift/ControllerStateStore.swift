@@ -2,7 +2,7 @@ import Foundation
 import GameController
 
 @objcMembers
-final class ControllerStateStore: NSObject {
+final class ControllerStateStore: NSObject, Sendable {
   static let shared = ControllerStateStore()
   private override init() {}
 
