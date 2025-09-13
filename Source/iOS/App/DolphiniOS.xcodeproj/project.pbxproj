@@ -38,6 +38,7 @@
 		B346CDDC2E75E42F00B3C00B /* GameGridItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDDB2E75E42E00B3C00B /* GameGridItem.swift */; };
 		B346CDE02E75E4CF00B3C00B /* CacheInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */; };
 		B346CDE22E75E52900B3C00B /* DSUSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDE12E75E52900B3C00B /* DSUSessionView.swift */; };
+		B346CDE82E75F04100B3C00B /* ButtonMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -349,6 +350,7 @@
 		B346CDDB2E75E42E00B3C00B /* GameGridItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameGridItem.swift; sourceTree = "<group>"; };
 		B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheInfoView.swift; sourceTree = "<group>"; };
 		B346CDE12E75E52900B3C00B /* DSUSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSUSessionView.swift; sourceTree = "<group>"; };
+		B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ButtonMappingView.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -1251,10 +1253,10 @@
 		B933EDBB27F6A5C7004D7DD7 /* Swift */ = {
 			isa = PBXGroup;
 			children = (
-				B346CDE12E75E52900B3C00B /* DSUSessionView.swift */,
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
 				B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */,
+				B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */,
 				B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
 				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
@@ -1266,6 +1268,7 @@
 				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
 				B346BBF52E73C27000B3C00B /* DolphinBlogView.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
+				B346CDE12E75E52900B3C00B /* DSUSessionView.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
 				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
 				B346CDDB2E75E42E00B3C00B /* GameGridItem.swift */,
@@ -2642,6 +2645,7 @@
 				B9661F332D2318D300FB2AAB /* MappingInputDisplayViewController.mm in Sources */,
 				B9DC5FAF28849640004BD94A /* GraphicsTabViewController.m in Sources */,
 				B904ACD52885D2C4008B6BE9 /* AnisotropicFilteringViewController.mm in Sources */,
+				B346CDE82E75F04100B3C00B /* ButtonMappingView.swift in Sources */,
 				B31E6DC52E63C0CD0036EE31 /* AppConsts.swift in Sources */,
 				B9B2C65B288E454700CB6569 /* ExternalDisplaySceneDelegate.swift in Sources */,
 				B3F216762E5F746600AF38F3 /* SaveStateFilmstripView.swift in Sources */,

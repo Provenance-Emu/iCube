@@ -13,11 +13,10 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
     #if os(tvOS)
     // For tvOS, create the view controller programmatically
     let mappingVC = MappingRootViewController()
-    mappingVC.mappingType = isGC ? DOLMappingTypePad : DOLMappingTypeWiimote
-    mappingVC.mappingPort = max(0, portOneBased - 1)
+    mappingVC.mappingType = isGC ? .DOLMappingTypePad : .DOLMappingTypeWiimote
+    mappingVC.mappingPort = Int32(max(0, portOneBased - 1))
 
     let navController = UINavigationController(rootViewController: mappingVC)
-    navController.navigationBar.prefersLargeTitles = false
 
     return navController
     #else
@@ -42,21 +41,43 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
 
 /// Programmatic version of MappingRootViewController that doesn't rely on storyboards
 @objc class MappingRootViewController: UITableViewController {
-  @objc var mappingType: DOLMappingType = DOLMappingTypePad
+  @objc var mappingType: DOLMappingType = .DOLMappingTypePad
   @objc var mappingPort: Int32 = 0
 
   private var config: UnsafeMutableRawPointer?
   private var controller: UnsafeMutableRawPointer?
   private var sections: [[String: Any]] = []
 
+    // Initialize with grouped style
+  override init(style: UITableView.Style) {
+    #if os(tvOS)
+    super.init(style: .grouped)
+    #else
+    super.init(style: .insetGrouped)
+    #endif
+  }
+
+  convenience override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+    #if os(tvOS)
+    self.init(style: .grouped)
+    #else
+    self.init(style: .insetGrouped)
+    #endif
+  }
+
+  required init?(coder: NSCoder) {
+    super.init(coder: coder)
+  }
+
   override func viewDidLoad() {
     super.viewDidLoad()
 
     title = L("Mapping")
+    #if !os(tvOS)
     navigationItem.largeTitleDisplayMode = .never
+    #endif
 
-    // Configure table view
-    tableView.style = UITableView.Style.insetGrouped
+    // Configure table view (style is set in init)
     tableView.rowHeight = UITableView.automaticDimension
     tableView.estimatedRowHeight = 44
 
@@ -110,7 +131,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
     ])
 
     // Controller-specific sections
-    if mappingType == DOLMappingTypePad {
+    if mappingType == .DOLMappingTypePad {
       // GameCube controller sections
       sections.append([
         "title": L("General and Options"),
@@ -265,14 +286,14 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
   private func showDeviceSelection() {
     // Placeholder for device selection
     let alert = UIAlertController(title: L("Device Selection"), message: L("Device selection not yet implemented in programmatic version"), preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: "OK", style: .default))
+    alert.addAction(UIAlertAction(title: L("OK"), style: .default))
     present(alert, animated: true)
   }
 
   private func showExtensionSelection() {
     // Placeholder for extension selection
     let alert = UIAlertController(title: L("Extension Selection"), message: L("Extension selection not yet implemented in programmatic version"), preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: "OK", style: .default))
+    alert.addAction(UIAlertAction(title: L("OK"), style: .default))
     present(alert, animated: true)
   }
 
@@ -317,7 +338,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
   private func showInputDisplay() {
     // Placeholder for input display
     let alert = UIAlertController(title: L("Input Display"), message: L("Input display not yet implemented in programmatic version"), preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: "OK", style: .default))
+    alert.addAction(UIAlertAction(title: L("OK"), style: .default))
     present(alert, animated: true)
   }
 }

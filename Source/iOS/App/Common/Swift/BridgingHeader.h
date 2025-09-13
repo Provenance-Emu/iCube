@@ -19,6 +19,7 @@
 #import "UpdateNoticeViewController.h"
 #import "UpdateRequiredNoticeViewController.h"
 #import "FastmemManager.h"
+#import "MappingRootViewController.h"
 
 #import "EmuEventVC.h"
 #import "InputOverriderBridge.h"
