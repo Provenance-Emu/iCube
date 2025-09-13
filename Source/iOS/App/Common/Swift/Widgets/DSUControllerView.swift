@@ -21,7 +21,9 @@ struct DSUControllerView: View {
   @State private var rxCount: UInt = 0
   @State private var clients: [String] = []
   @AppStorage("dsu_show_touch_area") private var showTouchArea: Bool = false
-
+  @AppStorage("dsu_show_tooltips") private var showTooltips: Bool = false
+  @State private var activeTooltip: String? = nil
+  @State private var tooltipTimer: Timer?
 
   /// Whether to show the touch area overlay for the current layout
   private var shouldShowTouchArea: Bool {
@@ -71,7 +73,10 @@ struct DSUControllerView: View {
         TouchAreaOverlay()
       }
 
-
+      // Tooltip overlay
+      if let tooltip = activeTooltip, showTooltips {
+        TooltipOverlay(text: tooltip)
+      }
 
       // Status HUD
       VStack {
@@ -115,12 +120,13 @@ struct DSUControllerView: View {
         Button(action: toggleIRMode) {
           Label(irModeLabel, systemImage: "gyroscope")
         }
+        .modifier(TooltipModifier(text: L("Toggle IR pointer mode for Wiimote games"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
       }
       ToolbarItem(placement: .navigationBarLeading) {
         Button(action: { showLayoutSheet = true }) {
           Label(L("Layout"), systemImage: "rectangle.3.offgrid")
         }
-
+        .modifier(TooltipModifier(text: L("Choose controller layout (Apple, GameCube, Wii)"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
       }
       // Target receiver selection
       ToolbarItem(placement: .navigationBarLeading) {
@@ -139,7 +145,7 @@ struct DSUControllerView: View {
         } label: {
           Label(L("Target"), systemImage: "antenna.radiowaves.left.and.right")
         }
-
+        .modifier(TooltipModifier(text: L("Select which receiver to send input to"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
       }
       // Apple controller: toggle between Left Stick and D-Pad (mutually exclusive)
       ToolbarItem(placement: .navigationBarLeading) {
@@ -150,25 +156,38 @@ struct DSUControllerView: View {
           }) {
             Label(appleLeftIsDPad ? L("Left=D‑Pad") : L("Left=Stick"), systemImage: appleLeftIsDPad ? "circle.grid.cross" : "circle")
           }
-
+          .modifier(TooltipModifier(text: L("Toggle left control between analog stick and D-pad"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
         }
       }
       ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: { showMotionSheet = true }) {
           Label(L("Motion"), systemImage: "slider.horizontal.3")
         }
-
+        .modifier(TooltipModifier(text: L("Adjust motion sensitivity and deadzone settings"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
       }
       ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: { showTouchArea.toggle() }) {
           Label(L("Touch"), systemImage: showTouchArea ? "hand.tap.fill" : "hand.tap")
         }
-
+        .modifier(TooltipModifier(text: L("Toggle touchpad area for DS4-style touch input"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+      }
+      ToolbarItem(placement: .navigationBarTrailing) {
+        Button(action: { showTooltips.toggle() }) {
+          Label(L("Tooltips"), systemImage: showTooltips ? "questionmark.circle.fill" : "questionmark.circle")
+        }
+        .modifier(TooltipModifier(text: L("Toggle help tooltips for toolbar buttons"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+      }
+      ToolbarItem(placement: .navigationBarTrailing) {
+        Button(action: { DSUServerBridge.sendNow() }) {
+          Label(L("Send Test Frame"), systemImage: "paperplane")
+        }
+        .modifier(TooltipModifier(text: L("Send a test frame to verify connection"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
       }
       ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: onClose) {
           Label(L("Exit"), systemImage: "xmark")
         }
+        .modifier(TooltipModifier(text: L("Close DSU controller and return to game"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
       }
     }
     .navigationBarTitleDisplayMode(.inline)
@@ -510,17 +529,15 @@ private final class TouchControllerHostViewController: UIViewController {
 // MARK: - Touch Area Overlay
 
 private struct TouchAreaOverlay: View {
-  @State private var touchPoints: [Int: CGPoint] = [:] // touchId -> position
-
   var body: some View {
     GeometryReader { geometry in
       let isLandscape = geometry.size.width > geometry.size.height
       let touchAreaHeight: CGFloat = isLandscape ? 150 : 180
       let alignment: Alignment = isLandscape ? .center : .top
-      let topPadding: CGFloat = isLandscape ? 40 : 60 // Move down in landscape, safe area padding for portrait
+      let topPadding: CGFloat = isLandscape ? 0 : 60 // Safe area padding for portrait
 
       // Constrain touch area width in landscape to 16:9 aspect ratio
-      let maxTouchAreaWidth: CGFloat = isLandscape ? (touchAreaHeight * 16.0 / 9.0) : geometry.size.width
+      let areaWidth: CGFloat = isLandscape ? (touchAreaHeight * 16.0 / 9.0) : geometry.size.width
 
       ZStack {
         // Semi-transparent touch area background
@@ -536,72 +553,153 @@ private struct TouchAreaOverlay: View {
                   .padding(4)
                   .background(Color.black.opacity(0.3))
                   .clipShape(RoundedRectangle(cornerRadius: 4))
-                  .position(x: geometry.size.width / 2, y: 20)
+                  .position(x: areaWidth / 2, y: 20)
               )
           )
 
-        // Active touch points
-        ForEach(Array(touchPoints.keys), id: \.self) { touchId in
-          if let point = touchPoints[touchId] {
-            Circle()
-              .fill(Color.cyan.opacity(0.6))
-              .frame(width: 44, height: 44)
-              .position(point)
-              .overlay(
-                Text("\(touchId + 1)")
-                  .font(.caption2.bold())
-                  .foregroundColor(.white)
-                  .position(point)
-              )
-          }
-        }
+        // Multi-touch capture layer (supports 2 touches)
+        TouchPadCapture()
       }
-      .frame(maxWidth: maxTouchAreaWidth, maxHeight: touchAreaHeight)
-      .frame(maxHeight: .infinity, alignment: alignment)
+      .frame(width: areaWidth, height: touchAreaHeight)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
       .padding(.top, topPadding)
-      .gesture(
-        DragGesture(minimumDistance: 0, coordinateSpace: .local)
-          .onChanged { value in
-            handleTouchChanged(value, geometry: geometry)
-          }
-          .onEnded { value in
-            handleTouchEnded(value)
-          }
-          .simultaneously(with:
-            // Support multi-touch
-            DragGesture(minimumDistance: 0, coordinateSpace: .local)
-              .onChanged { value in
-                handleTouchChanged(value, touchId: 1, geometry: geometry)
-              }
-              .onEnded { value in
-                handleTouchEnded(value, touchId: 1)
-              }
-          )
-      )
     }
-  }
-
-    private func handleTouchChanged(_ value: DragGesture.Value, touchId: Int = 0, geometry: GeometryProxy) {
-    let location = value.location
-    touchPoints[touchId] = location
-
-    // Convert to DSU touch coordinates (0-1920 x 0-1080)
-    // Use actual touch area dimensions for accurate mapping
-    let isLandscape = geometry.size.width > geometry.size.height
-    let touchAreaHeight: CGFloat = isLandscape ? 150.0 : 180.0
-    let touchAreaWidth: CGFloat = isLandscape ? (touchAreaHeight * 16.0 / 9.0) : geometry.size.width
-
-    let x = Int(location.x / touchAreaWidth * 1920.0)
-    let y = Int(location.y / touchAreaHeight * 1080.0)
-
-    DSUServerBridge.setTouchPoint(touchId, controller: 0, active: true, x: x, y: y)
-  }
-
-  private func handleTouchEnded(_ value: DragGesture.Value, touchId: Int = 0) {
-    touchPoints.removeValue(forKey: touchId)
-    DSUServerBridge.setTouchPoint(touchId, controller: 0, active: false, x: 0, y: 0)
   }
 }
 
+// UIViewRepresentable that captures up to two simultaneous touches and forwards to DSU
+private struct TouchPadCapture: UIViewRepresentable {
+  func makeUIView(context: Context) -> TouchPadCaptureView {
+    let v = TouchPadCaptureView()
+    v.isMultipleTouchEnabled = true
+    v.backgroundColor = .clear
+    return v
+  }
+  func updateUIView(_ uiView: TouchPadCaptureView, context: Context) { }
+}
+
+private final class TouchPadCaptureView: UIView {
+  private var touchToId: [UITouch: Int] = [:]
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    isMultipleTouchEnabled = true
+  }
+  required init?(coder: NSCoder) { super.init(coder: coder); isMultipleTouchEnabled = true }
+
+  private func assignId(for touch: UITouch) -> Int? {
+    if let id = touchToId[touch] { return id }
+    // Assign lowest free id 0 or 1
+    let used = Set(touchToId.values)
+    if !used.contains(0) { touchToId[touch] = 0; return 0 }
+    if !used.contains(1) { touchToId[touch] = 1; return 1 }
+    return nil
+  }
+
+  private func dsuXY(for point: CGPoint) -> (Int, Int) {
+    let w = max(bounds.width, 1)
+    let h = max(bounds.height, 1)
+    let x = Int((point.x / w) * 1920.0)
+    let y = Int((point.y / h) * 1080.0)
+    return (x, y)
+  }
+
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    for t in touches {
+      guard let id = assignId(for: t) else { continue }
+      let p = t.location(in: self)
+      let (x, y) = dsuXY(for: p)
+      DSUServerBridge.setTouchPoint(id, controller: 0, active: true, x: x, y: y)
+    }
+  }
+
+  override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+    for t in touches {
+      guard let id = touchToId[t] else { continue }
+      let p = t.location(in: self)
+      let (x, y) = dsuXY(for: p)
+      DSUServerBridge.setTouchPoint(id, controller: 0, active: true, x: x, y: y)
+    }
+  }
+
+  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    endTouches(touches)
+  }
+  override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+    endTouches(touches)
+  }
+
+  private func endTouches(_ touches: Set<UITouch>) {
+    for t in touches {
+      if let id = touchToId.removeValue(forKey: t) {
+        DSUServerBridge.setTouchPoint(id, controller: 0, active: false, x: 0, y: 0)
+      }
+    }
+  }
+}
+
+// MARK: - Tooltip Support
+
+/// Overlay that displays the active tooltip
+private struct TooltipOverlay: View {
+  let text: String
+
+  var body: some View {
+    VStack {
+      Spacer()
+      HStack {
+        Spacer()
+        Text(text)
+          .font(.caption)
+          .foregroundColor(.white)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 8)
+          .background(Color.black.opacity(0.8))
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .shadow(radius: 4)
+        Spacer()
+      }
+      .padding(.bottom, 100) // Above the controls
+    }
+    .allowsHitTesting(false)
+    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+    .animation(.easeInOut(duration: 0.2), value: text)
+  }
+}
+
+/// ViewModifier that shows tooltips on tap when enabled
+private struct TooltipModifier: ViewModifier {
+  let text: String
+  let showTooltips: Bool
+  @Binding var activeTooltip: String?
+  @Binding var tooltipTimer: Timer?
+
+  func body(content: Content) -> some View {
+    content
+      .onTapGesture {
+        guard showTooltips else { return }
+
+        // Cancel existing timer
+        tooltipTimer?.invalidate()
+
+        // Show tooltip
+        activeTooltip = text
+
+        // Auto-hide after 3 seconds
+        tooltipTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+          activeTooltip = nil
+        }
+      }
+      .onLongPressGesture(minimumDuration: 0.5) {
+        // Always show tooltip on long press, regardless of toggle
+        tooltipTimer?.invalidate()
+        activeTooltip = text
+
+        tooltipTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+          activeTooltip = nil
+        }
+      }
+  }
+}
 
 #endif
