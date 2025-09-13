@@ -124,8 +124,8 @@ internal struct PauseMenuView: View {
   // iOS: compact layout with adaptive grid and safe-area background
   private var iosMainMenu: some View {
     let backgroundView = ZStack {
-      // Use GameBanner if available, otherwise fallback to cover
-      Image(uiImage: game.bannerImage ?? game.coverImage)
+      // Use cover image for iOS (better aspect ratio fit)
+      Image(uiImage: game.coverImage)
         .resizable()
         .scaledToFill()
         .blur(radius: 24)
