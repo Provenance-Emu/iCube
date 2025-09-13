@@ -54,6 +54,9 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 
   // simple pad state (pad 0)
   ciface::DualShockUDPClient::Proto::MessageType::PadDataResponse _pad;
+
+  // Rumble callback for clients (controller, motorId, intensity 0..255)
+  void (^_rumbleHandler)(NSInteger, NSInteger, NSInteger);
 }
 
 + (instancetype)shared { static DSUServerBridge* s; static dispatch_once_t once; dispatch_once(&once, ^{ s = [DSUServerBridge new]; }); return s; }
@@ -278,6 +281,10 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   [[self shared] sendPadData];
 }
 
++ (void)setRumbleHandler:(void (^_Nullable)(NSInteger controller, NSInteger motorId, NSInteger intensity))handler {
+  [self shared]->_rumbleHandler = [handler copy];
+}
+
 - (instancetype)init {
   if (self = [super init]) {
     _running = NO; _sock = -1; _port = ciface::DualShockUDPClient::DEFAULT_SERVER_PORT;
@@ -405,7 +412,8 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 }
 
 - (void)handlePacket:(const void*)data length:(size_t)len from:(const struct sockaddr_in*)src {
-  if (len < sizeof(Proto::MessageType::FromClient)) return;
+  // Accept any packet that at least contains a header and message_type
+  if (len < (sizeof(Proto::MessageHeader) + sizeof(u32))) return;
   Proto::MessageType::FromClient msg{};
   memcpy(&msg, data, MIN(len, sizeof(msg)));
   // Quick filter by protocol magic
@@ -449,6 +457,44 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
       }
       // On request, respond immediately with a frame; regular frames are sent by timer
       [self sendPadDataTo:src];
+      break;
+    }
+    // Unofficial: respond to MotorInfo requests with 2 motors
+    case 0x110001U: { // MotorInfoRequest
+      struct MotorInfoResponse { // matches layout in PR #11545
+        Proto::MessageHeader header;
+        u32 message_type;
+        u8 pad_id;
+        std::array<u8, 6> pad_mac_address;
+        u8 motor_count;
+      } resp{};
+      resp.header.source = Proto::SERVER;
+      resp.header.protocol_version = Proto::CEMUHOOK_PROTOCOL_VERSION;
+      resp.message_type = 0x110001U; // MotorInfoResponse
+      resp.pad_id = 0;
+      memset(resp.pad_mac_address.data(), 0, resp.pad_mac_address.size());
+      resp.motor_count = 2;
+      resp.header.message_length = sizeof(resp) - sizeof(resp.header);
+      resp.header.source_uid = 0;
+      resp.header.crc32 = Common::ComputeCRC32(reinterpret_cast<const u8*>(&resp), sizeof(resp));
+      sendto(_sock, &resp, sizeof(resp), 0, (const struct sockaddr*)src, sizeof(*src));
+      break;
+    }
+    case 0x110002U: { // RumbleRequest
+      struct RumbleRequest {
+        Proto::MessageHeader header;
+        u32 message_type;
+        u8 pad_id;
+        std::array<u8, 6> pad_mac_address;
+        u8 motor_id;
+        u8 intensity; // 0..255
+      } req{};
+      if (len >= sizeof(req)) {
+        memcpy(&req, data, sizeof(req));
+        if (_rumbleHandler) {
+          _rumbleHandler((NSInteger)req.pad_id, (NSInteger)req.motor_id, (NSInteger)req.intensity);
+        }
+      }
       break;
     }
     default:
@@ -526,7 +572,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     char ipbuf[INET_ADDRSTRLEN] = {0};
     const char* ip = inet_ntop(AF_INET, &dst->sin_addr, ipbuf, sizeof(ipbuf));
     uint16_t p = ntohs(dst->sin_port);
-    NSLog(@"[DSU] Sent PadDataResponse %zd bytes to %s:%hu hid_counter=%u buttons1=%02x buttons2=%02x L2=%u R2=%u",
+    NSLog(@"[DSU] Sent PadDataResponse %zd bytes to %s:%hu hid_counter=%u buttons1=%02x buttons2=%02x",
           sent, ip ? ip : "<unknown>", p, pd.m_message.hid_packet_counter,
           pd.m_message.button_states1, pd.m_message.button_states2,
           pd.m_message.trigger_l2, pd.m_message.trigger_r2);
