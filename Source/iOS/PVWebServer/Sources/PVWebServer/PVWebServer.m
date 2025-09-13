@@ -538,7 +538,16 @@ NSUInteger webDavPort = 81;
     if (getifaddrs(&interfaces) == 0 && interfaces) {
         // Prefer Wi‑Fi (en0) or Ethernet (en1)
         temp_addr = interfaces;
-        while (temp_addr) {
+        NSMutableSet<NSValue*> *visited = [NSMutableSet set];
+        NSUInteger guard = 0, guardMax = 2048;
+        while (temp_addr && guard++ < guardMax) {
+            if ([visited containsObject:[NSValue valueWithPointer:temp_addr]]) {
+#if DEBUG
+                NSLog(@"IPAddress: detected cycle in interface list (primary loop), breaking");
+#endif
+                break;
+            }
+            [visited addObject:[NSValue valueWithPointer:temp_addr]];
             if (temp_addr->ifa_addr && temp_addr->ifa_addr->sa_family == AF_INET) {
                 NSString *interfaceName = [NSString stringWithUTF8String:temp_addr->ifa_name ?: "?"];
 #if DEBUG
@@ -555,7 +564,16 @@ NSUInteger webDavPort = 81;
         // Fallback: first non-loopback IPv4
         if ([address isEqualToString:@"error"]) {
             temp_addr = interfaces;
-            while (temp_addr) {
+            [visited removeAllObjects];
+            guard = 0;
+            while (temp_addr && guard++ < guardMax) {
+                if ([visited containsObject:[NSValue valueWithPointer:temp_addr]]) {
+#if DEBUG
+                    NSLog(@"IPAddress: detected cycle in interface list (fallback loop), breaking");
+#endif
+                    break;
+                }
+                [visited addObject:[NSValue valueWithPointer:temp_addr]];
                 if (temp_addr->ifa_addr && temp_addr->ifa_addr->sa_family == AF_INET) {
                     NSString *name = [NSString stringWithUTF8String:temp_addr->ifa_name ?: "?"];
                     if (![name isEqualToString:@"lo0"]) {
