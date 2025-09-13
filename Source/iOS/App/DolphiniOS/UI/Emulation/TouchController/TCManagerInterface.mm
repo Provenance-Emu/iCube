@@ -84,6 +84,18 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
   ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis, v);
   // Also forward to DSU server if running
   if ([DSUServerBridge isRunning]) {
+    // **WIIMOTE IR POINTER** - Forward IR data to DSU touch coordinates
+    // Uses TCButtonType.wiiInfraredUp/Down/Left/Right indices (112-115)
+    if (axis >= 112 && axis <= 115) {
+      static float ir_x = 0.0f, ir_y = 0.0f;
+      if (axis == 112 || axis == 113) { ir_y = v; }
+      if (axis == 114 || axis == 115) { ir_x = v; }
+      int touch_x = (int)((ir_x + 1.0f) * 0.5f * 1920.0f);
+      int touch_y = (int)((ir_y + 1.0f) * 0.5f * 1080.0f);
+      BOOL active = (fabsf(ir_x) > 0.01f || fabsf(ir_y) > 0.01f);
+      [DSUServerBridge setTouchPoint:0 controller:controllerId active:active x:touch_x y:touch_y];
+    }
+
     // Forward Wiimote gyro data to DSU (axes 631-636 are IMU gyro)
     if (axis >= 631 && axis <= 636) {
       static float gyro_pitch = 0.0f, gyro_yaw = 0.0f, gyro_roll = 0.0f;
