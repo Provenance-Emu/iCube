@@ -53,28 +53,35 @@ static float s_splitAxes[4][256] = {{0}}; // [controller][axisIndex] last values
 static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); }
 
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
-  // Apply DSU scaling parameters (gain, deadzone, smoothing) to analog axes before forwarding
+  // Apply DSU scaling parameters to analog axes before forwarding
   static float s_last[4][256] = {{0}}; // simple per-controller/per-axis smoothing
   NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;
   float gain = (float)[defs floatForKey:@"dsu_gyro_gain"]; if (gain <= 0.f) gain = 1.f;
   float dead = (float)[defs floatForKey:@"dsu_deadzone"]; if (dead < 0.f) dead = 0.f; if (dead > 0.49f) dead = 0.49f;
   float alpha = (float)[defs floatForKey:@"dsu_smoothing"]; if (alpha < 0.f) alpha = 0.f; if (alpha > 0.95f) alpha = 0.0f; // 0 = off
 
-  // Deadzone (assumes value in [-1, 1]) and gain
-  float v = value;
-  if (fabsf(v) < dead) v = 0.f; else {
-    float sign = (v >= 0.f) ? 1.f : -1.f;
-    float mag = (fabsf(v) - dead) / (1.f - dead);
-    v = sign * mag;
-  }
-  v *= gain;
-  if (v > 1.f) v = 1.f; if (v < -1.f) v = -1.f;
-
-  // Smoothing (EMA). Disable for split-stick axes to avoid clamping/angle bias.
+  // Axis classification
   int ci = (int)MAX(0, MIN(3, (int)controllerId));
   int ai = (int)MAX(0, MIN(255, (int)axis));
   const bool is_split_stick = ((ai >= 11 && ai <= 14) || (ai >= 16 && ai <= 19) || (ai >= 203 && ai <= 206));
-  if (alpha > 0.f && !is_split_stick) {
+  const bool is_ir_axis = (ai >= 112 && ai <= 115); // Wii IR Up/Down/Left/Right
+  const bool is_imu_axis = ((ai >= 625 && ai <= 636) || (ai >= 900 && ai <= 905)); // Wiimote+Nunchuk IMU
+
+  // Deadzone/gain only for standard analog axes; IMU + IR should be raw
+  float v = value;
+  if (!(is_ir_axis || is_imu_axis)) {
+    if (fabsf(v) < dead) v = 0.f; else {
+      float sign = (v >= 0.f) ? 1.f : -1.f;
+      float mag = (fabsf(v) - dead) / (1.f - dead);
+      v = sign * mag;
+    }
+    v *= gain;
+  }
+  if (v > 1.f) v = 1.f; if (v < -1.f) v = -1.f;
+
+  // Smoothing (EMA). Disable for split-stick, IMU and IR axes
+  const bool allow_smoothing = (alpha > 0.f) && !(is_split_stick || is_ir_axis || is_imu_axis);
+  if (allow_smoothing) {
     v = alpha * s_last[ci][ai] + (1.f - alpha) * v;
     s_last[ci][ai] = v;
   } else {
@@ -172,13 +179,29 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
       if (axis >= 11 && axis <= 14) {
         float lx = combLR(13, 14); // Left-, Right+
         float ly = combUD(11, 12); // Up-, Down+
+        // Snap small residuals to zero to avoid stickiness
+        if (fabsf(lx) < 0.02f) lx = 0.f; if (fabsf(ly) < 0.02f) ly = 0.f;
         [DSUServerBridge setAxis:0 controller:controllerId value:lx];
         [DSUServerBridge setAxis:1 controller:controllerId value:ly];
+        // Recenter guard: resend center shortly after release to overcome missed events
+        if (lx == 0.f && ly == 0.f) {
+          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
+            [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
+          });
+        }
       } else if (axis >= 16 && axis <= 19) {
         float rx = combLR(18, 19); // Left-, Right+
         float ry = combUD(16, 17); // Up-, Down+
+        if (fabsf(rx) < 0.02f) rx = 0.f; if (fabsf(ry) < 0.02f) ry = 0.f;
         [DSUServerBridge setAxis:2 controller:controllerId value:rx];
         [DSUServerBridge setAxis:3 controller:controllerId value:ry];
+        if (rx == 0.f && ry == 0.f) {
+          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            [DSUServerBridge setAxis:2 controller:controllerId value:0.f];
+            [DSUServerBridge setAxis:3 controller:controllerId value:0.f];
+          });
+        }
       } else {
         // Nunchuk stick - only send if there's actual input to avoid overwriting main stick
         float lx2 = combLR(205, 206); // Left-, Right+
@@ -186,6 +209,12 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
         if (fabsf(lx2) > 0.01f || fabsf(ly2) > 0.01f) {
           [DSUServerBridge setAxis:0 controller:controllerId value:lx2];
           [DSUServerBridge setAxis:1 controller:controllerId value:ly2];
+        } else {
+          // If both near zero, ensure main stick recenters as well
+          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+            [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
+            [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
+          });
         }
       }
     }
