@@ -41,6 +41,7 @@ struct ShaderPickerView: View {
 	@State private var presets: [ShaderPreset] = []
 	@State private var favorites: [String] = UserDefaults.standard.stringArray(forKey: "shader_favorites") ?? []
 	@State private var mru: [String] = UserDefaults.standard.stringArray(forKey: "shader_mru") ?? []
+	@State private var searchText: String = ""
 
 	private func normalizedPath(_ absPath: String) -> String {
 		let bundleBase = Bundle.main.bundleURL.path
@@ -65,6 +66,16 @@ struct ShaderPickerView: View {
 		UserDefaults.standard.set(mru, forKey: "shader_mru")
 	}
 
+	/// Returns true if the preset matches the current search filter
+	private func matchesSearch(_ preset: ShaderPreset) -> Bool {
+		let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+		if q.isEmpty { return true }
+		let needle = q.lowercased()
+		let name = preset.name.lowercased()
+		let path = normalizedPath(preset.id.path).lowercased()
+		return name.contains(needle) || path.contains(needle)
+	}
+
 	var body: some View {
 		ScrollViewReader { proxy in
 			List {
@@ -75,9 +86,10 @@ struct ShaderPickerView: View {
 				}
 				.id("NONE")
 				// Favorites
-				if !favorites.isEmpty {
+				let favItems = presets.filter(matchesSearch).filter { favorites.contains(normalizedPath($0.id.path)) }
+				if !favorites.isEmpty && !favItems.isEmpty {
 					Section(header: Text(L("Favorites"))) {
-						ForEach(presets.filter { favorites.contains(normalizedPath($0.id.path)) }) { preset in
+						ForEach(favItems) { preset in
 							let absPath = preset.id.path
 							let normalized = normalizedPath(absPath)
 							HStack {
@@ -96,9 +108,10 @@ struct ShaderPickerView: View {
 					}
 				}
 				// Recently used
-				if !mru.isEmpty {
+				let recentItems = presets.filter(matchesSearch).filter { mru.contains(normalizedPath($0.id.path)) }
+				if !mru.isEmpty && !recentItems.isEmpty {
 					Section(header: Text(L("Recently Used"))) {
-						ForEach(presets.filter { mru.contains(normalizedPath($0.id.path)) }) { preset in
+						ForEach(recentItems) { preset in
 							let absPath = preset.id.path
 							let normalized = normalizedPath(absPath)
 							HStack {
@@ -116,7 +129,8 @@ struct ShaderPickerView: View {
 						}
 					}
 				}
-				ForEach(presets) { preset in
+				let allItems = presets.filter(matchesSearch)
+				ForEach(allItems) { preset in
 					Group {
 						let absPath = preset.id.path
 						let bundleBase = Bundle.main.bundleURL.path
@@ -145,6 +159,11 @@ struct ShaderPickerView: View {
 					}
 				}
 			}
+      #if !os(tvOS)
+			.searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: Text(L("Search Shaders")))
+      #else
+      .searchable(text: $searchText, placement: .automatic, prompt: Text(L("Search Shaders")))
+      #endif
 			.navigationTitle(L("Shaders"))
 			.onAppear {
 				presets = ShaderLibrary.discoverPresets()
