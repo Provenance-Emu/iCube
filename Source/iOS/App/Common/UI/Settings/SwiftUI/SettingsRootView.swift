@@ -311,10 +311,12 @@ struct SettingsRootView<Background: View>: View {
             Label(L("About"), systemImage: "info.circle")
           }
           NavigationLink(destination: DolphinBlogView()) {
-            Label("Dolphin Blog", systemImage: "newspaper")
+            Label(L("Dolphin Blog"), systemImage: "newspaper")
           }
 #if os(tvOS)
-          NavigationLink(L("Help"), destination: HelpPlaceholderView())
+          NavigationLink(destination: HelpPlaceholderView()) {
+            Label(L("Help"), systemImage: "questionmark.circle")
+          }
 #else
           Button(L("Help")) {
             if let url = URL(string: "https://oatmealdome.me/dolphinios/") {
