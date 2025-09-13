@@ -860,7 +860,9 @@ struct ControllersRootView: View {
                     .frame(minWidth: 72)
                 }
                 .buttonStyle(.bordered)
+                #if !os(tvOS)
                 .controlSize(.regular)
+                #endif
                 .padding(.vertical, 4)
               }
             }
