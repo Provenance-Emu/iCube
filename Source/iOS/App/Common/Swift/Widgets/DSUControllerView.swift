@@ -41,6 +41,7 @@ struct DSUControllerView: View {
         NavigationView { controllerContent }
       }
     }
+    .ignoresSafeArea(.keyboard, edges: .bottom)
   }
 
   private var controllerContent: some View {
