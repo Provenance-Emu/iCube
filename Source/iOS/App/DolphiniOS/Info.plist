@@ -69,6 +69,17 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>me.oatmealdome.dolphinios</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dolphinios</string>
+			</array>
+		</dict>
+	</array>
 	<key>DOLBuildSource</key>
 	<string>$(DOL_BUILD_SOURCE)</string>
 	<key>DOLCoreVersion</key>
@@ -116,10 +127,6 @@
 		<string>_webdav._tcp</string>
 		<string>_dolphin-dsu._udp</string>
 	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>DolphiniOS uses your local network to discover and connect to DSU controllers and devices.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Used to save gameplay clips you record with Instant Replay.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -150,35 +157,35 @@
 			</array>
 		</dict>
 	</dict>
-	<key>UIFileSharingEnabled</key>
-	<true/>
 	<key>UIApplicationShortcutItems</key>
 	<array>
 		<dict>
-			<key>UIApplicationShortcutItemType</key>
-			<string>dios.quick.continue</string>
-			<key>UIApplicationShortcutItemTitle</key>
-			<string>Continue Last Game</string>
 			<key>UIApplicationShortcutItemIconType</key>
 			<string>UIApplicationShortcutIconTypePlay</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Continue Last Game</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>dios.quick.continue</string>
 		</dict>
 		<dict>
-			<key>UIApplicationShortcutItemType</key>
-			<string>dios.quick.import</string>
-			<key>UIApplicationShortcutItemTitle</key>
-			<string>Import Game</string>
 			<key>UIApplicationShortcutItemIconType</key>
 			<string>UIApplicationShortcutIconTypeAdd</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Import Game</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>dios.quick.import</string>
 		</dict>
 		<dict>
-			<key>UIApplicationShortcutItemType</key>
-			<string>dios.quick.settings</string>
-			<key>UIApplicationShortcutItemTitle</key>
-			<string>Settings</string>
 			<key>UIApplicationShortcutItemIconType</key>
 			<string>UIApplicationShortcutIconTypeCompose</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Settings</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>dios.quick.settings</string>
 		</dict>
 	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -343,21 +350,6 @@
 					<string>elf</string>
 				</array>
 			</dict>
-		</dict>
-	</array>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
-	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<true/>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>me.oatmealdome.dolphinios</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>dolphinios</string>
-			</array>
 		</dict>
 	</array>
 </dict>

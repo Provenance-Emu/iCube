@@ -114,6 +114,16 @@ struct DSUControllerView: View {
           NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
         }
       }
+      // Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping)
+      #if canImport(CoreMotion)
+      TCDeviceMotion.shared.setPort(0)
+      TCDeviceMotion.shared.setMotionEnabled(true)
+      #endif
+    }
+    .onDisappear {
+      #if canImport(CoreMotion)
+      TCDeviceMotion.shared.setMotionEnabled(false)
+      #endif
     }
     .toolbar {
       ToolbarItem(placement: .navigationBarLeading) {

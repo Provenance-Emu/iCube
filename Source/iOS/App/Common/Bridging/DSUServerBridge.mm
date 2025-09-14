@@ -77,7 +77,8 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   DSUServerBridge* s = [self shared];
   NSMutableArray<NSString*>* unique = [NSMutableArray array];
   NSMutableSet<NSString*>* seen = [NSMutableSet set];
-  for (NSString* addr in s->_clients) {
+  NSArray<NSString*>* snapshot = [s->_clients copy];
+  for (NSString* addr in snapshot) {
     NSArray<NSString*>* parts = [addr componentsSeparatedByString:@":"]; if (parts.count < 1) continue;
     NSString* ip = parts[0]; if (ip.length == 0) continue;
     if (![seen containsObject:ip]) { [seen addObject:ip]; [unique addObject:ip]; }
@@ -508,20 +509,22 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     // Send to all recently seen ports for the restricted IP
     NSString* rest = _restrictTo;
     NSRange c = [rest rangeOfString:@":"]; if (c.location != NSNotFound) rest = [rest substringToIndex:c.location];
-    for (NSString* addr in _clients) {
-      NSArray<NSString*>* parts = [addr componentsSeparatedByString:@":"]; if (parts.count != 2) continue;
-      if (![parts[0] isEqualToString:rest]) continue;
-      const char* ip = [parts[0] UTF8String];
-      int prt = parts[1].intValue; if (prt <= 0 || prt > 65535) continue;
-      struct sockaddr_in dst; memset(&dst, 0, sizeof(dst));
-      dst.sin_family = AF_INET; dst.sin_port = htons((uint16_t)prt);
-      if (inet_pton(AF_INET, ip, &dst.sin_addr) != 1) continue;
-      [self sendPadDataTo:&dst];
-    }
+      NSArray<NSString*>* snapshotRestrict = [_clients copy];
+  for (NSString* addr in snapshotRestrict) {
+    NSArray<NSString*>* parts = [addr componentsSeparatedByString:@":"]; if (parts.count != 2) continue;
+    if (![parts[0] isEqualToString:rest]) continue;
+    const char* ip = [parts[0] UTF8String];
+    int prt = parts[1].intValue; if (prt <= 0 || prt > 65535) continue;
+    struct sockaddr_in dst; memset(&dst, 0, sizeof(dst));
+    dst.sin_family = AF_INET; dst.sin_port = htons((uint16_t)prt);
+    if (inet_pton(AF_INET, ip, &dst.sin_addr) != 1) continue;
+    [self sendPadDataTo:&dst];
+  }
     return;
   }
   // Broadcast to all recently seen clients when not restricted
-  for (NSString* addr in _clients) {
+    NSArray<NSString*>* snapshotAll = [_clients copy];
+  for (NSString* addr in snapshotAll) {
     NSArray<NSString*>* parts = [addr componentsSeparatedByString:@":"];
     if (parts.count != 2) continue;
     const char* ip = [parts[0] UTF8String];
