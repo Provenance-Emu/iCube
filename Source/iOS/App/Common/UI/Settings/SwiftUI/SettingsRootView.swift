@@ -833,6 +833,18 @@ struct ControllersRootView: View {
           UserDefaults.standard.set(v, forKey: "ui_show_dsu_debug_hud")
 #endif
         }))
+        Toggle(L("Map IR (Gyro) to DSU Touch"), isOn: Binding(get: {
+          UserDefaults.standard.bool(forKey: "dsu_map_ir_to_touch")
+        }, set: { v in
+          UserDefaults.standard.set(v, forKey: "dsu_map_ir_to_touch")
+          NotificationCenter.default.post(name: Notification.Name("DOLMotionSettingsChanged"), object: nil)
+        }))
+        Toggle(L("Send DSU Gyro/Accel"), isOn: Binding(get: {
+          let has = UserDefaults.standard.object(forKey: "dsu_enable_gyro") != nil
+          return has ? UserDefaults.standard.bool(forKey: "dsu_enable_gyro") : true
+        }, set: { v in
+          UserDefaults.standard.set(v, forKey: "dsu_enable_gyro")
+        }))
         if dsuServers.isEmpty {
           HStack {
             Text(L("Servers"))

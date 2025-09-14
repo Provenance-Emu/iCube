@@ -128,10 +128,30 @@ struct DSUControllerView: View {
     }
     .toolbar {
       ToolbarItem(placement: .navigationBarLeading) {
-        Button(action: toggleIRMode) {
-          Label(irModeLabel, systemImage: "gyroscope")
+        Menu {
+          let currentIR = DOLConfigBridge.mainTouchPadIRMode()
+          Button {
+            DOLConfigBridge.setMainTouchPadIRMode(0)
+            refreshIRLabel()
+          } label: {
+            Label(L("Gyro"), systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
+          }
+          Button {
+            DOLConfigBridge.setMainTouchPadIRMode(1)
+            refreshIRLabel()
+          } label: {
+            Label(L("Follow"), systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
+          }
+          Button {
+            DOLConfigBridge.setMainTouchPadIRMode(2)
+            refreshIRLabel()
+          } label: {
+            Label(L("Drag"), systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
+          }
+        } label: {
+          Label(irModeLabel, systemImage: "cursor.rays")
         }
-        .modifier(TooltipModifier(text: L("Toggle IR pointer mode for Wiimote games"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        .modifier(TooltipModifier(text: L("Touch IR pointer control mode"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
       }
       ToolbarItem(placement: .navigationBarLeading) {
         Button(action: { showLayoutSheet = true }) {
