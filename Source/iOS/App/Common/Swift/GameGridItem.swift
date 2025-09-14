@@ -513,7 +513,7 @@ struct GameGridItem: View {
               LinearGradient(
                 colors: isFocused ? [
                   Color.cyan.opacity(0.95),
-                  Color.blue.opacity(0.9),
+                  Color(.dolphinTint).opacity(0.9),
                   Color.purple.opacity(0.95),
                   Color.cyan.opacity(0.95)
                 ] : [Color.clear],
@@ -650,7 +650,7 @@ struct GameGridItem: View {
                   .fill(.ultraThinMaterial)
                   .overlay(
                     Capsule()
-                      .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                      .stroke(Color(.dolphinTint).opacity(0.3), lineWidth: 1)
                   )
               )
             }

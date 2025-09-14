@@ -129,7 +129,7 @@ struct MotionDebugView: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(LinearGradient(
-                                colors: [Color.blue.opacity(0.1), Color.cyan.opacity(0.2)],
+                                colors: [Color(.dolphinTint).opacity(0.1), Color.cyan.opacity(0.2)],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             ))
@@ -904,7 +904,7 @@ struct Device3DView: View {
         }
 
         // Phone color based on shake intensity
-        let phoneColor = shakeIntensity > 1.0 ? Color.red.opacity(0.8) : Color.blue.opacity(0.8)
+        let phoneColor = shakeIntensity > 1.0 ? Color.red.opacity(0.8) : Color(.dolphinTint).opacity(0.8)
         let edgeColor = Color.white.opacity(0.9)
 
         // Draw phone faces (simplified to front and visible edges)

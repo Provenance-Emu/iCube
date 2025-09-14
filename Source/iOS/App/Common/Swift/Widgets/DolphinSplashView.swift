@@ -36,7 +36,7 @@ struct DolphinSplashView: View {
       // Animated wave background
       WaveShape(offset: waveOffset)
         .fill(LinearGradient(
-          colors: [Color.blue.opacity(0.2), Color.cyan.opacity(0.3)],
+          colors: [Color(.dolphinTint).opacity(0.2), Color.cyan.opacity(0.3)],
           startPoint: .leading,
           endPoint: .trailing
         ))
@@ -85,7 +85,7 @@ struct DolphinSplashView: View {
           ForEach(0..<12, id: \.self) { index in
             Image(systemName: "sparkle")
               .font(.system(size: CGFloat.random(in: 8...16)))
-              .foregroundColor(Color.blue.opacity(0.6))
+              .foregroundColor(Color(.dolphinTint).opacity(0.6))
               .offset(
                 x: cos(Double(index) * .pi / 6) * 140,
                 y: sin(Double(index) * .pi / 6) * 140

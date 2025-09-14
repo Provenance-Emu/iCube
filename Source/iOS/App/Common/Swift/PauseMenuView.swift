@@ -340,7 +340,7 @@ internal struct PauseMenuView: View {
             .padding(.vertical, 18)
             .background(
               LinearGradient(
-                colors: [Color.blue, Color.purple],
+                colors: [Color(.dolphinTint), Color.purple],
                 startPoint: .leading,
                 endPoint: .trailing
               )
