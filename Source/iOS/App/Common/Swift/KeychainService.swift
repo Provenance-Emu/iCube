@@ -3,7 +3,7 @@ import Security
 
 /// Simple Keychain wrapper for storing credentials per source id.
 enum KeychainService {
-    private static let service = "DolphiniOSRemoteSource"
+    private static let service = "iCubeRemoteSource"
 
     /// Stores or updates a password for a given account id.
     static func setPassword(_ password: String, for account: String) -> Bool {

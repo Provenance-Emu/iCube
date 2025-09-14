@@ -197,6 +197,7 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setSysconfWiimoteMotor:(BOOL)enabled;
 
 // RetroAchievements (Config + control)
+#if USE_RETRO_ACHIEVEMENTS
 + (BOOL)raEnabled;
 + (void)setRaEnabled:(BOOL)enabled;
 + (NSString*)raUsername;
@@ -220,6 +221,7 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)raShutdown;
 + (void)raLogin:(NSString*)password;
 + (void)raLogout;
+#endif
 
 // Controllers > Types
 + (NSInteger)gcPortDeviceForPort:(NSInteger)portOneBased;

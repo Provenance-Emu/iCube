@@ -1,5 +1,5 @@
-Package: me.oatmealdome.dolphinios
-Name: DolphiniOS
+Package: com.joemattiello.iCube
+Name: iCube
 Version: VERSION_NUMBER
 Architecture: iphoneos-arm
 Description: A GameCube and Wii emulator for iOS

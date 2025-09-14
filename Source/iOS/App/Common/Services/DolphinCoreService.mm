@@ -23,7 +23,7 @@
 
 #import "UICommon/UICommon.h"
 
-#import "DolphiniOS-Swift.h"
+#import "iCube-Swift.h"
 #import "EmulationCoordinator.h"
 #import "FastmemManager.h"
 #import "FoundationStringUtil.h"

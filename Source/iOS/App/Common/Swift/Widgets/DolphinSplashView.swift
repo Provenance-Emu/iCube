@@ -103,7 +103,7 @@ struct DolphinSplashView: View {
 
         // App title with animation
         VStack(spacing: 16) {
-          Text("DolphiniOS")
+          Text("iCube")
             .font(.system(size: 36, weight: .bold, design: .rounded))
             .foregroundStyle(
               LinearGradient(
@@ -133,7 +133,7 @@ struct DolphinSplashView: View {
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(.secondary)
 
-          Text("© 2019-2025+ DolphiniOS Project")
+          Text("© 025+ iCube Project")
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(.secondary)
             .scaledToFit()

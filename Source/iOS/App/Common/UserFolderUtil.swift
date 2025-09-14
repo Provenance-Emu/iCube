@@ -12,7 +12,7 @@ import Foundation
     return NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
   #endif
 #else
-    return "/private/var/mobile/Documents/DolphiniOS"
+    return "/private/var/mobile/Documents/iCube"
 #endif
   }
 

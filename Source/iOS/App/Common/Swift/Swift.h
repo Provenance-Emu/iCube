@@ -11,4 +11,4 @@
 
 // Import the Swift header now.
 
-#include "DolphiniOS-Swift.h"
+#include "iCube-Swift.h"

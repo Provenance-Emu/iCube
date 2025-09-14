@@ -258,7 +258,7 @@ internal struct ControllerMappingView: View {
           if controllers.isEmpty {
             DolphinErrorView(
               title: L("No Controllers"),
-              message: L("Connect external controllers to configure button mappings and enjoy the full DolphiniOS experience! 🎮")
+              message: L("Connect external controllers to configure button mappings and enjoy the full iCube experience! 🎮")
             )
             .background(.white.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))

@@ -50,7 +50,7 @@
                                                  name:GCKeyboardDidDisconnectNotification
                                                object:nil];
 
-    NSLog(@"[DolphiniOS][Input] MFiControllerScanner initialized. Current controllers=%lu",
+    NSLog(@"[iCube][Input] MFiControllerScanner initialized. Current controllers=%lu",
           (unsigned long)[GCController controllers].count);
 
 #if TARGET_OS_TV
@@ -94,7 +94,7 @@
     if ((NSUInteger)c.playerIndex != nextIndex)
     {
       c.playerIndex = (GCControllerPlayerIndex)nextIndex;
-      NSLog(@"[DolphiniOS][Input] Auto-assign MFi %@ (%@) -> playerIndex=%lu",
+      NSLog(@"[iCube][Input] Auto-assign MFi %@ (%@) -> playerIndex=%lu",
             c.vendorName, c.productCategory, (unsigned long)nextIndex);
     }
     nextIndex++;
@@ -105,7 +105,7 @@
     if ((NSUInteger)c.playerIndex != nextIndex)
     {
       c.playerIndex = (GCControllerPlayerIndex)nextIndex;
-      NSLog(@"[DolphiniOS][Input] Auto-assign Siri Remote %@ (%@) -> playerIndex=%lu",
+      NSLog(@"[iCube][Input] Auto-assign Siri Remote %@ (%@) -> playerIndex=%lu",
             c.vendorName, c.productCategory, (unsigned long)nextIndex);
     }
     nextIndex++;
@@ -115,14 +115,14 @@
 
 - (void)dealloc
 {
-  NSLog(@"[DolphiniOS][Input] MFiControllerScanner dealloc. Removing observers");
+  NSLog(@"[iCube][Input] MFiControllerScanner dealloc. Removing observers");
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)controllerConnected:(NSNotification*)notification
 {
   GCController* controller = (GCController*)notification.object;
-  NSLog(@"[DolphiniOS][Input] Controller connected: vendor=%@, category=%@, playerIndex=%ld",
+  NSLog(@"[iCube][Input] Controller connected: vendor=%@, category=%@, playerIndex=%ld",
         controller.vendorName, controller.productCategory, (long)controller.playerIndex);
 #if TARGET_OS_TV
   // Assign a slot if needed without disturbing existing assignments
@@ -151,7 +151,7 @@
     if (!qualifier.empty())
     {
       pad0->SetDefaultDevice(qualifier);
-      NSLog(@"[DolphiniOS][Input] Pad1 default device => %s", qualifier.c_str());
+      NSLog(@"[iCube][Input] Pad1 default device => %s", qualifier.c_str());
     }
     pad0->UpdateReferences(g_controller_interface);
   }
@@ -161,7 +161,7 @@
 - (void)controllerDisconnected:(NSNotification*)notification
 {
   GCController* gc_controller = (GCController*)notification.object;
-  NSLog(@"[DolphiniOS][Input] Controller disconnected: vendor=%@, category=%@, playerIndex=%ld",
+  NSLog(@"[iCube][Input] Controller disconnected: vendor=%@, category=%@, playerIndex=%ld",
         gc_controller.vendorName, gc_controller.productCategory, (long)gc_controller.playerIndex);
   g_controller_interface.RemoveDevice([&gc_controller](const auto* device) {
     const ciface::iOS::MFiController* controller =
@@ -177,14 +177,14 @@
 - (void)keyboardConnected:(NSNotification*)notification
 {
   GCKeyboard* keyboard = (GCKeyboard*)notification.object;
-  NSLog(@"[DolphiniOS][Input] Keyboard connected: %@", keyboard);
+  NSLog(@"[iCube][Input] Keyboard connected: %@", keyboard);
   g_controller_interface.AddDevice(std::make_shared<ciface::iOS::MFiKeyboard>(keyboard));
   [_keyboards addObject:keyboard];
 }
 
 - (void)keyboardDisconnected:(NSNotification*)notification
 {
-  NSLog(@"[DolphiniOS][Input] Keyboard disconnected: %@", notification.object);
+  NSLog(@"[iCube][Input] Keyboard disconnected: %@", notification.object);
   g_controller_interface.RemoveDevice([](const auto* device) {
     const ciface::iOS::MFiKeyboard* keyboard =
         dynamic_cast<const ciface::iOS::MFiKeyboard*>(device);

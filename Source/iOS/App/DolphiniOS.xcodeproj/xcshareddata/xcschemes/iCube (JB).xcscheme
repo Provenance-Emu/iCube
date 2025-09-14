@@ -15,8 +15,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "B9DC3DF527EFBD2C0084DAA4"
-               BuildableName = "DolphiniOS.app"
-               BlueprintName = "DolphiniOS"
+               BuildableName = "iCube.app"
+               BlueprintName = "iCube"
                ReferencedContainer = "container:DolphiniOS.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -33,8 +33,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "B96C9A4E2A46C1CE002B5ECF"
-               BuildableName = "DolphiniOSTests.xctest"
-               BlueprintName = "DolphiniOSTests"
+               BuildableName = "iCubeTests.xctest"
+               BlueprintName = "iCubeTests"
                ReferencedContainer = "container:DolphiniOS.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -58,8 +58,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "B9DC3DF527EFBD2C0084DAA4"
-            BuildableName = "DolphiniOS.app"
-            BlueprintName = "DolphiniOS"
+            BuildableName = "iCube.app"
+            BlueprintName = "iCube"
             ReferencedContainer = "container:DolphiniOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

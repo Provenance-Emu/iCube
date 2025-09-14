@@ -6,7 +6,7 @@
 #import "Core/Config/MainSettings.h"
 
 #import "Swift.h"
-#import "DolphiniOS-Swift.h"
+#import "iCube-Swift.h"
 
 #import "FastmemManager.h"
 #import "JitManager.h"

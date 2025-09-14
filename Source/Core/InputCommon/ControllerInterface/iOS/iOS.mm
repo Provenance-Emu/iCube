@@ -44,20 +44,20 @@ InputBackend::InputBackend(ControllerInterface* controller_interface)
 
 #if TARGET_OS_TV
   // On tvOS, proactively start wireless controller discovery.
-  NSLog(@"[DolphiniOS][Input] iOS InputBackend init (tvOS). Starting controller discovery. Existing controllers: %lu",
+  NSLog(@"[iCube][Input] iOS InputBackend init (tvOS). Starting controller discovery. Existing controllers: %lu",
         (unsigned long)[GCController controllers].count);
   [GCController startWirelessControllerDiscoveryWithCompletionHandler:^{
-    NSLog(@"[DolphiniOS][Input] Controller discovery started (completion)");
+    NSLog(@"[iCube][Input] Controller discovery started (completion)");
   }];
 #elif TARGET_OS_MACCATALYST
   // On Mac Catalyst, also start discovery to ensure controllers connect reliably.
-  NSLog(@"[DolphiniOS][Input] iOS InputBackend init (Mac Catalyst). Starting controller discovery. Existing controllers: %lu",
+  NSLog(@"[iCube][Input] iOS InputBackend init (Mac Catalyst). Starting controller discovery. Existing controllers: %lu",
         (unsigned long)[GCController controllers].count);
   [GCController startWirelessControllerDiscoveryWithCompletionHandler:^{
-    NSLog(@"[DolphiniOS][Input] Controller discovery started (completion, Catalyst)");
+    NSLog(@"[iCube][Input] Controller discovery started (completion, Catalyst)");
   }];
 #else
-  NSLog(@"[DolphiniOS][Input] iOS InputBackend init (iOS). Existing controllers: %lu",
+  NSLog(@"[iCube][Input] iOS InputBackend init (iOS). Existing controllers: %lu",
         (unsigned long)[GCController controllers].count);
 #endif
 }
@@ -69,7 +69,7 @@ InputBackend::~InputBackend()
 #if TARGET_OS_TV || TARGET_OS_MACCATALYST
   // Stop discovery when tearing down.
   [GCController stopWirelessControllerDiscovery];
-  NSLog(@"[DolphiniOS][Input] iOS InputBackend deinit (%s). Stopped controller discovery.",
+  NSLog(@"[iCube][Input] iOS InputBackend deinit (%s). Stopped controller discovery.",
         TARGET_OS_TV ? "tvOS" : "Mac Catalyst");
 #endif
 
@@ -84,10 +84,10 @@ void InputBackend::PopulateDevices()
 
   // Add already-connected controllers
   NSArray<GCController*>* controllers = [GCController controllers];
-  NSLog(@"[DolphiniOS][Input] PopulateDevices: found %lu GCController(s)", (unsigned long)controllers.count);
+  NSLog(@"[iCube][Input] PopulateDevices: found %lu GCController(s)", (unsigned long)controllers.count);
   for (GCController* controller in controllers)
   {
-    NSLog(@"[DolphiniOS][Input] Adding controller: vendor=%@, category=%@, playerIndex=%ld",
+    NSLog(@"[iCube][Input] Adding controller: vendor=%@, category=%@, playerIndex=%ld",
           controller.vendorName, controller.productCategory, (long)controller.playerIndex);
     g_controller_interface.AddDevice(std::make_shared<MFiController>(controller));
   }

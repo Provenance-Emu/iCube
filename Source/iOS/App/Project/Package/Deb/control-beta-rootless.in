@@ -1,4 +1,4 @@
-Package: me.oatmealdome.dolphinios-patreon-beta
+Package: com.joemattiello.iCube-patreon-beta
 Name: DolphiniOS (Beta)
 Version: VERSION_NUMBER
 Architecture: iphoneos-arm64

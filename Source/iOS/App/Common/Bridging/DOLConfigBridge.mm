@@ -250,6 +250,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (BOOL)sysconfWiimoteMotor { return Config::Get(Config::SYSCONF_WIIMOTE_MOTOR); }
 + (void)setSysconfWiimoteMotor:(BOOL)enabled { Config::SetBase(Config::SYSCONF_WIIMOTE_MOTOR, (bool)enabled); }
 
+#if USE_RETRO_ACHIEVEMENTS
 // RetroAchievements (Config + control)
 + (BOOL)raEnabled { return Config::Get(Config::RA_ENABLED); }
 + (void)setRaEnabled:(BOOL)enabled {
@@ -283,6 +284,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)raShutdown { AchievementManager::GetInstance().Shutdown(); }
 + (void)raLogin:(NSString*)password { AchievementManager::GetInstance().Login(password.UTF8String ? password.UTF8String : ""); }
 + (void)raLogout { AchievementManager::GetInstance().Logout(); }
+#endif // USE_RETRO_ACHIEVEMENTS
 
 // Graphics > Enhancements
 + (BOOL)gfxEnhanceForceTrueColor { return Config::Get(Config::GFX_ENHANCE_FORCE_TRUE_COLOR); }

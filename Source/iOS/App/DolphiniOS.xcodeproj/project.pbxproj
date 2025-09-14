@@ -597,7 +597,7 @@
 		B9661F352D23190300FB2AAB /* MappingInputDisplayInputCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingInputDisplayInputCell.m; sourceTree = "<group>"; };
 		B96C5DC82CFE4B200046C029 /* Logger.ini */ = {isa = PBXFileReference; lastKnownFileType = text; path = Logger.ini; sourceTree = "<group>"; };
 		B96C9A492A46501B002B5ECF /* DOLAppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOLAppVersion.swift; sourceTree = "<group>"; };
-		B96C9A4F2A46C1CE002B5ECF /* DolphiniOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DolphiniOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B96C9A4F2A46C1CE002B5ECF /* iCubeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iCubeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B96C9A5E2A46C2C0002B5ECF /* Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Bridging-Header.h"; sourceTree = "<group>"; };
 		B96C9A5F2A46C2C1002B5ECF /* DOLAppVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOLAppVersionTests.swift; sourceTree = "<group>"; };
 		B96F72CE27F0E8BD0024BA7D /* Debug (Non-Jailbroken).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Debug (Non-Jailbroken).xcconfig"; sourceTree = "<group>"; };
@@ -734,7 +734,7 @@
 		B9D938A0283F239F00B290FC /* TCButtonType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCButtonType.swift; sourceTree = "<group>"; };
 		B9D938A528418AFD00B290FC /* TCManagerInterface.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TCManagerInterface.h; sourceTree = "<group>"; };
 		B9D938A628418AFD00B290FC /* TCManagerInterface.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TCManagerInterface.mm; sourceTree = "<group>"; };
-		B9DC3DF627EFBD2C0084DAA4 /* DolphiniOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DolphiniOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B9DC3DF627EFBD2C0084DAA4 /* iCube.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iCube.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B9DC3E0327EFBD2D0084DAA4 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		B9DC3E0527EFBD2F0084DAA4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B9DC3E0827EFBD2F0084DAA4 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -2031,8 +2031,8 @@
 		B9DC3DF727EFBD2C0084DAA4 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				B9DC3DF627EFBD2C0084DAA4 /* DolphiniOS.app */,
-				B96C9A4F2A46C1CE002B5ECF /* DolphiniOSTests.xctest */,
+				B9DC3DF627EFBD2C0084DAA4 /* iCube.app */,
+				B96C9A4F2A46C1CE002B5ECF /* iCubeTests.xctest */,
 				B31E80642E6563530036EE31 /* Live ActivityExtension.appex */,
 			);
 			name = Products;
@@ -2174,9 +2174,9 @@
 			productReference = B31E80642E6563530036EE31 /* Live ActivityExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		B96C9A4E2A46C1CE002B5ECF /* DolphiniOSTests */ = {
+		B96C9A4E2A46C1CE002B5ECF /* iCubeTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B96C9A552A46C1CE002B5ECF /* Build configuration list for PBXNativeTarget "DolphiniOSTests" */;
+			buildConfigurationList = B96C9A552A46C1CE002B5ECF /* Build configuration list for PBXNativeTarget "iCubeTests" */;
 			buildPhases = (
 				B96C9A4B2A46C1CE002B5ECF /* Sources */,
 				B96C9A4C2A46C1CE002B5ECF /* Frameworks */,
@@ -2187,14 +2187,14 @@
 			dependencies = (
 				B96C9A542A46C1CE002B5ECF /* PBXTargetDependency */,
 			);
-			name = DolphiniOSTests;
+			name = iCubeTests;
 			productName = DolphiniOSTests;
-			productReference = B96C9A4F2A46C1CE002B5ECF /* DolphiniOSTests.xctest */;
+			productReference = B96C9A4F2A46C1CE002B5ECF /* iCubeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		B9DC3DF527EFBD2C0084DAA4 /* DolphiniOS */ = {
+		B9DC3DF527EFBD2C0084DAA4 /* iCube */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B9DC3E0F27EFBD2F0084DAA4 /* Build configuration list for PBXNativeTarget "DolphiniOS" */;
+			buildConfigurationList = B9DC3E0F27EFBD2F0084DAA4 /* Build configuration list for PBXNativeTarget "iCube" */;
 			buildPhases = (
 				B9A0EBC42DC3E1B500F929BA /* Setup Python */,
 				B9476B2327F23920009C0A4B /* Build Dolphin Core */,
@@ -2217,7 +2217,7 @@
 				B31EAC712E6772C80036EE31 /* Widgets */,
 				B31EAC8E2E68B1710036EE31 /* Tips */,
 			);
-			name = DolphiniOS;
+			name = iCube;
 			packageProductDependencies = (
 				B900A7D127F5228B000361DD /* UICollectionViewLeftAlignedLayout */,
 				B9FCB7DD28988E7E0020E233 /* AltKit */,
@@ -2228,7 +2228,7 @@
 				B37102AD2E70813B006C1ED7 /* NavigationStackBackport */,
 			);
 			productName = DolphiniOS;
-			productReference = B9DC3DF627EFBD2C0084DAA4 /* DolphiniOS.app */;
+			productReference = B9DC3DF627EFBD2C0084DAA4 /* iCube.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -2278,8 +2278,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				B9DC3DF527EFBD2C0084DAA4 /* DolphiniOS */,
-				B96C9A4E2A46C1CE002B5ECF /* DolphiniOSTests */,
+				B9DC3DF527EFBD2C0084DAA4 /* iCube */,
+				B96C9A4E2A46C1CE002B5ECF /* iCubeTests */,
 				B31E80632E6563530036EE31 /* Live ActivityExtension */,
 			);
 		};
@@ -2719,7 +2719,7 @@
 /* Begin PBXTargetDependency section */
 		B96C9A542A46C1CE002B5ECF /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = B9DC3DF527EFBD2C0084DAA4 /* DolphiniOS */;
+			target = B9DC3DF527EFBD2C0084DAA4 /* iCube */;
 			targetProxy = B96C9A532A46C1CE002B5ECF /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -2870,7 +2870,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb.Live-Activity";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb.Live-Activity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -2956,7 +2956,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb.Live-Activity";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb.Live-Activity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -3035,7 +3035,7 @@
 				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb.Live-Activity";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb.Live-Activity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -3114,7 +3114,7 @@
 				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb.Live-Activity";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb.Live-Activity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -3193,7 +3193,7 @@
 				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb.Live-Activity";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb.Live-Activity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -3272,7 +3272,7 @@
 				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb.Live-Activity";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb.Live-Activity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -3351,7 +3351,7 @@
 				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb.Live-Activity";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb.Live-Activity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -3430,7 +3430,7 @@
 				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb.Live-Activity";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb.Live-Activity";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -4104,7 +4104,7 @@
 				INFOPLIST_KEY_GCSupportsGameMode = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses your local network to discover and connect to DSU controllers and devices.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "iCube uses your local network to discover and connect to DSU controllers and devices.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Used to save gameplay clips you record with Instant Replay.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -4119,9 +4119,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b5;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-debug";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-debug";
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug-jb";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -4213,7 +4212,7 @@
 				INFOPLIST_KEY_GCSupportsGameMode = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses your local network to discover and connect to DSU controllers and devices.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "iCube uses your local network to discover and connect to DSU controllers and devices.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Used to save gameplay clips you record with Instant Replay.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -4228,9 +4227,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b5;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = com.joemattiello.DolphiniOS;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.joemattiello.DolphiniOS;
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-jb";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -4321,7 +4319,7 @@
 				INFOPLIST_KEY_GCSupportsGameMode = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses your local network to discover and connect to DSU controllers and devices.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "iCube uses your local network to discover and connect to DSU controllers and devices.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Used to save gameplay clips you record with Instant Replay.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -4336,9 +4334,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b5;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-njb-patreon-beta";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-njb-patreon-beta";
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb-patreon-beta";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -4429,7 +4426,7 @@
 				INFOPLIST_KEY_GCSupportsGameMode = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses your local network to discover and connect to DSU controllers and devices.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "iCube uses your local network to discover and connect to DSU controllers and devices.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Used to save gameplay clips you record with Instant Replay.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -4444,9 +4441,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b5;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-patreon-beta";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-patreon-beta";
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-patreon-beta-jb";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -4596,7 +4592,7 @@
 				INFOPLIST_KEY_GCSupportsGameMode = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses your local network to discover and connect to DSU controllers and devices.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "iCube uses your local network to discover and connect to DSU controllers and devices.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Used to save gameplay clips you record with Instant Replay.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -4611,8 +4607,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b5;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb-debug";
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -4647,7 +4643,7 @@
 				INFOPLIST_KEY_GCSupportsGameMode = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses your local network to discover and connect to DSU controllers and devices.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "iCube uses your local network to discover and connect to DSU controllers and devices.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Used to save gameplay clips you record with Instant Replay.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -4662,10 +4658,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b5;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.DolphiniOS-njb";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-njb";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-njb";
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joemattiello.iCube;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -4756,7 +4750,7 @@
 				INFOPLIST_KEY_GCSupportsGameMode = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses your local network to discover and connect to DSU controllers and devices.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "iCube uses your local network to discover and connect to DSU controllers and devices.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Used to save gameplay clips you record with Instant Replay.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -4771,9 +4765,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b5;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-ts";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-ts";
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -4864,7 +4857,7 @@
 				INFOPLIST_KEY_GCSupportsGameMode = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "DolphiniOS uses your local network to discover and connect to DSU controllers and devices.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "iCube uses your local network to discover and connect to DSU controllers and devices.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Used to save gameplay clips you record with Instant Replay.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -4879,9 +4872,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.1.0b5;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=appletv*]" = "com.joemattiello.DolphiniOS-ts-patreon-beta";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.joemattiello.DolphiniOS-ts-patreon-beta";
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts-patreon-beta";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -4912,7 +4904,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "Release (Non-Jailbroken)";
 		};
-		B96C9A552A46C1CE002B5ECF /* Build configuration list for PBXNativeTarget "DolphiniOSTests" */ = {
+		B96C9A552A46C1CE002B5ECF /* Build configuration list for PBXNativeTarget "iCubeTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B96C9A562A46C1CE002B5ECF /* Debug (Non-Jailbroken) */,
@@ -4942,7 +4934,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "Release (Non-Jailbroken)";
 		};
-		B9DC3E0F27EFBD2F0084DAA4 /* Build configuration list for PBXNativeTarget "DolphiniOS" */ = {
+		B9DC3E0F27EFBD2F0084DAA4 /* Build configuration list for PBXNativeTarget "iCube" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B9DC3E1027EFBD2F0084DAA4 /* Debug (Non-Jailbroken) */,

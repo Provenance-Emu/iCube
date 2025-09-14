@@ -38,7 +38,7 @@
 #import "TVControllerMappingBridge.h"
 #import "LocalizationUtil.h"
 #import "VirtualMFiControllerManager.h"
-#import "DolphiniOS-Swift.h"
+#import "iCube-Swift.h"
 #include "Core/Config/WiimoteSettings.h"
 
 static inline bool _EndsWith(const std::string& s, const char* suf)
@@ -338,7 +338,7 @@ static void EnsurePad1DefaultsToTouchscreen()
     }
     pad0->UpdateReferences(g_controller_interface);
     Pad::GetConfig()->SaveConfig();
-    NSLog(@"[DolphiniOS][Input] Ensured Pad1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
+    NSLog(@"[iCube][Input] Ensured Pad1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
   }
 after_pad1:
 
@@ -400,7 +400,7 @@ after_pad1:
       }
       wm0->UpdateReferences(g_controller_interface);
       Wiimote::GetConfig()->SaveConfig();
-      NSLog(@"[DolphiniOS][Input] Ensured Wiimote1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
+      NSLog(@"[iCube][Input] Ensured Wiimote1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
     }
   }
 after_wiimote:
@@ -486,7 +486,7 @@ static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev
     target_pad->LoadDefaults(g_controller_interface);
     target_pad->UpdateReferences(g_controller_interface);
     Pad::GetConfig()->SaveConfig();
-    NSLog(@"[DolphiniOS][Input] Auto-assigned external controller '%s' to Pad %d", dq_new.ToString().c_str(), target_index + 1);
+    NSLog(@"[iCube][Input] Auto-assigned external controller '%s' to Pad %d", dq_new.ToString().c_str(), target_index + 1);
   });
 }
 
@@ -563,7 +563,7 @@ static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev
   wm->UpdateReferences(g_controller_interface);
   Wiimote::GetConfig()->SaveConfig();
 after_set:
-  NSLog(@"[DolphiniOS][Input] Ensured Wiimote%ld mapped to iOS Touchscreen: %s", (long)portOneBased, dq_touch.ToString().c_str());
+  NSLog(@"[iCube][Input] Ensured Wiimote%ld mapped to iOS Touchscreen: %s", (long)portOneBased, dq_touch.ToString().c_str());
 }
 
 - (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter {

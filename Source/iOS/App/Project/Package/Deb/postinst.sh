@@ -10,7 +10,7 @@ if [ -f "/private/var/mobile/Documents" ]; then
 fi
 
 echo "Creating user directory if needed"
-mkdir -p /private/var/mobile/Documents/DolphiniOS || true
+mkdir -p /private/var/mobile/Documents/iCube || true
 
 echo "Setting user directory permissions"
-chown -R mobile:mobile /private/var/mobile/Documents/DolphiniOS
+chown -R mobile:mobile /private/var/mobile/Documents/iCube

@@ -26,7 +26,7 @@
 #import "VirtualMFiControllerManager.h"
 #import "TVControllerMappingBridge.h"
 #import <GameController/GameController.h>
-#import "DolphiniOS-Swift.h"
+#import "iCube-Swift.h"
 
 typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   DOLEmulationVisibleTouchPadNone,

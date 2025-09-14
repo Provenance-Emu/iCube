@@ -1,11 +1,11 @@
-/* Class = "UILabel"; text = "DolphiniOS"; ObjectID = "APP-na-me"; */
-"APP-na-me.text" = "DolphiniOS";
+/* Class = "UILabel"; text = "iCube"; ObjectID = "APP-na-me"; */
+"APP-na-me.text" = "iCube";
 
 /* Class = "UILabel"; text = "© 2003-2015+ Dolphin Team"; ObjectID = "COP-yr-ight1"; */
 "COP-yr-ight1.text" = "© 2003-2015+ Dolphin Team";
 
-/* Class = "UILabel"; text = "© 2019-2025+ DolphiniOS Project"; ObjectID = "COP-yr-ight2"; */
-"COP-yr-ight2.text" = "© 2019-2025+ DolphiniOS Project";
+/* Class = "UILabel"; text = "© 2025+ iCube Project"; ObjectID = "COP-yr-ight2"; */
+"COP-yr-ight2.text" = "© 2025+ iCube Project";
 
 /* Class = "UILabel"; text = "Loading..."; ObjectID = "LOA-di-ng"; */
 "LOA-di-ng.text" = "Loading...";

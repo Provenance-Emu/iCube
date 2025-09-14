@@ -1,5 +1,5 @@
-Package: me.oatmealdome.dolphinios-patreon-beta
-Name: DolphiniOS (Beta)
+Package: com.joemattiello.iCube-patreon-beta
+Name: iCube (Beta)
 Version: VERSION_NUMBER
 Architecture: iphoneos-arm
 Description: A GameCube and Wii emulator for iOS
@@ -8,4 +8,4 @@ Depiction: https://cydia.oatmealdome.me/depictions/?p=me.oatmealdome.dolphinios
 Maintainer: OatmealDome <julian@oatmealdome.me>
 Author: OatmealDome <julian@oatmealdome.me>
 Section: Games
-Conflicts: me.oatmealdome.dolphinios (<= 2.0.2-3)
+Conflicts: com.joemattiello.iCube (<= 2.0.2-3)

@@ -10,7 +10,7 @@ typedef DOLUIKitSwitch DOLSwitch;
 
 #elif TARGET_OS_TV
 
-#import "DolphiniOS-Swift.h"
+#import "iCube-Swift.h"
 typedef DOLTVSwitch DOLSwitch;
 
 #else

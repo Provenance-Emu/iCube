@@ -701,9 +701,11 @@ struct ConfigRootView: View {
       NavigationLink(destination: ConfigAdvancedView()) {
         Label(L("Advanced"), systemImage: "cpu")
       }
+      #if USE_RETRO_ACHIEVEMENTS
       NavigationLink(destination: ConfigAchievementsView()) {
         Label(L("Achievements"), systemImage: "trophy")
       }
+      #endif
     }
     .navigationTitle(L("Config"))
   }
@@ -957,7 +959,7 @@ struct ControllersRootView: View {
         }
       }
 
-      Section(header: Text(L("General")), footer: Text(L("Background Input: Allows controller input when DolphiniOS is in the background.\nAuto-select On-Screen Controller: Automatically chooses GameCube or Wii controller layout based on the game being played."))) {
+      Section(header: Text(L("General")), footer: Text(L("Background Input: Allows controller input when iCube is in the background.\nAuto-select On-Screen Controller: Automatically chooses GameCube or Wii controller layout based on the game being played."))) {
         Toggle(L("Background Input"), isOn: $backgroundInput)
           .onChange(of: backgroundInput) { newValue in DOLConfigBridge.setMainBackgroundInput(newValue) }
         Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
@@ -1342,11 +1344,11 @@ struct AboutView: View {
           startAboutAnimation()
         }
 
-        Text("DolphiniOS")
+        Text("iCube")
           .font(.system(size: 28, weight: .semibold))
           .foregroundColor(.blue)
 
-        Text("© 2003-2015+ Dolphin Team.\n© 2019-2025+ DolphiniOS Project.")
+        Text("© 2003-2015+ Dolphin Team.\n© 2025+ iCube Project.")
           .multilineTextAlignment(.center)
 
         Text("SwiftUI version by Joe Mattiello")
@@ -1358,10 +1360,10 @@ struct AboutView: View {
           }
         }
 
-        Text("DolphiniOS is an unofficial and separately maintained port of Dolphin to iOS. The DolphiniOS Project has no relation to Dolphin Team.")
+        Text("iCube is an unofficial and separately maintained port of Dolphin to iOS. The iCube Project has no relation to Dolphin Team.")
           .multilineTextAlignment(.center)
 
-        Text("\"GameCube\" and \"Wii\" are trademarks of Nintendo. DolphiniOS is not affiliated with Nintendo in any way.")
+        Text("\"GameCube\" and \"Wii\" are trademarks of Nintendo. iCube is not affiliated with Nintendo in any way.")
           .multilineTextAlignment(.center)
 
         Text("This software should not be used to play games you do not legally own.")
@@ -2261,6 +2263,7 @@ private struct WiiSensorBarPosPicker: View {
   }
 }
 /// Achievements config placeholder
+#if USE_RETRO_ACHIEVEMENTS
 struct ConfigAchievementsView: View {
   @State private var enabled: Bool = false
   @State private var username: String = ""
@@ -2392,6 +2395,7 @@ struct ConfigAchievementsView: View {
     hostURL = DOLConfigBridge.raHostURL()
   }
 }
+#endif
 
 // MARK: - Graphics General (wired)
 

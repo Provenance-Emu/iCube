@@ -6,7 +6,8 @@ import SwiftUI
 import WidgetKit
 
 struct Live_ActivityControl: ControlWidget {
-    static let kind: String = "com.joemattiello.DolphiniOS-njb.Live Activity"
+    // TODO: Programiatically do this @JoeMatt
+    static let kind: String = "com.joemattiello.iCube.Live Activity"
 
     var body: some ControlWidgetConfiguration {
         AppIntentControlConfiguration(

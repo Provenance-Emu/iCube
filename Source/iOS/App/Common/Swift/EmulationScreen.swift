@@ -84,7 +84,7 @@ private final class EmuContainerViewController: UIViewController {
     let currentCore = DOLConfigBridge.mainCpuCore()
     let isJitCoreSelected = (currentCore == 3) // JITARM64
     if !manager.acquiredJit && isJitCoreSelected {
-      let alert = UIAlertController(title: "Waiting for JIT", message: "DolphiniOS may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode.", preferredStyle: .alert)
+      let alert = UIAlertController(title: "Waiting for JIT", message: "iCube may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode.", preferredStyle: .alert)
       alert.addAction(UIAlertAction(title: "Help", style: .default, handler: { _ in
         if let url = URL(string: "https://dolphinios.oatmealdome.me/jit-help") {
           UIApplication.shared.open(url, options: [:], completionHandler: nil)

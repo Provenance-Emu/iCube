@@ -1,4 +1,4 @@
-// Copyright 2025 DolphiniOS Project
+// Copyright 2025 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import ActivityKit

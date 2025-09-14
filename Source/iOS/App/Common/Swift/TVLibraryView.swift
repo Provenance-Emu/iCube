@@ -342,7 +342,7 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var navigationConfiguration: some View {
     navigationContent
-      .navigationTitle(storeForBanner.isScanning ? "" : "DolphiniOS Library")
+      .navigationTitle(storeForBanner.isScanning ? "" : "iCube Library")
       .toolbar { libraryToolbar }
 #if !os(tvOS)
       .navigationBarTitleDisplayMode(.large)
