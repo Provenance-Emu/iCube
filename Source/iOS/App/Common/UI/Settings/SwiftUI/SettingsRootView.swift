@@ -820,6 +820,19 @@ struct ControllersRootView: View {
         Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
           .onChange(of: dsuEnabled) { DOLConfigBridge.setDsuClientEnabled($0) }
           .disabled(dsuRole == "sender")
+        Toggle(L("Show DSU Debug HUD"), isOn: Binding(get: {
+#if DEBUG
+          true
+#else
+          UserDefaults.standard.bool(forKey: "ui_show_dsu_debug_hud")
+#endif
+        }, set: { v in
+#if DEBUG
+          // Always on in DEBUG; ignore writes
+#else
+          UserDefaults.standard.set(v, forKey: "ui_show_dsu_debug_hud")
+#endif
+        }))
         if dsuServers.isEmpty {
           HStack {
             Text(L("Servers"))

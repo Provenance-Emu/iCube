@@ -180,6 +180,13 @@ struct EmulationScreen: View {
   @State private var showPauseMenu = false
   @State private var selectedSlot = 1
   @State private var showSettings = false
+  @AppStorage("ui_show_dsu_debug_hud") private var showDSUDebugHUD: Bool = {
+#if DEBUG
+    return true
+#else
+    return false
+#endif
+  }()
   // iOS top overlay
 #if os(iOS)
   @State private var showTopBar = false
@@ -545,13 +552,13 @@ struct EmulationScreen: View {
                 .allowsHitTesting(true)
             }
 
-            #if DEBUG
-            DSUDebugHUD()
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-              .padding(.top, 96)
-              .zIndex(1000)
-              .allowsHitTesting(true)
-            #endif
+            if showDSUDebugHUD {
+              DSUDebugHUD()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, 96)
+                .zIndex(1000)
+                .allowsHitTesting(true)
+            }
 
             if showTopBar {
                 VStack {
@@ -1252,8 +1259,7 @@ struct EmulationScreen: View {
   private func setupPauseGestureHandler(for controller: GCController) { }
 
 #if os(iOS)
-// DEBUG-only DSU HUD with RX blink indicator
-#if DEBUG
+/// DSU HUD with RX blink indicator (always compiled; visibility controlled by setting)
 private struct DSUDebugHUD: View {
   @State private var rx: UInt = 0
   @State private var blink: Bool = false
@@ -1304,7 +1310,6 @@ private struct DSUDebugHUD: View {
     }
   }
 }
-#endif
 
   private struct TouchPadsContainer: UIViewRepresentable {
     let forceVisible: Bool
