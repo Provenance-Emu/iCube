@@ -1852,6 +1852,19 @@ struct ConfigInterfaceView: View {
     }
   }
 
+  /// Picker style that works across tvOS versions
+  private var pickerStyleForPlatform: some PickerStyle {
+    #if os(tvOS)
+      if #available(tvOS 17.0, *) {
+        return .menu
+      } else {
+        return .automatic
+      }
+    #else
+      return .menu
+    #endif
+  }
+
   var body: some View {
     List {
       Section(header: Text(L("Game List"))) {
@@ -1870,7 +1883,7 @@ struct ConfigInterfaceView: View {
               Text(style.displayName).tag(style)
             }
           }
-          .pickerStyle(.menu)
+          .pickerStyle(pickerStyleForPlatform)
           .labelsHidden()
         }
 

@@ -1206,39 +1206,47 @@ struct TVLibraryView: View {
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      Menu {
-        Button(action: { model.loadGameCubeMainMenu() }) {
-          Label(L("Load GameCube Main Menu"), systemImage: "gamecontroller")
-        }
-        Button(action: { model.performOnlineSystemUpdate() }) {
-          Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
-        }
-#if os(iOS)
-        Button(action: {
-          let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
-          if role == "receiver" {
-            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Switch role to Sender to start DSU Controller")])
-          } else {
-            showDSUSession = true
+      if #available(tvOS 17.0, iOS 14.0, *) {
+        Menu {
+          Button(action: { model.loadGameCubeMainMenu() }) {
+            Label(L("Load GameCube Main Menu"), systemImage: "gamecontroller")
           }
-        }) {
-          Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
-        }
+          Button(action: { model.performOnlineSystemUpdate() }) {
+            Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
+          }
+#if os(iOS)
+          Button(action: {
+            let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
+            if role == "receiver" {
+              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Switch role to Sender to start DSU Controller")])
+            } else {
+              showDSUSession = true
+            }
+          }) {
+            Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
+          }
 #endif
-        Button(action: {
+          Button(action: {
 #if os(iOS) || targetEnvironment(macCatalyst)
-          showImportNANDPicker = true
+            showImportNANDPicker = true
 #endif
-        }) {
-          Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
+          }) {
+            Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
+          }
+          Button(action: { showSources = true }) {
+            Label(L("Sources"), systemImage: "externaldrive.badge.plus")
+          }
+        } label: {
+          Image(systemName: "ellipsis.circle")
         }
+        .tipAttachCompat(.importGame)
+      } else {
+        // Fallback for tvOS 16: Show most important action directly
         Button(action: { showSources = true }) {
-          Label(L("Sources"), systemImage: "externaldrive.badge.plus")
+          Image(systemName: "externaldrive.badge.plus")
         }
-      } label: {
-        Image(systemName: "ellipsis.circle")
+        .tipAttachCompat(.importGame)
       }
-      .tipAttachCompat(.importGame)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { model.rescan() }) {

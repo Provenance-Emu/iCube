@@ -685,30 +685,48 @@ struct GameGridItem: View {
         Label(L("Properties"), systemImage: "info.circle")
       }
       //            Button(L("View Save States")) { showSaveStates(item) }
-      Menu {
+
+      // Cheats menu with tvOS 16 compatibility
+      if #available(tvOS 17.0, iOS 14.0, *) {
+        Menu {
+          Button(action: { showCheatList(item) }) {
+            Label(L("Manage..."), systemImage: "slider.horizontal.3")
+          }
+          Button(action: { downloadGeckoAction(item) }) {
+            Label(L("Download Codes"), systemImage: "arrow.down.doc")
+          }
+          Divider()
+          Menu {
+            Button(action: { presentCheatGecko(item) }) {
+              Label(L("Add..."), systemImage: "plus.circle")
+            }
+          } label: {
+            Label(L("Gecko"), systemImage: "chevron.left.slash.chevron.right")
+          }
+          Menu {
+            Button(action: { presentCheatAR(item) }) {
+              Label(L("Add..."), systemImage: "plus.circle")
+            }
+          } label: {
+            Label(L("Action Replay"), systemImage: "number")
+          }
+        } label: {
+          Label(L("Cheats"), systemImage: "wand.and.stars")
+        }
+      } else {
+        // Fallback for tvOS 16: Flatten menu structure
         Button(action: { showCheatList(item) }) {
-          Label(L("Manage..."), systemImage: "slider.horizontal.3")
+          Label(L("Manage Cheats"), systemImage: "slider.horizontal.3")
         }
         Button(action: { downloadGeckoAction(item) }) {
-          Label(L("Download Codes"), systemImage: "arrow.down.doc")
+          Label(L("Download Cheat Codes"), systemImage: "arrow.down.doc")
         }
-        Divider()
-        Menu {
-          Button(action: { presentCheatGecko(item) }) {
-            Label(L("Add..."), systemImage: "plus.circle")
-          }
-        } label: {
-          Label(L("Gecko"), systemImage: "chevron.left.slash.chevron.right")
+        Button(action: { presentCheatGecko(item) }) {
+          Label(L("Add Gecko Code"), systemImage: "chevron.left.slash.chevron.right")
         }
-        Menu {
-          Button(action: { presentCheatAR(item) }) {
-            Label(L("Add..."), systemImage: "plus.circle")
-          }
-        } label: {
-          Label(L("Action Replay"), systemImage: "number")
+        Button(action: { presentCheatAR(item) }) {
+          Label(L("Add Action Replay Code"), systemImage: "number")
         }
-      } label: {
-        Label(L("Cheats"), systemImage: "wand.and.stars")
       }
       if isRemoteGame {
         if let source = getWebDAVSource() {
@@ -881,30 +899,48 @@ struct GameGridItem: View {
         Label(L("Properties"), systemImage: "info.circle")
       }
       //            Button(L("View Save States")) { showSaveStates(item) }
-      Menu {
+
+      // Cheats menu with tvOS 16 compatibility
+      if #available(tvOS 17.0, iOS 14.0, *) {
+        Menu {
+          Button(action: { showCheatList(item) }) {
+            Label(L("Manage..."), systemImage: "slider.horizontal.3")
+          }
+          Button(action: { downloadGeckoAction(item) }) {
+            Label(L("Download Codes"), systemImage: "arrow.down.doc")
+          }
+          Divider()
+          Menu {
+            Button(action: { presentCheatGecko(item) }) {
+              Label(L("Add..."), systemImage: "plus.circle")
+            }
+          } label: {
+            Label(L("Gecko"), systemImage: "chevron.left.slash.chevron.right")
+          }
+          Menu {
+            Button(action: { presentCheatAR(item) }) {
+              Label(L("Add..."), systemImage: "plus.circle")
+            }
+          } label: {
+            Label(L("Action Replay"), systemImage: "number")
+          }
+        } label: {
+          Label(L("Cheats"), systemImage: "wand.and.stars")
+        }
+      } else {
+        // Fallback for tvOS 16: Flatten menu structure
         Button(action: { showCheatList(item) }) {
-          Label(L("Manage..."), systemImage: "slider.horizontal.3")
+          Label(L("Manage Cheats"), systemImage: "slider.horizontal.3")
         }
         Button(action: { downloadGeckoAction(item) }) {
-          Label(L("Download Codes"), systemImage: "arrow.down.doc")
+          Label(L("Download Cheat Codes"), systemImage: "arrow.down.doc")
         }
-        Divider()
-        Menu {
-          Button(action: { presentCheatGecko(item) }) {
-            Label(L("Add..."), systemImage: "plus.circle")
-          }
-        } label: {
-          Label(L("Gecko"), systemImage: "chevron.left.slash.chevron.right")
+        Button(action: { presentCheatGecko(item) }) {
+          Label(L("Add Gecko Code"), systemImage: "chevron.left.slash.chevron.right")
         }
-        Menu {
-          Button(action: { presentCheatAR(item) }) {
-            Label(L("Add..."), systemImage: "plus.circle")
-          }
-        } label: {
-          Label(L("Action Replay"), systemImage: "number")
+        Button(action: { presentCheatAR(item) }) {
+          Label(L("Add Action Replay Code"), systemImage: "number")
         }
-      } label: {
-        Label(L("Cheats"), systemImage: "wand.and.stars")
       }
       if isRemoteGame {
         if let _ = getWebDAVSource() {
