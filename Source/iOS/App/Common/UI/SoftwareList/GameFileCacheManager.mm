@@ -11,6 +11,15 @@
 
 #import "UICommon/GameFileCache.h"
 
+static dispatch_queue_t GameFileCacheQueue() {
+  static dispatch_once_t onceToken;
+  static dispatch_queue_t queue;
+  dispatch_once(&onceToken, ^{
+    queue = dispatch_queue_create("org.dolphin-ios.gamefilecache.serial", DISPATCH_QUEUE_SERIAL);
+  });
+  return queue;
+}
+
 @implementation GameFileCacheManager
 
 + (GameFileCacheManager*)sharedManager {
@@ -36,39 +45,36 @@
 }
 
 - (void)updateCacheWithShouldUpdateMetadata:(bool)updateMetadata {
-  NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
-
-  std::vector<std::string> scanPaths{ FoundationToCppString(softwareFolder) };
-
-  bool cacheUpdated = self->_cache->Update(UICommon::FindAllGamePaths(scanPaths, true));
-
-  if (updateMetadata) {
-    cacheUpdated |= self->_cache->UpdateAdditionalMetadata();
-  }
-
-  if (cacheUpdated) {
-    self->_cache->Save();
-  }
+  dispatch_async(GameFileCacheQueue(), ^{
+    NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
+    std::vector<std::string> scanPaths{ FoundationToCppString(softwareFolder) };
+    bool cacheUpdated = self->_cache->Update(UICommon::FindAllGamePaths(scanPaths, true));
+    if (updateMetadata) {
+      cacheUpdated |= self->_cache->UpdateAdditionalMetadata();
+    }
+    if (cacheUpdated) {
+      self->_cache->Save();
+    }
+  });
 }
 
 - (void)rescan {
-  NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
-
-  // Only scan local folders during rescan - don't preserve old remote URLs
-  // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
-  std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
-  std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
-
-  printf("DEBUG CACHE MGR: rescan() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
-
-  bool updated = self->_cache->Update(all);
-  if (updated) {
-    self->_cache->Save();
-  }
+  dispatch_async(GameFileCacheQueue(), ^{
+    NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
+    // Only scan local folders during rescan - don't preserve old remote URLs
+    // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
+    std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
+    std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+    printf("DEBUG CACHE MGR: rescan() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
+    bool updated = self->_cache->Update(all);
+    if (updated) {
+      self->_cache->Save();
+    }
+  });
 }
 
 - (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
-  dispatch_async(dispatch_queue_create("org.dolphin-ios.gamefilecache.rescan", DISPATCH_QUEUE_SERIAL), ^{
+  dispatch_async(GameFileCacheQueue(), ^{
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Only scan local folders - don't preserve old remote URLs during refresh
@@ -116,7 +122,7 @@
 }
 
 - (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
-  dispatch_async(dispatch_queue_create("org.dolphin-ios.gamefilecache.rescanlocal", DISPATCH_QUEUE_SERIAL), ^{
+  dispatch_async(GameFileCacheQueue(), ^{
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // During refresh: preserve existing remote URLs and only add/update local files
@@ -189,25 +195,23 @@
 
 - (NSArray<GameFilePtrWrapper*>*)getGames {
   NSMutableArray<GameFilePtrWrapper*>* array = [[NSMutableArray alloc] init];
-  self->_cache->ForEach([array](const std::shared_ptr<const UICommon::GameFile>& game) {
-    GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
-    wrapper.gameFile = game;
-
-    [array addObject:wrapper];
+  dispatch_sync(GameFileCacheQueue(), ^{
+    self->_cache->ForEach([array](const std::shared_ptr<const UICommon::GameFile>& game) {
+      GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
+      wrapper.gameFile = game;
+      [array addObject:wrapper];
+    });
   });
 
   return array;
 }
 
 - (NSArray<TVGameItem*>*)currentGames {
-  static dispatch_queue_t _enumQueue;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{ _enumQueue = dispatch_queue_create("org.dolphin-ios.gamefilecache.enum", DISPATCH_QUEUE_SERIAL); });
   if (!self->_cache) { return nil; }
   __block NSArray<TVGameItem*>* result = nil;
   __block size_t countLogged = 0;
 
-  dispatch_sync(_enumQueue, ^{
+  dispatch_sync(GameFileCacheQueue(), ^{
     NSMutableArray<TVGameItem*>* localItems = [[NSMutableArray alloc] init];
     size_t localCount = 0;
     self->_cache->ForEach([&](const std::shared_ptr<const UICommon::GameFile>& game) {
