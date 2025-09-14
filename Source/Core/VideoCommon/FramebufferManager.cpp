@@ -768,6 +768,9 @@ void FramebufferManager::DestroyReadbackPipelines()
 
 bool FramebufferManager::CreateReadbackFramebuffer()
 {
+  // Ensure readback copy pipelines are compiled before any utility draw at >1x IR
+  if (!CompileReadbackPipelines())
+    return false;
   if (GetEFBScale() != 1)
   {
     const TextureConfig color_config(IsUsingTiledEFBCache() ? m_efb_cache_tile_size : EFB_WIDTH,
@@ -905,6 +908,16 @@ void FramebufferManager::PopulateEFBCache(bool depth, u32 tile_index, bool async
         {native_rect.left * rcp_src_width, native_rect.top * rcp_src_height,
          native_rect.GetWidth() * rcp_src_width, native_rect.GetHeight() * rcp_src_height}};
     g_vertex_manager->UploadUtilityUniforms(&uniforms, sizeof(uniforms));
+
+    // Ensure copy pipeline exists before drawing
+    if (!data.copy_pipeline)
+    {
+      if (!CompileReadbackPipelines() || !data.copy_pipeline)
+      {
+        g_gfx->EndUtilityDrawing();
+        return; // Skip this tile rather than crashing
+      }
+    }
 
     // Viewport will not be TILE_SIZExTILE_SIZE for the last row of tiles, assuming a tile size of
     // 64, because 528 is not evenly divisible by 64.

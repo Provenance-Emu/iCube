@@ -710,8 +710,15 @@ void Metal::StateTracker::PrepareRender()
     m_current_perf_query = NewPerfQueryTracker();
   if (!m_current_render_encoder)
     BeginRenderPass(MTLLoadActionLoad);
+  if (!m_current_render_encoder)
+    return;
   id<MTLRenderCommandEncoder> enc = m_current_render_encoder;
   const Pipeline* pipe = m_state.render_pipeline;
+  if (!pipe || !pipe->Get())
+  {
+    // No pipeline or pipeline state not ready; skip draw to avoid crash
+    return;
+  }
   bool is_gx = pipe->Usage() != AbstractPipelineUsage::Utility;
   NSString* label = is_gx ? LABEL_GX : LABEL_UTIL;
   if (m_flags.should_apply_label && m_current.label != label)
@@ -755,6 +762,11 @@ void Metal::StateTracker::PrepareRender()
   if (!m_flags.has_viewport)
   {
     m_flags.has_viewport = true;
+    if (m_state.viewport.width <= 0.f || m_state.viewport.height <= 0.f)
+    {
+      m_state.viewport.width = std::max(1.f, static_cast<float>(m_current.width));
+      m_state.viewport.height = std::max(1.f, static_cast<float>(m_current.height));
+    }
     m_current.viewport = m_state.viewport;
     MTLViewport metal;
     metal.originX = m_state.viewport.x;
@@ -979,8 +991,14 @@ void Metal::StateTracker::Draw(u32 base_vertex, u32 num_vertices)
 {
   if (!num_vertices)
     return;
+  const Pipeline* pipe = m_state.render_pipeline;
+  if (!pipe || !pipe->Get())
+    return;
   PrepareRender();
-  [m_current_render_encoder drawPrimitives:m_state.render_pipeline->Prim()
+  if (!m_current_render_encoder)
+    return;
+  const MTLPrimitiveType prim = pipe->Prim();
+  [m_current_render_encoder drawPrimitives:prim
                                vertexStart:base_vertex
                                vertexCount:num_vertices];
 }
@@ -989,8 +1007,14 @@ void Metal::StateTracker::DrawIndexed(u32 base_index, u32 num_indices, u32 base_
 {
   if (!num_indices)  // Happens in Metroid Prime, Metal API validation doesn't like this
     return;
+  const Pipeline* pipe = m_state.render_pipeline;
+  if (!pipe || !pipe->Get() || !m_state.indices)
+    return;
   PrepareRender();
-  [m_current_render_encoder drawIndexedPrimitives:m_state.render_pipeline->Prim()
+  if (!m_current_render_encoder)
+    return;
+  const MTLPrimitiveType prim = pipe->Prim();
+  [m_current_render_encoder drawIndexedPrimitives:prim
                                        indexCount:num_indices
                                         indexType:MTLIndexTypeUInt16
                                       indexBuffer:m_state.indices
