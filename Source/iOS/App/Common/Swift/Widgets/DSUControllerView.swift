@@ -171,18 +171,18 @@ struct DSUControllerView: View {
         }
         .modifier(TooltipModifier(text: L("Toggle touchpad area for DS4-style touch input"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
       }
-      ToolbarItem(placement: .navigationBarTrailing) {
-        Button(action: { showTooltips.toggle() }) {
-          Label(L("Tooltips"), systemImage: showTooltips ? "questionmark.circle.fill" : "questionmark.circle")
-        }
-        .modifier(TooltipModifier(text: L("Toggle help tooltips for toolbar buttons"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
-      }
-      ToolbarItem(placement: .navigationBarTrailing) {
-        Button(action: { DSUServerBridge.sendNow() }) {
-          Label(L("Send Test Frame"), systemImage: "paperplane")
-        }
-        .modifier(TooltipModifier(text: L("Send a test frame to verify connection"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
-      }
+//      ToolbarItem(placement: .navigationBarTrailing) {
+//        Button(action: { showTooltips.toggle() }) {
+//          Label(L("Tooltips"), systemImage: showTooltips ? "questionmark.circle.fill" : "questionmark.circle")
+//        }
+//        .modifier(TooltipModifier(text: L("Toggle help tooltips for toolbar buttons"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+//      }
+//      ToolbarItem(placement: .navigationBarTrailing) {
+//        Button(action: { DSUServerBridge.sendNow() }) {
+//          Label(L("Send Test Frame"), systemImage: "paperplane")
+//        }
+//        .modifier(TooltipModifier(text: L("Send a test frame to verify connection"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+//      }
       ToolbarItem(placement: .navigationBarTrailing) {
         Button(action: onClose) {
           Label(L("Exit"), systemImage: "xmark")
@@ -540,22 +540,36 @@ private struct TouchAreaOverlay: View {
       let areaWidth: CGFloat = isLandscape ? (touchAreaHeight * 16.0 / 9.0) : geometry.size.width
 
       ZStack {
-        // Semi-transparent touch area background
-        Rectangle()
-          .fill(Color.white.opacity(0.1))
+        // Obvious, high-contrast touch area box
+        RoundedRectangle(cornerRadius: 10)
+          .fill(Color.black.opacity(0.25))
           .overlay(
-            Rectangle()
-              .stroke(Color.white.opacity(0.3), lineWidth: 2)
+            RoundedRectangle(cornerRadius: 10)
+              .stroke(Color(.dolphinTint), lineWidth: 3)
               .overlay(
-                Text(L("Touch Area"))
-                  .font(.caption)
-                  .foregroundColor(.white.opacity(0.6))
-                  .padding(4)
-                  .background(Color.black.opacity(0.3))
-                  .clipShape(RoundedRectangle(cornerRadius: 4))
-                  .position(x: areaWidth / 2, y: 20)
+                ZStack {
+                  // Crosshair guides
+                  Path { p in
+                    p.move(to: CGPoint(x: areaWidth/2, y: 0))
+                    p.addLine(to: CGPoint(x: areaWidth/2, y: touchAreaHeight))
+                    p.move(to: CGPoint(x: 0, y: touchAreaHeight/2))
+                    p.addLine(to: CGPoint(x: areaWidth, y: touchAreaHeight/2))
+                  }
+                  .stroke(Color(.dolphinTint).opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5,4]))
+
+                  // Title badge
+                  Text(L("Touch Area"))
+                    .font(.caption.bold())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.6))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .position(x: areaWidth/2, y: 16)
+                }
               )
           )
+          .shadow(color: .black.opacity(0.6), radius: 8, x: 0, y: 2)
 
         // Multi-touch capture layer (supports 2 touches)
         TouchPadCapture()
