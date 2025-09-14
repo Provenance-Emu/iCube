@@ -6,6 +6,47 @@ import GameController
 import UIKit
 
 #if os(iOS)
+/// Orientation utilities to lock/unlock the current interface orientation while this view is visible
+private enum OrientationHelper {
+  /// Returns the current interface orientation mask based on the active window scene
+  static func currentMask() -> UIInterfaceOrientationMask {
+    guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
+      return .allButUpsideDown
+    }
+    switch scene.interfaceOrientation {
+    case .landscapeLeft, .landscapeRight:
+      return .landscape
+    case .portrait, .portraitUpsideDown:
+      return .portrait
+    default:
+      return .allButUpsideDown
+    }
+  }
+
+  /// Locks the app to the current interface orientation to prevent unexpected flips
+  static func lockToCurrentOrientation() {
+    guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+    let mask = currentMask()
+    if #available(iOS 16.0, *) {
+      let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
+      try? scene.requestGeometryUpdate(prefs)
+    } else {
+      // Best-effort: keep the current orientation by re-applying it
+      let io = scene.interfaceOrientation
+      UIDevice.current.setValue(io.rawValue, forKey: "orientation")
+    }
+  }
+
+  /// Restores default orientation allowances after the view is dismissed
+  static func unlock() {
+    guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+    if #available(iOS 16.0, *) {
+      let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .allButUpsideDown)
+      try? scene.requestGeometryUpdate(prefs)
+    }
+  }
+}
+
 struct DSUControllerView: View {
   let onClose: () -> Void
   @State private var virtualController: GCVirtualController?
@@ -106,6 +147,8 @@ struct DSUControllerView: View {
     }
     .onAppear {
       refreshIRLabel()
+      // Lock to the current interface orientation to avoid flipping when system rotation lock toggles
+      OrientationHelper.lockToCurrentOrientation()
       if !DSUServerBridge.isRunning() {
         let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
         let port = (p > 0 && p < 65536) ? p : 26760
@@ -122,6 +165,8 @@ struct DSUControllerView: View {
       #endif
     }
     .onDisappear {
+      // Restore default orientation allowances
+      OrientationHelper.unlock()
       #if canImport(CoreMotion)
       TCDeviceMotion.shared.setMotionEnabled(false)
       #endif
