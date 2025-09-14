@@ -523,7 +523,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     return;
   }
   // Broadcast to all recently seen clients when not restricted
-    NSArray<NSString*>* snapshotAll = [_clients copy];
+  NSArray<NSString*>* snapshotAll = [_clients copy];
   for (NSString* addr in snapshotAll) {
     NSArray<NSString*>* parts = [addr componentsSeparatedByString:@":"];
     if (parts.count != 2) continue;
