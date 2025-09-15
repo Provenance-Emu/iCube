@@ -14,6 +14,9 @@
 #include "Core/BootManager.h"
 #include "Core/Boot/Boot.h"
 #include "DiscIO/Enums.h"
+#include "Core/IOS/IOS.h"
+#include "Core/IOS/ES/ES.h"
+#include "Core/CommonTitles.h"
 #import "EmulationBootParameter.h"
 #import "EmulationBootType.h"
 #import "WiiSystemUpdateViewController.h"
@@ -41,6 +44,29 @@
   EmulationBootParameter* p = [EmulationBootParameter new];
   p.bootType = EmulationBootTypeGCIPL;
   p.iplRegion = DiscIO::Region::NTSC_U;
+  [[EmulationCoordinator shared] runEmulationWithBootParameter:p];
+}
+
++ (BOOL)isWiiSystemMenuInstalled {
+  // Prefer existing IOS if present to avoid creating a temporary Kernel while one exists
+  if (Core::System::GetInstance().GetIOS() != nullptr) {
+    const auto tmd = Core::System::GetInstance().GetIOS()->GetESCore().FindInstalledTMD(Titles::SYSTEM_MENU);
+    return tmd.IsValid();
+  } else {
+    IOS::HLE::Kernel ios;
+    const auto tmd = ios.GetESCore().FindInstalledTMD(Titles::SYSTEM_MENU);
+    return tmd.IsValid();
+  }
+}
+
++ (void)loadWiiSystemMenu {
+  if (![self isWiiSystemMenuInstalled]) return;
+  // Ensure no IOS instance is attached before boot pipeline constructs a temporary Kernel
+  if (Core::System::GetInstance().GetIOS() != nullptr) {
+    Core::System::GetInstance().SetIOS(std::unique_ptr<IOS::HLE::EmulationKernel>());
+  }
+  EmulationBootParameter* p = [EmulationBootParameter new];
+  p.bootType = EmulationBootTypeSystemMenu;
   [[EmulationCoordinator shared] runEmulationWithBootParameter:p];
 }
 

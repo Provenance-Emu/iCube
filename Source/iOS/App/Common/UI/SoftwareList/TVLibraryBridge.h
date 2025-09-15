@@ -16,6 +16,11 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)performOnlineSystemUpdate;
 + (void)performOnlineSystemUpdateWithRegion:(NSString*)regionCode;
 
+/// Returns YES if a Wii System Menu is installed in NAND
++ (BOOL)isWiiSystemMenuInstalled;
+/// Boots the Wii System Menu (no-op if not installed)
++ (void)loadWiiSystemMenu;
+
 /// Merge the provided absolute paths/URLs into the library cache and optionally fetch metadata.
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch;
 
