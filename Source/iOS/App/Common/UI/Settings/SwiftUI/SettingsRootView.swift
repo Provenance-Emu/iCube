@@ -812,6 +812,7 @@ struct ControllersRootView: View {
         },
         footer: Text(L("Enable the DSU (Cemuhook DualShock UDP) client to receive input from compatible servers on your network. Add servers as IP:Port. Bonjour discovery will be added in a future update."))
       ) {
+        #if !os(tvOS)
         Picker(L("Role"), selection: $dsuRole) {
           Text(L("Receiver")).tag("receiver")
           Text(L("Sender")).tag("sender")
@@ -822,6 +823,7 @@ struct ControllersRootView: View {
             DOLConfigBridge.setDsuClientEnabled(false)
           }
         }
+        #endif
         Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
           .onChange(of: dsuEnabled) { DOLConfigBridge.setDsuClientEnabled($0) }
           .disabled(dsuRole == "sender")
