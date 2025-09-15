@@ -35,11 +35,9 @@ func configureControllerForTVOS(_ c: GCController) {
         }
     }
     if let eg = c.extendedGamepad {
-        if #available(tvOS 14.0, *) {
-            eg.buttonB.preferredSystemGestureState = .disabled
-            eg.buttonMenu.preferredSystemGestureState = .alwaysReceive
-            eg.buttonOptions?.preferredSystemGestureState = .disabled
-        }
+      eg.buttonB.preferredSystemGestureState = .disabled
+      eg.buttonMenu.preferredSystemGestureState = .disabled
+      eg.buttonOptions?.preferredSystemGestureState = .disabled
     }
     installInputDebugHandlers(c)
 }

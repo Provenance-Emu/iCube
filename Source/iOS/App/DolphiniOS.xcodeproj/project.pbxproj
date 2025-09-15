@@ -13,21 +13,16 @@
 		B31E6DC62E6409F90036EE31 /* PVlibDolphin.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; };
 		B31E6DC72E6409F90036EE31 /* PVlibDolphin.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B36B48BD2E5CFD31009A2303 /* PVlibDolphin.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B31E804C2E64FCA50036EE31 /* SpotlightIndexService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804B2E64FCA50036EE31 /* SpotlightIndexService.swift */; };
-		B31E80502E6504940036EE31 /* ControllerGlyphs.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */; };
-		B31E80512E6504940036EE31 /* ControllerPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804E2E6504940036EE31 /* ControllerPresets.swift */; };
 		B31E80522E6504940036EE31 /* GameProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E804F2E6504940036EE31 /* GameProfiles.swift */; };
-		B31E80542E65051F0036EE31 /* ControllerStyleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */; };
 		B31E80592E651FD80036EE31 /* libMoltenVK-Catalyst.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */; platformFilter = maccatalyst; };
 		B31E805C2E6544430036EE31 /* TVFloatStepper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E805B2E6544430036EE31 /* TVFloatStepper.swift */; };
 		B31E80662E6563540036EE31 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80652E6563530036EE31 /* WidgetKit.framework */; };
 		B31E80682E6563540036EE31 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E80672E6563540036EE31 /* SwiftUI.framework */; };
-		B31E921B2E665F530036EE31 /* ControllerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E921A2E665F530036EE31 /* ControllerManager.swift */; };
 		B31E921D2E667BE10036EE31 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B31E921C2E667BE10036EE31 /* ReplayKit.framework */; };
 		B31E92212E667C0F0036EE31 /* SiriShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E921F2E667C0F0036EE31 /* SiriShortcutManager.swift */; };
 		B31E92222E667C0F0036EE31 /* ThermalManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E92202E667C0F0036EE31 /* ThermalManager.swift */; };
 		B31E92232E667C0F0036EE31 /* ReplayKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31E921E2E667C0F0036EE31 /* ReplayKitManager.swift */; };
 		B31EAC6F2E6697FD0036EE31 /* AssignmentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */; };
-		B31EAC702E6697FD0036EE31 /* ControllerStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */; };
 		B31EAC822E67743D0036EE31 /* ModernCheatItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */; };
 		B31EAC8B2E67E9050036EE31 /* DOLWiimoteBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */; };
 		B346BBEC2E73973E00B3C00B /* MotionDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */; };
@@ -62,7 +57,6 @@
 		B36B48CA2E5D07D4009A2303 /* Localized.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48C92E5D07D4009A2303 /* Localized.swift */; };
 		B36B48CD2E5D20A6009A2303 /* TVControllerMappingBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B36B48CC2E5D20A6009A2303 /* TVControllerMappingBridge.mm */; };
 		B36B48CF2E5D6AC5009A2303 /* PauseMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */; };
-		B36B48D12E5D6AFB009A2303 /* ControllerExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */; };
 		B36B51912E5D8760009A2303 /* CheatsMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51902E5D8760009A2303 /* CheatsMenuView.swift */; };
 		B36B51972E5E41C7009A2303 /* RemoteLibrarySource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */; };
 		B36B51982E5E41C7009A2303 /* WebDAVSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B51962E5E41C7009A2303 /* WebDAVSource.swift */; };
@@ -320,23 +314,18 @@
 		B31E6DC22E63C08F0036EE31 /* NANDImportManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NANDImportManager.mm; sourceTree = "<group>"; };
 		B31E6DC42E63C0CD0036EE31 /* AppConsts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConsts.swift; sourceTree = "<group>"; };
 		B31E804B2E64FCA50036EE31 /* SpotlightIndexService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightIndexService.swift; sourceTree = "<group>"; };
-		B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerGlyphs.swift; sourceTree = "<group>"; };
-		B31E804E2E6504940036EE31 /* ControllerPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerPresets.swift; sourceTree = "<group>"; };
 		B31E804F2E6504940036EE31 /* GameProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameProfiles.swift; sourceTree = "<group>"; };
-		B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerStyleManager.swift; sourceTree = "<group>"; };
 		B31E80582E651FD20036EE31 /* libMoltenVK-Catalyst.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libMoltenVK-Catalyst.a"; path = "../../../Externals/MoltenVK-macOS/libMoltenVK-Catalyst.a"; sourceTree = "<group>"; };
 		B31E805B2E6544430036EE31 /* TVFloatStepper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVFloatStepper.swift; sourceTree = "<group>"; };
 		B31E80642E6563530036EE31 /* Live ActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Live ActivityExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B31E80652E6563530036EE31 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		B31E80672E6563540036EE31 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B31E807A2E6563550036EE31 /* Live ActivityExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Live ActivityExtension.entitlements"; sourceTree = "<group>"; };
-		B31E921A2E665F530036EE31 /* ControllerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerManager.swift; sourceTree = "<group>"; };
 		B31E921C2E667BE10036EE31 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/System/iOSSupport/System/Library/Frameworks/ReplayKit.framework; sourceTree = DEVELOPER_DIR; };
 		B31E921E2E667C0F0036EE31 /* ReplayKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplayKitManager.swift; sourceTree = "<group>"; };
 		B31E921F2E667C0F0036EE31 /* SiriShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriShortcutManager.swift; sourceTree = "<group>"; };
 		B31E92202E667C0F0036EE31 /* ThermalManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThermalManager.swift; sourceTree = "<group>"; };
 		B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentEngine.swift; sourceTree = "<group>"; };
-		B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerStateStore.swift; sourceTree = "<group>"; };
 		B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernCheatItem.swift; sourceTree = "<group>"; };
 		B31EAC892E67E9050036EE31 /* DOLWiimoteBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLWiimoteBridge.h; sourceTree = "<group>"; };
 		B31EAC8A2E67E9050036EE31 /* DOLWiimoteBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLWiimoteBridge.mm; sourceTree = "<group>"; };
@@ -380,7 +369,6 @@
 		B36B48CB2E5D20A6009A2303 /* TVControllerMappingBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVControllerMappingBridge.h; sourceTree = "<group>"; };
 		B36B48CC2E5D20A6009A2303 /* TVControllerMappingBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVControllerMappingBridge.mm; sourceTree = "<group>"; };
 		B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseMenuView.swift; sourceTree = "<group>"; };
-		B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerExtensions.swift; sourceTree = "<group>"; };
 		B36B51902E5D8760009A2303 /* CheatsMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheatsMenuView.swift; sourceTree = "<group>"; };
 		B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLibrarySource.swift; sourceTree = "<group>"; };
 		B36B51952E5E41C7009A2303 /* RemoteSourcesCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourcesCoordinator.swift; sourceTree = "<group>"; };
@@ -831,6 +819,11 @@
 			path = Tips;
 			sourceTree = "<group>";
 		};
+		B37A7F632E77B7F5001C90F4 /* Controllers */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Controllers;
+			sourceTree = "<group>";
+		};
 		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = Core;
@@ -1259,12 +1252,7 @@
 				B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */,
 				B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
-				B36B48D02E5D6AFB009A2303 /* ControllerExtensions.swift */,
-				B31E804D2E6504940036EE31 /* ControllerGlyphs.swift */,
-				B31E921A2E665F530036EE31 /* ControllerManager.swift */,
-				B31E804E2E6504940036EE31 /* ControllerPresets.swift */,
-				B31EAC6E2E6697FD0036EE31 /* ControllerStateStore.swift */,
-				B31E80532E65051F0036EE31 /* ControllerStyleManager.swift */,
+				B37A7F632E77B7F5001C90F4 /* Controllers */,
 				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
 				B346BBF52E73C27000B3C00B /* DolphinBlogView.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
@@ -2216,6 +2204,7 @@
 				B31E805E2E654CC30036EE31 /* Activity */,
 				B31EAC712E6772C80036EE31 /* Widgets */,
 				B31EAC8E2E68B1710036EE31 /* Tips */,
+				B37A7F632E77B7F5001C90F4 /* Controllers */,
 			);
 			name = iCube;
 			packageProductDependencies = (
@@ -2537,7 +2526,6 @@
 				B9913781288096A300588446 /* ConfigWiiViewController.mm in Sources */,
 				B97E4B58296573E200B3EE9C /* DOLBuildSource.swift in Sources */,
 				B34ECD002E56A57A00301907 /* EmulationScreen.swift in Sources */,
-				B31E921B2E665F530036EE31 /* ControllerManager.swift in Sources */,
 				B9398716287FE28F008E8E47 /* FallbackRegionCell.m in Sources */,
 				B31E805C2E6544430036EE31 /* TVFloatStepper.swift in Sources */,
 				B939871A287FF135008E8E47 /* ConfigInterfaceViewController.mm in Sources */,
@@ -2548,7 +2536,6 @@
 				B950CFCC2962590600197719 /* JitManager+PTrace.m in Sources */,
 				B9398710287FBB80008E8E47 /* SpeedLimitCell.m in Sources */,
 				B9B2C622288DB62D00CB6569 /* TCSidewaysWiiPad.swift in Sources */,
-				B31E80542E65051F0036EE31 /* ControllerStyleManager.swift in Sources */,
 				B933EDC127F77D1E004D7DD7 /* GameFilePtrWrapper.mm in Sources */,
 				B933EDBE27F6A7BF004D7DD7 /* GameFileCacheService.swift in Sources */,
 				B9398707287F998C008E8E47 /* ConfigGeneralViewController.mm in Sources */,
@@ -2621,7 +2608,6 @@
 				B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */,
 				B991378E28814BCD00588446 /* WiiSensorBarViewController.mm in Sources */,
 				B97492472960CD2B00794509 /* FirstRunInitializationService.mm in Sources */,
-				B36B48D12E5D6AFB009A2303 /* ControllerExtensions.swift in Sources */,
 				B904ACD22885561E008B6BE9 /* InternalResolutionCell.m in Sources */,
 				B346BBFF2E73FA5400B3C00B /* URLRouterService.swift in Sources */,
 				B9447B052841901200BC9110 /* TCGameCubePad.swift in Sources */,
@@ -2637,7 +2623,6 @@
 				B346BBEC2E73973E00B3C00B /* MotionDebugView.swift in Sources */,
 				B9447B0128418F2600BC9110 /* TCJoystick.swift in Sources */,
 				B31EAC6F2E6697FD0036EE31 /* AssignmentEngine.swift in Sources */,
-				B31EAC702E6697FD0036EE31 /* ControllerStateStore.swift in Sources */,
 				B900A7BA27F4CB80000361DD /* DefaultsInitService.swift in Sources */,
 				B950CFC3296219C800197719 /* WiiSystemUpdateViewController.mm in Sources */,
 				B9809C6C2A49705500877579 /* GeckoCodeViewController.mm in Sources */,
@@ -2665,8 +2650,6 @@
 				B9EC283D2D21DE2F000FAE09 /* ControllersTouchscreenIRModeViewController.mm in Sources */,
 				B96C9A4A2A46501C002B5ECF /* DOLAppVersion.swift in Sources */,
 				B31E804C2E64FCA50036EE31 /* SpotlightIndexService.swift in Sources */,
-				B31E80502E6504940036EE31 /* ControllerGlyphs.swift in Sources */,
-				B31E80512E6504940036EE31 /* ControllerPresets.swift in Sources */,
 				B31E80522E6504940036EE31 /* GameProfiles.swift in Sources */,
 				B346BBF92E73E45800B3C00B /* DSUServerBridge.mm in Sources */,
 				B904AD1A2888AB5E008B6BE9 /* MappingDeviceCell.m in Sources */,

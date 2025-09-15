@@ -10,6 +10,9 @@ import PVWebServer
 import SafariServices
 import AudioToolbox
 #endif
+#if canImport(GameController)
+import GameController
+#endif
 #if os(iOS)
 import NavigationStackBackport
 #endif
@@ -967,7 +970,7 @@ struct ControllersRootView: View {
 
 #if os(iOS)
         Button(action: { testRumble() }) {
-          Label(L("Test Rumble"), systemImage: "iphone.radiowaves.left.and.right")
+          Label(L("Test Rumble"), systemImage: "waveform")
         }
 #endif
       }
@@ -1068,7 +1071,12 @@ struct ControllersRootView: View {
   private func dsuServerTitle(_ idx: Int) -> String {
     if idx < 0 || idx >= dsuServers.count { return "Server \(idx+1)" }
     let desc = (dsuServers[idx]["description"] as? String) ?? ""
-    return desc.isEmpty ? "Server \(idx+1)" : desc
+    let addrPort = dsuServerAddressPort(idx)
+    if desc.isEmpty {
+      return addrPort.isEmpty ? "Server \(idx+1)" : addrPort
+    } else {
+      return addrPort.isEmpty ? desc : "\(desc) — \(addrPort)"
+    }
   }
 
   private func dsuServerAddressPort(_ idx: Int) -> String {
@@ -1114,68 +1122,51 @@ struct ControllersRootView: View {
   private func testRumble() {
     var controllersTestedCount = 0
     var deviceTested = false
-
+    #if canImport(GameController)
     // Test ALL connected external controller haptics
     let controllers = GCController.controllers()
-    for controller in controllers {
-      if #available(iOS 14.0, *), let haptics = controller.haptics {
-        do {
-          let engine = try haptics.createEngine(withLocality: .default)
-          try engine?.start()
-          let pattern = try CHHapticPattern(events: [
-            CHHapticEvent(eventType: .hapticTransient, parameters: [
-              CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
-              CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.8)
-            ], relativeTime: 0),
-            CHHapticEvent(eventType: .hapticTransient, parameters: [
-              CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.6),
-              CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.4)
-            ], relativeTime: 0.15)
-          ], parameters: [])
-          if let engine = engine {
-            let player = try engine.makePlayer(with: pattern)
-            try player.start(atTime: 0)
-            controllersTestedCount += 1
+    if #available(iOS 14.0, tvOS 14.0, * ) {
+      for controller in controllers {
+        if let haptics = controller.haptics {
+          do {
+            let engine = try haptics.createEngine(withLocality: .default)
+            try engine?.start()
+            // Simple transient pulse
+            let pattern = try CHHapticPattern(events: [
+              CHHapticEvent(eventType: .hapticTransient, parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.9),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.8)
+              ], relativeTime: 0)
+            ], parameters: [])
+            if let engine = engine {
+              let player = try engine.makePlayer(with: pattern)
+              try player.start(atTime: 0)
+              controllersTestedCount += 1
+            }
+          } catch {
           }
-        } catch {
-          // Controller haptics failed for this controller, continue to next
         }
       }
     }
-
-    // Test device haptics (iPhone vibration)
+    #endif
+    #if canImport(CoreHaptics)
     if CHHapticEngine.capabilitiesForHardware().supportsHaptics {
       do {
         let engine = try CHHapticEngine()
         try engine.start()
-
-        // Create a strong rumble pattern
         let pattern = try CHHapticPattern(events: [
           CHHapticEvent(eventType: .hapticTransient, parameters: [
             CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0)
-          ], relativeTime: 0),
-          CHHapticEvent(eventType: .hapticContinuous, parameters: [
-            CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.8),
-            CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5)
-          ], relativeTime: 0.1, duration: 0.3)
+          ], relativeTime: 0)
         ], parameters: [])
-
         let player = try engine.makePlayer(with: pattern)
         try player.start(atTime: 0)
         deviceTested = true
       } catch {
-        // Device haptics failed, try fallback
       }
     }
-
-    // Fallback: Use legacy UIKit vibration if device CoreHaptics isn't available
-    if !deviceTested {
-      AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
-      deviceTested = true
-    }
-
-    // Show appropriate message based on what was tested
+    #endif
     let message: String
     if controllersTestedCount > 0 && deviceTested {
       message = String(format: L("Tested %d controller(s) + device rumble"), controllersTestedCount)
@@ -1186,8 +1177,39 @@ struct ControllersRootView: View {
     } else {
       message = L("No haptic feedback available")
     }
-
     NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": message])
+  }
+
+  private func mfiControllerTitle(_ controller: GCController, index: Int) -> String {
+    if #available(iOS 16.0, *) {
+      // Prefer the product category (e.g., "Gamepad", "DualSense") when available
+      let category = controller.productCategory
+      if !category.isEmpty { return category }
+      if let vendor = controller.vendorName, !vendor.isEmpty { return vendor }
+      return "Controller"
+    } else {
+      if let vendor = controller.vendorName, !vendor.isEmpty { return vendor }
+      return "Controller"
+    }
+  }
+
+  private func mfiControllerDetail(_ controller: GCController) -> String {
+    // Compose a stable short identifier to disambiguate same-model controllers
+    let ptr = Unmanaged.passUnretained(controller).toOpaque()
+    let hex = String(format: "%p", Int(bitPattern: ptr))
+    let shortId = hex.count > 4 ? String(hex.suffix(4)) : hex
+    if #available(iOS 16.0, *) {
+      let vendor = controller.vendorName ?? ""
+      let category = controller.productCategory
+      var parts: [String] = []
+      if !vendor.isEmpty { parts.append(vendor) }
+      if !category.isEmpty { parts.append(category) }
+      parts.append(shortId)
+      return parts.joined(separator: " · ")
+    } else {
+      let vendor = controller.vendorName ?? ""
+      return vendor.isEmpty ? shortId : "\(vendor) · \(shortId)"
+    }
   }
 #endif
 }
