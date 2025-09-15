@@ -40,10 +40,6 @@
 #include "Core/IOS/ES/Formats.h"
 #include "Core/TitleDatabase.h"
 
-#if defined(__APPLE__)
-#include <pthread.h>
-#endif
-
 #include "DiscIO/Blob.h"
 #include "DiscIO/DiscExtractor.h"
 #include "DiscIO/Enums.h"
@@ -326,13 +322,6 @@ bool GameFile::DefaultCoverChanged()
 {
   if (!m_default_cover.buffer.empty() || !UseGameCovers())
     return false;
-
-#if defined(__APPLE__)
-  // Avoid mutating cover buffers from background threads on iOS; defer to a future main-thread pass
-  // This prevents crashes observed during async metadata updates when covers are being updated concurrently
-  if (pthread_main_np() == 0)
-    return false;
-#endif
 
   const auto cover_path = File::GetUserPath(D_COVERCACHE_IDX) + DIR_SEP;
 

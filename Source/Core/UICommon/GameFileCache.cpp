@@ -319,22 +319,7 @@ bool GameFileCache::UpdateAdditionalMetadata(std::shared_ptr<GameFile>* game_fil
 
   (*game_file)->DownloadDefaultCover();
 
-  bool default_cover_changed = false;
-#ifdef __OBJC__
-  if (![NSThread isMainThread])
-  {
-    // Perform DefaultCoverChanged on main thread synchronously to avoid races with UI/lifecycle
-    __block bool changed = false;
-    dispatch_sync(dispatch_get_main_queue(), ^{
-      changed = (*game_file)->DefaultCoverChanged();
-    });
-    default_cover_changed = changed;
-  }
-  else
-#endif
-  {
-    default_cover_changed = (*game_file)->DefaultCoverChanged();
-  }
+  const bool default_cover_changed = (*game_file)->DefaultCoverChanged();
   const bool custom_cover_changed = (*game_file)->CustomCoverChanged();
 
   if (!xml_metadata_changed && !wii_banner_changed && !custom_banner_changed &&
