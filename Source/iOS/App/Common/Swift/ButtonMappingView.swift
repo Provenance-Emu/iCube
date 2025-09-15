@@ -539,15 +539,17 @@ class DeviceSelectionViewController: UITableViewController {
 }
 
 private func friendlyName(forQualified q: String) -> String {
-  if q.hasPrefix("DSUClient/") { return "DualShock UDP" }
-  if q.hasPrefix("MFi/") { return "MFi Controller" }
-  if q.hasPrefix("iOS/") { return "Touchscreen" }
+  //  if q.hasPrefix("DSUClient/") { return "DualShock UDP" }
+  //  if q.hasPrefix("MFi/") { return "MFi Controller" }
+  //  if q.hasPrefix("iOS/") { return "Touchscreen" }
+  //  return q
   return q
 }
 
 private func defaultProfileName(forQualified q: String) -> String? {
   if q.hasPrefix("DSUClient/") { return "DSU" }
   if q.hasPrefix("iOS/" ) { return "Touchscreen" }
+  if q.hasPrefix("MFi") { return "Physical Controller" }
   return nil
 }
 
