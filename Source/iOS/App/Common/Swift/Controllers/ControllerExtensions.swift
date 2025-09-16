@@ -52,6 +52,7 @@ func configureController(_ c: GCController) {
   }
   if let eg = c.extendedGamepad {
     eg.buttonB.preferredSystemGestureState = .disabled
+    eg.buttonHome?.preferredSystemGestureState = .disabled
     eg.buttonMenu.preferredSystemGestureState = .disabled
     eg.buttonOptions?.preferredSystemGestureState = .disabled
   }
@@ -230,10 +231,14 @@ func installExtraInputHandlers(_ c: GCController) {
       }
     }
   }
+  
+  // Home button Apple nonsense fixes
 
   // Home - Extended
   c.extendedGamepad?.buttonOptions?.preferredSystemGestureState = .disabled
   c.extendedGamepad?.buttonHome?.preferredSystemGestureState = .disabled
+  c.extendedGamepad?.buttonMenu.preferredSystemGestureState = .disabled
+
   // Home - Micro
   c.microGamepad?.buttonMenu.preferredSystemGestureState = .disabled
   // Generic pause handler for controllers that surface a pause/home action
@@ -243,8 +248,17 @@ func installExtraInputHandlers(_ c: GCController) {
   // FUCK YOU APPLE I HATE THIS STUPID MENU BUTTON SHIT AND ALL OF GCCONTROLLER!!!
   c.controllerPausedHandler = { _ in
     Task { @MainActor in
+      NSLog("controllerPausedHandler entered")
       PauseGestureTracker.shared.menuOrStartPressed()
     }
+  }
+  
+  // Fix B going back on tvOS
+  if #available(tvOS 14.0, *) {
+    c.extendedGamepad?.buttonA.preferredSystemGestureState = .disabled
+    c.extendedGamepad?.buttonB.preferredSystemGestureState = .disabled
+    c.extendedGamepad?.buttonX.preferredSystemGestureState = .disabled
+    c.extendedGamepad?.buttonY.preferredSystemGestureState = .disabled
   }
 }
 

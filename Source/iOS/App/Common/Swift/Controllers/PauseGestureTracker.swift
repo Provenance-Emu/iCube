@@ -59,6 +59,7 @@ final class PauseGestureTracker {
         let recentShoulders = (now - lastAllShouldersTrueAt) <= 0.30
         guard isAllShouldersHeld || recentShoulders else { return }
         DispatchQueue.main.async {
+            NSLog("menuOrStartPressed recognized shoulder gesture")
             TVEmulationBridge.pause()
             NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
         }
