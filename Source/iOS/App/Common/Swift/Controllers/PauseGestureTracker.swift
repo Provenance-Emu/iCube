@@ -19,7 +19,6 @@ final class PauseGestureTracker {
     private(set) var isAllShouldersHeld: Bool = false {
         didSet {
             if oldValue != isAllShouldersHeld {
-                if isAllShouldersHeld { lastAllShouldersTrueAt = Date().timeIntervalSince1970 }
                 // Activate/deactivate fast forward in the core
                 syncFastForward(with: isAllShouldersHeld)
                 // Legacy/local notification for other listeners
@@ -38,26 +37,24 @@ final class PauseGestureTracker {
         }
     }
 
-    /// Time the shoulders were last observed as all pressed (epoch seconds).
-    private var lastAllShouldersTrueAt: TimeInterval = 0
-
     private init() {}
 
     /// Call whenever the current state of the four shoulder buttons changes.
     /// - Parameter allPressed: true if L1, R1, L2, R2 are all currently pressed.
     func updateShoulderState(allPressed: Bool) {
+        NSLog("updateShoulderState: \(allPressed ? "Yes" : "No")")
         isAllShouldersHeld = allPressed
-        if allPressed { lastAllShouldersTrueAt = Date().timeIntervalSince1970 }
     }
 
     /// Call when Menu or Start is pressed.
     /// If all shoulders are currently held, this will show the pause menu.
     /// Also permits a small timing tolerance if shoulders were just pressed
     /// shortly before the Menu press to account for handler ordering.
-    func menuOrStartPressed() {
+  func menuOrStartPressed() {
+        NSLog("menuOrStartPressed entered: isAllShouldersHeld? \(isAllShouldersHeld ? "Yes" : "No")")
+
         let now = Date().timeIntervalSince1970
-        let recentShoulders = (now - lastAllShouldersTrueAt) <= 0.30
-        guard isAllShouldersHeld || recentShoulders else { return }
+        guard isAllShouldersHeld else { return }
         DispatchQueue.main.async {
             NSLog("menuOrStartPressed recognized shoulder gesture")
           
