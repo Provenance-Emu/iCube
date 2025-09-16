@@ -232,15 +232,20 @@ func installExtraInputHandlers(_ c: GCController) {
   }
 
   // Home - Extended
+  c.extendedGamepad?.buttonOptions?.preferredSystemGestureState = .disabled
   c.extendedGamepad?.buttonHome?.preferredSystemGestureState = .disabled
   // Home - Micro
   c.microGamepad?.buttonMenu.preferredSystemGestureState = .disabled
   // Generic pause handler for controllers that surface a pause/home action
-//  c.controllerPausedHandler = { _ in
-//    Task { @MainActor in
-//      presentPauseMenu()
-//    }
-//  }
+  // ! THIS IS REQUIRED FOR CONTROLLERS LIKE NIMBUS
+  // in order to prevent GameCenter from opening.
+  // IGNORE THE COMPILER WARNING, USING .HOME HANDLER IS NOT GOOD ENOUGH!
+  // FUCK YOU APPLE I HATE THIS STUPID MENU BUTTON SHIT AND ALL OF GCCONTROLLER!!!
+  c.controllerPausedHandler = { _ in
+    Task { @MainActor in
+      PauseGestureTracker.shared.menuOrStartPressed()
+    }
+  }
 }
 
 /// Sets up pause gesture handlers for all currently connected controllers
