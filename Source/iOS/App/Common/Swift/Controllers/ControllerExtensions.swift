@@ -23,6 +23,22 @@ private struct ShakeState {
 }
 private var shakeStates: [ObjectIdentifier: ShakeState] = [:]
 
+/// Shoulder state tracking for pause/fast-forward gestures
+private final class ShoulderState {
+  var l1: Bool = false
+  var r1: Bool = false
+  var l2: Bool = false
+  var r2: Bool = false
+  var allPressed: Bool { l1 && r1 && l2 && r2 }
+}
+private var shoulderStates: [ObjectIdentifier: ShoulderState] = [:]
+
+/// Helper to show the pause menu consistently
+private func presentPauseMenu() {
+  TVEmulationBridge.pause()
+  NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+}
+
 func configureController(_ c: GCController) {
   if let mg = c.microGamepad {
     mg.reportsAbsoluteDpadValues = true
@@ -48,8 +64,7 @@ func configureAllControllers() {
   }
 }
 
-func installExtraInputHandlers(_ c: GCController) {
-  
+func installMotionHandler(_ c: GCController) {
   // Map controller motion (if available) to Wii accelerometer and gyro
   if #available(iOS 14.0, tvOS 14.0, *), let motion = c.motion {
     motion.valueChangedHandler = { m in
@@ -79,7 +94,7 @@ func installExtraInputHandlers(_ c: GCController) {
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: controllerId, value: gy)
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: controllerId, value: gz)
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: controllerId, value: gz)
-        
+
         // Shake synthesis from high acceleration/rotation spikes; small debounce
         let id = ObjectIdentifier(c)
         let now = Date().timeIntervalSince1970
@@ -89,7 +104,7 @@ func installExtraInputHandlers(_ c: GCController) {
         let accelAxisThresh: Float = 0.80
         let accelMagThresh: Float = 1.10
         let rotMagThresh: Float = 4.5
-        
+
         func trigger(button: Int, last: inout TimeInterval) {
           if now - last >= debounce {
             last = now
@@ -99,12 +114,12 @@ func installExtraInputHandlers(_ c: GCController) {
             }
           }
         }
-        
+
         // Axis thresholds
         if abs(ax) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeX.rawValue, last: &state.lastTriggerX) }
         if abs(ay) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeY.rawValue, last: &state.lastTriggerY) }
         if abs(az) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ) }
-        
+
         // Combined magnitude thresholds (accel and rotation) as fallback
         let amag = sqrtf(ax*ax + ay*ay + az*az)
         if amag > accelMagThresh {
@@ -116,7 +131,7 @@ func installExtraInputHandlers(_ c: GCController) {
             trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ)
           }
         }
-        
+
         shakeStates[id] = state
       }
       if UserDefaults.standard.bool(forKey: "input_debug") {
@@ -124,6 +139,108 @@ func installExtraInputHandlers(_ c: GCController) {
       }
     }
   }
+}
+
+func installExtraInputHandlers(_ c: GCController) {
+
+  installMotionHandler(c)
+
+  // Pause + shoulder gesture handling
+  let id = ObjectIdentifier(c)
+  if shoulderStates[id] == nil { shoulderStates[id] = ShoulderState() }
+  func recomputeShouldersAndNotify() {
+    let anyAll = shoulderStates.values.contains { $0.allPressed }
+    Task { @MainActor in
+      PauseGestureTracker.shared.updateShoulderState(allPressed: anyAll)
+    }
+  }
+
+  if let eg = c.extendedGamepad {
+    // Shoulder buttons
+    eg.leftShoulder.pressedChangedHandler = { _, _, pressed in
+      shoulderStates[id, default: ShoulderState()].l1 = pressed
+      recomputeShouldersAndNotify()
+    }
+    eg.rightShoulder.pressedChangedHandler = { _, _, pressed in
+      shoulderStates[id, default: ShoulderState()].r1 = pressed
+      recomputeShouldersAndNotify()
+    }
+    eg.leftTrigger.pressedChangedHandler = { _, _, pressed in
+      shoulderStates[id, default: ShoulderState()].l2 = pressed
+      recomputeShouldersAndNotify()
+    }
+    eg.rightTrigger.pressedChangedHandler = { _, _, pressed in
+      shoulderStates[id, default: ShoulderState()].r2 = pressed
+      recomputeShouldersAndNotify()
+    }
+
+    // Start/Menu style buttons should consult PauseGestureTracker for shoulder+start combo
+    eg.buttonMenu.pressedChangedHandler = { _, _, pressed in
+      Task { @MainActor in
+        if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
+      }
+    }
+    eg.buttonOptions?.pressedChangedHandler = { _, _, pressed in
+      Task { @MainActor in
+        if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
+      }
+    }
+
+    // DualShock / DualSense / Xbox Home buttons open pause menu directly
+    if #available(iOS 14.0, tvOS 14.0, *) {
+      if let ds4 = eg as? GCDualShockGamepad {
+        // TouchPad
+        ds4.touchpadButton?.pressedChangedHandler = { _, _, pressed in
+          Task { @MainActor in
+            if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
+          }
+        }
+        // Home button
+        ds4.buttonHome?.preferredSystemGestureState = .disabled
+        // Some OS versions expose a home button
+        ds4.buttonHome?.pressedChangedHandler = { _, _, pressed in
+          Task { @MainActor in
+            if pressed { presentPauseMenu() }
+          }
+        }
+      }
+    }
+    if #available(iOS 14.0, tvOS 14.0, *) {
+      if let ds5 = eg as? GCDualSenseGamepad {
+        // Home button
+        ds5.buttonHome?.preferredSystemGestureState = .disabled
+
+        ds5.buttonHome?.pressedChangedHandler = { _, _, pressed in
+          Task { @MainActor in
+            if pressed { presentPauseMenu() }
+          }
+        }
+      }
+    }
+    if #available(iOS 14.5, tvOS 14.5, *) {
+      if let xbox = eg as? GCXboxGamepad {
+        // Home button
+        xbox.buttonHome?.preferredSystemGestureState = .disabled
+
+        xbox.buttonHome?.pressedChangedHandler = { _, _, pressed in
+          Task { @MainActor in
+            if pressed { presentPauseMenu() }
+          }
+        }
+      }
+    }
+  }
+
+  // Home - Extended
+  c.extendedGamepad?.buttonHome?.preferredSystemGestureState = .disabled
+  // Home - Micro
+  c.microGamepad?.buttonMenu.preferredSystemGestureState = .disabled
+  // Generic pause handler for controllers that surface a pause/home action
+//  c.controllerPausedHandler = { _ in
+//    Task { @MainActor in
+//      presentPauseMenu()
+//    }
+//  }
 }
 
 /// Sets up pause gesture handlers for all currently connected controllers
@@ -142,19 +259,19 @@ func setupPauseGestureHandler(for controller: GCController) {
   // The pause gesture handling is already implemented in installInputDebugHandlers
   // in ControllerExtensions.swift, so we just need to ensure it's called
   installExtraInputHandlers(controller)
-  
+
   // Also ensure Menu button is mapped to Start for controllers that have it
   if let extendedGamepad = controller.extendedGamepad {
     if #available(iOS 14, tvOS 14.0, *) {
       // Ensure Menu button preference is set to always receive
-      extendedGamepad.buttonMenu.preferredSystemGestureState = .alwaysReceive
+      extendedGamepad.buttonMenu.preferredSystemGestureState = .disabled
     }
   }
-  
+
   if let microGamepad = controller.microGamepad {
     if #available(iOS 14, tvOS 14.0, *) {
       // Ensure Menu button preference is set to always receive for micro gamepad too
-      microGamepad.buttonMenu.preferredSystemGestureState = .alwaysReceive
+      microGamepad.buttonMenu.preferredSystemGestureState = .disabled
     }
   }
 }

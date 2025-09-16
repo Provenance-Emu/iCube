@@ -20,10 +20,19 @@ final class PauseGestureTracker {
         didSet {
             if oldValue != isAllShouldersHeld {
                 if isAllShouldersHeld { lastAllShouldersTrueAt = Date().timeIntervalSince1970 }
+                // Activate/deactivate fast forward in the core
+                syncFastForward(with: isAllShouldersHeld)
+                // Legacy/local notification for other listeners
                 NotificationCenter.default.post(
                     name: Self.fastForwardDidChangeNotification,
                     object: nil,
                     userInfo: ["active": isAllShouldersHeld]
+                )
+                // UI/state notification used by ControllerManager/EmulationScreen
+                NotificationCenter.default.post(
+                    name: Notification.Name("DOLFastForwardToggled"),
+                    object: nil,
+                    userInfo: ["enabled": NSNumber(value: isAllShouldersHeld)]
                 )
             }
         }
@@ -63,6 +72,14 @@ final class PauseGestureTracker {
             GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
             #endif
             NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+        }
+    }
+
+    /// Ensure the bridge fast-forward state matches our desired active state
+    private func syncFastForward(with active: Bool) {
+        let currentlyEnabled = TVEmulationBridge.isFastForwardEnabled()
+        if currentlyEnabled != active {
+            _ = TVEmulationBridge.toggleFastForward()
         }
     }
 }

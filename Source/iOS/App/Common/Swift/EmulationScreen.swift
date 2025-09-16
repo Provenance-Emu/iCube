@@ -27,12 +27,12 @@ private final class EmuContainerViewController: UIViewController {
   private weak var emuVC: EmuEventVC?
   private var exitObserver: NSObjectProtocol?
   var gamePath: String = ""
-  
+
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .black
   }
-  
+
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     // Tear down any previous child to ensure a fresh setup each time
@@ -46,7 +46,7 @@ private final class EmuContainerViewController: UIViewController {
       NotificationCenter.default.removeObserver(token)
       exitObserver = nil
     }
-    
+
     let vc = EmuEventVC()
     vc.controllerUserInteractionEnabled = true
     addChild(vc)
@@ -57,12 +57,12 @@ private final class EmuContainerViewController: UIViewController {
     self.emuVC = vc
     _ = vc.becomeFirstResponder()
     NSLog("[INPUT] EmuEventVC becomeFirstResponder attempted")
-    
+
     let displayContainer = UIView(frame: vc.view.bounds)
     displayContainer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     displayContainer.backgroundColor = .black
     vc.view.addSubview(displayContainer)
-    
+
     func launchCore() {
       DispatchQueue.main.async {
         TVEmulationBridge.registerMainDisplay(displayContainer)
@@ -74,7 +74,7 @@ private final class EmuContainerViewController: UIViewController {
         }
       }
     }
-    
+
     // JIT warning dialog when JIT is unavailable and a JIT core is selected
     let manager = JitManager.shared()
     let currentCore = DOLConfigBridge.mainCpuCore()
@@ -97,16 +97,16 @@ private final class EmuContainerViewController: UIViewController {
     } else {
       launchCore()
     }
-    
+
     exitObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil, queue: .main) { [weak self] _ in
       self?.handleExit()
     }
   }
-  
+
   private func handleExit() {
     NotificationCenter.default.post(name: Notification.Name("DOLEmulationDidEndNotification"), object: nil)
   }
-  
+
   deinit {
     if let token = exitObserver {
       NotificationCenter.default.removeObserver(token)
@@ -149,7 +149,7 @@ private func resolveCachedPathIfAvailable(_ path: String) -> String {
 
 private struct EmulationProgrammaticHost: UIViewControllerRepresentable {
   let gamePath: String
-  
+
   func makeUIViewController(context: Context) -> UIViewController {
     if AppConsts.useSwiftUI {
       return UIViewController()
@@ -159,7 +159,7 @@ private struct EmulationProgrammaticHost: UIViewControllerRepresentable {
       return sb.instantiateInitialViewController()!
     }
   }
-  
+
   func updateUIViewController(_ uiViewController: UIViewController, context: Context) { }
 }
 
@@ -170,8 +170,9 @@ struct EmulationScreen: View {
 #if os(tvOS)
   @State private var exitObserver: NSObjectProtocol?
   @State private var showMotionDebug = false
+  @State private var tvPauseObserver: NSObjectProtocol?
 #endif
-  
+
   // Pause menu state
   @State private var showPauseMenu = false
   @State private var selectedSlot = 1
@@ -215,7 +216,7 @@ struct EmulationScreen: View {
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
   @State private var isWiiSystem: Bool = false
-  
+
   // Quick performance overlay
   @State private var showPerfOverlay: Bool = false
   @State private var ocEnabled: Bool = false
@@ -229,7 +230,7 @@ struct EmulationScreen: View {
   @State private var efbScaleQuick: Int = 1
   @State private var efbMaxScaleQuick: Int = 6
   @State private var anisotropyQuick: Int = 1
-  
+
 #if os(iOS)
   @State private var showSkyMenu = false
   @State private var showSkyImporter = false
@@ -237,7 +238,7 @@ struct EmulationScreen: View {
   @State private var showSkyClearPicker = false
   @State private var skyLastLoadedSlot: Int = 0
 #endif
-  
+
   var body: some View {
 #if os(tvOS)
     ZStack {
@@ -246,9 +247,9 @@ struct EmulationScreen: View {
         .focusable(!showPauseMenu)
         .allowsHitTesting(!showPauseMenu)
         .navigationBarBackButtonHidden(true)
-      
+
       // Removed floating speed overlay toggle; moved into pause menu
-      
+
       // Semi-transparent overlay with controls
       if showPerfOverlay {
         Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
@@ -260,7 +261,7 @@ struct EmulationScreen: View {
               .buttonStyle(.plain)
           }
           Divider().background(.white.opacity(0.2))
-          
+
           // CPU Clock
           Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
             ocEnabled = v
@@ -275,7 +276,7 @@ struct EmulationScreen: View {
               .disabled(!ocEnabled)
               .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
           }
-          
+
           // VBI
           Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
             vbiEnabledQuick = v
@@ -290,9 +291,9 @@ struct EmulationScreen: View {
               .disabled(!vbiEnabledQuick)
               .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
           }
-          
+
           Divider().background(.white.opacity(0.2))
-          
+
           // Overlays (FPS/VPS/Speed/VBlank)
           Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
             .tint(.blue)
@@ -306,7 +307,7 @@ struct EmulationScreen: View {
           Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
             .tint(.blue)
             .foregroundColor(.white)
-          
+
           // Graphics quick controls
           HStack {
             Text("Internal Resolution: \(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x")").foregroundColor(.white.opacity(0.8))
@@ -336,7 +337,7 @@ struct EmulationScreen: View {
           .resizable()
           .scaledToFill()
           .blur(radius: 25)
-        
+
         // Elegant gradient overlay
         LinearGradient(
           colors: [
@@ -347,7 +348,7 @@ struct EmulationScreen: View {
           startPoint: .top,
           endPoint: .bottom
         )
-        
+
         SettingsRootView(backgroundView: AnyView(Color.clear), isPauseMenuStyle: true, game: game)
       }
     }
@@ -468,6 +469,7 @@ struct EmulationScreen: View {
       if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
 #if os(tvOS)
       if let token = exitObserver { NotificationCenter.default.removeObserver(token); exitObserver = nil }
+      if let token = tvPauseObserver { NotificationCenter.default.removeObserver(token); tvPauseObserver = nil }
 #endif
       ControllerManager.shared.unregisterGCOverride(forController: 0)
       for c in GCController.controllers() {
@@ -533,7 +535,7 @@ struct EmulationScreen: View {
           TVEmulationBridge.resizeSurfaceNow()
           scheduleARPoll()
         }
-        
+
         // Top hit area: tap near status bar to reveal overlay (active only when hidden)
         if !showTopBar {
           VStack(spacing: 0) {
@@ -547,7 +549,7 @@ struct EmulationScreen: View {
           .zIndex(1)
           .allowsHitTesting(true)
         }
-        
+
         if showDSUDebugHUD {
           DSUDebugHUD()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -555,7 +557,7 @@ struct EmulationScreen: View {
             .zIndex(1000)
             .allowsHitTesting(true)
         }
-        
+
         if showTopBar {
           VStack {
             HStack(spacing: 16) {
@@ -622,7 +624,7 @@ struct EmulationScreen: View {
                 Image(systemName: fastForwardEnabled ? "forward.fill" : "forward")
                   .font(.title2)
               }
-              
+
 #if os(iOS)
               // Thermal badge
               if UserDefaults.standard.bool(forKey: "thermal_auto_enable") {
@@ -659,7 +661,7 @@ struct EmulationScreen: View {
               } label: {
                 Image(systemName: "slider.horizontal.3").font(.title2)
               }
-              
+
               Menu {
                 Menu {
                   ForEach(1...10, id: \.self) { slot in
@@ -738,7 +740,7 @@ struct EmulationScreen: View {
           .transition(.move(edge: .top).combined(with: .opacity))
           .zIndex(2)
         }
-        
+
         // Semi-transparent overlay with quick performance controls (iOS)
         if showPerfOverlay {
           Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
@@ -774,7 +776,7 @@ struct EmulationScreen: View {
                 .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
               Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
             }
-            
+
             Divider().background(.white.opacity(0.2))
             // Overlay toggles
             Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
@@ -789,7 +791,7 @@ struct EmulationScreen: View {
             Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
               .tint(.blue)
               .foregroundColor(.white)
-            
+
             // Quick graphics controls
             HStack {
               Text(L("Internal Resolution"))
@@ -815,8 +817,8 @@ struct EmulationScreen: View {
           .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
           .zIndex(5)
         }
-        
-        
+
+
         // Legacy touch pads
         if isTouchControlsActive {
           let isWiiToShow: Bool = {
@@ -889,7 +891,7 @@ struct EmulationScreen: View {
         }
         Button(L("Cancel"), role: .cancel) { }
       }
-      
+
     }
     .onAppear {
       NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
@@ -901,12 +903,12 @@ struct EmulationScreen: View {
       let useIMU = (irModeRaw == 0)
       TVEmulationBridge.setWiiIMUPointEnabled(useIMU)
       TCDeviceMotion.shared.setMotionEnabled(isTouchControlsActive && useIMU)
-      
+
       // Enable enhanced motion controls for touchscreen by default (Wii games)
       if isWiiSystem {
         setupEnhancedMotionControls()
       }
-      
+
       // Listen for motion settings changes during gameplay
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLMotionSettingsChanged"), object: nil, queue: .main) { _ in
         restartMotionSystemForSettingsChange()
@@ -925,21 +927,7 @@ struct EmulationScreen: View {
 #endif
       // On iOS, do not hand controller button presses to the system while in-game
       GCController.shouldMonitorBackgroundEvents = false
-      for c in GCController.controllers() {
-        c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
-        c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
-        if let gp = c.extendedGamepad {
-          if #available(iOS 14.0, *) {
-            gp.buttonMenu.preferredSystemGestureState = .alwaysReceive
-            gp.buttonOptions?.preferredSystemGestureState = .disabled
-          }
-        }
-        if let mg = c.microGamepad {
-          if #available(iOS 14.0, *) {
-            mg.buttonMenu.preferredSystemGestureState = .alwaysReceive
-          }
-        }
-      }
+
       logCurrentControllers()
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
       for c in GCController.controllers() { installExtraInputHandlers(c) }
@@ -1106,7 +1094,7 @@ struct EmulationScreen: View {
     }
 #endif
   }
-  
+
 #if os(iOS)
   /// ViewModel for on-screen controller visibility and mode
   final class TouchControlsViewModel: ObservableObject {
@@ -1114,7 +1102,7 @@ struct EmulationScreen: View {
     @Published var isVisible: Bool = true
     @Published var mode: Mode = .auto
   }
-  
+
   /// Resolve whether the overlay should show Wii or GC pads based on VM mode and current system
   private func overlayIsWii() -> Bool {
     let currentIsWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : isWiiSystem
@@ -1124,17 +1112,17 @@ struct EmulationScreen: View {
     case .wii: return true
     }
   }
-  
+
   @State private var isTouchControlsActive = false
   @State private var userOverrideTouchControls = false
-  
+
   private func toggleTopBar() {
     withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
       showTopBar.toggle()
     }
     if showTopBar { scheduleAutoHide() }
   }
-  
+
   private func hideTopBar(now: Bool = false) {
     if now {
       withAnimation { showTopBar = false }
@@ -1144,7 +1132,7 @@ struct EmulationScreen: View {
       withAnimation { showTopBar = false }
     }
   }
-  
+
   private func scheduleAutoHide() {
     hideBarWorkItem?.cancel()
     let token = UUID()
@@ -1157,7 +1145,7 @@ struct EmulationScreen: View {
     hideBarWorkItem = work
     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
   }
-  
+
   private func scheduleARPoll() {
     arPollTask?.cancel()
     arPollTask = Task { @MainActor in
@@ -1172,7 +1160,7 @@ struct EmulationScreen: View {
       }
     }
   }
-  
+
   /// Apply saved CoreAudio DSP defaults to the engine when a game starts
   private func applyCoreAudioDSPDefaults() {
     func has(_ k: String) -> Bool { UserDefaults.standard.object(forKey: k) != nil }
@@ -1187,13 +1175,13 @@ struct EmulationScreen: View {
     if has("ca_fx_eq_mid") { AudioFXBridge.setCAEQMidGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_mid")) }
     if has("ca_fx_eq_high") { AudioFXBridge.setCAEQHighGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_high")) }
   }
-  
+
   /// Setup enhanced motion controls optimized for touchscreen usage
   private func setupEnhancedMotionControls() {
     // Enable enhanced motion controls by default for touchscreen Wii games
     UserDefaults.standard.set(true, forKey: "motion_enhanced_shake_detection")
     UserDefaults.standard.set(true, forKey: "motion_enable_ir_cursor")
-    
+
     // Set sensible defaults for axis inversion (can be adjusted by user)
     if UserDefaults.standard.object(forKey: "motion_invert_roll") == nil {
       UserDefaults.standard.set(false, forKey: "motion_invert_roll")
@@ -1201,9 +1189,9 @@ struct EmulationScreen: View {
     if UserDefaults.standard.object(forKey: "motion_invert_pitch") == nil {
       UserDefaults.standard.set(false, forKey: "motion_invert_pitch")
     }
-    
+
     NSLog("[MOTION] Enhanced motion controls enabled for Wii game - roll/pitch → IR cursor, improved shake detection")
-    
+
     // CRITICAL: Restart motion system to pick up the newly enabled settings
     // Small delay to ensure UserDefaults are synchronized
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -1214,27 +1202,27 @@ struct EmulationScreen: View {
       NSLog("[MOTION] Triggered motion system restart after enabling enhanced controls")
     }
   }
-  
+
   /// Restart motion system when settings change during gameplay
   private func restartMotionSystemForSettingsChange() {
     NSLog("[MOTION] Motion settings changed during gameplay - restarting motion system")
-    
+
     // If we're using TCDeviceMotion, restart it to pick up new settings
     if isTouchControlsActive {
       let currentMotionEnabled = TCDeviceMotion.shared.motionEnabled
       TCDeviceMotion.shared.setMotionEnabled(false)
-      
+
       // Small delay to ensure clean restart
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
         TCDeviceMotion.shared.setMotionEnabled(currentMotionEnabled)
         NSLog("[MOTION] TCDeviceMotion restarted with new settings - cursor reset to center")
       }
     }
-    
+
     // The PVDolphinCore instance will handle its own motion system restart
     // and cursor reset via the notification observer
   }
-  
+
   /// Heuristic: infer Wii vs GC from game metadata (gameID prefix, file extension)
   private func inferIsWii(from item: TVGameItem) -> Bool {
     let id = item.gameID.uppercased()
@@ -1249,13 +1237,13 @@ struct EmulationScreen: View {
     }
     return isWiiSystem
   }
-  
+
   // Pause gesture setup is centralized in ControllerManager.installInputDebugHandlers
   private func setupPauseGestureHandlers() { }
   private func setupPauseGestureHandler(for controller: GCController) { }
-  
+
 #if os(iOS)
-  
+
   private struct TouchPadsContainer: UIViewRepresentable {
     let forceVisible: Bool
     let isWii: Bool
@@ -1263,7 +1251,7 @@ struct EmulationScreen: View {
       let host = UIView()
       host.backgroundColor = .clear
       host.isUserInteractionEnabled = true
-      
+
       // Decide which pad to show based on current system/controller config
       if shouldShowWiiPad() {
         let wiiView = makeWiiPadView()
@@ -1284,7 +1272,7 @@ struct EmulationScreen: View {
       }
       return host
     }
-    
+
     func updateUIView(_ uiView: UIView, context: Context) {
       uiView.subviews.forEach { $0.removeFromSuperview() }
       if shouldShowWiiPad() {
@@ -1322,7 +1310,7 @@ struct EmulationScreen: View {
         }
       }
     }
-    
+
     // MARK: - Decision Logic via ControllerManager
     private func shouldShowGameCubePad() -> Bool {
       let hasExternal = !GCController.controllers().isEmpty
@@ -1331,7 +1319,7 @@ struct EmulationScreen: View {
       NSLog("[TOUCH] GameCube pad decision: isWiiState=\(isWii) shouldShow=\(show)")
       return show
     }
-    
+
     private func shouldShowWiiPad() -> Bool {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
@@ -1339,7 +1327,7 @@ struct EmulationScreen: View {
       NSLog("[TOUCH] Wii pad decision: isWiiState=\(isWii) shouldShow=\(show)")
       return show
     }
-    
+
     // MARK: - Wii Subclass selection & configuration
     private func makeWiiPadView() -> UIView {
       let classic = DOLWiimoteBridge.isClassicActive(forWiimote: 0)
@@ -1360,7 +1348,7 @@ struct EmulationScreen: View {
       if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) { view.setTouchIRMode(mode) }
       return view
     }
-    
+
     private func configureWiiView(_ view: UIView, in container: UIView) {
       if let wiiPad = findTCWiiPad(in: view) {
         let motion = TCDeviceMotion.shared
@@ -1382,7 +1370,7 @@ struct EmulationScreen: View {
         applyPortRecursively(4, to: view)
       }
     }
-    
+
     private func loadPad(named name: String) -> UIView? {
       let candidateBundles: [Bundle] = [Bundle(for: TCWiiPad.self), Bundle.main]
       var candidateNames: [String] = [name]
@@ -1402,14 +1390,14 @@ struct EmulationScreen: View {
       NSLog("[TOUCH] Could not find nib for %@ in candidate bundles", name)
       return nil
     }
-    
+
     private func viewContainsTCWiiPad(_ v: UIView) -> Bool { return findTCWiiPad(in: v) != nil }
     private func findTCWiiPad(in v: UIView) -> TCWiiPad? {
       if let w = v as? TCWiiPad { return w }
       for sub in v.subviews { if let found = findTCWiiPad(in: sub) { return found } }
       return nil
     }
-    
+
     private func applyPortRecursively(_ port: Int, to view: UIView) {
       if let b = view as? TCButton { b.port = port }
       else if let j = view as? TCJoystick { j.port = port }
@@ -1419,9 +1407,9 @@ struct EmulationScreen: View {
     }
   }
 #endif // os(iOS)
-  
+
 #endif
-  
+
   private func logCurrentControllers() {
     guard UserDefaults.standard.bool(forKey: "input_debug") else { return }
     let controllers = GCController.controllers()

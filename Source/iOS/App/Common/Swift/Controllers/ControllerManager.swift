@@ -112,13 +112,13 @@ final class ControllerManager: NSObject, ObservableObject {
     // Prefer receiving Menu button events inside app
     if let gp = c.extendedGamepad {
       if #available(iOS 14.0, tvOS 14.0, *) {
-        gp.buttonMenu.preferredSystemGestureState = .alwaysReceive
+        gp.buttonMenu.preferredSystemGestureState = .disabled
         gp.buttonOptions?.preferredSystemGestureState = .disabled
       }
     }
     if let mgp = c.microGamepad {
       if #available(iOS 14.0, tvOS 14.0, *) {
-        mgp.buttonMenu.preferredSystemGestureState = .alwaysReceive
+        mgp.buttonMenu.preferredSystemGestureState = .disabled
       }
     }
   }
