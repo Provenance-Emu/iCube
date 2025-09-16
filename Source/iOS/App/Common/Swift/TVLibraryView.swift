@@ -1136,7 +1136,7 @@ struct TVLibraryView: View {
       VStack(spacing: 20) {
         DolphinErrorView(
           title: L("Library Empty"),
-          message: L("No games found. Add GameCube & Wii ROMs to your library to get started with this adorable emulator! 🎮")
+          message: L("No games found. Add GameCube & Wii ROMs to your library to get started with iCube! 🎮")
         )
       }
       .padding()
