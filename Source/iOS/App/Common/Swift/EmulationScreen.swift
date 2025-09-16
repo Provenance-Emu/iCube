@@ -216,9 +216,13 @@ struct EmulationScreen: View {
 
   // iOS top overlay
 #if os(iOS)
-  @State private var showTopBar = false
+  
+  @State var isTouchControlsActive = false
+  @State var userOverrideTouchControls = false
+  
+  @State var showTopBar = false
   @State private var fastForwardEnabled = false
-  @State private var hideBarWorkItem: DispatchWorkItem?
+  @State var hideBarWorkItem: DispatchWorkItem?
   // iOS observer tokens to avoid leaks
   @State private var obsGCConnect: NSObjectProtocol?
   @State private var obsGCDisconnect: NSObjectProtocol?
@@ -228,23 +232,23 @@ struct EmulationScreen: View {
   @State private var showFXSheet = false
   @State private var showMotionDebug = false
   // Auto-hide coordination
-  @State private var hasTopBarInteraction: Bool = false
-  @State private var autoHideScheduled: Bool = false
-  @State private var autoHideToken = UUID()
+  @State var hasTopBarInteraction: Bool = false
+  @State var autoHideScheduled: Bool = false
+  @State var autoHideToken = UUID()
   // AR stabilization
-  @State private var stableAR: CGFloat?
-  @State private var arPollTask: Task<Void, Never>?
+  @State var stableAR: CGFloat?
+  @State var arPollTask: Task<Void, Never>?
   // Touch pad refresh coordination to avoid system detection races
   @State private var touchPadsRefreshToken = UUID()
   @State private var irModeRaw: Int = 1
   @State private var desiredTouchControls: Bool = true
-  @StateObject private var touchVM = TouchControlsViewModel()
+  @StateObject var touchVM = TouchControlsViewModel()
   @State private var wiiOverlaySignature: Int = 0
   @ObservedObject private var controllerManager = ControllerManager.shared
 #endif
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
-  @State private var isWiiSystem: Bool = false
+  @State var isWiiSystem: Bool = false
 
   // Quick performance overlay
   @State private var showPerfOverlay: Bool = false

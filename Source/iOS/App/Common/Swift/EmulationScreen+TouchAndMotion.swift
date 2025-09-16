@@ -14,7 +14,7 @@ extension EmulationScreen {
   }
   
   /// Resolve whether the overlay should show Wii or GC pads based on VM mode and current system
-  private func overlayIsWii() -> Bool {
+  func overlayIsWii() -> Bool {
     let currentIsWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : isWiiSystem
     switch touchVM.mode {
     case .auto: return currentIsWii
@@ -22,18 +22,15 @@ extension EmulationScreen {
     case .wii: return true
     }
   }
-  
-  @State private var isTouchControlsActive = false
-  @State private var userOverrideTouchControls = false
-  
-  private func toggleTopBar() {
+
+    func toggleTopBar() {
     withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
       showTopBar.toggle()
     }
     if showTopBar { scheduleAutoHide() }
   }
   
-  private func hideTopBar(now: Bool = false) {
+  func hideTopBar(now: Bool = false) {
     if now {
       withAnimation { showTopBar = false }
       hideBarWorkItem?.cancel()
@@ -43,7 +40,7 @@ extension EmulationScreen {
     }
   }
   
-  private func scheduleAutoHide() {
+  func scheduleAutoHide() {
     hideBarWorkItem?.cancel()
     let token = UUID()
     autoHideToken = token
@@ -56,7 +53,7 @@ extension EmulationScreen {
     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
   }
   
-  private func scheduleARPoll() {
+  func scheduleARPoll() {
     arPollTask?.cancel()
     arPollTask = Task { @MainActor in
       for _ in 0..<20 {
@@ -72,7 +69,7 @@ extension EmulationScreen {
   }
   
   /// Apply saved CoreAudio DSP defaults to the engine when a game starts
-  private func applyCoreAudioDSPDefaults() {
+  func applyCoreAudioDSPDefaults() {
     func has(_ k: String) -> Bool { UserDefaults.standard.object(forKey: k) != nil }
     if has("ca_fx_delay_enabled") { AudioFXBridge.setCADelayEnabled(UserDefaults.standard.bool(forKey: "ca_fx_delay_enabled")) }
     if has("ca_fx_delay_ms") { AudioFXBridge.setCADelayMs(Int(UserDefaults.standard.double(forKey: "ca_fx_delay_ms"))) }
@@ -87,7 +84,7 @@ extension EmulationScreen {
   }
   
   /// Setup enhanced motion controls optimized for touchscreen usage
-  private func setupEnhancedMotionControls() {
+  func setupEnhancedMotionControls() {
     // Enable enhanced motion controls by default for touchscreen Wii games
     UserDefaults.standard.set(true, forKey: "motion_enhanced_shake_detection")
     UserDefaults.standard.set(true, forKey: "motion_enable_ir_cursor")
@@ -114,7 +111,7 @@ extension EmulationScreen {
   }
   
   /// Restart motion system when settings change during gameplay
-  private func restartMotionSystemForSettingsChange() {
+  func restartMotionSystemForSettingsChange() {
     NSLog("[MOTION] Motion settings changed during gameplay - restarting motion system")
     
     // If we're using TCDeviceMotion, restart it to pick up new settings
@@ -134,7 +131,7 @@ extension EmulationScreen {
   }
   
   /// Heuristic: infer Wii vs GC from game metadata (gameID prefix, file extension)
-  private func inferIsWii(from item: TVGameItem) -> Bool {
+  func inferIsWii(from item: TVGameItem) -> Bool {
     let id = item.gameID.uppercased()
     if let first = id.first {
       if first == "R" || first == "S" { return true }
@@ -148,7 +145,7 @@ extension EmulationScreen {
     return isWiiSystem
   }
     
-  private struct TouchPadsContainer: UIViewRepresentable {
+  struct TouchPadsContainer: UIViewRepresentable {
     let forceVisible: Bool
     let isWii: Bool
     func makeUIView(context: Context) -> UIView {
