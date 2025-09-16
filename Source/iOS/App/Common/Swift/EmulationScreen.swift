@@ -5,10 +5,6 @@ import Combine
 #if os(iOS)
 import NavigationStackBackport
 #endif
-#if os(tvOS)
-private func setupPauseGestureHandlers() { }
-private func setupPauseGestureHandler(for controller: GCController) { }
-#endif
 
 private struct EmulationSurfaceView: UIViewRepresentable {
   let gamePath: String
@@ -410,7 +406,7 @@ struct EmulationScreen: View {
       let initialCount = GCController.controllers().count
       NSLog("[INPUT] tvOS initial controllers count: %d", initialCount)
       GCController.shouldMonitorBackgroundEvents = true
-      configureAllControllersForTVOS()
+      configureAllControllers()
       setupPauseGestureHandlers()
       logCurrentControllers()
       if initialCount == 0 {
@@ -421,7 +417,7 @@ struct EmulationScreen: View {
       }
       NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
         if let c = note.object as? GCController {
-          configureControllerForTVOS(c)
+          configureController(c)
           setupPauseGestureHandler(for: c)
         }
       }
@@ -431,7 +427,7 @@ struct EmulationScreen: View {
       }
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
         ControllerManager.shared.registerGCOverride(forController: 0)
-        configureAllControllersForTVOS()
+        configureAllControllers()
       }
       // Auto-pause when app goes to background on tvOS
       NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
@@ -946,7 +942,7 @@ struct EmulationScreen: View {
       }
       logCurrentControllers()
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
-      for c in GCController.controllers() { installInputDebugHandlers(c) }
+      for c in GCController.controllers() { installExtraInputHandlers(c) }
 #if os(iOS)
       SiriShortcutManager.shared.donatePlay(game: game)
 #endif

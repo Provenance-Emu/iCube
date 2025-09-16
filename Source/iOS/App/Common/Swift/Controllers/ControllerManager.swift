@@ -108,7 +108,7 @@ final class ControllerManager: NSObject, ObservableObject {
 
   private func configureControllerForCurrentPlatform(_ c: GCController) {
     // Install debug/gesture handlers
-    installInputDebugHandlers(c)
+    installExtraInputHandlers(c)
     // Prefer receiving Menu button events inside app
     if let gp = c.extendedGamepad {
       if #available(iOS 14.0, tvOS 14.0, *) {

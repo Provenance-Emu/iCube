@@ -88,7 +88,6 @@
 		B3B31ABD2E5525A6002BF20C /* AchievementsSettingsViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */; };
 		B3B334442E566EBC002BF20C /* DOLUIKitSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */; };
 		B3D89A752E57DEF700EF1CB1 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = B3D89A742E57DEF700EF1CB1 /* Zip */; };
-		B3F20D912E5E6A9F00AF38F3 /* PauseGestureTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */; };
 		B3F216652E5F5EA100AF38F3 /* RegionFlagMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216642E5F5EA100AF38F3 /* RegionFlagMapper.swift */; };
 		B3F216672E5F6DEC00AF38F3 /* RemoteSourceFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F216662E5F6DEC00AF38F3 /* RemoteSourceFactory.swift */; };
 		B3F2166A2E5F73B900AF38F3 /* DOLPathsBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3F216692E5F73B900AF38F3 /* DOLPathsBridge.mm */; };
@@ -404,7 +403,6 @@
 		B3B31ABB2E5525A6002BF20C /* AchievementsSettingsViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = AchievementsSettingsViewController.mm; sourceTree = "<group>"; };
 		B3B334432E566EBC002BF20C /* DOLUIKitSwitch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOLUIKitSwitch.swift; sourceTree = "<group>"; };
 		B3B334452E5674FD002BF20C /* libMoltenVK.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libMoltenVK.dylib; path = "../../../Externals/MoltenVK-macOS/libMoltenVK.dylib"; sourceTree = "<group>"; };
-		B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PauseGestureTracker.swift; sourceTree = "<group>"; };
 		B3F216642E5F5EA100AF38F3 /* RegionFlagMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegionFlagMapper.swift; sourceTree = "<group>"; };
 		B3F216662E5F6DEC00AF38F3 /* RemoteSourceFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourceFactory.swift; sourceTree = "<group>"; };
 		B3F216682E5F73B900AF38F3 /* DOLPathsBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLPathsBridge.h; sourceTree = "<group>"; };
@@ -1265,7 +1263,6 @@
 				B36B48C92E5D07D4009A2303 /* Localized.swift */,
 				B31EAC812E67743D0036EE31 /* ModernCheatItem.swift */,
 				B346BBEB2E73973E00B3C00B /* MotionDebugView.swift */,
-				B3F20D902E5E6A9F00AF38F3 /* PauseGestureTracker.swift */,
 				B36B48CE2E5D6AC5009A2303 /* PauseMenuView.swift */,
 				B3F216642E5F5EA100AF38F3 /* RegionFlagMapper.swift */,
 				B36B51942E5E41C7009A2303 /* RemoteLibrarySource.swift */,
@@ -2479,7 +2476,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				B950CFAA29616B4F00197719 /* MainSceneCoordinator.m in Sources */,
-				B3F20D912E5E6A9F00AF38F3 /* PauseGestureTracker.swift in Sources */,
 				B904AD092887DAF1008B6BE9 /* ControllersTypeViewController.mm in Sources */,
 				B9913785288146D700588446 /* WiiAspectRatioViewController.mm in Sources */,
 				B9B2C64D288E170600CB6569 /* ServiceManager.swift in Sources */,
