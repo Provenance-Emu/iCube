@@ -27,6 +27,10 @@ private final class EmuContainerViewController: UIViewController {
   private weak var emuVC: EmuEventVC?
   private var exitObserver: NSObjectProtocol?
   var gamePath: String = ""
+#if os(tvOS)
+  private var pauseShownObserver: NSObjectProtocol?
+  private var pauseHiddenObserver: NSObjectProtocol?
+#endif
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -48,11 +52,7 @@ private final class EmuContainerViewController: UIViewController {
     }
 
     let vc = EmuEventVC()
-    #if os(tvOS)
     vc.controllerUserInteractionEnabled = false
-    #else
-    vc.controllerUserInteractionEnabled = true
-    #endif
     addChild(vc)
     vc.view.frame = view.bounds
     vc.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -105,6 +105,25 @@ private final class EmuContainerViewController: UIViewController {
     exitObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil, queue: .main) { [weak self] _ in
       self?.handleExit()
     }
+#if os(tvOS)
+    // Toggle GC controller interception based on pause overlay visibility
+    pauseShownObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLPauseOverlayShown"), object: nil, queue: .main) { [weak self] _ in
+      guard let self = self, let evc = self.emuVC else { return }
+      // Allow SwiftUI PauseMenu to receive controller navigation
+      evc.controllerUserInteractionEnabled = true
+      if UserDefaults.standard.bool(forKey: "input_debug") {
+        NSLog("[INPUT] EmuContainer toggled GC interaction OFF for PauseMenu")
+      }
+    }
+    pauseHiddenObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLPauseOverlayHidden"), object: nil, queue: .main) { [weak self] _ in
+      guard let self = self, let evc = self.emuVC else { return }
+      // Restore gameplay interception setting
+      evc.controllerUserInteractionEnabled = false
+      if UserDefaults.standard.bool(forKey: "input_debug") {
+        NSLog("[INPUT] EmuContainer restored GC interaction to %d after PauseMenu", evc.controllerUserInteractionEnabled)
+      }
+    }
+#endif
   }
 
   private func handleExit() {
@@ -115,6 +134,10 @@ private final class EmuContainerViewController: UIViewController {
     if let token = exitObserver {
       NotificationCenter.default.removeObserver(token)
     }
+#if os(tvOS)
+    if let t = pauseShownObserver { NotificationCenter.default.removeObserver(t) }
+    if let t = pauseHiddenObserver { NotificationCenter.default.removeObserver(t) }
+#endif
   }
 }
 
@@ -188,7 +211,7 @@ struct EmulationScreen: View {
     return false
 #endif
   }()
-  
+
   @State private var obsShowPause: NSObjectProtocol?
 
   // iOS top overlay
