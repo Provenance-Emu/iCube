@@ -49,6 +49,9 @@ internal struct PauseMenuView: View {
     }
     .onAppear {
       NSLog("[PAUSE] PauseMenuView appeared")
+      #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+      GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+      #endif
       TVEmulationBridge.pause()
     }
     .onDisappear {

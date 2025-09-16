@@ -217,13 +217,6 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   // MARK: Wiimote Emulation for External Controllers
-  private func controllerSupportsTouchpad(_ c: GCController) -> Bool {
-    if #available(iOS 14.0, tvOS 14.0, *) {
-      if let ds = c.extendedGamepad as? GCDualSenseGamepad { return ds.touchpadPrimary != nil }
-      if let ds4 = c.extendedGamepad as? GCDualShockGamepad { return ds4.touchpadPrimary != nil }
-    }
-    return false
-  }
 
   // Assign Wiimote slots 2..4 to external controllers that have a touchpad (DS4/DS5).
   // Slot 1 remains for the on-screen touch overlay.
@@ -236,7 +229,7 @@ final class ControllerManager: NSObject, ObservableObject {
 
     for c in GCController.controllers() {
       guard nextSlot <= 4 else { break }
-      guard controllerSupportsTouchpad(c) else { continue }
+      guard c.supportsTouchpad else { continue }
       wiimoteSlotByController[ObjectIdentifier(c)] = nextSlot
       DOLConfigBridge.setWiimoteSourceFor(nextSlot, source: 1)
       EmulationCoordinator.ensureWiimoteDefaultsToTouchscreen(forPort: nextSlot)

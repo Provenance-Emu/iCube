@@ -1292,6 +1292,7 @@ struct TVLibraryView: View {
     NavigationStack {
       navigationConfiguration
     }
+    // SaveStatesBrowserView presention
     .sheet(isPresented: $showSaveStatesBrowser) {
       NavigationStack { SaveStatesBrowserView() }
     }
@@ -1360,12 +1361,15 @@ struct TVLibraryView: View {
       }
     }
     .onDisappear {
-      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
-      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowImportGame"), object: nil)
-      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSettings"), object: nil)
-      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
-      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSnackbar"), object: nil)
-      NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DSUNewClientApproval"), object: nil)
+      func removeAllObservers() {
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowImportGame"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSettings"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSnackbar"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DSUNewClientApproval"), object: nil)
+      }
+      removeAllObservers()
     }
 #if os(tvOS)
     .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }

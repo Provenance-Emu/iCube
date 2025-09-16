@@ -67,6 +67,7 @@
 		B37102AE2E70813B006C1ED7 /* NavigationStackBackport in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, maccatalyst, ); productRef = B37102AD2E70813B006C1ED7 /* NavigationStackBackport */; };
 		B37102B12E708B3C006C1ED7 /* libobjc.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B37102AF2E708B31006C1ED7 /* libobjc.tbd */; };
 		B37102B22E708B49006C1ED7 /* libswiftObjectiveC.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B37102B02E708B31006C1ED7 /* libswiftObjectiveC.tbd */; };
+		B37A7F6D2E790819001C90F4 /* EmulationScreen+TouchAndMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A7F6C2E790819001C90F4 /* EmulationScreen+TouchAndMotion.swift */; };
 		B382060B2E57FF0E00D4853F /* CompiledShader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38205FF2E57FF0E00D4853F /* CompiledShader.swift */; };
 		B382060D2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */; };
 		B382060E2E57FF0E00D4853F /* Converters.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206012E57FF0E00D4853F /* Converters.metal */; };
@@ -378,6 +379,7 @@
 		B36B63002E5E56A3009A2303 /* PVlibDolphin.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PVlibDolphin.xcframework; path = ../../../../build/xcframework/PVlibDolphin.xcframework; sourceTree = "<group>"; };
 		B37102AF2E708B31006C1ED7 /* libobjc.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libobjc.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/lib/libobjc.tbd; sourceTree = DEVELOPER_DIR; };
 		B37102B02E708B31006C1ED7 /* libswiftObjectiveC.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libswiftObjectiveC.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/lib/swift/libswiftObjectiveC.tbd; sourceTree = DEVELOPER_DIR; };
+		B37A7F6C2E790819001C90F4 /* EmulationScreen+TouchAndMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulationScreen+TouchAndMotion.swift"; sourceTree = "<group>"; };
 		B38205FF2E57FF0E00D4853F /* CompiledShader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShader.swift; sourceTree = "<group>"; };
 		B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompiledShaderContainer.swift; sourceTree = "<group>"; };
 		B38206012E57FF0E00D4853F /* Converters.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Converters.metal; sourceTree = "<group>"; };
@@ -1250,12 +1252,12 @@
 				B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */,
 				B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
-				B37A7F632E77B7F5001C90F4 /* Controllers */,
 				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
 				B346BBF52E73C27000B3C00B /* DolphinBlogView.swift */,
 				B3F2166B2E5F741B00AF38F3 /* DolphinPaths.swift */,
 				B346CDE12E75E52900B3C00B /* DSUSessionView.swift */,
 				B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */,
+				B37A7F6C2E790819001C90F4 /* EmulationScreen+TouchAndMotion.swift */,
 				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
 				B346CDDB2E75E42E00B3C00B /* GameGridItem.swift */,
 				B31E804F2E6504940036EE31 /* GameProfiles.swift */,
@@ -1289,6 +1291,7 @@
 				B36B51962E5E41C7009A2303 /* WebDAVSource.swift */,
 				B31E805E2E654CC30036EE31 /* Activity */,
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
+				B37A7F632E77B7F5001C90F4 /* Controllers */,
 				B34EE6B22E57D65400301907 /* Shaders */,
 				B31EAC8E2E68B1710036EE31 /* Tips */,
 				B31EAC712E6772C80036EE31 /* Widgets */,
@@ -2571,6 +2574,7 @@
 				B38206132E57FF0E00D4853F /* CompiledShaderContainer.swift in Sources */,
 				B36B48C82E5D0749009A2303 /* TVCheatListView.swift in Sources */,
 				B38206142E57FF0E00D4853F /* Matrix.swift in Sources */,
+				B37A7F6D2E790819001C90F4 /* EmulationScreen+TouchAndMotion.swift in Sources */,
 				B38206152E57FF0E00D4853F /* MTLPixelConverter.swift in Sources */,
 				B38206162E57FF0E00D4853F /* ShaderPassBindings.swift in Sources */,
 				B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */,

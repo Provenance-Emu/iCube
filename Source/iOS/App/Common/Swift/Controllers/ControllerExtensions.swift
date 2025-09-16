@@ -35,6 +35,9 @@ private var shoulderStates: [ObjectIdentifier: ShoulderState] = [:]
 
 /// Helper to show the pause menu consistently
 private func presentPauseMenu() {
+  #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+  GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+  #endif
   TVEmulationBridge.pause()
   NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
 }
@@ -47,10 +50,15 @@ func configureController(_ c: GCController) {
       NSLog("[INPUT] Configured microGamepad: absolute=%d rotation=%d", mg.reportsAbsoluteDpadValues, mg.allowsRotation)
     }
     if #available(tvOS 14.0, *) {
+      mg.buttonA.preferredSystemGestureState = .disabled
       mg.buttonX.preferredSystemGestureState = .disabled
+      mg.buttonMenu.preferredSystemGestureState = .disabled
     }
   }
   if let eg = c.extendedGamepad {
+    eg.allButtons.forEach { button in
+      button.preferredSystemGestureState = .disabled
+    }
     eg.buttonB.preferredSystemGestureState = .disabled
     eg.buttonHome?.preferredSystemGestureState = .disabled
     eg.buttonMenu.preferredSystemGestureState = .disabled
@@ -65,7 +73,7 @@ func configureAllControllers() {
   }
 }
 
-func installMotionHandler(_ c: GCController) {
+fileprivate func installMotionHandler(_ c: GCController) {
   // Map controller motion (if available) to Wii accelerometer and gyro
   if #available(iOS 14.0, tvOS 14.0, *), let motion = c.motion {
     motion.valueChangedHandler = { m in
@@ -135,9 +143,9 @@ func installMotionHandler(_ c: GCController) {
 
         shakeStates[id] = state
       }
-      if UserDefaults.standard.bool(forKey: "input_debug") {
-        NSLog("[INPUT][Motion] acc(%.2f,%.2f,%.2f) rot(%.2f,%.2f,%.2f)", ax, ay, az, gx, gy, gz)
-      }
+//      if UserDefaults.standard.bool(forKey: "input_debug") {
+//        NSLog("[INPUT][Motion] acc(%.2f,%.2f,%.2f) rot(%.2f,%.2f,%.2f)", ax, ay, az, gx, gy, gz)
+//      }
     }
   }
 }
@@ -193,6 +201,7 @@ func installExtraInputHandlers(_ c: GCController) {
         // TouchPad
         ds4.touchpadButton?.pressedChangedHandler = { _, _, pressed in
           Task { @MainActor in
+            NSLog("ds4.touchpadButton")
             if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
           }
         }
@@ -201,6 +210,7 @@ func installExtraInputHandlers(_ c: GCController) {
         // Some OS versions expose a home button
         ds4.buttonHome?.pressedChangedHandler = { _, _, pressed in
           Task { @MainActor in
+            NSLog("ds4.buttonHome")
             if pressed { presentPauseMenu() }
           }
         }
@@ -213,6 +223,7 @@ func installExtraInputHandlers(_ c: GCController) {
 
         ds5.buttonHome?.pressedChangedHandler = { _, _, pressed in
           Task { @MainActor in
+            NSLog("ds5.buttonHome")
             if pressed { presentPauseMenu() }
           }
         }
@@ -225,6 +236,7 @@ func installExtraInputHandlers(_ c: GCController) {
 
         xbox.buttonHome?.pressedChangedHandler = { _, _, pressed in
           Task { @MainActor in
+            NSLog("xbox.buttonHome")
             if pressed { presentPauseMenu() }
           }
         }

@@ -60,6 +60,10 @@ final class PauseGestureTracker {
         guard isAllShouldersHeld || recentShoulders else { return }
         DispatchQueue.main.async {
             NSLog("menuOrStartPressed recognized shoulder gesture")
+          
+            #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+            GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
+            #endif
             TVEmulationBridge.pause()
             NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
         }
@@ -68,10 +72,10 @@ final class PauseGestureTracker {
     @MainActor
     @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
         if gesture.state == .began {
-            TVEmulationBridge.pause()
             #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
             GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
             #endif
+            TVEmulationBridge.pause()
             NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
         }
     }
