@@ -98,6 +98,7 @@ private:
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
   struct CheckIdleOperands;
+  struct CheckCtrIdleOperands;
 
   static s32 StartProfiledBlock(PowerPC::PowerPCState& ppc_state,
                                 const StartProfiledBlockOperands& operands);
@@ -154,6 +155,9 @@ private:
   static s32 CheckBreakpoint(std::ostream& stream, const CheckHaltOperands& operands);
   static s32 CheckIdle(PowerPC::PowerPCState& ppc_state, const CheckIdleOperands& operands);
   static s32 CheckIdle(std::ostream& stream, const CheckIdleOperands& operands);
+  static s32 FastForwardCtrIdle(PowerPC::PowerPCState& ppc_state,
+                                const CheckCtrIdleOperands& operands);
+  static s32 FastForwardCtrIdle(std::ostream& stream, const CheckCtrIdleOperands& operands);
 
   HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges;
   CachedInterpreterBlockCache m_block_cache;
@@ -306,4 +310,11 @@ struct CachedInterpreter::CheckIdleOperands
 {
   CoreTiming::CoreTimingManager& core_timing;
   u32 idle_pc;
+};
+
+struct CachedInterpreter::CheckCtrIdleOperands
+{
+  CoreTiming::CoreTimingManager& core_timing;
+  u32 idle_pc;         // PC of the CTR-branch at loop end
+  u32 fallthrough_pc;  // PC after the branch (loop exit)
 };

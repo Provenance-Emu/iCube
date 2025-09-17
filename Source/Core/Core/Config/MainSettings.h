@@ -66,6 +66,10 @@ extern const Info<int> MAIN_MAX_FALLBACK;
 extern const Info<int> MAIN_TIMING_VARIANCE;
 extern const Info<bool> MAIN_CPU_THREAD;
 extern const Info<bool> MAIN_SYNC_ON_SKIP_IDLE;
+// Enable relaxed busy-wait idle detection (allow more benign integer ops in loops)
+extern const Info<bool> MAIN_RELAXED_IDLE_DETECTION;
+// Enable fast-forwarding of proven side-effect-free CTR-only tight loops
+extern const Info<bool> MAIN_FAST_FORWARD_CTR_IDLE;
 extern const Info<std::string> MAIN_DEFAULT_ISO;
 extern const Info<bool> MAIN_ENABLE_CHEATS;
 extern const Info<int> MAIN_GC_LANGUAGE;

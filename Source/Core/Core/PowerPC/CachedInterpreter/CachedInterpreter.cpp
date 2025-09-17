@@ -2406,11 +2406,29 @@ s32 CachedInterpreter::CheckBreakpoint(PowerPC::PowerPCState& ppc_state,
 }
 
 s32 CachedInterpreter::CheckIdle(PowerPC::PowerPCState& ppc_state,
-                                 const CheckIdleOperands& operands)
+                                  const CheckIdleOperands& operands)
 {
   const auto& [core_timing, idle_pc] = operands;
   if (ppc_state.npc == idle_pc)
     core_timing.Idle();
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Note: ostream variant of CheckIdle is defined in CachedInterpreter_Disassembler.cpp.
+
+// Fast-forward CTR-only tight idle loops: when at the loop branch PC, force loop exit and yield.
+s32 CachedInterpreter::FastForwardCtrIdle(PowerPC::PowerPCState& ppc_state,
+                                          const CheckCtrIdleOperands& operands)
+{
+  const auto& [core_timing, idle_pc, fallthrough_pc] = operands;
+  if (ppc_state.npc == idle_pc)
+  {
+    // Force CTR exhaustion and take the fallthrough.
+    CTR(ppc_state) = 0;
+    ppc_state.pc = idle_pc;
+    ppc_state.npc = fallthrough_pc;
+    core_timing.Idle();
+  }
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -3285,6 +3303,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
       if (op.branchIsIdleLoop)
         Write(CheckIdle, {m_system.GetCoreTiming(), js.blockStart});
+      // For simple CTR-controlled tight loops, fast-forward by exiting the loop and yielding.
+      if (op.branchIsCtrIdleLoop)
+      {
+        const u32 fallthrough_pc = op.address + 4;
+        Write(FastForwardCtrIdle, {m_system.GetCoreTiming(), js.blockStart, fallthrough_pc});
+      }
       if (op.canEndBlock)
         WriteEndBlock();
     }

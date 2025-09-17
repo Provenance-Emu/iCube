@@ -1307,7 +1307,7 @@ struct DebugRootView: View {
       }
     }
     .navigationTitle(L("Debug"))
-    .onAppear { syncDebug() }
+    .onAppear { syncDebug(); }
   }
 
   private func syncDebug() {
@@ -1685,6 +1685,9 @@ struct ConfigAdvancedView: View {
   @State private var writeBackCache: Bool = false
   @State private var disableICache: Bool = false
   @State private var lowDCBZ: Bool = false
+  // CPU idle detection toggles
+  @State private var relaxedIdleDetection: Bool = false
+  @State private var fastForwardCtrIdle: Bool = false
 
   @State private var cpuClockEnabled: Bool = false
   @State private var cpuClockPercent: Int = 100
@@ -1716,6 +1719,11 @@ struct ConfigAdvancedView: View {
           .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) }
         Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
           .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) }
+        // CPU Idle Detection / Fast-Forward
+        Toggle(L("Relaxed Idle Loop Detection"), isOn: $relaxedIdleDetection)
+          .onChange(of: relaxedIdleDetection) { DOLConfigBridge.setMainRelaxedIdleDetection($0) }
+        Toggle(L("Fast-Forward CTR Idle Loops"), isOn: $fastForwardCtrIdle)
+          .onChange(of: fastForwardCtrIdle) { DOLConfigBridge.setMainFastForwardCtrIdle($0) }
       }
 
       Section(header: Text(L("Clock Override")), footer: Text(L("Adjusts the emulated CPU's clock rate. Can also be adjusted during gameplay via the in-game menu.\n\nHigher values may make variable-framerate games run at a higher framerate, at the expense of performance. Lower values may activate a game's internal frameskip, potentially improving performance.\n\nWARNING: Changing this from the default (100%) can and will break games and cause glitches. Do so at your own risk. Please do not report bugs that occur with a non-default clock."))) {

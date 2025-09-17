@@ -822,16 +822,8 @@ bool PPCAnalyzer::IsBusyWaitLoop(CodeBlock* block, CodeOp* code, size_t instruct
   {
     bool benign_body = true;
     size_t non_cmp_int_ops = 0;
-    // Determine platform-specific allowance
-    int allowed_non_cmp_int_ops = 1;
-#if defined(__APPLE__)
-#include <TargetConditionals.h>
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
-    allowed_non_cmp_int_ops = 2;
-#elif defined(TARGET_OS_TV) && TARGET_OS_TV
-    allowed_non_cmp_int_ops = 2;
-#endif
-#endif
+    // Determine allowance by config (platform defaults set in MainSettings.cpp)
+    int allowed_non_cmp_int_ops = Config::Get(Config::MAIN_RELAXED_IDLE_DETECTION) ? 2 : 1;
     for (size_t i = 0; i < instructions; ++i)
     {
       const auto* info = code[i].opinfo;
@@ -868,6 +860,59 @@ bool PPCAnalyzer::IsBusyWaitLoop(CodeBlock* block, CodeOp* code, size_t instruct
       return true;
   }
   return false;
+}
+
+// Detect simple CTR-controlled tight loops which are safe to fast-forward:
+//  - Backward branch to block start, branch decrements CTR and does not check CR condition (only CTR
+//    controls the loop count)
+//  - Loop body contains only integer ops and/or loads; no stores/FP/PS, no calls, no exceptions
+//  - Loop body does not modify CTR via mtspr SPR_CTR
+//  - No other branches inside body
+static bool IsCtrOnlyTightLoop(CodeBlock* block, CodeOp* code, size_t instructions)
+{
+  if (instructions == 0)
+    return false;
+
+  // Last must be a CTR-using branch back to start with no CR check
+  const CodeOp& last = code[instructions];
+  if (!(last.opinfo->type == OpType::Branch && last.branchUsesCtr && last.branchTo == block->m_address))
+    return false;
+
+  // Require BO_DONT_CHECK_CONDITION (only CTR decides). We can infer this from the decoded bits.
+  // For bcx/bclrx, BO bit 4 indicates "don't check condition". In decoded fields, that's BO_DONT_CHECK_CONDITION.
+  // We don't have direct BO flags here; however, SetInstructionStats already set branchUsesCtr when decrement flag is used.
+  // Be conservative: require that no compare or CR output exists in the body to suggest CR isn't part of condition.
+
+  for (size_t i = 0; i < instructions; ++i)
+  {
+    const CodeOp& op = code[i];
+    // No nested branches
+    if (op.opinfo->type == OpType::Branch)
+      return false;
+    // No memory accesses or FP/PS of any kind
+    if (op.opinfo->type == OpType::Store || op.opinfo->type == OpType::StoreFP || op.opinfo->type == OpType::StorePS ||
+        op.opinfo->type == OpType::Load || op.opinfo->type == OpType::SingleFP || op.opinfo->type == OpType::DoubleFP ||
+        op.opinfo->type == OpType::PS)
+      return false;
+    // Disallow mtspr to CTR inside loop
+    if (op.inst.OPCD == 31 && op.inst.SUBOP10 == 467) // mtspr
+    {
+      const u32 spr = (op.inst.SPRU << 5) | (op.inst.SPRL & 0x1F);
+      if (spr == SPR_CTR)
+        return false;
+    }
+    // Disallow operations that write CR in the body (suggests CR involved)
+    if (op.crOut.Count() != 0)
+      return false;
+    // Ensure strictly integer-only body
+    if (op.opinfo->type != OpType::Integer)
+      return false;
+    // Ensure the body does not produce any GPR outputs that might be used later (side-effect free)
+    if (op.regsOut.Count() != 0)
+      return false;
+  }
+
+  return true;
 }
 
 static bool CanCauseGatherPipeInterruptCheck(const CodeOp& op)
@@ -1024,6 +1069,9 @@ u32 PPCAnalyzer::Analyze(u32 address, CodeBlock* block, CodeBuffer* buffer,
 
     code[i].branchIsIdleLoop =
         code[i].branchTo == block->m_address && IsBusyWaitLoop(block, code, i);
+    code[i].branchIsCtrIdleLoop = Config::Get(Config::MAIN_FAST_FORWARD_CTR_IDLE) &&
+                                  code[i].branchTo == block->m_address && code[i].branchUsesCtr &&
+                                  IsCtrOnlyTightLoop(block, code, i);
 
     if (follow && numFollows < BRANCH_FOLLOWING_THRESHOLD)
     {

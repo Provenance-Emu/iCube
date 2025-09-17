@@ -47,6 +47,22 @@ const Info<int> MAIN_MAX_FALLBACK{{System::Main, "Core", "MaxFallback"}, 100};
 const Info<int> MAIN_TIMING_VARIANCE{{System::Main, "Core", "TimingVariance"}, 40};
 const Info<bool> MAIN_CPU_THREAD{{System::Main, "Core", "CPUThread"}, true};
 const Info<bool> MAIN_SYNC_ON_SKIP_IDLE{{System::Main, "Core", "SyncOnSkipIdle"}, true};
+// Idle loop detection / fast-forward toggles (default enabled on iOS/tvOS, disabled elsewhere)
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if defined(__APPLE__) && ((defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || \
+                           (defined(TARGET_OS_TV) && TARGET_OS_TV))
+constexpr bool kDefaultRelaxedIdleDetection = true;
+constexpr bool kDefaultFastForwardCtrIdle = true;
+#else
+constexpr bool kDefaultRelaxedIdleDetection = false;
+constexpr bool kDefaultFastForwardCtrIdle = false;
+#endif
+const Info<bool> MAIN_RELAXED_IDLE_DETECTION{{System::Main, "Core", "RelaxedIdleDetection"},
+                                             kDefaultRelaxedIdleDetection};
+const Info<bool> MAIN_FAST_FORWARD_CTR_IDLE{{System::Main, "Core", "FastForwardCtrIdle"},
+                                            kDefaultFastForwardCtrIdle};
 const Info<std::string> MAIN_DEFAULT_ISO{{System::Main, "Core", "DefaultISO"}, ""};
 const Info<bool> MAIN_ENABLE_CHEATS{{System::Main, "Core", "EnableCheats"}, false};
 const Info<int> MAIN_GC_LANGUAGE{{System::Main, "Core", "SelectedLanguage"}, 0};
