@@ -816,12 +816,22 @@ bool PPCAnalyzer::IsBusyWaitLoop(CodeBlock* block, CodeOp* code, size_t instruct
       return true;
   }
 
-  // Allow a single benign integer op before branch back to start (e.g., counter update), still no
-  // memory writes and no CTR use.
+  // Allow some benign integer ops before branch back to start (e.g., counter updates), still
+  // no memory writes and no CTR use. On iOS/tvOS, we relax to two, elsewhere keep original one.
   if (instructions >= 2)
   {
     bool benign_body = true;
     size_t non_cmp_int_ops = 0;
+    // Determine platform-specific allowance
+    int allowed_non_cmp_int_ops = 1;
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    allowed_non_cmp_int_ops = 2;
+#elif defined(TARGET_OS_TV) && TARGET_OS_TV
+    allowed_non_cmp_int_ops = 2;
+#endif
+#endif
     for (size_t i = 0; i < instructions; ++i)
     {
       const auto* info = code[i].opinfo;
@@ -833,12 +843,12 @@ bool PPCAnalyzer::IsBusyWaitLoop(CodeBlock* block, CodeOp* code, size_t instruct
       }
       if (info->type == OpType::Integer)
       {
-        // Count integer ops; allow at most one non-compare integer op
+        // Count integer ops; allow at most two non-compare integer ops
         const bool is_compare = (code[i].inst.OPCD == 11 /*cmpi*/ || code[i].inst.OPCD == 10 /*cmpli*/ ||
                                  (code[i].inst.OPCD == 31 && (code[i].inst.SUBOP10 == 0 || code[i].inst.SUBOP10 == 32)));
         if (!is_compare)
         {
-          if (++non_cmp_int_ops > 1)
+          if (++non_cmp_int_ops > static_cast<size_t>(allowed_non_cmp_int_ops))
           {
             benign_body = false;
             break;
