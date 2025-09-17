@@ -53,6 +53,7 @@ static float s_splitAxes[4][256] = {{0}}; // [controller][axisIndex] last values
 static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); }
 
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
+//  NSLog(@"Set axis value for %i, controller %i, value: %f", axis, controllerId, value);
   // Apply DSU scaling parameters to analog axes before forwarding
   static float s_last[4][256] = {{0}}; // simple per-controller/per-axis smoothing
   NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;

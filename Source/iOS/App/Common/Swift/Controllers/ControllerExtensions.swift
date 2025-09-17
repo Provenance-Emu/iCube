@@ -76,6 +76,10 @@ func configureAllControllers() {
 fileprivate func installMotionHandler(_ c: GCController) {
   // Map controller motion (if available) to Wii accelerometer and gyro
   if #available(iOS 14.0, tvOS 14.0, *), let motion = c.motion {
+    /// Some controllers (e.g. DualShock 4) require manual activation for motion sensors
+    if motion.sensorsRequireManualActivation {
+      motion.sensorsActive = true
+    }
     motion.valueChangedHandler = { m in
       // Use userAcceleration for shake/tilt impulses and rotationRate for gyro
       let ax = Float(m.userAcceleration.x)
@@ -118,8 +122,11 @@ fileprivate func installMotionHandler(_ c: GCController) {
           if now - last >= debounce {
             last = now
             TCManagerInterface.setButtonStateFor(button, controller: controllerId, state: true)
+            // Mirror to controller 1 to satisfy Physical Controller.ini shake mapping
+            TCManagerInterface.setButtonStateFor(button, controller: 1, state: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + hold) {
               TCManagerInterface.setButtonStateFor(button, controller: controllerId, state: false)
+              TCManagerInterface.setButtonStateFor(button, controller: 1, state: false)
             }
           }
         }
@@ -132,7 +139,6 @@ fileprivate func installMotionHandler(_ c: GCController) {
         // Combined magnitude thresholds (accel and rotation) as fallback
         let amag = sqrtf(ax*ax + ay*ay + az*az)
         if amag > accelMagThresh {
-          // Prefer Z for generic shakes, but also bump X/Y timers so rapid repeats don't spam
           trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ)
         } else {
           let rmag = sqrtf(gx*gx + gy*gy + gz*gz)
@@ -147,6 +153,102 @@ fileprivate func installMotionHandler(_ c: GCController) {
 //        NSLog("[INPUT][Motion] acc(%.2f,%.2f,%.2f) rot(%.2f,%.2f,%.2f)", ax, ay, az, gx, gy, gz)
 //      }
     }
+  }
+}
+
+private func installTouchpadIRHandlers(_ c: GCController, eg: GCExtendedGamepad) {
+//  guard DOLConfigBridge.mainTouchPadIRMode() != 0 else { return }
+  let irMode = DOLConfigBridge.mainTouchPadIRMode() // 1 = follow, 2 = drag
+
+  // Internal func
+  func setIR(controllerId: Int, x: Float, y: Float) {
+    TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredLeft.rawValue, controller: controllerId, value: x)
+    TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredRight.rawValue, controller: controllerId, value: x)
+    TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredUp.rawValue, controller: controllerId, value: y)
+    TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredDown.rawValue, controller: controllerId, value: y)
+    // Also mirror to Wiimote 1 to support profiles bound to P1 only
+    if controllerId != 4 {
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredLeft.rawValue, controller: 4, value: x)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredRight.rawValue, controller: 4, value: x)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredUp.rawValue, controller: 4, value: y)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredDown.rawValue, controller: 4, value: y)
+    }
+  }
+
+  // Internal func
+  func mapTouch(_ touchpad: GCControllerDirectionPad?)
+  {
+    NSLog("mapTouch: \(String(describing: touchpad))")
+    guard let slot = ControllerManager.shared.wiimoteIndex(for: c) else { return }
+    let controllerId = 3 + slot
+
+    let id = ObjectIdentifier(c)
+    if touchpadIRStates[id] == nil { touchpadIRStates[id] = TouchpadIRState() }
+    guard let state = touchpadIRStates[id] else { return }
+
+    // Read current pad values in [-1, 1]
+    let xRaw = touchpad?.xAxis.value ?? 0.0
+    let yRaw = touchpad?.yAxis.value ?? 0.0
+
+    // Map to IR: X is direct, Y is inverted (IR up is negative)
+    let absX = max(-1, min(1, xRaw))
+    let absY = max(-1, min(1, -yRaw))
+
+    switch irMode {
+    case 0, 1, 2: // absolute mapping for stability
+      NSLog("setIR(controllerId \(controllerId) \(absX) , \(absY)")
+      setIR(controllerId: controllerId, x: absX, y: absY)
+//    case 2: // drag/relative – accumulate deltas
+//      if !state.touching {
+//        state.touching = true
+//        state.startX = xVal
+//        state.startY = yVal
+//        state.oldX = xVal
+//        state.oldY = yVal
+//      }
+//      let dx = xVal - state.oldX
+//      let dy = yVal - state.oldY
+//      state.oldX = xVal
+//      state.oldY = yVal
+//      // Sensitivity tuned for comfortable cursor speed
+//      let sens: Float = 2.0
+////      let curX = max(-1, min(1, ((touchpad?.value(forKey: "_pv_ir_accum_x") as? Float) ?? 0) + dx * sens))
+////      let curY = max(-1, min(1, ((touchpad?.value(forKey: "_pv_ir_accum_y") as? Float) ?? 0) - dy * sens))
+//      setIR(controllerId: controllerId, x: curX, y: curY)
+//      // This chrashes
+////      touchpad?.setValue(curX, forKey: "_pv_ir_accum_x")
+////      touchpad?.setValue(curY, forKey: "_pv_ir_accum_y")
+    default:
+      break
+    }
+  }
+
+  if #available(iOS 14.0, tvOS 14.0, *), let ds4 = eg as? GCDualShockGamepad {
+    let tp = ds4.touchpadPrimary
+    tp?.xAxis.valueChangedHandler = { _, _ in mapTouch(tp) }
+    tp?.yAxis.valueChangedHandler = { _, _ in mapTouch(tp) }
+//    ds4.touchpadButton?.pressedChangedHandler = { _, _, pressed in
+//      let id = ObjectIdentifier(c)
+//      if let pad = tp as AnyObject? {
+//        pad.setValue(0 as Float, forKey: "_pv_ir_accum_x")
+//        pad.setValue(0 as Float, forKey: "_pv_ir_accum_y")
+//      }
+//      touchpadIRStates[id]?.touching = pressed
+//    }
+  }
+
+  if #available(iOS 14.0, tvOS 14.0, *), let ds5 = eg as? GCDualSenseGamepad {
+    let tp = ds5.touchpadPrimary
+    tp.xAxis.valueChangedHandler = { _, _ in mapTouch(tp) }
+    tp.yAxis.valueChangedHandler = { _, _ in mapTouch(tp) }
+//    ds5.touchpadButton?.pressedChangedHandler = { _, _, pressed in
+//      let id = ObjectIdentifier(c)
+//      if let pad = tp as AnyObject? {
+//        pad.setValue(0 as Float, forKey: "_pv_ir_accum_x")
+//        pad.setValue(0 as Float, forKey: "_pv_ir_accum_y")
+//      }
+//      touchpadIRStates[id]?.touching = pressed
+//    }
   }
 }
 
@@ -214,6 +316,8 @@ func installExtraInputHandlers(_ c: GCController) {
             if pressed { presentPauseMenu() }
           }
         }
+        // Install IR mapping from touchpad
+        installTouchpadIRHandlers(c, eg: eg)
       }
     }
     if #available(iOS 14.0, tvOS 14.0, *) {
@@ -227,6 +331,8 @@ func installExtraInputHandlers(_ c: GCController) {
             if pressed { presentPauseMenu() }
           }
         }
+        // Install IR mapping from touchpad
+        installTouchpadIRHandlers(c, eg: eg)
       }
     }
     if #available(iOS 14.5, tvOS 14.5, *) {
@@ -243,7 +349,7 @@ func installExtraInputHandlers(_ c: GCController) {
       }
     }
   }
-  
+
   // Home button Apple nonsense fixes
 
   // Home - Extended
@@ -264,7 +370,7 @@ func installExtraInputHandlers(_ c: GCController) {
       PauseGestureTracker.shared.menuOrStartPressed()
     }
   }
-  
+
   // Fix B going back on tvOS
   if #available(tvOS 14.0, *) {
     c.extendedGamepad?.buttonA.preferredSystemGestureState = .disabled

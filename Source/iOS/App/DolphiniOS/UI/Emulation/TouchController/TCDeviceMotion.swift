@@ -171,7 +171,9 @@ import Foundation
     let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
     if irMode != 0 && full6DOFEnabled {
       // Debug logging to verify this is being called
-      NSLog("[MOTION] 6DOF mapping active: IR mode=\(irMode), 6DOF enabled=\(full6DOFEnabled)")
+//      if UserDefaults.standard.bool(forKey: "input_debug") {
+//        NSLog("[MOTION] 6DOF mapping active: IR mode=\(irMode), 6DOF enabled=\(full6DOFEnabled)")
+//      }
       handle6DOFMotionMapping(motion: motion)
     }
   }

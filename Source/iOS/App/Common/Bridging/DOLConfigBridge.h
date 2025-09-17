@@ -77,6 +77,12 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)mainSyncOnSkipIdle;
 + (void)setMainSyncOnSkipIdle:(BOOL)enabled;
 
+// Idle loop detection / fast-forward toggles
++ (BOOL)mainRelaxedIdleDetection;
++ (void)setMainRelaxedIdleDetection:(BOOL)enabled;
++ (BOOL)mainFastForwardCtrIdle;
++ (void)setMainFastForwardCtrIdle:(BOOL)enabled;
+
 // Config > General
 + (BOOL)mainCpuThread;
 + (void)setMainCpuThread:(BOOL)enabled;

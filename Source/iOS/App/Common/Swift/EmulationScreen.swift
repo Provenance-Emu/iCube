@@ -216,10 +216,10 @@ struct EmulationScreen: View {
 
   // iOS top overlay
 #if os(iOS)
-  
+
   @State var isTouchControlsActive = false
   @State var userOverrideTouchControls = false
-  
+
   @State var showTopBar = false
   @State private var fastForwardEnabled = false
   @State var hideBarWorkItem: DispatchWorkItem?
@@ -878,6 +878,8 @@ struct EmulationScreen: View {
               TVEmulationBridge.setWiiIMUPointEnabled(false)
               // Ensure touch input is always a valid IR source
               TCDeviceMotion.shared.setMotionEnabled(true)
+              TCDeviceMotion.shared.setPort(4)
+              TCDeviceMotion.shared.statusBarOrientationChanged()
             }
             .onDisappear {
               TVEmulationBridge.setWiiIMUPointEnabled(true)
@@ -941,10 +943,16 @@ struct EmulationScreen: View {
       ControllerManager.shared.startObserving()
       // Initialize expected system early from metadata to avoid startup races
       isWiiSystem = inferIsWii(from: game)
-      irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
+            irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
       let useIMU = (irModeRaw == 0)
-      TVEmulationBridge.setWiiIMUPointEnabled(useIMU)
-      TCDeviceMotion.shared.setMotionEnabled(isTouchControlsActive && useIMU)
+      let wantsMotionForShake = UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") && isWiiSystem
+      TVEmulationBridge.setWiiIMUPointEnabled(useIMU || wantsMotionForShake)
+      let wantsMotion = (isTouchControlsActive && useIMU) || wantsMotionForShake
+      TCDeviceMotion.shared.setMotionEnabled(wantsMotion)
+      if wantsMotion {
+        TCDeviceMotion.shared.setPort(4)
+        TCDeviceMotion.shared.statusBarOrientationChanged()
+      }
 
       // Enable enhanced motion controls for touchscreen by default (Wii games)
       if isWiiSystem {
@@ -954,6 +962,15 @@ struct EmulationScreen: View {
       // Listen for motion settings changes during gameplay
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLMotionSettingsChanged"), object: nil, queue: .main) { _ in
         restartMotionSystemForSettingsChange()
+        // Ensure motion stays on for shake even if touch overlay is hidden but an external controller is connected
+        let wantsMotionForShake2 = UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") && isWiiSystem
+        if wantsMotionForShake2 {
+          Task { @MainActor in
+            TCDeviceMotion.shared.setMotionEnabled(true)
+            TCDeviceMotion.shared.setPort(4)
+            TCDeviceMotion.shared.statusBarOrientationChanged()
+          }
+        }
       }
       // Ensure touch controls start visible
       isTouchControlsActive = controllerManager.overlayVisible

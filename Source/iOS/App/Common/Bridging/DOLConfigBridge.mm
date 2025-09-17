@@ -13,7 +13,6 @@
 #include "AudioCommon/AudioCommon.h"
 #include "Core/Config/SYSCONFSettings.h"
 #include "Core/Config/UISettings.h"
-#include "Core/Config/MainSettings.h"
 #include "Core/Config/WiimoteSettings.h"
 #include "Core/HW/SI/SI_Device.h"
 #include "Core/HW/Wiimote.h"
@@ -113,6 +112,12 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setMainFastmem:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_FASTMEM, (bool)enabled); }
 + (BOOL)mainSyncOnSkipIdle { return Config::Get(Config::MAIN_SYNC_ON_SKIP_IDLE); }
 + (void)setMainSyncOnSkipIdle:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_SYNC_ON_SKIP_IDLE, (bool)enabled); }
+
+// Idle loop detection / fast-forward toggles
++ (BOOL)mainRelaxedIdleDetection { return Config::Get(Config::MAIN_RELAXED_IDLE_DETECTION); }
++ (void)setMainRelaxedIdleDetection:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_RELAXED_IDLE_DETECTION, (bool)enabled); }
++ (BOOL)mainFastForwardCtrIdle { return Config::Get(Config::MAIN_FAST_FORWARD_CTR_IDLE); }
++ (void)setMainFastForwardCtrIdle:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_FAST_FORWARD_CTR_IDLE, (bool)enabled); }
 
 // Config > General
 + (BOOL)mainCpuThread { return Config::Get(Config::MAIN_CPU_THREAD); }
