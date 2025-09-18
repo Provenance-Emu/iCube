@@ -10,7 +10,7 @@
 #import "FoundationStringUtil.h"
 #import "JitManager+Debugger.h"
 
-#if !TARGET_OS_MACCATALYST
+#if !TARGET_OS_MACCATALYST && !APPSTORE
 void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
 CFTypeRef SecTaskCopyValueForEntitlement(void* task, CFStringRef entitlement, CFErrorRef* _Nullable error);
 #endif
@@ -28,7 +28,9 @@ const char* _Nonnull DOLJitPTraceChildProcessArgument = "ptraceChild";
 - (bool)checkCanAcquireJitByPTrace {
   // If we're out of the sandbox, then we can run ptrace.
   // We can check this by the presence of the "platform-application" private entitlement.
-  
+#if APPSTORE
+  return false;
+#else
   void* task = SecTaskCreateFromSelf(NULL);
   CFTypeRef entitlementValue = SecTaskCopyValueForEntitlement(task, CFSTR("platform-application"), NULL);
   
@@ -42,6 +44,7 @@ const char* _Nonnull DOLJitPTraceChildProcessArgument = "ptraceChild";
   CFRelease(task);
   
   return result;
+#endif
 }
 
 - (void)runPTraceStartupTasks {
