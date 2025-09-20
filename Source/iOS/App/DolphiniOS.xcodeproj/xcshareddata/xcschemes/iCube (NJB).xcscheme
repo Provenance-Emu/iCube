@@ -65,6 +65,11 @@
       </BuildableProductRunnable>
       <EnvironmentVariables>
          <EnvironmentVariable
+            key = "XCODE"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
             key = "DOL_JIT_FORCE_RWX"
             value = "1"
             isEnabled = "NO">
