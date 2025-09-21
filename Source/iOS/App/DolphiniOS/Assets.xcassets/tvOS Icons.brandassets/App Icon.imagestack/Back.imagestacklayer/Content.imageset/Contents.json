@@ -2,7 +2,13 @@
   "images" : [
     {
       "filename" : "iCube Icon-BG.png",
-      "idiom" : "tv"
+      "idiom" : "tv",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "iCube Icon-BG@2x.png",
+      "idiom" : "tv",
+      "scale" : "2x"
     }
   ],
   "info" : {

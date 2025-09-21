@@ -72,6 +72,8 @@
     appType = @"non-jailbroken";
 #elif defined(TROLLSTORE)
     appType = @"trollstore";
+#elif defined(APPSTORE)
+    appType = @"appstore";
 #else
     appType = @"jailbroken";
 #endif

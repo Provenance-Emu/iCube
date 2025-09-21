@@ -5,7 +5,7 @@ import Foundation
 
 @objc class UserFolderUtil: NSObject {
   @objc static func getUserFolder() -> String {
-#if NONJAILBROKEN || TROLLSTORE
+#if NONJAILBROKEN || TROLLSTORE || APPSTORE
   #if os(tvOS)
     return NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true)[0]
   #else // !tvOS

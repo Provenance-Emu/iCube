@@ -12,7 +12,7 @@ class JitAcquisitionService: UIResponder, UIApplicationDelegate {
     if !manager.acquiredJit {
       manager.acquireJitByPTrace()
 
-#if NONJAILBROKEN
+#if NONJAILBROKEN || APPSTORE
       manager.acquireJitByAltServer()
 #endif
     }

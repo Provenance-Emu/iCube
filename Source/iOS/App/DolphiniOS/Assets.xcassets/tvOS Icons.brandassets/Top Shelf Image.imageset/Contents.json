@@ -1,12 +1,12 @@
 {
   "images" : [
     {
-      "filename" : "iCube logo-TopShelf Image 1.png",
+      "filename" : "iCube logo-TopShelf Image.png",
       "idiom" : "tv",
       "scale" : "1x"
     },
     {
-      "filename" : "iCube logo-TopShelf Image.png",
+      "filename" : "iCube logo-TopShelf Image@2x.png",
       "idiom" : "tv",
       "scale" : "2x"
     }
