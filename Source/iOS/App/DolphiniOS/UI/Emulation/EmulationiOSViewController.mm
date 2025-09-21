@@ -25,7 +25,18 @@
 #import "LocalizationUtil.h"
 #import "VirtualMFiControllerManager.h"
 #import "TVControllerMappingBridge.h"
+#if TARGET_OS_MACCATALYST
+#import <GameController/GCController.h>
+#import <GameController/GCExtendedGamepad.h>
+#import <GameController/GCMicroGamepad.h>
+#import <GameController/GCKeyboard.h>
+#import <GameController/GCDeviceHaptics.h>
+#import <GameController/GCDualShockGamepad.h>
+#import <GameController/GCDualSenseGamepad.h>
+#import <GameController/GCXboxGamepad.h>
+#else
 #import <GameController/GameController.h>
+#endif
 #import "iCube-Swift.h"
 
 typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {

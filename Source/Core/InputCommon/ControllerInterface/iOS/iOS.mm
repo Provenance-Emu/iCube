@@ -9,7 +9,18 @@
 #include "InputCommon/ControllerInterface/iOS/StateManager.h"
 #include "InputCommon/ControllerInterface/iOS/Touchscreen.h"
 
+#if TARGET_OS_MACCATALYST
+#import <GameController/GCController.h>
+#import <GameController/GCExtendedGamepad.h>
+#import <GameController/GCMicroGamepad.h>
+#import <GameController/GCKeyboard.h>
+#import <GameController/GCDeviceHaptics.h>
+#import <GameController/GCDualShockGamepad.h>
+#import <GameController/GCDualSenseGamepad.h>
+#import <GameController/GCXboxGamepad.h>
+#else
 #import <GameController/GameController.h>
+#endif
 
 namespace ciface::iOS
 {

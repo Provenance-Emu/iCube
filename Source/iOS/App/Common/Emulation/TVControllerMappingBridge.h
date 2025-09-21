@@ -2,7 +2,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import <Foundation/Foundation.h>
+#if TARGET_OS_MACCATALYST
+#import <GameController/GCController.h>
+#import <GameController/GCExtendedGamepad.h>
+#import <GameController/GCMicroGamepad.h>
+#import <GameController/GCKeyboard.h>
+#import <GameController/GCDeviceHaptics.h>
+#import <GameController/GCDualShockGamepad.h>
+#import <GameController/GCDualSenseGamepad.h>
+#import <GameController/GCXboxGamepad.h>
+#else
 #import <GameController/GameController.h>
+#endif
 
 NS_ASSUME_NONNULL_BEGIN
 
