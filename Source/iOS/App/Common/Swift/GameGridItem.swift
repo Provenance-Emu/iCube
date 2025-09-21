@@ -23,6 +23,8 @@ struct GameGridItem: View {
   let isAutoPreCaching: Bool
   let showSubtitles: Bool
 
+  @AppStorage("library_disable_artwork") private var disableArtwork: Bool = false
+
   @State private var showPreCacheProgress = false
   @State private var preCacheProgress: Double = 0.0
   @State private var isPreCaching = false
@@ -169,14 +171,22 @@ struct GameGridItem: View {
 
     var templateImageName: String {
       switch self {
+        #if APPSTORE
+      case .gamecube: return "GCCoverTemplate-NoLogo"
+      case .wii: return "WiiCoverTemplate-NoLogo"
+        #else
       case .gamecube: return "GCCoverTemplate"
       case .wii: return "WiiCoverTemplate"
+        #endif
       }
     }
   }
 
   /// Check if we're using the default placeholder cover
   private var isUsingPlaceholderCover: Bool {
+    // Global override: when enabled, always use the system templates (no artwork)
+    if disableArtwork { return true }
+
     // This is a heuristic - check if the cover image is the default "NoCover" placeholder
     let image = item.coverImage
     let desc = image.description.lowercased()

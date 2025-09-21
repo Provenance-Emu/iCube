@@ -1246,6 +1246,7 @@ struct DebugRootView: View {
   @State private var loggingVerbosity: Int = 4
   @State private var inputDebug: Bool = false
   @State private var instantReplay: Bool = false
+  @AppStorage("library_disable_artwork") private var disableArtwork: Bool = false
 
   var body: some View {
     List {
@@ -1304,6 +1305,10 @@ struct DebugRootView: View {
         }
         Toggle(L("Input Event Debug"), isOn: $inputDebug)
           .onChange(of: inputDebug) { UserDefaults.standard.set($0, forKey: "input_debug") }
+      }
+
+      Section(header: Text(L("Screenshots / Artwork")), footer: Text(L("When enabled, iCube hides downloaded box art and always shows platform templates (GameCube/Wii). Useful for App Store screenshots."))) {
+        Toggle(L("Use Template Covers (Disable Artwork)"), isOn: $disableArtwork)
       }
     }
     .navigationTitle(L("Debug"))
