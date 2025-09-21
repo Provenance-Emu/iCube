@@ -63,7 +63,8 @@ bool LabelMap::RegisterLabel(std::string label, u16 lval, LabelType type)
 
 void LabelMap::DeleteLabel(std::string_view label)
 {
-  const auto iter = std::ranges::find(labels, label, &Label::name);
+  const auto iter = std::find_if(labels.cbegin(), labels.cend(),
+                                 [&label](const auto& entry) { return entry.name == label; });
 
   if (iter == labels.cend())
     return;
