@@ -1965,7 +1965,7 @@ struct ConfigAudioView: View {
   var body: some View {
     List {
       Section(header: Text(L("Audio Backend"))) {
-        NavigationLink(backend.isEmpty ? L("Default Device") : (backend == "AVAudioEngine" ? "AVAudioEngine (Supports AUv3 FXs)" : (backend == "CoreAudio" ? "CoreAudio (Speakers/HDMI)" : backend)), destination: BackendPickerView(selected: $backend, options: availableBackends))
+        NavigationLink(backend.isEmpty ? L("Default Device") : (backend == "AVAudioEngine" ? "AVAudioEngine" : (backend == "CoreAudio" ? "CoreAudio (Speakers/HDMI)" : backend)), destination: BackendPickerView(selected: $backend, options: availableBackends))
           .onChange(of: backend) { DOLConfigBridge.setAudioBackend($0) }
         Text(L("CoreAudio: Best for TV/HDMI speakers. AVAudioEngine: Enables AUv3 FXs."))
           .font(.footnote)
@@ -2031,7 +2031,7 @@ struct ConfigAudioView: View {
     availableBackends = DOLConfigBridge.audioBackends()
     // Annotate entries to surface capabilities
     availableBackends = availableBackends.map { b in
-      if b == "AVAudioEngine" { return "AVAudioEngine (Supports AUv3 FXs)" }
+      if b == "AVAudioEngine" { return "AVAudioEngine" }
       if b == "CoreAudio" { return "CoreAudio (Speakers/HDMI)" }
       return b
     }
