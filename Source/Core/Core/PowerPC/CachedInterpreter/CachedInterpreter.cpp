@@ -2452,16 +2452,68 @@ bool CachedInterpreter::HandleFunctionHooking(u32 address)
 
 void CachedInterpreter::WriteEndBlock()
 {
-  if (IsProfilingEnabled())
-  {
-    Write(EndBlock<true>, {{js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst},
-                           js.curBlock->profile_data.get()});
-  }
-  else
-  {
-    Write(EndBlock<false>, {js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst});
-  }
+  // Emit a link trampoline which performs end-of-block accounting and optionally links
+  // to the next block by returning a non-zero relative distance. If linking is disabled
+  // or not yet patched, rel stays 0 and the dispatcher will exit the block as usual.
+  LinkToBlockOperands ops{};
+  ops.downcount = js.downcountAmount;
+  ops.num_load_stores = js.numLoadStoreInst;
+  ops.num_fp_inst = js.numFloatingPointInst;
+  ops.expected_pc = m_link_fallthrough_pc;
+  ops.profile_data = IsProfilingEnabled() ? js.curBlock->profile_data.get() : nullptr;
+  ops.rel = 0;
+
+  Write(LinkToBlock, ops);
+
+  // Record this exit so the block cache linker can patch in the destination later.
+  // Layout: [AnyCallback][LinkToBlockOperands]
+  auto* operands_begin = GetWritableCodePtr() - sizeof(LinkToBlockOperands);
+  auto* callback_start = operands_begin - sizeof(void*);
+
+  JitBlock::LinkData ld{};
+  ld.exitPtrs = callback_start;
+#ifdef _M_ARM_64
+  ld.exitFarcode = nullptr;
+#endif
+  ld.exitAddress = m_link_fallthrough_pc;
+  ld.linkStatus = false;
+  ld.call = false;
+  js.curBlock->linkData.push_back(ld);
 }
+
+s32 CachedInterpreter::LinkToBlock(PowerPC::PowerPCState& ppc_state,
+                                   const LinkToBlockOperands& operands)
+{
+  // Perform EndBlock-like accounting first
+  ppc_state.pc = ppc_state.npc;
+  ppc_state.downcount -= operands.downcount;
+  if (PowerPC::PerformanceMonitorActive(ppc_state))
+  {
+    PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
+                                      operands.num_fp_inst, ppc_state);
+  }
+  if (operands.profile_data)
+    JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
+
+  // If linked, continue within the same block stream; otherwise return 0 to exit.
+  return (ppc_state.npc == operands.expected_pc) ? operands.rel : 0;
+}
+
+CI_COLD_ONLY s32 CachedInterpreter::LinkToBlock(std::ostream& stream,
+                                                const LinkToBlockOperands& operands)
+{
+  fmt::println(stream,
+               "LinkToBlock(rel={}, expected_pc=0x{:08x}, downcount={}, numLoadStores={}, numFpInst={}, profiled={})",
+               operands.rel, operands.expected_pc, operands.downcount, operands.num_load_stores, operands.num_fp_inst,
+               operands.profile_data ? 1 : 0);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Explicitly instantiate EndBlock specializations so their symbols are available to other TUs
+template s32 CachedInterpreter::EndBlock<false>(PowerPC::PowerPCState&,
+                                                const EndBlockOperands<false>&);
+template s32 CachedInterpreter::EndBlock<true>(PowerPC::PowerPCState&,
+                                               const EndBlockOperands<true>&);
 
 bool CachedInterpreter::SetEmitterStateToFreeCodeRegion()
 {
@@ -2554,6 +2606,8 @@ void CachedInterpreter::Jit(u32 em_address, bool clear_cache_and_retry_on_failur
 bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 {
   js.blockStart = em_address;
+  // Record the natural fallthrough PC to enable end-of-block linking.
+  m_link_fallthrough_pc = nextPC;
   js.firstFPInstructionFound = false;
   js.fifoBytesSinceCheck = 0;
   js.downcountAmount = 0;
