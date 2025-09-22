@@ -84,8 +84,23 @@ void VideoInterfaceManager::UpdateVISkipDecisionAtFieldBoundary()
   const bool interlaced = IsInterlacedVideoMode();
   const bool xfb_active = IsRealXFBOrEFBActive();
 
+  // Step B: Stable-XFB heuristic. If the XFB base address hasn't changed since last field,
+  // we can relax interlaced/XFB gates for this field. This often happens when a game
+  // doesn't update scanout each VI, enabling safe VI-skip.
+  const bool top_valid = (m_xfb_info_top.POFF == 0) && (m_xfb_info_top.FBB != 0);
+  const bool bottom_valid = (m_xfb_info_bottom.POFF == 0) && (m_xfb_info_bottom.FBB != 0);
+  const bool stable_top = top_valid && (m_prev_xfb_top_fbb != 0) &&
+                          (m_xfb_info_top.FBB == m_prev_xfb_top_fbb);
+  const bool stable_bottom = bottom_valid && (m_prev_xfb_bottom_fbb != 0) &&
+                             (m_xfb_info_bottom.FBB == m_prev_xfb_bottom_fbb);
+  const bool stable_xfb = stable_top || stable_bottom;
+
   bool allow_skip = false;
-  if (!interlaced && !xfb_active &&
+  // Relax gates when XFB base is stable
+  const bool interlaced_ok = !interlaced || stable_xfb;
+  const bool xfb_ok = !xfb_active || stable_xfb;
+
+  if (interlaced_ok && xfb_ok &&
       m_viskip_consecutive_skips < VISKIP_MAX_CONSECUTIVE_SKIPS &&
       m_viskip_fields_since_present < VISKIP_MAX_FIELDS_WITHOUT_PRESENT)
   {
@@ -106,6 +121,10 @@ void VideoInterfaceManager::UpdateVISkipDecisionAtFieldBoundary()
     m_viskip_consecutive_skips = 0;
     m_viskip_fields_since_present = 0;
   }
+
+  // Update previous XFB base state for next field's stability check
+  m_prev_xfb_top_fbb = m_xfb_info_top.FBB;
+  m_prev_xfb_bottom_fbb = m_xfb_info_bottom.FBB;
 }
 
 VideoInterfaceManager::~VideoInterfaceManager()
@@ -134,6 +153,9 @@ void VideoInterfaceManager::DoState(PointerWrap& p)
   p.Do(m_xfb_info_bottom);
   p.Do(m_xfb_3d_info_top);
   p.Do(m_xfb_3d_info_bottom);
+  // Persist stable-XFB heuristic state across save states
+  p.Do(m_prev_xfb_top_fbb);
+  p.Do(m_prev_xfb_bottom_fbb);
   p.DoArray(m_interrupt_register);
   p.DoArray(m_latch_register);
   p.Do(m_picture_configuration);

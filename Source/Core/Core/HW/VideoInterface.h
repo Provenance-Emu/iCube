@@ -439,6 +439,9 @@ private:
   UVIFBInfoRegister m_xfb_info_bottom;
   UVIFBInfoRegister m_xfb_3d_info_top;  // Start making your stereoscopic demos! :p
   UVIFBInfoRegister m_xfb_3d_info_bottom;
+  // Previous XFB base addresses for stable-XFB heuristic
+  u32 m_prev_xfb_top_fbb = 0;
+  u32 m_prev_xfb_bottom_fbb = 0;
   std::array<UVIInterruptRegister, 4> m_interrupt_register{};
   std::array<UVILatchRegister, 2> m_latch_register{};
   PictureConfigurationRegister m_picture_configuration;
