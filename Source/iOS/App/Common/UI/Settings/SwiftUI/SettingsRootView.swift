@@ -2875,6 +2875,7 @@ struct GraphicsHacksView: View {
   @State private var noMipmapping: Bool = false
   @State private var earlyXfbOutput: Bool = true
   @State private var skipDuplicateXFBs: Bool = true
+  @State private var viDecimateInterlace: Bool = false
   var body: some View {
     List {
       Section(header: Text(L("General Hacks"))) {
@@ -2892,10 +2893,14 @@ struct GraphicsHacksView: View {
         NavigationLink("\(L("VI Skip Mode")): \(viSkipLabel(viSkipMode))", destination: ViSkipModePicker(selected: $viSkipMode))
           .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
         Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling).onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
-        Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath).onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) }
+        Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath).onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) } // Added closing brace here
         /// Compute path for EFB/XFB; may improve performance but can break some games
         Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb).onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
         Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping).onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) }
+      }
+      Section(footer: Text(L("Skips every other interlaced field for higher FPS; may reduce temporal resolution or cause artifacts or flickering in some games."))) {
+        Toggle(L("Interlaced Field Decimation"), isOn: $viDecimateInterlace)
+          .onChange(of: viDecimateInterlace) { DOLConfigBridge.setGfxHackViDecimateInterlace($0) }
       }
     }
     .navigationTitle(L("Hacks"))
@@ -2916,6 +2921,7 @@ struct GraphicsHacksView: View {
     fastMath = DOLConfigBridge.gfxHackFastMath()
     useComputeEfbXfb = DOLConfigBridge.gfxUseComputeEfbXfb()
     noMipmapping = DOLConfigBridge.gfxHackNoMipmapping()
+    viDecimateInterlace = DOLConfigBridge.gfxHackViDecimateInterlace()
   }
   private func viSkipLabel(_ v: Int) -> String { switch v { case 1: return L("On"); case 2: return L("Auto"); default: return L("Off") } }
 }

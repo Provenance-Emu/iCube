@@ -109,6 +109,20 @@ void VideoInterfaceManager::UpdateVISkipDecisionAtFieldBoundary()
     allow_skip = true;
   }
 
+  // Step C: Interlaced field decimation (aggressive). If enabled, skip every other field
+  // in interlaced modes regardless of XFB stability, but still respect global counters.
+  const bool decimation_enabled = Config::Get(Config::GFX_HACK_VI_DECIMATE_INTERLACE);
+  if (decimation_enabled && interlaced && !allow_skip)
+  {
+    const bool decimate_this_field = m_viskip_decimate_next;
+    if (decimate_this_field &&
+        m_viskip_consecutive_skips < VISKIP_MAX_CONSECUTIVE_SKIPS &&
+        m_viskip_fields_since_present < VISKIP_MAX_FIELDS_WITHOUT_PRESENT)
+    {
+      allow_skip = true;
+    }
+  }
+
   m_viskip_skip_current_field = allow_skip;
 
   if (allow_skip)
@@ -129,6 +143,12 @@ void VideoInterfaceManager::UpdateVISkipDecisionAtFieldBoundary()
   m_prev_xfb_bottom_fbb = m_xfb_info_bottom.FBB;
   // Reset copy tracking for the next field period
   m_viskip_efb_to_xfb_copied_this_field = false;
+
+  // Toggle decimation for next field if enabled and interlaced
+  if (decimation_enabled && interlaced)
+    m_viskip_decimate_next = !m_viskip_decimate_next;
+  else
+    m_viskip_decimate_next = false;
 }
 
 VideoInterfaceManager::~VideoInterfaceManager()
@@ -161,6 +181,7 @@ void VideoInterfaceManager::DoState(PointerWrap& p)
   p.Do(m_prev_xfb_top_fbb);
   p.Do(m_prev_xfb_bottom_fbb);
   p.Do(m_viskip_efb_to_xfb_copied_this_field);
+  p.Do(m_viskip_decimate_next);
   p.DoArray(m_interrupt_register);
   p.DoArray(m_latch_register);
   p.Do(m_picture_configuration);
@@ -275,6 +296,7 @@ void VideoInterfaceManager::Preset(bool _bNTSC)
   m_viskip_skip_current_field = false;
   m_viskip_consecutive_skips = 0;
   m_viskip_fields_since_present = 0;
+  m_viskip_decimate_next = false;
 
   UpdateParameters();
 }
