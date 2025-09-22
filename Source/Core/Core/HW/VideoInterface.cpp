@@ -59,8 +59,16 @@ bool VideoInterfaceManager::IsInterlacedVideoMode() const
 
 bool VideoInterfaceManager::IsRealXFBOrEFBActive() const
 {
-  // Heuristic: If either top or bottom XFB is enabled and has a base address, consider XFB active.
-  // This errs on the conservative side to prevent unsafe VI skipping when scanout is in use.
+  // If the backend isn't using REAL XFB, treat XFB as inactive for VI-skip gating.
+  // In current config, real XFB is effectively disabled when Immediate XFB is enabled
+  // or when XFB copies to RAM are skipped. Both cases mean we shouldn't conservatively
+  // block VI skipping.
+  if (g_ActiveConfig.bImmediateXFB || g_ActiveConfig.bSkipXFBCopyToRam)
+    return false;
+
+  // Heuristic (real XFB only): If either top or bottom XFB is enabled and has a base address,
+  // consider XFB active. This errs on the conservative side to prevent unsafe VI skipping when
+  // scanout is in use.
   const bool top_enabled = (m_xfb_info_top.POFF == 0) && (m_xfb_info_top.FBB != 0);
   const bool bottom_enabled = (m_xfb_info_bottom.POFF == 0) && (m_xfb_info_bottom.FBB != 0);
   return top_enabled || bottom_enabled;
@@ -770,16 +778,29 @@ float VideoInterfaceManager::GetAspectRatio() const
 
 void VideoInterfaceManager::UpdateParameters()
 {
-  u32 equ_hl = 3 * m_vertical_timing_register.EQU;
-  u32 acv_hl = 2 * m_vertical_timing_register.ACV;
-  m_odd_field_first_hl = equ_hl + m_vblank_timing_odd.PRB;
-  m_odd_field_last_hl = m_odd_field_first_hl + acv_hl - 1;
+  const u32 equ_hl = 3 * m_vertical_timing_register.EQU;
+  const u32 acv_hl = 2 * m_vertical_timing_register.ACV;
 
-  m_even_field_first_hl = equ_hl + m_vblank_timing_even.PRB + GetHalfLinesPerOddField();
+  // Odd field:
+  m_odd_field_first_hl = equ_hl + m_vblank_timing_odd.PRB;
+  const u32 odd_field_end = m_odd_field_first_hl + acv_hl;
+  m_odd_field_last_hl = odd_field_end - 1;
+
+  // Many GC games establish differing PRB/PSB values for odd/even fields.
+  // Added together they are equal, but because we OutputField *before* PSB
+  //  that can result in inconsistent pacing between odd/even fields.
+  // This will adjust the even-field to match the odd-field pacing,
+  //  accounting for the otherwise-ignored even-field PSB.
+  const s32 odd_even_psb_diff = m_vblank_timing_odd.PSB - m_vblank_timing_even.PSB;
+
+  // Even field:
+  m_even_field_first_hl = odd_field_end + m_vblank_timing_odd.PSB + equ_hl +
+                          m_vblank_timing_even.PRB - odd_even_psb_diff;
   m_even_field_last_hl = m_even_field_first_hl + acv_hl - 1;
-  
+
   UpdateRefreshRate();
 }
+
 
 void VideoInterfaceManager::UpdateRefreshRate()
 {
@@ -932,7 +953,16 @@ void VideoInterfaceManager::EndField(FieldType field, u64 ticks)
   // Currently, this is only known to be necessary to eliminate flickering in WWE Crush Hour.
   if (!Config::Get(Config::GFX_HACK_EARLY_XFB_OUTPUT))
     OutputField(field, ticks);
-
+  
+  // Note: OutputField above doesn't present when using GPU-on-Thread or Early/Immediate XFB,
+  //  giving "VBlank" measurements here poor pacing without a Throttle call.
+  // If the user actually wants the data, we'll Throttle to make the numbers nice.
+  const bool is_vblank_data_wanted = g_ActiveConfig.bShowVPS || g_ActiveConfig.bShowVTimes ||
+  g_ActiveConfig.bLogRenderTimeToFile ||
+  g_ActiveConfig.bShowGraphs;
+  if (is_vblank_data_wanted)
+    m_system.GetCoreTiming().Throttle(ticks);
+  
   g_perf_metrics.CountVBlank();
   VIEndFieldEvent::Trigger();
   Core::OnFrameEnd(m_system);
@@ -942,88 +972,94 @@ void VideoInterfaceManager::EndField(FieldType field, u64 ticks)
 // Run when: When a frame is scanned (progressive/interlace)
 void VideoInterfaceManager::Update(u64 ticks)
 {
+  constexpr u32 odd_field_begin = 0;
+  // Even-field begins where the odd-field ends.
+  const u32 even_field_begin = GetHalfLinesPerOddField();
+  
+  const bool is_at_field_boundary =
+  m_half_line_count == odd_field_begin || m_half_line_count == even_field_begin;
+  
   // Movie's frame counter should be updated before actually rendering the frame,
   // in case frame counter display is enabled
-
-  if (m_half_line_count == 0 || m_half_line_count == GetHalfLinesPerEvenField())
+  
+  if (is_at_field_boundary)
     m_system.GetMovie().FrameUpdate();
-
+  
   // If this half-line is at some boundary of the "active video lines" in either field, we either
   // need to (a) send a request to the GPU thread to actually render the XFB, or (b) increment
   // the number of frames we've actually drawn
-
-  if (m_half_line_count == m_even_field_first_hl)
-  {
-    BeginField(FieldType::Even, ticks);
-  }
-  else if (m_half_line_count == m_odd_field_first_hl)
+  
+  if (m_half_line_count == m_odd_field_first_hl)
   {
     BeginField(FieldType::Odd, ticks);
   }
-  else if (m_half_line_count == m_even_field_last_hl)
+  else if (m_half_line_count == m_even_field_first_hl)
   {
-    EndField(FieldType::Even, ticks);
+    BeginField(FieldType::Even, ticks);
   }
   else if (m_half_line_count == m_odd_field_last_hl)
   {
     EndField(FieldType::Odd, ticks);
   }
-
+  else if (m_half_line_count == m_even_field_last_hl)
+  {
+    EndField(FieldType::Even, ticks);
+  }
+  
   // If this half-line is at a field boundary, deal with frame stepping before potentially
   // dealing with SI polls, but after potentially sending a swap request to the GPU thread
-
-  if (m_half_line_count == 0 || m_half_line_count == GetHalfLinesPerEvenField())
-  {
-    // Update VI Skip gating decision at field boundaries
-    UpdateVISkipDecisionAtFieldBoundary();
+  
+  if (is_at_field_boundary)
     Core::Callback_NewField(m_system);
-  }
-
+  
+  auto& core_timing = m_system.GetCoreTiming();
+  
   // If an SI poll is scheduled to happen on this half-line, do it!
-
-  if (m_half_line_of_next_si_poll == m_half_line_count)
+  if (m_half_line_count == m_half_line_of_next_si_poll)
   {
+    // Throttle before SI poll so user input is taken just before needed. (lower input latency)
+    core_timing.Throttle(ticks);
+    
+    // This is a nice place to measure performance so we don't have to Throttle elsewhere.
+//    g_perf_metrics.CountPerformanceMarker(ticks, m_system.GetSystemTimers().GetTicksPerSecond());
+    
     Core::UpdateInputGate(!Config::Get(Config::MAIN_INPUT_BACKGROUND_INPUT),
                           Config::Get(Config::MAIN_LOCK_CURSOR));
     auto& si = m_system.GetSerialInterface();
     si.UpdateDevices();
     m_half_line_of_next_si_poll += 2 * si.GetPollXLines();
   }
-
+  
   // If this half-line is at the actual boundary of either field, schedule an SI poll to happen
   // some number of half-lines in the future
-
-  if (m_half_line_count == 0)
+  
+  if (is_at_field_boundary)
   {
-    m_half_line_of_next_si_poll = NUM_HALF_LINES_FOR_SI_POLL;  // first results start at vsync
+    // first results start at vsync
+    m_half_line_of_next_si_poll = m_half_line_count + NUM_HALF_LINES_FOR_SI_POLL;
   }
-  if (m_half_line_count == GetHalfLinesPerEvenField())
-  {
-    m_half_line_of_next_si_poll = GetHalfLinesPerEvenField() + NUM_HALF_LINES_FOR_SI_POLL;
-  }
-
+  
   // Move to the next half-line and potentially roll-over the count to zero. If we've reached
   // the beginning of a new full-line, update the timer
-
-  m_half_line_count++;
+  
+  ++m_half_line_count;
   if (m_half_line_count == GetHalfLinesPerEvenField() + GetHalfLinesPerOddField())
   {
     m_half_line_count = 0;
   }
-
-  auto& core_timing = m_system.GetCoreTiming();
+  
   if (!(m_half_line_count & 1))
   {
-    m_ticks_last_line_start = core_timing.GetTicks();
+    m_ticks_last_line_start = ticks;
   }
-
+  
   // TODO: Findout why skipping interrupts acts as a frameskip
   if (core_timing.GetVISkip())
     return;
-
+  
   // Check if we need to assert IR_INT. Note that the granularity of our current horizontal
   // position is limited to half-lines.
-
+  
   for (UVIInterruptRegister& reg : m_interrupt_register)
   {
     u32 target_halfline = (reg.HCT > m_h_timing_0.HLW) ? 1 : 0;
@@ -1032,7 +1068,7 @@ void VideoInterfaceManager::Update(u64 ticks)
       reg.IR_INT = 1;
     }
   }
-
+  
   UpdateInterrupts();
 }
 
