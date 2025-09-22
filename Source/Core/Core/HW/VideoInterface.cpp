@@ -94,11 +94,13 @@ void VideoInterfaceManager::UpdateVISkipDecisionAtFieldBoundary()
   const bool stable_bottom = bottom_valid && (m_prev_xfb_bottom_fbb != 0) &&
                              (m_xfb_info_bottom.FBB == m_prev_xfb_bottom_fbb);
   const bool stable_xfb = stable_top || stable_bottom;
+  // Step B.2: Only relax if there were no EFB->XFB copies during the last field period.
+  const bool no_copy_this_field = !m_viskip_efb_to_xfb_copied_this_field;
 
   bool allow_skip = false;
-  // Relax gates when XFB base is stable
-  const bool interlaced_ok = !interlaced || stable_xfb;
-  const bool xfb_ok = !xfb_active || stable_xfb;
+  // Relax gates when XFB base is stable AND there were no in-place XFB updates.
+  const bool interlaced_ok = !interlaced || (stable_xfb && no_copy_this_field);
+  const bool xfb_ok = !xfb_active || (stable_xfb && no_copy_this_field);
 
   if (interlaced_ok && xfb_ok &&
       m_viskip_consecutive_skips < VISKIP_MAX_CONSECUTIVE_SKIPS &&
@@ -125,6 +127,8 @@ void VideoInterfaceManager::UpdateVISkipDecisionAtFieldBoundary()
   // Update previous XFB base state for next field's stability check
   m_prev_xfb_top_fbb = m_xfb_info_top.FBB;
   m_prev_xfb_bottom_fbb = m_xfb_info_bottom.FBB;
+  // Reset copy tracking for the next field period
+  m_viskip_efb_to_xfb_copied_this_field = false;
 }
 
 VideoInterfaceManager::~VideoInterfaceManager()

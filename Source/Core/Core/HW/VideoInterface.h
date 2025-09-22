@@ -8,6 +8,7 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/Config/Config.h"
+#include "Common/HookableEvent.h"
 
 enum class FieldType;
 class PointerWrap;
@@ -442,6 +443,9 @@ private:
   // Previous XFB base addresses for stable-XFB heuristic
   u32 m_prev_xfb_top_fbb = 0;
   u32 m_prev_xfb_bottom_fbb = 0;
+  // Per-field EFB->XFB copy detection (Step B.2)
+  bool m_viskip_efb_to_xfb_copied_this_field = false;
+  Common::EventHook m_after_frame_hook;
   std::array<UVIInterruptRegister, 4> m_interrupt_register{};
   std::array<UVILatchRegister, 2> m_latch_register{};
   PictureConfigurationRegister m_picture_configuration;
