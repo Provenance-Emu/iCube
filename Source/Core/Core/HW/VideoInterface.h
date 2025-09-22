@@ -446,6 +446,8 @@ private:
   // Per-field EFB->XFB copy detection (Step B.2)
   bool m_viskip_efb_to_xfb_copied_this_field = false;
   Common::EventHook m_after_frame_hook;
+  // Step C: Interlaced decimation state (toggle skip every other field)
+  bool m_viskip_decimate_next = false;
   std::array<UVIInterruptRegister, 4> m_interrupt_register{};
   std::array<UVILatchRegister, 2> m_latch_register{};
   PictureConfigurationRegister m_picture_configuration;

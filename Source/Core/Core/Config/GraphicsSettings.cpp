@@ -261,6 +261,13 @@ const Info<TriState> GFX_HACK_VI_SKIP_MODE{{System::GFX, "Hacks", "VISkipMode"},
                                            TriState::Off
 #endif
 };
+const Info<bool> GFX_HACK_VI_DECIMATE_INTERLACE{{System::GFX, "Hacks", "VIDecimateInterlace"},
+#ifdef __APPLE__
+                                                  false
+#else
+                                                  false
+#endif
+};
 const Info<u32> GFX_HACK_MISSING_COLOR_VALUE{{System::GFX, "Hacks", "MissingColorValue"},
                                              0xFFFFFFFF};
 const Info<bool> GFX_HACK_FAST_TEXTURE_SAMPLING{{System::GFX, "Hacks", "FastTextureSampling"},

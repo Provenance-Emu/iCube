@@ -338,6 +338,8 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setGfxHackDeferEfbCopies:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_DEFER_EFB_COPIES, (bool)enabled); }
 + (NSInteger)gfxHackViSkipMode { return (NSInteger)Config::Get(Config::GFX_HACK_VI_SKIP_MODE); }
 + (void)setGfxHackViSkipMode:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_HACK_VI_SKIP_MODE, (TriState)mode); }
++ (BOOL)gfxHackViDecimateInterlace { return Config::Get(Config::GFX_HACK_VI_DECIMATE_INTERLACE); }
++ (void)setGfxHackViDecimateInterlace:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_VI_DECIMATE_INTERLACE, (bool)enabled); }
 + (BOOL)gfxHackFastTextureSampling { return Config::Get(Config::GFX_HACK_FAST_TEXTURE_SAMPLING); }
 + (void)setGfxHackFastTextureSampling:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_FAST_TEXTURE_SAMPLING, (bool)enabled); }
 + (BOOL)gfxHackFastMath { return Config::Get(Config::GFX_HACK_FAST_MATH); }

@@ -273,6 +273,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxHackDeferEfbCopies:(BOOL)enabled;
 + (NSInteger)gfxHackViSkipMode;
 + (void)setGfxHackViSkipMode:(NSInteger)mode;
++ (BOOL)gfxHackViDecimateInterlace;
++ (void)setGfxHackViDecimateInterlace:(BOOL)enabled;
 + (BOOL)gfxHackFastTextureSampling;
 + (void)setGfxHackFastTextureSampling:(BOOL)enabled;
 + (BOOL)gfxHackFastMath;

@@ -186,6 +186,8 @@ extern const Info<bool> GFX_HACK_VERTEX_ROUNDING;
 extern const Info<bool> GFX_HACK_VI_SKIP;
 // New tri-state mode: Off/On/Auto
 extern const Info<TriState> GFX_HACK_VI_SKIP_MODE;
+// Aggressive: Decimate interlaced fields (skip every other field) with synthetic VI timing
+extern const Info<bool> GFX_HACK_VI_DECIMATE_INTERLACE;
 extern const Info<u32> GFX_HACK_MISSING_COLOR_VALUE;
 extern const Info<bool> GFX_HACK_FAST_TEXTURE_SAMPLING;
 #ifdef __APPLE__
