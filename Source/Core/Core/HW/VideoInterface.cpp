@@ -160,6 +160,7 @@ void VideoInterfaceManager::DoState(PointerWrap& p)
   // Persist stable-XFB heuristic state across save states
   p.Do(m_prev_xfb_top_fbb);
   p.Do(m_prev_xfb_bottom_fbb);
+  p.Do(m_viskip_efb_to_xfb_copied_this_field);
   p.DoArray(m_interrupt_register);
   p.DoArray(m_latch_register);
   p.Do(m_picture_configuration);
@@ -267,6 +268,14 @@ void VideoInterfaceManager::Preset(bool _bNTSC)
   m_half_line_count = 0;
   m_half_line_of_next_si_poll = NUM_HALF_LINES_FOR_SI_POLL;  // first sampling starts at vsync
 
+  // Reset VI-skip heuristic state
+  m_prev_xfb_top_fbb = 0;
+  m_prev_xfb_bottom_fbb = 0;
+  m_viskip_efb_to_xfb_copied_this_field = false;
+  m_viskip_skip_current_field = false;
+  m_viskip_consecutive_skips = 0;
+  m_viskip_fields_since_present = 0;
+
   UpdateParameters();
 }
 
@@ -276,6 +285,12 @@ void VideoInterfaceManager::Init()
   
   m_config_changed_callback_id = Config::AddConfigChangedCallback([this] { RefreshConfig(); });
   RefreshConfig();
+
+  // Register to detect when an EFB->XFB copy occurs (host starts processing XFB copy)
+  // We use this as a guard to avoid skipping VI on fields with in-place XFB updates.
+  m_after_frame_hook = AfterFrameEvent::Register(
+      [this](Core::System&) { m_viskip_efb_to_xfb_copied_this_field = true; },
+      "VI-NoCopyGuard");
 }
 
 void VideoInterfaceManager::RefreshConfig()
@@ -1009,7 +1024,11 @@ void VideoInterfaceManager::Update(u64 ticks)
   // in case frame counter display is enabled
   
   if (is_at_field_boundary)
+  {
     m_system.GetMovie().FrameUpdate();
+    // Evaluate VI-skip decision for the upcoming field
+    UpdateVISkipDecisionAtFieldBoundary();
+  }
   
   // If this half-line is at some boundary of the "active video lines" in either field, we either
   // need to (a) send a request to the GPU thread to actually render the XFB, or (b) increment
