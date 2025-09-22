@@ -86,6 +86,8 @@ private:
   void ResetFreeMemoryRanges();
 
   void LogGeneratedCode() const;
+  // Fallthrough PC for the currently generated block (for linking)
+  u32 m_link_fallthrough_pc = 0;
 
   struct StartProfiledBlockOperands;
   template <bool profiled>
@@ -99,6 +101,18 @@ private:
   struct CheckHaltOperands;
   struct CheckIdleOperands;
   struct CheckCtrIdleOperands;
+  // Link to another cached-interpreter block without dispatcher round-trip
+  struct LinkToBlockOperands
+  {
+    // End-of-block accounting (merged EndBlock operands)
+    u32 downcount;
+    u32 num_load_stores;
+    u32 num_fp_inst;
+    u32 expected_pc; // only link if npc (next PC) matches this fallthrough
+    JitBlock::ProfileData* profile_data; // nullptr when profiling disabled
+    // Signed distance in bytes from callback start to dest->normalEntry (0 = not linked)
+    s32 rel;
+  };
 
   static s32 StartProfiledBlock(PowerPC::PowerPCState& ppc_state,
                                 const StartProfiledBlockOperands& operands);
@@ -107,6 +121,9 @@ private:
   static s32 EndBlock(PowerPC::PowerPCState& ppc_state, const EndBlockOperands<profiled>& operands);
   template <bool profiled>
   static s32 EndBlock(std::ostream& stream, const EndBlockOperands<profiled>& operands);
+  // Link trampoline callback
+  static s32 LinkToBlock(PowerPC::PowerPCState& ppc_state, const LinkToBlockOperands& operands);
+  static s32 LinkToBlock(std::ostream& stream, const LinkToBlockOperands& operands);
   template <bool write_pc>
   DOL_HOT static s32 Interpret(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   template <bool write_pc>
