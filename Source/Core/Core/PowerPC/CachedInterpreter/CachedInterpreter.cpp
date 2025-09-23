@@ -1,9 +1,11 @@
+// (instrumentation static functions defined later in this file)
 // Copyright 2014 Dolphin Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
 
 #include <span>
+#include <cstdlib>
 #include <iterator>
 #include <sstream>
 #include <bit>
@@ -37,6 +39,7 @@
 #include "Common/Swap.h"
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/Config/MainSettings.h"
+#include "VideoCommon/OnScreenDisplay.h"
 
 #if defined(__clang__) || defined(__GNUC__)
 #if defined(__aarch64__)
@@ -112,6 +115,46 @@ static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
   return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
 }
 } // anonymous namespace
+
+// Static instrumentation state
+CachedInterpreter::LinkStats CachedInterpreter::s_link_stats{};
+bool CachedInterpreter::s_log_enabled = false;
+
+void CachedInterpreter::OnLinkPatched()
+{
+  ++s_link_stats.links_patched;
+}
+
+void CachedInterpreter::MaybeLogLinkStats()
+{
+// #ifdef _DEBUG
+  if (!s_log_enabled)
+    return;
+  static u64 frames = 0;
+  static u64 last_links_patched = 0;
+  if ((++frames & 0xFFF) == 0) // log roughly every 4096 dispatcher returns
+  {
+    // Only log if something changed since the last log to avoid spam.
+    if (s_link_stats.links_patched == last_links_patched)
+      return;
+    last_links_patched = s_link_stats.links_patched;
+
+    const std::string msg = fmt::format(
+        "CI links: patched={} rel0={} rel1={} unlinked={} mismatch={} zero_dc={} slice_end={} disp_rt={}",
+        s_link_stats.links_patched, s_link_stats.rel0_taken, s_link_stats.rel1_taken,
+        s_link_stats.match_but_unlinked, s_link_stats.npc_mismatch,
+        s_link_stats.zero_downcount, s_link_stats.slice_end, s_link_stats.dispatcher_roundtrips);
+    printf("%s\n", msg.c_str());
+    // OSD::AddMessage(msg, OSD::Duration::NORMAL);
+  }
+// #endif
+}
+
+void CachedInterpreter::ConfigureLinkLogFromEnv()
+{
+  const char* env = std::getenv("DOLPHIN_CI_LINK_LOG");
+  s_log_enabled = (env && env[0] == '1');
+}
 
 // PSQ fast-path helpers (mirror Interpreter_LoadStorePaired semantics)
 static inline float CI_DequantizeFactor(u32 scale)
@@ -1181,6 +1224,8 @@ void CachedInterpreter::Init()
   code_block.m_stats = &js.st;
   code_block.m_gpa = &js.gpa;
   code_block.m_fpa = &js.fpa;
+
+  ConfigureLinkLogFromEnv();
 }
 
 template <bool write_pc>
@@ -1410,7 +1455,8 @@ CI_HOT_FLATTEN s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 ui = m.imm & 0xFFFFu;
       ppc_state.gpr[m.rd] = rs_val & ui;
-      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
       ++i;
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
@@ -1421,7 +1467,8 @@ CI_HOT_FLATTEN s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc
       const u32 rs_val = ppc_state.gpr[m.ra];
       const u32 ui = (m.imm & 0xFFFFu) << 16;
       ppc_state.gpr[m.rd] = rs_val & ui;
-      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
       ++i;
       if (i < count) goto micro_dispatch; else goto micro_done;
     }
@@ -2276,6 +2323,8 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
     else
       break;
   }
+  ++s_link_stats.dispatcher_roundtrips;
+  // MaybeLogLinkStats();
 }
 
 CI_HOT_ONLY void CachedInterpreter::Run()
@@ -2452,16 +2501,53 @@ bool CachedInterpreter::HandleFunctionHooking(u32 address)
 
 void CachedInterpreter::WriteEndBlock()
 {
-  // Emit a link trampoline which performs end-of-block accounting and optionally links
+  // If the terminal instruction is a dynamic/indirect exit (e.g., blr/bctr) with no
+  // static branch target, skip LinkToBlock and emit the plain EndBlock to avoid
+  // frequent npc mismatches and link overhead.
+  bool dynamic_terminal = false;
+  u32 taken_pc = 0;
+  if (code_block.m_num_instructions > 0)
+  {
+    const auto& last = m_code_buffer[code_block.m_num_instructions - 1];
+    dynamic_terminal = last.canEndBlock && (last.branchTo == UINT32_MAX);
+    if (!dynamic_terminal && last.canEndBlock && last.branchTo != UINT32_MAX)
+      taken_pc = last.branchTo;
+  }
+
+  if (dynamic_terminal)
+  {
+    if (IsProfilingEnabled())
+    {
+      EndBlockOperands<true> eops{};
+      eops.downcount = js.downcountAmount;
+      eops.num_load_stores = js.numLoadStoreInst;
+      eops.num_fp_inst = js.numFloatingPointInst;
+      eops.profile_data = js.curBlock->profile_data.get();
+      Write(EndBlock<true>, eops);
+    }
+    else
+    {
+      EndBlockOperands<false> eops{};
+      eops.downcount = js.downcountAmount;
+      eops.num_load_stores = js.numLoadStoreInst;
+      eops.num_fp_inst = js.numFloatingPointInst;
+      Write(EndBlock<false>, eops);
+    }
+    return;
+  }
+
+  // Otherwise, emit a link trampoline which performs end-of-block accounting and optionally links
   // to the next block by returning a non-zero relative distance. If linking is disabled
   // or not yet patched, rel stays 0 and the dispatcher will exit the block as usual.
   LinkToBlockOperands ops{};
   ops.downcount = js.downcountAmount;
   ops.num_load_stores = js.numLoadStoreInst;
   ops.num_fp_inst = js.numFloatingPointInst;
-  ops.expected_pc = m_link_fallthrough_pc;
+  ops.expected_pc0 = m_link_fallthrough_pc;
+  ops.expected_pc1 = taken_pc;
   ops.profile_data = IsProfilingEnabled() ? js.curBlock->profile_data.get() : nullptr;
-  ops.rel = 0;
+  ops.rel0 = 0;
+  ops.rel1 = 0;
 
   Write(LinkToBlock, ops);
 
@@ -2479,6 +2565,19 @@ void CachedInterpreter::WriteEndBlock()
   ld.linkStatus = false;
   ld.call = false;
   js.curBlock->linkData.push_back(ld);
+
+  if (taken_pc != 0 && taken_pc != m_link_fallthrough_pc)
+  {
+    JitBlock::LinkData ld2{};
+    ld2.exitPtrs = callback_start;
+#ifdef _M_ARM_64
+    ld2.exitFarcode = nullptr;
+#endif
+    ld2.exitAddress = taken_pc;
+    ld2.linkStatus = false;
+    ld2.call = false;
+    js.curBlock->linkData.push_back(ld2);
+  }
 }
 
 s32 CachedInterpreter::LinkToBlock(PowerPC::PowerPCState& ppc_state,
@@ -2495,16 +2594,64 @@ s32 CachedInterpreter::LinkToBlock(PowerPC::PowerPCState& ppc_state,
   if (operands.profile_data)
     JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
 
+  // If the timing slice is over, stop linking and exit to the dispatcher/scheduler.
+  if (ppc_state.downcount <= 0)
+  {
+    ++s_link_stats.slice_end;
+    return 0;
+  }
+
+  // Select the correct link (fallthrough or taken) based on npc.
+  s32 rel = 0;
+  if (ppc_state.npc == operands.expected_pc0)
+  {
+    rel = operands.rel0;
+    if (rel != 0)
+      ++s_link_stats.rel0_taken;
+    else
+      ++s_link_stats.match_but_unlinked;
+  }
+  else if (ppc_state.npc == operands.expected_pc1)
+  {
+    rel = operands.rel1;
+    if (rel != 0)
+      ++s_link_stats.rel1_taken;
+    else
+      ++s_link_stats.match_but_unlinked;
+  }
+  else
+  {
+    ++s_link_stats.npc_mismatch;
+  }
+
+  // Safety: if the block recorded 0 cycles, don't chain endlessly.
+  if (operands.downcount == 0)
+  {
+    ++s_link_stats.zero_downcount;
+    return 0;
+  }
+
+#if defined(__aarch64__)
+  if (rel != 0)
+  {
+    const u8* operands_ptr = reinterpret_cast<const u8*>(&operands);
+    const u8* callback_start = operands_ptr - sizeof(void*);
+    const u8* next_entry = callback_start + rel;
+    __builtin_prefetch(next_entry + 64, 0, 1);
+    __builtin_prefetch(next_entry + 128, 0, 1);
+  }
+#endif
+
   // If linked, continue within the same block stream; otherwise return 0 to exit.
-  return (ppc_state.npc == operands.expected_pc) ? operands.rel : 0;
+  return rel;
 }
 
 CI_COLD_ONLY s32 CachedInterpreter::LinkToBlock(std::ostream& stream,
                                                 const LinkToBlockOperands& operands)
 {
   fmt::println(stream,
-               "LinkToBlock(rel={}, expected_pc=0x{:08x}, downcount={}, numLoadStores={}, numFpInst={}, profiled={})",
-               operands.rel, operands.expected_pc, operands.downcount, operands.num_load_stores, operands.num_fp_inst,
+               "LinkToBlock(rel0={}, rel1={}, expected_pc0=0x{:08x}, expected_pc1=0x{:08x}, downcount={}, numLoadStores={}, numFpInst={}, profiled={})",
+               operands.rel0, operands.rel1, operands.expected_pc0, operands.expected_pc1, operands.downcount, operands.num_load_stores, operands.num_fp_inst,
                operands.profile_data ? 1 : 0);
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -2865,7 +3012,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA; // destination RA
                 mu.ra = next.inst.RS; // source RS
                 mu.rb = 0;
-                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                 // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
                 mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
                          ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
@@ -2876,7 +3023,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA; // destination RA
                 mu.ra = next.inst.RS; // source RS
                 mu.rb = 0;
-                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                 // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
                 mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
                          ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
@@ -2899,7 +3046,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA; // destination RA
                 mu.ra = next.inst.RS; // source RS
                 mu.rb = next.inst.RB; // variable shift from RB
-                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                 // Pack MB/ME into imm: [5..9]=MB, [10..14]=ME (SH is variable from RB)
                 mu.imm = ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
                          ((static_cast<u32>(next.inst.ME) & 31u) << 10);
@@ -3036,12 +3183,14 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.op = MicroOpCode::ANDI;
                 mu.rd = next.inst.RA; // destination is RA (recording variant)
                 mu.ra = next.inst.RS; // source is RS
+                mu.rc = 1;            // andi. always records to CR0
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 break;
               case 29: // andis.
                 mu.op = MicroOpCode::ANDIS;
                 mu.rd = next.inst.RA; // destination is RA (recording variant)
                 mu.ra = next.inst.RS; // source is RS
+                mu.rc = 1;            // andis. always records to CR0
                 mu.imm = static_cast<u32>(next.inst.UIMM);
                 break;
               case 31: // X-form logicals/shifts/misc
@@ -3100,7 +3249,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 778) ? 1u : 0u; // imm bit0 -> OE
                   goto end_pack_switch;
                 }
@@ -3111,7 +3260,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 522) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3122,7 +3271,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 650) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3133,7 +3282,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 746) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3144,7 +3293,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 714) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3155,7 +3304,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 552) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3166,7 +3315,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 520) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3177,7 +3326,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 648) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3188,7 +3337,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 744) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3199,7 +3348,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = (next.inst.SUBOP10 == 712) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3248,7 +3397,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = 0;
                   goto end_pack_switch;
                 case 824: // srawix
@@ -3256,7 +3405,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                   mu.imm = static_cast<u32>(next.inst.SH & 31u);
                   goto end_pack_switch;
                 default:
@@ -3269,7 +3418,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA;
                 mu.ra = next.inst.RS;
                 mu.rb = next.inst.RB;
-                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                 mu.imm = 0;
                 break;
               }

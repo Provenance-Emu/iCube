@@ -89,6 +89,27 @@ private:
   // Fallthrough PC for the currently generated block (for linking)
   u32 m_link_fallthrough_pc = 0;
 
+  // Lightweight instrumentation for linking effectiveness
+  struct LinkStats
+  {
+    u64 rel0_taken = 0;
+    u64 rel1_taken = 0;
+    u64 match_but_unlinked = 0; // expected_pc matched but rel==0
+    u64 npc_mismatch = 0;       // neither expected_pc matched
+    u64 zero_downcount = 0;     // link suppressed due to operands.downcount==0
+    u64 slice_end = 0;          // link suppressed due to ppc_state.downcount<=0
+    u64 dispatcher_roundtrips = 0; // block ended and we returned to dispatcher
+    u64 links_patched = 0;         // number of times WriteLinkBlock patched a link
+  };
+
+public:
+  static void OnLinkPatched();
+  static void MaybeLogLinkStats();
+  static void ConfigureLinkLogFromEnv();
+private:
+  static LinkStats s_link_stats;
+  static bool s_log_enabled;
+
   struct StartProfiledBlockOperands;
   template <bool profiled>
   struct EndBlockOperands;
@@ -108,10 +129,13 @@ private:
     u32 downcount;
     u32 num_load_stores;
     u32 num_fp_inst;
-    u32 expected_pc; // only link if npc (next PC) matches this fallthrough
+    u32 expected_pc0; // fallthrough or primary expected PC
+    u32 expected_pc1; // secondary expected PC (e.g., taken branch target)
     JitBlock::ProfileData* profile_data; // nullptr when profiling disabled
     // Signed distance in bytes from callback start to dest->normalEntry (0 = not linked)
-    s32 rel;
+    s32 rel0; // distance for expected_pc0
+    s32 rel1; // distance for expected_pc1
+    u32 _pad; // pad to keep sizeof(Operands) multiple of pointer size
   };
 
   static s32 StartProfiledBlock(PowerPC::PowerPCState& ppc_state,
