@@ -17,6 +17,7 @@
 #include "VideoCommon/VideoBackendBase.h"
 #include "Core/Config/GraphicsSettings.h"
 #include "Common/Config/Config.h"
+#include <TargetConditionals.h>
 
 #include <fstream>
 #import <Foundation/Foundation.h>
@@ -31,8 +32,10 @@
 Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
 {
   UpdateActiveConfig();
+#if TARGET_OS_OSX
   [m_layer setDisplaySyncEnabled:g_ActiveConfig.bVSyncActive];
-
+#endif
+  
   SetupSurface();
   g_state_tracker->FlushEncoders();
 
@@ -341,8 +344,10 @@ void Metal::Gfx::OnConfigChanged(u32 bits)
 {
   AbstractGfx::OnConfigChanged(bits);
 
+#if TARGET_OS_OSX
   if (bits & CONFIG_CHANGE_BIT_VSYNC)
     [m_layer setDisplaySyncEnabled:g_ActiveConfig.bVSyncActive];
+#endif
 
   if (bits & CONFIG_CHANGE_BIT_ANISOTROPY)
   {
