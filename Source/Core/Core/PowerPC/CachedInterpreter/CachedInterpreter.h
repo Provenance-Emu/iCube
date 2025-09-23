@@ -106,6 +106,35 @@ public:
   static void OnLinkPatched();
   static void MaybeLogLinkStats();
   static void ConfigureLinkLogFromEnv();
+
+  // Hot instruction profiling (disabled by default; enable with env DOLPHIN_CI_HOT=1)
+  struct HotStats
+  {
+    // Counts/time by primary opcode (0..63)
+    u64 count_by_opcd[64] = {};
+    u64 ns_by_opcd[64] = {};
+    // Counts/time for SUBOP10 when OPCD==31 (0..1023) to keep it simple
+    u64 count_by_subop31[1024] = {};
+    u64 ns_by_subop31[1024] = {};
+    // Counts/time for SUBOP5 when OPCD==59 (0..31)
+    u64 count_by_subop59[32] = {};
+    u64 ns_by_subop59[32] = {};
+    // Counts/time for SUBOP10 when OPCD==63 (0..1023)
+    u64 count_by_subop63[1024] = {};
+    u64 ns_by_subop63[1024] = {};
+  };
+
+public:
+  static void ConfigureHotStatsFromEnv();
+  static void MaybeLogHotStats();
+  static const HotStats& GetHotStats() { return s_hot_stats; }
+  static void ConfigureFpFastFromEnv();
+private:
+  static HotStats s_hot_stats;
+  static bool s_hot_enabled;
+  static u32 s_hot_sample_every; // measure 1 out of N instructions (N>=1)
+  static u64 s_hot_counter;
+  static bool s_fp_fast_enabled;
 private:
   static LinkStats s_link_stats;
   static bool s_log_enabled;
@@ -158,6 +187,36 @@ private:
   template <bool write_pc>
   static s32 InterpretAndCheckExceptions(std::ostream& stream,
                                          const InterpretAndCheckExceptionsOperands& operands);
+
+  // Fast branch callbacks
+  template <bool write_pc>
+  DOL_HOT static s32 BxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // OPCD 18
+  template <bool write_pc>
+  DOL_HOT static s32 BCxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // OPCD 16
+  template <bool write_pc>
+  DOL_HOT static s32 BclrxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // OPCD 19 SUBOP10=16
+  template <bool write_pc>
+  DOL_HOT static s32 BcctrxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // OPCD 19 SUBOP10=528
+
+  // Fast SPR access (LR/CTR only)
+  DOL_HOT static s32 MfsprFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // OPCD 31 SUBOP10=339
+  DOL_HOT static s32 MtsprFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // OPCD 31 SUBOP10=467
+
+  // Fast FP arithmetic (single-precision) - OPCD 59 using SUBOP5
+  template <bool write_pc>
+  DOL_HOT static s32 FpFsubsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=20
+  template <bool write_pc>
+  DOL_HOT static s32 FpFaddsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=21
+  template <bool write_pc>
+  DOL_HOT static s32 FpFmulsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=25
+
+  // Fast FP ops (double/misc) - OPCD 63 using SUBOP10
+  template <bool write_pc>
+  DOL_HOT static s32 FctiwzxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=15
+  template <bool write_pc>
+  DOL_HOT static s32 FrspxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=12
+  template <bool write_pc>
+  DOL_HOT static s32 FmrxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP10=72
   template <bool write_pc>
   DOL_HOT static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
                                const LoadStoreDFormPICOperands& operands);
