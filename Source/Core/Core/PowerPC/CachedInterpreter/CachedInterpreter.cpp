@@ -145,6 +145,42 @@ CI_HOT_ONLY s32 CachedInterpreter::FctiwzxFast(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FdivsxFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fdivsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[18];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FmulsxFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fmulsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[25];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 // Safer delegate fast paths for OPCD 59 add/sub (single-precision)
 template <bool write_pc>
 CI_HOT_ONLY s32 CachedInterpreter::FaddsxFast(PowerPC::PowerPCState& ppc_state,
@@ -4188,6 +4224,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             else if (opcd == 59)
             {
               const u32 sub5 = op.inst.SUBOP5;
+              if (sub5 == 18) // fdivsx (delegate)
+              {
+                Write(op.canEndBlock ? CallbackCast(FdivsxFast<true>) : CallbackCast(FdivsxFast<false>), operands);
+                fast_emitted = true;
+              }
               if (sub5 == 21) // faddsx (delegate)
               {
                 Write(op.canEndBlock ? CallbackCast(FaddsxFast<true>) : CallbackCast(FaddsxFast<false>), operands);
@@ -4196,6 +4237,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               else if (sub5 == 20) // fsubsx (delegate)
               {
                 Write(op.canEndBlock ? CallbackCast(FsubsxFast<true>) : CallbackCast(FsubsxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub5 == 25) // fmulsx (delegate)
+              {
+                Write(op.canEndBlock ? CallbackCast(FmulsxFast<true>) : CallbackCast(FmulsxFast<false>), operands);
                 fast_emitted = true;
               }
             }

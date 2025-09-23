@@ -214,6 +214,10 @@ private:
   DOL_HOT static s32 FaddsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=21
   template <bool write_pc>
   DOL_HOT static s32 FsubsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=20
+  template <bool write_pc>
+  DOL_HOT static s32 FmulsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=25
+  template <bool write_pc>
+  DOL_HOT static s32 FdivsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP5=18
 
   // Fast FP ops (double/misc) - OPCD 63 using SUBOP10
   template <bool write_pc>
