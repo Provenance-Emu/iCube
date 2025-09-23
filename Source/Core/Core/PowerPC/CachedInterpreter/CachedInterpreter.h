@@ -255,6 +255,36 @@ private:
   DOL_HOT static s32 PsMerge10Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP 592
   template <bool write_pc>
   DOL_HOT static s32 PsMerge11Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP 624
+
+  // ARM NEON optimized PS scalar multiply operations
+  template <bool write_pc>
+  DOL_HOT static s32 PsMuls0Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP 12
+  template <bool write_pc>
+  DOL_HOT static s32 PsMuls1Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP 13
+  template <bool write_pc>
+  DOL_HOT static s32 PsMadds0Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP 14
+  template <bool write_pc>
+  DOL_HOT static s32 PsMadds1Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP 15
+
+  // ARM NEON optimized integer operations - OPCD 31
+  template <bool write_pc>
+  DOL_HOT static s32 AddxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);      // SUBOP 266
+  template <bool write_pc>
+  DOL_HOT static s32 SubfxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 40
+  template <bool write_pc>
+  DOL_HOT static s32 MullwxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 235
+
+  // ARM NEON optimized Double-precision FP operations - OPCD 63
+  template <bool write_pc>
+  DOL_HOT static s32 FaddxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 21
+  template <bool write_pc>
+  DOL_HOT static s32 FsubxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 20
+  template <bool write_pc>
+  DOL_HOT static s32 FmulxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 25
+  template <bool write_pc>
+  DOL_HOT static s32 FmaddxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 29
+  template <bool write_pc>
+  DOL_HOT static s32 FnegxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 40
 #endif
 
   // Optimized integer operations
