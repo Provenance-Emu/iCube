@@ -209,6 +209,11 @@ private:
   DOL_HOT static s32 FpFaddsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=21
   template <bool write_pc>
   DOL_HOT static s32 FpFmulsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=25
+  // Delegate variants (safer) for 59 ops
+  template <bool write_pc>
+  DOL_HOT static s32 FaddsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=21
+  template <bool write_pc>
+  DOL_HOT static s32 FsubsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=20
 
   // Fast FP ops (double/misc) - OPCD 63 using SUBOP10
   template <bool write_pc>
@@ -217,6 +222,12 @@ private:
   DOL_HOT static s32 FrspxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=12
   template <bool write_pc>
   DOL_HOT static s32 FmrxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP10=72
+  template <bool write_pc>
+  DOL_HOT static s32 FcmpoFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=32
+  template <bool write_pc>
+  DOL_HOT static s32 FcmpuFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=0
+  template <bool write_pc>
+  DOL_HOT static s32 FselxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=20
   template <bool write_pc>
   DOL_HOT static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
                                const LoadStoreDFormPICOperands& operands);
