@@ -760,6 +760,267 @@ CI_HOT_ONLY s32 CachedInterpreter::FpFmulsxFast(PowerPC::PowerPCState& ppc_state
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+#if defined(__aarch64__)
+// ARM NEON optimized Paired Single operations for iOS/tvOS A10X+ devices
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsAddFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  // Load paired singles as ARM NEON float32x2_t
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+
+  float32x2_t va = {static_cast<float>(a.PS0AsDouble()), static_cast<float>(a.PS1AsDouble())};
+  float32x2_t vb = {static_cast<float>(b.PS0AsDouble()), static_cast<float>(b.PS1AsDouble())};
+
+  // SIMD addition
+  float32x2_t result = vadd_f32(va, vb);
+
+  // Store result back
+  ppc_state.ps[inst.FD].SetBoth(vget_lane_f32(result, 0), vget_lane_f32(result, 1));
+  ppc_state.UpdateFPRFSingle(vget_lane_f32(result, 0));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[21];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsMulFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& c = ppc_state.ps[inst.FC];
+
+  float32x2_t va = {static_cast<float>(a.PS0AsDouble()), static_cast<float>(a.PS1AsDouble())};
+  float32x2_t vc = {static_cast<float>(c.PS0AsDouble()), static_cast<float>(c.PS1AsDouble())};
+
+  // SIMD multiplication
+  float32x2_t result = vmul_f32(va, vc);
+
+  ppc_state.ps[inst.FD].SetBoth(vget_lane_f32(result, 0), vget_lane_f32(result, 1));
+  ppc_state.UpdateFPRFSingle(vget_lane_f32(result, 0));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[25];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsMaddFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+  const auto& c = ppc_state.ps[inst.FC];
+
+  float32x2_t va = {static_cast<float>(a.PS0AsDouble()), static_cast<float>(a.PS1AsDouble())};
+  float32x2_t vb = {static_cast<float>(b.PS0AsDouble()), static_cast<float>(b.PS1AsDouble())};
+  float32x2_t vc = {static_cast<float>(c.PS0AsDouble()), static_cast<float>(c.PS1AsDouble())};
+
+  // SIMD multiply-add: a * c + b
+  float32x2_t result = vfma_f32(vb, va, vc);
+
+  ppc_state.ps[inst.FD].SetBoth(vget_lane_f32(result, 0), vget_lane_f32(result, 1));
+  ppc_state.UpdateFPRFSingle(vget_lane_f32(result, 0));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[29];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsSubFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+
+  float32x2_t va = {static_cast<float>(a.PS0AsDouble()), static_cast<float>(a.PS1AsDouble())};
+  float32x2_t vb = {static_cast<float>(b.PS0AsDouble()), static_cast<float>(b.PS1AsDouble())};
+
+  // SIMD subtraction
+  float32x2_t result = vsub_f32(va, vb);
+
+  ppc_state.ps[inst.FD].SetBoth(vget_lane_f32(result, 0), vget_lane_f32(result, 1));
+  ppc_state.UpdateFPRFSingle(vget_lane_f32(result, 0));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[20];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsMerge00Fast(PowerPC::PowerPCState& ppc_state,
+                                                 const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+
+  // ps_merge00: FD = (FA.PS0, FB.PS0)
+  ppc_state.ps[inst.FD].SetBoth(static_cast<float>(a.PS0AsDouble()), static_cast<float>(b.PS0AsDouble()));
+  ppc_state.UpdateFPRFSingle(static_cast<float>(a.PS0AsDouble()));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[528];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsMerge01Fast(PowerPC::PowerPCState& ppc_state,
+                                                 const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+
+  // ps_merge01: FD = (FA.PS0, FB.PS1)
+  ppc_state.ps[inst.FD].SetBoth(static_cast<float>(a.PS0AsDouble()), static_cast<float>(b.PS1AsDouble()));
+  ppc_state.UpdateFPRFSingle(static_cast<float>(a.PS0AsDouble()));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[560];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsMerge10Fast(PowerPC::PowerPCState& ppc_state,
+                                                 const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+
+  // ps_merge10: FD = (FA.PS1, FB.PS0)
+  ppc_state.ps[inst.FD].SetBoth(static_cast<float>(a.PS1AsDouble()), static_cast<float>(b.PS0AsDouble()));
+  ppc_state.UpdateFPRFSingle(static_cast<float>(a.PS1AsDouble()));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[592];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsMerge11Fast(PowerPC::PowerPCState& ppc_state,
+                                                 const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+
+  // ps_merge11: FD = (FA.PS1, FB.PS1)
+  ppc_state.ps[inst.FD].SetBoth(static_cast<float>(a.PS1AsDouble()), static_cast<float>(b.PS1AsDouble()));
+  ppc_state.UpdateFPRFSingle(static_cast<float>(a.PS1AsDouble()));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[624];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+#endif // __aarch64__
+
+
 // Static instrumentation state
 CachedInterpreter::LinkStats CachedInterpreter::s_link_stats{};
 bool CachedInterpreter::s_log_enabled = false;
@@ -1031,6 +1292,34 @@ static inline bool CI_HasAddOverflowed(u32 x, u32 y, u32 result)
 
 CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_block_cache(*this)
 {
+}
+
+// Optimized addic_rc (Add Immediate Carrying and Record) - OPCD 13
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::AddicRcFast(PowerPC::PowerPCState& ppc_state,
+                                               const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  const u32 a = ppc_state.gpr[inst.RA];
+  const s32 imm = inst.SIMM_16;
+  const u64 result = static_cast<u64>(a) + static_cast<u64>(static_cast<s32>(imm));
+
+  ppc_state.gpr[inst.RD] = static_cast<u32>(result);
+  ppc_state.SetCarry(result > 0xFFFFFFFF);
+
+  // Record bit - update CR0 using local helper (now accessible)
+  CI_UpdateCR0(ppc_state, ppc_state.gpr[inst.RD]);
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[13];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
 }
 
 template <bool write_pc>
@@ -3213,6 +3502,8 @@ s32 CachedInterpreter::Interpret(PowerPC::PowerPCState& ppc_state,
       ++s_hot_stats.count_by_subop59[operands.inst.SUBOP5];
     else if (opcd == 63)
       ++s_hot_stats.count_by_subop63[operands.inst.SUBOP10];
+    else if (opcd == 4)
+      ++s_hot_stats.count_by_subop4[operands.inst.SUBOP10];
     else if (opcd == 59)
       ++s_hot_stats.count_by_subop59[operands.inst.SUBOP5];
     else if (opcd == 63)
@@ -3236,6 +3527,8 @@ s32 CachedInterpreter::Interpret(PowerPC::PowerPCState& ppc_state,
         s_hot_stats.ns_by_subop59[operands.inst.SUBOP5] += dt;
       else if (opcd == 63)
         s_hot_stats.ns_by_subop63[operands.inst.SUBOP10] += dt;
+      else if (opcd == 4)
+        s_hot_stats.ns_by_subop4[operands.inst.SUBOP10] += dt;
       else if (opcd == 59)
         s_hot_stats.ns_by_subop59[operands.inst.SUBOP5] += dt;
       else if (opcd == 63)
@@ -4533,6 +4826,57 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 Write(op.canEndBlock ? CallbackCast(FcmpuFast<true>) : CallbackCast(FcmpuFast<false>), operands);
                 fast_emitted = true;
               }
+            }
+#if defined(__aarch64__)
+            else if (opcd == 4) // Paired Single operations
+            {
+              const u32 sub = op.inst.SUBOP10;
+              if (sub == 21) // ps_add
+              {
+                Write(op.canEndBlock ? CallbackCast(PsAddFast<true>) : CallbackCast(PsAddFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 20) // ps_sub
+              {
+                Write(op.canEndBlock ? CallbackCast(PsSubFast<true>) : CallbackCast(PsSubFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 25) // ps_mul
+              {
+                Write(op.canEndBlock ? CallbackCast(PsMulFast<true>) : CallbackCast(PsMulFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 29) // ps_madd
+              {
+                Write(op.canEndBlock ? CallbackCast(PsMaddFast<true>) : CallbackCast(PsMaddFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 528) // ps_merge00
+              {
+                Write(op.canEndBlock ? CallbackCast(PsMerge00Fast<true>) : CallbackCast(PsMerge00Fast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 560) // ps_merge01
+              {
+                Write(op.canEndBlock ? CallbackCast(PsMerge01Fast<true>) : CallbackCast(PsMerge01Fast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 592) // ps_merge10
+              {
+                Write(op.canEndBlock ? CallbackCast(PsMerge10Fast<true>) : CallbackCast(PsMerge10Fast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 624) // ps_merge11
+              {
+                Write(op.canEndBlock ? CallbackCast(PsMerge11Fast<true>) : CallbackCast(PsMerge11Fast<false>), operands);
+                fast_emitted = true;
+              }
+            }
+#endif
+            else if (opcd == 13) // addic_rc
+            {
+              Write(op.canEndBlock ? CallbackCast(AddicRcFast<true>) : CallbackCast(AddicRcFast<false>), operands);
+              fast_emitted = true;
             }
 
             if (!fast_emitted)

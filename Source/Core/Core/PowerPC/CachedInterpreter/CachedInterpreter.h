@@ -122,6 +122,9 @@ public:
     // Counts/time for SUBOP10 when OPCD==63 (0..1023)
     u64 count_by_subop63[1024] = {};
     u64 ns_by_subop63[1024] = {};
+    // Counts/time for SUBOP10 when OPCD==4 (Paired Single) (0..1023)
+    u64 count_by_subop4[1024] = {};
+    u64 ns_by_subop4[1024] = {};
   };
 
 public:
@@ -233,6 +236,31 @@ private:
   DOL_HOT static s32 FnmaddsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=31
   template <bool write_pc>
   DOL_HOT static s32 FnmsubsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=28 (if used)
+
+#if defined(__aarch64__)
+  // ARM NEON optimized Paired Single operations - OPCD 4
+  template <bool write_pc>
+  DOL_HOT static s32 PsAddFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 21
+  template <bool write_pc>
+  DOL_HOT static s32 PsSubFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 20
+  template <bool write_pc>
+  DOL_HOT static s32 PsMulFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 25
+  template <bool write_pc>
+  DOL_HOT static s32 PsMaddFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP 29
+  template <bool write_pc>
+  DOL_HOT static s32 PsMerge00Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP 528
+  template <bool write_pc>
+  DOL_HOT static s32 PsMerge01Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP 560
+  template <bool write_pc>
+  DOL_HOT static s32 PsMerge10Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP 592
+  template <bool write_pc>
+  DOL_HOT static s32 PsMerge11Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP 624
+#endif
+
+  // Optimized integer operations
+  template <bool write_pc>
+  DOL_HOT static s32 AddicRcFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // OPCD 13
+
   // Fast FP ops (double/misc) - OPCD 63 using SUBOP10
   template <bool write_pc>
   DOL_HOT static s32 FctiwzxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=15
