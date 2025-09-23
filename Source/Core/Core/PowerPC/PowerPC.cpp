@@ -24,6 +24,7 @@
 #include "Core/HW/SystemTimers.h"
 #include "Core/Host.h"
 #include "Core/PowerPC/CPUCoreBase.h"
+#include <cstdlib>
 #include "Core/PowerPC/GDBStub.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
 #include "Core/PowerPC/JitInterface.h"
@@ -196,6 +197,11 @@ void PowerPCManager::InitializeCPUCore(CPUCore cpu_core)
   // it is used on boot and code window independently.
   auto& interpreter = m_system.GetInterpreter();
   interpreter.Init();
+
+  // Allow forcing Cached Interpreter via environment for debugging/testing:
+  // Set DOLPHIN_FORCE_CI=1 in the app environment to bypass JIT detection.
+  if (const char* env = std::getenv("DOLPHIN_FORCE_CI"); env && env[0] == '1')
+    cpu_core = CPUCore::CachedInterpreter;
 
   INFO_LOG_FMT(POWERPC, "InitializeCPUCore: requested core {}", static_cast<int>(cpu_core));
 
