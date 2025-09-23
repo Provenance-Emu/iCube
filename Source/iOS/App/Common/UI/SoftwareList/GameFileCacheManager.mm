@@ -25,11 +25,9 @@ static dispatch_queue_t GameFileCacheQueue() {
 + (GameFileCacheManager*)sharedManager {
   static dispatch_once_t _onceToken = 0;
   static GameFileCacheManager* _sharedManager = nil;
-  static dispatch_queue_t _cacheQueue = nil;
 
   dispatch_once(&_onceToken, ^{
     _sharedManager = [[self alloc] init];
-    _cacheQueue = dispatch_queue_create("org.dolphin-ios.gamefilecache", DISPATCH_QUEUE_SERIAL);
   });
 
   return _sharedManager;
