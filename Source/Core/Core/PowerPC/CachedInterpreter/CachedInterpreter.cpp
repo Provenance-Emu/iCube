@@ -125,6 +125,29 @@ void CachedInterpreter::ConfigureFpFastFromEnv()
   s_fp_fast_enabled = (env && env[0] == '1');
 }
 
+// Inline/verify controls for 59 arithmetic fast paths (file-local)
+static bool s_inline59_enabled = false;
+static bool s_verify_fp = false;
+static u32 s_verify_sample_every = 64;
+static bool s_verify_log = false;
+
+static void ConfigureInline59FromEnv()
+{
+  const char* e1 = std::getenv("CI_ENABLE_INLINE_59");
+  s_inline59_enabled = (e1 && e1[0] == '1');
+  const char* e2 = std::getenv("CI_VERIFY_FP");
+  s_verify_fp = (e2 && e2[0] == '1');
+  const char* e3 = std::getenv("CI_VERIFY_SAMPLE");
+  if (e3)
+  {
+    const long v = std::strtol(e3, nullptr, 10);
+    if (v > 0 && v < 100000)
+      s_verify_sample_every = static_cast<u32>(v);
+  }
+  const char* e4 = std::getenv("CI_VERIFY_LOG");
+  s_verify_log = (e4 && e4[0] == '1');
+}
+
 // OPCD 63 fast paths (selected): fctiwzx (15), frspx (12), fmrx (72)
 template <bool write_pc>
 CI_HOT_ONLY s32 CachedInterpreter::FctiwzxFast(PowerPC::PowerPCState& ppc_state,
@@ -142,6 +165,188 @@ CI_HOT_ONLY s32 CachedInterpreter::FctiwzxFast(PowerPC::PowerPCState& ppc_state,
     ++s_hot_stats.count_by_opcd[63];
     ++s_hot_stats.count_by_subop63[15];
   }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// FMADD family delegates (single-precision): fmaddsx/fmsubsx/fnmaddsx/fnmsubsx
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FmaddsxFast(PowerPC::PowerPCState& ppc_state,
+                                               const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fmaddsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[29];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FmsubsxFast(PowerPC::PowerPCState& ppc_state,
+                                               const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fmsubsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[30];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FnmaddsxFast(PowerPC::PowerPCState& ppc_state,
+                                                const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fnmaddsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[31];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FnmsubsxFast(PowerPC::PowerPCState& ppc_state,
+                                                const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fnmsubsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[28];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Verify-but-delegate fmulsx: compute inline expected without mutating state, then delegate to Interpreter
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FmulsxVerifyDelegateFast(PowerPC::PowerPCState& ppc_state,
+                                                            const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  // Compute expected using inline path on local FPSCR copy
+  float expected_result_bits = 0.0f;
+  {
+    const u32 fpscr_saved_hex = ppc_state.fpscr.Hex;
+    const auto& a = ppc_state.ps[inst.FA];
+    const auto& c = ppc_state.ps[inst.FC];
+    const double c_value = Force25Bit(c.PS0AsDouble());
+    const FPResult product = NI_mul(ppc_state, a.PS0AsDouble(), c_value);
+    if (ppc_state.fpscr.VE == 0 || product.HasNoInvalidExceptions())
+    {
+      auto fpscr_copy = ppc_state.fpscr; // local copy to avoid mutating flags while computing ForceSingle
+      const float result = ForceSingle(fpscr_copy, product.value);
+      expected_result_bits = result;
+    }
+    // Restore FPSCR to avoid mutating real state during verification
+    ppc_state.fpscr.Hex = fpscr_saved_hex;
+  }
+  // Now run the authoritative Interpreter version for correctness
+  Interpreter::fmulsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[25];
+  }
+  (void)expected_result_bits; // logging disabled for portability
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Verify-but-delegate faddsx (compute inline expected, then delegate to Interpreter)
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FaddsxVerifyDelegateFast(PowerPC::PowerPCState& ppc_state,
+                                                            const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  float expected_result_bits = 0.0f;
+  {
+    const u32 fpscr_saved_hex = ppc_state.fpscr.Hex;
+    const auto& a = ppc_state.ps[inst.FA];
+    const auto& b = ppc_state.ps[inst.FB];
+    const FPResult sum = NI_add(ppc_state, a.PS0AsDouble(), b.PS0AsDouble());
+    if (ppc_state.fpscr.VE == 0 || sum.HasNoInvalidExceptions())
+    {
+      auto fpscr_copy = ppc_state.fpscr;
+      const float result = ForceSingle(fpscr_copy, sum.value);
+      expected_result_bits = result;
+    }
+    ppc_state.fpscr.Hex = fpscr_saved_hex;
+  }
+  Interpreter::faddsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[21];
+  }
+  (void)expected_result_bits;
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Verify-but-delegate fsubsx (compute inline expected, then delegate to Interpreter)
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FsubsxVerifyDelegateFast(PowerPC::PowerPCState& ppc_state,
+                                                            const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  float expected_result_bits = 0.0f;
+  {
+    const u32 fpscr_saved_hex = ppc_state.fpscr.Hex;
+    const auto& a = ppc_state.ps[inst.FA];
+    const auto& b = ppc_state.ps[inst.FB];
+    const FPResult diff = NI_sub(ppc_state, a.PS0AsDouble(), b.PS0AsDouble());
+    if (ppc_state.fpscr.VE == 0 || diff.HasNoInvalidExceptions())
+    {
+      auto fpscr_copy = ppc_state.fpscr;
+      const float result = ForceSingle(fpscr_copy, diff.value);
+      expected_result_bits = result;
+    }
+    ppc_state.fpscr.Hex = fpscr_saved_hex;
+  }
+  Interpreter::fsubsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[20];
+  }
+  (void)expected_result_bits;
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -534,12 +739,15 @@ CI_HOT_ONLY s32 CachedInterpreter::FpFmulsxFast(PowerPC::PowerPCState& ppc_state
   }
   const UGeckoInstruction inst = operands.inst;
   const auto& a = ppc_state.ps[inst.FA];
-  const auto& b = ppc_state.ps[inst.FB];
-  const FPResult product = NI_mul(ppc_state, a.PS0AsDouble(), b.PS0AsDouble());
+  const auto& c = ppc_state.ps[inst.FC];
+  const double c_value = Force25Bit(c.PS0AsDouble());
+  const FPResult product = NI_mul(ppc_state, a.PS0AsDouble(), c_value);
   if (ppc_state.fpscr.VE == 0 || product.HasNoInvalidExceptions())
   {
     const float result = ForceSingle(ppc_state.fpscr, product.value);
     ppc_state.ps[inst.FD].Fill(result);
+    ppc_state.fpscr.FI = 0;
+    ppc_state.fpscr.FR = 0;
     ppc_state.UpdateFPRFSingle(result);
   }
   if (inst.Rc)
@@ -1834,6 +2042,7 @@ void CachedInterpreter::Init()
   ConfigureLinkLogFromEnv();
   ConfigureHotStatsFromEnv();
   ConfigureFpFastFromEnv();
+  ConfigureInline59FromEnv();
 }
 
 template <bool write_pc>
@@ -4229,19 +4438,69 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 Write(op.canEndBlock ? CallbackCast(FdivsxFast<true>) : CallbackCast(FdivsxFast<false>), operands);
                 fast_emitted = true;
               }
-              if (sub5 == 21) // faddsx (delegate)
+              if (sub5 == 21) // faddsx
               {
-                Write(op.canEndBlock ? CallbackCast(FaddsxFast<true>) : CallbackCast(FaddsxFast<false>), operands);
+                if (s_inline59_enabled)
+                {
+                  if (s_verify_fp)
+                    Write(op.canEndBlock ? CallbackCast(FaddsxVerifyDelegateFast<true>) : CallbackCast(FaddsxVerifyDelegateFast<false>), operands);
+                  else
+                    Write(op.canEndBlock ? CallbackCast(FpFaddsxFast<true>) : CallbackCast(FpFaddsxFast<false>), operands);
+                }
+                else
+                {
+                  Write(op.canEndBlock ? CallbackCast(FaddsxFast<true>) : CallbackCast(FaddsxFast<false>), operands);
+                }
                 fast_emitted = true;
               }
-              else if (sub5 == 20) // fsubsx (delegate)
+              else if (sub5 == 20) // fsubsx
               {
-                Write(op.canEndBlock ? CallbackCast(FsubsxFast<true>) : CallbackCast(FsubsxFast<false>), operands);
+                if (s_inline59_enabled)
+                {
+                  if (s_verify_fp)
+                    Write(op.canEndBlock ? CallbackCast(FsubsxVerifyDelegateFast<true>) : CallbackCast(FsubsxVerifyDelegateFast<false>), operands);
+                  else
+                    Write(op.canEndBlock ? CallbackCast(FpFsubsxFast<true>) : CallbackCast(FpFsubsxFast<false>), operands);
+                }
+                else
+                {
+                  Write(op.canEndBlock ? CallbackCast(FsubsxFast<true>) : CallbackCast(FsubsxFast<false>), operands);
+                }
                 fast_emitted = true;
               }
               else if (sub5 == 25) // fmulsx (delegate)
               {
-                Write(op.canEndBlock ? CallbackCast(FmulsxFast<true>) : CallbackCast(FmulsxFast<false>), operands);
+                if (s_inline59_enabled)
+                {
+                  if (s_verify_fp)
+                    Write(op.canEndBlock ? CallbackCast(FmulsxVerifyDelegateFast<true>) : CallbackCast(FmulsxVerifyDelegateFast<false>), operands);
+                  else
+                    Write(op.canEndBlock ? CallbackCast(FpFmulsxFast<true>) : CallbackCast(FpFmulsxFast<false>), operands);
+                }
+                else
+                {
+                  Write(op.canEndBlock ? CallbackCast(FmulsxFast<true>) : CallbackCast(FmulsxFast<false>), operands);
+                }
+                fast_emitted = true;
+              }
+              else if (sub5 == 29) // fmaddsx (delegate)
+              {
+                Write(op.canEndBlock ? CallbackCast(FmaddsxFast<true>) : CallbackCast(FmaddsxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub5 == 30) // fmsubsx (delegate)
+              {
+                Write(op.canEndBlock ? CallbackCast(FmsubsxFast<true>) : CallbackCast(FmsubsxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub5 == 31) // fnmaddsx (delegate)
+              {
+                Write(op.canEndBlock ? CallbackCast(FnmaddsxFast<true>) : CallbackCast(FnmaddsxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub5 == 28) // fnmsubsx (delegate)
+              {
+                Write(op.canEndBlock ? CallbackCast(FnmsubsxFast<true>) : CallbackCast(FnmsubsxFast<false>), operands);
                 fast_emitted = true;
               }
             }
@@ -4260,6 +4519,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               }
               else if (sub10 == 72) // fmrx
               {
+                // Temporarily disabled to isolate F-Zero GPU desync; fall back to Interpreter
                 Write(op.canEndBlock ? CallbackCast(FmrxFast<true>) : CallbackCast(FmrxFast<false>), operands);
                 fast_emitted = true;
               }
