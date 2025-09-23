@@ -799,6 +799,163 @@ CI_HOT_ONLY s32 CachedInterpreter::PsAddFast(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// ps_sel (23): per lane select based on (a >= -0.0), choose c when true, else b
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsSelFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+  const auto& c = ppc_state.ps[inst.FC];
+
+  float32x2_t va = {static_cast<float>(a.PS0AsDouble()), static_cast<float>(a.PS1AsDouble())};
+  float32x2_t vb = {static_cast<float>(b.PS0AsDouble()), static_cast<float>(b.PS1AsDouble())};
+  float32x2_t vc = {static_cast<float>(c.PS0AsDouble()), static_cast<float>(c.PS1AsDouble())};
+
+  float32x2_t vnegzero = vdup_n_f32(-0.0f);
+  uint32x2_t mask = vcge_f32(va, vnegzero); // a >= -0.0f ? 0xFFFFFFFF : 0
+  float32x2_t result = vbsl_f32(mask, vc, vb);
+
+  ppc_state.ps[inst.FD].SetBoth(vget_lane_f32(result, 0), vget_lane_f32(result, 1));
+  ppc_state.UpdateFPRFSingle(vget_lane_f32(result, 0));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[23];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// ps_neg (40): FD = -FB
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsNegFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& b = ppc_state.ps[inst.FB];
+  float32x2_t vb = {static_cast<float>(b.PS0AsDouble()), static_cast<float>(b.PS1AsDouble())};
+  float32x2_t result = vneg_f32(vb);
+
+  ppc_state.ps[inst.FD].SetBoth(vget_lane_f32(result, 0), vget_lane_f32(result, 1));
+  ppc_state.UpdateFPRFSingle(vget_lane_f32(result, 0));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[40];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// ps_abs (264): FD = abs(FB)
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsAbsFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& b = ppc_state.ps[inst.FB];
+  float32x2_t vb = {static_cast<float>(b.PS0AsDouble()), static_cast<float>(b.PS1AsDouble())};
+  float32x2_t result = vabs_f32(vb);
+
+  ppc_state.ps[inst.FD].SetBoth(vget_lane_f32(result, 0), vget_lane_f32(result, 1));
+  ppc_state.UpdateFPRFSingle(vget_lane_f32(result, 0));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[264];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// ps_nabs (136): FD = -abs(FB)
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsNabsFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& b = ppc_state.ps[inst.FB];
+  float32x2_t vb = {static_cast<float>(b.PS0AsDouble()), static_cast<float>(b.PS1AsDouble())};
+  float32x2_t result = vneg_f32(vabs_f32(vb));
+
+  ppc_state.ps[inst.FD].SetBoth(vget_lane_f32(result, 0), vget_lane_f32(result, 1));
+  ppc_state.UpdateFPRFSingle(vget_lane_f32(result, 0));
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[136];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// ps_mr (72): FD = FB
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::PsMrFast(PowerPC::PowerPCState& ppc_state,
+                                            const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& b = ppc_state.ps[inst.FB];
+  const float ps0 = static_cast<float>(b.PS0AsDouble());
+  const float ps1 = static_cast<float>(b.PS1AsDouble());
+  ppc_state.ps[inst.FD].SetBoth(ps0, ps1);
+  ppc_state.UpdateFPRFSingle(ps0);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[4];
+    ++s_hot_stats.count_by_subop4[72];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 template <bool write_pc>
 CI_HOT_ONLY s32 CachedInterpreter::PsMulFast(PowerPC::PowerPCState& ppc_state,
                                              const InterpretOperands& operands)
@@ -1460,6 +1617,74 @@ CI_HOT_ONLY s32 CachedInterpreter::FnegxFast(PowerPC::PowerPCState& ppc_state,
   {
     ++s_hot_stats.count_by_opcd[63];
     ++s_hot_stats.count_by_subop63[40];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// fabsx (264): FD = |FB|
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FabsxFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& b = ppc_state.ps[inst.FB];
+  double b_val = b.PS0AsDouble();
+  float64x1_t vb = vld1_f64(&b_val);
+  float64x1_t result = vabs_f64(vb);
+
+  double result_val;
+  vst1_f64(&result_val, result);
+
+  ppc_state.ps[inst.FD].SetBoth(result_val, result_val);
+  ppc_state.UpdateFPRFDouble(result_val);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[264];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// fnabsx (136): FD = -|FB|
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FnabsxFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+
+  const auto& b = ppc_state.ps[inst.FB];
+  double b_val = b.PS0AsDouble();
+  float64x1_t vb = vld1_f64(&b_val);
+  float64x1_t result = vneg_f64(vabs_f64(vb));
+
+  double result_val;
+  vst1_f64(&result_val, result);
+
+  ppc_state.ps[inst.FD].SetBoth(result_val, result_val);
+  ppc_state.UpdateFPRFDouble(result_val);
+
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[136];
   }
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -3924,7 +4149,7 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
   if constexpr (profiled)
     JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
   // Periodically print hot-instruction stats if enabled
-  MaybeLogHotStats();
+  // MaybeLogHotStats();
   return 0;
 }
 
@@ -5298,6 +5523,16 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 Write(op.canEndBlock ? CallbackCast(FnegxFast<true>) : CallbackCast(FnegxFast<false>), operands);
                 fast_emitted = true;
               }
+              else if (sub10 == 264) // fabsx
+              {
+                Write(op.canEndBlock ? CallbackCast(FabsxFast<true>) : CallbackCast(FabsxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub10 == 136) // fnabsx
+              {
+                Write(op.canEndBlock ? CallbackCast(FnabsxFast<true>) : CallbackCast(FnabsxFast<false>), operands);
+                fast_emitted = true;
+              }
 #endif
             }
 #if defined(__aarch64__)
@@ -5362,6 +5597,31 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               else if (sub == 15) // ps_madds1
               {
                 Write(op.canEndBlock ? CallbackCast(PsMadds1Fast<true>) : CallbackCast(PsMadds1Fast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 23) // ps_sel
+              {
+                Write(op.canEndBlock ? CallbackCast(PsSelFast<true>) : CallbackCast(PsSelFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 40) // ps_neg
+              {
+                Write(op.canEndBlock ? CallbackCast(PsNegFast<true>) : CallbackCast(PsNegFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 72) // ps_mr
+              {
+                Write(op.canEndBlock ? CallbackCast(PsMrFast<true>) : CallbackCast(PsMrFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 136) // ps_nabs
+              {
+                Write(op.canEndBlock ? CallbackCast(PsNabsFast<true>) : CallbackCast(PsNabsFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 264) // ps_abs
+              {
+                Write(op.canEndBlock ? CallbackCast(PsAbsFast<true>) : CallbackCast(PsAbsFast<false>), operands);
                 fast_emitted = true;
               }
             }

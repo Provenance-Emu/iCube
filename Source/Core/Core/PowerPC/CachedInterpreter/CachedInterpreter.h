@@ -266,6 +266,18 @@ private:
   template <bool write_pc>
   DOL_HOT static s32 PsMadds1Fast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP 15
 
+  // Newly added Paired Single (OPCD 4) fast paths
+  template <bool write_pc>
+  DOL_HOT static s32 PsSelFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 23
+  template <bool write_pc>
+  DOL_HOT static s32 PsNegFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 40
+  template <bool write_pc>
+  DOL_HOT static s32 PsAbsFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 264
+  template <bool write_pc>
+  DOL_HOT static s32 PsNabsFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 136
+  template <bool write_pc>
+  DOL_HOT static s32 PsMrFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);      // SUBOP 72
+
   // ARM NEON optimized integer operations - OPCD 31
   template <bool write_pc>
   DOL_HOT static s32 AddxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);      // SUBOP 266
@@ -285,6 +297,11 @@ private:
   DOL_HOT static s32 FmaddxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 29
   template <bool write_pc>
   DOL_HOT static s32 FnegxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 40
+  // Newly added scalar double helpers
+  template <bool write_pc>
+  DOL_HOT static s32 FabsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 264
+  template <bool write_pc>
+  DOL_HOT static s32 FnabsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 136
 #endif
 
   // Optimized integer operations
