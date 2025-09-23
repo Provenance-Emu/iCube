@@ -4100,6 +4100,16 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 Write(op.canEndBlock ? CallbackCast(FctiwzxFast<true>) : CallbackCast(FctiwzxFast<false>), operands);
                 fast_emitted = true;
               }
+              else if (sub10 == 12) // frspx
+              {
+                Write(op.canEndBlock ? CallbackCast(FrspxFast<true>) : CallbackCast(FrspxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub10 == 72) // fmrx
+              {
+                Write(op.canEndBlock ? CallbackCast(FmrxFast<true>) : CallbackCast(FmrxFast<false>), operands);
+                fast_emitted = true;
+              }
             }
 
             if (!fast_emitted)
