@@ -145,6 +145,103 @@ CI_HOT_ONLY s32 CachedInterpreter::FctiwzxFast(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// Safer delegate fast paths for OPCD 59 add/sub (single-precision)
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FaddsxFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::faddsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[21];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FsubsxFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fsubsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[20];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FcmpoFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fcmpo(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[32];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FcmpuFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fcmpu(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[0];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FselxFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+  const auto& c = ppc_state.ps[inst.FC];
+  ppc_state.ps[inst.FD].SetPS0((a.PS0AsDouble() >= -0.0) ? c.PS0AsDouble() : b.PS0AsDouble());
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[20];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 template <bool write_pc>
 CI_HOT_ONLY s32 CachedInterpreter::FrspxFast(PowerPC::PowerPCState& ppc_state,
                                              const InterpretOperands& operands)
@@ -4090,7 +4187,17 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             }
             else if (opcd == 59)
             {
-              // Temporarily disabled: fall back to generic interpreter for safety.
+              const u32 sub5 = op.inst.SUBOP5;
+              if (sub5 == 21) // faddsx (delegate)
+              {
+                Write(op.canEndBlock ? CallbackCast(FaddsxFast<true>) : CallbackCast(FaddsxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub5 == 20) // fsubsx (delegate)
+              {
+                Write(op.canEndBlock ? CallbackCast(FsubsxFast<true>) : CallbackCast(FsubsxFast<false>), operands);
+                fast_emitted = true;
+              }
             }
             else if (opcd == 63)
             {
@@ -4108,6 +4215,16 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               else if (sub10 == 72) // fmrx
               {
                 Write(op.canEndBlock ? CallbackCast(FmrxFast<true>) : CallbackCast(FmrxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub10 == 32) // fcmpo
+              {
+                Write(op.canEndBlock ? CallbackCast(FcmpoFast<true>) : CallbackCast(FcmpoFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub10 == 0) // fcmpu
+              {
+                Write(op.canEndBlock ? CallbackCast(FcmpuFast<true>) : CallbackCast(FcmpuFast<false>), operands);
                 fast_emitted = true;
               }
             }
