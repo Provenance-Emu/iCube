@@ -200,7 +200,7 @@ CI_HOT_ONLY s32 CachedInterpreter::FmsubsxFast(PowerPC::PowerPCState& ppc_state,
   if (s_hot_enabled)
   {
     ++s_hot_stats.count_by_opcd[59];
-    ++s_hot_stats.count_by_subop59[30];
+    ++s_hot_stats.count_by_subop59[28];
   }
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -236,7 +236,7 @@ CI_HOT_ONLY s32 CachedInterpreter::FnmsubsxFast(PowerPC::PowerPCState& ppc_state
   if (s_hot_enabled)
   {
     ++s_hot_stats.count_by_opcd[59];
-    ++s_hot_stats.count_by_subop59[28];
+    ++s_hot_stats.count_by_subop59[30];
   }
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -4488,7 +4488,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 Write(op.canEndBlock ? CallbackCast(FmaddsxFast<true>) : CallbackCast(FmaddsxFast<false>), operands);
                 fast_emitted = true;
               }
-              else if (sub5 == 30) // fmsubsx (delegate)
+              else if (sub5 == 28) // fmsubsx (delegate)
               {
                 Write(op.canEndBlock ? CallbackCast(FmsubsxFast<true>) : CallbackCast(FmsubsxFast<false>), operands);
                 fast_emitted = true;
@@ -4498,7 +4498,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 Write(op.canEndBlock ? CallbackCast(FnmaddsxFast<true>) : CallbackCast(FnmaddsxFast<false>), operands);
                 fast_emitted = true;
               }
-              else if (sub5 == 28) // fnmsubsx (delegate)
+              else if (sub5 == 30) // fnmsubsx (delegate)
               {
                 Write(op.canEndBlock ? CallbackCast(FnmsubsxFast<true>) : CallbackCast(FnmsubsxFast<false>), operands);
                 fast_emitted = true;
