@@ -433,27 +433,31 @@ bool CommandProcessorManager::IsInterruptWaiting() const
 
 void CommandProcessorManager::SetCPStatusFromGPU()
 {
+  // Cache frequently-read atomics locally to avoid repeated loads
+  const u32 read_ptr = m_fifo.CPReadPointer.load(std::memory_order_relaxed);
+  const u32 bp_ptr = m_fifo.CPBreakpoint.load(std::memory_order_relaxed);
+  const u32 bp_enable = m_fifo.bFF_BPEnable.load(std::memory_order_relaxed);
+  bool breakpoint = m_fifo.bFF_Breakpoint.load(std::memory_order_relaxed);
+
   // breakpoint
-  const bool breakpoint = m_fifo.bFF_Breakpoint.load(std::memory_order_relaxed);
-  if (m_fifo.bFF_BPEnable.load(std::memory_order_relaxed) != 0)
+  if (bp_enable != 0)
   {
-    if (m_fifo.CPBreakpoint.load(std::memory_order_relaxed) ==
-        m_fifo.CPReadPointer.load(std::memory_order_relaxed))
+    if (bp_ptr == read_ptr)
     {
       if (!breakpoint)
       {
-        DEBUG_LOG_FMT(COMMANDPROCESSOR, "Hit breakpoint at {}",
-                      m_fifo.CPReadPointer.load(std::memory_order_relaxed));
+        DEBUG_LOG_FMT(COMMANDPROCESSOR, "Hit breakpoint at {}", read_ptr);
         m_fifo.bFF_Breakpoint.store(1, std::memory_order_relaxed);
+        breakpoint = true;
       }
     }
     else
     {
       if (breakpoint)
       {
-        DEBUG_LOG_FMT(COMMANDPROCESSOR, "Cleared breakpoint at {}",
-                      m_fifo.CPReadPointer.load(std::memory_order_relaxed));
+        DEBUG_LOG_FMT(COMMANDPROCESSOR, "Cleared breakpoint at {}", read_ptr);
         m_fifo.bFF_Breakpoint.store(0, std::memory_order_relaxed);
+        breakpoint = false;
       }
     }
   }
@@ -461,30 +465,31 @@ void CommandProcessorManager::SetCPStatusFromGPU()
   {
     if (breakpoint)
     {
-      DEBUG_LOG_FMT(COMMANDPROCESSOR, "Cleared breakpoint at {}",
-                    m_fifo.CPReadPointer.load(std::memory_order_relaxed));
+      DEBUG_LOG_FMT(COMMANDPROCESSOR, "Cleared breakpoint at {}", read_ptr);
       m_fifo.bFF_Breakpoint = false;
+      breakpoint = false;
     }
   }
 
   // overflow & underflow check
-  m_fifo.bFF_HiWatermark.store(
-      (m_fifo.CPReadWriteDistance.load(std::memory_order_relaxed) > m_fifo.CPHiWatermark),
-      std::memory_order_relaxed);
-  m_fifo.bFF_LoWatermark.store(
-      (m_fifo.CPReadWriteDistance.load(std::memory_order_relaxed) < m_fifo.CPLoWatermark),
-      std::memory_order_relaxed);
+  const u32 dist = m_fifo.CPReadWriteDistance.load(std::memory_order_relaxed);
+  const bool hi = (dist > m_fifo.CPHiWatermark);
+  const bool lo = (dist < m_fifo.CPLoWatermark);
+  m_fifo.bFF_HiWatermark.store(hi, std::memory_order_relaxed);
+  m_fifo.bFF_LoWatermark.store(lo, std::memory_order_relaxed);
 
-  bool bpInt = m_fifo.bFF_Breakpoint.load(std::memory_order_relaxed) &&
-               m_fifo.bFF_BPInt.load(std::memory_order_relaxed);
-  bool ovfInt = m_fifo.bFF_HiWatermark.load(std::memory_order_relaxed) &&
-                m_fifo.bFF_HiWatermarkInt.load(std::memory_order_relaxed);
-  bool undfInt = m_fifo.bFF_LoWatermark.load(std::memory_order_relaxed) &&
-                 m_fifo.bFF_LoWatermarkInt.load(std::memory_order_relaxed);
+  const bool bp_int_en = m_fifo.bFF_BPInt.load(std::memory_order_relaxed);
+  const bool hi_int_en = m_fifo.bFF_HiWatermarkInt.load(std::memory_order_relaxed);
+  const bool lo_int_en = m_fifo.bFF_LoWatermarkInt.load(std::memory_order_relaxed);
 
-  bool interrupt = (bpInt || ovfInt || undfInt) && m_cp_ctrl_reg.GPReadEnable;
+  const bool bpInt = breakpoint && bp_int_en;
+  const bool ovfInt = hi && hi_int_en;
+  const bool undfInt = lo && lo_int_en;
 
-  if (interrupt != m_interrupt_set.IsSet() && !m_interrupt_waiting.IsSet())
+  const bool interrupt = (bpInt || ovfInt || undfInt) && m_cp_ctrl_reg.GPReadEnable;
+
+  const bool interrupt_set = m_interrupt_set.IsSet();
+  if (interrupt != interrupt_set && !m_interrupt_waiting.IsSet())
   {
     const u64 userdata = interrupt ? 1 : 0;
     if (IsOnThread(m_system))
