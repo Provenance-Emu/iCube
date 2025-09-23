@@ -766,6 +766,8 @@ bool CachedInterpreter::s_hot_enabled = false;
 u32 CachedInterpreter::s_hot_sample_every = 32; // default: sample 1 out of 32 instructions
 u64 CachedInterpreter::s_hot_counter = 0;
 bool CachedInterpreter::s_fp_fast_enabled = false;
+static bool s_microops_enabled = true;
+static bool s_pic_ls_enabled = true;
 
 static inline u64 CI_NowNs()
 {
@@ -2029,6 +2031,13 @@ void CachedInterpreter::Init()
   jo.enableBlocklink = false;
   #endif
 
+  // Env override: allow disabling jump caching/block linking for debugging
+  if (const char* env = std::getenv("CI_DISABLE_JUMP_CACHE"))
+  {
+    if (env[0] == '1')
+      jo.enableBlocklink = false;
+  }
+
   m_block_cache.Init();
 
   code_block.m_stats = &js.st;
@@ -2039,6 +2048,22 @@ void CachedInterpreter::Init()
   ConfigureHotStatsFromEnv();
   ConfigureFpFastFromEnv();
   ConfigureInline59FromEnv();
+  // Configure micro-op emission from env (CI_DISABLE_MICRO_OPS=1 to disable)
+  {
+    if (const char* env = std::getenv("CI_DISABLE_MICRO_OPS"))
+    {
+      if (env[0] == '1')
+        s_microops_enabled = false;
+    }
+  }
+  // Configure PIC load/store fast paths (CI_DISABLE_PIC_LS=1 to disable)
+  {
+    if (const char* env = std::getenv("CI_DISABLE_PIC_LS"))
+    {
+      if (env[0] == '1')
+        s_pic_ls_enabled = false;
+    }
+  }
 }
 
 template <bool write_pc>
@@ -3418,6 +3443,29 @@ void CachedInterpreter::WriteEndBlock()
     return;
   }
 
+  // If block linking is disabled, emit a plain EndBlock instead of a link trampoline.
+  if (!jo.enableBlocklink)
+  {
+    if (IsProfilingEnabled())
+    {
+      EndBlockOperands<true> eops{};
+      eops.downcount = js.downcountAmount;
+      eops.num_load_stores = js.numLoadStoreInst;
+      eops.num_fp_inst = js.numFloatingPointInst;
+      eops.profile_data = js.curBlock->profile_data.get();
+      Write(EndBlock<true>, eops);
+    }
+    else
+    {
+      EndBlockOperands<false> eops{};
+      eops.downcount = js.downcountAmount;
+      eops.num_load_stores = js.numLoadStoreInst;
+      eops.num_fp_inst = js.numFloatingPointInst;
+      Write(EndBlock<false>, eops);
+    }
+    return;
+  }
+
   // Otherwise, emit a link trampoline which performs end-of-block accounting and optionally links
   // to the next block by returning a non-zero relative distance. If linking is disabled
   // or not yet patched, rel stays 0 and the dispatcher will exit the block as usual.
@@ -4329,10 +4377,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
             if (mop.count > 0)
             {
-              used_micro_ops = true;
-              Write(op.canEndBlock ? CallbackCast(ExecuteMicroOps<true>) :
-                                     CallbackCast(ExecuteMicroOps<false>),
-                    mop);
+              if (s_microops_enabled)
+              {
+                used_micro_ops = true;
+                Write(op.canEndBlock ? CallbackCast(ExecuteMicroOps<true>) :
+                                       CallbackCast(ExecuteMicroOps<false>),
+                      mop);
+              }
+              else
+              {
+                // Disable micro-ops: fall back to normal emission
+                mop.count = 0;
+              }
             }
           }
         }
@@ -4340,7 +4396,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         if (!emitted_const32 && !used_micro_ops)
         {
           // Use PIC fast path for load/store instructions when possible
-          if ((op.opinfo->flags & FL_LOADSTORE) != 0)
+          if (s_pic_ls_enabled && (op.opinfo->flags & FL_LOADSTORE) != 0)
           {
             auto& mm = m_system.GetMemory();
             const LoadStoreDFormPICOperands operands = {interpreter,
