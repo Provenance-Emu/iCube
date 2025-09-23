@@ -2214,9 +2214,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if ((ea & 0b11) != 0) [[unlikely]]
         break; // misaligned -> fallback
-      u64 raw64;
-      std::memcpy(&raw64, base_ptr + offset, sizeof(raw64));
-      const u64 be64 = Common::FromBigEndian(raw64);
+      const u32 hi = Common::FromBigEndian(*reinterpret_cast<const u32*>(base_ptr + offset));
+      const u32 lo = Common::FromBigEndian(*reinterpret_cast<const u32*>(base_ptr + offset + 4));
+      const u64 be64 = (static_cast<u64>(hi) << 32) | static_cast<u64>(lo);
       ppc_state.ps[inst.FD].SetPS0(be64);
       return sizeof(AnyCallback) + sizeof(operands);
     }
@@ -2224,9 +2224,9 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
     {
       if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
         break; // illegal or misaligned -> fallback
-      u64 raw64;
-      std::memcpy(&raw64, base_ptr + offset, sizeof(raw64));
-      const u64 be64 = Common::FromBigEndian(raw64);
+      const u32 hi = Common::FromBigEndian(*reinterpret_cast<const u32*>(base_ptr + offset));
+      const u32 lo = Common::FromBigEndian(*reinterpret_cast<const u32*>(base_ptr + offset + 4));
+      const u64 be64 = (static_cast<u64>(hi) << 32) | static_cast<u64>(lo);
       ppc_state.ps[inst.FD].SetPS0(be64);
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
@@ -2268,8 +2268,10 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
       __builtin_prefetch(base_ptr + offset, 1, 1);
       #endif
       const u64 val64 = ppc_state.ps[inst.FS].PS0AsU64();
-      const u64 raw64 = Common::swap64(val64);
-      std::memcpy(base_ptr + offset, &raw64, sizeof(raw64));
+      const u32 hi = static_cast<u32>(val64 >> 32);
+      const u32 lo = static_cast<u32>(val64);
+      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(hi);
+      *reinterpret_cast<u32*>(base_ptr + offset + 4) = Common::swap32(lo);
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 55: // stfdu (update)
@@ -2280,8 +2282,10 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
       __builtin_prefetch(base_ptr + offset, 1, 1);
       #endif
       const u64 val64 = ppc_state.ps[inst.FS].PS0AsU64();
-      const u64 raw64 = Common::swap64(val64);
-      std::memcpy(base_ptr + offset, &raw64, sizeof(raw64));
+      const u32 hi = static_cast<u32>(val64 >> 32);
+      const u32 lo = static_cast<u32>(val64);
+      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(hi);
+      *reinterpret_cast<u32*>(base_ptr + offset + 4) = Common::swap32(lo);
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
