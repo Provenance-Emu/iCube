@@ -215,10 +215,24 @@ private:
   template <bool write_pc>
   DOL_HOT static s32 FsubsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=20
   template <bool write_pc>
+  DOL_HOT static s32 FaddsxVerifyDelegateFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  template <bool write_pc>
+  DOL_HOT static s32 FsubsxVerifyDelegateFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  template <bool write_pc>
   DOL_HOT static s32 FmulsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=25
   template <bool write_pc>
+  DOL_HOT static s32 FmulsxVerifyDelegateFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // verify inline vs interpreter, then delegate
+  template <bool write_pc>
   DOL_HOT static s32 FdivsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP5=18
-
+  // FMADD family delegates (safe)
+  template <bool write_pc>
+  DOL_HOT static s32 FmaddsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP5=29
+  template <bool write_pc>
+  DOL_HOT static s32 FmsubsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP5=30
+  template <bool write_pc>
+  DOL_HOT static s32 FnmaddsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=31
+  template <bool write_pc>
+  DOL_HOT static s32 FnmsubsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=28 (if used)
   // Fast FP ops (double/misc) - OPCD 63 using SUBOP10
   template <bool write_pc>
   DOL_HOT static s32 FctiwzxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=15
