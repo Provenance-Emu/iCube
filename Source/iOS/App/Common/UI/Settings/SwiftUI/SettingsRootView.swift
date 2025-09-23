@@ -2876,27 +2876,49 @@ struct GraphicsHacksView: View {
   @State private var earlyXfbOutput: Bool = true
   @State private var skipDuplicateXFBs: Bool = true
   @State private var viDecimateInterlace: Bool = false
+  @State private var helpMessage: String = ""
+  @State private var showHelp: Bool = false
   var body: some View {
     List {
       Section(header: Text(L("General Hacks"))) {
-        Toggle(L("Enable EFB Access"), isOn: $efbAccess).onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) }
-        Toggle(L("Skip EFB Copy to RAM"), isOn: $skipEfbToRam).onChange(of: skipEfbToRam) { DOLConfigBridge.setGfxHackSkipEfbCopyToRam($0) }
-        Toggle(L("Skip XFB Copy to RAM"), isOn: $skipXfbToRam).onChange(of: skipXfbToRam) { DOLConfigBridge.setGfxHackSkipXfbCopyToRam($0) }
-        Toggle(L("Immediate XFB"), isOn: $immediateXfb).onChange(of: immediateXfb) { DOLConfigBridge.setGfxHackImmediateXfb($0) }
-        Toggle(L("Copy EFB Scaled"), isOn: $copyEfbScaled).onChange(of: copyEfbScaled) { DOLConfigBridge.setGfxHackCopyEfbScaled($0) }
-        Toggle(L("Early XFB Output"), isOn: $earlyXfbOutput).onChange(of: earlyXfbOutput) { DOLConfigBridge.setGfxHackEarlyXfbOutput($0) }
-        Toggle(L("Skip Duplicate XFBs"), isOn: $skipDuplicateXFBs).onChange(of: skipDuplicateXFBs) { DOLConfigBridge.setGfxHackSkipDuplicateXFBs($0) }
-        Toggle(L("Emulate EFB Format Changes"), isOn: $efbFormatChanges).onChange(of: efbFormatChanges) { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) }
-        Toggle(L("Vertex Rounding"), isOn: $vertexRounding).onChange(of: vertexRounding) { DOLConfigBridge.setGfxHackVertexRounding($0) }
-        Toggle(L("Force Progressive Scan"), isOn: $forceProgressive).onChange(of: forceProgressive) { DOLConfigBridge.setGfxHackForceProgressive($0) }
-        Toggle(L("Defer EFB Copies"), isOn: $deferEfbCopies).onChange(of: deferEfbCopies) { DOLConfigBridge.setGfxHackDeferEfbCopies($0) }
-        NavigationLink("\(L("VI Skip Mode")): \(viSkipLabel(viSkipMode))", destination: ViSkipModePicker(selected: $viSkipMode))
-          .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
-        Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling).onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
-        Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath).onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) } // Added closing brace here
-        /// Compute path for EFB/XFB; may improve performance but can break some games
-        Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb).onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
-        Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping).onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) }
+        Toggle(isOn: $efbAccess) { labelWithInfo(L("Enable EFB Access")) { helpMessage = helpTextEfbAccess(); showHelp = true } }
+          .onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) }
+        Toggle(isOn: $skipEfbToRam) { labelWithInfo(L("Skip EFB Copy to RAM")) { helpMessage = helpTextSkipEfbToRam(); showHelp = true } }
+          .onChange(of: skipEfbToRam) { DOLConfigBridge.setGfxHackSkipEfbCopyToRam($0) }
+        Toggle(isOn: $skipXfbToRam) { labelWithInfo(L("Skip XFB Copy to RAM")) { helpMessage = helpTextSkipXfbToRam(); showHelp = true } }
+          .onChange(of: skipXfbToRam) { DOLConfigBridge.setGfxHackSkipXfbCopyToRam($0) }
+        Toggle(isOn: $immediateXfb) { labelWithInfo(L("Immediate XFB")) { helpMessage = helpTextImmediateXfb(); showHelp = true } }
+          .onChange(of: immediateXfb) { DOLConfigBridge.setGfxHackImmediateXfb($0) }
+        Toggle(isOn: $copyEfbScaled) { labelWithInfo(L("Copy EFB Scaled")) { helpMessage = helpTextCopyEfbScaled(); showHelp = true } }
+          .onChange(of: copyEfbScaled) { DOLConfigBridge.setGfxHackCopyEfbScaled($0) }
+        Toggle(isOn: $earlyXfbOutput) { labelWithInfo(L("Early XFB Output")) { helpMessage = helpTextEarlyXfbOutput(); showHelp = true } }
+          .onChange(of: earlyXfbOutput) { DOLConfigBridge.setGfxHackEarlyXfbOutput($0) }
+        Toggle(isOn: $skipDuplicateXFBs) { labelWithInfo(L("Skip Duplicate XFBs")) { helpMessage = helpTextSkipDuplicateXFBs(); showHelp = true } }
+          .onChange(of: skipDuplicateXFBs) { DOLConfigBridge.setGfxHackSkipDuplicateXFBs($0) }
+        Toggle(isOn: $efbFormatChanges) { labelWithInfo(L("Emulate EFB Format Changes")) { helpMessage = helpTextEmulateEfbFormatChanges(); showHelp = true } }
+          .onChange(of: efbFormatChanges) { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) }
+        Toggle(isOn: $vertexRounding) { labelWithInfo(L("Vertex Rounding")) { helpMessage = helpTextVertexRounding(); showHelp = true } }
+          .onChange(of: vertexRounding) { DOLConfigBridge.setGfxHackVertexRounding($0) }
+        Toggle(isOn: $forceProgressive) { labelWithInfo(L("Force Progressive Scan")) { helpMessage = helpTextForceProgressive(); showHelp = true } }
+          .onChange(of: forceProgressive) { DOLConfigBridge.setGfxHackForceProgressive($0) }
+        Toggle(isOn: $deferEfbCopies) { labelWithInfo(L("Defer EFB Copies")) { helpMessage = helpTextDeferEfbCopies(); showHelp = true } }
+          .onChange(of: deferEfbCopies) { DOLConfigBridge.setGfxHackDeferEfbCopies($0) }
+        NavigationLink(destination: ViSkipModePicker(selected: $viSkipMode)) {
+          Text("\(L("VI Skip Mode")): \(viSkipLabel(viSkipMode))")
+            .overlay(alignment: .trailing) {
+              Button { helpMessage = helpTextViSkipMode(); showHelp = true } label: { Image(systemName: "info.circle") }
+                .buttonStyle(.plain)
+            }
+        }
+        .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
+        Toggle(isOn: $fastTextureSampling) { labelWithInfo(L("Fast Texture Sampling")) { helpMessage = helpTextFastTextureSampling(); showHelp = true } }
+          .onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
+        Toggle(isOn: $fastMath) { labelWithInfo(L("Fast Math (Metal Shaders)")) { helpMessage = helpTextFastMath(); showHelp = true } }
+          .onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) }
+        Toggle(isOn: $useComputeEfbXfb) { labelWithInfo(L("Use Compute for EFB/XFB")) { helpMessage = helpTextUseComputeEfbXfb(); showHelp = true } }
+          .onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
+        Toggle(isOn: $noMipmapping) { labelWithInfo(L("No Mipmapping (iOS)")) { helpMessage = helpTextNoMipmapping(); showHelp = true } }
+          .onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) }
       }
       Section(footer: Text(L("Skips every other interlaced field for higher FPS; may reduce temporal resolution or cause artifacts or flickering in some games."))) {
         Toggle(L("Interlaced Field Decimation"), isOn: $viDecimateInterlace)
@@ -2905,6 +2927,18 @@ struct GraphicsHacksView: View {
     }
     .navigationTitle(L("Hacks"))
     .onAppear { sync() }
+    .sheet(isPresented: $showHelp) {
+      NavigationView {
+        ScrollView { Text(helpMessage).padding() }
+          .navigationTitle(L("Help"))
+          .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { showHelp = false } } }
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLEmulationDidStartNotification"))) { _ in sync() }
+    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLEmulationDidEndNotification"))) { _ in sync() }
+#if os(iOS)
+    .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in sync() }
+#endif
   }
   private func sync() {
     efbAccess = DOLConfigBridge.gfxHackEfbAccessEnable()
@@ -2924,6 +2958,64 @@ struct GraphicsHacksView: View {
     viDecimateInterlace = DOLConfigBridge.gfxHackViDecimateInterlace()
   }
   private func viSkipLabel(_ v: Int) -> String { switch v { case 1: return L("On"); case 2: return L("Auto"); default: return L("Off") } }
+  // MARK: - Help UI & Text
+  private func labelWithInfo(_ title: String, action: @escaping () -> Void) -> some View {
+    HStack {
+      Text(title)
+      Spacer()
+      Button(action: action) { Image(systemName: "info.circle") }
+        .buttonStyle(.plain)
+    }
+  }
+
+  private func helpTextEfbAccess() -> String {
+    L("Allows the emulated CPU to read from the Embedded Framebuffer (EFB).\n\nTurning this off can improve performance but will break games that read the EFB for effects such as heat haze, soft particles, lens flares, and some UI elements.\n\nIf unsure, leave this enabled.")
+  }
+  private func helpTextSkipEfbToRam() -> String {
+    L("Skips copying EFB contents to emulated RAM.\n\nImproves performance but breaks features that rely on CPU reads of the EFB. Symptoms include missing post-processing, reflections, heat haze, and broken UI in some games.\n\nIf unsure, leave this unchecked.")
+  }
+  private func helpTextSkipXfbToRam() -> String {
+    L("Skips copying XFB (external framebuffer) to RAM.\n\nCan increase performance but breaks software XFB paths and some video output. May cause missing frames, flicker, or broken FMVs in certain titles.\n\nIf unsure, leave this unchecked.")
+  }
+  private func helpTextImmediateXfb() -> String {
+    L("Renders directly from the EFB without using an emulated XFB buffer.\n\nReduces latency and may increase FPS, but can cause flickering, incorrect deinterlacing, or timing issues in games that rely on VI/XFB behavior.\n\nIf unsure, leave this unchecked.")
+  }
+  private func helpTextCopyEfbScaled() -> String {
+    L("Scales EFB copies to the current internal resolution.\n\nImproves clarity of post-processing effects at higher resolutions, but some games assume 1x EFB and can show overblown bloom, halos, or broken depth-based effects. Disabling may fix such glitches at a small quality cost.\n\nIf unsure, leave this enabled.")
+  }
+  private func helpTextEarlyXfbOutput() -> String {
+    L("Outputs XFB earlier in the pipeline.\n\nCan reduce display latency, but may cause animation jitter or timing issues in titles sensitive to VI scheduling.\n\nIf unsure, leave this enabled.")
+  }
+  private func helpTextSkipDuplicateXFBs() -> String {
+    L("Skips presenting duplicate XFB fields/frames.\n\nImproves performance and reduces bandwidth when games output identical fields, but in rare cases can affect frame pacing or cause minor audio/video sync issues.\n\nIf unsure, leave this enabled.")
+  }
+  private func helpTextEmulateEfbFormatChanges() -> String {
+    L("Accurately emulates EFB format/precision changes.\n\nFixes color conversion and post-process issues in many games. Disabling can improve performance but may cause incorrect colors or missing effects.\n\nIf unsure, leave this enabled.")
+  }
+  private func helpTextVertexRounding() -> String {
+    L("Rounds vertex positions to reduce subpixel jitter.\n\nOften improves stability of 2D elements and reduces shimmering, but can slightly distort geometry in some 3D scenes. Minor performance impact.\n\nIf unsure, leave this enabled.")
+  }
+  private func helpTextForceProgressive() -> String {
+    L("Forces games to output progressive scan instead of interlaced fields.\n\nReduces flicker and may reduce latency, but some games expect interlacing and can exhibit timing or presentation issues.\n\nIf unsure, leave this unchecked.")
+  }
+  private func helpTextDeferEfbCopies() -> String {
+    L("Queues and defers EFB copies to reduce stalls.\n\nCan increase performance, but may change the ordering of copies and break effects that rely on immediate results (e.g., heat haze, mirrors).\n\nIf unsure, leave this unchecked.")
+  }
+  private func helpTextViSkipMode() -> String {
+    L("Skips VI (Video Interface) updates to increase performance.\n\nOn: Always skip, highest FPS but visible temporal artifacts or flicker. Auto: Skips when likely safe. Off: Most accurate.\n\nIf unsure, select Auto or Off.")
+  }
+  private func helpTextFastTextureSampling() -> String {
+    L("Uses a faster, less accurate texture sampling path.\n\nCan improve performance on some GPUs, but may cause visible artifacts such as banding, seams, or vertical lines in FMVs in certain titles. Disable if you see texture anomalies.\n\nIf unsure, leave this enabled.")
+  }
+  private func helpTextFastMath() -> String {
+    L("Enables fast-math optimizations in Metal shaders.\n\nImproves performance by relaxing IEEE precision rules. Can introduce subtle differences in lighting or rare shader bugs in edge cases.\n\nIf unsure, leave this unchecked.")
+  }
+  private func helpTextUseComputeEfbXfb() -> String {
+    L("Uses compute shaders for EFB/XFB operations.\n\nMay improve performance on some GPUs (especially tile-based/mobile), but is more experimental and can cause graphical or timing issues in certain games.\n\nIf unsure, leave this unchecked.")
+  }
+  private func helpTextNoMipmapping() -> String {
+    L("Disables texture mipmapping (iOS only).\n\nCan work around driver-specific issues in rare cases, but typically increases shimmering/aliasing and can hurt performance due to cache inefficiency.\n\nIf unsure, leave this unchecked.")
+  }
 }
 
 private struct ViSkipModePicker: View {
