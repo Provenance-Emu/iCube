@@ -13,6 +13,7 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
+#include <chrono>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -31,6 +32,7 @@
 #include "Core/Host.h"
 #include "Core/PowerPC/Gekko.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
+#include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/PowerPC/Jit64Common/Jit64Constants.h"
 #include "Core/PowerPC/PPCAnalyst.h"
 #include "Core/PowerPC/PowerPC.h"
@@ -78,6 +80,7 @@ static inline CI_RegionInfo CI_GetRegionInfo(u32 ea, bool dr, u8* mem1_base, u32
     info.sub = Memory::MEM1_BASE_ADDR;
     return info;
   }
+
   if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
   {
     info.base = exram_base;
@@ -116,9 +119,322 @@ static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
 }
 } // anonymous namespace
 
+void CachedInterpreter::ConfigureFpFastFromEnv()
+{
+  const char* env = std::getenv("DOLPHIN_CI_FP_FAST");
+  s_fp_fast_enabled = (env && env[0] == '1');
+}
+
+// OPCD 63 fast paths (selected): fctiwzx (15), frspx (12), fmrx (72)
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FctiwzxFast(PowerPC::PowerPCState& ppc_state,
+                                               const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  // Delegate to Interpreter to preserve full exception semantics while avoiding function pointer indirection
+  Interpreter::fctiwzx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[15];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FrspxFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  // Delegate to Interpreter for correct NaN/exception semantics
+  Interpreter::frspx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[12];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FmrxFast(PowerPC::PowerPCState& ppc_state,
+                                            const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  ppc_state.ps[inst.FD].SetPS0(ppc_state.ps[inst.FB].PS0AsU64());
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[72];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Fast branch callbacks (bcx, bx, bclrx, bcctrx)
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::BxFast(PowerPC::PowerPCState& ppc_state,
+                                          const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  if (inst.LK)
+    LR(ppc_state) = ppc_state.pc + 4;
+  u32 destination_addr = static_cast<u32>(SignExt26(inst.LI << 2));
+  if (!inst.AA)
+    destination_addr += ppc_state.pc;
+  ppc_state.npc = destination_addr;
+  if (s_hot_enabled)
+    ++s_hot_stats.count_by_opcd[18];
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::BCxFast(PowerPC::PowerPCState& ppc_state,
+                                           const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  if ((inst.BO & BO_DONT_DECREMENT_FLAG) == 0)
+    CTR(ppc_state)--;
+  const bool true_false = ((inst.BO >> 3) & 1) != 0;
+  const bool only_counter_check = ((inst.BO >> 4) & 1) != 0;
+  const bool only_condition_check = ((inst.BO >> 2) & 1) != 0;
+  const u32 ctr_check = ((CTR(ppc_state) != 0) ^ (inst.BO >> 1)) & 1;
+  const bool counter = only_condition_check || ctr_check != 0;
+  const bool condition = only_counter_check || (ppc_state.cr.GetBit(inst.BI) == u32(true_false));
+  if (counter && condition)
+  {
+    if (inst.LK)
+      LR(ppc_state) = ppc_state.pc + 4;
+    u32 destination_addr = static_cast<u32>(SignExt16(static_cast<s16>(inst.BD << 2)));
+    if (!inst.AA)
+      destination_addr += ppc_state.pc;
+    ppc_state.npc = destination_addr;
+  }
+  if (s_hot_enabled)
+    ++s_hot_stats.count_by_opcd[16];
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::BclrxFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  if ((inst.BO_2 & BO_DONT_DECREMENT_FLAG) == 0)
+    CTR(ppc_state)--;
+  const u32 counter = ((inst.BO_2 >> 2) | ((CTR(ppc_state) != 0) ^ (inst.BO_2 >> 1))) & 1;
+  const u32 condition = ((inst.BO_2 >> 4) | (ppc_state.cr.GetBit(inst.BI_2) == ((inst.BO_2 >> 3) & 1))) & 1;
+  if ((counter & condition) != 0)
+  {
+    const u32 destination_addr = LR(ppc_state) & (~3u);
+    ppc_state.npc = destination_addr;
+    if (inst.LK_3)
+      LR(ppc_state) = ppc_state.pc + 4;
+  }
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[19];
+    ++s_hot_stats.count_by_subop31[16];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::BcctrxFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  // bcctrx must not decrement/test CTR
+  const u32 condition = ((inst.BO_2 >> 4) | (ppc_state.cr.GetBit(inst.BI_2) == ((inst.BO_2 >> 3) & 1))) & 1;
+  if (condition != 0)
+  {
+    const u32 destination_addr = CTR(ppc_state) & (~3u);
+    ppc_state.npc = destination_addr;
+    if (inst.LK_3)
+      LR(ppc_state) = ppc_state.pc + 4;
+  }
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[19];
+    ++s_hot_stats.count_by_subop31[528];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Fast SPR access (limited to LR/CTR only for safety)
+CI_HOT_ONLY s32 CachedInterpreter::MfsprFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  // Do not write PC here; these do not rely on pc for computation
+  const UGeckoInstruction inst = operands.inst;
+  const u32 index = ((inst.SPR & 0x1F) << 5) + ((inst.SPR >> 5) & 0x1F);
+  if (index == SPR_LR)
+    ppc_state.gpr[inst.RD] = ppc_state.spr[SPR_LR];
+  else if (index == SPR_CTR)
+    ppc_state.gpr[inst.RD] = ppc_state.spr[SPR_CTR];
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[31];
+    ++s_hot_stats.count_by_subop31[339];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+CI_HOT_ONLY s32 CachedInterpreter::MtsprFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  const UGeckoInstruction inst = operands.inst;
+  const u32 index = (inst.SPRU << 5) | (inst.SPRL & 0x1F);
+  if (index == SPR_LR)
+    ppc_state.spr[SPR_LR] = ppc_state.gpr[inst.RD];
+  else if (index == SPR_CTR)
+    ppc_state.spr[SPR_CTR] = ppc_state.gpr[inst.RD];
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[31];
+    ++s_hot_stats.count_by_subop31[467];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Fast FP arithmetic (single-precision): fsubsx (20), faddsx (21), fmulsx (25)
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FpFsubsxFast(PowerPC::PowerPCState& ppc_state,
+                                                const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+  const FPResult difference = NI_sub(ppc_state, a.PS0AsDouble(), b.PS0AsDouble());
+  if (ppc_state.fpscr.VE == 0 || difference.HasNoInvalidExceptions())
+  {
+    const float result = ForceSingle(ppc_state.fpscr, difference.value);
+    ppc_state.ps[inst.FD].Fill(result);
+    ppc_state.UpdateFPRFSingle(result);
+  }
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[20];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FpFaddsxFast(PowerPC::PowerPCState& ppc_state,
+                                                const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+  const FPResult sum = NI_add(ppc_state, a.PS0AsDouble(), b.PS0AsDouble());
+  if (ppc_state.fpscr.VE == 0 || sum.HasNoInvalidExceptions())
+  {
+    const float result = ForceSingle(ppc_state.fpscr, sum.value);
+    ppc_state.ps[inst.FD].Fill(result);
+    ppc_state.UpdateFPRFSingle(result);
+  }
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[21];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FpFmulsxFast(PowerPC::PowerPCState& ppc_state,
+                                                const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  const auto& a = ppc_state.ps[inst.FA];
+  const auto& b = ppc_state.ps[inst.FB];
+  const FPResult product = NI_mul(ppc_state, a.PS0AsDouble(), b.PS0AsDouble());
+  if (ppc_state.fpscr.VE == 0 || product.HasNoInvalidExceptions())
+  {
+    const float result = ForceSingle(ppc_state.fpscr, product.value);
+    ppc_state.ps[inst.FD].Fill(result);
+    ppc_state.UpdateFPRFSingle(result);
+  }
+  if (inst.Rc)
+    ppc_state.UpdateCR1();
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[25];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 // Static instrumentation state
 CachedInterpreter::LinkStats CachedInterpreter::s_link_stats{};
 bool CachedInterpreter::s_log_enabled = false;
+
+// Hot-instruction profiling state
+CachedInterpreter::HotStats CachedInterpreter::s_hot_stats{};
+bool CachedInterpreter::s_hot_enabled = false;
+u32 CachedInterpreter::s_hot_sample_every = 32; // default: sample 1 out of 32 instructions
+u64 CachedInterpreter::s_hot_counter = 0;
+bool CachedInterpreter::s_fp_fast_enabled = false;
+
+static inline u64 CI_NowNs()
+{
+  using namespace std::chrono;
+  return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+}
 
 void CachedInterpreter::OnLinkPatched()
 {
@@ -148,6 +464,156 @@ void CachedInterpreter::MaybeLogLinkStats()
     // OSD::AddMessage(msg, OSD::Duration::NORMAL);
   }
 // #endif
+}
+
+void CachedInterpreter::ConfigureHotStatsFromEnv()
+{
+  const char* env = std::getenv("DOLPHIN_CI_HOT");
+  s_hot_enabled = (env && env[0] == '1');
+  const char* samp = std::getenv("DOLPHIN_CI_HOT_SAMPLE");
+  if (samp)
+  {
+    const unsigned v = static_cast<unsigned>(std::strtoul(samp, nullptr, 10));
+    if (v >= 1 && v <= 1000000)
+      s_hot_sample_every = v;
+  }
+}
+
+void CachedInterpreter::MaybeLogHotStats()
+{
+  if (!s_hot_enabled)
+    return;
+
+  static u64 blocks = 0;
+  if ((++blocks & 0x0FFF) != 0) // roughly every 4096 blocks
+    return;
+
+  // Find top 8 opcodes by sampled nanoseconds
+  struct Item { u32 key; u64 ns; u64 cnt; };
+  Item top[8]{};
+  auto consider = [&](u32 key, u64 ns, u64 cnt) {
+    if (ns == 0 && cnt == 0) return;
+    // insert if better than smallest
+    int idx = -1; u64 minns = UINT64_MAX; int minpos = -1;
+    for (int i = 0; i < 8; ++i) { if (top[i].ns == 0 && top[i].cnt == 0 && idx == -1) idx = i; if (top[i].ns < minns) { minns = top[i].ns; minpos = i; } }
+    int pos = (idx != -1) ? idx : minpos;
+    if (idx == -1 && ns <= minns) return;
+    top[pos] = {key, ns, cnt};
+  };
+  for (u32 op = 0; op < 64; ++op)
+    consider(op, s_hot_stats.ns_by_opcd[op], s_hot_stats.count_by_opcd[op]);
+
+  // Log
+  std::string msg = "CI hot ops (ns sampled, count total): ";
+  bool first = true;
+  for (const auto& it : top)
+  {
+    if (it.ns == 0 && it.cnt == 0) continue;
+    if (!first) msg += ", ";
+    first = false;
+    msg += fmt::format("OPCD {}: {} ns, {}x", it.key, it.ns, it.cnt);
+  }
+  if (!first)
+    printf("%s\n", msg.c_str());
+
+  // Additionally print top SUBOP10 under OPCD 31, if there is any activity
+  struct SItem { u32 subop; u64 ns; u64 cnt; };
+  SItem top31[8]{};
+  auto consider31 = [&](u32 subop, u64 ns, u64 cnt) {
+    if (ns == 0 && cnt == 0) return;
+    int idx = -1; u64 minns = UINT64_MAX; int minpos = -1;
+    for (int i = 0; i < 8; ++i) { if (top31[i].ns == 0 && top31[i].cnt == 0 && idx == -1) idx = i; if (top31[i].ns < minns) { minns = top31[i].ns; minpos = i; } }
+    int pos = (idx != -1) ? idx : minpos;
+    if (idx == -1 && ns <= minns) return;
+    top31[pos] = {subop, ns, cnt};
+  };
+  bool any31 = false;
+  for (u32 sub = 0; sub < 1024; ++sub)
+  {
+    const u64 ns = s_hot_stats.ns_by_subop31[sub];
+    const u64 cnt = s_hot_stats.count_by_subop31[sub];
+    if (ns != 0 || cnt != 0) { any31 = true; consider31(sub, ns, cnt); }
+  }
+  if (any31)
+  {
+    std::string msg2 = "  OPCD31 hot SUBOPs (ns sampled, count total): ";
+    bool first2 = true;
+    for (const auto& it : top31)
+    {
+      if (it.ns == 0 && it.cnt == 0) continue;
+      if (!first2) msg2 += ", ";
+      first2 = false;
+      msg2 += fmt::format("SUBOP {}: {} ns, {}x", it.subop, it.ns, it.cnt);
+    }
+    if (!first2)
+      printf("%s\n", msg2.c_str());
+  }
+
+  // OPCD 59 (SUBOP5) hot list
+  struct S5 { u32 subop; u64 ns; u64 cnt; };
+  S5 top59[8]{};
+  auto consider59 = [&](u32 subop, u64 ns, u64 cnt) {
+    if (ns == 0 && cnt == 0) return;
+    int idx = -1; u64 minns = UINT64_MAX; int minpos = -1;
+    for (int i = 0; i < 8; ++i) { if (top59[i].ns == 0 && top59[i].cnt == 0 && idx == -1) idx = i; if (top59[i].ns < minns) { minns = top59[i].ns; minpos = i; } }
+    int pos = (idx != -1) ? idx : minpos;
+    if (idx == -1 && ns <= minns) return;
+    top59[pos] = {subop, ns, cnt};
+  };
+  bool any59 = false;
+  for (u32 sub = 0; sub < 32; ++sub)
+  {
+    const u64 ns = s_hot_stats.ns_by_subop59[sub];
+    const u64 cnt = s_hot_stats.count_by_subop59[sub];
+    if (ns != 0 || cnt != 0) { any59 = true; consider59(sub, ns, cnt); }
+  }
+  if (any59)
+  {
+    std::string msg59 = "  OPCD59 hot SUBOP5 (ns sampled, count total): ";
+    bool f = true;
+    for (const auto& it : top59)
+    {
+      if (it.ns == 0 && it.cnt == 0) continue;
+      if (!f) msg59 += ", ";
+      f = false;
+      msg59 += fmt::format("SUBOP5 {}: {} ns, {}x", it.subop, it.ns, it.cnt);
+    }
+    if (!f)
+      printf("%s\n", msg59.c_str());
+  }
+
+  // OPCD 63 (SUBOP10) hot list
+  struct S10 { u32 subop; u64 ns; u64 cnt; };
+  S10 top63[8]{};
+  auto consider63 = [&](u32 subop, u64 ns, u64 cnt) {
+    if (ns == 0 && cnt == 0) return;
+    int idx = -1; u64 minns = UINT64_MAX; int minpos = -1;
+    for (int i = 0; i < 8; ++i) { if (top63[i].ns == 0 && top63[i].cnt == 0 && idx == -1) idx = i; if (top63[i].ns < minns) { minns = top63[i].ns; minpos = i; } }
+    int pos = (idx != -1) ? idx : minpos;
+    if (idx == -1 && ns <= minns) return;
+    top63[pos] = {subop, ns, cnt};
+  };
+  bool any63 = false;
+  for (u32 sub = 0; sub < 1024; ++sub)
+  {
+    const u64 ns = s_hot_stats.ns_by_subop63[sub];
+    const u64 cnt = s_hot_stats.count_by_subop63[sub];
+    if (ns != 0 || cnt != 0) { any63 = true; consider63(sub, ns, cnt); }
+  }
+  if (any63)
+  {
+    std::string msg63 = "  OPCD63 hot SUBOPs (ns sampled, count total): ";
+    bool f2 = true;
+    for (const auto& it : top63)
+    {
+      if (it.ns == 0 && it.cnt == 0) continue;
+      if (!f2) msg63 += ", ";
+      f2 = false;
+      msg63 += fmt::format("SUBOP {}: {} ns, {}x", it.subop, it.ns, it.cnt);
+    }
+    if (!f2)
+      printf("%s\n", msg63.c_str());
+  }
 }
 
 void CachedInterpreter::ConfigureLinkLogFromEnv()
@@ -239,6 +705,13 @@ CI_HOT_FLATTEN s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& p
   {
     ppc_state.pc = current_pc;
     ppc_state.npc = current_pc + 4;
+  }
+
+  // Count this opcode in hot-instruction stats (no timing to keep PIC fast)
+  if (s_hot_enabled)
+  {
+    const u8 opcd = inst.OPCD;
+    ++s_hot_stats.count_by_opcd[opcd];
   }
 
   // Decode effective address for D-form: ea = (RA ? GPR[RA] : 0) + SIMM_16
@@ -1226,6 +1699,8 @@ void CachedInterpreter::Init()
   code_block.m_fpa = &js.fpa;
 
   ConfigureLinkLogFromEnv();
+  ConfigureHotStatsFromEnv();
+  ConfigureFpFastFromEnv();
 }
 
 template <bool write_pc>
@@ -2324,7 +2799,7 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
       break;
   }
   ++s_link_stats.dispatcher_roundtrips;
-  // MaybeLogLinkStats();
+  MaybeLogLinkStats();
 }
 
 CI_HOT_ONLY void CachedInterpreter::Run()
@@ -2372,19 +2847,63 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
   }
   if constexpr (profiled)
     JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
+  // Periodically print hot-instruction stats if enabled
+  MaybeLogHotStats();
   return 0;
 }
 
 template <bool write_pc>
 s32 CachedInterpreter::Interpret(PowerPC::PowerPCState& ppc_state,
-                                 const InterpretOperands& operands)
+                                  const InterpretOperands& operands)
 {
   if constexpr (write_pc)
   {
     ppc_state.pc = operands.current_pc;
     ppc_state.npc = operands.current_pc + 4;
   }
-  operands.func(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    const u8 opcd = operands.inst.OPCD;
+    ++s_hot_stats.count_by_opcd[opcd];
+    if (opcd == 31)
+      ++s_hot_stats.count_by_subop31[operands.inst.SUBOP10];
+    else if (opcd == 59)
+      ++s_hot_stats.count_by_subop59[operands.inst.SUBOP5];
+    else if (opcd == 63)
+      ++s_hot_stats.count_by_subop63[operands.inst.SUBOP10];
+    else if (opcd == 59)
+      ++s_hot_stats.count_by_subop59[operands.inst.SUBOP5];
+    else if (opcd == 63)
+      ++s_hot_stats.count_by_subop63[operands.inst.SUBOP10];
+
+    // Sampled timing to reduce overhead
+    const bool sample = ((++s_hot_counter % s_hot_sample_every) == 0);
+    u64 t0 = 0;
+    if (sample)
+      t0 = CI_NowNs();
+
+    operands.func(operands.interpreter, operands.inst);
+
+    if (sample)
+    {
+      const u64 dt = CI_NowNs() - t0;
+      s_hot_stats.ns_by_opcd[opcd] += dt;
+      if (opcd == 31)
+        s_hot_stats.ns_by_subop31[operands.inst.SUBOP10] += dt;
+      else if (opcd == 59)
+        s_hot_stats.ns_by_subop59[operands.inst.SUBOP5] += dt;
+      else if (opcd == 63)
+        s_hot_stats.ns_by_subop63[operands.inst.SUBOP10] += dt;
+      else if (opcd == 59)
+        s_hot_stats.ns_by_subop59[operands.inst.SUBOP5] += dt;
+      else if (opcd == 63)
+        s_hot_stats.ns_by_subop63[operands.inst.SUBOP10] += dt;
+    }
+  }
+  else
+  {
+    operands.func(operands.interpreter, operands.inst);
+  }
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -2397,7 +2916,32 @@ s32 CachedInterpreter::InterpretAndCheckExceptions(
     ppc_state.pc = operands.current_pc;
     ppc_state.npc = operands.current_pc + 4;
   }
-  operands.func(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    const u8 opcd = operands.inst.OPCD;
+    ++s_hot_stats.count_by_opcd[opcd];
+    if (opcd == 31)
+      ++s_hot_stats.count_by_subop31[operands.inst.SUBOP10];
+
+    const bool sample = ((++s_hot_counter % s_hot_sample_every) == 0);
+    u64 t0 = 0;
+    if (sample)
+      t0 = CI_NowNs();
+
+    operands.func(operands.interpreter, operands.inst);
+
+    if (sample)
+    {
+      const u64 dt = CI_NowNs() - t0;
+      s_hot_stats.ns_by_opcd[opcd] += dt;
+      if (opcd == 31)
+        s_hot_stats.ns_by_subop31[operands.inst.SUBOP10] += dt;
+    }
+  }
+  else
+  {
+    operands.func(operands.interpreter, operands.inst);
+  }
 
   if ((ppc_state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM)) != 0)
   {
@@ -3498,8 +4042,71 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           {
             const InterpretOperands operands = {interpreter, Interpreter::GetInterpreterOp(op.inst),
                                                 js.compilerPC, op.inst};
-            Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
-                  operands);
+            const u32 opcd = op.inst.OPCD;
+            bool fast_emitted = false;
+            if (opcd == 18) // bx
+            {
+              Write(CallbackCast(BxFast<true>), operands);
+              fast_emitted = true;
+            }
+            else if (opcd == 16) // bcx
+            {
+              Write(CallbackCast(BCxFast<true>), operands);
+              fast_emitted = true;
+            }
+            else if (opcd == 19)
+            {
+              if (op.inst.SUBOP10 == 16) // bclrx
+              {
+                Write(CallbackCast(BclrxFast<true>), operands);
+                fast_emitted = true;
+              }
+              else if (op.inst.SUBOP10 == 528) // bcctrx
+              {
+                Write(CallbackCast(BcctrxFast<true>), operands);
+                fast_emitted = true;
+              }
+            }
+            else if (opcd == 31)
+            {
+              if (op.inst.SUBOP10 == 339) // mfspr
+              {
+                const u32 index = ((op.inst.SPR & 0x1F) << 5) + ((op.inst.SPR >> 5) & 0x1F);
+                if (index == SPR_LR || index == SPR_CTR)
+                {
+                  Write(CallbackCast(MfsprFast), operands);
+                  fast_emitted = true;
+                }
+              }
+              else if (op.inst.SUBOP10 == 467) // mtspr
+              {
+                const u32 index = (op.inst.SPRU << 5) | (op.inst.SPRL & 0x1F);
+                if (index == SPR_LR || index == SPR_CTR)
+                {
+                  Write(CallbackCast(MtsprFast), operands);
+                  fast_emitted = true;
+                }
+              }
+            }
+            else if (opcd == 59)
+            {
+              // Temporarily disabled: fall back to generic interpreter for safety.
+            }
+            else if (opcd == 63)
+            {
+              const u32 sub10 = op.inst.SUBOP10;
+              if (sub10 == 15) // fctiwzx only
+              {
+                Write(op.canEndBlock ? CallbackCast(FctiwzxFast<true>) : CallbackCast(FctiwzxFast<false>), operands);
+                fast_emitted = true;
+              }
+            }
+
+            if (!fast_emitted)
+            {
+              Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
+                    operands);
+            }
           }
         }
       }
