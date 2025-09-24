@@ -72,6 +72,8 @@ public:
   const char* GetName() const override { return "Cached Interpreter"; }
   const CommonAsmRoutinesBase* GetAsmRoutines() override { return nullptr; }
 
+  static bool IsBlockLinkingEnabled();
+
 private:
   void ExecuteOneBlock();
 

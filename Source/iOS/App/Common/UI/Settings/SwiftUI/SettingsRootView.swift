@@ -1712,18 +1712,36 @@ struct ConfigAdvancedView: View {
       Section(header: Text(L("CPU Options")), footer: Text(L("CPU Emulation Engine: ARM64 JIT is fastest on modern devices. MMU: Enables memory management (required for some games, reduces performance). Adaptive Clock: Automatically adjusts timing (experimental). Accurate CPU Cache: More precise emulation but slower."))) {
         NavigationLink("\(L("CPU Emulation Engine")): \(cpuEngine.label)", destination: CpuEnginePicker(selected: $cpuEngine))
           .onChange(of: cpuEngine) { DOLConfigBridge.setMainCpuCore($0.rawValue) }
-        Toggle(L("Enable MMU"), isOn: $mmu)
-          .onChange(of: mmu) { DOLConfigBridge.setMainMMU($0) }
+        HStack {
+          Toggle(L("Enable MMU"), isOn: $mmu)
+            .onChange(of: mmu) { DOLConfigBridge.setMainMMU($0) }
+          Spacer()
+          Image(systemName: "info.circle").help(L("Accurate but very slow. Only needed for a few specific games."))
+        }
         Toggle(L("Adaptive Clock (auto VI/CPU)"), isOn: $adaptiveClock)
           .onChange(of: adaptiveClock) { UserDefaults.standard.set($0, forKey: "adaptive_clock_enable") }
         Toggle(L("Pause on Panic"), isOn: $pauseOnPanic)
           .onChange(of: pauseOnPanic) { DOLConfigBridge.setMainPauseOnPanic($0) }
-        Toggle(L("Accurate CPU Cache (slower)"), isOn: $writeBackCache)
-          .onChange(of: writeBackCache) { DOLConfigBridge.setMainAccurateCpuCache($0) }
-        Toggle(L("Bypass Instruction Cache"), isOn: $disableICache)
-          .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) }
+        HStack {
+          Toggle(L("Accurate CPU Cache (slower)"), isOn: $writeBackCache)
+            .onChange(of: writeBackCache) { DOLConfigBridge.setMainAccurateCpuCache($0) }
+          Spacer()
+          Image(systemName: "info.circle").help(L("Improves correctness of CPU cache emulation, but significantly reduces performance."))
+        }
+        HStack {
+          Toggle(L("Bypass Instruction Cache"), isOn: $disableICache)
+            .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) }
+          Spacer()
+          Image(systemName: "info.circle").help(L("Skips emulation of I-Cache behavior. Can improve performance but may cause bugs. Usually keep off."))
+        }
         Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
           .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) }
+        // Cached Interpreter block linking toggle
+        HStack {
+          Toggle(L("Enable Cached Interpreter Block Linking"), isOn: Binding(get: { DOLConfigBridge.mainCIBlockLinking() }, set: { DOLConfigBridge.setMainCIBlockLinking($0) }))
+          Spacer()
+          Image(systemName: "info.circle").help(L("May increase performance by chaining basic blocks in the Cached Interpreter, but can cause crashes or freezes in some games. Off by default."))
+        }
         // CPU Idle Detection / Fast-Forward
         Toggle(L("Relaxed Idle Loop Detection"), isOn: $relaxedIdleDetection)
           .onChange(of: relaxedIdleDetection) { DOLConfigBridge.setMainRelaxedIdleDetection($0) }
@@ -1819,17 +1837,17 @@ struct ConfigAdvancedView: View {
     writeBackCache = DOLConfigBridge.mainAccurateCpuCache()
     disableICache = DOLConfigBridge.mainDisableICache()
     lowDCBZ = DOLConfigBridge.mainLowDCBZHack()
-
+    // Ensure idle detection toggles persist
+    relaxedIdleDetection = DOLConfigBridge.mainRelaxedIdleDetection()
+    fastForwardCtrIdle = DOLConfigBridge.mainFastForwardCtrIdle()
+    // CI block linking toggle does not need local state; bound directly
     cpuClockEnabled = DOLConfigBridge.mainOverclockEnable()
     cpuClockPercent = DOLConfigBridge.mainOverclockPercent()
-
     vbiEnabled = DOLConfigBridge.mainViOverclockEnable()
     vbiPercent = DOLConfigBridge.mainViOverclockPercent()
-
     memOverride = DOLConfigBridge.mainRamOverrideEnable()
     mem1MB = DOLConfigBridge.mainMem1SizeMB()
     mem2MB = DOLConfigBridge.mainMem2SizeMB()
-
     rtcEnabled = DOLConfigBridge.mainCustomRtcEnable()
     rtcDate = Date(timeIntervalSince1970: TimeInterval(DOLConfigBridge.mainCustomRtcValue()))
   }

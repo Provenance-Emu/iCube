@@ -46,6 +46,11 @@
 #include "Core/Config/MainSettings.h"
 #include "VideoCommon/OnScreenDisplay.h"
 
+bool CachedInterpreter::IsBlockLinkingEnabled()
+{
+  return Config::Get(Config::MAIN_CI_BLOCK_LINKING);
+}
+
 #if defined(__clang__) || defined(__GNUC__)
 #if defined(__aarch64__)
 #define CI_HOT_FLATTEN [[gnu::hot, gnu::flatten]]
@@ -3240,7 +3245,7 @@ void CachedInterpreter::Init()
   // Enable block linking on ARM64 to reduce dispatch overhead.
   // Safe on iOS/tvOS and provides measurable speedups.
   #if defined(__aarch64__)
-  jo.enableBlocklink = true;
+  jo.enableBlocklink = IsBlockLinkingEnabled();
   #else
   jo.enableBlocklink = false;
   #endif
@@ -3269,7 +3274,7 @@ CI_HOT_ONLY static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_st
 
 template <bool write_pc>
 CI_HOT_FLATTEN s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
-                                                       const ExecuteMicroOpsOperands& operands)
+                                                     const ExecuteMicroOpsOperands& operands)
 {
   CI_SetPCForMicroOps<write_pc>(ppc_state, operands.current_pc);
 

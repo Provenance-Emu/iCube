@@ -128,6 +128,8 @@ extern const Info<bool> MAIN_FPRF;
 extern const Info<bool> MAIN_ACCURATE_NANS;
 extern const Info<bool> MAIN_DISABLE_ICACHE;
 extern const Info<float> MAIN_EMULATION_SPEED;
+// Enable Cached Interpreter block jump caching/linking
+extern const Info<bool> MAIN_CI_BLOCK_LINKING;
 extern const Info<float> MAIN_OVERCLOCK;
 extern const Info<bool> MAIN_OVERCLOCK_ENABLE;
 extern const Info<float> MAIN_VI_OVERCLOCK;

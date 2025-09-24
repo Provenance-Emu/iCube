@@ -115,9 +115,9 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 
 // Idle loop detection / fast-forward toggles
 + (BOOL)mainRelaxedIdleDetection { return Config::Get(Config::MAIN_RELAXED_IDLE_DETECTION); }
-+ (void)setMainRelaxedIdleDetection:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_RELAXED_IDLE_DETECTION, (bool)enabled); }
++ (void)setMainRelaxedIdleDetection:(BOOL)enabled { Config::SetBase(Config::MAIN_RELAXED_IDLE_DETECTION, (bool)enabled); }
 + (BOOL)mainFastForwardCtrIdle { return Config::Get(Config::MAIN_FAST_FORWARD_CTR_IDLE); }
-+ (void)setMainFastForwardCtrIdle:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_FAST_FORWARD_CTR_IDLE, (bool)enabled); }
++ (void)setMainFastForwardCtrIdle:(BOOL)enabled { Config::SetBase(Config::MAIN_FAST_FORWARD_CTR_IDLE, (bool)enabled); }
 
 // Config > General
 + (BOOL)mainCpuThread { return Config::Get(Config::MAIN_CPU_THREAD); }
@@ -161,6 +161,9 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setMainAccurateCpuCache:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_ACCURATE_CPU_CACHE, (bool)enabled); }
 + (BOOL)mainDisableICache { return Config::Get(Config::MAIN_DISABLE_ICACHE); }
 + (void)setMainDisableICache:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_DISABLE_ICACHE, (bool)enabled); }
+// Cached Interpreter: block linking toggle
++ (BOOL)mainCIBlockLinking { return Config::Get(Config::MAIN_CI_BLOCK_LINKING); }
++ (void)setMainCIBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CI_BLOCK_LINKING, (bool)enabled); }
 + (BOOL)mainLowDCBZHack { return Config::Get(Config::MAIN_LOW_DCBZ_HACK); }
 + (void)setMainLowDCBZHack:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_LOW_DCBZ_HACK, (bool)enabled); }
 + (BOOL)mainOverclockEnable { return Config::Get(Config::MAIN_OVERCLOCK_ENABLE); }

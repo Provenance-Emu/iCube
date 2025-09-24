@@ -118,6 +118,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setMainAccurateCpuCache:(BOOL)enabled;
 + (BOOL)mainDisableICache;
 + (void)setMainDisableICache:(BOOL)enabled;
+// Cached Interpreter: block linking toggle
++ (BOOL)mainCIBlockLinking;
++ (void)setMainCIBlockLinking:(BOOL)enabled;
 + (BOOL)mainLowDCBZHack;
 + (void)setMainLowDCBZHack:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;
