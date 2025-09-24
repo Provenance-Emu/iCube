@@ -1,0 +1,68 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.47843,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "hidden" : false,
+      "layers" : [
+        {
+          "glass" : true,
+          "image-name" : "iCube Icon-Top@2x.png",
+          "name" : "iCube Icon-Top@2x",
+          "position" : {
+            "scale" : 2,
+            "translation-in-points" : [
+              0,
+              -0.6796875
+            ]
+          }
+        },
+        {
+          "image-name" : "iCube Icon-Middle@2x.png",
+          "name" : "iCube Icon-Middle@2x",
+          "position" : {
+            "scale" : 2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "glass" : false,
+          "hidden" : true,
+          "image-name" : "iCube Icon-BG@2x.png",
+          "name" : "iCube Icon-BG@2x",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "glass" : true,
+          "hidden" : true,
+          "image-name" : "iCube Logo.png",
+          "name" : "iCube Logo"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
