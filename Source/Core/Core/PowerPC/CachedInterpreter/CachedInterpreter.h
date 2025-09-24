@@ -78,6 +78,14 @@ private:
   bool HandleFunctionHooking(u32 address);
   void WriteEndBlock();
 
+#if defined(__aarch64__)
+
+  // Apple Silicon memory optimizations
+  void OptimizeMemoryLayout();
+  void ConfigureAppleSiliconHints();
+
+#endif
+
   // Finds a free memory region and sets the code emitter to point at that region.
   // Returns false if no free memory region can be found.
   bool SetEmitterStateToFreeCodeRegion();
