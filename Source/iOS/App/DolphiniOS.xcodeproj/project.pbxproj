@@ -64,6 +64,7 @@
 		B36B519B2E5E46AC009A2303 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519A2E5E46AC009A2303 /* KeychainService.swift */; };
 		B36B519D2E5E46D5009A2303 /* RemoteSourcesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */; };
 		B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36B519E2E5E4700009A2303 /* SourcesView.swift */; };
+		B36CD56D2E834EA20002F4E4 /* iCube.icon in Resources */ = {isa = PBXBuildFile; fileRef = B36CD56C2E834EA20002F4E4 /* iCube.icon */; };
 		B37102AE2E70813B006C1ED7 /* NavigationStackBackport in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, maccatalyst, ); productRef = B37102AD2E70813B006C1ED7 /* NavigationStackBackport */; };
 		B37102B12E708B3C006C1ED7 /* libobjc.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B37102AF2E708B31006C1ED7 /* libobjc.tbd */; };
 		B37102B22E708B49006C1ED7 /* libswiftObjectiveC.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = B37102B02E708B31006C1ED7 /* libswiftObjectiveC.tbd */; };
@@ -377,6 +378,7 @@
 		B36B519C2E5E46D5009A2303 /* RemoteSourcesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSourcesStore.swift; sourceTree = "<group>"; };
 		B36B519E2E5E4700009A2303 /* SourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesView.swift; sourceTree = "<group>"; };
 		B36B63002E5E56A3009A2303 /* PVlibDolphin.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PVlibDolphin.xcframework; path = ../../../../build/xcframework/PVlibDolphin.xcframework; sourceTree = "<group>"; };
+		B36CD56C2E834EA20002F4E4 /* iCube.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = iCube.icon; sourceTree = "<group>"; };
 		B37102AF2E708B31006C1ED7 /* libobjc.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libobjc.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/lib/libobjc.tbd; sourceTree = DEVELOPER_DIR; };
 		B37102B02E708B31006C1ED7 /* libswiftObjectiveC.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libswiftObjectiveC.tbd; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/lib/swift/libswiftObjectiveC.tbd; sourceTree = DEVELOPER_DIR; };
 		B37A7F6C2E790819001C90F4 /* EmulationScreen+TouchAndMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulationScreen+TouchAndMotion.swift"; sourceTree = "<group>"; };
@@ -2040,6 +2042,7 @@
 				B9DC3E0227EFBD2D0084DAA4 /* Main.storyboard */,
 				B9DC3E0527EFBD2F0084DAA4 /* Assets.xcassets */,
 				B38B855F2E7CB3D300CFAD6E /* iCube AppStore.entitlements */,
+				B36CD56C2E834EA20002F4E4 /* iCube.icon */,
 				B9FCB7E72898FB620020E233 /* DolphiniOS.entitlements */,
 				B9DC3E0727EFBD2F0084DAA4 /* LaunchScreen.storyboard */,
 				B9DC3E0A27EFBD2F0084DAA4 /* Info.plist */,
@@ -2305,6 +2308,7 @@
 				B99137AC28827AD200588446 /* SettingsRoot.storyboard in Resources */,
 				B991379E2881F23A00588446 /* Core.strings in Resources */,
 				B9B2C624288DB62D00CB6569 /* TCWiiPad.xib in Resources */,
+				B36CD56D2E834EA20002F4E4 /* iCube.icon in Resources */,
 				B904ACF42886AB06008B6BE9 /* ButtonMapping.storyboard in Resources */,
 				B950CFB6296179E000197719 /* UnofficialBuildNotice.xib in Resources */,
 				B950CA942846A13100F45219 /* Sys in Resources */,
@@ -3495,8 +3499,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B38B85542E7BC54C00CFAD6E /* Release (AppStore).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -3754,7 +3758,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B38B85532E7BC54C00CFAD6E /* Debug (AppStore).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -4609,7 +4614,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B96F72CF27F0FBE90024BA7D /* Debug (Jailbroken).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -4716,8 +4722,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B96F72D127F0FC1A0024BA7D /* Release (Jailbroken).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -4823,8 +4829,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B96F72D227F0FC420024BA7D /* Release (Beta, Non-Jailbroken).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconBeta;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -4930,8 +4936,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B96F72D327F0FC520024BA7D /* Release (Beta, Jailbroken).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconBeta;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -5096,8 +5102,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B96F72CE27F0E8BD0024BA7D /* Debug (Non-Jailbroken).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -5147,8 +5153,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B96F72D027F0FC020024BA7D /* Release (Non-Jailbroken).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -5254,8 +5260,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B9FF01E82977DCF700B49B00 /* Release (TrollStore).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -5361,8 +5367,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B9FF01E92977DD0000B49B00 /* Release (Beta, TrollStore).xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(DOL_APP_ICON_ASSET_NAME)";
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "$(DOL_APP_ICON_ASSET_NAME_TV)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconBeta;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]" = "tvOS Icons";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
