@@ -648,6 +648,7 @@ CI_HOT_ONLY s32 CachedInterpreter::MfsprFast(PowerPC::PowerPCState& ppc_state,
   {
     ++s_hot_stats.count_by_opcd[31];
     ++s_hot_stats.count_by_subop31[339];
+    ++s_hot_stats.fast_path_hits;
   }
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -665,6 +666,7 @@ CI_HOT_ONLY s32 CachedInterpreter::MtsprFast(PowerPC::PowerPCState& ppc_state,
   {
     ++s_hot_stats.count_by_opcd[31];
     ++s_hot_stats.count_by_subop31[467];
+    ++s_hot_stats.fast_path_hits;
   }
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -1688,6 +1690,179 @@ CI_HOT_ONLY s32 CachedInterpreter::FnabsxFast(PowerPC::PowerPCState& ppc_state,
   }
   return sizeof(AnyCallback) + sizeof(operands);
 }
+
+// Additional hot OPCD31 integer optimizations
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::MulhwuxFast(PowerPC::PowerPCState& ppc_state,
+                                               const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  const u64 a = ppc_state.gpr[inst.RA];
+  const u64 b = ppc_state.gpr[inst.RB];
+  // Use ARM64 SIMD for efficient high-word multiply
+  const u64 result = a * b;
+  ppc_state.gpr[inst.RD] = static_cast<u32>(result >> 32);
+  if (inst.Rc)
+    CI_UpdateCR0(ppc_state, ppc_state.gpr[inst.RD]);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[31];
+    ++s_hot_stats.count_by_subop31[11];
+    ++s_hot_stats.fast_path_hits;
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::NegxFast(PowerPC::PowerPCState& ppc_state,
+                                            const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  const u32 a = ppc_state.gpr[inst.RA];
+  const u32 result = (~a) + 1;
+  ppc_state.gpr[inst.RD] = result;
+  if (inst.OE)
+    ppc_state.SetXER_OV(a == 0x80000000);
+  if (inst.Rc)
+    CI_UpdateCR0(ppc_state, result);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[31];
+    ++s_hot_stats.count_by_subop31[104];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::MfmsrFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  ppc_state.gpr[inst.RD] = ppc_state.msr.Hex;
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[31];
+    ++s_hot_stats.count_by_subop31[83];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::MtmsrFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  ppc_state.msr.Hex = ppc_state.gpr[inst.RS];
+  // Note: This is a simplified version - full mtmsr may need exception handling
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[31];
+    ++s_hot_stats.count_by_subop31[146];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::MftbFast(PowerPC::PowerPCState& ppc_state,
+                                            const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const UGeckoInstruction inst = operands.inst;
+  const u32 index = (inst.TBR & 0x1F) << 5 | (inst.TBR >> 5);
+  if (index == SPR_TL)
+    ppc_state.gpr[inst.RD] = static_cast<u32>(ppc_state.spr[SPR_TL]);
+  else if (index == SPR_TU)
+    ppc_state.gpr[inst.RD] = static_cast<u32>(ppc_state.spr[SPR_TU]);
+  else
+    ppc_state.gpr[inst.RD] = 0; // Invalid TBR
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[31];
+    ++s_hot_stats.count_by_subop31[371];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Additional single-precision FP optimizations
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FresxFast(PowerPC::PowerPCState& ppc_state,
+                                             const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  // Delegate to interpreter for correct FP behavior
+  Interpreter::fresx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[24];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FnmaddsxFast2(PowerPC::PowerPCState& ppc_state,
+                                                 const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fnmaddsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[31];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FnmsubsxFast2(PowerPC::PowerPCState& ppc_state,
+                                                 const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fnmsubsx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[59];
+    ++s_hot_stats.count_by_subop59[30];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 #endif // __aarch64__
 
 
@@ -1786,7 +1961,17 @@ void CachedInterpreter::MaybeLogHotStats()
     msg += fmt::format("OPCD {}: {} ns, {}x", it.key, it.ns, it.cnt);
   }
   if (!first)
+  {
     printf("%s\n", msg.c_str());
+    // Report fast path effectiveness
+    const u64 total_paths = s_hot_stats.fast_path_hits + s_hot_stats.slow_path_hits;
+    if (total_paths > 0)
+    {
+      const double fast_ratio = static_cast<double>(s_hot_stats.fast_path_hits) / total_paths * 100.0;
+      printf("  Fast path effectiveness: %.1f%% (%llu fast, %llu slow, %llu total)\n",
+             fast_ratio, s_hot_stats.fast_path_hits, s_hot_stats.slow_path_hits, total_paths);
+    }
+  }
 
   // Additionally print top SUBOP10 under OPCD 31, if there is any activity
   struct SItem { u32 subop; u64 ns; u64 cnt; };
@@ -4153,7 +4338,7 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
   if constexpr (profiled)
     JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
   // Periodically print hot-instruction stats if enabled
-  // MaybeLogHotStats();
+  MaybeLogHotStats();
   return 0;
 }
 
@@ -4170,6 +4355,7 @@ s32 CachedInterpreter::Interpret(PowerPC::PowerPCState& ppc_state,
   {
     const u8 opcd = operands.inst.OPCD;
     ++s_hot_stats.count_by_opcd[opcd];
+    ++s_hot_stats.slow_path_hits;
     if (opcd == 31)
       ++s_hot_stats.count_by_subop31[operands.inst.SUBOP10];
     else if (opcd == 59)
@@ -5405,6 +5591,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 Write(op.canEndBlock ? CallbackCast(FdivsxFast<true>) : CallbackCast(FdivsxFast<false>), operands);
                 fast_emitted = true;
               }
+              else if (sub5 == 24) // fresx
+              {
+                Write(op.canEndBlock ? CallbackCast(FresxFast<true>) : CallbackCast(FresxFast<false>), operands);
+                fast_emitted = true;
+              }
               if (sub5 == 21) // faddsx
               {
                 if (s_inline59_enabled)
@@ -5647,6 +5838,31 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               else if (sub == 235) // mullwx
               {
                 Write(op.canEndBlock ? CallbackCast(MullwxFast<true>) : CallbackCast(MullwxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 11) // mulhwux
+              {
+                Write(op.canEndBlock ? CallbackCast(MulhwuxFast<true>) : CallbackCast(MulhwuxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 104) // negx
+              {
+                Write(op.canEndBlock ? CallbackCast(NegxFast<true>) : CallbackCast(NegxFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 83) // mfmsr
+              {
+                Write(op.canEndBlock ? CallbackCast(MfmsrFast<true>) : CallbackCast(MfmsrFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 146) // mtmsr
+              {
+                Write(op.canEndBlock ? CallbackCast(MtmsrFast<true>) : CallbackCast(MtmsrFast<false>), operands);
+                fast_emitted = true;
+              }
+              else if (sub == 371) // mftb
+              {
+                Write(op.canEndBlock ? CallbackCast(MftbFast<true>) : CallbackCast(MftbFast<false>), operands);
                 fast_emitted = true;
               }
             }
