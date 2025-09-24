@@ -4668,6 +4668,29 @@ void CachedInterpreter::WriteEndBlock()
     return;
   }
 
+  // If block linking is globally disabled, emit a plain EndBlock (legacy path)
+  if (!IsBlockLinkingEnabled())
+  {
+    if (IsProfilingEnabled())
+    {
+      EndBlockOperands<true> eops{};
+      eops.downcount = js.downcountAmount;
+      eops.num_load_stores = js.numLoadStoreInst;
+      eops.num_fp_inst = js.numFloatingPointInst;
+      eops.profile_data = js.curBlock->profile_data.get();
+      Write(EndBlock<true>, eops);
+    }
+    else
+    {
+      EndBlockOperands<false> eops{};
+      eops.downcount = js.downcountAmount;
+      eops.num_load_stores = js.numLoadStoreInst;
+      eops.num_fp_inst = js.numFloatingPointInst;
+      Write(EndBlock<false>, eops);
+    }
+    return;
+  }
+
   // Otherwise, emit a link trampoline which performs end-of-block accounting and optionally links
   // to the next block by returning a non-zero relative distance. If linking is disabled
   // or not yet patched, rel stays 0 and the dispatcher will exit the block as usual.
