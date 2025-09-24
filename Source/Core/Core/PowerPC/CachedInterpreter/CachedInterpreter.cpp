@@ -5669,7 +5669,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             if (op.inst.SUBOP10 == 339) // mfspr
             {
               const u32 index = ((op.inst.SPR & 0x1F) << 5) + ((op.inst.SPR >> 5) & 0x1F);
-              if (index == SPR_LR || index == SPR_CTR)
+              if (index == SPR_LR || index == SPR_CTR || index == SPR_XER ||
+                  index == SPR_SRR0 || index == SPR_SRR1)
               {
                 Write(CallbackCast(MfsprFast), operands);
                 fast_emitted = true;
@@ -5678,7 +5679,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             else if (op.inst.SUBOP10 == 467) // mtspr
             {
               const u32 index = (op.inst.SPRU << 5) | (op.inst.SPRL & 0x1F);
-              if (index == SPR_LR || index == SPR_CTR)
+              if (index == SPR_LR || index == SPR_CTR || index == SPR_XER ||
+                  index == SPR_SRR0 || index == SPR_SRR1)
               {
                 Write(CallbackCast(MtsprFast), operands);
                 fast_emitted = true;
