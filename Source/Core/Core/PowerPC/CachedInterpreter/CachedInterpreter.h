@@ -125,6 +125,9 @@ public:
     // Counts/time for SUBOP10 when OPCD==4 (Paired Single) (0..1023)
     u64 count_by_subop4[1024] = {};
     u64 ns_by_subop4[1024] = {};
+    // Fast path hit counts
+    u64 fast_path_hits = 0;
+    u64 slow_path_hits = 0;
   };
 
 public:
@@ -236,6 +239,12 @@ private:
   DOL_HOT static s32 FnmaddsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=31
   template <bool write_pc>
   DOL_HOT static s32 FnmsubsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=28 (if used)
+  template <bool write_pc>
+  DOL_HOT static s32 FresxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP5=24
+  template <bool write_pc>
+  DOL_HOT static s32 FnmaddsxFast2(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=31
+  template <bool write_pc>
+  DOL_HOT static s32 FnmsubsxFast2(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP5=30
 
 #if defined(__aarch64__)
   // ARM NEON optimized Paired Single operations - OPCD 4
@@ -285,6 +294,16 @@ private:
   DOL_HOT static s32 SubfxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 40
   template <bool write_pc>
   DOL_HOT static s32 MullwxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP 235
+  template <bool write_pc>
+  DOL_HOT static s32 MulhwuxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP 11
+  template <bool write_pc>
+  DOL_HOT static s32 NegxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);      // SUBOP 104
+  template <bool write_pc>
+  DOL_HOT static s32 MfmsrFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 83
+  template <bool write_pc>
+  DOL_HOT static s32 MtmsrFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);     // SUBOP 146
+  template <bool write_pc>
+  DOL_HOT static s32 MftbFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);      // SUBOP 371
 
   // ARM NEON optimized Double-precision FP operations - OPCD 63
   template <bool write_pc>
