@@ -4279,12 +4279,29 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
   while (true)
   {
 #if defined(__aarch64__)
-    __builtin_prefetch(normal_entry + 64, 0, 1);
-    __builtin_prefetch(normal_entry + 128, 0, 1);
+    // Apple Silicon: Enhanced prefetching with multiple cache lines
+    __builtin_prefetch(normal_entry + 64, 0, 0);   // L1 temporal
+    __builtin_prefetch(normal_entry + 128, 0, 0);  // L1 temporal
+    __builtin_prefetch(normal_entry + 256, 0, 1);  // L2 non-temporal
+    __builtin_prefetch(normal_entry + 512, 0, 3);  // L3 non-temporal
+
 #endif
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
+
+#if defined(__aarch64__)
+    // Apple Silicon: Speculative execution hints
+    __builtin_prefetch(normal_entry + sizeof(callback), 0, 0); // Prefetch operands
+#endif
+
     if (const auto distance = callback(ppc_state, normal_entry + sizeof(callback))) [[likely]]
+    {
       normal_entry += distance;
+#if defined(__aarch64__)
+      // Apple Silicon: Aggressive block chaining prefetch
+      __builtin_prefetch(normal_entry, 0, 0); // Next callback
+      __builtin_prefetch(normal_entry + 32, 0, 1); // Next operands
+#endif
+    }
     else
       break;
   }
@@ -4642,15 +4659,24 @@ s32 CachedInterpreter::LinkToBlock(PowerPC::PowerPCState& ppc_state,
 
   // Select the correct link (fallthrough or taken) based on npc.
   s32 rel = 0;
-  if (ppc_state.npc == operands.expected_pc0)
+
+#if defined(__aarch64__)
+  // Apple Silicon: Branch prediction hints based on PowerPC patterns
+  // Most PowerPC code has highly predictable branch patterns
+  __builtin_expect(ppc_state.npc == operands.expected_pc0, 1); // Fallthrough usually taken
+#endif
+
+  if (ppc_state.npc == operands.expected_pc0) [[likely]]
   {
     rel = operands.rel0;
-    if (rel != 0)
+    if (rel != 0) [[likely]]
+    {
       ++s_link_stats.rel0_taken;
+    }
     else
       ++s_link_stats.match_but_unlinked;
   }
-  else if (ppc_state.npc == operands.expected_pc1)
+  else if (ppc_state.npc == operands.expected_pc1) [[unlikely]]
   {
     rel = operands.rel1;
     if (rel != 0)
