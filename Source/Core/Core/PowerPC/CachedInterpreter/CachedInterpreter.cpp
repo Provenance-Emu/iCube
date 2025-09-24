@@ -132,7 +132,12 @@ void CachedInterpreter::ConfigureFpFastFromEnv()
 }
 
 // Inline/verify controls for 59 arithmetic fast paths (file-local)
-static bool s_inline59_enabled = false;
+static bool s_inline59_enabled =
+#if defined(__aarch64__)
+    true;
+#else
+    false;
+#endif
 static bool s_verify_fp = false;
 static u32 s_verify_sample_every = 64;
 static bool s_verify_log = false;
@@ -650,6 +655,12 @@ CI_HOT_ONLY s32 CachedInterpreter::MfsprFast(PowerPC::PowerPCState& ppc_state,
     ppc_state.gpr[inst.RD] = ppc_state.spr[SPR_LR];
   else if (index == SPR_CTR)
     ppc_state.gpr[inst.RD] = ppc_state.spr[SPR_CTR];
+  else if (index == SPR_XER)
+    ppc_state.gpr[inst.RD] = ppc_state.GetXER().Hex;
+  else if (index == SPR_SRR0)
+    ppc_state.gpr[inst.RD] = ppc_state.spr[SPR_SRR0];
+  else if (index == SPR_SRR1)
+    ppc_state.gpr[inst.RD] = ppc_state.spr[SPR_SRR1];
   if (s_hot_enabled)
   {
     ++s_hot_stats.count_by_opcd[31];
@@ -668,6 +679,12 @@ CI_HOT_ONLY s32 CachedInterpreter::MtsprFast(PowerPC::PowerPCState& ppc_state,
     ppc_state.spr[SPR_LR] = ppc_state.gpr[inst.RD];
   else if (index == SPR_CTR)
     ppc_state.spr[SPR_CTR] = ppc_state.gpr[inst.RD];
+  else if (index == SPR_XER)
+    ppc_state.SetXER(UReg_XER{ppc_state.gpr[inst.RD]});
+  else if (index == SPR_SRR0)
+    ppc_state.spr[SPR_SRR0] = ppc_state.gpr[inst.RD];
+  else if (index == SPR_SRR1)
+    ppc_state.spr[SPR_SRR1] = ppc_state.gpr[inst.RD];
   if (s_hot_enabled)
   {
     ++s_hot_stats.count_by_opcd[31];
@@ -1865,6 +1882,26 @@ CI_HOT_ONLY s32 CachedInterpreter::FnmsubsxFast2(PowerPC::PowerPCState& ppc_stat
   {
     ++s_hot_stats.count_by_opcd[59];
     ++s_hot_stats.count_by_subop59[30];
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Add fctiwx(14) fast delegate
+template <bool write_pc>
+CI_HOT_ONLY s32 CachedInterpreter::FctiwxFast(PowerPC::PowerPCState& ppc_state,
+                                              const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Interpreter::fctiwx(operands.interpreter, operands.inst);
+  if (s_hot_enabled)
+  {
+    ++s_hot_stats.count_by_opcd[63];
+    ++s_hot_stats.count_by_subop63[14];
+    ++s_hot_stats.fast_path_hits;
   }
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -4301,7 +4338,7 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
     Jit(m_ppc_state.pc);
     return;
   }
-  
+
   static bool initialized = false;
   if (!initialized) [[unlikely]] {
     OptimizeMemoryLayout();
@@ -4746,7 +4783,7 @@ s32 CachedInterpreter::LinkToBlock(PowerPC::PowerPCState& ppc_state,
 }
 
 CI_COLD_ONLY s32 CachedInterpreter::LinkToBlock(std::ostream& stream,
-                                                const LinkToBlockOperands& operands)
+                                               const LinkToBlockOperands& operands)
 {
   fmt::println(stream,
                "LinkToBlock(rel0={}, rel1={}, expected_pc0=0x{:08x}, expected_pc1=0x{:08x}, downcount={}, numLoadStores={}, numFpInst={}, profiled={})",
@@ -4757,7 +4794,7 @@ CI_COLD_ONLY s32 CachedInterpreter::LinkToBlock(std::ostream& stream,
 
 // Explicitly instantiate EndBlock specializations so their symbols are available to other TUs
 template s32 CachedInterpreter::EndBlock<false>(PowerPC::PowerPCState&,
-                                                const EndBlockOperands<false>&);
+                                               const EndBlockOperands<false>&);
 template s32 CachedInterpreter::EndBlock<true>(PowerPC::PowerPCState&,
                                                const EndBlockOperands<true>&);
 
@@ -4982,1084 +5019,1084 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           }
         }
 
-        // If we did not match any CONST32 pattern, try to pack a small run of simple ALU ops
-        bool used_micro_ops = false;
-        if (!emitted_const32)
-        {
-          auto is_simple_mop = [](const UGeckoInstruction& ins) -> bool {
-            switch (ins.OPCD)
+      // If we did not match any CONST32 pattern, try to pack a small run of simple ALU ops
+      bool used_micro_ops = false;
+      if (!emitted_const32)
+      {
+        auto is_simple_mop = [](const UGeckoInstruction& ins) -> bool {
+          switch (ins.OPCD)
+          {
+          case 10: // cmpli
+          case 11: // cmpi
+          case 14: // addi
+          case 15: // addis
+          case 20: // rlwimix
+          case 21: // rlwinm / rlwinm.
+          case 23: // rlwnmx
+          case 24: // ori
+          case 25: // oris
+          case 26: // xori
+          case 27: // xoris
+          case 28: // andi.
+          case 29: // andis.
+            return true;
+          case 31: // X-form logical reg-reg and/or/xor
+            switch (ins.SUBOP10)
             {
-            case 10: // cmpli
-            case 11: // cmpi
-            case 14: // addi
-            case 15: // addis
-            case 20: // rlwimix
-            case 21: // rlwinm / rlwinm.
-            case 23: // rlwnmx
-            case 24: // ori
-            case 25: // oris
-            case 26: // xori
-            case 27: // xoris
-            case 28: // andi.
-            case 29: // andis.
+            case 0:   // cmp
+            case 32:  // cmpl
+            case 28:  // andx
+            case 444: // orx
+            case 316: // xorx
+            case 60:  // andcx
+            case 412: // orcx
+            case 476: // nandx
+            case 124: // norx
+            case 284: // eqvx
+            // arithmetic add/sub family
+            case 266: // addx
+            case 778: // addox
+            case 10:  // addcx
+            case 522: // addcox
+            case 138: // addex
+            case 650: // addeox
+            case 234: // addmex
+            case 746: // addmeox
+            case 202: // addzex
+            case 714: // addzeox
+            case 40:  // subfx
+            case 552: // subfox
+            case 8:   // subfcx
+            case 520: // subfcox
+            case 136: // subfex
+            case 648: // subfeox
+            case 232: // subfmex
+            case 744: // subfmeox
+            case 200: // subfzex
+            case 712: // subfzeox
+            case 26:  // cntlzwx
+            case 954: // extsbx
+            case 922: // extshx
+            case 24:  // slwx
+            case 536: // srwx
+            case 792: // srawx
+            case 824: // srawix
               return true;
-            case 31: // X-form logical reg-reg and/or/xor
-              switch (ins.SUBOP10)
-              {
-              case 0:   // cmp
-              case 32:  // cmpl
-              case 28:  // andx
-              case 444: // orx
-              case 316: // xorx
-              case 60:  // andcx
-              case 412: // orcx
-              case 476: // nandx
-              case 124: // norx
-              case 284: // eqvx
-              // arithmetic add/sub family
-              case 266: // addx
-              case 778: // addox
-              case 10:  // addcx
-              case 522: // addcox
-              case 138: // addex
-              case 650: // addeox
-              case 234: // addmex
-              case 746: // addmeox
-              case 202: // addzex
-              case 714: // addzeox
-              case 40:  // subfx
-              case 552: // subfox
-              case 8:   // subfcx
-              case 520: // subfcox
-              case 136: // subfex
-              case 648: // subfeox
-              case 232: // subfmex
-              case 744: // subfmeox
-              case 200: // subfzex
-              case 712: // subfzeox
-              case 26:  // cntlzwx
-              case 954: // extsbx
-              case 922: // extshx
-              case 24:  // slwx
-              case 536: // srwx
-              case 792: // srawx
-              case 824: // srawix
-                return true;
-              default:
-                return false;
-              }
             default:
               return false;
             }
-          };
+          default:
+            return false;
+          }
+        };
 
-          if (is_simple_mop(op.inst))
+        if (is_simple_mop(op.inst))
+        {
+          ExecuteMicroOpsOperands mop{};
+          mop.count = 0;
+          mop.current_pc = js.compilerPC;
+
+          // Pack up to kMaxOps or until encountering a non-simple op
+          for (u32 j = i; j < code_block.m_num_instructions &&
+                          mop.count < ExecuteMicroOpsOperands::kMaxOps;
+               ++j)
           {
-            ExecuteMicroOpsOperands mop{};
-            mop.count = 0;
-            mop.current_pc = js.compilerPC;
-
-            // Pack up to kMaxOps or until encountering a non-simple op
-            for (u32 j = i; j < code_block.m_num_instructions &&
-                            mop.count < ExecuteMicroOpsOperands::kMaxOps;
-                 ++j)
+            PPCAnalyst::CodeOp& next = m_code_buffer[j];
+            if (next.skip || (next.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
+                !is_simple_mop(next.inst))
             {
-              PPCAnalyst::CodeOp& next = m_code_buffer[j];
-              if (next.skip || (next.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
-                  !is_simple_mop(next.inst))
-              {
-                break;
-              }
+              break;
+            }
 
-              MicroOp& mu = mop.ops[mop.count++];
-              switch (next.inst.OPCD)
+            MicroOp& mu = mop.ops[mop.count++];
+            switch (next.inst.OPCD)
+            {
+            case 10: // cmpli
+            {
+              mu.op = MicroOpCode::CMPL_U_IMM;
+              mu.rd = next.inst.CRFD;
+              mu.ra = next.inst.RA;
+              mu.rb = 0;
+              mu.rc = 0;
+              mu.imm = next.inst.UIMM;
+              goto end_pack_switch;
+            }
+            case 11: // cmpi
+            {
+              mu.op = MicroOpCode::CMP_S_IMM;
+              mu.rd = next.inst.CRFD;
+              mu.ra = next.inst.RA;
+              mu.rb = 0;
+              mu.rc = 0;
+              mu.imm = static_cast<u16>(next.inst.SIMM_16); // keep 16-bit immediate
+              goto end_pack_switch;
+            }
+            case 14: // addi
+              mu.op = MicroOpCode::ADDI;
+              mu.rd = next.inst.RD; // RT
+              mu.ra = next.inst.RA; // RA (0 allowed)
+              mu.imm = static_cast<u32>(next.inst.SIMM_16);
+              break;
+            case 15: // addis
+              mu.op = MicroOpCode::ADDIS;
+              mu.rd = next.inst.RD;
+              mu.ra = next.inst.RA;
+              mu.imm = static_cast<u32>(next.inst.SIMM_16);
+              break;
+            case 20: // rlwimix
+              mu.op = MicroOpCode::RLWIMI_IMM;
+              mu.rd = next.inst.RA; // destination RA
+              mu.ra = next.inst.RS; // source RS
+              mu.rb = 0;
+              mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+              // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
+              mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
+                       ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                       ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+              break;
+            case 21: // rlwinm/rlwinm.
+              mu.op = MicroOpCode::RLWINM_IMM;
+              mu.rd = next.inst.RA; // destination RA
+              mu.ra = next.inst.RS; // source RS
+              mu.rb = 0;
+              mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+              // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
+              mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
+                       ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                       ((static_cast<u32>(next.inst.ME) & 31u) << 10);
               {
-              case 10: // cmpli
+                // NOP elimination: rlwinm rA,rA,0,0,31 with Rc==0
+                const bool is_identity = (next.inst.SH & 31u) == 0 && (next.inst.MB & 31u) == 0 &&
+                                        (next.inst.ME & 31u) == 31 && next.inst.RA == next.inst.RS &&
+                                        next.inst.Rc == 0;
+                if (is_identity)
+                {
+                  // Drop this op from the micro-op batch
+                  --mop.count;
+                  goto end_pack_switch;
+                }
+              }
+              break;
+            case 23: // rlwnmx
+              mu.op = MicroOpCode::RLWNM_VAR;
+              mu.rd = next.inst.RA; // destination RA
+              mu.ra = next.inst.RS; // source RS
+              mu.rb = next.inst.RB; // variable shift from RB
+              mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+              // Pack MB/ME into imm: [5..9]=MB, [10..14]=ME (SH is variable from RB)
+              mu.imm = ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                       ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+              break;
+            case 24: // ori
+              mu.op = MicroOpCode::ORI;
+              mu.rd = next.inst.RA; // destination is RA
+              mu.ra = next.inst.RS; // source is RS
+              mu.imm = static_cast<u32>(next.inst.UIMM);
               {
-                mu.op = MicroOpCode::CMPL_U_IMM;
+                // NOP elimination: ori rA,rA,0
+                if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                {
+                  --mop.count;
+                  goto end_pack_switch;
+                }
+                // Fold consecutive ori RA, RA, uimm
+                const u8 rt = next.inst.RA;
+                const u8 rs = next.inst.RS;
+                u32 combined = mu.imm & 0xFFFFu;
+                u32 jj = j + 1;
+                while (jj < code_block.m_num_instructions)
+                {
+                  PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                  if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
+                    break;
+                  if (n2.inst.OPCD != 24 /*ori*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                    break;
+                  combined |= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                  js.downcountAmount += n2.opinfo->num_cycles;
+                  j = jj; // consume
+                  ++jj;
+                }
+                mu.imm = combined;
+              }
+              break;
+            case 25: // oris
+              mu.op = MicroOpCode::ORIS;
+              mu.rd = next.inst.RA; // destination is RA
+              mu.ra = next.inst.RS; // source is RS
+              mu.imm = static_cast<u32>(next.inst.UIMM);
+              {
+                // NOP elimination: oris rA,rA,0
+                if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                {
+                  --mop.count;
+                  goto end_pack_switch;
+                }
+                // Fold consecutive oris RA, RA, uimm
+                const u8 rt = next.inst.RA;
+                const u8 rs = next.inst.RS;
+                u32 combined = mu.imm & 0xFFFFu;
+                u32 jj = j + 1;
+                while (jj < code_block.m_num_instructions)
+                {
+                  PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                  if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
+                    break;
+                  if (n2.inst.OPCD != 25 /*oris*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                    break;
+                  combined |= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                  js.downcountAmount += n2.opinfo->num_cycles;
+                  j = jj; // consume
+                  ++jj;
+                }
+                mu.imm = combined;
+              }
+              break;
+            case 26: // xori
+              mu.op = MicroOpCode::XORI;
+              mu.rd = next.inst.RA; // destination is RA
+              mu.ra = next.inst.RS; // source is RS
+              mu.imm = static_cast<u32>(next.inst.UIMM);
+              {
+                // NOP elimination: xori rA,rA,0
+                if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                {
+                  --mop.count;
+                  goto end_pack_switch;
+                }
+                // Fold consecutive xori RA, RA, uimm
+                const u8 rt = next.inst.RA;
+                const u8 rs = next.inst.RS;
+                u32 combined = mu.imm & 0xFFFFu;
+                u32 jj = j + 1;
+                while (jj < code_block.m_num_instructions)
+                {
+                  PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                  if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
+                    break;
+                  if (n2.inst.OPCD != 26 /*xori*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                    break;
+                  combined ^= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                  js.downcountAmount += n2.opinfo->num_cycles;
+                  j = jj; // consume
+                  ++jj;
+                }
+                mu.imm = combined;
+              }
+              break;
+            case 27: // xoris
+              mu.op = MicroOpCode::XORIS;
+              mu.rd = next.inst.RA; // destination is RA
+              mu.ra = next.inst.RS; // source is RS
+              mu.imm = static_cast<u32>(next.inst.UIMM);
+              {
+                // NOP elimination: xoris rA,rA,0
+                if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                {
+                  --mop.count;
+                  goto end_pack_switch;
+                }
+                // Fold consecutive xoris RA, RA, uimm
+                const u8 rt = next.inst.RA;
+                const u8 rs = next.inst.RS;
+                u32 combined = mu.imm & 0xFFFFu;
+                u32 jj = j + 1;
+                while (jj < code_block.m_num_instructions)
+                {
+                  PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                  if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
+                    break;
+                  if (n2.inst.OPCD != 27 /*xoris*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                    break;
+                  combined ^= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                  js.downcountAmount += n2.opinfo->num_cycles;
+                  j = jj; // consume
+                  ++jj;
+                }
+                mu.imm = combined;
+              }
+              break;
+            case 28: // andi.
+              mu.op = MicroOpCode::ANDI;
+              mu.rd = next.inst.RA; // destination is RA (recording variant)
+              mu.ra = next.inst.RS; // source is RS
+              mu.rc = 1;            // andi. always records to CR0
+              mu.imm = static_cast<u32>(next.inst.UIMM);
+              break;
+            case 29: // andis.
+              mu.op = MicroOpCode::ANDIS;
+              mu.rd = next.inst.RA; // destination is RA (recording variant)
+              mu.ra = next.inst.RS; // source is RS
+              mu.rc = 1;            // andis. always records to CR0
+              mu.imm = static_cast<u32>(next.inst.UIMM);
+              break;
+            case 31: // X-form logicals/shifts/misc
+            {
+              switch (next.inst.SUBOP10)
+              {
+              case 0: // cmp
+              {
+                mu.op = MicroOpCode::CMP_S_RR;
                 mu.rd = next.inst.CRFD;
                 mu.ra = next.inst.RA;
-                mu.rb = 0;
+                mu.rb = next.inst.RB;
                 mu.rc = 0;
-                mu.imm = next.inst.UIMM;
+                mu.imm = 0;
                 goto end_pack_switch;
               }
-              case 11: // cmpi
+              case 32: // cmpl
               {
-                mu.op = MicroOpCode::CMP_S_IMM;
+                mu.op = MicroOpCode::CMPL_U_RR;
                 mu.rd = next.inst.CRFD;
                 mu.ra = next.inst.RA;
-                mu.rb = 0;
+                mu.rb = next.inst.RB;
                 mu.rc = 0;
-                mu.imm = static_cast<u16>(next.inst.SIMM_16); // keep 16-bit immediate
+                mu.imm = 0;
                 goto end_pack_switch;
               }
-              case 14: // addi
-                mu.op = MicroOpCode::ADDI;
-                mu.rd = next.inst.RD; // RT
-                mu.ra = next.inst.RA; // RA (0 allowed)
-                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+              case 28: // andx
+                mu.op = MicroOpCode::AND_RR;
                 break;
-              case 15: // addis
-                mu.op = MicroOpCode::ADDIS;
+              case 444: // orx
+                mu.op = MicroOpCode::OR_RR;
+                break;
+              case 316: // xorx
+                mu.op = MicroOpCode::XOR_RR;
+                break;
+              case 60: // andcx
+                mu.op = MicroOpCode::ANDC_RR;
+                break;
+              case 412: // orcx
+                mu.op = MicroOpCode::ORC_RR;
+                break;
+              case 476: // nandx
+                mu.op = MicroOpCode::NAND_RR;
+                break;
+              case 124: // norx
+                mu.op = MicroOpCode::NOR_RR;
+                break;
+              case 284: // eqvx
+                mu.op = MicroOpCode::EQV_RR;
+                break;
+              // arithmetic add/sub family
+              case 266: // addx
+              case 778: // addox (OE)
+              {
+                mu.op = MicroOpCode::ADD_RR;
                 mu.rd = next.inst.RD;
                 mu.ra = next.inst.RA;
-                mu.imm = static_cast<u32>(next.inst.SIMM_16);
-                break;
-              case 20: // rlwimix
-                mu.op = MicroOpCode::RLWIMI_IMM;
-                mu.rd = next.inst.RA; // destination RA
-                mu.ra = next.inst.RS; // source RS
-                mu.rb = 0;
+                mu.rb = next.inst.RB;
                 mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
-                mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
-                         ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
-                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
-                break;
-              case 21: // rlwinm/rlwinm.
-                mu.op = MicroOpCode::RLWINM_IMM;
-                mu.rd = next.inst.RA; // destination RA
-                mu.ra = next.inst.RS; // source RS
-                mu.rb = 0;
-                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
-                mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
-                         ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
-                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
-                {
-                  // NOP elimination: rlwinm rA,rA,0,0,31 with Rc==0
-                  const bool is_identity = (next.inst.SH & 31u) == 0 && (next.inst.MB & 31u) == 0 &&
-                                          (next.inst.ME & 31u) == 31 && next.inst.RA == next.inst.RS &&
-                                          next.inst.Rc == 0;
-                  if (is_identity)
-                  {
-                    // Drop this op from the micro-op batch
-                    --mop.count;
-                    goto end_pack_switch;
-                  }
-                }
-                break;
-              case 23: // rlwnmx
-                mu.op = MicroOpCode::RLWNM_VAR;
-                mu.rd = next.inst.RA; // destination RA
-                mu.ra = next.inst.RS; // source RS
-                mu.rb = next.inst.RB; // variable shift from RB
-                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                // Pack MB/ME into imm: [5..9]=MB, [10..14]=ME (SH is variable from RB)
-                mu.imm = ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
-                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
-                break;
-              case 24: // ori
-                mu.op = MicroOpCode::ORI;
-                mu.rd = next.inst.RA; // destination is RA
-                mu.ra = next.inst.RS; // source is RS
-                mu.imm = static_cast<u32>(next.inst.UIMM);
-                {
-                  // NOP elimination: ori rA,rA,0
-                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
-                  {
-                    --mop.count;
-                    goto end_pack_switch;
-                  }
-                  // Fold consecutive ori RA, RA, uimm
-                  const u8 rt = next.inst.RA;
-                  const u8 rs = next.inst.RS;
-                  u32 combined = mu.imm & 0xFFFFu;
-                  u32 jj = j + 1;
-                  while (jj < code_block.m_num_instructions)
-                  {
-                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
-                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
-                      break;
-                    if (n2.inst.OPCD != 24 /*ori*/ || n2.inst.RA != rt || n2.inst.RS != rs)
-                      break;
-                    combined |= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
-                    js.downcountAmount += n2.opinfo->num_cycles;
-                    j = jj; // consume
-                    ++jj;
-                  }
-                  mu.imm = combined;
-                }
-                break;
-              case 25: // oris
-                mu.op = MicroOpCode::ORIS;
-                mu.rd = next.inst.RA; // destination is RA
-                mu.ra = next.inst.RS; // source is RS
-                mu.imm = static_cast<u32>(next.inst.UIMM);
-                {
-                  // NOP elimination: oris rA,rA,0
-                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
-                  {
-                    --mop.count;
-                    goto end_pack_switch;
-                  }
-                  // Fold consecutive oris RA, RA, uimm
-                  const u8 rt = next.inst.RA;
-                  const u8 rs = next.inst.RS;
-                  u32 combined = mu.imm & 0xFFFFu;
-                  u32 jj = j + 1;
-                  while (jj < code_block.m_num_instructions)
-                  {
-                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
-                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
-                      break;
-                    if (n2.inst.OPCD != 25 /*oris*/ || n2.inst.RA != rt || n2.inst.RS != rs)
-                      break;
-                    combined |= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
-                    js.downcountAmount += n2.opinfo->num_cycles;
-                    j = jj; // consume
-                    ++jj;
-                  }
-                  mu.imm = combined;
-                }
-                break;
-              case 26: // xori
-                mu.op = MicroOpCode::XORI;
-                mu.rd = next.inst.RA; // destination is RA
-                mu.ra = next.inst.RS; // source is RS
-                mu.imm = static_cast<u32>(next.inst.UIMM);
-                {
-                  // NOP elimination: xori rA,rA,0
-                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
-                  {
-                    --mop.count;
-                    goto end_pack_switch;
-                  }
-                  // Fold consecutive xori RA, RA, uimm
-                  const u8 rt = next.inst.RA;
-                  const u8 rs = next.inst.RS;
-                  u32 combined = mu.imm & 0xFFFFu;
-                  u32 jj = j + 1;
-                  while (jj < code_block.m_num_instructions)
-                  {
-                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
-                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
-                      break;
-                    if (n2.inst.OPCD != 26 /*xori*/ || n2.inst.RA != rt || n2.inst.RS != rs)
-                      break;
-                    combined ^= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
-                    js.downcountAmount += n2.opinfo->num_cycles;
-                    j = jj; // consume
-                    ++jj;
-                  }
-                  mu.imm = combined;
-                }
-                break;
-              case 27: // xoris
-                mu.op = MicroOpCode::XORIS;
-                mu.rd = next.inst.RA; // destination is RA
-                mu.ra = next.inst.RS; // source is RS
-                mu.imm = static_cast<u32>(next.inst.UIMM);
-                {
-                  // NOP elimination: xoris rA,rA,0
-                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
-                  {
-                    --mop.count;
-                    goto end_pack_switch;
-                  }
-                  // Fold consecutive xoris RA, RA, uimm
-                  const u8 rt = next.inst.RA;
-                  const u8 rs = next.inst.RS;
-                  u32 combined = mu.imm & 0xFFFFu;
-                  u32 jj = j + 1;
-                  while (jj < code_block.m_num_instructions)
-                  {
-                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
-                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 || !is_simple_mop(n2.inst))
-                      break;
-                    if (n2.inst.OPCD != 27 /*xoris*/ || n2.inst.RA != rt || n2.inst.RS != rs)
-                      break;
-                    combined ^= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
-                    js.downcountAmount += n2.opinfo->num_cycles;
-                    j = jj; // consume
-                    ++jj;
-                  }
-                  mu.imm = combined;
-                }
-                break;
-              case 28: // andi.
-                mu.op = MicroOpCode::ANDI;
-                mu.rd = next.inst.RA; // destination is RA (recording variant)
-                mu.ra = next.inst.RS; // source is RS
-                mu.rc = 1;            // andi. always records to CR0
-                mu.imm = static_cast<u32>(next.inst.UIMM);
-                break;
-              case 29: // andis.
-                mu.op = MicroOpCode::ANDIS;
-                mu.rd = next.inst.RA; // destination is RA (recording variant)
-                mu.ra = next.inst.RS; // source is RS
-                mu.rc = 1;            // andis. always records to CR0
-                mu.imm = static_cast<u32>(next.inst.UIMM);
-                break;
-              case 31: // X-form logicals/shifts/misc
+                mu.imm = (next.inst.SUBOP10 == 778) ? 1u : 0u; // imm bit0 -> OE
+                goto end_pack_switch;
+              }
+              case 10: // addcx
+              case 522: // addcox (OE)
               {
-                switch (next.inst.SUBOP10)
-                {
-                case 0: // cmp
-                {
-                  mu.op = MicroOpCode::CMP_S_RR;
-                  mu.rd = next.inst.CRFD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = next.inst.RB;
-                  mu.rc = 0;
-                  mu.imm = 0;
-                  goto end_pack_switch;
-                }
-                case 32: // cmpl
-                {
-                  mu.op = MicroOpCode::CMPL_U_RR;
-                  mu.rd = next.inst.CRFD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = next.inst.RB;
-                  mu.rc = 0;
-                  mu.imm = 0;
-                  goto end_pack_switch;
-                }
-                case 28: // andx
-                  mu.op = MicroOpCode::AND_RR;
-                  break;
-                case 444: // orx
-                  mu.op = MicroOpCode::OR_RR;
-                  break;
-                case 316: // xorx
-                  mu.op = MicroOpCode::XOR_RR;
-                  break;
-                case 60: // andcx
-                  mu.op = MicroOpCode::ANDC_RR;
-                  break;
-                case 412: // orcx
-                  mu.op = MicroOpCode::ORC_RR;
-                  break;
-                case 476: // nandx
-                  mu.op = MicroOpCode::NAND_RR;
-                  break;
-                case 124: // norx
-                  mu.op = MicroOpCode::NOR_RR;
-                  break;
-                case 284: // eqvx
-                  mu.op = MicroOpCode::EQV_RR;
-                  break;
-                // arithmetic add/sub family
-                case 266: // addx
-                case 778: // addox (OE)
-                {
-                  mu.op = MicroOpCode::ADD_RR;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 778) ? 1u : 0u; // imm bit0 -> OE
-                  goto end_pack_switch;
-                }
-                case 10: // addcx
-                case 522: // addcox (OE)
-                {
-                  mu.op = MicroOpCode::ADDC_RR;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 522) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 138: // addex
-                case 650: // addeox (OE)
-                {
-                  mu.op = MicroOpCode::ADDE_RR;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 650) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 234: // addmex
-                case 746: // addmeox (OE)
-                {
-                  mu.op = MicroOpCode::ADDME;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 746) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 202: // addzex
-                case 714: // addzeox (OE)
-                {
-                  mu.op = MicroOpCode::ADDZE;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 714) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 40: // subfx
-                case 552: // subfox (OE)
-                {
-                  mu.op = MicroOpCode::SUBF_RR;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 552) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 8: // subfcx
-                case 520: // subfcox (OE)
-                {
-                  mu.op = MicroOpCode::SUBFC_RR;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 520) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 136: // subfex
-                case 648: // subfeox (OE)
-                {
-                  mu.op = MicroOpCode::SUBFE_RR;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 648) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 232: // subfmex
-                case 744: // subfmeox (OE)
-                {
-                  mu.op = MicroOpCode::SUBFME;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 744) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 200: // subfzex
-                case 712: // subfzeox (OE)
-                {
-                  mu.op = MicroOpCode::SUBFZE;
-                  mu.rd = next.inst.RD;
-                  mu.ra = next.inst.RA;
-                  mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = (next.inst.SUBOP10 == 712) ? 1u : 0u;
-                  goto end_pack_switch;
-                }
-                case 26: // cntlzwx
-                  mu.op = MicroOpCode::CNTLZW;
-                  mu.rd = next.inst.RA;
-                  mu.ra = next.inst.RS;
-                  mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
-                  mu.imm = 0;
-                  goto end_pack_switch;
-                case 954: // extsbx
-                  mu.op = MicroOpCode::EXTSB;
-                  mu.rd = next.inst.RA;
-                  mu.ra = next.inst.RS;
-                  mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
-                  mu.imm = 0;
-                  goto end_pack_switch;
-                case 922: // extshx
-                  mu.op = MicroOpCode::EXTSH;
-                  mu.rd = next.inst.RA;
-                  mu.ra = next.inst.RS;
-                  mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
-                  mu.imm = 0;
-                  goto end_pack_switch;
-                case 24: // slwx
-                  mu.op = MicroOpCode::SLW_VAR;
-                  mu.rd = next.inst.RA;
-                  mu.ra = next.inst.RS;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
-                  mu.imm = 0;
-                  goto end_pack_switch;
-                case 536: // srwx
-                  mu.op = MicroOpCode::SRW_VAR;
-                  mu.rd = next.inst.RA;
-                  mu.ra = next.inst.RS;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
-                  mu.imm = 0;
-                  goto end_pack_switch;
-                case 792: // srawx
-                  mu.op = MicroOpCode::SRAW_VAR;
-                  mu.rd = next.inst.RA;
-                  mu.ra = next.inst.RS;
-                  mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = 0;
-                  goto end_pack_switch;
-                case 824: // srawix
-                  mu.op = MicroOpCode::SRAWI_IMM;
-                  mu.rd = next.inst.RA;
-                  mu.ra = next.inst.RS;
-                  mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
-                  mu.imm = static_cast<u32>(next.inst.SH & 31u);
-                  goto end_pack_switch;
-                default:
-                  // Not supported; undo reservation and stop packing
-                  mop.count--;
-                  j = code_block.m_num_instructions; // force stop
-                  goto end_pack_switch;
-                }
-                // Common reg-reg logicals fallthrough: set standard fields
+                mu.op = MicroOpCode::ADDC_RR;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = next.inst.RB;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 522) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 138: // addex
+              case 650: // addeox (OE)
+              {
+                mu.op = MicroOpCode::ADDE_RR;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = next.inst.RB;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 650) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 234: // addmex
+              case 746: // addmeox (OE)
+              {
+                mu.op = MicroOpCode::ADDME;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 746) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 202: // addzex
+              case 714: // addzeox (OE)
+              {
+                mu.op = MicroOpCode::ADDZE;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 714) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 40: // subfx
+              case 552: // subfox (OE)
+              {
+                mu.op = MicroOpCode::SUBF_RR;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = next.inst.RB;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 552) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 8: // subfcx
+              case 520: // subfcox (OE)
+              {
+                mu.op = MicroOpCode::SUBFC_RR;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = next.inst.RB;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 520) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 136: // subfex
+              case 648: // subfeox (OE)
+              {
+                mu.op = MicroOpCode::SUBFE_RR;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = next.inst.RB;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 648) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 232: // subfmex
+              case 744: // subfmeox (OE)
+              {
+                mu.op = MicroOpCode::SUBFME;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 744) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 200: // subfzex
+              case 712: // subfzeox (OE)
+              {
+                mu.op = MicroOpCode::SUBFZE;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = (next.inst.SUBOP10 == 712) ? 1u : 0u;
+                goto end_pack_switch;
+              }
+              case 26: // cntlzwx
+                mu.op = MicroOpCode::CNTLZW;
+                mu.rd = next.inst.RA;
+                mu.ra = next.inst.RS;
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.imm = 0;
+                goto end_pack_switch;
+              case 954: // extsbx
+                mu.op = MicroOpCode::EXTSB;
+                mu.rd = next.inst.RA;
+                mu.ra = next.inst.RS;
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.imm = 0;
+                goto end_pack_switch;
+              case 922: // extshx
+                mu.op = MicroOpCode::EXTSH;
+                mu.rd = next.inst.RA;
+                mu.ra = next.inst.RS;
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.imm = 0;
+                goto end_pack_switch;
+              case 24: // slwx
+                mu.op = MicroOpCode::SLW_VAR;
+                mu.rd = next.inst.RA;
+                mu.ra = next.inst.RS;
+                mu.rb = next.inst.RB;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.imm = 0;
+                goto end_pack_switch;
+              case 536: // srwx
+                mu.op = MicroOpCode::SRW_VAR;
+                mu.rd = next.inst.RA;
+                mu.ra = next.inst.RS;
+                mu.rb = next.inst.RB;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.imm = 0;
+                goto end_pack_switch;
+              case 792: // srawx
+                mu.op = MicroOpCode::SRAW_VAR;
                 mu.rd = next.inst.RA;
                 mu.ra = next.inst.RS;
                 mu.rb = next.inst.RB;
                 mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
                 mu.imm = 0;
-                break;
-              }
+                goto end_pack_switch;
+              case 824: // srawix
+                mu.op = MicroOpCode::SRAWI_IMM;
+                mu.rd = next.inst.RA;
+                mu.ra = next.inst.RS;
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+                mu.imm = static_cast<u32>(next.inst.SH & 31u);
+                goto end_pack_switch;
               default:
+                // Not supported; undo reservation and stop packing
                 mop.count--;
                 j = code_block.m_num_instructions; // force stop
-                break;
+                goto end_pack_switch;
               }
-            end_pack_switch:
-
-              // Advance i when packing
-              if (j != i)
-                js.downcountAmount += next.opinfo->num_cycles;
-
-              // Stop packing if this instruction ends the block
-              if (next.canEndBlock)
-              {
-                // Emit what we have and ensure end block is handled after the loop
-                i = j; // The for-loop will ++i; we want to stop at j
-                break;
-              }
-
-              // Prepare to consume this op; the outer loop will ++i
-              i = j;
+              // Common reg-reg logicals fallthrough: set standard fields
+              mu.rd = next.inst.RA;
+              mu.ra = next.inst.RS;
+              mu.rb = next.inst.RB;
+              mu.rc = static_cast<u8>(next.inst.Rc && next.crInUse[0]);
+              mu.imm = 0;
+              break;
             }
+            default:
+              mop.count--;
+              j = code_block.m_num_instructions; // force stop
+              break;
+            }
+          end_pack_switch:
 
-            if (mop.count > 0)
+            // Advance i when packing
+            if (j != i)
+              js.downcountAmount += next.opinfo->num_cycles;
+
+            // Stop packing if this instruction ends the block
+            if (next.canEndBlock)
             {
-              used_micro_ops = true;
-              Write(op.canEndBlock ? CallbackCast(ExecuteMicroOps<true>) :
-                                     CallbackCast(ExecuteMicroOps<false>),
-                    mop);
+              // Emit what we have and ensure end block is handled after the loop
+              i = j; // The for-loop will ++i; we want to stop at j
+              break;
             }
+
+            // Prepare to consume this op; the outer loop will ++i
+            i = j;
+          }
+
+          if (mop.count > 0)
+          {
+            used_micro_ops = true;
+            Write(op.canEndBlock ? CallbackCast(ExecuteMicroOps<true>) :
+                                   CallbackCast(ExecuteMicroOps<false>),
+                  mop);
           }
         }
+      }
 
-        if (!emitted_const32 && !used_micro_ops)
+      if (!emitted_const32 && !used_micro_ops)
+      {
+        // Use PIC fast path for load/store instructions when possible
+        if ((op.opinfo->flags & FL_LOADSTORE) != 0)
         {
-          // Use PIC fast path for load/store instructions when possible
-          if ((op.opinfo->flags & FL_LOADSTORE) != 0)
+          auto& mm = m_system.GetMemory();
+          const LoadStoreDFormPICOperands operands = {interpreter,
+                                                      Interpreter::GetInterpreterOp(op.inst),
+                                                      js.compilerPC,
+                                                      op.inst,
+                                                      power_pc,
+                                                      mm.GetRAM(),
+                                                      mm.GetRamMask(),
+                                                      mm.GetEXRAM(),
+                                                      mm.GetExRamMask(),
+                                                      mm.GetFakeVMEM(),
+                                                      mm.GetFakeVMemMask()};
+          if (op.inst.OPCD == 31)
           {
-            auto& mm = m_system.GetMemory();
-            const LoadStoreDFormPICOperands operands = {interpreter,
-                                                        Interpreter::GetInterpreterOp(op.inst),
-                                                        js.compilerPC,
-                                                        op.inst,
-                                                        power_pc,
-                                                        mm.GetRAM(),
-                                                        mm.GetRamMask(),
-                                                        mm.GetEXRAM(),
-                                                        mm.GetExRamMask(),
-                                                        mm.GetFakeVMEM(),
-                                                        mm.GetFakeVMemMask()};
-            if (op.inst.OPCD == 31)
+            if (op.inst.SUBOP10 == 1014) // dcbz
             {
-              if (op.inst.SUBOP10 == 1014) // dcbz
-              {
-                Write(op.canEndBlock ? CallbackCast(DcbzPIC<true>) : CallbackCast(DcbzPIC<false>),
-                      operands);
-              }
-              else
-              {
-                Write(op.canEndBlock ? CallbackCast(LoadStoreXFormPIC<true>) :
-                                       CallbackCast(LoadStoreXFormPIC<false>),
-                      operands);
-              }
+              Write(op.canEndBlock ? CallbackCast(DcbzPIC<true>) : CallbackCast(DcbzPIC<false>),
+                    operands);
             }
             else
             {
-              Write(op.canEndBlock ? CallbackCast(LoadStoreDFormPIC<true>) :
-                                     CallbackCast(LoadStoreDFormPIC<false>),
+              Write(op.canEndBlock ? CallbackCast(LoadStoreXFormPIC<true>) :
+                                     CallbackCast(LoadStoreXFormPIC<false>),
                     operands);
             }
-            ++js.numLoadStoreInst;
           }
           else
           {
-            const InterpretOperands operands = {interpreter, Interpreter::GetInterpreterOp(op.inst),
-                                                js.compilerPC, op.inst};
-            const u32 opcd = op.inst.OPCD;
-            bool fast_emitted = false;
-            if (opcd == 18) // bx
+            Write(op.canEndBlock ? CallbackCast(LoadStoreDFormPIC<true>) :
+                                   CallbackCast(LoadStoreDFormPIC<false>),
+                  operands);
+          }
+          ++js.numLoadStoreInst;
+        }
+        else
+        {
+          const InterpretOperands operands = {interpreter, Interpreter::GetInterpreterOp(op.inst),
+                                              js.compilerPC, op.inst};
+          const u32 opcd = op.inst.OPCD;
+          bool fast_emitted = false;
+          if (opcd == 18) // bx
+          {
+            Write(CallbackCast(BxFast<true>), operands);
+            fast_emitted = true;
+          }
+          else if (opcd == 16) // bcx
+          {
+            Write(CallbackCast(BCxFast<true>), operands);
+            fast_emitted = true;
+          }
+          else if (opcd == 19)
+          {
+            if (op.inst.SUBOP10 == 16) // bclrx
             {
-              Write(CallbackCast(BxFast<true>), operands);
+              Write(CallbackCast(BclrxFast<true>), operands);
               fast_emitted = true;
             }
-            else if (opcd == 16) // bcx
+            else if (op.inst.SUBOP10 == 528) // bcctrx
             {
-              Write(CallbackCast(BCxFast<true>), operands);
+              Write(CallbackCast(BcctrxFast<true>), operands);
               fast_emitted = true;
             }
-            else if (opcd == 19)
+          }
+          else if (opcd == 31)
+          {
+            if (op.inst.SUBOP10 == 339) // mfspr
             {
-              if (op.inst.SUBOP10 == 16) // bclrx
+              const u32 index = ((op.inst.SPR & 0x1F) << 5) + ((op.inst.SPR >> 5) & 0x1F);
+              if (index == SPR_LR || index == SPR_CTR)
               {
-                Write(CallbackCast(BclrxFast<true>), operands);
-                fast_emitted = true;
-              }
-              else if (op.inst.SUBOP10 == 528) // bcctrx
-              {
-                Write(CallbackCast(BcctrxFast<true>), operands);
+                Write(CallbackCast(MfsprFast), operands);
                 fast_emitted = true;
               }
             }
-            else if (opcd == 31)
+            else if (op.inst.SUBOP10 == 467) // mtspr
             {
-              if (op.inst.SUBOP10 == 339) // mfspr
+              const u32 index = (op.inst.SPRU << 5) | (op.inst.SPRL & 0x1F);
+              if (index == SPR_LR || index == SPR_CTR)
               {
-                const u32 index = ((op.inst.SPR & 0x1F) << 5) + ((op.inst.SPR >> 5) & 0x1F);
-                if (index == SPR_LR || index == SPR_CTR)
-                {
-                  Write(CallbackCast(MfsprFast), operands);
-                  fast_emitted = true;
-                }
-              }
-              else if (op.inst.SUBOP10 == 467) // mtspr
-              {
-                const u32 index = (op.inst.SPRU << 5) | (op.inst.SPRL & 0x1F);
-                if (index == SPR_LR || index == SPR_CTR)
-                {
-                  Write(CallbackCast(MtsprFast), operands);
-                  fast_emitted = true;
-                }
-              }
-            }
-            else if (opcd == 59)
-            {
-              const u32 sub5 = op.inst.SUBOP5;
-              if (sub5 == 18) // fdivsx (delegate)
-              {
-                Write(op.canEndBlock ? CallbackCast(FdivsxFast<true>) : CallbackCast(FdivsxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub5 == 24) // fresx
-              {
-                Write(op.canEndBlock ? CallbackCast(FresxFast<true>) : CallbackCast(FresxFast<false>), operands);
-                fast_emitted = true;
-              }
-              if (sub5 == 21) // faddsx
-              {
-                if (s_inline59_enabled)
-                {
-                  if (s_verify_fp)
-                    Write(op.canEndBlock ? CallbackCast(FaddsxVerifyDelegateFast<true>) : CallbackCast(FaddsxVerifyDelegateFast<false>), operands);
-                  else
-                    Write(op.canEndBlock ? CallbackCast(FpFaddsxFast<true>) : CallbackCast(FpFaddsxFast<false>), operands);
-                }
-                else
-                {
-                  Write(op.canEndBlock ? CallbackCast(FaddsxFast<true>) : CallbackCast(FaddsxFast<false>), operands);
-                }
-                fast_emitted = true;
-              }
-              else if (sub5 == 20) // fsubsx
-              {
-                if (s_inline59_enabled)
-                {
-                  if (s_verify_fp)
-                    Write(op.canEndBlock ? CallbackCast(FsubsxVerifyDelegateFast<true>) : CallbackCast(FsubsxVerifyDelegateFast<false>), operands);
-                  else
-                    Write(op.canEndBlock ? CallbackCast(FpFsubsxFast<true>) : CallbackCast(FpFsubsxFast<false>), operands);
-                }
-                else
-                {
-                  Write(op.canEndBlock ? CallbackCast(FsubsxFast<true>) : CallbackCast(FsubsxFast<false>), operands);
-                }
-                fast_emitted = true;
-              }
-              else if (sub5 == 25) // fmulsx (delegate)
-              {
-                if (s_inline59_enabled)
-                {
-                  if (s_verify_fp)
-                    Write(op.canEndBlock ? CallbackCast(FmulsxVerifyDelegateFast<true>) : CallbackCast(FmulsxVerifyDelegateFast<false>), operands);
-                  else
-                    Write(op.canEndBlock ? CallbackCast(FpFmulsxFast<true>) : CallbackCast(FpFmulsxFast<false>), operands);
-                }
-                else
-                {
-                  Write(op.canEndBlock ? CallbackCast(FmulsxFast<true>) : CallbackCast(FmulsxFast<false>), operands);
-                }
-                fast_emitted = true;
-              }
-              else if (sub5 == 29) // fmaddsx (delegate)
-              {
-                Write(op.canEndBlock ? CallbackCast(FmaddsxFast<true>) : CallbackCast(FmaddsxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub5 == 28) // fmsubsx (delegate)
-              {
-                Write(op.canEndBlock ? CallbackCast(FmsubsxFast<true>) : CallbackCast(FmsubsxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub5 == 31) // fnmaddsx (delegate)
-              {
-                Write(op.canEndBlock ? CallbackCast(FnmaddsxFast<true>) : CallbackCast(FnmaddsxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub5 == 30) // fnmsubsx (delegate)
-              {
-                Write(op.canEndBlock ? CallbackCast(FnmsubsxFast<true>) : CallbackCast(FnmsubsxFast<false>), operands);
+                Write(CallbackCast(MtsprFast), operands);
                 fast_emitted = true;
               }
             }
-            else if (opcd == 63)
+          }
+          else if (opcd == 59)
+          {
+            const u32 sub5 = op.inst.SUBOP5;
+            if (sub5 == 18) // fdivsx (delegate)
             {
-              const u32 sub10 = op.inst.SUBOP10;
-              if (sub10 == 15) // fctiwzx only
-              {
-                Write(op.canEndBlock ? CallbackCast(FctiwzxFast<true>) : CallbackCast(FctiwzxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 12) // frspx
-              {
-                Write(op.canEndBlock ? CallbackCast(FrspxFast<true>) : CallbackCast(FrspxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 72) // fmrx
-              {
-                // Temporarily disabled to isolate F-Zero GPU desync; fall back to Interpreter
-                Write(op.canEndBlock ? CallbackCast(FmrxFast<true>) : CallbackCast(FmrxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 32) // fcmpo
-              {
-                Write(op.canEndBlock ? CallbackCast(FcmpoFast<true>) : CallbackCast(FcmpoFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 0) // fcmpu
-              {
-                Write(op.canEndBlock ? CallbackCast(FcmpuFast<true>) : CallbackCast(FcmpuFast<false>), operands);
-                fast_emitted = true;
-              }
-#if defined(__aarch64__)
-              // ARM64 SIMD double-precision optimizations
-              else if (sub10 == 21) // faddx
-              {
-                Write(op.canEndBlock ? CallbackCast(FaddxFast<true>) : CallbackCast(FaddxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 20) // fsubx
-              {
-                Write(op.canEndBlock ? CallbackCast(FsubxFast<true>) : CallbackCast(FsubxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 25) // fmulx
-              {
-                Write(op.canEndBlock ? CallbackCast(FmulxFast<true>) : CallbackCast(FmulxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 29) // fmaddx
-              {
-                Write(op.canEndBlock ? CallbackCast(FmaddxFast<true>) : CallbackCast(FmaddxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 40) // fnegx
-              {
-                Write(op.canEndBlock ? CallbackCast(FnegxFast<true>) : CallbackCast(FnegxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 264) // fabsx
-              {
-                Write(op.canEndBlock ? CallbackCast(FabsxFast<true>) : CallbackCast(FabsxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub10 == 136) // fnabsx
-              {
-                Write(op.canEndBlock ? CallbackCast(FnabsxFast<true>) : CallbackCast(FnabsxFast<false>), operands);
-                fast_emitted = true;
-              }
-#endif
-            }
-#if defined(__aarch64__)
-            else if (opcd == 4) // Paired Single operations
-            {
-              const u32 sub = op.inst.SUBOP10;
-              if (sub == 21) // ps_add
-              {
-                Write(op.canEndBlock ? CallbackCast(PsAddFast<true>) : CallbackCast(PsAddFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 20) // ps_sub
-              {
-                Write(op.canEndBlock ? CallbackCast(PsSubFast<true>) : CallbackCast(PsSubFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 25) // ps_mul
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMulFast<true>) : CallbackCast(PsMulFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 29) // ps_madd
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMaddFast<true>) : CallbackCast(PsMaddFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 528) // ps_merge00
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMerge00Fast<true>) : CallbackCast(PsMerge00Fast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 560) // ps_merge01
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMerge01Fast<true>) : CallbackCast(PsMerge01Fast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 592) // ps_merge10
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMerge10Fast<true>) : CallbackCast(PsMerge10Fast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 624) // ps_merge11
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMerge11Fast<true>) : CallbackCast(PsMerge11Fast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 12) // ps_muls0
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMuls0Fast<true>) : CallbackCast(PsMuls0Fast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 13) // ps_muls1
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMuls1Fast<true>) : CallbackCast(PsMuls1Fast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 14) // ps_madds0
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMadds0Fast<true>) : CallbackCast(PsMadds0Fast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 15) // ps_madds1
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMadds1Fast<true>) : CallbackCast(PsMadds1Fast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 23) // ps_sel
-              {
-                Write(op.canEndBlock ? CallbackCast(PsSelFast<true>) : CallbackCast(PsSelFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 40) // ps_neg
-              {
-                Write(op.canEndBlock ? CallbackCast(PsNegFast<true>) : CallbackCast(PsNegFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 72) // ps_mr
-              {
-                Write(op.canEndBlock ? CallbackCast(PsMrFast<true>) : CallbackCast(PsMrFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 136) // ps_nabs
-              {
-                Write(op.canEndBlock ? CallbackCast(PsNabsFast<true>) : CallbackCast(PsNabsFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 264) // ps_abs
-              {
-                Write(op.canEndBlock ? CallbackCast(PsAbsFast<true>) : CallbackCast(PsAbsFast<false>), operands);
-                fast_emitted = true;
-              }
-            }
-#endif
-#if defined(__aarch64__)
-            else if (opcd == 31) // Integer operations
-            {
-              const u32 sub = op.inst.SUBOP10;
-              if (sub == 266) // addx
-              {
-                Write(op.canEndBlock ? CallbackCast(AddxFast<true>) : CallbackCast(AddxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 40) // subfx
-              {
-                Write(op.canEndBlock ? CallbackCast(SubfxFast<true>) : CallbackCast(SubfxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 235) // mullwx
-              {
-                Write(op.canEndBlock ? CallbackCast(MullwxFast<true>) : CallbackCast(MullwxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 11) // mulhwux
-              {
-                Write(op.canEndBlock ? CallbackCast(MulhwuxFast<true>) : CallbackCast(MulhwuxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 104) // negx
-              {
-                Write(op.canEndBlock ? CallbackCast(NegxFast<true>) : CallbackCast(NegxFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 83) // mfmsr
-              {
-                Write(op.canEndBlock ? CallbackCast(MfmsrFast<true>) : CallbackCast(MfmsrFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 146) // mtmsr
-              {
-                Write(op.canEndBlock ? CallbackCast(MtmsrFast<true>) : CallbackCast(MtmsrFast<false>), operands);
-                fast_emitted = true;
-              }
-              else if (sub == 371) // mftb
-              {
-                Write(op.canEndBlock ? CallbackCast(MftbFast<true>) : CallbackCast(MftbFast<false>), operands);
-                fast_emitted = true;
-              }
-            }
-#endif
-            else if (opcd == 13) // addic_rc
-            {
-              Write(op.canEndBlock ? CallbackCast(AddicRcFast<true>) : CallbackCast(AddicRcFast<false>), operands);
+              Write(op.canEndBlock ? CallbackCast(FdivsxFast<true>) : CallbackCast(FdivsxFast<false>), operands);
               fast_emitted = true;
             }
+            else if (sub5 == 24) // fresx
+            {
+              Write(op.canEndBlock ? CallbackCast(FresxFast<true>) : CallbackCast(FresxFast<false>), operands);
+              fast_emitted = true;
+            }
+            if (sub5 == 21) // faddsx
+            {
+              if (s_inline59_enabled)
+              {
+                if (s_verify_fp)
+                  Write(op.canEndBlock ? CallbackCast(FaddsxVerifyDelegateFast<true>) : CallbackCast(FaddsxVerifyDelegateFast<false>), operands);
+                else
+                  Write(op.canEndBlock ? CallbackCast(FpFaddsxFast<true>) : CallbackCast(FpFaddsxFast<false>), operands);
+              }
+              else
+              {
+                Write(op.canEndBlock ? CallbackCast(FaddsxFast<true>) : CallbackCast(FaddsxFast<false>), operands);
+              }
+              fast_emitted = true;
+            }
+            else if (sub5 == 20) // fsubsx
+            {
+              if (s_inline59_enabled)
+              {
+                if (s_verify_fp)
+                  Write(op.canEndBlock ? CallbackCast(FsubsxVerifyDelegateFast<true>) : CallbackCast(FsubsxVerifyDelegateFast<false>), operands);
+                else
+                  Write(op.canEndBlock ? CallbackCast(FpFsubsxFast<true>) : CallbackCast(FpFsubsxFast<false>), operands);
+              }
+              else
+              {
+                Write(op.canEndBlock ? CallbackCast(FsubsxFast<true>) : CallbackCast(FsubsxFast<false>), operands);
+              }
+              fast_emitted = true;
+            }
+            else if (sub5 == 25) // fmulsx (delegate)
+            {
+              if (s_inline59_enabled)
+              {
+                if (s_verify_fp)
+                  Write(op.canEndBlock ? CallbackCast(FmulsxVerifyDelegateFast<true>) : CallbackCast(FmulsxVerifyDelegateFast<false>), operands);
+                else
+                  Write(op.canEndBlock ? CallbackCast(FpFmulsxFast<true>) : CallbackCast(FpFmulsxFast<false>), operands);
+              }
+              else
+              {
+                Write(op.canEndBlock ? CallbackCast(FmulsxFast<true>) : CallbackCast(FmulsxFast<false>), operands);
+              }
+              fast_emitted = true;
+            }
+            else if (sub5 == 29) // fmaddsx (delegate)
+            {
+              Write(op.canEndBlock ? CallbackCast(FmaddsxFast<true>) : CallbackCast(FmaddsxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub5 == 28) // fmsubsx (delegate)
+            {
+              Write(op.canEndBlock ? CallbackCast(FmsubsxFast<true>) : CallbackCast(FmsubsxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub5 == 31) // fnmaddsx (delegate)
+            {
+              Write(op.canEndBlock ? CallbackCast(FnmaddsxFast<true>) : CallbackCast(FnmaddsxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub5 == 30) // fnmsubsx (delegate)
+            {
+              Write(op.canEndBlock ? CallbackCast(FnmsubsxFast<true>) : CallbackCast(FnmsubsxFast<false>), operands);
+              fast_emitted = true;
+            }
+          }
+          else if (opcd == 63)
+          {
+            const u32 sub10 = op.inst.SUBOP10;
+            if (sub10 == 15) // fctiwzx only
+            {
+              Write(op.canEndBlock ? CallbackCast(FctiwzxFast<true>) : CallbackCast(FctiwzxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 12) // frspx
+            {
+              Write(op.canEndBlock ? CallbackCast(FrspxFast<true>) : CallbackCast(FrspxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 72) // fmrx
+            {
+              // Temporarily disabled to isolate F-Zero GPU desync; fall back to Interpreter
+              Write(op.canEndBlock ? CallbackCast(FmrxFast<true>) : CallbackCast(FmrxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 32) // fcmpo
+            {
+              Write(op.canEndBlock ? CallbackCast(FcmpoFast<true>) : CallbackCast(FcmpoFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 0) // fcmpu
+            {
+              Write(op.canEndBlock ? CallbackCast(FcmpuFast<true>) : CallbackCast(FcmpuFast<false>), operands);
+              fast_emitted = true;
+            }
+#if defined(__aarch64__)
+            // ARM64 SIMD double-precision optimizations
+            else if (sub10 == 21) // faddx
+            {
+              Write(op.canEndBlock ? CallbackCast(FaddxFast<true>) : CallbackCast(FaddxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 20) // fsubx
+            {
+              Write(op.canEndBlock ? CallbackCast(FsubxFast<true>) : CallbackCast(FsubxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 25) // fmulx
+            {
+              Write(op.canEndBlock ? CallbackCast(FmulxFast<true>) : CallbackCast(FmulxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 29) // fmaddx
+            {
+              Write(op.canEndBlock ? CallbackCast(FmaddxFast<true>) : CallbackCast(FmaddxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 40) // fnegx
+            {
+              Write(op.canEndBlock ? CallbackCast(FnegxFast<true>) : CallbackCast(FnegxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 264) // fabsx
+            {
+              Write(op.canEndBlock ? CallbackCast(FabsxFast<true>) : CallbackCast(FabsxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub10 == 136) // fnabsx
+            {
+              Write(op.canEndBlock ? CallbackCast(FnabsxFast<true>) : CallbackCast(FnabsxFast<false>), operands);
+              fast_emitted = true;
+            }
+#endif
+          }
+#if defined(__aarch64__)
+          else if (opcd == 4) // Paired Single operations
+          {
+            const u32 sub = op.inst.SUBOP10;
+            if (sub == 21) // ps_add
+            {
+              Write(op.canEndBlock ? CallbackCast(PsAddFast<true>) : CallbackCast(PsAddFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 20) // ps_sub
+            {
+              Write(op.canEndBlock ? CallbackCast(PsSubFast<true>) : CallbackCast(PsSubFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 25) // ps_mul
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMulFast<true>) : CallbackCast(PsMulFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 29) // ps_madd
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMaddFast<true>) : CallbackCast(PsMaddFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 528) // ps_merge00
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMerge00Fast<true>) : CallbackCast(PsMerge00Fast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 560) // ps_merge01
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMerge01Fast<true>) : CallbackCast(PsMerge01Fast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 592) // ps_merge10
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMerge10Fast<true>) : CallbackCast(PsMerge10Fast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 624) // ps_merge11
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMerge11Fast<true>) : CallbackCast(PsMerge11Fast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 12) // ps_muls0
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMuls0Fast<true>) : CallbackCast(PsMuls0Fast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 13) // ps_muls1
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMuls1Fast<true>) : CallbackCast(PsMuls1Fast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 14) // ps_madds0
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMadds0Fast<true>) : CallbackCast(PsMadds0Fast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 15) // ps_madds1
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMadds1Fast<true>) : CallbackCast(PsMadds1Fast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 23) // ps_sel
+            {
+              Write(op.canEndBlock ? CallbackCast(PsSelFast<true>) : CallbackCast(PsSelFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 40) // ps_neg
+            {
+              Write(op.canEndBlock ? CallbackCast(PsNegFast<true>) : CallbackCast(PsNegFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 72) // ps_mr
+            {
+              Write(op.canEndBlock ? CallbackCast(PsMrFast<true>) : CallbackCast(PsMrFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 136) // ps_nabs
+            {
+              Write(op.canEndBlock ? CallbackCast(PsNabsFast<true>) : CallbackCast(PsNabsFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 264) // ps_abs
+            {
+              Write(op.canEndBlock ? CallbackCast(PsAbsFast<true>) : CallbackCast(PsAbsFast<false>), operands);
+              fast_emitted = true;
+            }
+          }
+#endif
+#if defined(__aarch64__)
+          else if (opcd == 31) // Integer operations
+          {
+            const u32 sub = op.inst.SUBOP10;
+            if (sub == 266) // addx
+            {
+              Write(op.canEndBlock ? CallbackCast(AddxFast<true>) : CallbackCast(AddxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 40) // subfx
+            {
+              Write(op.canEndBlock ? CallbackCast(SubfxFast<true>) : CallbackCast(SubfxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 235) // mullwx
+            {
+              Write(op.canEndBlock ? CallbackCast(MullwxFast<true>) : CallbackCast(MullwxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 11) // mulhwux
+            {
+              Write(op.canEndBlock ? CallbackCast(MulhwuxFast<true>) : CallbackCast(MulhwuxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 104) // negx
+            {
+              Write(op.canEndBlock ? CallbackCast(NegxFast<true>) : CallbackCast(NegxFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 83) // mfmsr
+            {
+              Write(op.canEndBlock ? CallbackCast(MfmsrFast<true>) : CallbackCast(MfmsrFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 146) // mtmsr
+            {
+              Write(op.canEndBlock ? CallbackCast(MtmsrFast<true>) : CallbackCast(MtmsrFast<false>), operands);
+              fast_emitted = true;
+            }
+            else if (sub == 371) // mftb
+            {
+              Write(op.canEndBlock ? CallbackCast(MftbFast<true>) : CallbackCast(MftbFast<false>), operands);
+              fast_emitted = true;
+            }
+          }
+#endif
+          else if (opcd == 13) // addic_rc
+          {
+            Write(op.canEndBlock ? CallbackCast(AddicRcFast<true>) : CallbackCast(AddicRcFast<false>), operands);
+            fast_emitted = true;
+          }
 
-            if (!fast_emitted)
-            {
-              Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
-                    operands);
-            }
+          if (!fast_emitted)
+          {
+            Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
+                  operands);
           }
         }
       }
-
-      if (op.branchIsIdleLoop)
-        Write(CheckIdle, {m_system.GetCoreTiming(), js.blockStart});
-      // For simple CTR-controlled tight loops, fast-forward by exiting the loop and yielding.
-      if (op.branchIsCtrIdleLoop)
-      {
-        const u32 fallthrough_pc = op.address + 4;
-        Write(FastForwardCtrIdle, {m_system.GetCoreTiming(), js.blockStart, fallthrough_pc});
-      }
-      if (op.canEndBlock)
-        WriteEndBlock();
     }
-  }
-  if (code_block.m_broken)
-  {
-    Write(WriteBrokenBlockNPC, {nextPC});
-    WriteEndBlock();
-  }
 
-  if (HasWriteFailed())
-  {
-    WARN_LOG_FMT(DYNA_REC, "JIT ran out of space in code region during code generation.");
-    return false;
+    if (op.branchIsIdleLoop)
+      Write(CheckIdle, {m_system.GetCoreTiming(), js.blockStart});
+    // For simple CTR-controlled tight loops, fast-forward by exiting the loop and yielding.
+    if (op.branchIsCtrIdleLoop)
+    {
+      const u32 fallthrough_pc = op.address + 4;
+      Write(FastForwardCtrIdle, {m_system.GetCoreTiming(), js.blockStart, fallthrough_pc});
+    }
+    if (op.canEndBlock)
+      WriteEndBlock();
   }
-  return true;
+}
+if (code_block.m_broken)
+{
+  Write(WriteBrokenBlockNPC, {nextPC});
+  WriteEndBlock();
+}
+
+if (HasWriteFailed())
+{
+  WARN_LOG_FMT(DYNA_REC, "JIT ran out of space in code region during code generation.");
+  return false;
+}
+return true;
 }
 
 void CachedInterpreter::EraseSingleBlock(const JitBlock& block)
 {
-  m_block_cache.EraseSingleBlock(block);
-  FreeRanges();
+m_block_cache.EraseSingleBlock(block);
+FreeRanges();
 }
 
 std::vector<JitBase::MemoryStats> CachedInterpreter::GetMemoryStats() const
 {
-  return {{"free", m_free_ranges.get_stats()}};
+return {{"free", m_free_ranges.get_stats()}};
 }
 
 std::size_t CachedInterpreter::DisassembleNearCode(const JitBlock& block,
-                                                   std::ostream& stream) const
+                                                 std::ostream& stream) const
 {
-  return Disassemble(block, stream);
+return Disassemble(block, stream);
 }
 
 std::size_t CachedInterpreter::DisassembleFarCode(const JitBlock& block, std::ostream& stream) const
 {
-  stream << "N/A\n";
-  return 0;
+stream << "N/A\n";
+return 0;
 }
 
 void CachedInterpreter::ClearCache()
 {
-  m_block_cache.Clear();
-  m_block_cache.ClearRangesToFree();
-  ClearCodeSpace();
-  ResetFreeMemoryRanges();
-  RefreshConfig();
-  Host_JitCacheInvalidation();
+m_block_cache.Clear();
+m_block_cache.ClearRangesToFree();
+ClearCodeSpace();
+ResetFreeMemoryRanges();
+RefreshConfig();
+Host_JitCacheInvalidation();
 }
 
 void CachedInterpreter::LogGeneratedCode() const
 {
-  std::ostringstream stream;
+std::ostringstream stream;
 
-  stream << "\nPPC Code Buffer:\n";
-  for (const PPCAnalyst::CodeOp& op :
-       std::span{m_code_buffer.data(), code_block.m_num_instructions})
-  {
-    fmt::print(stream, "0x{:08x}\t\t{}\n", op.address,
-               Common::GekkoDisassembler::Disassemble(op.inst.hex, op.address));
-  }
+stream << "\nPPC Code Buffer:\n";
+for (const PPCAnalyst::CodeOp& op :
+     std::span{m_code_buffer.data(), code_block.m_num_instructions})
+{
+  fmt::print(stream, "0x{:08x}\t\t{}\n", op.address,
+             Common::GekkoDisassembler::Disassemble(op.inst.hex, op.address));
+}
 
-  stream << "\nHost Code:\n";
-  Disassemble(*js.curBlock, stream);
+stream << "\nHost Code:\n";
+Disassemble(*js.curBlock, stream);
 
-  // TODO C++20: std::ostringstream::view()
-  DEBUG_LOG_FMT(DYNA_REC, "{}", std::move(stream).str());
+// TODO C++20: std::ostringstream::view()
+DEBUG_LOG_FMT(DYNA_REC, "{}", std::move(stream).str());
 }
 
 template <bool write_pc>
 CI_HOT_ONLY s32 CachedInterpreter::DcbzPIC(PowerPC::PowerPCState& ppc_state,
-                                           const LoadStoreDFormPICOperands& operands)
+                                         const LoadStoreDFormPICOperands& operands)
 {
-  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
-               exram_mask, fakevmem_base, fakevmem_mask] = operands;
+const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
+             exram_mask, fakevmem_base, fakevmem_mask] = operands;
 
-  if constexpr (write_pc)
-  {
-    ppc_state.pc = current_pc;
-    ppc_state.npc = current_pc + 4;
-  }
+if constexpr (write_pc)
+{
+  ppc_state.pc = current_pc;
+  ppc_state.npc = current_pc + 4;
+}
 
-  // Require data cache enabled and no address translation
-  if (!HID0(ppc_state).DCE || ppc_state.msr.DR)
-  {
-    func(interpreter, inst);
-    return sizeof(AnyCallback) + sizeof(operands);
-  }
-
-  // EA for X-form
-  const u32 ea = inst.RA ? (ppc_state.gpr[inst.RA] + ppc_state.gpr[inst.RB]) : ppc_state.gpr[inst.RB];
-  const u32 line_addr = ea & ~31u;
-
-  const auto region = CI_GetRegionInfo(line_addr, ppc_state.msr.DR, mem1_base, mem1_mask,
-                                       exram_base, exram_mask, fakevmem_base, fakevmem_mask);
-  if (!region.base)
-  {
-    func(interpreter, inst);
-    return sizeof(AnyCallback) + sizeof(operands);
-  }
-  const u32 offset = CI_RegionOffset(region, line_addr);
-  #if defined(__aarch64__)
-  {
-    uint8x16_t vz = vdupq_n_u8(0);
-    vst1q_u8(reinterpret_cast<uint8_t*>(region.base + offset), vz);
-    vst1q_u8(reinterpret_cast<uint8_t*>(region.base + offset + 16), vz);
-  }
-  #else
-  std::memset(region.base + offset, 0, 32);
-  #endif
+// Require data cache enabled and no address translation
+if (!HID0(ppc_state).DCE || ppc_state.msr.DR)
+{
+  func(interpreter, inst);
   return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// EA for X-form
+const u32 ea = inst.RA ? (ppc_state.gpr[inst.RA] + ppc_state.gpr[inst.RB]) : ppc_state.gpr[inst.RB];
+const u32 line_addr = ea & ~31u;
+
+const auto region = CI_GetRegionInfo(line_addr, ppc_state.msr.DR, mem1_base, mem1_mask,
+                                     exram_base, exram_mask, fakevmem_base, fakevmem_mask);
+if (!region.base)
+{
+  func(interpreter, inst);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+const u32 offset = CI_RegionOffset(region, line_addr);
+#if defined(__aarch64__)
+{
+  uint8x16_t vz = vdupq_n_u8(0);
+  vst1q_u8(reinterpret_cast<uint8_t*>(region.base + offset), vz);
+  vst1q_u8(reinterpret_cast<uint8_t*>(region.base + offset + 16), vz);
+}
+#else
+std::memset(region.base + offset, 0, 32);
+#endif
+return sizeof(AnyCallback) + sizeof(operands);
 }

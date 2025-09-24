@@ -339,6 +339,8 @@ private:
   template <bool write_pc>
   DOL_HOT static s32 FctiwzxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=15
   template <bool write_pc>
+  DOL_HOT static s32 FctiwxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP10=14
+  template <bool write_pc>
   DOL_HOT static s32 FrspxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=12
   template <bool write_pc>
   DOL_HOT static s32 FmrxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);    // SUBOP10=72
@@ -348,6 +350,28 @@ private:
   DOL_HOT static s32 FcmpuFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=0
   template <bool write_pc>
   DOL_HOT static s32 FselxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=20
+  template <bool write_pc>
+  DOL_HOT static s32 FdivxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=18
+  template <bool write_pc>
+  DOL_HOT static s32 FrsqrtexFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);// SUBOP10=26
+  template <bool write_pc>
+  DOL_HOT static s32 FmsubxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP10=28
+  template <bool write_pc>
+  DOL_HOT static s32 FnmaddxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=31
+  template <bool write_pc>
+  DOL_HOT static s32 FnmsubxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=30
+  template <bool write_pc>
+  DOL_HOT static s32 McrfsFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=64
+  template <bool write_pc>
+  DOL_HOT static s32 MffsxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);   // SUBOP10=583
+  template <bool write_pc>
+  DOL_HOT static s32 Mtfsb0xFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=70
+  template <bool write_pc>
+  DOL_HOT static s32 Mtfsb1xFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=38
+  template <bool write_pc>
+  DOL_HOT static s32 MtfsfixFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands); // SUBOP10=134
+  template <bool write_pc>
+  DOL_HOT static s32 MtfsfxFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);  // SUBOP10=711
   template <bool write_pc>
   DOL_HOT static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
                                const LoadStoreDFormPICOperands& operands);
