@@ -4,6 +4,7 @@
 #import "JitManager.h"
 
 #import "JitManager+Debugger.h"
+#import <TargetConditionals.h>
 
 typedef NS_ENUM(NSInteger, DOLJitType) {
   DOLJitTypeDebugger,
@@ -33,7 +34,7 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 
 - (id)init {
   if (self = [super init]) {
-#if TARGET_OS_SIMULATOR
+#if TARGET_OS_SIMULATOR || TARGET_OS_MACCATALYST
     _jitType = DOLJitTypeUnrestricted;
 #else
     _jitType = DOLJitTypeDebugger;
@@ -46,11 +47,11 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 }
 
 - (void)recheckIfJitIsAcquired {
-  if (_jitType == DOLJitTypeDebugger) {
-    self.acquiredJit = [self checkIfProcessIsDebugged];
-  } else if (_jitType == DOLJitTypeUnrestricted) {
-    self.acquiredJit = true;
-  }
+//  if (_jitType == DOLJitTypeDebugger) {
+//    self.acquiredJit = [self checkIfProcessIsDebugged];
+//  } else if (_jitType == DOLJitTypeUnrestricted) {
+//    self.acquiredJit = true;
+//  }
 }
 
 @end
