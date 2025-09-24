@@ -19,6 +19,9 @@
 #include <fmt/ostream.h>
 #if defined(__aarch64__)
 #include <arm_neon.h>
+#include <sys/mman.h>
+#include <mach/mach.h>
+#include <mach/thread_policy.h>
 #endif
 
 #include "Common/CommonTypes.h"
@@ -48,15 +51,18 @@
 #define CI_HOT_FLATTEN [[gnu::hot, gnu::flatten]]
 #define CI_HOT_ONLY [[gnu::hot]]
 #define CI_COLD_ONLY [[gnu::cold]]
+#define CI_ALWAYS_INLINE __attribute__((always_inline)) inline
 #else
 #define CI_HOT_FLATTEN [[gnu::hot]]
 #define CI_HOT_ONLY [[gnu::hot]]
 #define CI_COLD_ONLY [[gnu::cold]]
+#define CI_ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
 #else
 #define CI_HOT_FLATTEN
 #define CI_HOT_ONLY
 #define CI_COLD_ONLY
+#define CI_ALWAYS_INLINE inline
 #endif
 
 namespace {
@@ -1882,6 +1888,27 @@ static inline u64 CI_NowNs()
   using namespace std::chrono;
   return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
+
+#if defined(__aarch64__)
+
+// Apple Silicon memory optimization
+void CachedInterpreter::OptimizeMemoryLayout() {
+  // Configure for Apple Silicon's unified memory architecture
+  madvise(&m_ppc_state, sizeof(m_ppc_state), MADV_WILLNEED);
+
+  // Prefetch hot state data
+  __builtin_prefetch(&m_ppc_state.gpr[0], 0, 3);
+  __builtin_prefetch(&m_ppc_state.ps[0], 0, 3);
+}
+
+void CachedInterpreter::ConfigureAppleSiliconHints() {
+  // Request performance cores for demanding emulation workload
+  thread_extended_policy_data_t policy = {true};
+  thread_policy_set(mach_thread_self(), THREAD_EXTENDED_POLICY,
+                     (thread_policy_t)&policy, THREAD_EXTENDED_POLICY_COUNT);
+}
+
+#endif // __aarch64__
 
 void CachedInterpreter::OnLinkPatched()
 {
@@ -4273,6 +4300,13 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
   {
     Jit(m_ppc_state.pc);
     return;
+  }
+  
+  static bool initialized = false;
+  if (!initialized) [[unlikely]] {
+    OptimizeMemoryLayout();
+    ConfigureAppleSiliconHints();
+    initialized = true;
   }
 
   auto& ppc_state = m_ppc_state;
