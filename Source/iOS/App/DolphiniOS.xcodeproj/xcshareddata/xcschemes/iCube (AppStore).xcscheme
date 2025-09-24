@@ -83,7 +83,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "CI_ENABLE_INLINE_59"
-            value = "0"
+            value = "1"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
