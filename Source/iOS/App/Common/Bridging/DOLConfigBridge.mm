@@ -162,8 +162,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (BOOL)mainDisableICache { return Config::Get(Config::MAIN_DISABLE_ICACHE); }
 + (void)setMainDisableICache:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_DISABLE_ICACHE, (bool)enabled); }
 // Cached Interpreter: block linking toggle
-+ (BOOL)mainCIBlockLinking { return Config::Get(Config::MAIN_CI_BLOCK_LINKING); }
-+ (void)setMainCIBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CI_BLOCK_LINKING, (bool)enabled); }
+
 + (BOOL)mainLowDCBZHack { return Config::Get(Config::MAIN_LOW_DCBZ_HACK); }
 + (void)setMainLowDCBZHack:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_LOW_DCBZ_HACK, (bool)enabled); }
 + (BOOL)mainOverclockEnable { return Config::Get(Config::MAIN_OVERCLOCK_ENABLE); }

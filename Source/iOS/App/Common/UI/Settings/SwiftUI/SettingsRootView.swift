@@ -1736,12 +1736,6 @@ struct ConfigAdvancedView: View {
         }
         Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
           .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) }
-        // Cached Interpreter block linking toggle
-        HStack {
-          Toggle(L("Enable Cached Interpreter Block Linking"), isOn: Binding(get: { DOLConfigBridge.mainCIBlockLinking() }, set: { DOLConfigBridge.setMainCIBlockLinking($0) }))
-          Spacer()
-          Image(systemName: "info.circle").help(L("May increase performance by chaining basic blocks in the Cached Interpreter, but can cause crashes or freezes in some games. Off by default."))
-        }
         // CPU Idle Detection / Fast-Forward
         Toggle(L("Relaxed Idle Loop Detection"), isOn: $relaxedIdleDetection)
           .onChange(of: relaxedIdleDetection) { DOLConfigBridge.setMainRelaxedIdleDetection($0) }

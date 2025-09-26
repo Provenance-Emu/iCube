@@ -152,7 +152,6 @@ private:
   static u64 s_hot_counter;
   static bool s_fp_fast_enabled;
 private:
-  static LinkStats s_link_stats;
   static bool s_log_enabled;
 
   struct StartProfiledBlockOperands;
@@ -167,22 +166,6 @@ private:
   struct CheckHaltOperands;
   struct CheckIdleOperands;
   struct CheckCtrIdleOperands;
-  // Link to another cached-interpreter block without dispatcher round-trip
-  struct LinkToBlockOperands
-  {
-    // End-of-block accounting (merged EndBlock operands)
-    u32 downcount;
-    u32 num_load_stores;
-    u32 num_fp_inst;
-    u32 expected_pc0; // fallthrough or primary expected PC
-    u32 expected_pc1; // secondary expected PC (e.g., taken branch target)
-    JitBlock::ProfileData* profile_data; // nullptr when profiling disabled
-    // Signed distance in bytes from callback start to dest->normalEntry (0 = not linked)
-    s32 rel0; // distance for expected_pc0
-    s32 rel1; // distance for expected_pc1
-    u32 _pad; // pad to keep sizeof(Operands) multiple of pointer size
-  };
-
   static s32 StartProfiledBlock(PowerPC::PowerPCState& ppc_state,
                                 const StartProfiledBlockOperands& operands);
   static s32 StartProfiledBlock(std::ostream& stream, const StartProfiledBlockOperands& operands);
@@ -190,9 +173,6 @@ private:
   static s32 EndBlock(PowerPC::PowerPCState& ppc_state, const EndBlockOperands<profiled>& operands);
   template <bool profiled>
   static s32 EndBlock(std::ostream& stream, const EndBlockOperands<profiled>& operands);
-  // Link trampoline callback
-  static s32 LinkToBlock(PowerPC::PowerPCState& ppc_state, const LinkToBlockOperands& operands);
-  static s32 LinkToBlock(std::ostream& stream, const LinkToBlockOperands& operands);
   template <bool write_pc>
   DOL_HOT static s32 Interpret(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   template <bool write_pc>
