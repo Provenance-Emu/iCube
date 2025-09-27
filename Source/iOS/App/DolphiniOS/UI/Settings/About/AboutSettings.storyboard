@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="23727" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="Xvi-QC-HZ6">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24127" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="Xvi-QC-HZ6">
     <device id="retina4_7" orientation="portrait" appearance="light"/>
     <dependencies>
         <deployment identifier="iOS"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="23721"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24063"/>
+        <capability name="Named colors" minToolsVersion="9.0"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
         <capability name="System colors in document resources" minToolsVersion="11.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
@@ -30,8 +31,9 @@
                                                     <constraint firstAttribute="height" id="Ie1-rX-mGK"/>
                                                 </constraints>
                                             </view>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" verticalCompressionResistancePriority="751" image="DolphinLogo" translatesAutoresizingMaskIntoConstraints="NO" id="BZx-el-fSq" userLabel="Logo">
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" verticalCompressionResistancePriority="751" image="iCube-Logo-Square-WithText" translatesAutoresizingMaskIntoConstraints="NO" id="BZx-el-fSq" userLabel="Logo">
                                                 <rect key="frame" x="0.0" y="25.5" width="335" height="48"/>
+                                                <color key="tintColor" name="DolphTintLight"/>
                                                 <constraints>
                                                     <constraint firstAttribute="height" constant="128" id="d8R-IJ-300"/>
                                                 </constraints>
@@ -129,7 +131,6 @@
             <objects>
                 <navigationController modalPresentationStyle="formSheet" id="Xvi-QC-HZ6" sceneMemberID="viewController">
                     <navigationBar key="navigationBar" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="NO" id="ZIg-C7-Ky9">
-                        <rect key="frame" x="0.0" y="20" width="375" height="44"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </navigationBar>
                     <connections>
@@ -142,7 +143,10 @@
         </scene>
     </scenes>
     <resources>
-        <image name="DolphinLogo" width="48" height="48"/>
+        <image name="iCube-Logo-Square-WithText" width="480" height="480"/>
+        <namedColor name="DolphTintLight">
+            <color red="0.55686274509803924" green="0.77254901960784317" blue="0.97647058823529409" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+        </namedColor>
         <systemColor name="systemBackgroundColor">
             <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
         </systemColor>

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="23727" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24127" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
     <device id="retina6_12" orientation="portrait" appearance="light"/>
     <dependencies>
         <deployment identifier="iOS"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="23721"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24063"/>
+        <capability name="Named colors" minToolsVersion="9.0"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
         <capability name="System colors in document resources" minToolsVersion="11.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
@@ -17,50 +18,33 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="DolphinLogo" translatesAutoresizingMaskIntoConstraints="NO" id="DLO-go-IMG">
-                                <rect key="frame" x="146.66666666666666" y="296" width="100" height="100"/>
-                                <constraints>
-                                    <constraint firstAttribute="height" constant="100" id="logo-height"/>
-                                    <constraint firstAttribute="width" constant="100" id="logo-width"/>
-                                </constraints>
-                            </imageView>
-                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="iCube" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="APP-na-me">
-                                <rect key="frame" x="96.666666666666686" y="416" width="200" height="30"/>
-                                <constraints>
-                                    <constraint firstAttribute="height" constant="30" id="title-height"/>
-                                    <constraint firstAttribute="width" constant="200" id="title-width"/>
-                                </constraints>
-                                <fontDescription key="fontDescription" type="system" weight="semibold" pointSize="24"/>
-                                <color key="textColor" systemColor="systemBlueColor"/>
-                                <nil key="highlightedColor"/>
-                            </label>
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="🐬 GameCube &amp; Wii emulator 🌊" textAlignment="center" lineBreakMode="tailTruncation" numberOfLines="2" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="SUB-ti-tle">
                                 <rect key="frame" x="46.666666666666657" y="456" width="300" height="40"/>
                                 <constraints>
                                     <constraint firstAttribute="height" constant="40" id="subtitle-height"/>
-                                    <constraint firstAttribute="width" constant="300" id="subtitle-width"/>
+                                    <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="300" id="subtitle-width"/>
                                 </constraints>
                                 <fontDescription key="fontDescription" type="system" weight="medium" pointSize="16"/>
-                                <color key="textColor" systemColor="systemBlueColor"/>
+                                <color key="textColor" name="DolphTintLight"/>
                                 <nil key="highlightedColor"/>
                             </label>
                             <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="center" spacing="4" translatesAutoresizingMaskIntoConstraints="NO" id="VER-si-ons">
-                                <rect key="frame" x="96.666666666666686" y="690" width="200" height="60"/>
+                                <rect key="frame" x="-3.6666666666666572" y="690" width="400.33333333333326" height="60"/>
                                 <subviews>
-                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" ambiguous="YES" text="© 2003-2015+ Dolphin Team" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="COP-yr-ight1">
-                                        <rect key="frame" x="9.3333333333333286" y="0.0" width="181" height="23"/>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" text="© 2003-2015+ Dolphin Team" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="COP-yr-ight1">
+                                        <rect key="frame" x="109.66666666666669" y="0.0" width="181" height="23"/>
                                         <fontDescription key="fontDescription" type="system" weight="medium" pointSize="13"/>
                                         <color key="textColor" systemColor="secondaryLabelColor"/>
                                         <nil key="highlightedColor"/>
                                     </label>
-                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" ambiguous="YES" text="© 2025+ iCube Project" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="COP-yr-ight2">
-                                        <rect key="frame" x="28.333333333333329" y="27.000000000000004" width="143" height="15.666666666666668"/>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="© 2025+ iCube Project" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="COP-yr-ight2">
+                                        <rect key="frame" x="128.66666666666666" y="27.000000000000004" width="142.99999999999997" height="15.666666666666668"/>
                                         <fontDescription key="fontDescription" type="system" weight="medium" pointSize="13"/>
                                         <color key="textColor" systemColor="secondaryLabelColor"/>
                                         <nil key="highlightedColor"/>
                                     </label>
-                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" ambiguous="YES" text="Loading..." textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="LOA-di-ng">
-                                        <rect key="frame" x="73.333333333333329" y="46.666666666666629" width="53.333333333333329" height="13.333333333333336"/>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Loading..." textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="LOA-di-ng">
+                                        <rect key="frame" x="173.66666666666666" y="46.666666666666629" width="53.333333333333343" height="13.333333333333336"/>
                                         <fontDescription key="fontDescription" type="system" weight="medium" pointSize="11"/>
                                         <color key="textColor" systemColor="tertiaryLabelColor"/>
                                         <nil key="highlightedColor"/>
@@ -68,19 +52,25 @@
                                 </subviews>
                                 <constraints>
                                     <constraint firstAttribute="height" constant="60" id="versions-height"/>
-                                    <constraint firstAttribute="width" constant="200" id="versions-width"/>
+                                    <constraint firstAttribute="width" constant="400" id="versions-width"/>
                                 </constraints>
                             </stackView>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="iCube-Logo-Square-WithText" translatesAutoresizingMaskIntoConstraints="NO" id="DLO-go-IMG">
+                                <rect key="frame" x="117.66666666666669" y="290" width="158" height="158"/>
+                                <color key="tintColor" name="DolphTintLight"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="158" id="logo-height"/>
+                                    <constraint firstAttribute="width" constant="158" id="logo-width"/>
+                                </constraints>
+                            </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
                         <constraints>
+                            <constraint firstItem="SUB-ti-tle" firstAttribute="top" secondItem="DLO-go-IMG" secondAttribute="bottom" constant="8" id="J6A-8X-OxB"/>
                             <constraint firstItem="DLO-go-IMG" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="logo-centerX"/>
-                            <constraint firstItem="DLO-go-IMG" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" constant="-80" id="logo-centerY"/>
+                            <constraint firstItem="DLO-go-IMG" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" constant="-57" id="logo-centerY"/>
                             <constraint firstItem="SUB-ti-tle" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="subtitle-centerX"/>
-                            <constraint firstItem="SUB-ti-tle" firstAttribute="top" secondItem="APP-na-me" secondAttribute="bottom" constant="10" id="subtitle-spacing"/>
-                            <constraint firstItem="APP-na-me" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="title-centerX"/>
-                            <constraint firstItem="APP-na-me" firstAttribute="top" secondItem="DLO-go-IMG" secondAttribute="bottom" constant="20" id="title-spacing"/>
                             <constraint firstItem="6Tk-OE-BBY" firstAttribute="bottom" secondItem="VER-si-ons" secondAttribute="bottom" constant="34" id="versions-bottom"/>
                             <constraint firstItem="VER-si-ons" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="versions-centerX"/>
                         </constraints>
@@ -88,19 +78,19 @@
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="53" y="375"/>
+            <point key="canvasLocation" x="52.671755725190835" y="374.64788732394368"/>
         </scene>
     </scenes>
     <resources>
-        <image name="DolphinLogo" width="48" height="48"/>
+        <image name="iCube-Logo-Square-WithText" width="480" height="480"/>
+        <namedColor name="DolphTintLight">
+            <color red="0.55686274509803924" green="0.77254901960784317" blue="0.97647058823529409" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+        </namedColor>
         <systemColor name="secondaryLabelColor">
             <color red="0.23529411759999999" green="0.23529411759999999" blue="0.26274509800000001" alpha="0.59999999999999998" colorSpace="custom" customColorSpace="sRGB"/>
         </systemColor>
         <systemColor name="systemBackgroundColor">
             <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
-        </systemColor>
-        <systemColor name="systemBlueColor">
-            <color red="0.0" green="0.47843137250000001" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
         </systemColor>
         <systemColor name="tertiaryLabelColor">
             <color red="0.23529411759999999" green="0.23529411759999999" blue="0.26274509800000001" alpha="0.29803921570000003" colorSpace="custom" customColorSpace="sRGB"/>
