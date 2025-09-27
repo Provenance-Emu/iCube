@@ -39,6 +39,11 @@
 #include "VideoCommon/CommandProcessor.h"
 #include "VideoCommon/PixelEngine.h"
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#include <sys/mman.h>
+#endif
+
 namespace Memory
 {
 MemoryManager::MemoryManager(Core::System& system) : m_system(system)
@@ -140,6 +145,14 @@ void MemoryManager::Init()
           region.physical_address, region.size);
       exit(0);
     }
+
+#ifdef __APPLE__
+#if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || (defined(TARGET_OS_TV) && TARGET_OS_TV)
+    // Provide paging hints to the kernel for unified memory on iOS/tvOS
+    madvise(*region.out_pointer, region.size, MADV_WILLNEED);
+    madvise(*region.out_pointer, region.size, MADV_RANDOM);
+#endif
+#endif
 
     for (u32 i = 0; i < region.size; i += PowerPC::BAT_PAGE_SIZE)
     {

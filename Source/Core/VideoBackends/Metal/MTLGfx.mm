@@ -35,7 +35,7 @@ Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
 #if TARGET_OS_OSX
   [m_layer setDisplaySyncEnabled:g_ActiveConfig.bVSyncActive];
 #endif
-  
+
   SetupSurface();
   g_state_tracker->FlushEncoders();
 
@@ -109,11 +109,9 @@ Metal::Gfx::CreateStagingTexture(StagingTextureType type, const TextureConfig& c
     const size_t stride = config.GetStride();
     const size_t buffer_size = stride * static_cast<size_t>(config.height);
 
-    MTLResourceOptions options = MTLStorageModeShared;
+    MTLResourceOptions options = MTLStorageModeShared | MTLResourceHazardTrackingModeUntracked;
     if (type == StagingTextureType::Upload)
       options |= MTLResourceCPUCacheModeWriteCombined;
-    if (type == StagingTextureType::Upload)
-      options |= MTLResourceHazardTrackingModeUntracked;
 
     id<MTLBuffer> buffer = [g_device newBufferWithLength:buffer_size options:options];
     if (!buffer)

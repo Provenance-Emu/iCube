@@ -194,7 +194,7 @@ std::pair<void*, size_t> Metal::StateTracker::Preallocate(UploadBuffer buffer_id
     while (newsize < amt)
       newsize *= 2;
     MTLResourceOptions options =
-        MTLResourceStorageModeShared | MTLResourceCPUCacheModeWriteCombined;
+        MTLResourceStorageModeShared | MTLResourceCPUCacheModeWriteCombined | MTLResourceHazardTrackingModeUntracked;
     buffer.cpubuffer = MRCTransfer([g_device newBufferWithLength:newsize options:options]);
     [buffer.cpubuffer setLabel:GetName(buffer_idx)];
     ASSERT_MSG(VIDEO, buffer.cpubuffer, "Failed to allocate MTLBuffer (out of memory?)");
