@@ -786,77 +786,168 @@ struct EmulationScreen: View {
         // Semi-transparent overlay with quick performance controls (iOS)
         if showPerfOverlay {
           Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
-          VStack(alignment: .leading, spacing: 16) {
-            HStack {
-              Text("Performance Controls").font(.headline).foregroundColor(.white)
-              Spacer()
-              Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
-                .buttonStyle(.plain)
-            }
-            Divider().background(.white.opacity(0.2))
-            Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-              ocEnabled = v
-              DOLConfigBridge.setMainOverclockEnable(v)
-            }))
-            .tint(.blue)
-            .foregroundColor(.white)
-            HStack {
-              Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1...400)
-                .disabled(!ocEnabled)
-                .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
-              Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-            }
-            Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-              vbiEnabledQuick = v
-              DOLConfigBridge.setMainViOverclockEnable(v)
-            }))
-            .tint(.blue)
-            .foregroundColor(.white)
-            HStack {
-              Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1...400)
-                .disabled(!vbiEnabledQuick)
-                .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
-              Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-            }
+          GeometryReader { geometry in
+            let isLandscape = geometry.size.width > geometry.size.height
+            ScrollView {
+              if isLandscape {
+                // Two-column layout for landscape
+                VStack(alignment: .leading, spacing: 12) {
+                  HStack {
+                    Text("Performance Controls").font(.headline).foregroundColor(.white)
+                    Spacer()
+                    Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
+                      .buttonStyle(.plain)
+                  }
+                  Divider().background(.white.opacity(0.2))
 
-            Divider().background(.white.opacity(0.2))
-            // Overlay toggles
-            Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
-              .tint(.blue)
-              .foregroundColor(.white)
-            Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
-              .tint(.blue)
-              .foregroundColor(.white)
-            Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
-              .tint(.blue)
-              .foregroundColor(.white)
-            Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
-              .tint(.blue)
-              .foregroundColor(.white)
+                  HStack(alignment: .top, spacing: 20) {
+                    // Left column
+                    VStack(alignment: .leading, spacing: 12) {
+                      Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+                        ocEnabled = v
+                        DOLConfigBridge.setMainOverclockEnable(v)
+                      }))
+                      .tint(.blue)
+                      .foregroundColor(.white)
+                      HStack {
+                        Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1...400)
+                          .disabled(!ocEnabled)
+                          .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
+                        Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                      }
 
-            // Quick graphics controls
-            HStack {
-              Text(L("Internal Resolution"))
-                .foregroundColor(.white.opacity(0.8))
-              Spacer()
-              Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0...Double(max(1, efbMaxScaleQuick)), step: 1)
-                .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
-              Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+                      Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+                        vbiEnabledQuick = v
+                        DOLConfigBridge.setMainViOverclockEnable(v)
+                      }))
+                      .tint(.blue)
+                      .foregroundColor(.white)
+                      HStack {
+                        Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1...400)
+                          .disabled(!vbiEnabledQuick)
+                          .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
+                        Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                      }
+
+                      // Graphics controls
+                      HStack {
+                        Text(L("Internal Resolution"))
+                          .foregroundColor(.white.opacity(0.8))
+                          .font(.caption)
+                        Spacer()
+                        Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0...Double(max(1, efbMaxScaleQuick)), step: 1)
+                          .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
+                        Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
+                      }
+                      HStack {
+                        Text(L("Anisotropic Filtering"))
+                          .foregroundColor(.white.opacity(0.8))
+                          .font(.caption)
+                        Spacer()
+                        Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1...16, step: 1)
+                          .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+                        Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
+                      }
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    // Right column - Overlay toggles
+                    VStack(alignment: .leading, spacing: 12) {
+                      Text("Display Overlays").font(.subheadline).foregroundColor(.white.opacity(0.8))
+                      Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                      Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                      Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                      Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                  }
+                }
+              } else {
+                // Single column layout for portrait
+                VStack(alignment: .leading, spacing: 16) {
+                  HStack {
+                    Text("Performance Controls").font(.headline).foregroundColor(.white)
+                    Spacer()
+                    Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
+                      .buttonStyle(.plain)
+                  }
+                  Divider().background(.white.opacity(0.2))
+                  Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+                    ocEnabled = v
+                    DOLConfigBridge.setMainOverclockEnable(v)
+                  }))
+                  .tint(.blue)
+                  .foregroundColor(.white)
+                  HStack {
+                    Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1...400)
+                      .disabled(!ocEnabled)
+                      .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
+                    Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                  }
+                  Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+                    vbiEnabledQuick = v
+                    DOLConfigBridge.setMainViOverclockEnable(v)
+                  }))
+                  .tint(.blue)
+                  .foregroundColor(.white)
+                  HStack {
+                    Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1...400)
+                      .disabled(!vbiEnabledQuick)
+                      .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
+                    Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                  }
+
+                  Divider().background(.white.opacity(0.2))
+                  // Overlay toggles
+                  Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
+                  Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
+                  Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
+                  Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
+
+                  // Quick graphics controls
+                  HStack {
+                    Text(L("Internal Resolution"))
+                      .foregroundColor(.white.opacity(0.8))
+                    Spacer()
+                    Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0...Double(max(1, efbMaxScaleQuick)), step: 1)
+                      .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
+                    Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+                  }
+                  HStack {
+                    Text(L("Anisotropic Filtering"))
+                      .foregroundColor(.white.opacity(0.8))
+                    Spacer()
+                    Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1...16, step: 1)
+                      .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+                    Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+                  }
+                }
+              }
             }
-            HStack {
-              Text(L("Anisotropic Filtering"))
-                .foregroundColor(.white.opacity(0.8))
-              Spacer()
-              Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1...16, step: 1)
-                .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
-              Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
-            }
+            .padding(20)
+            .frame(maxWidth: isLandscape ? min(geometry.size.width * 0.9, 720) : 420)
+            .frame(maxHeight: isLandscape ? min(geometry.size.height * 0.8, 400) : .infinity)
+            .background(.black.opacity(0.6))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
+            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
           }
-          .padding(20)
-          .frame(maxWidth: 420)
-          .background(.black.opacity(0.6))
-          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-          .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
           .zIndex(5)
         }
 
