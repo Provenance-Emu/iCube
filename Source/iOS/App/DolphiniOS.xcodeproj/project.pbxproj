@@ -34,8 +34,8 @@
 		B346CDE02E75E4CF00B3C00B /* CacheInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */; };
 		B346CDE22E75E52900B3C00B /* DSUSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDE12E75E52900B3C00B /* DSUSessionView.swift */; };
 		B346CDE82E75F04100B3C00B /* ButtonMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */; };
-		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); };
-		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilters = (ios, tvos, ); settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilter = ios; };
+		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
 		B34ECCF52E569AF300301907 /* PVWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = B34ECCF42E569AF300301907 /* PVWebServer */; };
 		B34ECCF92E56A2EB00301907 /* TVGameItem.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF72E56A2EB00301907 /* TVGameItem.mm */; };
