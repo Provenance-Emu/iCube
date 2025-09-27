@@ -304,7 +304,9 @@ struct SettingsRootView<Background: View>: View {
           NavigationLink(destination: ControllersRootView()) {
             Label(L("Controllers"), systemImage: "gamecontroller")
           }
-          NavigationLink(destination: DebugRootView()) {
+          NavigationLink {
+            DebugRootView()
+          } label: {
             Label(L("Debug"), systemImage: "ladybug")
           }
         }
@@ -340,7 +342,7 @@ struct SettingsRootView<Background: View>: View {
           }
 #else
           Button(L("Help")) {
-            if let url = URL(string: "https://oatmealdome.me/dolphinios/") {
+            if let url = URL(string: "https://icube-emu.com/support") {
               openURL(url)
             }
           }
@@ -1264,6 +1266,7 @@ struct DebugRootView: View {
   @State private var loggingVerbosity: Int = 4
   @State private var inputDebug: Bool = false
   @State private var instantReplay: Bool = false
+  @State private var hydrated: Bool = false
   @AppStorage("library_disable_artwork") private var disableArtwork: Bool = false
 
   var body: some View {
@@ -1330,23 +1333,65 @@ struct DebugRootView: View {
       }
     }
     .navigationTitle(L("Debug"))
-    .onAppear { syncDebug(); }
+    .task {
+      if !hydrated {
+        hydrated = true
+        await withTaskGroup(of: Void.self) { group in
+          group.addTask { await syncDebugAsync() }
+        }
+      }
+    }
   }
 
   private func syncDebug() {
-    fastmem = DOLConfigBridge.mainFastmem()
-    syncOnSkipIdle = DOLConfigBridge.mainSyncOnSkipIdle()
-    mfiConnect = UserDefaults.standard.bool(forKey: "virtual_mfi_connect")
-    userFolder = UserFolderUtil.getUserFolder()
-    jitAcquired = (JitManager.shared().acquiredJit)
-    jitError = (JitManager.shared().acquisitionError) ?? ""
-    fastmemAvailable = (FastmemManager.shared().fastmemAvailable)
-    launchTimes = UserDefaults.standard.integer(forKey: "launch_times")
-    loggingEnabled = UserDefaults.standard.bool(forKey: "logger_console_enabled")
+    // Kept for potential call-sites; now delegates to async variant
+    Task { await syncDebugAsync() }
+  }
+
+  private func syncDebugChunk1() async {
+    await MainActor.run {
+      fastmem = DOLConfigBridge.mainFastmem()
+      syncOnSkipIdle = DOLConfigBridge.mainSyncOnSkipIdle()
+      mfiConnect = UserDefaults.standard.bool(forKey: "virtual_mfi_connect")
+      fastmemAvailable = (FastmemManager.shared().fastmemAvailable)
+      launchTimes = UserDefaults.standard.integer(forKey: "launch_times")
+    }
+  }
+
+  private func syncDebugChunk2() async {
+    let folder = UserFolderUtil.getUserFolder()
+    await MainActor.run { userFolder = folder }
+  }
+
+  private func syncDebugChunk3() async {
+    let acquired = JitManager.shared().acquiredJit
+    let error = JitManager.shared().acquisitionError ?? ""
+    await MainActor.run {
+      jitAcquired = acquired
+      jitError = error
+    }
+  }
+
+  private func syncDebugChunk4() async {
+    let logEnabled = UserDefaults.standard.bool(forKey: "logger_console_enabled")
     var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = 4 }
-    loggingVerbosity = v
-    inputDebug = UserDefaults.standard.bool(forKey: "input_debug")
-    instantReplay = UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled")
+    let inputDbg = UserDefaults.standard.bool(forKey: "input_debug")
+    let ir = UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled")
+    await MainActor.run {
+      loggingEnabled = logEnabled
+      loggingVerbosity = v
+      inputDebug = inputDbg
+      instantReplay = ir
+    }
+  }
+
+  private func syncDebugAsync() async {
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask { await syncDebugChunk1() }
+      group.addTask { await syncDebugChunk2() }
+      group.addTask { await syncDebugChunk3() }
+      group.addTask { await syncDebugChunk4() }
+    }
   }
 }
 
@@ -1417,7 +1462,7 @@ struct AboutView: View {
           .multilineTextAlignment(.center)
 
         Button(L("Source Code")) {
-          if let url = URL(string: "https://github.com/OatmealDome/dolphinios") {
+          if let url = URL(string: "https://github.com/provenance-Emu/icube") {
             openURL(url)
           }
         }
