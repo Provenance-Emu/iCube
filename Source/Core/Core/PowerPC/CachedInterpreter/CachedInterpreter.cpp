@@ -120,6 +120,21 @@ static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
   return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
 }
 } // anonymous namespace
+ 
+bool CachedInterpreter::IsBlockLinkingEnabled()
+{
+#if defined(__aarch64__)
+  // Respect user-configured toggle; when disabled, force block linking off.
+  if (SConfig::GetInstance().bJITNoBlockLinking)
+    return false;
+  // Shadow mode default: require explicit env to enable patching.
+  // This keeps the default safe until we've validated linking thoroughly.
+  const char* env = std::getenv("DOLPHIN_CI_LINK_ENABLE");
+  return env && env[0] == '1';
+#else
+  return false;
+#endif
+}
 
 void CachedInterpreter::ConfigureFpFastFromEnv()
 {
@@ -1907,6 +1922,15 @@ CI_HOT_ONLY s32 CachedInterpreter::FctiwxFast(PowerPC::PowerPCState& ppc_state,
 
 // Static instrumentation state
 bool CachedInterpreter::s_log_enabled = false;
+struct CILinkStats
+{
+  u64 links_patched = 0;
+  u64 match_but_unlinked = 0;
+  u64 npc_mismatch = 0;
+  u64 zero_downcount = 0;
+  u64 slice_end = 0;
+};
+static CILinkStats s_link_stats{};
 
 // Hot-instruction profiling state
 CachedInterpreter::HotStats CachedInterpreter::s_hot_stats{};
@@ -3191,13 +3215,8 @@ void CachedInterpreter::Init()
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
 
-  // Enable block linking on ARM64 to reduce dispatch overhead.
-  // Safe on iOS/tvOS and provides measurable speedups.
-  #if defined(__aarch64__)
-  jo.enableBlocklink = true;
-  #else
-  jo.enableBlocklink = false;
-  #endif
+  // Respect platform capabilities and user config for block linking.
+  jo.enableBlocklink = IsBlockLinkingEnabled();
 
   m_block_cache.Init();
 
@@ -4323,6 +4342,7 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
     else
       break;
   }
+  MaybeLogLinkStats();
 }
 
 CI_HOT_ONLY void CachedInterpreter::Run()
@@ -4371,6 +4391,73 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
   if constexpr (profiled)
     JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
   return 0;
+}
+
+s32 CachedInterpreter::CheckLinkCandidate(PowerPC::PowerPCState& ppc_state,
+                                          const CheckLinkCandidateOperands& operands)
+{
+  // Validate whether the expected fallthrough matches the current NPC and whether
+  // downcount conditions would have allowed linking.
+  if (operands.downcount == 0)
+  {
+    ++s_link_stats.zero_downcount;
+  }
+  else if (ppc_state.downcount <= 0)
+  {
+    ++s_link_stats.slice_end;
+  }
+  else if (ppc_state.npc == operands.fallthrough_pc)
+  {
+    ++s_link_stats.match_but_unlinked;
+  }
+  else
+  {
+    ++s_link_stats.npc_mismatch;
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreter::LinkToBlockEndDistance(PowerPC::PowerPCState& ppc_state,
+                                              const void* operands)
+{
+  // Operands layout mirrors EndBlockOperands<false> with an extra u32 appended
+  // by the linker patcher that encodes the relative distance to the next block.
+  const u32* p = reinterpret_cast<const u32*>(operands);
+  const u32 downcount = p[0];
+  const u32 num_load_stores = p[1];
+  const u32 num_fp_inst = p[2];
+  const s32 distance = static_cast<s32>(p[3]);
+
+  // Perform EndBlock semantics (unprofiled)
+  ppc_state.pc = ppc_state.npc;
+  ppc_state.downcount -= downcount;
+  if (PowerPC::PerformanceMonitorActive(ppc_state))
+  {
+    PowerPC::UpdatePerformanceMonitor(downcount, num_load_stores, num_fp_inst, ppc_state);
+  }
+  // Linked path: return the precomputed relative distance to the next block entry
+  return distance;
+}
+
+void CachedInterpreter::OnLinkPatched()
+{
+  ++s_link_stats.links_patched;
+}
+
+void CachedInterpreter::MaybeLogLinkStats()
+{
+  if (!s_log_enabled)
+    return;
+
+  static u64 blocks = 0;
+  if ((++blocks & 0x0FFF) != 0) // roughly every 4096 blocks
+    return;
+
+  DEBUG_LOG_FMT(DYNA_REC,
+                "CI Link: patched={} match_unlinked={} npc_mismatch={} zero_downcount={} "
+                "slice_end={}",
+                s_link_stats.links_patched, s_link_stats.match_but_unlinked,
+                s_link_stats.npc_mismatch, s_link_stats.zero_downcount, s_link_stats.slice_end);
 }
 
 template <bool write_pc>
@@ -4506,7 +4593,26 @@ void CachedInterpreter::WriteEndBlock()
   }
   else
   {
-    Write(EndBlock<false>, {js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst});
+    // Emit a shadow-mode checker before the real EndBlock, then capture
+    // EndBlock pointer location for potential linking.
+    const u32 fallthrough_pc = js.blockStart + code_block.m_num_instructions * 4;
+    Write(CheckLinkCandidate, CheckLinkCandidateOperands{fallthrough_pc, js.downcountAmount});
+    const auto operands = EndBlockOperands<false>{
+        js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst};
+    u8* const end_ptr = WriteGetPtr(EndBlock<false>, operands);
+
+    // Shadow-mode: record a fallthrough link candidate but do not patch yet.
+    // The actual patching is gated via jo.enableBlocklink and implemented in
+    // CachedInterpreterBlockCache::WriteLinkBlock, which is currently a no-op.
+    if (end_ptr && js.curBlock)
+    {
+      JitBlock::LinkData ld{};
+      ld.exitPtrs = end_ptr;
+      ld.exitAddress = fallthrough_pc;
+      ld.linkStatus = false;
+      ld.call = false;
+      js.curBlock->linkData.emplace_back(ld);
+    }
   }
 }
 
@@ -5745,6 +5851,8 @@ void CachedInterpreter::ClearCache()
   ClearCodeSpace();
   ResetFreeMemoryRanges();
   RefreshConfig();
+  // Re-evaluate block linking setting after configuration refresh.
+  jo.enableBlocklink = IsBlockLinkingEnabled();
   Host_JitCacheInvalidation();
 }
 

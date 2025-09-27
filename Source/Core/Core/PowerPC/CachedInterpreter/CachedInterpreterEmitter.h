@@ -68,6 +68,18 @@ public:
   }
   void Write(AnyCallback callback) { Write(callback, nullptr, 0); }
 
+  // Write callback and return the address where the callback pointer was stored.
+  // This is useful for later patching (e.g., block linking). Only used by the
+  // cached interpreter internals; normal code should use Write above.
+  template <class Operands>
+  u8* WriteGetPtr(Callback<Operands> callback, const Operands& operands)
+  {
+    static_assert(
+        std::is_trivially_copyable_v<Operands> && std::is_trivially_destructible_v<Operands> &&
+        alignof(Operands) <= alignof(AnyCallback) && sizeof(Operands) % alignof(AnyCallback) == 0);
+    return WriteReturningAddress(AnyCallbackCast(callback), &operands, sizeof(Operands));
+  }
+
   // Reserve space for N callbacks + operands to avoid bounds checks per Write.
   void Reserve(std::size_t bytes)
   {
@@ -95,6 +107,8 @@ public:
 
 private:
   void Write(AnyCallback callback, const void* operands, std::size_t size);
+  // Same as Write but returns the address where the callback pointer was stored.
+  u8* WriteReturningAddress(AnyCallback callback, const void* operands, std::size_t size);
 
   // Pointer to memory where code will be emitted to.
   u8* m_code = nullptr;

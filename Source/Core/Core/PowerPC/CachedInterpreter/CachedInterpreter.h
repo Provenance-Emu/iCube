@@ -117,6 +117,23 @@ public:
   static void MaybeLogLinkStats();
   static void ConfigureLinkLogFromEnv();
 
+  // Shadow-mode link candidate logger: validates whether the computed fallthrough
+  // would have been correct at runtime (without patching/exiting dispatcher).
+  struct CheckLinkCandidateOperands
+  {
+    u32 fallthrough_pc;
+    u32 downcount;
+    u32 : 32;
+    u32 : 32;
+  };
+  static s32 CheckLinkCandidate(PowerPC::PowerPCState& ppc_state,
+                                const CheckLinkCandidateOperands& operands);
+
+  // Linked end-of-block: performs EndBlock semantics and then jumps by a stored
+  // relative distance encoded in the 4th u32 of the original EndBlock operands layout.
+  // We accept void* here to avoid header ordering/private layout dependencies.
+  static s32 LinkToBlockEndDistance(PowerPC::PowerPCState& ppc_state, const void* operands);
+
   // Hot instruction profiling (disabled by default; enable with env DOLPHIN_CI_HOT=1)
   struct HotStats
   {

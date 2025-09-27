@@ -42,6 +42,29 @@ CI_HOT_ONLY void CachedInterpreterEmitter::Write(AnyCallback callback, const voi
   m_code += size;
 }
 
+CI_HOT_ONLY u8* CachedInterpreterEmitter::WriteReturningAddress(AnyCallback callback, const void* operands, std::size_t size)
+{
+#if defined(__aarch64__)
+  __builtin_prefetch(m_code + 64, 1, 1);
+  __builtin_prefetch(m_code + 128, 1, 1);
+#endif
+  DEBUG_ASSERT(reinterpret_cast<std::uintptr_t>(m_code) % alignof(AnyCallback) == 0);
+  if (m_code + sizeof(callback) + size >= m_code_end)
+  {
+    m_write_failed = true;
+    return nullptr;
+  }
+  u8* const addr = m_code; // address where the callback pointer will be written
+  std::memcpy(m_code, &callback, sizeof(callback));
+  m_code += sizeof(callback);
+  if (size != 0)
+  {
+    std::memcpy(m_code, operands, size);
+    m_code += size;
+  }
+  return addr;
+}
+
 s32 CachedInterpreterEmitter::PoisonCallback(PowerPC::PowerPCState& ppc_state, const void* operands)
 {
   ASSERT_MSG(DYNA_REC, false,
