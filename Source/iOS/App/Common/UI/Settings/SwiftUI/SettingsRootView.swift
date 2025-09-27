@@ -50,6 +50,11 @@ struct SettingsRootView<Background: View>: View {
     PVWebServer.shared.webDavURLString ?? ""
   }
 
+  @State private var appVersionLabel: String = ""
+  @State private var coreVersionLabel: String = ""
+  @State private var webURLDisplay: String = ""
+  @State private var webDavDisplay: String = ""
+
   var body: some View {
     ZStack {
       // Optional background
@@ -69,6 +74,9 @@ struct SettingsRootView<Background: View>: View {
     .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLSettingsSelectControllers"))) { _ in
       currentSettingsPage = .controllers
     }
+    .task {
+      await refreshLightweightInfo()
+    }
   }
 
   @State private var currentSettingsPage: SettingsPage? = nil
@@ -77,6 +85,16 @@ struct SettingsRootView<Background: View>: View {
   @State private var showSafari: Bool = false
   @State private var safariURL: URL? = nil
 #endif
+
+  private func refreshLightweightInfo() async {
+    await MainActor.run {
+      // Set placeholders immediately to avoid blocking UI
+      if appVersionLabel.isEmpty { appVersionLabel = appVersion }
+      if coreVersionLabel.isEmpty { coreVersionLabel = coreVersion }
+      if webURLDisplay.isEmpty { webURLDisplay = PVWebServer.shared.urlString ?? "" }
+      if webDavDisplay.isEmpty { webDavDisplay = PVWebServer.shared.webDavURLString ?? "" }
+    }
+  }
 
   @ViewBuilder
   private var pauseMenuStyleContent: some View {
@@ -160,7 +178,7 @@ struct SettingsRootView<Background: View>: View {
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.8))
                 Spacer()
-                Text(appVersion)
+                Text(appVersionLabel.isEmpty ? appVersion : appVersionLabel)
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.6))
               }
@@ -170,7 +188,7 @@ struct SettingsRootView<Background: View>: View {
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.8))
                 Spacer()
-                Text(coreVersion)
+                Text(coreVersionLabel.isEmpty ? coreVersion : coreVersionLabel)
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.6))
               }
@@ -188,14 +206,14 @@ struct SettingsRootView<Background: View>: View {
                   .foregroundColor(.white.opacity(0.8))
                 Spacer()
 #if os(iOS)
-                if !webURLString.isEmpty {
+                if !(webURLDisplay.isEmpty) {
                   Button(action: {
-                    if let u = URL(string: webURLString) {
+                    if let u = URL(string: webURLDisplay) {
                       safariURL = u
                       showSafari = true
                     }
                   }) {
-                    Text(webURLString)
+                    Text(webURLDisplay)
                       .font(.system(size: 16, weight: .medium))
                       .foregroundColor(.blue)
                       .lineLimit(1)
@@ -208,7 +226,7 @@ struct SettingsRootView<Background: View>: View {
                     .foregroundColor(.white.opacity(0.6))
                 }
 #else
-                Text(webURLString.isEmpty ? L("Not Running") : webURLString)
+                Text(webURLDisplay.isEmpty ? L("Not Running") : webURLDisplay)
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.6))
                   .lineLimit(1)
@@ -220,7 +238,7 @@ struct SettingsRootView<Background: View>: View {
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.8))
                 Spacer()
-                Text(webDavURLString.isEmpty ? L("Not Running") : webDavURLString)
+                Text(webDavDisplay.isEmpty ? L("Not Running") : webDavDisplay)
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.6))
                   .lineLimit(1)
@@ -296,7 +314,7 @@ struct SettingsRootView<Background: View>: View {
             Text(L("Version"))
             Spacer()
             if #available(iOS 17.0, *) {
-              Text(appVersion).foregroundStyle(.secondary)
+              Text(appVersionLabel.isEmpty ? appVersion : appVersionLabel).foregroundStyle(.secondary)
             }
           }
           HStack {
@@ -307,7 +325,7 @@ struct SettingsRootView<Background: View>: View {
             Text(L("Core"))
             Spacer()
             if #available(iOS 15.0, *) {
-              Text(coreVersion).foregroundStyle(.secondary)
+              Text(coreVersionLabel.isEmpty ? coreVersion : coreVersionLabel).foregroundStyle(.secondary)
             }
           }
           NavigationLink(destination: AboutView()) {
@@ -334,7 +352,7 @@ struct SettingsRootView<Background: View>: View {
           HStack {
             Text(L("Web UI"))
             Spacer()
-            let s = webURLString
+            let s = webURLDisplay
 #if os(iOS)
             if !s.isEmpty {
               Button(action: {
@@ -363,7 +381,7 @@ struct SettingsRootView<Background: View>: View {
           HStack {
             Text(L("WebDAV"))
             Spacer()
-            let s = webDavURLString
+            let s = webDavDisplay
             Text(s.isEmpty ? L("Not Running") : s)
               .foregroundStyle(.secondary)
               .lineLimit(1)
