@@ -3233,7 +3233,10 @@ void CachedInterpreter::Init()
   // Configure id-dispatch from environment
   {
     const char* env = std::getenv("DOLPHIN_CI_USE_ID_DISPATCH");
-    const bool use_id = (env && env[0] == '1');
+    // Default: enabled. Explicitly set to '0' to disable.
+    bool use_id = true;
+    if (env && env[0] == '0')
+      use_id = false;
     CachedInterpreterEmitter::SetUseIdDispatch(use_id);
     if (use_id)
     {
