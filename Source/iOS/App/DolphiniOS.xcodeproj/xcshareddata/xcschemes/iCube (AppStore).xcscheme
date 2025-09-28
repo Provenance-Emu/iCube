@@ -68,7 +68,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "DOLPHIN_CI_HOT_SAMPLE"
-            value = "16"
+            value = "64"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
@@ -113,6 +113,31 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "CI_DISABLE_PIC_LS"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DOLPHIN_CI_LINK_ENABLE"
+            value = "0"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DOLPHIN_CI_LINK_SAMPLE"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DOLPHIN_CI_LINK_LOG_VERBOSE"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DOLPHIN_CI_LINK_SKIP_RANGE"
+            value = "0x80160000:0x20000"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DOLPHIN_CI_USE_ID_DISPATCH"
             value = "1"
             isEnabled = "YES">
          </EnvironmentVariable>
