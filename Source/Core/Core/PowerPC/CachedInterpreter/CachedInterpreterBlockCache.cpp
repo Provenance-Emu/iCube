@@ -38,6 +38,14 @@ void CachedInterpreterBlockCache::WriteLinkBlock(const JitBlock::LinkData& sourc
   // Only patch when linking is enabled; otherwise, this remains no-op.
   if (!CachedInterpreter::IsBlockLinkingEnabled())
     return;
+  // Enable ID-only linking when both ID-dispatch is on and the flag DOLPHIN_CI_ID_LINK=1 is set.
+  static bool s_id_link = []() {
+    if (const char* env = std::getenv("DOLPHIN_CI_ID_LINK"))
+      return env[0] == '1';
+    return false;
+  }();
+  if (!CachedInterpreterEmitter::IsIdDispatchEnabled() || !s_id_link)
+    return; // Do not link unless explicitly enabled for ID mode
 
   // If dest is null, we should restore EndBlock; however, for now we just skip since
   // our shadow-mode only patches forward. A subsequent DestroyBlock/Poison will make
@@ -47,20 +55,23 @@ void CachedInterpreterBlockCache::WriteLinkBlock(const JitBlock::LinkData& sourc
 
   // Compute relative distance from the patched EndBlock site to dest->normalEntry.
   // The callback loop computes new_entry = old_entry + returned_distance.
-  const u8* const cb_ptr = source.exitPtrs;              // points at callback pointer
-  constexpr std::size_t kPtrSize = sizeof(&CachedInterpreter::LinkToBlockEndDistance);
-  const u8* const operands_ptr = cb_ptr + kPtrSize;
+  const u8* const cb_ptr = source.exitPtrs;              // points at header (ptr or ID)
+  constexpr std::size_t kHdrSize = CachedInterpreterEmitter::kHeaderSize;
+  const u8* const operands_ptr = cb_ptr + kHdrSize;
   const u8* const dest_entry = dest->normalEntry;
   const s64 distance = static_cast<s64>(dest_entry - cb_ptr);
 
-  // Patch callback to LinkToBlockEndDistance and store distance into 4th u32 of operands.
-  // Overwrite callback pointer in place.
-  auto func = &CachedInterpreter::LinkToBlockEndDistance;
-  std::memcpy(const_cast<u8*>(cb_ptr), &func, kPtrSize);
-  // Write the distance into the last u32 of the existing operands blob.
-  // We must not disturb the first three u32 which were already written.
-  u32* const tail = reinterpret_cast<u32*>(const_cast<u8*>(operands_ptr)) + 3;
-  *tail = static_cast<u32>(static_cast<s32>(distance));
+  // Emit LinkToBlockEndDistance as an ID header with distance operand at the start
+  const u16 id_raw = static_cast<u16>(CachedInterpreterEmitter::CallbackId::LinkToBlockEndDistance);
+  const u16 tag = 0xC1D1;
+  std::memcpy(const_cast<u8*>(cb_ptr), &id_raw, sizeof(id_raw));
+  std::memcpy(const_cast<u8*>(cb_ptr) + sizeof(id_raw), &tag, sizeof(tag));
+  std::memset(const_cast<u8*>(cb_ptr) + 2 * sizeof(u16), 0,
+              CachedInterpreterEmitter::kHeaderSize - 2 * sizeof(u16));
+
+  auto* link_ops = reinterpret_cast<CachedInterpreterEmitter::LinkToBlockDistanceOperands*>(
+      const_cast<u8*>(operands_ptr));
+  link_ops->distance = static_cast<s32>(distance);
   CachedInterpreter::OnLinkPatched();
 }
 

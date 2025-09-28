@@ -10,6 +10,7 @@
 #include "Common/CommonTypes.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
+#include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
 #include "Core/PowerPC/JitCommon/JitBase.h"
 #include "Core/PowerPC/PPCAnalyst.h"
 
@@ -409,6 +410,9 @@ private:
   static s32 CheckBreakpoint(std::ostream& stream, const CheckHaltOperands& operands);
   static s32 CheckIdle(PowerPC::PowerPCState& ppc_state, const CheckIdleOperands& operands);
   static s32 CheckIdle(std::ostream& stream, const CheckIdleOperands& operands);
+  // ID-only link macro disassembly overload
+  static s32 LinkToBlockEndDistance(std::ostream& stream,
+                                    const CachedInterpreterEmitter::LinkToBlockDistanceOperands& operands);
   static s32 FastForwardCtrIdle(PowerPC::PowerPCState& ppc_state,
                                 const CheckCtrIdleOperands& operands);
   static s32 FastForwardCtrIdle(std::ostream& stream, const CheckCtrIdleOperands& operands);

@@ -60,17 +60,20 @@ CI_HOT_ONLY void CachedInterpreterEmitter::Write(AnyCallback callback, const voi
       // Zero padding improves determinism
       std::memset(m_code + 2 * sizeof(u16), 0, sizeof(AnyCallback) - 2 * sizeof(u16));
       m_code += sizeof(AnyCallback);
+      ++s_id_headers_emitted;
     }
     else
     {
       std::memcpy(m_code, &callback, sizeof(callback));
       m_code += sizeof(callback);
+      ++s_ptr_headers_emitted;
     }
   }
   else
   {
     std::memcpy(m_code, &callback, sizeof(callback));
     m_code += sizeof(callback);
+    ++s_ptr_headers_emitted;
   }
   if (size == 0)
     return;
@@ -103,17 +106,20 @@ CI_HOT_ONLY u8* CachedInterpreterEmitter::WriteReturningAddress(AnyCallback call
       std::memcpy(m_code + sizeof(id_raw), &tag, sizeof(tag));
       std::memset(m_code + 2 * sizeof(u16), 0, sizeof(AnyCallback) - 2 * sizeof(u16));
       m_code += sizeof(AnyCallback);
+      ++s_id_headers_emitted;
     }
     else
     {
       std::memcpy(m_code, &callback, sizeof(callback));
       m_code += sizeof(callback);
+      ++s_ptr_headers_emitted;
     }
   }
   else
   {
     std::memcpy(m_code, &callback, sizeof(callback));
     m_code += sizeof(callback);
+    ++s_ptr_headers_emitted;
   }
   if (size != 0)
   {

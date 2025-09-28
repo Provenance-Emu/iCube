@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
+#include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
 
 #include <algorithm>
 #include <array>
@@ -28,11 +29,28 @@ CI_COLD_ONLY s32 CachedInterpreterEmitter::PoisonCallback(std::ostream& stream, 
   return sizeof(AnyCallback);
 }
 
+
 CI_COLD_ONLY s32 CachedInterpreter::StartProfiledBlock(std::ostream& stream,
                                           const StartProfiledBlockOperands& operands)
 {
   stream << "StartProfiledBlock()\n";
   return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+CI_COLD_ONLY s32 CachedInterpreter::LoadStoreDFormPIC(std::ostream& stream,
+                                                      const LoadStoreDFormPICOperands& operands)
+{
+  fmt::println(stream, "LoadStoreDFormPIC<write_pc={:5}>()", write_pc);
+  return static_cast<s32>(CachedInterpreterEmitter::kHeaderSize + sizeof(operands));
+}
+
+template <bool write_pc>
+CI_COLD_ONLY s32 CachedInterpreter::LoadStoreXFormPIC(std::ostream& stream,
+                                                      const LoadStoreDFormPICOperands& operands)
+{
+  fmt::println(stream, "LoadStoreXFormPIC<write_pc={:5}>()", write_pc);
+  return static_cast<s32>(CachedInterpreterEmitter::kHeaderSize + sizeof(operands));
 }
 
 template <bool profiled>
@@ -141,6 +159,62 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
 #if defined(__aarch64__)
     __builtin_prefetch(normal_entry + 64, 0, 0);
 #endif
+    // First check for ID header (u16 id + u16 tag)
+    constexpr u16 kTag = 0xC1D1;
+    const u16 id = *reinterpret_cast<const u16*>(normal_entry);
+    const u16 tag = *(reinterpret_cast<const u16*>(normal_entry) + 1);
+    if (tag == kTag)
+    {
+      const u8* const ops = normal_entry + sizeof(CachedInterpreterEmitter::AnyCallback);
+      s32 distance = 0;
+      switch (id)
+      {
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::Poison):
+        distance = CachedInterpreterEmitter::PoisonCallback(stream, ops);
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::InterpretFalse):
+        distance = CachedInterpreter::Interpret<false>(stream, *reinterpret_cast<const InterpretOperands*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::InterpretTrue):
+        distance = CachedInterpreter::Interpret<true>(stream, *reinterpret_cast<const InterpretOperands*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::EndBlockUnprofiled):
+        distance = CachedInterpreter::EndBlock<false>(stream, *reinterpret_cast<const EndBlockOperands<false>*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::EndBlockProfiled):
+        distance = CachedInterpreter::EndBlock<true>(stream, *reinterpret_cast<const EndBlockOperands<true>*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::HLEFunction):
+        distance = CachedInterpreter::HLEFunction(stream, *reinterpret_cast<const HLEFunctionOperands*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LoadStoreDFormPICFalse):
+        distance = CachedInterpreter::LoadStoreDFormPIC<false>(stream, *reinterpret_cast<const LoadStoreDFormPICOperands*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LoadStoreDFormPICTrue):
+        distance = CachedInterpreter::LoadStoreDFormPIC<true>(stream, *reinterpret_cast<const LoadStoreDFormPICOperands*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LoadStoreXFormPICFalse):
+        distance = CachedInterpreter::LoadStoreXFormPIC<false>(stream, *reinterpret_cast<const LoadStoreDFormPICOperands*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LoadStoreXFormPICTrue):
+        distance = CachedInterpreter::LoadStoreXFormPIC<true>(stream, *reinterpret_cast<const LoadStoreDFormPICOperands*>(ops));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LinkToBlockEndDistance):
+      {
+        const auto& link_ops = *reinterpret_cast<const CachedInterpreterEmitter::LinkToBlockDistanceOperands*>(ops);
+        fmt::println(stream, "LinkToBlockEndDistance(distance={})", link_ops.distance);
+        distance = static_cast<s32>(sizeof(CachedInterpreterEmitter::AnyCallback) + sizeof(link_ops));
+        break;
+      }
+      default:
+        fmt::println(stream, "UNKNOWN ID=0x{:04x}", id);
+        return instruction_count;
+      }
+      normal_entry += distance;
+      continue;
+    }
+
+    // Pointer header disassembly path (legacy)
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
     const auto kv = std::ranges::lower_bound(sorted_lookup, callback, {}, &LookupKV::first);
     if (kv != sorted_lookup.end() && kv->first == callback)

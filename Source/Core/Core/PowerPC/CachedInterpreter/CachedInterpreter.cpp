@@ -122,7 +122,7 @@ static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
   return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
 }
 } // anonymous namespace
- 
+
 bool CachedInterpreter::IsBlockLinkingEnabled()
 {
 #if defined(__aarch64__)
@@ -3267,6 +3267,15 @@ void CachedInterpreter::Init()
       // HLE entry
       CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::HLEFunction,
                                                       CachedInterpreterEmitter::CallbackId::HLEFunction);
+      // Small control callbacks
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::CheckIdle,
+                                                      CachedInterpreterEmitter::CallbackId::CheckIdle);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::CheckBreakpoint,
+                                                      CachedInterpreterEmitter::CallbackId::CheckBreakpoint);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::CheckFPU,
+                                                      CachedInterpreterEmitter::CallbackId::CheckFPU);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::WriteBrokenBlockNPC,
+                                                      CachedInterpreterEmitter::CallbackId::WriteBrokenBlockNPC);
     }
   }
 }
@@ -4357,7 +4366,7 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
     ConfigureAppleSiliconHints();
     initialized = true;
   }
-  
+
   if (CachedInterpreterEmitter::IsIdDispatchEnabled())
   {
     using AnyCallback = s32 (*)(PowerPC::PowerPCState&, const void*);
@@ -4436,6 +4445,28 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
         distance = CachedInterpreter::HLEFunction(ppc_state,
                    *reinterpret_cast<const HLEFunctionOperands*>(ops_ptr));
         break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::CheckIdle):
+        distance = CachedInterpreter::CheckIdle(ppc_state,
+                   *reinterpret_cast<const CheckIdleOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::CheckBreakpoint):
+        distance = CachedInterpreter::CheckBreakpoint(ppc_state,
+                   *reinterpret_cast<const CheckHaltOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::CheckFPU):
+        distance = CachedInterpreter::CheckFPU(ppc_state,
+                   *reinterpret_cast<const CheckHaltOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::WriteBrokenBlockNPC):
+        distance = CachedInterpreter::WriteBrokenBlockNPC(ppc_state,
+                   *reinterpret_cast<const WriteBrokenBlockNPCOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LinkToBlockEndDistance):
+      {
+        const auto* link = reinterpret_cast<const CachedInterpreterEmitter::LinkToBlockDistanceOperands*>(ops_ptr);
+        distance = link->distance;
+        break;
+      }
       default:
         distance = CachedInterpreterEmitter::PoisonCallback(ppc_state, ops_ptr);
         break;

@@ -74,6 +74,21 @@ public:
     HLEFunction = 9,
     // Placeholder for future ID-only link macro
     LinkToBlockEndDistance = 10,
+    // Small control callbacks
+    CheckIdle = 11,
+    CheckBreakpoint = 12,
+    CheckFPU = 13,
+    WriteBrokenBlockNPC = 14,
+  };
+
+  // Public constant: size of the callback header (either pointer or ID+tag+pad)
+  static constexpr std::size_t kHeaderSize = sizeof(AnyCallback);
+
+  // Operands for ID-only link macro: return precomputed distance to next callback.
+  struct LinkToBlockDistanceOperands
+  {
+    // Signed distance (in bytes) to add to the current callback address to reach the target.
+    s32 distance;
   };
 
   template <class Operands>
@@ -147,6 +162,10 @@ public:
     RegisterIdForCallback(AnyCallbackCast(callback), id);
   }
 
+  // Stats: number of headers emitted as ID vs function pointer
+  static inline u64 GetIdHeaderCount() { return s_id_headers_emitted; }
+  static inline u64 GetPtrHeaderCount() { return s_ptr_headers_emitted; }
+
   // Pointer to memory where code will be emitted to.
   u8* m_code = nullptr;
   // Pointer past the end of the memory region we're allowed to emit to.
@@ -158,6 +177,9 @@ public:
 
   // Global toggle: when true, emitter writes ID-based headers instead of function pointers.
   inline static bool s_use_id_dispatch = false;
+
+  inline static u64 s_id_headers_emitted = 0;
+  inline static u64 s_ptr_headers_emitted = 0;
 };
 
 class CachedInterpreterCodeBlock : public Common::CodeBlock<CachedInterpreterEmitter, false>
