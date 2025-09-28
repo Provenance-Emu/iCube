@@ -5,6 +5,7 @@
 
 #import <string>
 #import <vector>
+#include <mutex>
 
 #import "Common/FileUtil.h"
 
@@ -30,6 +31,7 @@ struct Device {
   NSInteger _lastSelected;
   std::vector<std::string> _devices;
   NSMutableArray<NSString*>* _deviceNames;
+  std::mutex _devicesMutex;
   ControllerInterface::HotplugCallbackHandle _hotplugHandle;
   BOOL _hotplugRegistered;
 }
@@ -67,6 +69,7 @@ struct Device {
 }
 
 - (void)repopulateDevices {
+  std::lock_guard<std::mutex> lock(_devicesMutex);
   _devices.clear();
   [_deviceNames removeAllObjects];
 
@@ -96,6 +99,7 @@ struct Device {
   const std::string defaultDevice = self.emulatedController->GetDefaultDevice().ToString();
 
   if (defaultDevice.empty()) {
+    [self.tableView reloadData];
     return;
   }
 
@@ -124,27 +128,40 @@ struct Device {
 }
 
 - (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
-  return _devices.size();
+  std::lock_guard<std::mutex> lock(_devicesMutex);
+  return (NSInteger)_devices.size();
 }
 
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   MappingDeviceCell* cell = [tableView dequeueReusableCellWithIdentifier:@"DeviceCell" forIndexPath:indexPath];
 
-  cell.deviceLabel.text = _deviceNames[indexPath.row];
-
-  if (indexPath.row == _lastSelected) {
-    cell.accessoryType = UITableViewCellAccessoryCheckmark;
-  } else {
-    cell.accessoryType = UITableViewCellAccessoryNone;
+  NSString* name = nil;
+  NSInteger last = -1;
+  {
+    std::lock_guard<std::mutex> lock(_devicesMutex);
+    if (indexPath.row < _deviceNames.count) {
+      name = _deviceNames[indexPath.row];
+    }
+    last = _lastSelected;
   }
 
+  cell.deviceLabel.text = name ?: @"";
+  cell.accessoryType = (indexPath.row == last) ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
   return cell;
 }
 
 - (void)tableView:(UITableView*)tableView didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
-  if (_lastSelected != indexPath.row) {
-    const std::string device = _devices[indexPath.row];
+  std::string device;
+  NSInteger previous = -1;
+  {
+    std::lock_guard<std::mutex> lock(_devicesMutex);
+    if (indexPath.row < _devices.size()) {
+      device = _devices[indexPath.row];
+    }
+    previous = _lastSelected;
+  }
 
+  if (previous != indexPath.row && !device.empty()) {
     ciface::Core::DeviceQualifier qualifier;
     qualifier.FromString(device);
 
@@ -156,12 +173,15 @@ struct Device {
     MappingDeviceCell* cell = [tableView cellForRowAtIndexPath:indexPath];
     cell.accessoryType = UITableViewCellAccessoryCheckmark;
 
-    if (_lastSelected != -1) {
-      MappingDeviceCell* oldCell = [tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:_lastSelected inSection:0]];
+    if (previous != -1) {
+      MappingDeviceCell* oldCell = [tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:previous inSection:0]];
       oldCell.accessoryType = UITableViewCellAccessoryNone;
     }
 
-    _lastSelected = indexPath.row;
+    {
+      std::lock_guard<std::mutex> lock(_devicesMutex);
+      _lastSelected = indexPath.row;
+    }
 
     bool isTouchscreen = qualifier.source == "iOS";
     bool isMFiPhysicalController = qualifier.source == "MFi" && qualifier.name != "Keyboard";
