@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
+#include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
 
 #include <span>
 #include <cstdlib>
@@ -63,6 +64,7 @@
 #endif
 
 namespace {
+constexpr u16 CI_ID_TAG = 0xC1D1;
 struct CI_RegionInfo
 {
   u8* base;
@@ -3223,6 +3225,40 @@ void CachedInterpreter::Init()
   code_block.m_stats = &js.st;
   code_block.m_gpa = &js.gpa;
   code_block.m_fpa = &js.fpa;
+
+  // Configure id-dispatch from environment
+  {
+    const char* env = std::getenv("DOLPHIN_CI_USE_ID_DISPATCH");
+    const bool use_id = (env && env[0] == '1');
+    CachedInterpreterEmitter::SetUseIdDispatch(use_id);
+    if (use_id)
+    {
+      // Register minimal IDs for emission
+      CachedInterpreterEmitter::RegisterIdForCallback(
+          static_cast<CachedInterpreterEmitter::AnyCallback>(&CachedInterpreterEmitter::PoisonCallback),
+          CachedInterpreterEmitter::CallbackId::Poison);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::Interpret<false>,
+                                                      CachedInterpreterEmitter::CallbackId::InterpretFalse);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::Interpret<true>,
+                                                      CachedInterpreterEmitter::CallbackId::InterpretTrue);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::EndBlock<false>,
+                                                      CachedInterpreterEmitter::CallbackId::EndBlockUnprofiled);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::EndBlock<true>,
+                                                      CachedInterpreterEmitter::CallbackId::EndBlockProfiled);
+      // Hot path memory helpers (PIC addressing)
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::LoadStoreDFormPIC<false>,
+                                                      CachedInterpreterEmitter::CallbackId::LoadStoreDFormPICFalse);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::LoadStoreDFormPIC<true>,
+                                                      CachedInterpreterEmitter::CallbackId::LoadStoreDFormPICTrue);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::LoadStoreXFormPIC<false>,
+                                                      CachedInterpreterEmitter::CallbackId::LoadStoreXFormPICFalse);
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::LoadStoreXFormPIC<true>,
+                                                      CachedInterpreterEmitter::CallbackId::LoadStoreXFormPICTrue);
+      // HLE entry
+      CachedInterpreterEmitter::RegisterIdForCallback(&CachedInterpreter::HLEFunction,
+                                                      CachedInterpreterEmitter::CallbackId::HLEFunction);
+    }
+  }
 }
 
 template <bool write_pc>
@@ -4311,6 +4347,106 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
     ConfigureAppleSiliconHints();
     initialized = true;
   }
+  
+  if (CachedInterpreterEmitter::IsIdDispatchEnabled())
+  {
+    using AnyCallback = s32 (*)(PowerPC::PowerPCState&, const void*);
+    auto& ppc_state = m_ppc_state;
+    while (true)
+    {
+#if defined(__aarch64__)
+      // Apple Silicon: Enhanced prefetching with multiple cache lines
+      __builtin_prefetch(normal_entry + 64, 0, 0);   // L1 temporal
+      __builtin_prefetch(normal_entry + 128, 0, 0);  // L1 temporal
+#endif
+      const u16 id = *reinterpret_cast<const u16*>(normal_entry);
+      const u16 tag = *(reinterpret_cast<const u16*>(normal_entry) + 1);
+      if (tag != CI_ID_TAG)
+      {
+        // Fallback: treat as pointer header and execute once via pointer path
+        const AnyCallback cb = *reinterpret_cast<const AnyCallback*>(normal_entry);
+#if defined(__aarch64__)
+        __builtin_prefetch(normal_entry + sizeof(AnyCallback), 0, 0);
+#endif
+        if (const auto distance = cb(ppc_state, normal_entry + sizeof(AnyCallback))) [[likely]]
+        {
+          normal_entry += distance;
+          continue;
+        }
+        else
+        {
+          break;
+        }
+      }
+
+      // Minimal id table: call directly with typed operands to avoid ambiguous casts
+      s32 distance = 0;
+      const u8* const ops_ptr = normal_entry + sizeof(AnyCallback);
+#if defined(__aarch64__)
+      __builtin_prefetch(ops_ptr, 0, 0); // Prefetch operands
+#endif
+      switch (id)
+      {
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::Poison):
+        distance = CachedInterpreterEmitter::PoisonCallback(ppc_state, ops_ptr);
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::InterpretFalse):
+        distance = CachedInterpreter::Interpret<false>(ppc_state,
+                   *reinterpret_cast<const InterpretOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::InterpretTrue):
+        distance = CachedInterpreter::Interpret<true>(ppc_state,
+                   *reinterpret_cast<const InterpretOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::EndBlockUnprofiled):
+        distance = CachedInterpreter::EndBlock<false>(ppc_state,
+                   *reinterpret_cast<const EndBlockOperands<false>*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::EndBlockProfiled):
+        distance = CachedInterpreter::EndBlock<true>(ppc_state,
+                   *reinterpret_cast<const EndBlockOperands<true>*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LoadStoreDFormPICFalse):
+        distance = CachedInterpreter::LoadStoreDFormPIC<false>(ppc_state,
+                   *reinterpret_cast<const LoadStoreDFormPICOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LoadStoreDFormPICTrue):
+        distance = CachedInterpreter::LoadStoreDFormPIC<true>(ppc_state,
+                   *reinterpret_cast<const LoadStoreDFormPICOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LoadStoreXFormPICFalse):
+        distance = CachedInterpreter::LoadStoreXFormPIC<false>(ppc_state,
+                   *reinterpret_cast<const LoadStoreDFormPICOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::LoadStoreXFormPICTrue):
+        distance = CachedInterpreter::LoadStoreXFormPIC<true>(ppc_state,
+                   *reinterpret_cast<const LoadStoreDFormPICOperands*>(ops_ptr));
+        break;
+      case static_cast<u16>(CachedInterpreterEmitter::CallbackId::HLEFunction):
+        distance = CachedInterpreter::HLEFunction(ppc_state,
+                   *reinterpret_cast<const HLEFunctionOperands*>(ops_ptr));
+        break;
+      default:
+        distance = CachedInterpreterEmitter::PoisonCallback(ppc_state, ops_ptr);
+        break;
+      }
+
+      if (distance) [[likely]]
+      {
+        normal_entry += distance;
+#if defined(__aarch64__)
+        __builtin_prefetch(normal_entry, 0, 0);
+        __builtin_prefetch(normal_entry + 32, 0, 1);
+#endif
+      }
+      else
+      {
+        break;
+      }
+    }
+    MaybeLogLinkStats();
+    return;
+  }
 
   auto& ppc_state = m_ppc_state;
   while (true)
@@ -4319,11 +4455,10 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
     // Apple Silicon: Enhanced prefetching with multiple cache lines
     __builtin_prefetch(normal_entry + 64, 0, 0);   // L1 temporal
     __builtin_prefetch(normal_entry + 128, 0, 0);  // L1 temporal
-    __builtin_prefetch(normal_entry + 256, 0, 1);  // L2 non-temporal
-    __builtin_prefetch(normal_entry + 512, 0, 3);  // L3 non-temporal
-
 #endif
-    const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
+
+    using AnyCallback = s32 (*)(PowerPC::PowerPCState&, const void*);
+    const AnyCallback callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
 
 #if defined(__aarch64__)
     // Apple Silicon: Speculative execution hints

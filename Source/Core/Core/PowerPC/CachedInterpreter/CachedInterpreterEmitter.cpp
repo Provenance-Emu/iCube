@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <unordered_map>
 
 #include "Common/Assert.h"
 #include "Common/MsgHandler.h"
@@ -22,6 +23,16 @@
 #define CI_HOT_ONLY
 #endif
 
+namespace {
+// Mapping from callback pointer to CallbackId for id-dispatch mode.
+static std::unordered_map<const void*, CachedInterpreterEmitter::CallbackId> g_cb_to_id;
+}
+
+void CachedInterpreterEmitter::RegisterIdForCallback(AnyCallback callback, CallbackId id)
+{
+  g_cb_to_id.emplace(reinterpret_cast<const void*>(callback), id);
+}
+
 CI_HOT_ONLY void CachedInterpreterEmitter::Write(AnyCallback callback, const void* operands, std::size_t size)
 {
 #if defined(__aarch64__)
@@ -34,8 +45,33 @@ CI_HOT_ONLY void CachedInterpreterEmitter::Write(AnyCallback callback, const voi
     m_write_failed = true;
     return;
   }
-  std::memcpy(m_code, &callback, sizeof(callback));
-  m_code += sizeof(callback);
+  if (s_use_id_dispatch)
+  {
+    auto it = g_cb_to_id.find(reinterpret_cast<const void*>(callback));
+    if (it != g_cb_to_id.end())
+    {
+      // Emit 16-bit ID + 16-bit tag + padding to sizeof(AnyCallback)
+      const CallbackId id = it->second;
+      const u16 id_raw = static_cast<u16>(id);
+      std::memcpy(m_code, &id_raw, sizeof(id_raw));
+      // Tag to identify ID headers when mixed with pointer headers
+      const u16 tag = 0xC1D1; // "CI" + "DI" hint
+      std::memcpy(m_code + sizeof(id_raw), &tag, sizeof(tag));
+      // Zero padding improves determinism
+      std::memset(m_code + 2 * sizeof(u16), 0, sizeof(AnyCallback) - 2 * sizeof(u16));
+      m_code += sizeof(AnyCallback);
+    }
+    else
+    {
+      std::memcpy(m_code, &callback, sizeof(callback));
+      m_code += sizeof(callback);
+    }
+  }
+  else
+  {
+    std::memcpy(m_code, &callback, sizeof(callback));
+    m_code += sizeof(callback);
+  }
   if (size == 0)
     return;
   std::memcpy(m_code, operands, size);
@@ -54,9 +90,31 @@ CI_HOT_ONLY u8* CachedInterpreterEmitter::WriteReturningAddress(AnyCallback call
     m_write_failed = true;
     return nullptr;
   }
-  u8* const addr = m_code; // address where the callback pointer will be written
-  std::memcpy(m_code, &callback, sizeof(callback));
-  m_code += sizeof(callback);
+  u8* const addr = m_code; // address where the header (ptr or id) will be written
+  if (s_use_id_dispatch)
+  {
+    auto it = g_cb_to_id.find(reinterpret_cast<const void*>(callback));
+    if (it != g_cb_to_id.end())
+    {
+      const CallbackId id = it->second;
+      const u16 id_raw = static_cast<u16>(id);
+      std::memcpy(m_code, &id_raw, sizeof(id_raw));
+      const u16 tag = 0xC1D1;
+      std::memcpy(m_code + sizeof(id_raw), &tag, sizeof(tag));
+      std::memset(m_code + 2 * sizeof(u16), 0, sizeof(AnyCallback) - 2 * sizeof(u16));
+      m_code += sizeof(AnyCallback);
+    }
+    else
+    {
+      std::memcpy(m_code, &callback, sizeof(callback));
+      m_code += sizeof(callback);
+    }
+  }
+  else
+  {
+    std::memcpy(m_code, &callback, sizeof(callback));
+    m_code += sizeof(callback);
+  }
   if (size != 0)
   {
     std::memcpy(m_code, operands, size);
@@ -76,6 +134,21 @@ void CachedInterpreterCodeBlock::PoisonMemory()
 {
   DEBUG_ASSERT(reinterpret_cast<std::uintptr_t>(region) % alignof(AnyCallback) == 0);
   DEBUG_ASSERT(region_size % sizeof(AnyCallback) == 0);
-  std::fill(reinterpret_cast<AnyCallback*>(region),
-            reinterpret_cast<AnyCallback*>(region + region_size), AnyCallbackCast(PoisonCallback));
+  if (CachedInterpreterEmitter::IsIdDispatchEnabled())
+  {
+    // Write Poison ID headers across the region.
+    for (u8* p = region; p < region + region_size; p += sizeof(AnyCallback))
+    {
+      const u16 id_raw = static_cast<u16>(CachedInterpreterEmitter::CallbackId::Poison);
+      const u16 tag = 0xC1D1;
+      std::memcpy(p, &id_raw, sizeof(id_raw));
+      std::memcpy(p + sizeof(id_raw), &tag, sizeof(tag));
+      std::memset(p + 2 * sizeof(u16), 0, sizeof(AnyCallback) - 2 * sizeof(u16));
+    }
+  }
+  else
+  {
+    std::fill(reinterpret_cast<AnyCallback*>(region),
+              reinterpret_cast<AnyCallback*>(region + region_size), AnyCallbackCast(PoisonCallback));
+  }
 }

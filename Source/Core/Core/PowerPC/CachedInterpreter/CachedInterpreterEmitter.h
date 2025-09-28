@@ -56,6 +56,26 @@ public:
   CachedInterpreterEmitter() = default;
   explicit CachedInterpreterEmitter(u8* begin, u8* end) : m_code(begin), m_code_end(end) {}
 
+  // Minimal callback IDs for id-dispatch mode. The header size remains sizeof(AnyCallback)
+  // to keep existing callbacks' return distances correct.
+  enum class CallbackId : u16
+  {
+    Poison = 0,
+    InterpretFalse = 1,
+    InterpretTrue = 2,
+    EndBlockUnprofiled = 3,
+    EndBlockProfiled = 4,
+    // Hot path memory helpers (PIC addressing): register both write-pc variants
+    LoadStoreDFormPICFalse = 5,
+    LoadStoreDFormPICTrue = 6,
+    LoadStoreXFormPICFalse = 7,
+    LoadStoreXFormPICTrue = 8,
+    // HLE entry
+    HLEFunction = 9,
+    // Placeholder for future ID-only link macro
+    LinkToBlockEndDistance = 10,
+  };
+
   template <class Operands>
   void Write(Callback<Operands> callback, const Operands& operands)
   {
@@ -102,6 +122,12 @@ public:
     m_write_failed = false;
   }
 
+  // Enable or disable opcode-id dispatch emission. When enabled, Write() will emit
+  // a 16-bit CallbackId followed by padding to sizeof(AnyCallback), then operands.
+  // This keeps callback return distances unchanged.
+  static void SetUseIdDispatch(bool enabled) { s_use_id_dispatch = enabled; }
+  static bool IsIdDispatchEnabled() { return s_use_id_dispatch; }
+
   static s32 PoisonCallback(PowerPC::PowerPCState& ppc_state, const void* operands);
   static s32 PoisonCallback(std::ostream& stream, const void* operands);
 
@@ -109,6 +135,17 @@ private:
   void Write(AnyCallback callback, const void* operands, std::size_t size);
   // Same as Write but returns the address where the callback pointer was stored.
   u8* WriteReturningAddress(AnyCallback callback, const void* operands, std::size_t size);
+
+public:
+  // Registration API: allow clients (e.g., CachedInterpreter) to register IDs for callbacks.
+  // When id-dispatch is enabled, registered callbacks will be emitted as CallbackId headers
+  // rather than function pointers. Unregistered callbacks fall back to pointer emission.
+  static void RegisterIdForCallback(AnyCallback callback, CallbackId id);
+  template <class Operands>
+  static void RegisterIdForCallback(Callback<Operands> callback, CallbackId id)
+  {
+    RegisterIdForCallback(AnyCallbackCast(callback), id);
+  }
 
   // Pointer to memory where code will be emitted to.
   u8* m_code = nullptr;
@@ -118,6 +155,9 @@ private:
   // Set to true when a write request happens that would write past m_code_end.
   // Must be cleared with SetCodePtr() afterwards.
   bool m_write_failed = false;
+
+  // Global toggle: when true, emitter writes ID-based headers instead of function pointers.
+  inline static bool s_use_id_dispatch = false;
 };
 
 class CachedInterpreterCodeBlock : public Common::CodeBlock<CachedInterpreterEmitter, false>
