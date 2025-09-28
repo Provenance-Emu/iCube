@@ -45,6 +45,54 @@ void CachedInterpreterBlockCache::WriteLinkBlock(const JitBlock::LinkData& sourc
   if (!dest)
     return;
 
+  // Optional PC-range skip: DOLPHIN_CI_LINK_SKIP_RANGE="start:size" (hex or dec)
+  {
+    static bool parsed = false;
+    static u32 skip_start = 0;
+    static u32 skip_size = 0;
+    if (!parsed)
+    {
+      parsed = true;
+      if (const char* env = std::getenv("DOLPHIN_CI_LINK_SKIP_RANGE"); env && *env)
+      {
+        // Parse start:size with base auto-detected (0x... or decimal)
+        const char* colon = std::strchr(env, ':');
+        if (colon)
+        {
+          std::string sstart(env, colon - env);
+          std::string ssize(colon + 1);
+          skip_start = static_cast<u32>(std::strtoul(sstart.c_str(), nullptr, 0));
+          skip_size = static_cast<u32>(std::strtoul(ssize.c_str(), nullptr, 0));
+        }
+      }
+    }
+    if (skip_size != 0)
+    {
+      const u32 pc = source.exitAddress;
+      if (pc - skip_start < skip_size)
+        return;
+    }
+  }
+
+  // Conservative source guard: do not patch links when the source block performed
+  // any memory load/store. Read the EndBlock operands (3*u32) at operands_ptr.
+  {
+    const u8* const cb_ptr = source.exitPtrs;
+    constexpr std::size_t kPtrSize = sizeof(&CachedInterpreter::LinkToBlockEndDistance);
+    const u32* fields = reinterpret_cast<const u32*>(cb_ptr + kPtrSize);
+    const u32 num_load_stores_src = fields[1];
+    if (num_load_stores_src != 0)
+      return;
+  }
+
+  // Sampling: patch only 1 out of N eligible links to reduce risk while testing.
+  {
+    static unsigned long long counter = 0;
+    const u32 div = CachedInterpreter::GetLinkSampleDiv();
+    if (div > 1 && ((++counter) % div) != 0)
+      return;
+  }
+
   // Compute relative distance from the patched EndBlock site to dest->normalEntry.
   // The callback loop computes new_entry = old_entry + returned_distance.
   const u8* const cb_ptr = source.exitPtrs;              // points at callback pointer
@@ -58,9 +106,10 @@ void CachedInterpreterBlockCache::WriteLinkBlock(const JitBlock::LinkData& sourc
   auto func = &CachedInterpreter::LinkToBlockEndDistance;
   std::memcpy(const_cast<u8*>(cb_ptr), &func, kPtrSize);
   // Write the distance into the last u32 of the existing operands blob.
-  // We must not disturb the first three u32 which were already written.
-  u32* const tail = reinterpret_cast<u32*>(const_cast<u8*>(operands_ptr)) + 3;
-  *tail = static_cast<u32>(static_cast<s32>(distance));
+  // We must not expand past the 3*u32 EndBlock operands blob. We repurpose
+  // the third u32 (index 2) to store the link distance.
+  u32* const fields = reinterpret_cast<u32*>(const_cast<u8*>(operands_ptr));
+  fields[2] = static_cast<u32>(static_cast<s32>(distance));
   CachedInterpreter::OnLinkPatched();
 }
 

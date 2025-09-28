@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <limits>
 #include <chrono>
+#include <iostream>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -120,12 +121,29 @@ static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
   return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
 }
 } // anonymous namespace
- 
+
+// Static instrumentation state
+bool CachedInterpreter::s_log_enabled = false;
+struct CILinkStats
+{
+  u64 links_patched = 0;
+  u64 match_but_unlinked = 0;
+  u64 npc_mismatch = 0;
+  u64 zero_downcount = 0;
+  u64 slice_end = 0;
+  u64 exceptions_pending = 0;
+};
+static CILinkStats s_link_stats{};
+static u32 s_link_sample_div = 1; // 1 = patch all selected links
+static u64 s_blocks_executed = 0;    // total blocks completed since init
+
 bool CachedInterpreter::IsBlockLinkingEnabled()
 {
 #if defined(__aarch64__)
   // Respect user-configured toggle; when disabled, force block linking off.
-  if (SConfig::GetInstance().bJITNoBlockLinking)
+  const char* force_ci = std::getenv("DOLPHIN_FORCE_CI");
+  const bool force = (force_ci && force_ci[0] == '1');
+  if (!force && SConfig::GetInstance().bJITNoBlockLinking)
     return false;
   // Shadow mode default: require explicit env to enable patching.
   // This keeps the default safe until we've validated linking thoroughly.
@@ -141,6 +159,24 @@ void CachedInterpreter::ConfigureFpFastFromEnv()
   const char* env = std::getenv("DOLPHIN_CI_FP_FAST");
   s_fp_fast_enabled = (env && env[0] == '1');
 }
+
+// Configure link sampling (patch 1 of N eligible links). File-scope function.
+static void CI_ConfigureLinkSampleFromEnv()
+{
+  const char* env = std::getenv("DOLPHIN_CI_LINK_SAMPLE");
+  if (!env || env[0] == '\0')
+  {
+    s_link_sample_div = 1;
+    return;
+  }
+  unsigned v = static_cast<unsigned>(std::strtoul(env, nullptr, 10));
+  if (v == 0)
+    v = 1;
+  if (v > 1000000)
+    v = 1000000;
+  s_link_sample_div = v;
+}
+
 
 // Inline/verify controls for 59 arithmetic fast paths (file-local)
 static bool s_inline59_enabled =
@@ -1919,19 +1955,6 @@ CI_HOT_ONLY s32 CachedInterpreter::FctiwxFast(PowerPC::PowerPCState& ppc_state,
 
 #endif // __aarch64__
 
-
-// Static instrumentation state
-bool CachedInterpreter::s_log_enabled = false;
-struct CILinkStats
-{
-  u64 links_patched = 0;
-  u64 match_but_unlinked = 0;
-  u64 npc_mismatch = 0;
-  u64 zero_downcount = 0;
-  u64 slice_end = 0;
-};
-static CILinkStats s_link_stats{};
-
 // Hot-instruction profiling state
 CachedInterpreter::HotStats CachedInterpreter::s_hot_stats{};
 bool CachedInterpreter::s_hot_enabled = false;
@@ -3212,6 +3235,13 @@ void CachedInterpreter::Init()
 {
   RefreshConfig();
 
+  // Configure optional features and logging from environment early.
+  ConfigureLinkLogFromEnv();
+  ConfigureHotStatsFromEnv();
+  ConfigureFpFastFromEnv();
+  ConfigureInline59FromEnv();
+  CI_ConfigureLinkSampleFromEnv();
+
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
 
@@ -4340,7 +4370,11 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
 #endif
     }
     else
+    {
+      // Completed a block; increment global execution counter.
+      ++s_blocks_executed;
       break;
+    }
   }
   MaybeLogLinkStats();
 }
@@ -4397,12 +4431,20 @@ s32 CachedInterpreter::CheckLinkCandidate(PowerPC::PowerPCState& ppc_state,
                                           const CheckLinkCandidateOperands& operands)
 {
   // Validate whether the expected fallthrough matches the current NPC and whether
-  // downcount conditions would have allowed linking.
+  // downcount conditions would have allowed linking. We must consider the
+  // post-EndBlock downcount value: downcount_after = downcount - block_downcount.
+  // Only if downcount_after > 0 would the dispatcher normally continue.
+  if (ppc_state.Exceptions != 0)
+  {
+    ++s_link_stats.exceptions_pending;
+    return sizeof(AnyCallback) + sizeof(operands);
+  }
+  const s32 downcount_after = static_cast<s32>(ppc_state.downcount) - static_cast<s32>(operands.downcount);
   if (operands.downcount == 0)
   {
     ++s_link_stats.zero_downcount;
   }
-  else if (ppc_state.downcount <= 0)
+  else if (downcount_after <= 0)
   {
     ++s_link_stats.slice_end;
   }
@@ -4425,16 +4467,28 @@ s32 CachedInterpreter::LinkToBlockEndDistance(PowerPC::PowerPCState& ppc_state,
   const u32* p = reinterpret_cast<const u32*>(operands);
   const u32 downcount = p[0];
   const u32 num_load_stores = p[1];
-  const u32 num_fp_inst = p[2];
-  const s32 distance = static_cast<s32>(p[3]);
+  // We repurpose the third u32 slot to carry the link distance when patched.
+  // This avoids writing past the EndBlock operands blob.
+  const s32 distance = static_cast<s32>(p[2]);
 
-  // Perform EndBlock semantics (unprofiled)
+  // Perform EndBlock semantics (unprofiled) regardless of whether we will chain.
   ppc_state.pc = ppc_state.npc;
   ppc_state.downcount -= downcount;
-  if (PowerPC::PerformanceMonitorActive(ppc_state))
+  // Skip performance monitor update on the linked path since the third field
+  // may carry link distance instead of FP instruction count.
+  // After applying semantics, decide whether to chain or return to dispatcher.
+  // Conservative guard: avoid chaining across blocks that performed memory ops.
+  // This reduces MMIO/DSI hazard windows seen during early boot and device init.
+  if (num_load_stores != 0)
+    return 0;
+  if (ppc_state.Exceptions != 0)
   {
-    PowerPC::UpdatePerformanceMonitor(downcount, num_load_stores, num_fp_inst, ppc_state);
+    ++s_link_stats.exceptions_pending;
+    return 0;
   }
+  if (ppc_state.downcount <= 0)
+    return 0;
+
   // Linked path: return the precomputed relative distance to the next block entry
   return distance;
 }
@@ -4450,14 +4504,32 @@ void CachedInterpreter::MaybeLogLinkStats()
     return;
 
   static u64 blocks = 0;
-  if ((++blocks & 0x0FFF) != 0) // roughly every 4096 blocks
+  static bool first_print = true;
+  if (first_print)
+  {
+    std::printf("CI Link logging enabled.\n");
+    first_print = false;
+  }
+
+  u64 mod = 0x0FFF; // ~every 4096 blocks
+  if (const char* verbose = std::getenv("DOLPHIN_CI_LINK_LOG_VERBOSE"); verbose && verbose[0] == '1')
+    mod = 0x00FF; // ~every 256 blocks in verbose mode
+
+  if ((++blocks & mod) != 0)
     return;
 
-  DEBUG_LOG_FMT(DYNA_REC,
-                "CI Link: patched={} match_unlinked={} npc_mismatch={} zero_downcount={} "
-                "slice_end={}",
-                s_link_stats.links_patched, s_link_stats.match_but_unlinked,
-                s_link_stats.npc_mismatch, s_link_stats.zero_downcount, s_link_stats.slice_end);
+  std::printf("CI Link: patched=%llu match_unlinked=%llu npc_mismatch=%llu zero_downcount=%llu slice_end=%llu exceptions=%llu\n",
+              static_cast<unsigned long long>(s_link_stats.links_patched),
+              static_cast<unsigned long long>(s_link_stats.match_but_unlinked),
+              static_cast<unsigned long long>(s_link_stats.npc_mismatch),
+              static_cast<unsigned long long>(s_link_stats.zero_downcount),
+              static_cast<unsigned long long>(s_link_stats.slice_end),
+              static_cast<unsigned long long>(s_link_stats.exceptions_pending));
+}
+
+u32 CachedInterpreter::GetLinkSampleDiv()
+{
+  return s_link_sample_div;
 }
 
 template <bool write_pc>
@@ -4593,18 +4665,38 @@ void CachedInterpreter::WriteEndBlock()
   }
   else
   {
-    // Emit a shadow-mode checker before the real EndBlock, then capture
-    // EndBlock pointer location for potential linking.
+    // Determine whether the block tail is a direct branch; if so, skip
+    // fallthrough candidate instrumentation to reduce false positives.
+    bool tail_is_branch = false;
+    if (code_block.m_num_instructions > 0)
+    {
+      const UGeckoInstruction last = m_code_buffer[code_block.m_num_instructions - 1].inst;
+      tail_is_branch = (last.OPCD == 18) || // bx
+                       (last.OPCD == 16) || // bcx
+                       (last.OPCD == 19 && (last.SUBOP10 == 16 || last.SUBOP10 == 528)); // bclrx/bcctrx
+    }
+
     const u32 fallthrough_pc = js.blockStart + code_block.m_num_instructions * 4;
-    Write(CheckLinkCandidate, CheckLinkCandidateOperands{fallthrough_pc, js.downcountAmount});
+    const bool shadow_enabled = []() {
+      if (const char* s = std::getenv("DOLPHIN_CI_LINK_SHADOW"))
+        return s[0] != '0';
+      return true; // default on
+    }();
+    if (shadow_enabled && !tail_is_branch)
+    {
+      // Emit a shadow-mode checker before the real EndBlock only for straight-line tails.
+      Write(CheckLinkCandidate, CheckLinkCandidateOperands{fallthrough_pc, js.downcountAmount});
+    }
+    // Emit EndBlock operands as usual; the struct already contains a 4th u32
+    // pad slot we can safely reuse for link distance during patching.
     const auto operands = EndBlockOperands<false>{
         js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst};
     u8* const end_ptr = WriteGetPtr(EndBlock<false>, operands);
 
-    // Shadow-mode: record a fallthrough link candidate but do not patch yet.
+    // Shadow-mode: record a fallthrough link candidate only for straight-line tails; do not patch yet.
     // The actual patching is gated via jo.enableBlocklink and implemented in
     // CachedInterpreterBlockCache::WriteLinkBlock, which is currently a no-op.
-    if (end_ptr && js.curBlock)
+    if (shadow_enabled && !tail_is_branch && end_ptr && js.curBlock)
     {
       JitBlock::LinkData ld{};
       ld.exitPtrs = end_ptr;

@@ -134,6 +134,9 @@ public:
   // We accept void* here to avoid header ordering/private layout dependencies.
   static s32 LinkToBlockEndDistance(PowerPC::PowerPCState& ppc_state, const void* operands);
 
+  // Sampling divisor for link patcher (1 = patch all)
+  static u32 GetLinkSampleDiv();
+
   // Hot instruction profiling (disabled by default; enable with env DOLPHIN_CI_HOT=1)
   struct HotStats
   {
