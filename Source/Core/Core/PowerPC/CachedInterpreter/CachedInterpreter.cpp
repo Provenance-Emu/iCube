@@ -1939,7 +1939,11 @@ CachedInterpreter::HotStats CachedInterpreter::s_hot_stats{};
 bool CachedInterpreter::s_hot_enabled = false;
 u32 CachedInterpreter::s_hot_sample_every = 32; // default: sample 1 out of 32 instructions
 u64 CachedInterpreter::s_hot_counter = 0;
+#if defined(__aarch64__)
+bool CachedInterpreter::s_fp_fast_enabled = true;
+#else
 bool CachedInterpreter::s_fp_fast_enabled = false;
+#endif
 
 static inline u64 CI_NowNs()
 {
