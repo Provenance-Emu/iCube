@@ -158,7 +158,10 @@ static bool s_verify_log = false;
 static void ConfigureInline59FromEnv()
 {
   const char* e1 = std::getenv("CI_ENABLE_INLINE_59");
-  s_inline59_enabled = (e1 && e1[0] == '1');
+  // Default: enabled. Explicitly set to '0' to disable.
+  s_inline59_enabled = true;
+  if (e1 && e1[0] == '0')
+    s_inline59_enabled = false;
   const char* e2 = std::getenv("CI_VERIFY_FP");
   s_verify_fp = (e2 && e2[0] == '1');
   const char* e3 = std::getenv("CI_VERIFY_SAMPLE");
