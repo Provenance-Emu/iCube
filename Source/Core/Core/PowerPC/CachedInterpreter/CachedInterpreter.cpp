@@ -4468,18 +4468,30 @@ CI_HOT_ONLY void CachedInterpreter::ExecuteOneBlock()
     // Apple Silicon: Speculative execution hints
     __builtin_prefetch(normal_entry + sizeof(callback), 0, 0); // Prefetch operands
 #endif
-
-    if (const auto distance = callback(ppc_state, normal_entry + sizeof(callback))) [[likely]]
+    const u8* payload = normal_entry + sizeof(callback);
+    // Direct dispatch to the most commonly used callbacks for better performance
+    if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<false>))) [[likely]]
     {
-      normal_entry += distance;
-#if defined(__aarch64__)
-      // Apple Silicon: Aggressive block chaining prefetch
-      __builtin_prefetch(normal_entry, 0, 0); // Next callback
-      __builtin_prefetch(normal_entry + 32, 0, 1); // Next operands
-#endif
+      Interpret<false>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
+      normal_entry = payload + sizeof(InterpretOperands);
+    }
+    else if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<true>)))
+    {
+      Interpret<true>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
+      normal_entry = payload + sizeof(InterpretOperands);
     }
     else
-      break;
+    {
+      if (const auto distance = callback(ppc_state, payload))
+        normal_entry += distance;
+      else
+        break;
+    }
+#if defined(__aarch64__)
+    // Apple Silicon: Aggressive block chaining prefetch
+    __builtin_prefetch(normal_entry, 0, 0); // Next callback
+    __builtin_prefetch(normal_entry + 32, 0, 1); // Next operands
+#endif
   }
   MaybeLogLinkStats();
 }
