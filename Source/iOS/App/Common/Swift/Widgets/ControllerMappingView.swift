@@ -11,6 +11,22 @@ internal struct ControllerMappingView: View {
   @State private var controllers: [GCController] = []
   @State private var currentQualifiers: [Int: String] = [:] // portOneBased -> qualifier
   @State private var showPickerForPort: Int?
+  /// Selected GC port to load a profile for (1-based). When non-nil, present GC profile sheet.
+  @State private var showProfileForGCPort: Int? = nil
+  /// Selected Wiimote to load a profile for (1-based). When non-nil, present Wiimote profile sheet.
+  @State private var showProfileForWiimote: Int? = nil
+  /// Per-Wiimote extension: 0 None, 1 Nunchuk, 2 Classic
+  @State private var wiiExtension: [Int] = [0, 0, 0, 0]
+  /// Per-Wiimote sideways toggle
+  @State private var wiiSideways: [Bool] = [false, false, false, false]
+  /// Cached GC profiles for the active port sheet
+  @State private var gcProfiles: [String] = []
+  /// Cached Wiimote profiles for the active port sheet
+  @State private var wiiProfiles: [String] = []
+  /// GC assignment per port (0 None, 1 Controller, ...)
+  @State private var gcPortDevices: [Int] = [0, 0, 0, 0]
+  /// Wiimote source per port (0 None, 1 Emulated, ...)
+  @State private var wiiSources: [Int] = [0, 0, 0, 0]
   let game: TVGameItem
   let onBack: () -> Void
 
@@ -25,56 +41,139 @@ internal struct ControllerMappingView: View {
     controllers = GCController.controllers()
     for port in 1...4 {
       currentQualifiers[port] = ControllerManager.shared.defaultDeviceQualifier(forGCPort: port)
+      gcPortDevices[port - 1] = DOLConfigBridge.gcPortDevice(forPort: port)
+      wiiSources[port - 1] = DOLConfigBridge.wiimoteSource(for: port)
     }
   }
+
+  /// Fetch GC profiles for the given port.
+  private func loadGCProfiles(forPort port: Int) {
+    gcProfiles = TVControllerMappingBridge.profiles(forGCPort: port)
+  }
+
+  /// Fetch Wiimote profiles for the given port.
+  private func loadWiimoteProfiles(forWiimote port: Int) {
+    wiiProfiles = TVControllerMappingBridge.profiles(forWiimote: port)
+  }
+
+  /// Initialize Wiimote extension/sideways state from the bridge.
+  private func syncWiimoteState() {
+    for i in 0..<4 {
+      let ext = Int(DOLWiimoteBridge.selectedExtension(forWiimote: Int(i)))
+      let side = DOLWiimoteBridge.isSideways(forWiimote: Int(i))
+      wiiExtension[i] = ext
+      wiiSideways[i] = side
+    }
+  }
+
+#if os(iOS)
+  var sectionPlayers: some View {
+    Section(header: Text(L("Players"))) {
+      ForEach(1...4, id: \.self) { port in
+        HStack(spacing: 12) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(String(format: L("Player %d"), port)).font(.headline)
+            let q = currentQualifiers[port] ?? ""
+            Text(q.isEmpty ? L("No controller assigned") : q)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+          }
+          Spacer()
+          // Badges to clarify assignment types
+          HStack(spacing: 6) {
+            if gcPortDevices[port - 1] != 0 {
+              Text("GC").font(.caption2).padding(.horizontal, 6).padding(.vertical, 2).background(Color.blue.opacity(0.15), in: Capsule())
+            }
+            if wiiSources[port - 1] != 0 {
+              Text("Wii").font(.caption2).padding(.horizontal, 6).padding(.vertical, 2).background(Color.green.opacity(0.15), in: Capsule())
+            }
+          }
+          Button(L("Assign")) { showPickerForPort = port }
+          Button(L("Profiles")) {
+            showProfileForGCPort = port
+            loadGCProfiles(forPort: port)
+          }
+          Button(L("Clear")) {
+            ControllerManager.shared.clearDefaultDevice(forGCPort: port)
+            reload()
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Cleared Player %d"), port)])
+          }
+        }
+      }
+    }
+  }
+
+  var sectionWiiMotes: some View {
+    Section(header: Text(L("Wii Remotes (Quick)"))) {
+      ForEach(1...4, id: \.self) { w in
+        VStack(alignment: .leading, spacing: 8) {
+          HStack {
+            Text(String(format: L("Wii Remote %d"), w)).font(.headline)
+            Spacer()
+            Button(L("Profiles")) { showProfileForWiimote = w; loadWiimoteProfiles(forWiimote: w) }
+          }
+          // Clear, separate affordances for extension and sideways
+          HStack(spacing: 16) {
+            // Extension segmented control
+            Picker(L("Extension"), selection: Binding(get: { wiiExtension[w - 1] }, set: { v in
+              wiiExtension[w - 1] = v
+              DOLWiimoteBridge.setExtensionForWiimote(Int(w - 1), extension: v)
+              // retrigger overlay/nib refresh
+              ControllerManager.shared.reconcile()
+              NotificationCenter.default.post(name: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil)
+            })) {
+              Text(L("None")).tag(0)
+              Text(L("Nunchuk")).tag(1)
+              Text(L("Classic")).tag(2)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 320)
+
+            // Sideways toggle
+            Toggle(L("Sideways"), isOn: Binding(get: { wiiSideways[w - 1] }, set: { v in
+              wiiSideways[w - 1] = v
+              DOLWiimoteBridge.setSidewaysForWiimote(Int(w - 1), enabled: v)
+              ControllerManager.shared.reconcile()
+              NotificationCenter.default.post(name: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil)
+            }))
+            .toggleStyle(.switch)
+          }
+        }
+        .padding(.vertical, 4)
+      }
+    }
+  }
+
+  var sectionConnectedControllers: some View {
+    Section(header: Text(L("Connected Controllers"))) {
+      if controllers.isEmpty {
+        CompactDolphinError(message: L("No controllers connected"))
+          .padding(.vertical, 8)
+      } else {
+        ForEach(Array(controllers.enumerated()), id: \.offset) { _, c in
+          HStack {
+            Image(systemName: "gamecontroller").foregroundStyle(.secondary)
+            VStack(alignment: .leading) {
+              Text(c.vendorName ?? c.productCategory)
+              Text(c.productCategory).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text("P\(c.playerIndex.rawValue + 1)").font(.caption)
+          }
+        }
+      }
+    }
+  }
+#endif
 
   var body: some View {
 #if os(iOS)
     NavigationStack {
       List {
-        Section(header: Text(L("Players"))) {
-          ForEach(1...4, id: \.self) { port in
-            HStack {
-              VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: L("Player %d"), port)).font(.headline)
-                let q = currentQualifiers[port] ?? ""
-                HStack(spacing: 6) {
-                  Text(q.isEmpty ? L("No controller assigned") : q)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                  if !q.isEmpty && q.localizedCaseInsensitiveContains("DSUClient") {
-                    Text("DSU")
-                      .font(.caption2)
-                      .padding(.horizontal, 6)
-                      .padding(.vertical, 2)
-                      .background(Color(.dolphinTint).opacity(0.2), in: Capsule())
-                  }
-                }
-              }
-              Spacer()
-              Button(L("Assign")) { showPickerForPort = port }
-              Button(L("Clear")) { ControllerManager.shared.clearDefaultDevice(forGCPort: port); reload(); NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Cleared Player %d"), port)]) }
-            }
-          }
-        }
-        Section(header: Text(L("Connected Controllers"))) {
-          if controllers.isEmpty {
-            CompactDolphinError(message: L("No controllers connected"))
-              .padding(.vertical, 8)
-          } else {
-            ForEach(Array(controllers.enumerated()), id: \.offset) { _, c in
-              HStack {
-                Image(systemName: "gamecontroller").foregroundStyle(.secondary)
-                VStack(alignment: .leading) {
-                  Text(c.vendorName ?? c.productCategory)
-                  Text(c.productCategory).font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("P\(c.playerIndex.rawValue + 1)").font(.caption)
-              }
-            }
-          }
-        }
+        sectionPlayers
+        sectionWiiMotes
+        sectionConnectedControllers
       }
       .navigationTitle(L("Controllers"))
       .toolbar(content: {
@@ -82,7 +181,7 @@ internal struct ControllerMappingView: View {
           Button(L("Back")) { onBack() }
         }
       })
-      .onAppear { reload() }
+      .onAppear { reload(); syncWiimoteState() }
       .sheet(isPresented: Binding(get: { showPickerForPort != nil }, set: { if !$0 { showPickerForPort = nil } })) {
         if let port = showPickerForPort {
           ControllerPickerSheet(game: game, port: port) { selected in
@@ -97,6 +196,42 @@ internal struct ControllerMappingView: View {
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Touchscreen assigned to Player %d"), port)])
             }
             showPickerForPort = nil
+          }
+        }
+      }
+      .sheet(isPresented: Binding(get: { showProfileForGCPort != nil }, set: { if !$0 { showProfileForGCPort = nil } })) {
+        if let port = showProfileForGCPort {
+          NavigationStack {
+            List(gcProfiles, id: \.self) { p in
+              Button(action: {
+                let ok = TVControllerMappingBridge.loadProfile(p, forGCPort: port, restoreDevice: true)
+                if ok {
+                  ControllerManager.shared.reconcile()
+                  reload()
+                  NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Loaded profile %@ for P%d"), p, port)])
+                }
+                showProfileForGCPort = nil
+              }) { Text(p) }
+            }
+            .navigationTitle(L("GC Profiles"))
+          }
+        }
+      }
+      .sheet(isPresented: Binding(get: { showProfileForWiimote != nil }, set: { if !$0 { showProfileForWiimote = nil } })) {
+        if let w = showProfileForWiimote {
+          NavigationStack {
+            List(wiiProfiles, id: \.self) { p in
+              Button(action: {
+                let ok = TVControllerMappingBridge.loadProfile(p, forWiimote: w, restoreDevice: true)
+                if ok {
+                  ControllerManager.shared.reconcile()
+                  NotificationCenter.default.post(name: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil)
+                  NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Loaded Wiimote %d profile %@"), w, p)])
+                }
+                showProfileForWiimote = nil
+              }) { Text(p) }
+            }
+            .navigationTitle(L("Wiimote Profiles"))
           }
         }
       }
