@@ -65,6 +65,9 @@ struct DSUControllerView: View {
   @AppStorage("dsu_show_tooltips") private var showTooltips: Bool = false
   @State private var activeTooltip: String? = nil
   @State private var tooltipTimer: Timer?
+  // App-level layout lock independent of system rotation lock
+  @AppStorage("dsu_lock_layout") private var lockLayout: Bool = false
+  @State private var lockedLandscape: Bool? = nil
 
   /// Whether to show the touch area overlay for the current layout
   private var shouldShowTouchArea: Bool {
@@ -86,204 +89,226 @@ struct DSUControllerView: View {
   }
 
   private var controllerContent: some View {
-    ZStack {
-      Color.black.ignoresSafeArea()
-
-      Group {
-        switch DSUControllerLayout(rawValue: layoutRaw) ?? .appleVirtual {
-        case .appleVirtual:
-          AppleVirtualControllerPlaceholder()
-            .onAppear { startVirtualController() }
-            .onDisappear { stopVirtualController() }
-        case .gamecube:
-          TouchControllerNibHost(layout: .gamecube)
-            .onAppear { stopVirtualController() }
-        case .wiiRemote:
-          TouchControllerNibHost(layout: .wiiRemote)
-            .onAppear { stopVirtualController() }
-        case .wiiClassic:
-          TouchControllerNibHost(layout: .wiiClassic)
-            .onAppear { stopVirtualController() }
-        case .wiiSideways:
-          TouchControllerNibHost(layout: .wiiSideways)
-            .onAppear { stopVirtualController() }
+    GeometryReader { geo in
+      let isLandscape = geo.size.width > geo.size.height
+      ZStack {
+        Color.black.ignoresSafeArea()
+        
+        Group {
+          switch DSUControllerLayout(rawValue: layoutRaw) ?? .appleVirtual {
+          case .appleVirtual:
+            AppleVirtualControllerPlaceholder()
+              .onAppear { startVirtualController() }
+              .onDisappear { stopVirtualController() }
+          case .gamecube:
+            TouchControllerNibHost(layout: .gamecube)
+              .onAppear { stopVirtualController() }
+          case .wiiRemote:
+            TouchControllerNibHost(layout: .wiiRemote)
+              .onAppear { stopVirtualController() }
+          case .wiiClassic:
+            TouchControllerNibHost(layout: .wiiClassic)
+              .onAppear { stopVirtualController() }
+          case .wiiSideways:
+            TouchControllerNibHost(layout: .wiiSideways)
+              .onAppear { stopVirtualController() }
+          }
         }
-      }
-
-      // Touch area overlay (for layouts that support touch)
-      if shouldShowTouchArea {
-        TouchAreaOverlay()
-      }
-
-      // Tooltip overlay
-      if let tooltip = activeTooltip, showTooltips {
-        TooltipOverlay(text: tooltip)
-      }
-
-      // Status HUD
-      VStack {
-        HStack(spacing: 12) {
-          // Connection indicator
-          Circle().fill(hasClient ? Color.green : Color.red).frame(width: 10, height: 10)
-          Text(hasClient ? (clientAddr.isEmpty ? L("Receiver connected") : clientAddr) : L("Waiting for receiver…"))
-            .foregroundColor(.white)
-            .font(.footnote)
-            .lineLimit(1)
+        
+        // Touch area overlay (for layouts that support touch)
+        if shouldShowTouchArea {
+          TouchAreaOverlay()
+        }
+        
+        // Tooltip overlay
+        if let tooltip = activeTooltip, showTooltips {
+          TooltipOverlay(text: tooltip)
+        }
+        
+        // Status HUD
+        VStack {
+          HStack(spacing: 12) {
+            // Connection indicator
+            Circle().fill(hasClient ? Color.green : Color.red).frame(width: 10, height: 10)
+            Text(hasClient ? (clientAddr.isEmpty ? L("Receiver connected") : clientAddr) : L("Waiting for receiver…"))
+              .foregroundColor(.white)
+              .font(.footnote)
+              .lineLimit(1)
+            Spacer()
+            // Counters
+            Text("TX: \(txCount)  RX: \(rxCount)")
+              .foregroundColor(.white.opacity(0.8))
+              .font(.caption2)
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
+          .background(Color.black.opacity(0.35))
+          .clipShape(Capsule())
+          .padding(.top, 12)
+          .padding(.horizontal, 12)
           Spacer()
-          // Counters
-          Text("TX: \(txCount)  RX: \(rxCount)")
-            .foregroundColor(.white.opacity(0.8))
-            .font(.caption2)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color.black.opacity(0.35))
-        .clipShape(Capsule())
-        .padding(.top, 12)
-        .padding(.horizontal, 12)
-        Spacer()
+        .allowsHitTesting(false)
       }
-      .allowsHitTesting(false)
-    }
-    .onAppear {
-      refreshIRLabel()
-      // Lock to the current interface orientation to avoid flipping when system rotation lock toggles
-      OrientationHelper.lockToCurrentOrientation()
-      if !DSUServerBridge.isRunning() {
-        let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
-        let port = (p > 0 && p < 65536) ? p : 26760
-        let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
-        if !ok {
-          let err = DSUServerBridge.lastError()
-          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+      .onAppear {
+        refreshIRLabel()
+        // App-level orientation lock: capture current orientation as desired
+        if lockLayout {
+          lockedLandscape = UIScreen.main.bounds.width > UIScreen.main.bounds.height
+        } else {
+          lockedLandscape = nil
         }
-      }
-      // Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping)
-      #if canImport(CoreMotion)
-      TCDeviceMotion.shared.setPort(0)
-      TCDeviceMotion.shared.setMotionEnabled(true)
-      #endif
-    }
-    .onDisappear {
-      // Restore default orientation allowances
-      OrientationHelper.unlock()
-      #if canImport(CoreMotion)
-      TCDeviceMotion.shared.setMotionEnabled(false)
-      #endif
-    }
-    .toolbar {
-      ToolbarItem(placement: .navigationBarLeading) {
-        Menu {
-          let currentIR = DOLConfigBridge.mainTouchPadIRMode()
-          Button {
-            DOLConfigBridge.setMainTouchPadIRMode(0)
-            refreshIRLabel()
-          } label: {
-            Label(L("Gyro"), systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
+        // Lock geometry to current orientation only if not using app-level lock
+        if !lockLayout {
+          OrientationHelper.lockToCurrentOrientation()
+        }
+        if !DSUServerBridge.isRunning() {
+          let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
+          let port = (p > 0 && p < 65536) ? p : 26760
+          let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
+          if !ok {
+            let err = DSUServerBridge.lastError()
+            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
           }
-          Button {
-            DOLConfigBridge.setMainTouchPadIRMode(1)
-            refreshIRLabel()
-          } label: {
-            Label(L("Follow"), systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
-          }
-          Button {
-            DOLConfigBridge.setMainTouchPadIRMode(2)
-            refreshIRLabel()
-          } label: {
-            Label(L("Drag"), systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
-          }
-        } label: {
-          Label(irModeLabel, systemImage: "cursor.rays")
         }
-        .modifier(TooltipModifier(text: L("Touch IR pointer control mode"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        // Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping)
+#if canImport(CoreMotion)
+        TCDeviceMotion.shared.setPort(0)
+        TCDeviceMotion.shared.setMotionEnabled(true)
+#endif
       }
-      ToolbarItem(placement: .navigationBarLeading) {
-        Button(action: { showLayoutSheet = true }) {
-          Label(L("Layout"), systemImage: "rectangle.3.offgrid")
+      .onDisappear {
+        // Restore default orientation allowances when not using app-level lock
+        if !lockLayout {
+          OrientationHelper.unlock()
         }
-        .modifier(TooltipModifier(text: L("Choose controller layout (Apple, GameCube, Wii)"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+#if canImport(CoreMotion)
+        TCDeviceMotion.shared.setMotionEnabled(false)
+#endif
       }
-      // Target receiver selection
-      ToolbarItem(placement: .navigationBarLeading) {
-        Menu {
+      .toolbar {
+        ToolbarItem(placement: .navigationBarLeading) {
+          Menu {
+            let currentIR = DOLConfigBridge.mainTouchPadIRMode()
+            Button {
+              DOLConfigBridge.setMainTouchPadIRMode(0)
+              refreshIRLabel()
+            } label: {
+              Label(L("Gyro"), systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
+            }
+            Button {
+              DOLConfigBridge.setMainTouchPadIRMode(1)
+              refreshIRLabel()
+            } label: {
+              Label(L("Follow"), systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
+            }
+            Button {
+              DOLConfigBridge.setMainTouchPadIRMode(2)
+              refreshIRLabel()
+            } label: {
+              Label(L("Drag"), systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
+            }
+          } label: {
+            Label(irModeLabel, systemImage: "cursor.rays")
+          }
+          .modifier(TooltipModifier(text: L("Touch IR pointer control mode"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        }
+        ToolbarItem(placement: .navigationBarLeading) {
+          Button(action: { showLayoutSheet = true }) {
+            Label(L("Layout"), systemImage: "rectangle.3.offgrid")
+          }
+          .modifier(TooltipModifier(text: L("Choose controller layout (Apple, GameCube, Wii)"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        }
+        ToolbarItem(placement: .navigationBarLeading) {
           Button(action: {
-            restrictClient = ""; DSUServerBridge.setRestrictToClient(nil)
-            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Target: All receivers")])
-          }) { Label(L("All Receivers"), systemImage: restrictClient.isEmpty ? "checkmark" : "person.3") }
-          if clients.isEmpty { Text(L("No receivers seen yet")).foregroundColor(.secondary) }
-          ForEach(clients, id: \.self) { addr in
-            Button(action: {
-              restrictClient = addr; DSUServerBridge.setRestrictToClient(addr)
-              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Target: %@"), addr)])
-            }) { Label(addr, systemImage: (restrictClient == addr ? "checkmark" : "antenna.radiowaves.left.and.right")) }
-          }
-        } label: {
-          Label(L("Target"), systemImage: "antenna.radiowaves.left.and.right")
-        }
-        .modifier(TooltipModifier(text: L("Select which receiver to send input to"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
-      }
-      // Apple controller: toggle between Left Stick and D-Pad (mutually exclusive)
-      ToolbarItem(placement: .navigationBarLeading) {
-        if (DSUControllerLayout(rawValue: layoutRaw) ?? .appleVirtual) == .appleVirtual {
-          Button(action: {
-            appleLeftIsDPad.toggle()
-            reconfigureVirtualControllerIfNeeded()
+            lockLayout.toggle()
+            if !lockLayout { lockedLandscape = nil; OrientationHelper.unlock() }
           }) {
-            Label(appleLeftIsDPad ? L("Left=D‑Pad") : L("Left=Stick"), systemImage: appleLeftIsDPad ? "circle.grid.cross" : "circle")
+            Label(lockLayout ? L("Unlock Layout") : L("Lock Layout"), systemImage: lockLayout ? "lock.open" : "lock")
           }
-          .modifier(TooltipModifier(text: L("Toggle left control between analog stick and D-pad"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+          .modifier(TooltipModifier(text: L("Lock the DSU controller layout orientation"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        }
+        // Target receiver selection
+        ToolbarItem(placement: .navigationBarLeading) {
+          Menu {
+            Button(action: {
+              restrictClient = ""; DSUServerBridge.setRestrictToClient(nil)
+              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Target: All receivers")])
+            }) { Label(L("All Receivers"), systemImage: restrictClient.isEmpty ? "checkmark" : "person.3") }
+            if clients.isEmpty { Text(L("No receivers seen yet")).foregroundColor(.secondary) }
+            ForEach(clients, id: \.self) { addr in
+              Button(action: {
+                restrictClient = addr; DSUServerBridge.setRestrictToClient(addr)
+                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Target: %@"), addr)])
+              }) { Label(addr, systemImage: (restrictClient == addr ? "checkmark" : "antenna.radiowaves.left.and.right")) }
+            }
+          } label: {
+            Label(L("Target"), systemImage: "antenna.radiowaves.left.and.right")
+          }
+          .modifier(TooltipModifier(text: L("Select which receiver to send input to"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        }
+        // Apple controller: toggle between Left Stick and D-Pad (mutually exclusive)
+        ToolbarItem(placement: .navigationBarLeading) {
+          if (DSUControllerLayout(rawValue: layoutRaw) ?? .appleVirtual) == .appleVirtual {
+            Button(action: {
+              appleLeftIsDPad.toggle()
+              reconfigureVirtualControllerIfNeeded()
+            }) {
+              Label(appleLeftIsDPad ? L("Left=D‑Pad") : L("Left=Stick"), systemImage: appleLeftIsDPad ? "circle.grid.cross" : "circle")
+            }
+            .modifier(TooltipModifier(text: L("Toggle left control between analog stick and D-pad"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+          }
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button(action: { showMotionSheet = true }) {
+            Label(L("Motion"), systemImage: "slider.horizontal.3")
+          }
+          .modifier(TooltipModifier(text: L("Adjust motion sensitivity and deadzone settings"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button(action: { showTouchArea.toggle() }) {
+            Label(L("Touch"), systemImage: showTouchArea ? "hand.tap.fill" : "hand.tap")
+          }
+          .modifier(TooltipModifier(text: L("Toggle touchpad area for DS4-style touch input"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        }
+        //      ToolbarItem(placement: .navigationBarTrailing) {
+        //        Button(action: { showTooltips.toggle() }) {
+        //          Label(L("Tooltips"), systemImage: showTooltips ? "questionmark.circle.fill" : "questionmark.circle")
+        //        }
+        //        .modifier(TooltipModifier(text: L("Toggle help tooltips for toolbar buttons"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        //      }
+        //      ToolbarItem(placement: .navigationBarTrailing) {
+        //        Button(action: { DSUServerBridge.sendNow() }) {
+        //          Label(L("Send Test Frame"), systemImage: "paperplane")
+        //        }
+        //        .modifier(TooltipModifier(text: L("Send a test frame to verify connection"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+        //      }
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button(action: onClose) {
+            Label(L("Exit"), systemImage: "xmark")
+          }
+          .modifier(TooltipModifier(text: L("Close DSU controller and return to game"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
         }
       }
-      ToolbarItem(placement: .navigationBarTrailing) {
-        Button(action: { showMotionSheet = true }) {
-          Label(L("Motion"), systemImage: "slider.horizontal.3")
-        }
-        .modifier(TooltipModifier(text: L("Adjust motion sensitivity and deadzone settings"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+      .navigationBarTitleDisplayMode(.inline)
+      .sheet(isPresented: $showMotionSheet) { MotionQuickSettingsView() }
+      .sheet(isPresented: $showLayoutSheet) { LayoutPickerSheet(selectedRaw: $layoutRaw) }
+      .onChange(of: layoutRaw) { _ in reconfigureVirtualControllerIfNeeded() }
+      .onChange(of: restrictClient) { newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
+      .onAppear {
+        DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
+        // Publish layout metadata for auto-profile selection on receivers
+        publishLayoutTXT(raw: layoutRaw)
       }
-      ToolbarItem(placement: .navigationBarTrailing) {
-        Button(action: { showTouchArea.toggle() }) {
-          Label(L("Touch"), systemImage: showTouchArea ? "hand.tap.fill" : "hand.tap")
-        }
-        .modifier(TooltipModifier(text: L("Toggle touchpad area for DS4-style touch input"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+      .onChange(of: layoutRaw) { newVal in publishLayoutTXT(raw: newVal) }
+      .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+        hasClient = DSUServerBridge.hasClient()
+        clientAddr = DSUServerBridge.lastClientAddress()
+        txCount = UInt(DSUServerBridge.txCount())
+        rxCount = UInt(DSUServerBridge.rxCount())
+        clients = DSUServerBridge.clients() as? [String] ?? []
+        if !hasClient { DSUServerBridge.sendNow() }
       }
-//      ToolbarItem(placement: .navigationBarTrailing) {
-//        Button(action: { showTooltips.toggle() }) {
-//          Label(L("Tooltips"), systemImage: showTooltips ? "questionmark.circle.fill" : "questionmark.circle")
-//        }
-//        .modifier(TooltipModifier(text: L("Toggle help tooltips for toolbar buttons"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
-//      }
-//      ToolbarItem(placement: .navigationBarTrailing) {
-//        Button(action: { DSUServerBridge.sendNow() }) {
-//          Label(L("Send Test Frame"), systemImage: "paperplane")
-//        }
-//        .modifier(TooltipModifier(text: L("Send a test frame to verify connection"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
-//      }
-      ToolbarItem(placement: .navigationBarTrailing) {
-        Button(action: onClose) {
-          Label(L("Exit"), systemImage: "xmark")
-        }
-        .modifier(TooltipModifier(text: L("Close DSU controller and return to game"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
-      }
-    }
-    .navigationBarTitleDisplayMode(.inline)
-    .sheet(isPresented: $showMotionSheet) { MotionQuickSettingsView() }
-    .sheet(isPresented: $showLayoutSheet) { LayoutPickerSheet(selectedRaw: $layoutRaw) }
-    .onChange(of: layoutRaw) { _ in reconfigureVirtualControllerIfNeeded() }
-    .onChange(of: restrictClient) { newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
-        .onAppear {
-      DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
-      // Publish layout metadata for auto-profile selection on receivers
-      publishLayoutTXT(raw: layoutRaw)
-    }
-     .onChange(of: layoutRaw) { newVal in publishLayoutTXT(raw: newVal) }
-    .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
-      hasClient = DSUServerBridge.hasClient()
-      clientAddr = DSUServerBridge.lastClientAddress()
-      txCount = UInt(DSUServerBridge.txCount())
-      rxCount = UInt(DSUServerBridge.rxCount())
-      clients = DSUServerBridge.clients() as? [String] ?? []
-      if !hasClient { DSUServerBridge.sendNow() }
     }
   }
 
