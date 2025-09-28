@@ -186,9 +186,13 @@ PRIVATE
   FatFs
   Iconv::Iconv
   spng::spng
-  watcher
   ${VTUNE_LIBRARIES}
 )
+
+# Link filesystem watcher only on macOS (FSEvents)
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  target_link_libraries(common PRIVATE watcher)
+endif()
 
 if ((DEFINED CMAKE_ANDROID_ARCH_ABI AND CMAKE_ANDROID_ARCH_ABI MATCHES "x86|x86_64") OR
     (NOT DEFINED CMAKE_ANDROID_ARCH_ABI AND _M_X86_64))

@@ -17,10 +17,10 @@
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  
-  const int maxAnisotropy = Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
+
+  const int maxAnisotropy = (int)Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
   const TextureFilteringMode filteringMode = Config::Get(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING);
-  
+
   if (filteringMode == TextureFilteringMode::Default) {
     _lastSelected = maxAnisotropy;
   } else if (filteringMode == TextureFilteringMode::Nearest) {
@@ -28,7 +28,7 @@
   } else if (filteringMode == TextureFilteringMode::Linear) {
     _lastSelected = 6 + maxAnisotropy;
   }
-  
+
   UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:_lastSelected inSection:0]];
   [cell setAccessoryType:UITableViewCellAccessoryCheckmark];
 }
@@ -37,7 +37,7 @@
   if (_lastSelected != indexPath.row) {
     int maxAnisotropy;
     TextureFilteringMode filteringMode;
-    
+
     switch (indexPath.row) {
       case 0: // Default
         maxAnisotropy = 0;
@@ -88,19 +88,19 @@
         filteringMode = TextureFilteringMode::Default;
         break;
     }
-    
-    Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY, maxAnisotropy);
+
+    Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY, static_cast<AnisotropicFilteringMode>(maxAnisotropy));
     Config::SetBase(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING, filteringMode);
-    
+
     UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];
     cell.accessoryType = UITableViewCellAccessoryCheckmark;
-    
+
     UITableViewCell* oldCell = [tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:_lastSelected inSection:0]];
     oldCell.accessoryType = UITableViewCellAccessoryNone;
-    
+
     _lastSelected = indexPath.row;
   }
-  
+
   [tableView deselectRowAtIndexPath:indexPath animated:true];
 }
 

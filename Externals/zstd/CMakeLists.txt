@@ -133,7 +133,7 @@ target_compile_definitions(zstd PUBLIC ZSTD_LEGACY_SUPPORT=0)
 
 if(MSVC)
     target_compile_definitions(zstd PUBLIC ZSTD_DISABLE_ASM)
-else()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" OR CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
     target_sources(zstd PRIVATE zstd/lib/decompress/huf_decompress_amd64.S)
 endif()
 

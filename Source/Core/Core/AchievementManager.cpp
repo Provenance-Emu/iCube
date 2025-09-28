@@ -217,7 +217,7 @@ void AchievementManager::LoadGame(const DiscIO::Volume* volume)
   rc_hash_init_custom_filereader(&volume_reader);
   if (rc_client_get_game_info(m_client))
   {
-    rc_client_begin_identify_and_change_media(m_client, "", NULL, 0, ChangeMediaCallback, NULL);
+    rc_client_begin_change_media(m_client, "", NULL, 0, ChangeMediaCallback, NULL);
   }
   else
   {
@@ -1265,7 +1265,7 @@ void AchievementManager::Request(const rc_api_request_t* request,
 {
   std::string url = request->url;
   std::string post_data = request->post_data;
-  AchievementManager::GetInstance().m_queue.EmplaceItem(
+  AchievementManager::GetInstance().m_queue.Push(
       [url = std::move(url), post_data = std::move(post_data), callback = std::move(callback),
        callback_data = std::move(callback_data)] {
         Common::HttpRequest http_request(std::chrono::milliseconds{10000});

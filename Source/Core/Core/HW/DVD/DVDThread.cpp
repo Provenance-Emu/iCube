@@ -296,40 +296,15 @@ void DVDThread::FinishRead(u64 id, s64 cycles_late)
 void DVDThread::ProcessReadRequest(ReadRequest&& request)
 {
   Common::SetCurrentThreadName("DVD thread");
-
-  while (true)
-  {
-    m_request_queue_expanded.Wait();
-
-    if (m_dvd_thread_exiting.IsSet())
-      return;
-
-    ReadRequest request;
-    bool has_pending = false;
-    ReadRequest pending;
-
-    while (true)
-    {
-      if (has_pending)
-      {
-        request = pending;
-        has_pending = false;
-      }
-      else
-      {
-        if (!m_request_queue.Pop(request))
-          break;
-      }
-
+  
   m_file_logger.Log(*m_disc, request.partition, request.dvd_offset);
-
+  
   std::vector<u8> buffer(request.length);
   if (!m_disc->Read(request.dvd_offset, request.length, buffer.data(), request.partition))
     buffer.resize(0);
-
+  
   request.realtime_done_us = Common::Timer::NowUs();
-
+  
   m_result_queue.Push(ReadResult(std::move(request), std::move(buffer)));
-}
 }
 }  // namespace DVD

@@ -144,7 +144,7 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   DolphinAnalytics::Instance().ReportDolphinStart("ios");
 
 #ifdef USE_RETRO_ACHIEVEMENTS
-  AchievementManager::GetInstance().Init();
+  AchievementManager::GetInstance().Init(nullptr);
   AchievementManager::GetInstance().SetUpdateCallback([](const AchievementManager::UpdatedItems& items) {
     if (items.failed_login_code != 0) {
       [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLRAFailedLogin" object:nil userInfo:@{ @"code": @(items.failed_login_code) }];

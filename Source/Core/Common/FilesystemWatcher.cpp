@@ -3,7 +3,9 @@
 
 #include "Common/FilesystemWatcher.h"
 
+#if COMMON_FS_WATCH_ENABLED
 #include <wtr/watcher.hpp>
+#endif
 
 #include "Common/Logging/Log.h"
 #include "Common/StringUtil.h"
@@ -15,6 +17,7 @@ FilesystemWatcher::~FilesystemWatcher() = default;
 
 void FilesystemWatcher::Watch(const std::string& path)
 {
+#if COMMON_FS_WATCH_ENABLED
   const auto [iter, inserted] = m_watched_paths.try_emplace(path, nullptr);
   if (inserted)
   {
@@ -58,10 +61,17 @@ void FilesystemWatcher::Watch(const std::string& path)
       }
     });
   }
+#else
+  (void)path;
+#endif
 }
 
 void FilesystemWatcher::Unwatch(const std::string& path)
 {
+#if COMMON_FS_WATCH_ENABLED
   m_watched_paths.erase(path);
+#else
+  (void)path;
+#endif
 }
 }  // namespace Common

@@ -1422,7 +1422,7 @@ struct AboutView: View {
           }
 
           // Main dolphin logo with gentle animation
-          Image("DolphinLogo")
+          Image("iCube-Logo-Square-NoText")
             .resizable()
             .scaledToFit()
             .frame(height: 128)
@@ -1430,6 +1430,7 @@ struct AboutView: View {
             .rotationEffect(.degrees(logoRotation))
             .animation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true), value: logoScale)
             .animation(.easeInOut(duration: 4.0).repeatForever(autoreverses: true), value: logoRotation)
+            .tint(Color("DolphinTint"))
         }
         .frame(height: 160)
         .onAppear {

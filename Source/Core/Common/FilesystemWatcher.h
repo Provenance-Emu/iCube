@@ -8,6 +8,15 @@
 #include <string>
 #include <string_view>
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if defined(__APPLE__) && defined(TARGET_OS_OSX) && TARGET_OS_OSX
+#define COMMON_FS_WATCH_ENABLED 1
+#else
+#define COMMON_FS_WATCH_ENABLED 0
+#endif
+
 namespace wtr
 {
 inline namespace watcher
@@ -42,6 +51,8 @@ private:
   // A file or folder was deleted in one of the watched paths
   virtual void PathDeleted(std::string_view path) {}
 
+#if COMMON_FS_WATCH_ENABLED
   std::map<std::string, std::unique_ptr<wtr::watch>> m_watched_paths;
+#endif
 };
 }  // namespace Common

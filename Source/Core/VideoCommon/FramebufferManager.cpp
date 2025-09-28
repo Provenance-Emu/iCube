@@ -306,7 +306,7 @@ bool FramebufferManager::CreateEFBFramebuffer()
       ResolveEFBDepthTexture(native_rect, true);
     }
     // Color resolve pipeline if multisampled or partial resolve unsupported
-    if (m_efb_resolve_color_texture || !g_ActiveConfig.backend_info.bSupportsPartialMultisampleResolve)
+    if (m_efb_resolve_color_texture || !g_backend_info.bSupportsPartialMultisampleResolve)
     {
       ResolveEFBColorTexture(native_rect);
     }

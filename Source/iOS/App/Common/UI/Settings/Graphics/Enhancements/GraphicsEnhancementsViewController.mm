@@ -17,7 +17,7 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  
+
   [self.resolutionCell registerSetting:Config::GFX_EFB_SCALE];
   [self.filteringCell registerSetting:Config::GFX_ENHANCE_MAX_ANISOTROPY];
   [self.scaledEfbCell registerSetting:Config::GFX_HACK_COPY_EFB_SCALED];
@@ -31,7 +31,7 @@
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  
+
   const int efb_scale = Config::Get(Config::GFX_EFB_SCALE);
   if (efb_scale > 0) {
     NSString* resolution = [NSString stringWithFormat:@"%dx", efb_scale];
@@ -39,12 +39,12 @@
   } else {
     self.resolutionCell.choiceSettingLabel.text = DOLCoreLocalizedString(@"Auto");
   }
-  
-  const int maxAnisotropy = Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
+
+  const int maxAnisotropy = (int)Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
   const TextureFilteringMode filteringMode = Config::Get(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING);
-  
+
   NSString* filteringAnisotropy;
-  
+
   switch (maxAnisotropy) {
     case 0:
       filteringAnisotropy = @"Default";
@@ -65,9 +65,9 @@
       filteringAnisotropy = @"Error";
       break;
   }
-  
+
   NSString* filtering;
-  
+
   if (filteringMode == TextureFilteringMode::Default) {
     filtering = filteringAnisotropy;
   } else if (filteringMode == TextureFilteringMode::Nearest) {
@@ -79,13 +79,13 @@
       filtering = [NSString stringWithFormat:@"Force Linear and %@", filteringAnisotropy];
     }
   }
-  
+
   self.filteringCell.choiceSettingLabel.text = DOLCoreLocalizedString(filtering);
 }
 
 - (void)tableView:(UITableView*)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath*)indexPath {
   NSString* message = nil;
-  
+
   switch (indexPath.section) {
     case 0:
       switch (indexPath.row) {
@@ -155,7 +155,7 @@
       }
       break;
   }
-  
+
   [self showHelpWithLocalizable:message];
 }
 

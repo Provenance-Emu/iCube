@@ -28,6 +28,8 @@ target_compile_features(sfml-network PUBLIC cxx_std_20)
 target_compile_features(sfml-system PUBLIC cxx_std_20)
 target_compile_definitions(sfml-system PUBLIC SFML_STATIC)
 target_include_directories(sfml-system PUBLIC SFML/include PRIVATE SFML/src)
+# Ensure unicodelib headers are found for String.cpp
+target_include_directories(sfml-system PRIVATE SFML/extlibs/headers/cpp-unicodelib)
 target_include_directories(sfml-network PUBLIC SFML/include PRIVATE SFML/src)
 target_link_libraries(sfml-network PUBLIC sfml-system)
 dolphin_disable_warnings(sfml-network)

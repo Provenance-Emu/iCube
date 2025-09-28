@@ -553,7 +553,7 @@ void VulkanContext::PopulateBackendInfoFeatures(BackendInfo* backend_info, VkPhy
 
   // On MoltenVK, prefer inverted depth to avoid depth compare mismatches on some devices
   if (info.driverID == VK_DRIVER_ID_MOLTENVK)
-    config->backend_info.bSupportsReversedDepthRange = false;
+    backend_info->bSupportsReversedDepthRange = false;
 
   // Dynamic sampler indexing locks up Intel GPUs on MoltenVK/Metal
   if (DriverDetails::HasBug(DriverDetails::BUG_BROKEN_DYNAMIC_SAMPLER_INDEXING))

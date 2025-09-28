@@ -7,6 +7,9 @@
 #include <string>
 
 #include <TargetConditionals.h>
+#if TARGET_OS_OSX
+#import <AppKit/AppKit.h>
+#endif
 #include <spirv_msl.hpp>
 
 #include "Common/MsgHandler.h"
@@ -79,13 +82,11 @@ void Metal::Util::PopulateBackendInfo(BackendInfo* backend_info)
   backend_info->bSupportsPartialMultisampleResolve = false;
   backend_info->bSupportsDynamicVertexLoader = true;
   backend_info->bSupportsVSLinePointExpand = true;
+#if TARGET_OS_OSX
   backend_info->bSupportsHDROutput =
       1.0 < [[NSScreen deepestScreen] maximumPotentialExtendedDynamicRangeColorComponentValue];
 #else
-  config->backend_info.bSupportsHDROutput = false;
-#endif
-#ifndef IPHONEOS
-  config->backend_info.bSupportsHDROutput = false;
+  backend_info->bSupportsHDROutput = false;
 #endif
 }
 
@@ -293,6 +294,7 @@ void Metal::Util::PopulateBackendInfoFeatures(const VideoConfig& config, Backend
   backend_info->bSupportsBPTCTextures = true;
 #else
   backend_info->bSupportsDepthClamp = [device supportsFamily:MTLGPUFamilyApple4];
+#endif
 
   // Initialize support variables for all platforms
   bool supports_apple4 = false;
@@ -302,9 +304,9 @@ void Metal::Util::PopulateBackendInfoFeatures(const VideoConfig& config, Backend
     // On macOS, these features are always available
     supports_apple4 = true;
     supports_bcn = true;
-    config->backend_info.bSupportsDepthClamp   = true;
-    config->backend_info.bSupportsST3CTextures = true;
-    config->backend_info.bSupportsBPTCTextures = true;
+      backend_info->bSupportsDepthClamp   = true;
+  backend_info->bSupportsST3CTextures = true;
+  backend_info->bSupportsBPTCTextures = true;
 
 #else   // iOS / tvOS
 
@@ -322,7 +324,9 @@ void Metal::Util::PopulateBackendInfoFeatures(const VideoConfig& config, Backend
     } else {
     #if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
         supports_apple4 = [device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily4_v1];
-    #else // TARGET_OS_TV or Mac Catalyst
+    #elif TARGET_OS_TV || TARGET_OS_MACCATALYST
+      supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
+    #else
       supports_apple4 = [device supportsFamily:MTLGPUFamilyApple4];
     #endif
     }
@@ -330,9 +334,9 @@ void Metal::Util::PopulateBackendInfoFeatures(const VideoConfig& config, Backend
     /* BCn (S3TC/BPTC) and depth-clamp come free with Apple 4 or newer   */
     supports_bcn    = supports_apple4;
     if (supports_apple4) {
-        config->backend_info.bSupportsDepthClamp   = true;
-        config->backend_info.bSupportsST3CTextures = true;   // S3TC / BC1-3
-        config->backend_info.bSupportsBPTCTextures = true;   // BC6/BC7
+        backend_info->bSupportsDepthClamp   = true;
+        backend_info->bSupportsST3CTextures = true;   // S3TC / BC1-3
+        backend_info->bSupportsBPTCTextures = true;   // BC6/BC7
     }
 #endif
   if (@available(iOS 16.4, *))
@@ -340,7 +344,7 @@ void Metal::Util::PopulateBackendInfoFeatures(const VideoConfig& config, Backend
   backend_info->bSupportsST3CTextures = supports_bcn;
   backend_info->bSupportsBPTCTextures = supports_bcn;
 
-  config->backend_info.bSupportsFramebufferFetch = true;
+  backend_info->bSupportsFramebufferFetch = true;
 
   backend_info->AAModes.clear();
   for (u32 i = 1; i <= 64; i <<= 1)
