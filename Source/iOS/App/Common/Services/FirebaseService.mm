@@ -8,6 +8,8 @@
 #import <FirebaseCore/FirebaseCore.h>
 #import <FirebaseCrashlytics/FirebaseCrashlytics.h>
 #import "Core/Config/MainSettings.h"
+//@import FirebaseCore;
+
 
 #import "AnalyticsNoticeViewController.h"
 #import "BootNoticeManager.h"
@@ -22,9 +24,9 @@
 }
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary<UIApplicationLaunchOptionsKey,id>*)launchOptions {
-  if ([VersionManager shared].appVersion.source != DOLBuildSourceOfficial) {
-    return true;
-  }
+//  if ([VersionManager shared].appVersion.source != DOLBuildSourceOfficial) {
+//    return true;
+//  }
   
   [FIRApp configure];
   
