@@ -43,6 +43,7 @@
 #include "Common/Swap.h"
 #include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/Config/MainSettings.h"
+#include "Common/Config/Config.h"
 
 #if defined(__clang__) || defined(__GNUC__)
 #if defined(__aarch64__)
@@ -140,8 +141,8 @@ bool CachedInterpreter::IsBlockLinkingEnabled()
 
 void CachedInterpreter::ConfigureFpFastFromEnv()
 {
-  const char* env = std::getenv("DOLPHIN_CI_FP_FAST");
-  s_fp_fast_enabled = (env && env[0] == '1');
+  // Read from configurable setting (default false). Env var no longer used.
+  s_fp_fast_enabled = Config::Get(Config::MAIN_FP_FAST);
 }
 
 // Inline/verify controls for 59 arithmetic fast paths (file-local)
@@ -1943,7 +1944,7 @@ bool CachedInterpreter::s_hot_enabled = false;
 u32 CachedInterpreter::s_hot_sample_every = 32; // default: sample 1 out of 32 instructions
 u64 CachedInterpreter::s_hot_counter = 0;
 #if defined(__aarch64__)
-bool CachedInterpreter::s_fp_fast_enabled = true;
+bool CachedInterpreter::s_fp_fast_enabled = false;
 #else
 bool CachedInterpreter::s_fp_fast_enabled = false;
 #endif

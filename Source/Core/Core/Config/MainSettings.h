@@ -60,6 +60,8 @@ extern const Info<bool> MAIN_FASTMEM;
 extern const Info<bool> MAIN_FASTMEM_ARENA;
 extern const Info<bool> MAIN_LARGE_ENTRY_POINTS_MAP;
 extern const Info<bool> MAIN_ACCURATE_CPU_CACHE;
+// Enable fast FP paths in Cached Interpreter (experimental; default off)
+extern const Info<bool> MAIN_FP_FAST;
 // Should really be in the DSP section, but we're kind of stuck with bad decisions made in the past.
 extern const Info<bool> MAIN_DSP_HLE;
 extern const Info<int> MAIN_MAX_FALLBACK;

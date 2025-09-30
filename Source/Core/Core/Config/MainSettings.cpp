@@ -219,6 +219,8 @@ const Info<int> MAIN_SYNC_GPU_MIN_DISTANCE{{System::Main, "Core", "SyncGpuMinDis
 const Info<float> MAIN_SYNC_GPU_OVERCLOCK{{System::Main, "Core", "SyncGpuOverclock"}, 1.0f};
 const Info<bool> MAIN_FAST_DISC_SPEED{{System::Main, "Core", "FastDiscSpeed"}, true};
 const Info<bool> MAIN_LOW_DCBZ_HACK{{System::Main, "Core", "LowDCBZHack"}, true};
+// Enable fast FP paths in Cached Interpreter (experimental; default off)
+const Info<bool> MAIN_FP_FAST{{System::Main, "Core", "FpFast"}, false};
 const Info<bool> MAIN_FLOAT_EXCEPTIONS{{System::Main, "Core", "FloatExceptions"}, false};
 const Info<bool> MAIN_DIVIDE_BY_ZERO_EXCEPTIONS{{System::Main, "Core", "DivByZeroExceptions"},
                                                 false};

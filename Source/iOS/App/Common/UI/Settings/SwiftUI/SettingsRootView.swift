@@ -1753,6 +1753,7 @@ struct ConfigAdvancedView: View {
   @State private var writeBackCache: Bool = false
   @State private var disableICache: Bool = false
   @State private var lowDCBZ: Bool = false
+  @State private var fpFast: Bool = false
   // CPU idle detection toggles
   @State private var relaxedIdleDetection: Bool = false
   @State private var fastForwardCtrIdle: Bool = false
@@ -1796,6 +1797,12 @@ struct ConfigAdvancedView: View {
             .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) }
           Spacer()
           Image(systemName: "info.circle").help(L("Skips emulation of I-Cache behavior. Can improve performance but may cause bugs. Usually keep off."))
+        }
+        HStack {
+          Toggle(L("Fast FP (Cached Interpreter, experimental)"), isOn: $fpFast)
+            .onChange(of: fpFast) { DOLConfigBridge.setMainFpFast($0) }
+          Spacer()
+          Image(systemName: "exclamationmark.triangle").help(L("Enables faster floating-point paths in the Cached Interpreter. Experimental and may cause incorrect behavior in some games. Off by default."))
         }
         Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
           .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) }
@@ -1894,6 +1901,7 @@ struct ConfigAdvancedView: View {
     writeBackCache = DOLConfigBridge.mainAccurateCpuCache()
     disableICache = DOLConfigBridge.mainDisableICache()
     lowDCBZ = DOLConfigBridge.mainLowDCBZHack()
+    fpFast = DOLConfigBridge.mainFpFast()
     // Ensure idle detection toggles persist
     relaxedIdleDetection = DOLConfigBridge.mainRelaxedIdleDetection()
     fastForwardCtrIdle = DOLConfigBridge.mainFastForwardCtrIdle()

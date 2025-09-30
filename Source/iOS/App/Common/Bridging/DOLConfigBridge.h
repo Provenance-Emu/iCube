@@ -122,6 +122,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (BOOL)mainLowDCBZHack;
 + (void)setMainLowDCBZHack:(BOOL)enabled;
+// Cached Interpreter: fast FP paths (experimental)
++ (BOOL)mainFpFast;
++ (void)setMainFpFast:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;
 + (void)setMainOverclockEnable:(BOOL)enabled;
 + (NSInteger)mainOverclockPercent;

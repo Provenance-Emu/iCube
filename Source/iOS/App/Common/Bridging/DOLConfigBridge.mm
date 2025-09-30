@@ -165,6 +165,10 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 
 + (BOOL)mainLowDCBZHack { return Config::Get(Config::MAIN_LOW_DCBZ_HACK); }
 + (void)setMainLowDCBZHack:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_LOW_DCBZ_HACK, (bool)enabled); }
+
+// Cached Interpreter: fast FP paths (experimental)
++ (BOOL)mainFpFast { return Config::Get(Config::MAIN_FP_FAST); }
++ (void)setMainFpFast:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_FP_FAST, (bool)enabled); }
 + (BOOL)mainOverclockEnable { return Config::Get(Config::MAIN_OVERCLOCK_ENABLE); }
 + (void)setMainOverclockEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK_ENABLE, (bool)enabled); }
 + (NSInteger)mainOverclockPercent { float v = Config::Get(Config::MAIN_OVERCLOCK); return (NSInteger)lroundf(v * 100.0f); }
