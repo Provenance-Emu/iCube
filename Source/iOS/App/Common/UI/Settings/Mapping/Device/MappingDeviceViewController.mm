@@ -69,53 +69,53 @@ struct Device {
 }
 
 - (void)repopulateDevices {
-  std::lock_guard<std::mutex> lock(_devicesMutex);
-  _devices.clear();
-  [_deviceNames removeAllObjects];
+  // Build device lists under lock, then reload UI after unlocking to avoid deadlock
+  {
+    std::lock_guard<std::mutex> lock(_devicesMutex);
+    _devices.clear();
+    [_deviceNames removeAllObjects];
 
-  g_controller_interface.RefreshDevices();
+    g_controller_interface.RefreshDevices();
 
-  for (const auto& name : g_controller_interface.GetAllDeviceStrings()) {
-    if (self.filterType != DOLDeviceFilterNone) {
-      ciface::Core::DeviceQualifier qualifier;
-      qualifier.FromString(name);
+    for (const auto& name : g_controller_interface.GetAllDeviceStrings()) {
+      if (self.filterType != DOLDeviceFilterNone) {
+        ciface::Core::DeviceQualifier qualifier;
+        qualifier.FromString(name);
 
-      if (qualifier.source == "iOS" && qualifier.name == "Touchscreen") {
-        // Don't list unnecessary Touchscreen devices depending on the filter type.
-        if ((self.filterType == DOLDeviceFilterTouchscreenExceptPad && qualifier.cid != 0)
-            || (self.filterType == DOLDeviceFilterTouchscreenExceptWii && qualifier.cid != 4)
-            || self.filterType == DOLDeviceFilterTouchscreenAll) {
-          continue;
+        if (qualifier.source == "iOS" && qualifier.name == "Touchscreen") {
+          // Don't list unnecessary Touchscreen devices depending on the filter type.
+          if ((self.filterType == DOLDeviceFilterTouchscreenExceptPad && qualifier.cid != 0)
+              || (self.filterType == DOLDeviceFilterTouchscreenExceptWii && qualifier.cid != 4)
+              || self.filterType == DOLDeviceFilterTouchscreenAll) {
+            continue;
+          }
         }
       }
+
+      _devices.push_back(name);
+      [_deviceNames addObject:CppToFoundationString(name)];
     }
 
-    _devices.push_back(name);
-    [_deviceNames addObject:CppToFoundationString(name)];
-  }
+    _lastSelected = -1;
 
-  _lastSelected = -1;
+    const std::string defaultDevice = self.emulatedController->GetDefaultDevice().ToString();
 
-  const std::string defaultDevice = self.emulatedController->GetDefaultDevice().ToString();
+    if (!defaultDevice.empty()) {
+      for (int i = 0; i < _devices.size(); i++) {
+        if (_devices[i] == defaultDevice) {
+          _lastSelected = i;
+        }
+      }
 
-  if (defaultDevice.empty()) {
-    [self.tableView reloadData];
-    return;
-  }
+      if (_lastSelected == -1) {
+        _devices.push_back(defaultDevice);
 
-  for (int i = 0; i < _devices.size(); i++) {
-    if (_devices[i] == defaultDevice) {
-      _lastSelected = i;
+        NSString* foundationDeviceName = CppToFoundationString(defaultDevice);
+        [_deviceNames addObject:[NSString stringWithFormat:@"[%@] %@", DOLCoreLocalizedString(@"disconnected"), foundationDeviceName]];
+
+        _lastSelected = _devices.size() - 1;
+      }
     }
-  }
-
-  if (_lastSelected == -1) {
-    _devices.push_back(defaultDevice);
-
-    NSString* foundationDeviceName = CppToFoundationString(defaultDevice);
-    [_deviceNames addObject:[NSString stringWithFormat:@"[%@] %@", DOLCoreLocalizedString(@"disconnected"), foundationDeviceName]];
-
-    _lastSelected = _devices.size() - 1;
   }
 
   [self.tableView reloadData];
