@@ -29,7 +29,7 @@ class UpdateCheckService: UIResponder, UIApplicationDelegate {
     }
 
     let session = URLSession(configuration: URLSessionConfiguration.ephemeral)
-    let updateUrl = URL(string: "https://dolphinios.oatmealdome.me/api/v2/update.json")!
+    let updateUrl = URL(string: "https://icube-emu.com/api/v2/update.json")!
 
     session.dataTask(with: updateUrl) { (data, _, _) in
       if versionManager.appVersion.source != .official {

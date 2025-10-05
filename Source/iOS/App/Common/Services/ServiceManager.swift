@@ -20,7 +20,7 @@ class ServiceManager {
     JitAcquisitionService(),
     URLRouterService(),
     AudioSessionCategoryService(),
-    UpdateCheckService()
+//    UpdateCheckService()
   ]
   #else
   let services: [UIApplicationDelegate] = [
@@ -34,7 +34,7 @@ class ServiceManager {
     SpotlightIndexService(),
     FirebaseService(),
     AudioSessionCategoryService(),
-    UpdateCheckService()
+//    UpdateCheckService()
   ]
 #endif
 
