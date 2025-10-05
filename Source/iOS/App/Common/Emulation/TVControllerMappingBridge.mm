@@ -156,14 +156,16 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
   if (!cfg)
     return;
 
-  // Build set of qualified names for currently enumerated MFi devices
+  // Build set of qualified names for currently enumerated physical devices (MFi/DSU)
   std::unordered_set<std::string> connected_qnames;
   const auto devices = g_controller_interface.GetAllDevices();
   for (const auto& dev : devices)
   {
-    if (!dev || dev->GetSource() != "MFi" || IsDisconnectedPlaceholder(dev))
+    if (!dev || IsDisconnectedPlaceholder(dev))
       continue;
-    connected_qnames.insert(dev->GetQualifiedName());
+    const std::string src = dev->GetSource();
+    if (src == "MFi" || src == "DSUClient")
+      connected_qnames.insert(dev->GetQualifiedName());
   }
 
   // Clear phantom defaults
@@ -186,12 +188,38 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
     }
   }
 
-  // Assign first connected controller to first free port (ignoring touchscreen and occupied physicals)
+  // Unified policy:
+  // 1) If any port has a connected physical device assigned, respect user assignments and stop.
+  // 2) Otherwise, if a physical device is connected, assign it to Pad 1.
+  // 3) Otherwise, assign Touchscreen to Pad 1.
+
+  bool any_connected_physical_assigned = false;
+  for (int i = 0; i < count && !any_connected_physical_assigned; ++i)
+  {
+    auto* pad = cfg->GetController(i);
+    if (!pad) continue;
+    const auto dq = pad->GetDefaultDevice();
+    const bool is_touch = (dq.source == "iOS" && dq.name == "Touchscreen");
+    if (!is_touch && connected_qnames.find(dq.ToString()) != connected_qnames.end())
+      any_connected_physical_assigned = true;
+  }
+
+  if (any_connected_physical_assigned)
+  {
+    if (did_mutate) Pad::GetConfig()->SaveConfig();
+    return;
+  }
+
+  // Try to find a connected physical device to assign to Pad 1
+  std::shared_ptr<ciface::Core::Device> candidate_physical;
   for (const auto& dev : devices)
   {
-    if (!dev || dev->GetSource() != "MFi" || IsDisconnectedPlaceholder(dev))
+    if (!dev || IsDisconnectedPlaceholder(dev))
       continue;
-
+    const std::string src = dev->GetSource();
+    if (!(src == "MFi" || src == "DSUClient"))
+      continue;
+    // Skip if already assigned anywhere
     ciface::Core::DeviceQualifier dq_new; dq_new.FromDevice(dev.get());
     bool already = false;
     for (int i = 0; i < count; ++i)
@@ -199,23 +227,30 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
       auto* pad = cfg->GetController(i);
       if (pad && pad->GetDefaultDevice() == dq_new) { already = true; break; }
     }
-    if (already) continue;
-
-    for (int i = 0; i < count; ++i)
-    {
-      auto* pad = cfg->GetController(i);
-      if (!pad) continue;
-      const auto cur = pad->GetDefaultDevice();
-      if (connected_qnames.find(cur.ToString()) != connected_qnames.end())
-        continue; // occupied by another physical controller
-      pad->SetDefaultDevice(dq_new);
-      pad->LoadDefaults(g_controller_interface);
-      pad->UpdateReferences(g_controller_interface);
-      did_mutate = true;
-      break;
-    }
+    if (!already) { candidate_physical = dev; break; }
   }
-  if (did_mutate) Pad::GetConfig()->SaveConfig();
+
+  if (candidate_physical)
+  {
+    auto* pad1 = cfg->GetController(0);
+    if (pad1)
+    {
+      ciface::Core::DeviceQualifier dq_new; dq_new.FromDevice(candidate_physical.get());
+      if (!(pad1->GetDefaultDevice() == dq_new))
+      {
+        pad1->SetDefaultDevice(dq_new);
+        pad1->LoadDefaults(g_controller_interface);
+        pad1->UpdateReferences(g_controller_interface);
+        did_mutate = true;
+      }
+    }
+    if (did_mutate) Pad::GetConfig()->SaveConfig();
+    return;
+  }
+
+  // No physicals connected: ensure Touchscreen on Pad 1
+  [self assignTouchscreenToGCPort:1];
+  // assignTouchscreenToGCPort saves config
 }
 
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased
