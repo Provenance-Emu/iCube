@@ -9,6 +9,8 @@ Source/Core/Common/scmrev.h
 /cmake-build-debug
 /cmake-build-release
 /[Bb]uild*/
+!/[Bb]uild/xcframework/
+!/[Bb]uild/xcframework/**
 /[Bb]inary*/
 /obj/
 # Ignore files output by Android cmake build
