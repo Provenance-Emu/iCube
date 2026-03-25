@@ -390,7 +390,6 @@ void Metal::Util::PopulateBackendInfoFeatures(const VideoConfig& config, Backend
 #if TARGET_OS_OSX
   if (vendor == DriverDetails::VENDOR_INTEL)
     backend_info->bSupportsFramebufferFetch |= DetectIntelGPUFBFetch(device);
-      DriverDetails::EnableBug(DriverDetails::BUG_INTEL_PIXEL_SHADER_DEPTH_ROUNDING);
 #endif
 
   if (DriverDetails::HasBug(DriverDetails::BUG_BROKEN_DYNAMIC_SAMPLER_INDEXING))
