@@ -129,7 +129,7 @@
 #   command.
 #
 
-cmake_minimum_required(VERSION 3.8.0)
+cmake_minimum_required(VERSION 3.10)
 
 # CMake invokes the toolchain file twice during the first build, but only once during subsequent rebuilds.
 if(DEFINED ENV{_IOS_TOOLCHAIN_HAS_RUN})
@@ -550,7 +550,13 @@ if (NOT DEFINED CMAKE_DEVELOPER_ROOT AND NOT CMAKE_GENERATOR MATCHES "Xcode")
   get_filename_component(PLATFORM_SDK_DIR ${CMAKE_OSX_SYSROOT_INT} PATH)
   get_filename_component(CMAKE_DEVELOPER_ROOT ${PLATFORM_SDK_DIR} PATH)
   if (NOT EXISTS "${CMAKE_DEVELOPER_ROOT}")
-    message(FATAL_ERROR "Invalid CMAKE_DEVELOPER_ROOT: ${CMAKE_DEVELOPER_ROOT} does not exist.")
+    # Fallback to a more generic developer root if the SDK-specific one doesn't exist
+    execute_process(COMMAND xcode-select -p
+            OUTPUT_VARIABLE CMAKE_DEVELOPER_ROOT
+            OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (NOT EXISTS "${CMAKE_DEVELOPER_ROOT}")
+      message(FATAL_ERROR "Invalid CMAKE_DEVELOPER_ROOT: ${CMAKE_DEVELOPER_ROOT} does not exist.")
+    endif()
   endif()
 endif()
 
