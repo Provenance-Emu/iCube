@@ -27,37 +27,37 @@
 //  if ([VersionManager shared].appVersion.source != DOLBuildSourceOfficial) {
 //    return true;
 //  }
-  
+
   [FIRApp configure];
-  
+
   bool analyticsEnabled;
-  
+
   if (!Config::GetBase(Config::MAIN_ANALYTICS_PERMISSION_ASKED)) {
     // Default to no analytics temporarily
     analyticsEnabled = false;
-    
+
     AnalyticsNoticeViewController* controller = [[AnalyticsNoticeViewController alloc] initWithNibName:@"AnalyticsNotice" bundle:nil];
     controller.delegate = self;
-    
+
     [[BootNoticeManager shared] enqueueViewController:controller];
   } else {
     analyticsEnabled = Config::GetBase(Config::MAIN_ANALYTICS_ENABLED);
   }
-  
+
   [FIRAnalytics setAnalyticsCollectionEnabled:analyticsEnabled];
   [[FIRCrashlytics crashlytics] setCrashlyticsCollectionEnabled:analyticsEnabled];
-  
+
   if (analyticsEnabled) {
     NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-    
+
     NSString* lastVersion = [defaults stringForKey:@"last_version"];
     NSString* currentVersion = [VersionManager shared].appVersion.userFacing;
-    
+
     _shouldSendInitialEvent = ![lastVersion isEqualToString:currentVersion];
   } else {
     _shouldSendInitialEvent = false;
   }
-  
+
   return true;
 }
 
@@ -79,7 +79,7 @@
 #else
     appType = @"jailbroken";
 #endif
-    
+
     [FIRAnalytics logEventWithName:@"version_start" parameters:@{
       @"type" : appType,
       @"version" : [VersionManager shared].appVersion.userFacing
