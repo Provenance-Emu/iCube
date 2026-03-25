@@ -1,6 +1,8 @@
 // Copyright 2022 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#import <GameController/GameController.h>
+
 #include "InputCommon/ControllerInterface/iOS/MFiKeyboard.h"
 
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
