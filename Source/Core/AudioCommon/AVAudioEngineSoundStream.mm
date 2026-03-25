@@ -91,6 +91,7 @@ void AVAudioEngineSound::teardownEngine()
 
 void AVAudioEngineSound::registerAudioSessionObservers()
 {
+#if !TARGET_OS_OSX
   AVAudioSession* session = [AVAudioSession sharedInstance];
   AVAudioEngineSound* selfPtr = this;
   m_routeToken = [[NSNotificationCenter defaultCenter] addObserverForName:AVAudioSessionRouteChangeNotification object:session queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification* note){
@@ -108,14 +109,17 @@ void AVAudioEngineSound::registerAudioSessionObservers()
       selfPtr->buildAndStartEngine();
     }
   }];
+#endif
 }
 
 void AVAudioEngineSound::unregisterAudioSessionObservers()
 {
+#if !TARGET_OS_OSX
   if (m_routeToken) [[NSNotificationCenter defaultCenter] removeObserver:m_routeToken];
   if (m_interruptToken) [[NSNotificationCenter defaultCenter] removeObserver:m_interruptToken];
   m_routeToken = nil;
   m_interruptToken = nil;
+#endif
 }
 
 void AVAudioEngineSound::startHeadTracking()
