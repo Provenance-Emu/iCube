@@ -110,7 +110,7 @@ Metal::Gfx::CreateStagingTexture(StagingTextureType type, const TextureConfig& c
     const size_t stride = config.GetStride();
     const size_t buffer_size = stride * static_cast<size_t>(config.height);
 
-    MTLResourceOptions options = MTLStorageModeShared | MTLResourceHazardTrackingModeUntracked;
+    MTLResourceOptions options = MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked;
     if (type == StagingTextureType::Upload)
       options |= MTLResourceCPUCacheModeWriteCombined;
 
@@ -574,6 +574,7 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
       SetAndClearFramebuffer(m_backbuffer.get(), clear_color);
       return m_drawable != nullptr;
     }
+    return false;
   }
 }
 

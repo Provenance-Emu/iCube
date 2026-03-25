@@ -327,7 +327,10 @@ public:
     }
     PipelineID(const AbstractPipelineConfig& cfg)
     {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnontrivial-memcall"
       memset(this, 0, sizeof(*this));
+#pragma clang diagnostic pop
       if (const NativeVertexFormat* v = cfg.vertex_format)
       {
         const PortableVertexDeclaration& decl = v->GetVertexDeclaration();
@@ -369,6 +372,8 @@ public:
           is_lines = true;
       }
     }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnontrivial-memcall"
     PipelineID() { memset(this, 0, sizeof(*this)); }
     PipelineID(const PipelineID& other) { memcpy(this, &other, sizeof(*this)); }
     PipelineID& operator=(const PipelineID& other)
@@ -376,6 +381,7 @@ public:
       memcpy(this, &other, sizeof(*this));
       return *this;
     }
+#pragma clang diagnostic pop
     bool operator<(const PipelineID& other) const
     {
       return memcmp(this, &other, sizeof(*this)) < 0;
