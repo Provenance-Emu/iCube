@@ -25,6 +25,7 @@
 
 @interface DOLShaderPostProcessor : NSObject
 + (instancetype)shared;
++ (BOOL)hasProvenanceFilter;
 - (void)configureWithDevice:(id<MTLDevice>)device;
 - (void)renderSource:(id<MTLTexture>)source commandBuffer:(id<MTLCommandBuffer>)cb drawable:(id<CAMetalDrawable>)drawable;
 @end
@@ -586,6 +587,26 @@ void Metal::Gfx::PresentBackbuffer()
       // Decide post-processing and whether we need to blit from an offscreen target
       bool use_post = false;
       @try { use_post = [[NSUserDefaults standardUserDefaults] boolForKey:@"shader_enabled"]; } @catch (...) { use_post = false; }
+
+      // Check for Provenance filters - always enable post-processing if filters are enabled
+      bool has_provenance_filter = false;
+      @try {
+        Class C = NSClassFromString(@"DOLShaderPostProcessor");
+        if (!C) {
+          NSString* module = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
+          if (module && [module isKindOfClass:[NSString class]]) {
+            NSString* qualified = [NSString stringWithFormat:@"%@.%@", module, @"DOLShaderPostProcessor"];
+            C = NSClassFromString(qualified);
+          }
+        }
+        if (C && [C respondsToSelector:@selector(hasProvenanceFilter)]) {
+          has_provenance_filter = ((BOOL(*)(id, SEL))[C methodForSelector:@selector(hasProvenanceFilter)])(C, @selector(hasProvenanceFilter));
+        }
+      } @catch (...) { has_provenance_filter = false; }
+
+      if (has_provenance_filter) {
+        use_post = true;
+      }
       id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
       // Use the pass descriptor's bound color attachment (offscreen when shaders enabled) as source
       id<MTLTexture> source = [m_backbuffer->PassDesc() colorAttachments][0].texture;
