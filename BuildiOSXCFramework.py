@@ -101,20 +101,19 @@ class DolphinBuilder:
         This prevents CMake errors like "Cannot find source file" for vendored
         dependencies when submodules haven't been initialized.
         """
-        # Only require presence of the external project roots and their build scripts
-        # to let CMake drive fetching or discovery (e.g., via FetchContent/ExternalProject).
+        # Check actual source files inside nested submodules, not just the wrapper
+        # CMakeLists.txt files that live in the main repo alongside the submodule dir.
         projects = [
-            self.repo_root_dir / "Externals/zstd/CMakeLists.txt",
-            self.repo_root_dir / "Externals/SFML/CMakeLists.txt",
+            self.repo_root_dir / "Externals/zstd/zstd/lib/common/debug.c",
+            self.repo_root_dir / "Externals/SFML/SFML/src/SFML/Network/Http.cpp",
             self.repo_root_dir / "Externals/rcheevos/CMakeLists.txt",
         ]
 
         missing_roots = [str(p.relative_to(self.repo_root_dir)) for p in projects if not p.exists()]
         if not missing_roots:
-            # Roots exist; do not enforce specific source file presence. Let CMake handle fetching.
             return
         else:
-            self._log("Missing Externals build files: " + ", ".join(missing_roots), "warning")
+            self._log("Missing Externals source files (uninitialized submodules): " + ", ".join(missing_roots), "warning")
 
         # Attempt to initialize/update submodules
         self._log("Attempting to initialize/update git submodules for Externals...", "info")
