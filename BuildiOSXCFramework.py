@@ -271,6 +271,20 @@ class DolphinBuilder:
 
         cmake_build_dir.mkdir(exist_ok=True)
 
+        # Invalidate stale CMakeCache if the cached sysroot no longer exists on disk.
+        # This happens after an Xcode SDK update (e.g. 26.0 → 26.4) where the old SDK
+        # path is cached as INTERNAL and CMake re-uses it without re-querying xcodebuild.
+        cmake_cache = cmake_build_dir / "CMakeCache.txt"
+        if cmake_cache.exists():
+            import re as _re
+            cache_text = cmake_cache.read_text()
+            m = _re.search(r"CMAKE_OSX_SYSROOT[^:]*:[^=]*=(.+)", cache_text)
+            if m:
+                cached_sysroot = m.group(1).strip()
+                if cached_sysroot and not Path(cached_sysroot).exists():
+                    self._log(f"Stale sysroot in CMakeCache ({cached_sysroot}), clearing cache", "warning")
+                    cmake_cache.unlink()
+
         # Base optimization flags (common to all platforms)
         # Matches BuildCore.sh aggressive flags
         base_optimization_flags = (
@@ -378,6 +392,13 @@ class DolphinBuilder:
             elif platform == "SIMULATOR_TVOS":
                 simulator_sdk = subprocess.check_output(["xcrun", "--sdk", "appletvsimulator", "--show-sdk-path"]).decode().strip()
                 cmake_cmd.append(f"-DCMAKE_OSX_SYSROOT={simulator_sdk}")
+        elif platform == "OS64":
+            # Explicitly set device SDK so Xcode upgrades don't leave a stale cached path
+            device_sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"]).decode().strip()
+            cmake_cmd.append(f"-DCMAKE_OSX_SYSROOT={device_sdk}")
+        elif platform == "TVOS":
+            device_sdk = subprocess.check_output(["xcrun", "--sdk", "appletvos", "--show-sdk-path"]).decode().strip()
+            cmake_cmd.append(f"-DCMAKE_OSX_SYSROOT={device_sdk}")
         elif platform == "MAC_CATALYST":
             # Use macOS SDK for Catalyst
             macos_sdk = subprocess.check_output(["xcrun", "--sdk", "macosx", "--show-sdk-path"]).decode().strip()
