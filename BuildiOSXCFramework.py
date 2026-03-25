@@ -106,6 +106,7 @@ class DolphinBuilder:
         projects = [
             self.repo_root_dir / "Externals/zstd/zstd/lib/common/debug.c",
             self.repo_root_dir / "Externals/SFML/SFML/src/SFML/Network/Http.cpp",
+            self.repo_root_dir / "Externals/watcher/watcher/include/watcher/watcher.hpp",
             self.repo_root_dir / "Externals/rcheevos/CMakeLists.txt",
         ]
 
