@@ -34,9 +34,8 @@
 #include <TargetConditionals.h>
 #endif
 
-#ifdef IPHONEOS
-#include "Common/JITMemoryTracker.h"
-#endif
+// On iOS/tvOS, JIT memory management is handled by MemoryUtil_iOS.cpp (dispatch layer)
+// and its per-JIT-type implementations. JITMemoryTracker is used internally by the Legacy path.
 
 #if defined(__APPLE__) && defined(_M_ARM_64)
 #include <dlfcn.h>
@@ -69,10 +68,8 @@ namespace Common
 // This is purposely not a full wrapper for virtualalloc/mmap, but it
 // provides exactly the primitive operations that Dolphin needs.
 
-#ifdef IPHONEOS
-static JITMemoryTracker g_jit_memory_tracker;
-#endif
-
+// On iOS/tvOS, AllocateExecutableMemory and JITPageWrite* are provided by MemoryUtil_iOS.cpp.
+#if !defined(IPHONEOS)
 void* AllocateExecutableMemory(size_t size)
 {
 #if defined(_WIN32)
@@ -184,13 +181,11 @@ void* AllocateExecutableMemory(size_t size)
   if (ptr == nullptr)
     PanicAlertFmt("Failed to allocate executable memory: {}", LastStrerrorString());
 
-#ifdef IPHONEOS
-  g_jit_memory_tracker.RegisterJITRegion(ptr, size);
-#endif
-
   return ptr;
 }
-#ifndef IPHONEOS
+#endif  // !defined(IPHONEOS)
+
+#if !defined(IPHONEOS)
 // This function is used to provide a counter for the JITPageWrite*Execute*
 // functions to enable nesting. The static variable is wrapped in a a function
 // to allow those functions to be called inside of the constructor of a static
@@ -258,17 +253,8 @@ void JITPageWriteDisableExecuteEnable()
   }
 #endif
 }
-#else
-void JITPageWriteEnableExecuteDisable(void* ptr)
-{
-  g_jit_memory_tracker.JITRegionWriteEnableExecuteDisable(ptr);
-}
-
-void JITPageWriteDisableExecuteEnable(void* ptr)
-{
-  g_jit_memory_tracker.JITRegionWriteDisableExecuteEnable(ptr);
-}
-#endif
+// void* variants of JITPageWrite* for iOS/tvOS are provided by MemoryUtil_iOS.cpp.
+#endif  // !defined(IPHONEOS)
 
 void* AllocateMemoryPages(size_t size)
 {
@@ -321,9 +307,6 @@ bool FreeMemoryPages(void* ptr, size_t size)
     }
 #endif
 
-#ifdef IPHONEOS
-    g_jit_memory_tracker.UnregisterJITRegion(ptr);
-#endif
   }
   return true;
 }

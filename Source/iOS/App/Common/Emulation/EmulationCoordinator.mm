@@ -7,13 +7,17 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 
+#import "Common/MemoryUtil.h"
 #import "Common/WindowSystemInfo.h"
 
 #import "Core/Boot/Boot.h"
 #import "Core/BootManager.h"
+#import "Core/Config/GraphicsSettings.h"
 #import "Core/Core.h"
 #import "Core/System.h"
 #import "Core/Config/MainSettings.h"
+
+#import "VideoCommon/VideoConfig.h"
 
 #import "VideoCommon/Present.h"
 #import "VideoCommon/Present.h"
@@ -579,7 +583,26 @@ after_set:
 
     auto& system = Core::System::GetInstance();
 
-    system.SetJitAvailable([JitManager shared].acquiredJit);
+    // Set up JIT type and allocate executable memory region
+    if ([JitManager shared].acquiredJit)
+    {
+      if (@available(iOS 26, tvOS 26, *))
+      {
+        Common::SetJitType([JitManager shared].deviceHasTxm
+                               ? Common::JitType::LuckTXM
+                               : Common::JitType::LuckNoTXM);
+      }
+      else
+      {
+        Common::SetJitType(Common::JitType::Legacy);
+      }
+      Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Native);
+      Common::AllocateExecutableMemoryRegion();
+    }
+    else
+    {
+      Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Software);
+    }
 
     // Clear any lingering per-run CPU core override so we honor current availability/config
     if (Config::GetLayer(Config::LayerType::CurrentRun)) {

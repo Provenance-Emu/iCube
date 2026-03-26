@@ -107,6 +107,10 @@ add_library(common
   MemArena.h
   MemoryUtil.cpp
   MemoryUtil.h
+  $<$<BOOL:${IOS}>:MemoryUtil_iOS.cpp>
+  $<$<BOOL:${IOS}>:MemoryUtil_iOS_Legacy.cpp>
+  $<$<BOOL:${IOS}>:MemoryUtil_iOS_LuckNoTXM.cpp>
+  $<$<BOOL:${IOS}>:MemoryUtil_iOS_LuckTXM.cpp>
   MinizipUtil.h
   MsgHandler.cpp
   MsgHandler.h
@@ -206,6 +210,7 @@ if (APPLE)
     ${COREFOUNDATION_LIBRARY}
     ${IOK_LIBRARY}
     ${CFNETWORK_LIBRARY}
+    $<$<BOOL:${IOS}>:lwmem>
   )
 elseif(WIN32)
   target_link_libraries(common

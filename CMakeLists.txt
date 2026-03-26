@@ -694,6 +694,10 @@ if(WIN32 OR APPLE)
 endif()
 add_subdirectory(Externals/tinygltf)
 
+if(IOS)
+  add_subdirectory(Externals/lwmem)
+endif()
+
 if(ENABLE_VULKAN)
   add_definitions(-DHAS_VULKAN)
 

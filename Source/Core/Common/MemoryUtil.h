@@ -58,4 +58,41 @@ bool WriteProtectMemory(void* ptr, size_t size, bool executable = false);
 bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute = false);
 size_t MemPhysical();
 
+#if defined(IPHONEOS) || TARGET_OS_IOS
+
+enum class JitType
+{
+  Legacy,
+  LuckNoTXM,
+  LuckTXM
+};
+
+void SetJitType(JitType type);
+
+void FreeExecutableMemory(void* ptr, size_t size);
+void AllocateExecutableMemoryRegion();
+ptrdiff_t AllocateWritableRegionAndGetDiff(void* rx_ptr, size_t size);
+void FreeWritableRegion(void* rx_ptr, size_t size, ptrdiff_t diff);
+
+// LuckTXM
+void* AllocateExecutableMemory_LuckTXM(size_t size);
+void FreeExecutableMemory_LuckTXM(void* ptr);
+void AllocateExecutableMemoryRegion_LuckTXM();
+ptrdiff_t AllocateWritableRegionAndGetDiff_LuckTXM();
+
+// LuckNoTXM
+void* AllocateExecutableMemory_LuckNoTXM(size_t size);
+void FreeExecutableMemory_LuckNoTXM(void* ptr, size_t size);
+ptrdiff_t GetWritableRegionDiff_LuckNoTXM(void* rx_ptr, size_t size);
+void FreeWritableRegion_LuckNoTXM(void* rx_ptr, size_t size, ptrdiff_t diff);
+ptrdiff_t AllocateWritableRegionAndGetDiff_LuckNoTXM(void* rx_ptr, size_t size);
+
+// Legacy
+void* AllocateExecutableMemory_Legacy(size_t size);
+void FreeExecutableMemory_Legacy(void* ptr, size_t size);
+void JITPageWriteEnableExecuteDisable_Legacy(void* ptr);
+void JITPageWriteDisableExecuteEnable_Legacy(void* ptr);
+
+#endif
+
 }  // namespace Common
