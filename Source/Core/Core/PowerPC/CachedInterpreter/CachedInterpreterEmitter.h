@@ -130,6 +130,10 @@ public:
   // successfully written to memory. Do not call the generated code when this returns true!
   bool HasWriteFailed() const { return m_write_failed; }
 
+  // No-op stubs for cross-platform CodeBlock<T> interface (writable region is iOS/ARM64 only)
+  ptrdiff_t GetWritableRegionDiff() { return 0; }
+  void SetWritableRegionDiff(ptrdiff_t) {}
+
   void SetCodePtr(u8* begin, u8* end)
   {
     m_code = begin;
