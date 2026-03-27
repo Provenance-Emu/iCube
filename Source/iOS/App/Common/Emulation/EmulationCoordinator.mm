@@ -583,21 +583,67 @@ after_set:
 
     auto& system = Core::System::GetInstance();
 
-    // Set up JIT type and allocate executable memory region
+    // Set up JIT type and allocate executable memory region.
+    //
+    // txmInterpreterFallback: true when we're on an iOS 26 TXM device but cannot use
+    // JIT (running under Xcode, not StikDebug). In this case we use LuckNoTXM for
+    // memory typing (no brk required, writes go through RW alias) but force
+    // CachedInterpreter + Software VertexLoader so nothing ever executes from JIT pages.
+    bool txmInterpreterFallback = false;
+
     if ([JitManager shared].acquiredJit)
     {
       if (@available(iOS 26, tvOS 26, *))
       {
-        Common::SetJitType([JitManager shared].deviceHasTxm
-                               ? Common::JitType::LuckTXM
-                               : Common::JitType::LuckNoTXM);
+        if ([JitManager shared].deviceHasTxm)
+        {
+          // TXM device + CS_DEBUGGED. Distinguish Xcode from StikDebug:
+          //
+          // Xcode injects libMainThreadChecker.dylib via DYLD_INSERT_LIBRARIES by
+          // default (Main Thread Checker is on in all Xcode run schemes). StikDebug
+          // never sets this. The XCODE env-var is a manual opt-in as fallback.
+          //
+          // • Xcode → LuckNoTXM (no brk) + interpreter fallback.
+          //   LuckNoTXM writes through RW alias (no pthread_jit_write_protect_np crash),
+          //   and since no JIT code is generated the TXM execution block never fires.
+          //
+          // • StikDebug (or DYLD_INSERT_LIBRARIES absent) → LuckTXM + full JIT.
+          //   StikDebug intercepts brk #0x69, authorizes TXM, vm_remap succeeds.
+          NSDictionary* env = [[NSProcessInfo processInfo] environment];
+          NSString* insertedLibs = env[@"DYLD_INSERT_LIBRARIES"] ?: @"";
+          BOOL isXcodeSession =
+              [insertedLibs containsString:@"MainThreadChecker"] ||
+              env[@"XCODE"] != nil;
+
+          if (isXcodeSession)
+          {
+            // Xcode: avoid the brk, run in interpreter.
+            Common::SetJitType(Common::JitType::LuckNoTXM);
+            txmInterpreterFallback = true;
+          }
+          else
+          {
+            // StikDebug (or unknown TXM-aware debugger): use LuckTXM JIT.
+            Common::SetJitType(Common::JitType::LuckTXM);
+            Common::AllocateExecutableMemoryRegion();
+          }
+        }
+        else
+        {
+          // Non-TXM iOS 26 device: dual-mapping works fine.
+          Common::SetJitType(Common::JitType::LuckNoTXM);
+          Common::AllocateExecutableMemoryRegion(); // no-op for LuckNoTXM
+        }
       }
       else
       {
         Common::SetJitType(Common::JitType::Legacy);
+        Common::AllocateExecutableMemoryRegion(); // no-op for Legacy
       }
-      Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Native);
-      Common::AllocateExecutableMemoryRegion();
+
+      Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE,
+                      txmInterpreterFallback ? VertexLoaderType::Software
+                                             : VertexLoaderType::Native);
     }
     else
     {
@@ -609,11 +655,12 @@ after_set:
       Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
     }
 
-    // Enforce CPU-core fallback when JIT is not available for this run
+    // Enforce CPU-core fallback when JIT is not available for this run.
+    // Covers: (a) no debugger attached, (b) iOS 26 TXM device under Xcode.
     {
       const PowerPC::CPUCore current_core = Config::Get(Config::MAIN_CPU_CORE);
       const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter;
-      if (![JitManager shared].acquiredJit && !is_interpreter_core)
+      if ((![JitManager shared].acquiredJit || txmInterpreterFallback) && !is_interpreter_core)
       {
         Config::SetCurrent(Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
       }

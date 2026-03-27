@@ -22,6 +22,16 @@ constexpr size_t EXECUTABLE_REGION_SIZE = 536870912;
 static u8* g_rx_region = nullptr;
 static ptrdiff_t g_rw_region_diff = 0;
 
+// Xcode/StikDebug detection flag.
+// Set to 1 (true) just before `brk #0x69`.  Under StikDebug the breakpoint is
+// handled by StikDebug's TXM authorization path and this flag is never cleared.
+// Under Xcode, dolphin_jit_lldb.py skips the brk AND writes 0 here so that
+// AllocateExecutableMemoryRegion_LuckTXM can detect the Xcode case and bail out
+// before attempting vm_remap (which would succeed but TXM would block execution).
+extern "C" {
+  volatile int dolphin_txm_auth_status = 0;
+}
+
 namespace Common
 {
 void AllocateExecutableMemoryRegion_LuckTXM()
@@ -40,9 +50,24 @@ void AllocateExecutableMemoryRegion_LuckTXM()
     return;
   }
 
+  // Signal intent to authorize TXM.  dolphin_jit_lldb.py writes 0 here when it
+  // skips the brk under Xcode so the post-brk check can detect Xcode mode.
+  dolphin_txm_auth_status = 1;
+
   asm ("mov x0, %0\n"
        "mov x1, %1\n"
        "brk #0x69" :: "r" (rx_ptr), "r" (size) : "x0", "x1");
+
+  // Under Xcode, dolphin_jit_lldb.py sets dolphin_txm_auth_status = 0 when it
+  // skips the brk.  In that case TXM has NOT been authorized: vm_remap would
+  // succeed (CS_DEBUGGED) but execution from the rx region would be blocked by
+  // TXM with KERN_CODESIGN_ERROR.  Bail out early so IsTXMAvailable() returns
+  // false and EmulationCoordinator falls back to interpreter.
+  if (!dolphin_txm_auth_status)
+  {
+    munmap(rx_ptr, size);
+    return;
+  }
 
   vm_address_t rw_region = 0;
   vm_address_t target = reinterpret_cast<vm_address_t>(rx_ptr);
@@ -117,5 +142,10 @@ void* AllocateExecutableMemory_LuckTXM(size_t size)
 void FreeExecutableMemory_LuckTXM(void* ptr)
 {
   lwmem_free(((void**)ptr)[-1]);
+}
+
+bool IsTXMJITAvailable_LuckTXM()
+{
+  return g_rx_region != nullptr;
 }
 }  // namespace Common

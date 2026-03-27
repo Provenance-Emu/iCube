@@ -58,7 +58,7 @@ bool WriteProtectMemory(void* ptr, size_t size, bool executable = false);
 bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute = false);
 size_t MemPhysical();
 
-#if defined(IPHONEOS) || TARGET_OS_IOS
+#if defined(IPHONEOS) || TARGET_OS_IOS || TARGET_OS_TV
 
 enum class JitType
 {
@@ -79,6 +79,12 @@ void* AllocateExecutableMemory_LuckTXM(size_t size);
 void FreeExecutableMemory_LuckTXM(void* ptr);
 void AllocateExecutableMemoryRegion_LuckTXM();
 ptrdiff_t AllocateWritableRegionAndGetDiff_LuckTXM();
+bool IsTXMJITAvailable_LuckTXM();
+
+// Returns true when LuckTXM is in use and TXM authorization succeeded (StikDebug
+// intercepted brk #0x69).  Returns false when running under Xcode (LLDB script
+// skipped the brk and cleared dolphin_txm_auth_status) or when not using LuckTXM.
+bool IsTXMAvailable();
 
 // LuckNoTXM
 void* AllocateExecutableMemory_LuckNoTXM(size_t size);
