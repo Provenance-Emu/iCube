@@ -1351,6 +1351,10 @@ struct TVLibraryView: View {
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation { snackbarVisible = false } }
         }
       }
+      // Rescan library when a file import completes
+      NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLImportFileFinishedNotification"), object: nil, queue: .main) { _ in
+        model.rescan()
+      }
       // Global DSU approval toast
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DSUNewClientApproval"), object: nil, queue: .main) { note in
         if let addr = note.userInfo?["address"] as? String { approvalBannerAddr = addr }
@@ -1367,6 +1371,7 @@ struct TVLibraryView: View {
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSettings"), object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSnackbar"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLImportFileFinishedNotification"), object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DSUNewClientApproval"), object: nil)
       }
       removeAllObservers()
@@ -1591,13 +1596,12 @@ struct TVLibraryView: View {
     }
     if anyOffline && !offlineBannerDismissed {
       VStack {
-        Spacer()
         HStack(spacing: 10) {
           Image(systemName: "wifi.slash").foregroundStyle(.white)
           Text(L("Some remote sources are offline. Retrying…")).foregroundStyle(.white)
             .lineLimit(2)
           Spacer(minLength: 8)
-          Button(action: { offlineBannerDismissed = true }) {
+          Button(action: { withAnimation { offlineBannerDismissed = true } }) {
             Image(systemName: "xmark").foregroundStyle(.white)
           }
           .buttonStyle(.plain)
@@ -1607,9 +1611,15 @@ struct TVLibraryView: View {
         .background(Color.orange.opacity(0.9))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        .padding(.top, 8)
+        .onAppear {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            withAnimation { offlineBannerDismissed = true }
+          }
+        }
+        Spacer()
       }
-      .transition(.move(edge: .bottom).combined(with: .opacity))
+      .transition(.move(edge: .top).combined(with: .opacity))
     } else if !anyOffline && offlineBannerDismissed {
       EmptyView()
         .onAppear { offlineBannerDismissed = false }
