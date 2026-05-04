@@ -100,8 +100,8 @@ LayerType GetActiveLayerForConfig(const Info<T>& info)
   return GetActiveLayerForConfig(info.GetLocation());
 }
 
-template <typename InfoT, typename ValueT>
-void Set(LayerType layer, const InfoT& info, const ValueT& value)
+template <typename T, typename ValueT>
+void Set(LayerType layer, const Info<T>& info, const ValueT& value)
 {
   if (GetLayer(layer)->Set(info, value))
     OnConfigChanged();
