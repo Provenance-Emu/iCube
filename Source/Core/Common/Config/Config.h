@@ -103,7 +103,7 @@ LayerType GetActiveLayerForConfig(const Info<T>& info)
 template <typename T, typename ValueT>
 void Set(LayerType layer, const Info<T>& info, const ValueT& value)
 {
-  if (GetLayer(layer)->Set(info, value))
+  if (GetLayer(layer)->template Set<T, ValueT>(info, value))
     OnConfigChanged();
 }
 
