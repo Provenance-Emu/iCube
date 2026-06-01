@@ -15,6 +15,7 @@
 #import "Core/Config/GraphicsSettings.h"
 #import "Core/Core.h"
 #import "Core/System.h"
+#include "Core/ConfigManager.h"
 #import "Core/Config/MainSettings.h"
 
 #import "VideoCommon/VideoConfig.h"
@@ -87,6 +88,7 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
   dispatch_source_t _inputPumpTimer;
   float _adaptiveVI;
   float _adaptiveCPU;
+  NSString* _adaptiveGameID;  // current game id, for persisting learned clocks per game
   CGSize _lastDrawableSize;
 }
 
@@ -236,6 +238,27 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
   if (_adaptiveClockTimer) return;
   _adaptiveVI = Config::Get(Config::MAIN_VI_OVERCLOCK);
   _adaptiveCPU = Config::Get(Config::MAIN_OVERCLOCK);
+  // Per-game learned clocks: seed from what the autoclock converged on last time this title
+  // ran, so it starts at (near) the right clock instead of re-converging from 1.0 each boot.
+  {
+    const std::string gid = SConfig::GetInstance().GetGameID();
+    _adaptiveGameID = gid.empty() ? nil : [NSString stringWithUTF8String:gid.c_str()];
+    if (_adaptiveGameID) {
+      NSUserDefaults* d = NSUserDefaults.standardUserDefaults;
+      NSString* cpuKey = [@"adaptive_clock_cpu_" stringByAppendingString:_adaptiveGameID];
+      NSString* viKey = [@"adaptive_clock_vi_" stringByAppendingString:_adaptiveGameID];
+      if ([d objectForKey:cpuKey]) {
+        _adaptiveCPU = [d floatForKey:cpuKey];
+        Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK_ENABLE, true);
+        Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK, _adaptiveCPU);
+      }
+      if ([d objectForKey:viKey]) {
+        _adaptiveVI = [d floatForKey:viKey];
+        if (_adaptiveVI < 1.0f) Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, true);
+        Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK, _adaptiveVI);
+      }
+    }
+  }
   _adaptiveClockTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
   dispatch_source_set_timer(_adaptiveClockTimer, dispatch_time(DISPATCH_TIME_NOW, 0), NSEC_PER_SEC * 2, NSEC_PER_MSEC * 100);
   dispatch_source_set_event_handler(_adaptiveClockTimer, ^{
@@ -262,6 +285,7 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
 
       const float CPU_FLOOR = 0.40f;  // many GC titles only reach full speed near here
       const float VI_FLOOR = 0.50f;
+      bool changed = false;
 
       if (pct < 95.0f || self->_adaptiveCPU > cpu_ceiling) {
         // Underspeed (or thermally capped): drop the CPU clock first (largest lever).
@@ -273,20 +297,32 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
           self->_adaptiveCPU = target_cpu;
           Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK_ENABLE, true);
           Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK, self->_adaptiveCPU);
+          changed = true;
         } else if (self->_adaptiveVI > VI_FLOOR) {
           self->_adaptiveVI = MAX(VI_FLOOR, self->_adaptiveVI - 0.05f);
           Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, true);
           Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK, self->_adaptiveVI);
+          changed = true;
         }
       } else if (pct > 105.0f && thermal <= NSProcessInfoThermalStateFair) {
         // Comfortable headroom and device is cool: gently restore toward full clock.
         if (self->_adaptiveVI < 1.0f) {
           self->_adaptiveVI = MIN(1.0f, self->_adaptiveVI + 0.03f);
           Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK, self->_adaptiveVI);
+          changed = true;
         } else if (self->_adaptiveCPU < cpu_ceiling) {
           self->_adaptiveCPU = MIN(cpu_ceiling, self->_adaptiveCPU + 0.02f);
           Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK, self->_adaptiveCPU);
+          changed = true;
         }
+      }
+
+      // Persist the learned clocks for this title so the next launch starts here (quick-win #2:
+      // the autoclock self-populates per-game defaults from real runs — no hand-curated list).
+      if (changed && self->_adaptiveGameID) {
+        NSUserDefaults* d = NSUserDefaults.standardUserDefaults;
+        [d setFloat:self->_adaptiveCPU forKey:[@"adaptive_clock_cpu_" stringByAppendingString:self->_adaptiveGameID]];
+        [d setFloat:self->_adaptiveVI forKey:[@"adaptive_clock_vi_" stringByAppendingString:self->_adaptiveGameID]];
       }
     }, false);
   });
