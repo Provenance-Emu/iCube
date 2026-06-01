@@ -18,6 +18,7 @@
 #import "Core/Config/MainSettings.h"
 
 #import "VideoCommon/VideoConfig.h"
+#import "VideoCommon/PerformanceMetrics.h"
 
 #import "VideoCommon/Present.h"
 #import "VideoCommon/Present.h"
@@ -240,15 +241,52 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
   dispatch_source_set_event_handler(_adaptiveClockTimer, ^{
     auto& sys = Core::System::GetInstance();
     if (Core::GetState(sys) != Core::State::Running) return;
-    const double speed_ratio = Config::Get(Config::MAIN_EMULATION_SPEED);
-    const float pct = (float)(speed_ratio * 100.0);
-    Core::QueueHostJob([&](Core::System& s) {
-      if (pct > 0.f && pct < 95.0f) {
-        if (self->_adaptiveVI > 0.75f) { self->_adaptiveVI = MAX(0.75f, self->_adaptiveVI - 0.05f); Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, true); Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK, self->_adaptiveVI); }
-        else if (self->_adaptiveCPU > 0.90f) { self->_adaptiveCPU = MAX(0.90f, self->_adaptiveCPU - 0.02f); Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK_ENABLE, true); Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK, self->_adaptiveCPU); }
-      } else if (pct > 103.0f) {
-        if (self->_adaptiveCPU < 1.0f) { self->_adaptiveCPU = MIN(1.0f, self->_adaptiveCPU + 0.02f); Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK, self->_adaptiveCPU); }
-        else if (self->_adaptiveVI < 1.0f) { self->_adaptiveVI = MIN(1.0f, self->_adaptiveVI + 0.05f); Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK, self->_adaptiveVI); }
+    // Read device thermal pressure here on the timer queue (NSProcessInfo is thread-safe);
+    // apply clock changes on the host/CPU thread, where mutating timing config is safe.
+    const NSProcessInfoThermalState thermal = NSProcessInfo.processInfo.thermalState;
+    // Capture by value (self, thermal), never [&]: the host job can run after this handler
+    // returns, so a reference capture of locals would dangle.
+    Core::QueueHostJob([self, thermal](Core::System& s) {
+      if (Core::GetState(s) != Core::State::Running) return;
+      // ACTUAL achieved emulation speed (1.0 == full speed). MAIN_EMULATION_SPEED is only the
+      // user's throttle target and never reflects real performance — reading it was the bug
+      // that kept this loop from ever adjusting.
+      const float pct = (float)(g_perf_metrics.GetSpeed() * 100.0);
+      if (pct <= 0.f) return;  // metrics not warmed up yet
+
+      // When the device is hot, cap how high the CPU clock may climb so we shed load BEFORE
+      // thermal throttling tanks the framerate, instead of only reacting after it drops.
+      float cpu_ceiling = 1.0f;
+      if (thermal == NSProcessInfoThermalStateCritical) cpu_ceiling = 0.65f;
+      else if (thermal == NSProcessInfoThermalStateSerious) cpu_ceiling = 0.80f;
+
+      const float CPU_FLOOR = 0.40f;  // many GC titles only reach full speed near here
+      const float VI_FLOOR = 0.50f;
+
+      if (pct < 95.0f || self->_adaptiveCPU > cpu_ceiling) {
+        // Underspeed (or thermally capped): drop the CPU clock first (largest lever).
+        // Step proportionally to the deficit so we converge in a few ticks, not ~50s.
+        const float deficit = MAX(0.f, (95.0f - pct) / 100.0f);   // 0 .. ~1
+        const float step = MIN(0.20f, MAX(0.04f, deficit));        // 4% .. 20% per tick
+        const float target_cpu = MAX(CPU_FLOOR, MIN(self->_adaptiveCPU, cpu_ceiling) - step);
+        if (target_cpu < self->_adaptiveCPU) {
+          self->_adaptiveCPU = target_cpu;
+          Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK_ENABLE, true);
+          Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK, self->_adaptiveCPU);
+        } else if (self->_adaptiveVI > VI_FLOOR) {
+          self->_adaptiveVI = MAX(VI_FLOOR, self->_adaptiveVI - 0.05f);
+          Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, true);
+          Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK, self->_adaptiveVI);
+        }
+      } else if (pct > 105.0f && thermal <= NSProcessInfoThermalStateFair) {
+        // Comfortable headroom and device is cool: gently restore toward full clock.
+        if (self->_adaptiveVI < 1.0f) {
+          self->_adaptiveVI = MIN(1.0f, self->_adaptiveVI + 0.03f);
+          Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK, self->_adaptiveVI);
+        } else if (self->_adaptiveCPU < cpu_ceiling) {
+          self->_adaptiveCPU = MIN(cpu_ceiling, self->_adaptiveCPU + 0.02f);
+          Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK, self->_adaptiveCPU);
+        }
       }
     }, false);
   });
