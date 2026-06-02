@@ -115,6 +115,10 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
   int   _acLastAction;         // -1 = lowered, 0 = none, +1 = probed upward, on the previous tick
   int   _acProbeCooldown;      // ticks to wait before probing upward again (after a probe lost speed)
   BOOL  _acLowerBlocked;       // underclocking observed not to help (GPU/host-bound) -> stop underclocking
+  int   _acLowerMisses;        // consecutive ineffective underclock grades; latch only after 2 (a single
+                               // noisy reading must not disable auto-downclock for the whole session)
+  int   _acBlockedTicks;       // ticks spent latched while still underspeeding; re-arm after a while so a
+                               // scene change (menu GPU-bound -> gameplay CPU-bound) gets re-tested
   BOOL  _acYielded;            // user took manual clock control this session -> stop adjusting entirely
   NSString* _adaptiveGameID;  // current game id, for persisting learned clocks per game
   CGSize _lastDrawableSize;
@@ -307,6 +311,8 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
   _acLastAction = 0;
   _acProbeCooldown = 0;
   _acLowerBlocked = NO;
+  _acLowerMisses = 0;
+  _acBlockedTicks = 0;
   _acYielded = NO;
 
   // Per-game learned clock: seed from the value the loop converged on (and verified) last time
@@ -376,11 +382,19 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
       //    grade a change across a thermal episode, whose throttling would distort the reading).
       if (cool && self->_acLastAction == -1) {  // we underclocked last tick
         if (pct - self->_acSpeedBefore < HELP_EPS) {
-          // Lowering didn't lift speed -> the bottleneck isn't the emulated CPU (GPU/host-bound,
-          // e.g. the Software vertex loader). Undo the useless underclock and stop underclocking
-          // so we never ratchet a GPU-bound title into pointless slow motion.
+          // Lowering didn't lift speed this tick. Undo the useless step. But do NOT latch on a
+          // single ambiguous grade: the perf-sample window (GFX_PERF_SAMP_WINDOW, ~1s) lags the
+          // 2s tick, so the first reading after a change is partly contaminated by pre-change
+          // (slower) samples and can read below HELP_EPS even on a genuinely CPU-bound title.
+          // Only conclude GPU/host-bound (and stop underclocking) after TWO consecutive misses.
           self->_adaptiveCPU = MIN(1.0f, self->_adaptiveCPU + self->_acLastStep);
-          self->_acLowerBlocked = YES;
+          if (++self->_acLowerMisses >= 2) {
+            self->_acLowerBlocked = YES;
+            self->_acBlockedTicks = 0;
+          }
+        } else {
+          // Lowering helped -> genuinely CPU-bound; clear the miss streak.
+          self->_acLowerMisses = 0;
         }
       } else if (cool && self->_acLastAction == +1) {  // we probed upward last tick
         if (pct < TARGET_LO) {
@@ -390,6 +404,18 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
         }
       }
       self->_acLastAction = 0;
+
+      // Re-arm a blocked title after a while. A latch means "underclocking didn't help" for the
+      // scene we tested — but the bottleneck shifts (a GPU-bound menu becomes a CPU-bound level),
+      // so periodically clear the latch and re-test instead of giving up for the whole session.
+      // (Without this, one early ambiguous grade used to disable auto-downclock permanently.)
+      if (cool && self->_acLowerBlocked && pct < TARGET_LO) {
+        if (++self->_acBlockedTicks >= 15) {  // ~30s at the 2s tick
+          self->_acLowerBlocked = NO;
+          self->_acLowerMisses = 0;
+          self->_acBlockedTicks = 0;
+        }
+      }
 
       // 2) Choose this tick's change.
       const float applied_now = MIN(self->_adaptiveCPU, ceiling);
