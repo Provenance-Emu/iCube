@@ -98,6 +98,11 @@ double PerformanceMetrics::GetMaxSpeed() const
   return m_max_speed.load(std::memory_order_relaxed);
 }
 
+double PerformanceMetrics::GetLastRawFrameTimeMs() const
+{
+  return DT_ms(m_fps_counter.GetLastRawDt()).count();
+}
+
 void PerformanceMetrics::DrawImGuiStats(const float backbuffer_scale)
 {
   m_vps_counter.UpdateStats();

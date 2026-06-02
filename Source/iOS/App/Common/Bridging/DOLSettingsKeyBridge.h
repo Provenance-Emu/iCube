@@ -1,0 +1,51 @@
+// Copyright 2025 DolphiniOS Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+// TARGET PATH (when integrated):
+//   Source/iOS/App/Common/Bridging/DOLSettingsKeyBridge.h
+
+#import <Foundation/Foundation.h>
+
+NS_ASSUME_NONNULL_BEGIN
+
+/// String-keyed facade over the typed `DOLConfigBridge` setters/getters,
+/// for the debug/benchmark HTTP API and automated settings sweeps.
+///
+/// `DOLConfigBridge` is typed-only (separate `+gfxEfbScale` / `+setGfxEfbScale:`
+/// etc.), which a generic `set(key,value)` REST endpoint can't call directly.
+/// This bridge maps a stable string key to a pair of get/set blocks that close
+/// over the correctly-typed `DOLConfigBridge` call. (Blocks, not
+/// `performSelector:`, because the underlying setters take primitives —
+/// BOOL / NSInteger / float — which `performSelector:` cannot pass safely.)
+///
+/// Each key is tagged hot-swappable vs boot-time. A boot-time key only takes
+/// effect on the next core boot, so an automated sweep MUST reload the save
+/// state / reboot the title after changing one (otherwise the change is a
+/// silent no-op and the measured data is garbage).
+@interface DOLSettingsKeyBridge : NSObject
+
+/// All known keys with their current values and metadata.
+/// Returns a dictionary keyed by setting name; each value is a dictionary:
+///   - `value`         : NSNumber or NSString — current value
+///   - `type`          : NSString — one of "bool" / "int" / "float" / "string"
+///   - `hotSwappable`  : NSNumber(BOOL) — YES if it applies live mid-run
++ (NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)snapshotAll;
+
+/// The set of keys that require a reboot / save-state reload to take effect.
++ (NSArray<NSString*>*)bootTimeKeys;
+
+/// YES if `key` is known and applies live without a reboot.
++ (BOOL)isHotSwappable:(NSString*)key;
+
+/// YES if `key` is a known/settable key.
++ (BOOL)isKnownKey:(NSString*)key;
+
+/// Apply `value` to `key`. `value` may be an NSNumber (bool/int/float) or
+/// NSString depending on the key's type; numeric strings are coerced.
+/// Returns NO if the key is unknown. Note: a YES return for a boot-time key
+/// means the config was written, NOT that it is live — the caller must reload.
++ (BOOL)setKey:(NSString*)key value:(id)value;
+
+@end
+
+NS_ASSUME_NONNULL_END

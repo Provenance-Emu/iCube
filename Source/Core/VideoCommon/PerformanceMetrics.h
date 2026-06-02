@@ -43,6 +43,9 @@ public:
   double GetSpeed() const;
   double GetMaxSpeed() const;
 
+  // Last raw frame time in ms (per-frame, atomic, any thread). For 1%-low capture.
+  double GetLastRawFrameTimeMs() const;
+
   // ImGui Functions
   void DrawImGuiStats(const float backbuffer_scale);
 

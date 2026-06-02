@@ -920,6 +920,17 @@ after_set:
 
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidStartNotification object:self userInfo:nil];
 
+#if DEBUG
+  // DEBUG-only perf test-bench: start the loopback HTTP/JSON server once
+  // emulation is live (g_perf_metrics meaningful). DebugServerManager is
+  // @MainActor and idempotent (guards !isRunning); start() is a no-op in
+  // release builds, so this whole block is also compiled out by #if DEBUG.
+  // We are on the emulation background queue here, so hop to main.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[DebugServerManager sharedManager] start];
+  });
+#endif
+
   [self startAdaptiveClockIfEnabled];
   [self startInputPump];
 
