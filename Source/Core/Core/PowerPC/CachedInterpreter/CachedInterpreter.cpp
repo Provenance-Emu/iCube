@@ -3,6 +3,8 @@
 
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
 
+#include <algorithm>
+#include <array>
 #include <span>
 #include <sstream>
 #include <utility>
@@ -10,6 +12,7 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include "Common/Assert.h"
 #include "Common/CommonTypes.h"
 #include "Common/GekkoDisassembler.h"
 #include "Common/Config/Config.h"
@@ -40,10 +43,50 @@ CachedInterpreter::~CachedInterpreter() = default;
 // MAIN_CIR_SKIP_PERF_MONITOR setting opts in. Read once in Init (cheap per-block bool check).
 static bool s_skip_perf_monitor = false;
 
+// iCube: when true, the emission site routes whitelisted hot integer-ALU ops to a specialized,
+// directly-dispatched callback (see InterpretSpecialized) instead of the generic Interpret
+// trampoline. Read once in Init (cheap per-op bool check at compile time). Default OFF.
+static bool s_specialized_ops = false;
+// iCube: when true, each specialized callback re-derives and asserts the dispatch bookkeeping
+// against the generic Interpret<write_pc> contract before committing the real handler.
+static bool s_specialized_ops_validate = false;
+
+// iCube: whitelist of hot integer-ALU ops eligible for specialized dispatch. Defined once as an
+// X-macro so the emission site, the ExecuteOneBlock dispatch compare-chain, and the eligibility
+// check all stay in lockstep — adding an op is a single line here.
+//
+// Membership criteria (ALL must hold; verified against the 2509 Interpreter_Integer.cpp bodies):
+//   - NOT FL_LOADSTORE and NOT FL_USE_FPU  => emission site always routes via Interpret<write_pc>
+//     (never InterpretAndCheckExceptions), and never via CheckFPU.
+//   - Side effects confined to the register file (GPR/CR/XER); never raises an exception, never
+//     touches the MMU, never sets m_end_block, never calls CheckExceptions.
+// Each X(handler) expands for the caller's purpose. Keep this set SMALL: every entry adds two
+// branches (write_pc false/true) to the hottest dispatch loop.
+#define CIR_SPECIALIZED_OP_LIST(X)                                                                 \
+  X(addi)    /* D-form: gpr[RD] = (RA?gpr[RA]:0) + SIMM_16; pure GPR write */                       \
+  X(addis)   /* D-form: gpr[RD] = (RA?gpr[RA]:0) + (SIMM_16<<16); pure GPR write */                 \
+  X(ori)     /* D-form: gpr[RA] = gpr[RS] | UIMM; pure GPR write */                                 \
+  X(oris)    /* D-form: gpr[RA] = gpr[RS] | (UIMM<<16); pure GPR write */                           \
+  X(orx)     /* X-form: gpr[RA] = gpr[RS] | gpr[RB]; +CR0 if Rc; no XER, no exceptions */           \
+  X(rlwinmx) /* M-form: gpr[RA] = rotl(gpr[RS],SH) & mask; +CR0 if Rc; no XER, no exceptions */
+
+// True if this opcode's chosen interpreter handler is on the specialized whitelist.
+static bool IsSpecializedOp(Interpreter::Instruction func)
+{
+#define CIR_CHECK(name)                                                                            \
+  if (func == &Interpreter::name)                                                                  \
+    return true;
+  CIR_SPECIALIZED_OP_LIST(CIR_CHECK)
+#undef CIR_CHECK
+  return false;
+}
+
 void CachedInterpreter::Init()
 {
   RefreshConfig();
   s_skip_perf_monitor = Config::Get(Config::MAIN_CIR_SKIP_PERF_MONITOR);
+  s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
+  s_specialized_ops_validate = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
@@ -87,6 +130,32 @@ void CachedInterpreter::ExecuteOneBlock()
       Interpret<true>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);
     }
+// iCube: direct dispatch for specialized hot ops (only emitted when MAIN_CIR_SPECIALIZED_OPS is on;
+// when off these branches are never taken because no specialized callback is ever written). Each
+// matched branch makes BOTH the dispatch AND the handler call direct (handler inlines under
+// ThinLTO), collapsing the two indirect calls of the generic path. The payload layout is the same
+// InterpretOperands, so advancement is identical to the generic Interpret branches above. Reaching
+// here means the two (hotter) generic compares already failed, so these are only paid by ops that
+// are themselves specialized or that fall through to the cold indirect tail below.
+#define CIR_DISPATCH(name)                                                                         \
+  else if (callback ==                                                                             \
+           reinterpret_cast<AnyCallback>(CallbackCast(InterpretSpecialized<&Interpreter::name,     \
+                                                                           false>)))               \
+  {                                                                                                \
+    InterpretSpecialized<&Interpreter::name, false>(                                               \
+        ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));                          \
+    normal_entry = payload + sizeof(InterpretOperands);                                            \
+  }                                                                                                \
+  else if (callback ==                                                                             \
+           reinterpret_cast<AnyCallback>(CallbackCast(InterpretSpecialized<&Interpreter::name,     \
+                                                                           true>)))                \
+  {                                                                                                \
+    InterpretSpecialized<&Interpreter::name, true>(                                                \
+        ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));                          \
+    normal_entry = payload + sizeof(InterpretOperands);                                            \
+  }
+    CIR_SPECIALIZED_OP_LIST(CIR_DISPATCH)
+#undef CIR_DISPATCH
     else
     {
       if (const auto distance = callback(ppc_state, payload))
@@ -153,6 +222,98 @@ s32 CachedInterpreter::Interpret(PowerPC::PowerPCState& ppc_state,
     ppc_state.npc = operands.current_pc + 4;
   }
   operands.func(operands.interpreter, operands.inst);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube: specialized counterpart to Interpret<write_pc>. See header for contract. The ONLY
+// behavioral difference from Interpret<write_pc> is that the per-op handler is invoked by its
+// compile-time-constant pointer Func (direct/inlinable) instead of operands.func (indirect).
+// Everything else — the write_pc pc/npc writes and the return distance — is reproduced verbatim.
+template <Interpreter::Instruction Func, bool write_pc>
+s32 CachedInterpreter::InterpretSpecialized(PowerPC::PowerPCState& ppc_state,
+                                            const InterpretOperands& operands)
+{
+  // The whitelist (see CIR_SPECIALIZED_OP_LIST) is integer-ALU only: pure register math, never
+  // FL_LOADSTORE/FL_USE_FPU, so these never raise exceptions and never touch the MMU. That is why
+  // this mirrors Interpret<write_pc> (the non-exception trampoline) and NOT
+  // InterpretAndCheckExceptions: the emission site (DoJit) only routes such ops through Interpret.
+  if (s_specialized_ops_validate) [[unlikely]]
+  {
+    // Strongest feasible self-check (see header / report): handler math is identical by
+    // construction (Func == operands.func for whitelisted ops), so we validate the BOOKKEEPING and
+    // dispatch integration that a specialized callback could get subtly wrong: the write_pc pc/npc
+    // writes and the returned advance distance. We run the generic Interpret<write_pc> on a scratch
+    // copy of the register state, then the specialized path on the real state, and assert the
+    // resulting architectural state (GPR/CR/XER/PC/NPC) and return distance match. Safe to
+    // double-run because whitelisted ops are side-effect-free outside the register file.
+    // gpr/cr.fields are C arrays; snapshot via std::array copies so we can compare with ==.
+    std::array<u32, 32> saved_gpr;
+    std::array<u64, 8> saved_cr;
+    std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), saved_gpr.begin());
+    std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), saved_cr.begin());
+    // XER lives in the split fields xer_ca / xer_so_ov, NOT spr[SPR_XER] (which is only
+    // reconstructed on mfspr). Watch the live fields so this check is correct for future ops that
+    // affect carry/overflow (addic/addx/subfic/...). The current 6-op whitelist never writes them.
+    const u8 saved_xer_ca = ppc_state.xer_ca;
+    const u8 saved_xer_so_ov = ppc_state.xer_so_ov;
+    const u32 saved_pc = ppc_state.pc;
+    const u32 saved_npc = ppc_state.npc;
+
+    // Generic reference run on the live state (this is exactly what the unspecialized block would
+    // have done, using the same operands.func the emission site captured).
+    const s32 generic_distance = Interpret<write_pc>(ppc_state, operands);
+
+    std::array<u32, 32> generic_gpr;
+    std::array<u64, 8> generic_cr;
+    std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), generic_gpr.begin());
+    std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), generic_cr.begin());
+    const u8 generic_xer_ca = ppc_state.xer_ca;
+    const u8 generic_xer_so_ov = ppc_state.xer_so_ov;
+    const u32 generic_pc = ppc_state.pc;
+    const u32 generic_npc = ppc_state.npc;
+
+    // Restore and run the specialized path.
+    std::copy(saved_gpr.begin(), saved_gpr.end(), std::begin(ppc_state.gpr));
+    std::copy(saved_cr.begin(), saved_cr.end(), std::begin(ppc_state.cr.fields));
+    ppc_state.xer_ca = saved_xer_ca;
+    ppc_state.xer_so_ov = saved_xer_so_ov;
+    ppc_state.pc = saved_pc;
+    ppc_state.npc = saved_npc;
+
+    if constexpr (write_pc)
+    {
+      ppc_state.pc = operands.current_pc;
+      ppc_state.npc = operands.current_pc + 4;
+    }
+    Func(operands.interpreter, operands.inst);
+    const s32 specialized_distance = sizeof(AnyCallback) + sizeof(operands);
+
+    std::array<u32, 32> spec_gpr;
+    std::array<u64, 8> spec_cr;
+    std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), spec_gpr.begin());
+    std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), spec_cr.begin());
+
+    ASSERT_MSG(DYNA_REC, specialized_distance == generic_distance,
+               "CIR specialized op return distance mismatch: {} vs generic {}",
+               specialized_distance, generic_distance);
+    ASSERT_MSG(DYNA_REC, spec_gpr == generic_gpr, "CIR specialized op GPR mismatch at pc {:#x}",
+               operands.current_pc);
+    ASSERT_MSG(DYNA_REC, spec_cr == generic_cr, "CIR specialized op CR mismatch at pc {:#x}",
+               operands.current_pc);
+    ASSERT_MSG(DYNA_REC,
+               ppc_state.xer_ca == generic_xer_ca && ppc_state.xer_so_ov == generic_xer_so_ov,
+               "CIR specialized op XER mismatch at pc {:#x}", operands.current_pc);
+    ASSERT_MSG(DYNA_REC, ppc_state.pc == generic_pc && ppc_state.npc == generic_npc,
+               "CIR specialized op PC/NPC mismatch at pc {:#x}", operands.current_pc);
+    return specialized_distance;
+  }
+
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  Func(operands.interpreter, operands.inst);
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -427,10 +588,32 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       }
       else
       {
-        const InterpretOperands operands = {interpreter, Interpreter::GetInterpreterOp(op.inst),
-                                            js.compilerPC, op.inst};
-        Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
-              operands);
+        const auto func = Interpreter::GetInterpreterOp(op.inst);
+        const InterpretOperands operands = {interpreter, func, js.compilerPC, op.inst};
+        // iCube: route whitelisted hot integer-ALU ops to the specialized, directly-dispatched
+        // callback when MAIN_CIR_SPECIALIZED_OPS is on. The payload is the identical
+        // InterpretOperands struct, so dispatch advancement is unchanged; only the emitted callback
+        // pointer differs. write_pc == op.canEndBlock, matching the generic Interpret selection.
+        // Cold/non-whitelisted ops fall through to the unchanged generic emission below.
+        bool emitted = false;
+        if (s_specialized_ops && IsSpecializedOp(func))
+        {
+#define CIR_EMIT(name)                                                                             \
+  if (!emitted && func == &Interpreter::name)                                                      \
+  {                                                                                                \
+    Write(op.canEndBlock ? CallbackCast(InterpretSpecialized<&Interpreter::name, true>) :          \
+                           CallbackCast(InterpretSpecialized<&Interpreter::name, false>),          \
+          operands);                                                                               \
+    emitted = true;                                                                                \
+  }
+          CIR_SPECIALIZED_OP_LIST(CIR_EMIT)
+#undef CIR_EMIT
+        }
+        if (!emitted)
+        {
+          Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
+                operands);
+        }
       }
 
       if (op.branchIsIdleLoop)

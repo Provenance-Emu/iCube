@@ -10,6 +10,7 @@
 #include "Common/CommonTypes.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
+#include "Core/PowerPC/Interpreter/Interpreter.h"
 #include "Core/PowerPC/JitCommon/JitBase.h"
 #include "Core/PowerPC/PPCAnalyst.h"
 
@@ -21,7 +22,6 @@ namespace CPU
 {
 enum class State;
 }
-class Interpreter;
 
 class CachedInterpreter : public JitBase, public CachedInterpreterCodeBlock
 {
@@ -95,6 +95,15 @@ private:
   static s32 Interpret(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   template <bool write_pc>
   static s32 Interpret(std::ostream& stream, const InterpretOperands& operands);
+  // iCube: specialized variant of Interpret<write_pc>. Func is a compile-time-constant
+  // Interpreter:: handler pointer, so the per-op call is direct (and inlinable under ThinLTO)
+  // instead of the indirect operands.func(...) load+call. Reproduces the Interpret<write_pc>
+  // bookkeeping contract EXACTLY: write_pc => pc=current_pc, npc=current_pc+4; run handler;
+  // return sizeof(AnyCallback)+sizeof(InterpretOperands). Reuses the InterpretOperands payload
+  // layout so dispatch advancement is identical. Gated by MAIN_CIR_SPECIALIZED_OPS at emit time.
+  template <Interpreter::Instruction Func, bool write_pc>
+  static s32 InterpretSpecialized(PowerPC::PowerPCState& ppc_state,
+                                  const InterpretOperands& operands);
   template <bool write_pc>
   static s32 InterpretAndCheckExceptions(PowerPC::PowerPCState& ppc_state,
                                          const InterpretAndCheckExceptionsOperands& operands);

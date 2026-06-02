@@ -808,5 +808,17 @@ const Info<bool> MAIN_RELAXED_IDLE_DETECTION{{System::Main, "Core", "RelaxedIdle
 // iCube: skip per-block PMC update on the CachedInterpreter (~4% on CPU-bound titles). Default
 // false (PMC emulated for correctness); flip true to A/B the speedup on titles that don't read PMC.
 const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR{{System::Main, "Core", "CIRSkipPerfMonitor"}, false};
+// iCube: emit specialized, directly-dispatched callbacks for a small whitelist of hot integer-ALU
+// PowerPC ops on the CachedInterpreter. Collapses the two indirect calls (dispatch + per-op handler
+// trampoline) into a direct, inlinable call (full body inline under ThinLTO). Default false (generic
+// path, identical to upstream); flip true to A/B the speedup. RESEARCH-GRADE, MEASUREMENT-GATED.
+const Info<bool> MAIN_CIR_SPECIALIZED_OPS{{System::Main, "Core", "CIRSpecializedOps"}, false};
+// iCube: self-validation for CIRSpecializedOps. When true, every specialized callback re-derives the
+// dispatch bookkeeping (pc/npc/return-distance) on a scratch copy and asserts it matches the generic
+// Interpret<write_pc> trampoline contract before committing the real handler. Catches integration
+// bugs (wrong write_pc, wrong return distance, payload mismatch) — NOT handler math (by construction
+// the same Interpreter:: function). Default false; flip true during on-device correctness passes.
+const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE{
+    {System::Main, "Core", "CIRSpecializedOpsValidate"}, false};
 
 }  // namespace Config

@@ -407,5 +407,7 @@ extern const Info<bool> MAIN_FAST_FORWARD_CTR_IDLE;
 extern const Info<bool> MAIN_FP_FAST;
 extern const Info<bool> MAIN_RELAXED_IDLE_DETECTION;
 extern const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR;
+extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS;
+extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE;
 
 }  // namespace Config
