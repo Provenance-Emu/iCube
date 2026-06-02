@@ -170,7 +170,7 @@ let iCube = Target.target(
     destinations: [.iPhone, .iPad, .appleTv, .macWithiPadDesign, .macCatalyst],
     product: .app,
     bundleId: "com.joemattiello.iCube", // placeholder; real per-config ids set in appConfigs
-    deploymentTargets: .multiplatform(iOS: "15.0", tvOS: "16.0"),
+    deploymentTargets: .multiplatform(iOS: "17.0", tvOS: "17.0"),
     infoPlist: .file(path: "DolphiniOS/Info.plist"),
     sources: [
         .glob("DolphiniOS/**/*.{swift,m,mm,h}"),
@@ -320,7 +320,7 @@ let iCubeTests = Target.target(
     destinations: [.iPhone, .iPad],
     product: .unitTests,
     bundleId: "com.joemattiello.iCubeTests",
-    deploymentTargets: .multiplatform(iOS: "15.0"),
+    deploymentTargets: .multiplatform(iOS: "17.0"),
     infoPlist: .default,
     sources: ["DolphiniOSTests/**/*.swift"],
     dependencies: [.target(name: "iCube")],
