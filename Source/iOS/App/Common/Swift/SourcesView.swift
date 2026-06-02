@@ -1,7 +1,6 @@
 import SwiftUI
 import PVWebServer
 #if os(iOS)
-import NavigationStackBackport
 #endif
 
 struct SourcesView: View {

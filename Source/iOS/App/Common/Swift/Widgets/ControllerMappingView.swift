@@ -4,7 +4,6 @@
 import SwiftUI
 import GameController
 #if os(iOS)
-import NavigationStackBackport
 #endif
 
 internal struct ControllerMappingView: View {

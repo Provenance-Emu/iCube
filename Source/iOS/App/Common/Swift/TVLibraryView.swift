@@ -3,7 +3,6 @@ import UIKit
 import GameController
 import UniformTypeIdentifiers
 #if os(iOS)
-import NavigationStackBackport
 #endif
 import Combine
 

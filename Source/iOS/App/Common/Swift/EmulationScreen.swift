@@ -3,7 +3,6 @@ import UIKit
 import GameController
 import Combine
 #if os(iOS)
-import NavigationStackBackport
 #endif
 
 private struct EmulationSurfaceView: UIViewRepresentable {

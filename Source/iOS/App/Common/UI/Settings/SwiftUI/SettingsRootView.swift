@@ -14,7 +14,6 @@ import AudioToolbox
 import GameController
 #endif
 #if os(iOS)
-import NavigationStackBackport
 #endif
 import Foundation
 
