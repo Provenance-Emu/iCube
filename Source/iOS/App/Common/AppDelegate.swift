@@ -29,12 +29,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     if AppConsts.useSwiftUI {
       let role = connectingSceneSession.role
       let config = UISceneConfiguration(name: "Default Configuration", sessionRole: role)
-      if #available(iOS 16.0, *) {
-        if role == .windowExternalDisplayNonInteractive {
-          config.delegateClass = ExternalDisplaySceneDelegate.self
-        } else {
-          config.delegateClass = MainDisplaySceneDelegate.self
-        }
+      if role == .windowExternalDisplayNonInteractive {
+        config.delegateClass = ExternalDisplaySceneDelegate.self
       } else {
         config.delegateClass = MainDisplaySceneDelegate.self
       }

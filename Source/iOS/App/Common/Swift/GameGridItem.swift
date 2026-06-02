@@ -458,20 +458,12 @@ struct GameGridItem: View {
 
   /// Enhanced headline font with iOS version compatibility
   private var enhancedHeadlineFont: Font {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      return .system(.headline, design: .rounded, weight: .semibold)
-    } else {
-      return .system(size: 17, weight: .semibold, design: .rounded)
-    }
+    return .system(.headline, design: .rounded, weight: .semibold)
   }
 
   /// Enhanced caption font with iOS version compatibility
   private var enhancedCaptionFont: Font {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      return .system(.caption, design: .monospaced, weight: .medium)
-    } else {
-      return .system(size: 12, weight: .medium, design: .monospaced)
-    }
+    return .system(.caption, design: .monospaced, weight: .medium)
   }
 
 

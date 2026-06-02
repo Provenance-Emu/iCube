@@ -360,21 +360,13 @@ private struct KVRow: View {
           .textCase(.uppercase)
 #if os(tvOS)
         if monospaced {
-          if #available(tvOS 16.0, *) {
-            Text(value).font(.callout).monospaced().lineLimit(nil)
-          } else {
-            Text(value).font(.system(.callout, design: .monospaced)).lineLimit(nil)
-          }
+          Text(value).font(.callout).monospaced().lineLimit(nil)
         } else {
           Text(value).font(.callout).lineLimit(nil)
         }
 #else
         if monospaced {
-          if #available(iOS 16.0, *) {
-            Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
-          } else {
-            Text(value).font(.system(.callout, design: .monospaced)).lineLimit(nil)
-          }
+          Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
         } else {
           Text(value).font(.callout).textSelection(.enabled).lineLimit(nil)
         }

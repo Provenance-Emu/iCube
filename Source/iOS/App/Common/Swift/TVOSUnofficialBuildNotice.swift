@@ -34,23 +34,19 @@ private struct TVUnofficialBuildNoticeView: View {
 final class TVOSUnofficialBuildNoticeHost: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
-        if #available(tvOS 16.4, *) {
-            let host = UIHostingController(rootView: TVUnofficialBuildNoticeView { [weak self] in
-                self?.dismiss(animated: true)
-            })
-            addChild(host)
-            view.addSubview(host.view)
-            host.view.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                host.view.topAnchor.constraint(equalTo: view.topAnchor),
-                host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-            ])
-            host.didMove(toParent: self)
-        } else {
-            view.backgroundColor = .black
-        }
+        let host = UIHostingController(rootView: TVUnofficialBuildNoticeView { [weak self] in
+            self?.dismiss(animated: true)
+        })
+        addChild(host)
+        view.addSubview(host.view)
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: view.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        host.didMove(toParent: self)
     }
 }
 

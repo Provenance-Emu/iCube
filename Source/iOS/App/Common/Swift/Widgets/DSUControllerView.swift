@@ -27,23 +27,15 @@ private enum OrientationHelper {
   static func lockToCurrentOrientation() {
     guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
     let mask = currentMask()
-    if #available(iOS 16.0, *) {
-      let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
-      try? scene.requestGeometryUpdate(prefs)
-    } else {
-      // Best-effort: keep the current orientation by re-applying it
-      let io = scene.interfaceOrientation
-      UIDevice.current.setValue(io.rawValue, forKey: "orientation")
-    }
+    let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
+    try? scene.requestGeometryUpdate(prefs)
   }
 
   /// Restores default orientation allowances after the view is dismissed
   static func unlock() {
     guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
-    if #available(iOS 16.0, *) {
-      let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .allButUpsideDown)
-      try? scene.requestGeometryUpdate(prefs)
-    }
+    let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .allButUpsideDown)
+    try? scene.requestGeometryUpdate(prefs)
   }
 }
 
@@ -79,11 +71,7 @@ struct DSUControllerView: View {
 
   var body: some View {
     Group {
-      if #available(iOS 16.0, *) {
-        NavigationStack { controllerContent }
-      } else {
-        NavigationView { controllerContent }
-      }
+      NavigationStack { controllerContent }
     }
     .ignoresSafeArea(.keyboard, edges: .bottom)
   }
@@ -454,62 +442,32 @@ private struct MotionQuickSettingsView: View {
   @State private var smoothing: Double = UserDefaults.standard.object(forKey: "dsu_smoothing") as? Double ?? 0.0
   @Environment(\.dismiss) private var dismiss
   var body: some View {
-    if #available(iOS 16.0, *) {
-      NavigationStack {
-        Form {
-          Section(header: Text(L("Gyro Gain"))) {
-            HStack {
-              Slider(value: $gain, in: 0.1...3.0, step: 0.05)
-              Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
-            }
-          }
-          Section(header: Text(L("Deadzone"))) {
-            HStack {
-              Slider(value: $deadzone, in: 0.0...0.49, step: 0.01)
-              Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
-            }
-          }
-          Section(header: Text(L("Smoothing"))) {
-            HStack {
-              Slider(value: $smoothing, in: 0.0...0.9, step: 0.05)
-              Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
-            }
+    NavigationStack {
+      Form {
+        Section(header: Text(L("Gyro Gain"))) {
+          HStack {
+            Slider(value: $gain, in: 0.1...3.0, step: 0.05)
+            Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
           }
         }
-        .navigationTitle(L("Motion Settings"))
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { dismiss() } } }
-        .onChange(of: gain) { UserDefaults.standard.set($0, forKey: "dsu_gyro_gain") }
-        .onChange(of: deadzone) { UserDefaults.standard.set($0, forKey: "dsu_deadzone") }
-        .onChange(of: smoothing) { UserDefaults.standard.set($0, forKey: "dsu_smoothing") }
-      }
-    } else {
-      NavigationView {
-        Form {
-          Section(header: Text(L("Gyro Gain"))) {
-            HStack {
-              Slider(value: $gain, in: 0.1...3.0, step: 0.05)
-              Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
-            }
-          }
-          Section(header: Text(L("Deadzone"))) {
-            HStack {
-              Slider(value: $deadzone, in: 0.0...0.49, step: 0.01)
-              Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
-            }
-          }
-          Section(header: Text(L("Smoothing"))) {
-            HStack {
-              Slider(value: $smoothing, in: 0.0...0.9, step: 0.05)
-              Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
-            }
+        Section(header: Text(L("Deadzone"))) {
+          HStack {
+            Slider(value: $deadzone, in: 0.0...0.49, step: 0.01)
+            Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
           }
         }
-        .navigationTitle(L("Motion Settings"))
-        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { dismiss() } } }
-        .onChange(of: gain) { UserDefaults.standard.set($0, forKey: "dsu_gyro_gain") }
-        .onChange(of: deadzone) { UserDefaults.standard.set($0, forKey: "dsu_deadzone") }
-        .onChange(of: smoothing) { UserDefaults.standard.set($0, forKey: "dsu_smoothing") }
+        Section(header: Text(L("Smoothing"))) {
+          HStack {
+            Slider(value: $smoothing, in: 0.0...0.9, step: 0.05)
+            Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
+          }
+        }
       }
+      .navigationTitle(L("Motion Settings"))
+      .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { dismiss() } } }
+      .onChange(of: gain) { UserDefaults.standard.set($0, forKey: "dsu_gyro_gain") }
+      .onChange(of: deadzone) { UserDefaults.standard.set($0, forKey: "dsu_deadzone") }
+      .onChange(of: smoothing) { UserDefaults.standard.set($0, forKey: "dsu_smoothing") }
     }
   }
 }
@@ -538,38 +496,20 @@ private struct LayoutPickerSheet: View {
   @Binding var selectedRaw: String
   @Environment(\.dismiss) private var dismiss
   var body: some View {
-    if #available(iOS 16.0, *) {
-      NavigationStack {
-        List {
-          ForEach(DSUControllerLayout.allCases, id: \.rawValue) { opt in
-            HStack {
-              Text(opt.displayName)
-              Spacer()
-              if opt.rawValue == selectedRaw { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { selectedRaw = opt.rawValue; dismiss() }
+    NavigationStack {
+      List {
+        ForEach(DSUControllerLayout.allCases, id: \.rawValue) { opt in
+          HStack {
+            Text(opt.displayName)
+            Spacer()
+            if opt.rawValue == selectedRaw { Image(systemName: "checkmark").foregroundColor(.accentColor) }
           }
+          .contentShape(Rectangle())
+          .onTapGesture { selectedRaw = opt.rawValue; dismiss() }
         }
-        .navigationTitle(L("Controller Layout"))
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { dismiss() } } }
       }
-    } else {
-      NavigationView {
-        List {
-          ForEach(DSUControllerLayout.allCases, id: \.rawValue) { opt in
-            HStack {
-              Text(opt.displayName)
-              Spacer()
-              if opt.rawValue == selectedRaw { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { selectedRaw = opt.rawValue; dismiss() }
-          }
-        }
-        .navigationTitle(L("Controller Layout"))
-        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { dismiss() } } }
-      }
+      .navigationTitle(L("Controller Layout"))
+      .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { dismiss() } } }
     }
   }
 }

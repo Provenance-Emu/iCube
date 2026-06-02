@@ -1259,21 +1259,13 @@ private struct SettingsNavigationFallback: ViewModifier {
   @Binding var showSettings: Bool
   func body(content: Content) -> some View {
     Group {
-      if #available(iOS 16.0, *) {
-        content
-          .navigationDestination(isPresented: $showSettings) {
-            SettingsRootView()
+      content
+        .navigationDestination(isPresented: $showSettings) {
+          SettingsRootView()
 #if !os(tvOS)
-              .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
 #endif
-          }
-      } else {
-        content
-          .background(
-            NavigationLink(destination: SettingsRootView(), isActive: $showSettings) { EmptyView() }
-              .hidden()
-          )
-      }
+        }
     }
   }
 }

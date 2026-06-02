@@ -733,35 +733,17 @@ struct BlogPostDetailView: View {
 
       // Share button
 #if !os(tvOS)
-      if #available(iOS 16.0, *) {
-        ShareLink(item: URL(string: post.link)!, subject: Text(post.title)) {
-          HStack {
-            Image(systemName: "square.and.arrow.up")
-            Text("Share This Post")
-          }
-          .font(.subheadline)
-          .foregroundColor(.blue)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 12)
-          .background(Color.blue.opacity(0.1))
-          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+      ShareLink(item: URL(string: post.link)!, subject: Text(post.title)) {
+        HStack {
+          Image(systemName: "square.and.arrow.up")
+          Text("Share This Post")
         }
-      } else {
-        // Fallback for iOS 15 and below
-        Button(action: {
-          sharePost(url: post.link, title: post.title)
-        }) {
-          HStack {
-            Image(systemName: "square.and.arrow.up")
-            Text("Share This Post")
-          }
-          .font(.subheadline)
-          .foregroundColor(.blue)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 12)
-          .background(Color.blue.opacity(0.1))
-          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
+        .font(.subheadline)
+        .foregroundColor(.blue)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(Color.blue.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
       }
 #endif // !tvOS
     }

@@ -259,38 +259,22 @@ struct TVLibraryView: View {
 
   /// Enhanced title2 font with iOS version compatibility for favorites headers
   private var enhancedTitle2BoldFont: Font {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      return .system(.title2, design: .rounded, weight: .bold)
-    } else {
-      return .system(size: 22, weight: .bold, design: .rounded)
-    }
+    return .system(.title2, design: .rounded, weight: .bold)
   }
 
   /// Enhanced caption medium font with iOS version compatibility
   private var enhancedCaptionMediumFont: Font {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      return .system(.caption, design: .rounded, weight: .medium)
-    } else {
-      return .system(size: 12, weight: .medium, design: .rounded)
-    }
+    return .system(.caption, design: .rounded, weight: .medium)
   }
 
   /// Enhanced large title font with iOS version compatibility for tvOS favorites
   private var enhancedLargeTitleFont: Font {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      return .system(.largeTitle, design: .rounded, weight: .bold)
-    } else {
-      return .system(size: 34, weight: .bold, design: .rounded)
-    }
+    return .system(.largeTitle, design: .rounded, weight: .bold)
   }
 
   /// Enhanced title3 font with iOS version compatibility for tvOS favorites
   private var enhancedTitle3Font: Font {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      return .system(.title3, design: .rounded, weight: .medium)
-    } else {
-      return .system(size: 20, weight: .medium, design: .rounded)
-    }
+    return .system(.title3, design: .rounded, weight: .medium)
   }
 
   @Environment(\.tipsService) private var tipsService
@@ -2431,30 +2415,18 @@ struct iOS16TrackingModifier: ViewModifier {
   let tracking: CGFloat
 
   func body(content: Content) -> some View {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      content.tracking(tracking)
-    } else {
-      // For iOS 13-15, we'll use a minimal approach since kerning is also iOS 16+
-      // The text will still look great without tracking
-      content
-    }
+    content.tracking(tracking)
   }
 }
 
 /// iOS 16.0+ navigation styling modifier for backward compatibility
 struct iOS16NavigationStyleModifier: ViewModifier {
   func body(content: Content) -> some View {
-    if #available(iOS 16.0, tvOS 16.0, *) {
-      content
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+    content
+      .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+      .toolbarColorScheme(.dark, for: .navigationBar)
 #if !os(tvOS)
-        .scrollContentBackground(.hidden)
+      .scrollContentBackground(.hidden)
 #endif
-    } else {
-      // For iOS 13-15, use basic styling
-      content
-        .preferredColorScheme(.dark)
-    }
   }
 }

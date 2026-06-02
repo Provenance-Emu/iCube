@@ -326,9 +326,7 @@ struct SettingsRootView<Background: View>: View {
               .frame(height: 24)
             Text(L("Core"))
             Spacer()
-            if #available(iOS 15.0, *) {
-              Text(coreVersionLabel.isEmpty ? coreVersion : coreVersionLabel).foregroundStyle(.secondary)
-            }
+            Text(coreVersionLabel.isEmpty ? coreVersion : coreVersionLabel).foregroundStyle(.secondary)
           }
           NavigationLink(destination: AboutView()) {
             Label(L("About"), systemImage: "info.circle")
@@ -1203,16 +1201,11 @@ struct ControllersRootView: View {
   }
 
   private func mfiControllerTitle(_ controller: GCController, index: Int) -> String {
-    if #available(iOS 16.0, *) {
-      // Prefer the product category (e.g., "Gamepad", "DualSense") when available
-      let category = controller.productCategory
-      if !category.isEmpty { return category }
-      if let vendor = controller.vendorName, !vendor.isEmpty { return vendor }
-      return "Controller"
-    } else {
-      if let vendor = controller.vendorName, !vendor.isEmpty { return vendor }
-      return "Controller"
-    }
+    // Prefer the product category (e.g., "Gamepad", "DualSense") when available
+    let category = controller.productCategory
+    if !category.isEmpty { return category }
+    if let vendor = controller.vendorName, !vendor.isEmpty { return vendor }
+    return "Controller"
   }
 
   private func mfiControllerDetail(_ controller: GCController) -> String {
@@ -1220,18 +1213,13 @@ struct ControllersRootView: View {
     let ptr = Unmanaged.passUnretained(controller).toOpaque()
     let hex = String(format: "%p", Int(bitPattern: ptr))
     let shortId = hex.count > 4 ? String(hex.suffix(4)) : hex
-    if #available(iOS 16.0, *) {
-      let vendor = controller.vendorName ?? ""
-      let category = controller.productCategory
-      var parts: [String] = []
-      if !vendor.isEmpty { parts.append(vendor) }
-      if !category.isEmpty { parts.append(category) }
-      parts.append(shortId)
-      return parts.joined(separator: " · ")
-    } else {
-      let vendor = controller.vendorName ?? ""
-      return vendor.isEmpty ? shortId : "\(vendor) · \(shortId)"
-    }
+    let vendor = controller.vendorName ?? ""
+    let category = controller.productCategory
+    var parts: [String] = []
+    if !vendor.isEmpty { parts.append(vendor) }
+    if !category.isEmpty { parts.append(category) }
+    parts.append(shortId)
+    return parts.joined(separator: " · ")
   }
 #endif
 }
@@ -3920,11 +3908,7 @@ private struct HorizontalMotionPicker: View {
 #if os(iOS)
 private struct HideListBackgroundIfAvailable: ViewModifier {
   func body(content: Content) -> some View {
-    if #available(iOS 16.0, *) {
-      content.scrollContentBackground(.hidden)
-    } else {
-      content
-    }
+    content.scrollContentBackground(.hidden)
   }
 }
 #endif

@@ -13,23 +13,18 @@ final class ReplayKitManager {
 	/// Returns whether Instant Replay is enabled in settings and available on device
 	private var shouldUseReplayKit: Bool {
 		guard UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled") else { return false }
-		if #available(iOS 15.0, *) {
-			return RPScreenRecorder.shared().isAvailable
-		}
-		return false
+		return RPScreenRecorder.shared().isAvailable
 	}
 
 	/// Begin rolling clip buffering if enabled
 	func startBufferingIfEnabled() {
 		guard shouldUseReplayKit else { return }
-		if #available(iOS 15.0, *) {
-			guard !isBuffering else { return }
-			RPScreenRecorder.shared().startClipBuffering { err in
-				DispatchQueue.main.async {
-					self.isBuffering = (err == nil)
-					if let e = err {
-						NSLog("[ReplayKit] startClipBuffering error: %@", e.localizedDescription)
-					}
+		guard !isBuffering else { return }
+		RPScreenRecorder.shared().startClipBuffering { err in
+			DispatchQueue.main.async {
+				self.isBuffering = (err == nil)
+				if let e = err {
+					NSLog("[ReplayKit] startClipBuffering error: %@", e.localizedDescription)
 				}
 			}
 		}
@@ -37,12 +32,10 @@ final class ReplayKitManager {
 
 	/// Stop rolling clip buffering
 	func stopBuffering() {
-		if #available(iOS 15.0, *) {
-			guard isBuffering else { return }
-			RPScreenRecorder.shared().stopClipBuffering { err in
-				DispatchQueue.main.async { self.isBuffering = false }
-				if let e = err { NSLog("[ReplayKit] stopClipBuffering error: %@", e.localizedDescription) }
-			}
+		guard isBuffering else { return }
+		RPScreenRecorder.shared().stopClipBuffering { err in
+			DispatchQueue.main.async { self.isBuffering = false }
+			if let e = err { NSLog("[ReplayKit] stopClipBuffering error: %@", e.localizedDescription) }
 		}
 	}
 
@@ -52,45 +45,43 @@ final class ReplayKitManager {
 			NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Instant Replay is disabled")])
 			return
 		}
-		if #available(iOS 15.0, *) {
-			let preferred = UserDefaults.standard.integer(forKey: "replaykit_clip_seconds")
-			let secs = preferred > 0 ? TimeInterval(preferred) : seconds
-			let fm = FileManager.default
-			let docs = URL(fileURLWithPath: UserFolderUtil.getUserFolder())
-			let clips = docs.appendingPathComponent("Clips", isDirectory: true)
-			let saveToPhotos = UserDefaults.standard.bool(forKey: "replaykit_save_to_photos")
-			let onlyPhotos = UserDefaults.standard.bool(forKey: "replaykit_save_only_photos")
-			if !onlyPhotos { try? fm.createDirectory(at: clips, withIntermediateDirectories: true) }
-			let filename = "Clip_\(Int(Date().timeIntervalSince1970)).mov"
-			let baseDir = onlyPhotos ? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true) : clips
-			let url = baseDir.appendingPathComponent(filename)
-			RPScreenRecorder.shared().exportClip(to: url, duration: secs) { err in
-				DispatchQueue.main.async {
-					if let e = err {
-						NSLog("[ReplayKit] exportClip error: %@", e.localizedDescription)
-						NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Failed to save replay")])
-					} else {
-						if saveToPhotos {
-							self.saveToPhotos(fileURL: url) { success in
-								if success {
-									if onlyPhotos {
-										try? fm.removeItem(at: url)
-										NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Saved clip to Photos")])
-									} else {
-										NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Saved clip to Clips and Photos")])
-									}
+		let preferred = UserDefaults.standard.integer(forKey: "replaykit_clip_seconds")
+		let secs = preferred > 0 ? TimeInterval(preferred) : seconds
+		let fm = FileManager.default
+		let docs = URL(fileURLWithPath: UserFolderUtil.getUserFolder())
+		let clips = docs.appendingPathComponent("Clips", isDirectory: true)
+		let saveToPhotos = UserDefaults.standard.bool(forKey: "replaykit_save_to_photos")
+		let onlyPhotos = UserDefaults.standard.bool(forKey: "replaykit_save_only_photos")
+		if !onlyPhotos { try? fm.createDirectory(at: clips, withIntermediateDirectories: true) }
+		let filename = "Clip_\(Int(Date().timeIntervalSince1970)).mov"
+		let baseDir = onlyPhotos ? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true) : clips
+		let url = baseDir.appendingPathComponent(filename)
+		RPScreenRecorder.shared().exportClip(to: url, duration: secs) { err in
+			DispatchQueue.main.async {
+				if let e = err {
+					NSLog("[ReplayKit] exportClip error: %@", e.localizedDescription)
+					NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Failed to save replay")])
+				} else {
+					if saveToPhotos {
+						self.saveToPhotos(fileURL: url) { success in
+							if success {
+								if onlyPhotos {
+									try? fm.removeItem(at: url)
+									NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Saved clip to Photos")])
 								} else {
-									// Fall back snackbar to indicate local save succeeded
-									if onlyPhotos {
-										NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
-									} else {
-										NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
-									}
+									NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Saved clip to Clips and Photos")])
+								}
+							} else {
+								// Fall back snackbar to indicate local save succeeded
+								if onlyPhotos {
+									NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
+								} else {
+									NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
 								}
 							}
-						} else {
-							NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
 						}
+					} else {
+						NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved last %1ds to Clips"), Int(secs))])
 					}
 				}
 			}

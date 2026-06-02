@@ -61,11 +61,7 @@ public enum ZipCompiledShaderContainer {
         #if canImport(Zip)
         try Zip.zipFiles(paths: filesToZip, zipFilePath: path, password: nil, progress: nil)
         #else
-        if #available(iOS 16.0, tvOS 16.0, *) {
-            try FileManager.default.zipItem(at: staging, to: path, shouldKeepParent: false)
-        } else {
-            throw Error.unsupported
-        }
+        try FileManager.default.zipItem(at: staging, to: path, shouldKeepParent: false)
         #endif
     }
 
@@ -104,11 +100,7 @@ public enum ZipCompiledShaderContainer {
                 #if canImport(Zip)
                 try Zip.unzipFile(tempZip, destination: tempZipDir, overwrite: true, password: nil, progress: nil)
                 #else
-                if #available(iOS 16.0, tvOS 16.0, *) {
-                    try FileManager.default.unzipItem(at: tempZip, to: tempZipDir)
-                } else {
-                    throw Error.unsupported
-                }
+                try FileManager.default.unzipItem(at: tempZip, to: tempZipDir)
                 #endif
             } catch {
                 throw Error.invalidArchive
