@@ -117,6 +117,14 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
   SetBaseIfUnspecified(Config::MAIN_FAST_DISC_SPEED, true);
   SetBaseIfUnspecified(Config::MAIN_DSP_THREAD, true);
+  // Dual-core (separate CPU/GPU threads). Upstream gates DEFAULT_CPU_THREAD=true to Android only,
+  // so iOS launches SINGLE-CORE by default. The pre-2509 base extended the on-default to iOS; the
+  // rebaseline graft dropped it (only the Reset-All block re-forced it), so a normal launch was
+  // single-core — the leading suspect for the GC-disc-streaming boot freezes (Chibi-Robo / Paper
+  // Mario / GoldenEye) since single-core services DI/DTK/DSP differently. Restore the iOS on-default
+  // here (user-toggleable). NOTE: single-vs-dual is still an open PERF A/B for CPU-bound titles
+  // (F-Zero) — this default prioritizes boot correctness/compat (matches what shipped before).
+  SetBaseIfUnspecified(Config::MAIN_CPU_THREAD, true);
   // Speed-first video/CPU defaults
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
