@@ -1748,6 +1748,10 @@ private struct HelpSheetButton: View {
 
 struct ConfigAdvancedView: View {
   @State private var cpuEngine: CpuEngine = .jitARM64
+  /// True when the runtime acquired a JIT entitlement. On the App Store (jitless)
+  /// build this is always false, so JIT engine choices are hidden and the core
+  /// silently runs the Cached Interpreter (see EmulationViewController fallback).
+  @State private var jitAvailable: Bool = false
   @State private var mmu: Bool = false
   // iCube perf settings — @AppStorage (same keys the ObjC++ EmulationCoordinator reads).
   @AppStorage("adaptive_clock_enable") private var adaptiveClock: Bool = false
@@ -1779,64 +1783,65 @@ struct ConfigAdvancedView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("CPU Options")), footer: Text(L("CPU Emulation Engine: ARM64 JIT is fastest on modern devices. MMU: Enables memory management (required for some games, reduces performance). Adaptive Clock: Automatically adjusts timing (experimental). Accurate CPU Cache: More precise emulation but slower."))) {
-        NavigationLink("\(L("CPU Emulation Engine")): \(cpuEngine.label)", destination: CpuEnginePicker(selected: $cpuEngine))
+      Section(header: Text(L("CPU Options")),
+              footer: Text(jitAvailable
+                           ? L("These options control the PowerPC CPU emulation. On iCube the emulated CPU is almost always the performance bottleneck, so the CPU options below matter far more than any graphics setting.")
+                           : L("This build runs without JIT, so games always use the Cached Interpreter (the JIT engine choices are hidden). The emulated CPU is the performance bottleneck on iCube — these options matter far more than any graphics setting."))) {
+        NavigationLink("\(L("CPU Emulation Engine")): \(effectiveCpuEngineLabel)", destination: CpuEnginePicker(selected: $cpuEngine, jitAvailable: jitAvailable))
           .onChange(of: cpuEngine) { DOLConfigBridge.setMainCpuCore($0.rawValue) }
-        HStack {
+        rowWithCaption(
           Toggle(L("Enable MMU"), isOn: $mmu)
-            .onChange(of: mmu) { DOLConfigBridge.setMainMMU($0) }
-          Spacer()
-          Image(systemName: "info.circle").help(L("Accurate but very slow. Only needed for a few specific games."))
-        }
-        Toggle(L("Adaptive Clock (auto VI/CPU)"), isOn: $adaptiveClock)
-        HStack {
-          Picker(L("Vertex Loader (jitless)"), selection: $vertexLoaderMode) {
-            Text(L("Software (default)")).tag(0)
-            Text(L("NEON SIMD")).tag(1)
+            .onChange(of: mmu) { DOLConfigBridge.setMainMMU($0) },
+          L("Emulates the PowerPC memory management unit. Required by a small number of games (e.g. some Star Wars titles) but adds CPU overhead on every memory access, so it hurts the framerate on this already CPU-bound build. Leave OFF unless a specific game needs it."))
+        rowWithCaption(
+          Toggle(L("Adaptive Clock (auto VI/CPU)"), isOn: $adaptiveClock),
+          L("Lets iCube auto-tune the emulated CPU/VI clock to trade accuracy for speed when frames run long. Experimental iCube option. Applies on next game launch."))
+        VStack(alignment: .leading, spacing: 4) {
+          Picker(L("Vertex Loader"), selection: $vertexLoaderMode) {
+            Text(L("Software")).tag(0)
+            Text(L("NEON SIMD (default)")).tag(1)
             Text(L("Compare (validate)")).tag(2)
           }
-          Spacer()
-          Image(systemName: "info.circle").help(L("Experimental ARM64 NEON SIMD vertex decoder. Compare runs NEON vs Software and asserts they match. Applies on next game launch."))
+          Text(L("How vertex data is decoded on the CPU. NEON SIMD is the fast default on Apple Silicon; Software is the slow reference path; Compare runs both and asserts they match (debug only — slowest). Leave on NEON SIMD. Applies on next game launch."))
+            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
-        Toggle(L("Pause on Panic"), isOn: $pauseOnPanic)
-          .onChange(of: pauseOnPanic) { DOLConfigBridge.setMainPauseOnPanic($0) }
-        HStack {
+        rowWithCaption(
+          Toggle(L("Pause on Panic"), isOn: $pauseOnPanic)
+            .onChange(of: pauseOnPanic) { DOLConfigBridge.setMainPauseOnPanic($0) },
+          L("Pauses emulation and shows a dialog when the core hits an internal error. Useful for debugging; leave OFF for normal play."))
+        rowWithCaption(
           Toggle(L("Accurate CPU Cache (slower)"), isOn: $writeBackCache)
-            .onChange(of: writeBackCache) { DOLConfigBridge.setMainAccurateCpuCache($0) }
-          Spacer()
-          Image(systemName: "info.circle").help(L("Improves correctness of CPU cache emulation, but significantly reduces performance."))
-        }
-        HStack {
+            .onChange(of: writeBackCache) { DOLConfigBridge.setMainAccurateCpuCache($0) },
+          L("Emulates the PowerPC data cache more precisely. Fixes a few games that depend on cache timing, but noticeably slows the interpreter. Leave OFF unless a game misbehaves without it."))
+        rowWithCaption(
           Toggle(L("Bypass Instruction Cache"), isOn: $disableICache)
-            .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) }
-          Spacer()
-          Image(systemName: "info.circle").help(L("Skips emulation of I-Cache behavior. Can improve performance but may cause bugs. Usually keep off."))
-        }
-        HStack {
+            .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) },
+          L("Skips emulation of the PowerPC instruction cache. Can give a small CPU speedup but may cause bugs in games that rely on I-cache behavior. Usually keep OFF."))
+        rowWithCaption(
           Toggle(L("Fast FP (Cached Interpreter, experimental)"), isOn: $fpFast)
-            .onChange(of: fpFast) { DOLConfigBridge.setMainFpFast($0) }
-          Spacer()
-          Image(systemName: "exclamationmark.triangle").help(L("Enables faster floating-point paths in the Cached Interpreter. Experimental and may cause incorrect behavior in some games. Off by default."))
-        }
-        HStack {
+            .onChange(of: fpFast) { DOLConfigBridge.setMainFpFast($0) },
+          L("⚠️ Uses faster, less-accurate floating-point paths in the Cached Interpreter. May speed up CPU-bound games but can cause wrong physics, audio, or graphics. Experimental — OFF by default."))
+        rowWithCaption(
           Toggle(L("CachedInterpreter Prefetch (Apple Silicon)"), isOn: $cachedInterpreterPrefetch)
-            .onChange(of: cachedInterpreterPrefetch) { DOLConfigBridge.setMainCachedInterpreterPrefetch($0) }
-          Spacer()
-          Image(systemName: "info.circle").help(L("Software-prefetch hints in the CachedInterpreter hot loop. On by default. A/B knob for the Apple-Silicon prefetch hypothesis; applies on next game launch."))
-        }
-        HStack {
+            .onChange(of: cachedInterpreterPrefetch) { DOLConfigBridge.setMainCachedInterpreterPrefetch($0) },
+          L("Adds software-prefetch hints to the Cached Interpreter hot loop on Apple Silicon. ON by default and generally a small win on the CPU-bound path; an A/B knob you can turn off to compare. Applies on next game launch."))
+        rowWithCaption(
           Toggle(L("NEON Texture Decoder"), isOn: $neonTextureDecode)
-            .onChange(of: neonTextureDecode) { DOLConfigBridge.setGfxHackNeonTextureDecode($0) }
-          Spacer()
-          Image(systemName: "info.circle").help(L("ARM64 NEON SIMD texture decoder. On by default; off falls back to the scalar reference decoder. A/B knob; applies on next game launch."))
-        }
-        Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
-          .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) }
+            .onChange(of: neonTextureDecode) { DOLConfigBridge.setGfxHackNeonTextureDecode($0) },
+          L("ARM64 NEON SIMD texture decoder. ON by default; turning it off falls back to the slower scalar decoder. A/B knob. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
+            .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) },
+          L("Skips part of the dcbz (data-cache-block-zero) instruction. Can speed up a few games but breaks others (notably some Wii titles). Leave OFF unless you know a game needs it."))
         // CPU Idle Detection / Fast-Forward
-        Toggle(L("Relaxed Idle Loop Detection"), isOn: $relaxedIdleDetection)
-          .onChange(of: relaxedIdleDetection) { DOLConfigBridge.setMainRelaxedIdleDetection($0) }
-        Toggle(L("Fast-Forward CTR Idle Loops"), isOn: $fastForwardCtrIdle)
-          .onChange(of: fastForwardCtrIdle) { DOLConfigBridge.setMainFastForwardCtrIdle($0) }
+        rowWithCaption(
+          Toggle(L("Relaxed Idle Loop Detection"), isOn: $relaxedIdleDetection)
+            .onChange(of: relaxedIdleDetection) { DOLConfigBridge.setMainRelaxedIdleDetection($0) },
+          L("Detects more idle loops so the CPU can skip busy-waiting. ON helps reclaim CPU time on the bottlenecked interpreter; very rarely affects timing. Default ON."))
+        rowWithCaption(
+          Toggle(L("Fast-Forward CTR Idle Loops"), isOn: $fastForwardCtrIdle)
+            .onChange(of: fastForwardCtrIdle) { DOLConfigBridge.setMainFastForwardCtrIdle($0) },
+          L("Fast-forwards counter-based idle loops instead of emulating every iteration. Can recover CPU headroom; may slightly affect timing-sensitive games. iCube tuning knob."))
       }
 
       Section(header: Text(L("Clock Override")), footer: Text(L("Adjusts the emulated CPU's clock rate. Can also be adjusted during gameplay via the in-game menu.\n\nHigher values may make variable-framerate games run at a higher framerate, at the expense of performance. Lower values may activate a game's internal frameskip, potentially improving performance.\n\nWARNING: Changing this from the default (100%) can and will break games and cause glitches. Do so at your own risk. Please do not report bugs that occur with a non-default clock."))) {
@@ -1919,7 +1924,31 @@ struct ConfigAdvancedView: View {
     .onAppear { syncAdvanced() }
   }
 
+  /// The engine label to display. On jitless builds a stored JIT core actually
+  /// runs as Cached Interpreter, so show that truth instead of the misleading
+  /// "JIT (recommended)" the raw config would imply.
+  private var effectiveCpuEngineLabel: String {
+    if !jitAvailable && (cpuEngine == .jit64 || cpuEngine == .jitARM64) {
+      return CpuEngine.cachedInterpreter.label
+    }
+    return cpuEngine.label
+  }
+
+  /// Wraps a control with an inline secondary-text description shown directly
+  /// under the row (instead of a hidden info popover).
+  @ViewBuilder
+  private func rowWithCaption<Content: View>(_ content: Content, _ caption: String) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      content
+      Text(caption)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
   private func syncAdvanced() {
+    jitAvailable = JitManager.shared().acquiredJit
     cpuEngine = CpuEngine.from(raw: DOLConfigBridge.mainCpuCore())
     mmu = DOLConfigBridge.mainMMU()
     // adaptiveClock / vertexLoaderMode are @AppStorage now — auto-loaded, no manual sync needed.
@@ -1964,10 +1993,21 @@ private enum CpuEngine: Int, CaseIterable {
 
 private struct CpuEnginePicker: View {
   @Binding var selected: CpuEngine
+  /// When false (App Store / jitless build), JIT engine choices are hidden
+  /// because the core cannot run them and silently falls back to the Cached
+  /// Interpreter at launch.
+  var jitAvailable: Bool = true
+  private var choices: [CpuEngine] {
+    jitAvailable ? CpuEngine.allCases : [.interpreter, .cachedInterpreter]
+  }
   var body: some View {
     List {
-      ForEach(Array(CpuEngine.allCases.enumerated()), id: \.offset) { _, value in
-        SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setMainCpuCore(value.rawValue) }
+      Section(footer: Text(jitAvailable
+                           ? L("Cached Interpreter and the JIT recompilers are faster; the plain Interpreter is the most accurate but far too slow for full-speed play.")
+                           : L("This build runs without a JIT entitlement, so only interpreter engines are available. Cached Interpreter is the recommended (and default) choice. Selecting a JIT engine on other builds would silently fall back to Cached Interpreter here."))) {
+        ForEach(Array(choices.enumerated()), id: \.offset) { _, value in
+          SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setMainCpuCore(value.rawValue) }
+        }
       }
     }
     .navigationTitle(L("CPU Emulation Engine"))
@@ -2583,18 +2623,30 @@ struct GraphicsGeneralView: View {
           Text("\(L("Aspect Ratio")): \(aspect.label)")
         }
         .onChange(of: aspect) { _ in DOLConfigBridge.setGfxAspectRatio(aspect.aspectRaw) }
-        Toggle(L("V-Sync"), isOn: $vSync)
-          .onChange(of: vSync) { newValue in DOLConfigBridge.setGfxVSync(newValue) }
-        Toggle(L("Show Auto IR OSD"), isOn: $showAutoIrOSD)
-          .onChange(of: showAutoIrOSD) { newValue in DOLConfigBridge.setGfxAutoIRShowOSD(newValue) }
-        Toggle(L("Triple Buffering"), isOn: $tripleBuffering)
-          .onChange(of: tripleBuffering) { newValue in UserDefaults.standard.set(newValue, forKey: "gfx_triple_buffering") }
-        Toggle(L("Force scale 1.0 on non‑ProMotion"), isOn: $forceScaleOneNonProMotion)
-          .onChange(of: forceScaleOneNonProMotion) { newValue in UserDefaults.standard.set(newValue, forKey: "gfx_force_scale_one_non_promo") }
-        Toggle(L("Asynchronous Present"), isOn: $asyncPresent)
-          .onChange(of: asyncPresent) { newValue in DOLConfigBridge.setGfxAsyncPresent(newValue) }
-        Toggle(L("Enable Auto Internal Resolution"), isOn: $autoIR)
-          .onChange(of: autoIR) { newValue in DOLConfigBridge.setGfxAutoIREnable(newValue) }
+        captionRow(
+          Toggle(L("V-Sync"), isOn: $vSync)
+            .onChange(of: vSync) { newValue in DOLConfigBridge.setGfxVSync(newValue) },
+          L("Syncs presentation to the display refresh to remove tearing. On iOS the compositor already syncs, so this has little effect; leave ON."))
+        captionRow(
+          Toggle(L("Show Auto IR OSD"), isOn: $showAutoIrOSD)
+            .onChange(of: showAutoIrOSD) { newValue in DOLConfigBridge.setGfxAutoIRShowOSD(newValue) },
+          L("Shows the resolution Auto Internal Resolution picks each frame as an on-screen overlay. Diagnostic only."))
+        captionRow(
+          Toggle(L("Triple Buffering"), isOn: $tripleBuffering)
+            .onChange(of: tripleBuffering) { newValue in UserDefaults.standard.set(newValue, forKey: "gfx_triple_buffering") },
+          L("Adds a third frame buffer to smooth pacing at a small latency/memory cost. Default ON; turn off only if you want minimum latency."))
+        captionRow(
+          Toggle(L("Force scale 1.0 on non‑ProMotion"), isOn: $forceScaleOneNonProMotion)
+            .onChange(of: forceScaleOneNonProMotion) { newValue in UserDefaults.standard.set(newValue, forKey: "gfx_force_scale_one_non_promo") },
+          L("On non-ProMotion (non-120 Hz) devices, render at a 1.0 backing scale to save GPU/bandwidth. Helps on older devices; leave OFF on ProMotion displays."))
+        captionRow(
+          Toggle(L("Asynchronous Present"), isOn: $asyncPresent)
+            .onChange(of: asyncPresent) { newValue in DOLConfigBridge.setGfxAsyncPresent(newValue) },
+          L("Presents finished frames on a background thread so the CPU thread isn't blocked waiting on the display. Helps on the CPU-bound interpreter; default ON."))
+        captionRow(
+          Toggle(L("Enable Auto Internal Resolution"), isOn: $autoIR)
+            .onChange(of: autoIR) { newValue in DOLConfigBridge.setGfxAutoIREnable(newValue) },
+          L("Dynamically scales internal resolution between Min and Max to hold the Target FPS. Useful when scenes are GPU-bound; has no benefit when the CPU is the limit (the usual case on iCube)."))
         NavigationLink(destination: GraphicsTargetFPSView(selected: $targetFPS)) {
           Text("\(L("Target FPS")): \(targetFPS.label)")
         }
@@ -2656,6 +2708,18 @@ struct GraphicsGeneralView: View {
       let s = UserDefaults.standard.integer(forKey: "replaykit_clip_seconds"); clipSeconds = (s > 0 ? s : 15)
     }
 #endif
+  }
+
+  /// Inline secondary-text description rendered under a control.
+  @ViewBuilder
+  private func captionRow<Content: View>(_ content: Content, _ caption: String) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      content
+      Text(caption)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
   }
 
   private func syncFromConfig() {
@@ -2843,7 +2907,7 @@ struct GraphicsEnhancementsView: View {
           .onChange(of: widescreenHack) { DOLConfigBridge.setGfxWidescreenHack($0) }
         Toggle(isOn: $hdrOutput) { labelWithInfo(L("HDR Output")) { helpMessage = helpTextHDROutput(); showHelp = true } }
           .onChange(of: hdrOutput) { DOLConfigBridge.setGfxEnhanceHDROutput($0) }
-        Toggle(isOn: $gpuTextureDecoding) { labelWithInfo(L("GPU Texture Decoding")) { helpMessage = L("Decodes textures on the GPU to reduce CPU load. May cause issues with some features such as Arbitrary Mipmap Detection."); showHelp = true } }
+        Toggle(isOn: $gpuTextureDecoding) { labelWithInfo(L("GPU Texture Decoding")) { helpMessage = L("Decodes textures on the GPU instead of the CPU.\n\nMay conflict with Arbitrary Mipmap Detection.\n\niOS note: moves work off the CPU thread — the bottleneck — so it can help CPU-bound titles that stream many textures, at some GPU cost. Worth trying. Note iCube also has a NEON CPU texture decoder (in Config ▸ Advanced) as the default fast path."); showHelp = true } }
           .onChange(of: gpuTextureDecoding) { DOLConfigBridge.setGfxEnableGPUTextureDecoding($0) }
       }, header: { Text(L("Enhancements")) })
       Section(content: {
@@ -2910,28 +2974,28 @@ struct GraphicsEnhancementsView: View {
 
   // MARK: - Help Text (UIKit parity)
   private func helpTextInternalResolution() -> String {
-    L("Controls the rendering resolution.\n\nA high resolution greatly improves visual quality, but also greatly increases GPU load and can cause issues in certain games. Generally speaking, the lower the internal resolution, the better performance will be.\n\nIf unsure, select Native.")
+    L("Controls the rendering resolution.\n\nA high resolution greatly improves visual quality, but also greatly increases GPU load and can cause issues in certain games. Generally speaking, the lower the internal resolution, the better performance will be.\n\niOS note: this is a GPU cost. iCube is usually CPU-bound (the jitless interpreter), so raising resolution often costs little until the GPU becomes the limit; lower it first if a GPU-heavy scene drops frames.\n\nIf unsure, select Native (1x).")
   }
   private func helpTextAnisotropy() -> String {
-    L("Adjust the texture filtering. Anisotropic filtering enhances the visual quality of textures that are at oblique viewing angles. Force Nearest and Force Linear override the texture scaling filter selected by the game.\n\nAny option except 'Default' will alter the look of the game's textures and might cause issues in a small number of games.\n\nIf unsure, select 'Default'.")
+    L("Adjusts texture filtering. Anisotropic filtering sharpens textures viewed at oblique angles.\n\nAny option above 1x slightly increases GPU load and can alter the look of textures in a few games.\n\niOS note: GPU-side cost only; rarely matters on the CPU-bound interpreter. Safe to raise unless a specific GPU-heavy scene struggles.\n\nIf unsure, select 1x.")
   }
   private func helpTextDisableFog() -> String {
-    L("Makes distant objects more visible by removing fog, thus increasing the overall detail.\n\nDisabling fog will break some games which rely on proper fog emulation.\n\nIf unsure, leave this unchecked.")
+    L("Removes distance fog, making far objects more visible.\n\nDisabling fog breaks games that rely on proper fog emulation (pop-in, wrong visibility).\n\niOS note: tiny GPU saving; almost never helps on iCube because the CPU interpreter is the limit, and it can cause visual glitches. Leave OFF unless you are clearly GPU-bound.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextDisableCopyFilter() -> String {
-    L("Disables the blending of adjacent rows when copying the EFB. This is known in some games as \"deflickering\" or \"smoothing\".\n\nDisabling the filter has no effect on performance, but may result in a sharper image. Causes few graphical issues.\n\nIf unsure, leave this checked.")
+    L("Disables the blending of adjacent rows when copying the EFB (some games call this \"deflickering\" or \"smoothing\").\n\nResults in a sharper image with no performance cost; causes few issues.\n\niOS note: image-quality choice only; no effect on the CPU-bound framerate.\n\nIf unsure, leave this checked.")
   }
   private func helpTextWidescreenHack() -> String {
-    L("Forces the game to output graphics for any aspect ratio. Use with \"Aspect Ratio\" set to \"Force 16:9\" to force 4:3-only games to run at 16:9.\n\nRarely produces good results and often partially breaks graphics and game UIs. Unnecessary (and detrimental) if using any AR/Gecko-code widescreen patches.\n\nIf unsure, leave this unchecked.")
+    L("Forces 4:3 games to render at a wider aspect ratio. Use with Aspect Ratio set to 16:9.\n\nOften partially breaks graphics and UIs, and is unnecessary (and harmful) if you use an AR/Gecko widescreen patch instead.\n\niOS note: display/aspect choice only; no framerate impact.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextForceTrueColor() -> String {
-    L("Forces the game to render the RGB color channels in 24-bit, thereby increasing quality by reducing color banding.\n\nHas no impact on performance and causes few graphical issues.\n\nIf unsure, leave this checked.")
+    L("Renders color in 24-bit to reduce banding.\n\nNo performance impact and few graphical issues.\n\niOS note: pure quality win; safe to leave on regardless of the CPU bottleneck.\n\nIf unsure, leave this checked.")
   }
   private func helpTextArbitraryMipmap() -> String {
-    L("Enables detection of arbitrary mipmaps, which some games use for special distance-based effects.\n\nMay have false positives that result in blurry textures at increased internal resolution, such as in games that use very low resolution mipmaps. Disabling this can also reduce stutter in games that frequently load new textures. This feature is not compatible with GPU Texture Decoding.\n\nIf unsure, leave this checked.")
+    L("Detects arbitrary mipmaps that some games use for distance-based effects.\n\nCan cause blurry textures from false positives, and is incompatible with GPU Texture Decoding. Disabling can reduce stutter in games that stream many textures.\n\niOS note: mostly an accuracy/quality tradeoff; little framerate effect on the CPU-bound path.\n\nIf unsure, leave this checked.")
   }
   private func helpTextHDROutput() -> String {
-    L("Enables HDR output on supported displays. May improve perceived dynamic range and color on HDR-capable devices.")
+    L("Enables HDR output on supported displays for wider dynamic range and color.\n\niOS note: display feature; negligible performance cost. Only useful on HDR-capable screens.")
   }
 }
 
@@ -3026,8 +3090,16 @@ struct GraphicsHacksView: View {
           .onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
         Toggle(isOn: $fastMath) { labelWithInfo(L("Fast Math (Metal Shaders)")) { helpMessage = helpTextFastMath(); showHelp = true } }
           .onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) }
-        Toggle(isOn: $useComputeEfbXfb) { labelWithInfo(L("Use Compute for EFB/XFB")) { helpMessage = helpTextUseComputeEfbXfb(); showHelp = true } }
-          .onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
+        // NOTE: GFX_USE_COMPUTE_EFBXFB has no consumer in this Dolphin base
+        // (declared in GraphicsSettings + the bridge, but no video backend reads
+        // it). The toggle is inert, so it is disabled and labeled accordingly.
+        VStack(alignment: .leading, spacing: 4) {
+          Toggle(isOn: $useComputeEfbXfb) { labelWithInfo(L("Use Compute for EFB/XFB")) { helpMessage = helpTextUseComputeEfbXfb(); showHelp = true } }
+            .onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
+            .disabled(true)
+          Text(L("No effect on this build — this option is not wired to the renderer."))
+            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
         Toggle(isOn: $noMipmapping) { labelWithInfo(L("No Mipmapping (iOS)")) { helpMessage = helpTextNoMipmapping(); showHelp = true } }
           .onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) }
       }
@@ -3080,52 +3152,52 @@ struct GraphicsHacksView: View {
   }
 
   private func helpTextEfbAccess() -> String {
-    L("Allows the emulated CPU to read from the Embedded Framebuffer (EFB).\n\nTurning this off can improve performance but will break games that read the EFB for effects such as heat haze, soft particles, lens flares, and some UI elements.\n\nIf unsure, leave this enabled.")
+    L("Allows the emulated CPU to read the Embedded Framebuffer (EFB).\n\nTurning it off can help performance but breaks effects that read the EFB (heat haze, soft particles, lens flares, some UI).\n\niOS note: when a game does use EFB reads, those reads run on the CPU thread — the bottleneck — so this can matter here; but disabling it breaks visuals. Leave ON unless a game both needs the speed and tolerates the breakage.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextSkipEfbToRam() -> String {
-    L("Skips copying EFB contents to emulated RAM.\n\nImproves performance but breaks features that rely on CPU reads of the EFB. Symptoms include missing post-processing, reflections, heat haze, and broken UI in some games.\n\nIf unsure, leave this unchecked.")
+    L("Skips copying EFB contents to emulated RAM.\n\nImproves performance but breaks features that rely on CPU reads of the EFB (post-processing, reflections, heat haze, some UI).\n\niOS note: the skipped copy/readback is CPU-side, so this can recover real time on the bottlenecked interpreter — at the cost of broken effects in affected games.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextSkipXfbToRam() -> String {
-    L("Skips copying XFB (external framebuffer) to RAM.\n\nCan increase performance but breaks software XFB paths and some video output. May cause missing frames, flicker, or broken FMVs in certain titles.\n\nIf unsure, leave this unchecked.")
+    L("Skips copying the XFB (external framebuffer) to RAM.\n\nCan increase performance but breaks software XFB paths; may cause missing frames, flicker, or broken FMVs.\n\niOS note: CPU-side saving that can help the bottleneck, but the breakage is common — keep off unless a specific title benefits.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextImmediateXfb() -> String {
-    L("Renders directly from the EFB without using an emulated XFB buffer.\n\nReduces latency and may increase FPS, but can cause flickering, incorrect deinterlacing, or timing issues in games that rely on VI/XFB behavior.\n\nIf unsure, leave this unchecked.")
+    L("Renders directly from the EFB without an emulated XFB buffer.\n\nReduces latency and may raise FPS, but can cause flicker, bad deinterlacing, or timing issues.\n\niOS note: trims some CPU/sync work but is risky on VI-sensitive games. Leave off unless you specifically want lower latency.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextCopyEfbScaled() -> String {
-    L("Scales EFB copies to the current internal resolution.\n\nImproves clarity of post-processing effects at higher resolutions, but some games assume 1x EFB and can show overblown bloom, halos, or broken depth-based effects. Disabling may fix such glitches at a small quality cost.\n\nIf unsure, leave this enabled.")
+    L("Scales EFB copies to the current internal resolution.\n\nSharpens post-processing at higher resolutions, but some games assume 1x EFB and show overblown bloom/halos or broken depth effects.\n\niOS note: GPU-side quality choice; little framerate effect on the CPU-bound path. Disable only to fix such glitches.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextEarlyXfbOutput() -> String {
-    L("Outputs XFB earlier in the pipeline.\n\nCan reduce display latency, but may cause animation jitter or timing issues in titles sensitive to VI scheduling.\n\nIf unsure, leave this enabled.")
+    L("Outputs the XFB earlier in the pipeline.\n\nReduces display latency, but may cause jitter or timing issues in VI-sensitive titles.\n\niOS note: latency/pacing tweak; negligible framerate effect. Default ON.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextSkipDuplicateXFBs() -> String {
-    L("Skips presenting duplicate XFB fields/frames.\n\nImproves performance and reduces bandwidth when games output identical fields, but in rare cases can affect frame pacing or cause minor audio/video sync issues.\n\nIf unsure, leave this enabled.")
+    L("Skips presenting duplicate XFB fields/frames.\n\nSaves work and bandwidth when games output identical fields; rarely affects pacing or A/V sync.\n\niOS note: small saving on both CPU and GPU; safe. Default ON.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextEmulateEfbFormatChanges() -> String {
-    L("Accurately emulates EFB format/precision changes.\n\nFixes color conversion and post-process issues in many games. Disabling can improve performance but may cause incorrect colors or missing effects.\n\nIf unsure, leave this enabled.")
+    L("Accurately emulates EFB format/precision changes.\n\nFixes color and post-process issues in many games. Disabling can help speed but may cause wrong colors or missing effects.\n\niOS note: accuracy vs a modest CPU/GPU saving; the breakage usually isn't worth it. Default ON.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextVertexRounding() -> String {
-    L("Rounds vertex positions to reduce subpixel jitter.\n\nOften improves stability of 2D elements and reduces shimmering, but can slightly distort geometry in some 3D scenes. Minor performance impact.\n\nIf unsure, leave this enabled.")
+    L("Rounds vertex positions to reduce subpixel jitter.\n\nStabilizes 2D elements and reduces shimmering; can slightly distort 3D geometry.\n\niOS note: minor cost; quality choice rather than a performance one.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextForceProgressive() -> String {
-    L("Forces games to output progressive scan instead of interlaced fields.\n\nReduces flicker and may reduce latency, but some games expect interlacing and can exhibit timing or presentation issues.\n\nIf unsure, leave this unchecked.")
+    L("Forces progressive scan instead of interlaced fields.\n\nReduces flicker and may cut latency, but some games expect interlacing.\n\niOS note: presentation choice; no meaningful framerate impact.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextDeferEfbCopies() -> String {
-    L("Queues and defers EFB copies to reduce stalls.\n\nCan increase performance, but may change the ordering of copies and break effects that rely on immediate results (e.g., heat haze, mirrors).\n\nIf unsure, leave this unchecked.")
+    L("Queues and defers EFB copies to reduce pipeline stalls.\n\nCan increase performance but reorders copies and may break effects that need immediate results (heat haze, mirrors).\n\niOS note: can reduce CPU-thread stalls on the bottleneck — a real potential win — but verify visuals per game.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextViSkipMode() -> String {
-    L("Skips VI (Video Interface) updates to increase performance.\n\nOn: Always skip, highest FPS but visible temporal artifacts or flicker. Auto: Skips when likely safe. Off: Most accurate.\n\nIf unsure, select Auto or Off.")
+    L("Skips VI (Video Interface) updates to raise FPS.\n\nOn: always skip (highest FPS, visible artifacts/flicker). Auto: skip when likely safe. Off: most accurate.\n\niOS note: this directly cuts per-frame CPU work, so it can help on the bottlenecked interpreter — at the cost of temporal artifacts. Try Auto if you need frames.\n\nIf unsure, select Auto or Off.")
   }
   private func helpTextFastTextureSampling() -> String {
-    L("Uses a faster, less accurate texture sampling path.\n\nCan improve performance on some GPUs, but may cause visible artifacts such as banding, seams, or vertical lines in FMVs in certain titles. Disable if you see texture anomalies.\n\nIf unsure, leave this enabled.")
+    L("Uses a faster, less accurate texture-sampling path.\n\nCan help on some GPUs but may cause banding, seams, or vertical lines in FMVs.\n\niOS note: GPU-side; rarely changes the CPU-bound framerate. Disable if you see texture artifacts. Default ON.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextFastMath() -> String {
-    L("Enables fast-math optimizations in Metal shaders.\n\nImproves performance by relaxing IEEE precision rules. Can introduce subtle differences in lighting or rare shader bugs in edge cases.\n\nIf unsure, leave this unchecked.")
+    L("Enables fast-math optimizations in iCube's Metal shaders.\n\nRelaxes IEEE precision for speed; can cause subtle lighting differences or rare shader bugs.\n\niOS note: GPU-side optimization; helps only when GPU-bound and won't move the CPU bottleneck. Default OFF.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextUseComputeEfbXfb() -> String {
-    L("Uses compute shaders for EFB/XFB operations.\n\nMay improve performance on some GPUs (especially tile-based/mobile), but is more experimental and can cause graphical or timing issues in certain games.\n\nIf unsure, leave this unchecked.")
+    L("DISABLED — no effect on this build.\n\nThis setting (Hacks/UseComputeEfbXfb) exists in the config but is not read by any video backend in iCube's current Dolphin base, so toggling it does nothing. It is left visible (disabled) for transparency and may be wired up or removed in a future update.")
   }
   private func helpTextNoMipmapping() -> String {
-    L("Disables texture mipmapping (iOS only).\n\nCan work around driver-specific issues in rare cases, but typically increases shimmering/aliasing and can hurt performance due to cache inefficiency.\n\nIf unsure, leave this unchecked.")
+    L("Disables texture mipmapping.\n\nA workaround for rare driver bugs; normally increases shimmering/aliasing and can hurt performance via texture-cache inefficiency.\n\niOS note: GPU-side; leave OFF — it usually makes things both uglier and slightly slower.\n\nIf unsure, leave this unchecked.")
   }
 }
 
