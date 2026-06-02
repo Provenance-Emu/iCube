@@ -84,6 +84,40 @@ const Info<u32> GFX_MSAA{{System::GFX, "Settings", "MSAA"}, 1};
 const Info<bool> GFX_SSAA{{System::GFX, "Settings", "SSAA"}, false};
 const Info<int> GFX_EFB_SCALE{{System::GFX, "Settings", "InternalResolution"}, 1};
 const Info<int> GFX_MAX_EFB_SCALE{{System::GFX, "Settings", "MaxInternalResolution"}, 12};
+
+// Auto Internal Resolution Controller (iCube) — config keys; controller logic ported in the GFX cluster.
+const Info<bool> GFX_AUTO_IR_ENABLE{{System::GFX, "Settings", "AutoInternalResolution"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                     true
+#else
+                                     false
+#endif
+};
+const Info<int> GFX_AUTO_IR_TARGET_FPS{{System::GFX, "Settings", "AutoIRTargetFPS"}, 60};
+const Info<int> GFX_AUTO_IR_MIN_SCALE{{System::GFX, "Settings", "AutoIRMinScale"}, 1};
+const Info<int> GFX_AUTO_IR_MAX_SCALE{{System::GFX, "Settings", "AutoIRMaxScale"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                       4
+#else
+                                       12
+#endif
+};
+const Info<int> GFX_AUTO_IR_COOLDOWN_FRAMES{{System::GFX, "Settings", "AutoIRCooldownFrames"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                             90
+#else
+                                             60
+#endif
+};
+const Info<int> GFX_AUTO_IR_HYSTERESIS_PERCENT{{System::GFX, "Settings", "AutoIRHysteresisPct"},
+                                                12};
+const Info<bool> GFX_AUTO_IR_SHOW_OSD{{System::GFX, "Settings", "AutoIRShowOSD"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                      true
+#else
+                                      false
+#endif
+};
 const Info<bool> GFX_TEXFMT_OVERLAY_ENABLE{{System::GFX, "Settings", "TexFmtOverlayEnable"}, false};
 const Info<bool> GFX_TEXFMT_OVERLAY_CENTER{{System::GFX, "Settings", "TexFmtOverlayCenter"}, false};
 const Info<bool> GFX_ENABLE_WIREFRAME{{System::GFX, "Settings", "WireFrame"}, false};
@@ -201,6 +235,14 @@ const Info<bool> GFX_HACK_EFB_EMULATE_FORMAT_CHANGES{
     {System::GFX, "Hacks", "EFBEmulateFormatChanges"}, false};
 const Info<bool> GFX_HACK_VERTEX_ROUNDING{{System::GFX, "Hacks", "VertexRounding"}, false};
 const Info<bool> GFX_HACK_VI_SKIP{{System::GFX, "Hacks", "VISkip"}, false};
+// iCube tri-state VI-skip mode (Off/On/Auto) — config key; CoreTiming logic ported in the GFX cluster.
+const Info<TriState> GFX_HACK_VI_SKIP_MODE{{System::GFX, "Hacks", "VISkipMode"},
+#ifdef __APPLE__
+                                           TriState::Auto
+#else
+                                           TriState::Off
+#endif
+};
 const Info<u32> GFX_HACK_MISSING_COLOR_VALUE{{System::GFX, "Hacks", "MissingColorValue"},
                                              0xFFFFFFFF};
 const Info<bool> GFX_HACK_FAST_TEXTURE_SAMPLING{{System::GFX, "Hacks", "FastTextureSampling"},
@@ -212,5 +254,30 @@ const Info<bool> GFX_HACK_NO_MIPMAPPING{{System::GFX, "Hacks", "NoMipmapping"}, 
 // Graphics.GameSpecific
 
 const Info<bool> GFX_PERF_QUERIES_ENABLE{{System::GFX, "GameSpecific", "PerfQueriesEnable"}, false};
+
+// --- iCube re-baseline: carried custom Config keys ---
+const Info<bool> GFX_ASYNC_PRESENT{{System::GFX, "Settings", "AsyncPresent"},
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
+                                   true
+#else
+                                   false
+#endif
+};
+
+const Info<bool> GFX_HACK_FAST_MATH{{System::GFX, "Hacks", "FastMath"}, true};
+
+const Info<bool> GFX_HACK_GPU_EFB_PEEK_RESOLVE{{System::GFX, "Hacks", "GPUEFBPeekResolve"}, false};
+
+const Info<bool> GFX_HACK_NEON_TEXTURE_DECODE{{System::GFX, "Hacks", "NEONTextureDecode"}, true};
+
+const Info<bool> GFX_HACK_VI_DECIMATE_INTERLACE{{System::GFX, "Hacks", "VIDecimateInterlace"},
+#ifdef __APPLE__
+                                                  false
+#else
+                                                  false
+#endif
+};
+
+const Info<bool> GFX_USE_COMPUTE_EFBXFB{{System::GFX, "Hacks", "UseComputeEfbXfb"}, false};
 
 }  // namespace Config

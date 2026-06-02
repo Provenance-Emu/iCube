@@ -81,6 +81,15 @@ extern const Info<u32> GFX_MSAA;
 extern const Info<bool> GFX_SSAA;
 extern const Info<int> GFX_EFB_SCALE;
 extern const Info<int> GFX_MAX_EFB_SCALE;
+
+// Auto Internal Resolution Controller (iCube; controller logic lands in the GFX cluster)
+extern const Info<bool> GFX_AUTO_IR_ENABLE;
+extern const Info<int> GFX_AUTO_IR_TARGET_FPS;
+extern const Info<int> GFX_AUTO_IR_MIN_SCALE;
+extern const Info<int> GFX_AUTO_IR_MAX_SCALE;
+extern const Info<int> GFX_AUTO_IR_COOLDOWN_FRAMES;
+extern const Info<int> GFX_AUTO_IR_HYSTERESIS_PERCENT;
+extern const Info<bool> GFX_AUTO_IR_SHOW_OSD;
 extern const Info<bool> GFX_TEXFMT_OVERLAY_ENABLE;
 extern const Info<bool> GFX_TEXFMT_OVERLAY_CENTER;
 extern const Info<bool> GFX_ENABLE_WIREFRAME;
@@ -174,6 +183,8 @@ extern const Info<bool> GFX_HACK_COPY_EFB_SCALED;
 extern const Info<bool> GFX_HACK_EFB_EMULATE_FORMAT_CHANGES;
 extern const Info<bool> GFX_HACK_VERTEX_ROUNDING;
 extern const Info<bool> GFX_HACK_VI_SKIP;
+// iCube tri-state VI-skip mode: Off/On/Auto (supersedes the bool above; logic in the GFX cluster)
+extern const Info<TriState> GFX_HACK_VI_SKIP_MODE;
 extern const Info<u32> GFX_HACK_MISSING_COLOR_VALUE;
 extern const Info<bool> GFX_HACK_FAST_TEXTURE_SAMPLING;
 #ifdef __APPLE__
@@ -191,5 +202,13 @@ extern const Info<std::string> GFX_DRIVER_LIB_NAME;
 // Vertex loader
 
 extern const Info<VertexLoaderType> GFX_VERTEX_LOADER_TYPE;
+
+// --- iCube re-baseline: carried custom Config keys ---
+extern const Info<bool> GFX_ASYNC_PRESENT;
+extern const Info<bool> GFX_HACK_FAST_MATH;
+extern const Info<bool> GFX_HACK_GPU_EFB_PEEK_RESOLVE;
+extern const Info<bool> GFX_HACK_NEON_TEXTURE_DECODE;
+extern const Info<bool> GFX_HACK_VI_DECIMATE_INTERLACE;
+extern const Info<bool> GFX_USE_COMPUTE_EFBXFB;
 
 }  // namespace Config

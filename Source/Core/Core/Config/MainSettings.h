@@ -401,4 +401,10 @@ std::string GetGCIFolderPath(std::string configured_folder, ExpansionInterface::
 bool IsDefaultGCIFolderPathConfigured(ExpansionInterface::Slot slot);
 bool AreCheatsEnabled();
 bool IsDebuggingEnabled();
+// --- iCube re-baseline: carried custom Config keys ---
+extern const Info<bool> MAIN_CACHED_INTERPRETER_PREFETCH;
+extern const Info<bool> MAIN_FAST_FORWARD_CTR_IDLE;
+extern const Info<bool> MAIN_FP_FAST;
+extern const Info<bool> MAIN_RELAXED_IDLE_DETECTION;
+
 }  // namespace Config

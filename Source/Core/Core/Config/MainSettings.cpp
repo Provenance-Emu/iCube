@@ -795,4 +795,15 @@ bool IsDebuggingEnabled()
          !AchievementManager::GetInstance().IsHardcoreModeActive();
 }
 
+// --- iCube re-baseline: carried custom Config keys ---
+const Info<bool> MAIN_CACHED_INTERPRETER_PREFETCH{{System::Main, "Core", "CachedInterpreterPrefetch"}, true};
+
+// iOS/tvOS-only fork: these idle-detection toggles default ON (the value of Joe's
+// kDefault* constexprs on Apple mobile); inlined to avoid carrying the platform-guard block.
+const Info<bool> MAIN_FAST_FORWARD_CTR_IDLE{{System::Main, "Core", "FastForwardCtrIdle"}, true};
+
+const Info<bool> MAIN_FP_FAST{{System::Main, "Core", "FpFast"}, false};
+
+const Info<bool> MAIN_RELAXED_IDLE_DETECTION{{System::Main, "Core", "RelaxedIdleDetection"}, true};
+
 }  // namespace Config
