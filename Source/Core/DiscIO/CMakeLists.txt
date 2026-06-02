@@ -86,3 +86,13 @@ if(MSVC)
   # Add precompiled header
   target_link_libraries(discio PRIVATE use_pch)
 endif()
+
+# HttpBlobReader (HTTP/WebDAV game streaming) uses CFNetwork's CFReadStream HTTP API
+# (kCFStreamPropertyHTTPResponseHeader, etc.) on Apple platforms.
+if(APPLE)
+  find_library(CFNETWORK_LIBRARY CFNetwork)
+  find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+  # PUBLIC: discio is a static lib, so the framework requirement must propagate to whatever
+  # links discio into the final dylib (else the HttpBlobReader CFNetwork symbols stay undefined).
+  target_link_libraries(discio PUBLIC ${CFNETWORK_LIBRARY} ${COREFOUNDATION_LIBRARY})
+endif()
