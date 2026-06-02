@@ -1,0 +1,71 @@
+name: Lint
+
+# Lint/format only -- intentionally NOT a build.
+# The xcframework build needs a big self-hosted runner (it OOMs heavy -Ofast TUs);
+# the existing build.yml / release.yml already cover building on [self-hosted, macOS].
+# This job stays cheap and fast on a GitHub-hosted runner so PRs get quick feedback.
+
+on:
+  pull_request:
+  push:
+    branches: [ feature/rebaseline-2509 ]
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift (swiftlint + swiftformat)
+    runs-on: macos-latest
+    # Advisory until the Swift agent lands .swiftlint.yml / .swiftformat: with no
+    # config the tools use their defaults, which is noisy. Flip to false once the
+    # project configs exist and the codebase is clean against them.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        # No submodules: lint doesn't need the Externals/ C++ tree.
+
+      - name: Install tools
+        run: |
+          # swiftlint ships preinstalled on the macos-latest image.
+          brew list swiftformat >/dev/null 2>&1 || brew install swiftformat
+          swiftlint version
+          swiftformat --version
+
+      - name: swiftformat --lint (Source/iOS/App)
+        run: swiftformat --lint Source/iOS/App
+
+      - name: swiftlint (Source/iOS/App)
+        run: swiftlint lint --quiet Source/iOS/App
+
+  clang-format:
+    name: clang-format (iCube ObjC/ObjC++/C++)
+    runs-on: macos-latest
+    # Advisory: the checked-in iCube ObjC/C++ tree is not yet clang-formatted
+    # (~12k violations vs Dolphin's Source/.clang-format). Until a one-time format
+    # pass lands, this job reports but does not block. Flip to false after that pass.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          brew list clang-format >/dev/null 2>&1 || brew install clang-format
+          clang-format --version
+
+      - name: clang-format --dry-run -Werror (Source/iOS)
+        # iCube ObjC/ObjC++/C/C++ only. The upstream C++ core under Source/Core is
+        # intentionally excluded. clang-format auto-discovers Source/.clang-format.
+        run: |
+          set -euo pipefail
+          files=$(git ls-files \
+            'Source/iOS/*.mm' 'Source/iOS/*.m' 'Source/iOS/*.cpp' \
+            'Source/iOS/*.cc' 'Source/iOS/*.h'  'Source/iOS/*.hpp')
+          if [ -z "$files" ]; then
+            echo "No iCube ObjC/C++ files found; nothing to check."
+            exit 0
+          fi
+          # git ls-files is newline-separated; xargs splits on newlines.
+          echo "$files" | xargs clang-format --dry-run -Werror

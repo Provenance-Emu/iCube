@@ -1,0 +1,32 @@
+iCube / dolphin-ios git hooks
+=============================
+
+Enable (once per clone or worktree):
+
+    git config core.hooksPath .githooks
+
+The pre-commit hook runs hygiene checks on STAGED files only (fast):
+
+  - Swift under Source/iOS/App/   -> swiftformat --lint + swiftlint
+  - iCube ObjC/ObjC++/C/C++ under Source/iOS/ -> clang-format --dry-run -Werror
+        (uses Dolphin's Source/.clang-format via auto-discovery; the upstream
+         C++ core under Source/Core is intentionally NOT format-checked here)
+  - Source/Core/**.{cpp,h}        -> /tmp/syncheck.py syntax check, ONLY if that
+        dev tool and a build-iphoneos-Release/compile_commands.json exist
+        (normally absent -> silently skipped)
+
+Modes (env vars):
+
+    git commit                        # warn-only (default): prints findings, still commits
+    ICUBE_HOOK_BLOCK=1 git commit     # block: lint *findings* abort the commit
+    ICUBE_HOOK_SKIP=1  git commit     # skip all hygiene checks
+
+Resilience:
+  - A missing dev tool (swiftformat/swiftlint/clang-format/python3) is always a
+    skip-with-warning, never a failure -- even in blocking mode. Blocking mode
+    only blocks on real lint/format findings.
+  - A missing .swiftlint.yml / .swiftformat is not fatal (tools fall back to
+    defaults). Those configs are owned by the Swift side of the project.
+
+Overrides:
+    ICUBE_SYNCHECK=/path/to/syncheck.py   # point at a non-default syncheck

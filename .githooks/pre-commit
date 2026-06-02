@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+#
+# iCube / dolphin-ios pre-commit hygiene hook (staged files only, fast).
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+#
+# What it checks (only on files staged in this commit, filtered to Added/Copied/Modified):
+#   - Swift under Source/iOS/App/  -> swiftformat --lint  + swiftlint --quiet
+#   - iCube ObjC/ObjC++/C/C++ under Source/iOS/  -> clang-format --dry-run -Werror
+#       (uses Dolphin's existing Source/.clang-format via clang-format's auto-discovery;
+#        the upstream C++ core under Source/Core is intentionally NOT touched here)
+#   - Source/Core/**.{cpp,h} -> /tmp/syncheck.py syntax check IF that dev tool + a
+#       compile_commands.json are present (normally absent -> silently skipped)
+#
+# Failure modes:
+#   - A missing dev tool (swiftformat/swiftlint/clang-format/syncheck) is ALWAYS a
+#     skip-with-warning, never a failure -- even in blocking mode.
+#   - A missing config (.swiftlint.yml/.swiftformat owned by another agent) is not fatal;
+#     the tool falls back to its defaults and we keep going.
+#
+# Warn vs. block:
+#   - Default: WARN only. Lint findings are printed but the commit proceeds (exit 0).
+#   - Blocking: set ICUBE_HOOK_BLOCK=1 to make lint *findings* abort the commit.
+#       git commit                  # warn-only
+#       ICUBE_HOOK_BLOCK=1 git commit   # block on findings
+#   - Skip everything: ICUBE_HOOK_SKIP=1 git commit
+
+set -u
+
+# ---- mode ---------------------------------------------------------------
+if [ "${ICUBE_HOOK_SKIP:-0}" = "1" ]; then
+  echo "[pre-commit] ICUBE_HOOK_SKIP=1 -> skipping all hygiene checks."
+  exit 0
+fi
+
+BLOCK="${ICUBE_HOOK_BLOCK:-0}"
+FINDINGS=0   # set when a tool reports a real lint/format finding
+
+note()  { printf '[pre-commit] %s\n' "$1"; }
+warn()  { printf '[pre-commit] \033[33mwarn:\033[0m %s\n' "$1" >&2; }
+found() { printf '[pre-commit] \033[31mfinding:\033[0m %s\n' "$1" >&2; FINDINGS=1; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# Repo root (works under worktrees too).
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || REPO_ROOT="."
+
+# ---- staged file lists --------------------------------------------------
+# ACM = Added / Copied / Modified. Deleted/renamed-away files are excluded so we
+# never lint a path that no longer exists.
+staged() { git diff --cached --name-only --diff-filter=ACM -z; }
+
+SWIFT_FILES=()
+CLANG_FILES=()
+CORE_CPP_FILES=()
+
+while IFS= read -r -d '' f; do
+  case "$f" in
+    Source/iOS/App/*.swift)
+      SWIFT_FILES+=("$f") ;;
+    Source/iOS/*.mm|Source/iOS/*.m|Source/iOS/*.cpp|Source/iOS/*.cc|Source/iOS/*.h|Source/iOS/*.hpp)
+      CLANG_FILES+=("$f") ;;
+  esac
+  case "$f" in
+    Source/Core/*.cpp|Source/Core/*.h)
+      CORE_CPP_FILES+=("$f") ;;
+  esac
+done < <(staged)
+
+if [ "${#SWIFT_FILES[@]}" -eq 0 ] && [ "${#CLANG_FILES[@]}" -eq 0 ] && [ "${#CORE_CPP_FILES[@]}" -eq 0 ]; then
+  note "no relevant staged files; nothing to check."
+  exit 0
+fi
+
+# ---- Swift: swiftformat --lint -----------------------------------------
+if [ "${#SWIFT_FILES[@]}" -gt 0 ]; then
+  if have swiftformat; then
+    # --lint: report only, never rewrite. Uses .swiftformat if present, else defaults.
+    if ! swiftformat --lint "${SWIFT_FILES[@]}" >/dev/null 2>&1; then
+      found "swiftformat --lint reported formatting issues:"
+      swiftformat --lint "${SWIFT_FILES[@]}" >&2 || true
+    fi
+  else
+    warn "swiftformat not found -> skipping Swift format check."
+  fi
+
+  # ---- Swift: swiftlint ------------------------------------------------
+  if have swiftlint; then
+    # Lint only the staged files. SwiftLint reads .swiftlint.yml via discovery
+    # (other agent owns that config; absent -> SwiftLint uses its defaults).
+    out="$(swiftlint lint --quiet "${SWIFT_FILES[@]}" 2>&1)"
+    if [ -n "$out" ]; then
+      found "swiftlint reported issues:"
+      printf '%s\n' "$out" >&2
+    fi
+  else
+    warn "swiftlint not found -> skipping Swift lint."
+  fi
+fi
+
+# ---- iCube ObjC/ObjC++/C++: clang-format --dry-run -Werror -------------
+# Relies on clang-format auto-discovering Source/.clang-format (Dolphin's canonical
+# style) by walking up from each file. We do NOT pass -style; discovery handles it.
+if [ "${#CLANG_FILES[@]}" -gt 0 ]; then
+  if have clang-format; then
+    if ! clang-format --dry-run -Werror "${CLANG_FILES[@]}" 2>/dev/null; then
+      found "clang-format reported style violations in iCube ObjC/C++ (see above)."
+      clang-format --dry-run -Werror "${CLANG_FILES[@]}" >&2 || true
+    fi
+  else
+    warn "clang-format not found -> skipping iCube ObjC/C++ format check."
+  fi
+fi
+
+# ---- upstream core C++: optional /tmp/syncheck.py ----------------------
+# Dev-only convenience: a -fsyntax-only check driven by a compile_commands.json.
+# Both the script and the compile DB are normally ABSENT (script lives in /tmp);
+# that is the expected case and is a silent skip.
+SYNCHECK="${ICUBE_SYNCHECK:-/tmp/syncheck.py}"
+if [ "${#CORE_CPP_FILES[@]}" -gt 0 ]; then
+  if [ -f "$SYNCHECK" ] && [ -f "$REPO_ROOT/build-iphoneos-Release/compile_commands.json" ] && have python3; then
+    for f in "${CORE_CPP_FILES[@]}"; do
+      [ -f "$REPO_ROOT/$f" ] || continue
+      if ! python3 "$SYNCHECK" "$REPO_ROOT/$f" >/dev/null 2>&1; then
+        warn "syncheck reported a syntax issue in $f (advisory):"
+        python3 "$SYNCHECK" "$REPO_ROOT/$f" >&2 || true
+      fi
+    done
+  fi
+  # else: syncheck or compile DB absent -> silently skip (normal).
+fi
+
+# ---- verdict ------------------------------------------------------------
+if [ "$FINDINGS" -eq 1 ]; then
+  if [ "$BLOCK" = "1" ]; then
+    warn "ICUBE_HOOK_BLOCK=1 and findings present -> aborting commit."
+    warn "Fix the issues above, or commit with: ICUBE_HOOK_SKIP=1 git commit"
+    exit 1
+  fi
+  warn "findings present but warn-only mode (default) -> commit proceeds."
+  warn "To enforce, commit with: ICUBE_HOOK_BLOCK=1 git commit"
+fi
+
+exit 0
