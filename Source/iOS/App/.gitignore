@@ -91,3 +91,10 @@ iOSInjectionProject/
 
 # Python venv used during building
 venv
+
+# Tuist-generated artifacts (regenerated from Project.swift via `tuist generate`)
+iCube.xcodeproj/
+iCube.xcworkspace/
+Derived/
+.tuist-version
+Tuist/.build/
