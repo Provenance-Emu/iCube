@@ -82,7 +82,16 @@ static CachedInterpreter* s_validate_instance = nullptr;
   X(ori)     /* D-form: gpr[RA] = gpr[RS] | UIMM; pure GPR write */                                 \
   X(oris)    /* D-form: gpr[RA] = gpr[RS] | (UIMM<<16); pure GPR write */                           \
   X(orx)     /* X-form: gpr[RA] = gpr[RS] | gpr[RB]; +CR0 if Rc; no XER, no exceptions */           \
-  X(rlwinmx) /* M-form: gpr[RA] = rotl(gpr[RS],SH) & mask; +CR0 if Rc; no XER, no exceptions */
+  X(rlwinmx) /* M-form: gpr[RA] = rotl(gpr[RS],SH) & mask; +CR0 if Rc; no XER, no exceptions */ \
+  X(addx)    /* X-form: gpr[RD] = gpr[RA] + gpr[RB]; +CR0 if Rc, +XER_OV if OE; no exceptions */ \
+  X(subfx)   /* X-form: gpr[RD] = ~gpr[RA] + gpr[RB] + 1; +CR0 if Rc, +XER_OV if OE */ \
+  X(andx)    /* X-form: gpr[RA] = gpr[RS] & gpr[RB]; +CR0 if Rc; no XER, no exceptions */ \
+  X(andi_rc) /* D-form: gpr[RA] = gpr[RS] & UIMM; always +CR0; no XER, no exceptions */ \
+  X(xorx)    /* X-form: gpr[RA] = gpr[RS] ^ gpr[RB]; +CR0 if Rc; no XER, no exceptions */ \
+  X(slwx)    /* X-form: gpr[RA] = gpr[RS] << (gpr[RB]&0x3f); +CR0 if Rc; no exceptions */ \
+  X(srwx)    /* X-form: gpr[RA] = gpr[RS] >> (gpr[RB]&0x3f); +CR0 if Rc; no exceptions */ \
+  X(cmp)     /* X-form: CR[CRFD] = cmp(s32 RA, s32 RB); CR-only, reads XER_SO; no GPR write */ \
+  X(rlwimix) /* M-form: gpr[RA] = (gpr[RA]&~m)|(rotl(RS,SH)&m); +CR0 if Rc; no exceptions */
 
 // True if this opcode's chosen interpreter handler is on the specialized whitelist.
 static bool IsSpecializedOp(Interpreter::Instruction func)
