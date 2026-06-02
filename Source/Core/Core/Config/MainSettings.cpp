@@ -820,5 +820,26 @@ const Info<bool> MAIN_CIR_SPECIALIZED_OPS{{System::Main, "Core", "CIRSpecialized
 // the same Interpreter:: function). Default false; flip true during on-device correctness passes.
 const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE{
     {System::Main, "Core", "CIRSpecializedOpsValidate"}, false};
+// iCube: CachedInterpreter block linking. When a block ends at a STATIC direct branch (bx/bcx) whose
+// target block is already compiled with matching feature_flags, let the block continue DIRECTLY into
+// the target's callback stream instead of round-tripping through the dispatcher (Dispatch +
+// GetBlockFromStartAddress, ~3.6% on F-Zero). Reuses the upstream JitBaseBlockCache link/unlink
+// bookkeeping (FinalizeBlock(block_link)/LinkBlock/UnlinkBlock/DestroyBlock); the CIR only supplies
+// the trampoline emission and a real WriteLinkBlock that patches a relative distance. The link
+// callback ALWAYS re-checks the slice boundary (downcount<=0 -> exit so CoreTiming::Advance can
+// service the decrementer/external interrupts) and the npc==expected_pc guard (fail-safe: any
+// mismatch deopts to the dispatcher, never executes the wrong stream). Default false. RESEARCH-GRADE,
+// MEASUREMENT-GATED — never enable without an on-device correctness pass. See report / research notes.
+const Info<bool> MAIN_CIR_BLOCK_LINKING{{System::Main, "Core", "CIRBlockLinking"}, false};
+// iCube: self-validation for CIRBlockLinking. When true, the link callback — before following any
+// patched distance — re-resolves the next block the dispatcher WOULD have selected
+// (GetBlockFromStartAddress(npc, feature_flags)) and asserts (a) it exists, (b) its normalEntry is
+// exactly callback_site+distance (the patched rel is not stale and points at the right block),
+// (c) its feature_flags match the current ppc_state (no MSR/IR/DR context divergence across the
+// link), and (d) downcount>0 at the moment we follow. Catches stale-rel, wrong-target, and
+// feature-flag-divergence bugs directly. Slow (a map lookup per linked exit) — debug builds / on-
+// device correctness passes only. Default false.
+const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE{
+    {System::Main, "Core", "CIRBlockLinkingValidate"}, false};
 
 }  // namespace Config

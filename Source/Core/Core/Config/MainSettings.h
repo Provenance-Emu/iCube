@@ -409,5 +409,7 @@ extern const Info<bool> MAIN_RELAXED_IDLE_DETECTION;
 extern const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR;
 extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS;
 extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE;
+extern const Info<bool> MAIN_CIR_BLOCK_LINKING;
+extern const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE;
 
 }  // namespace Config
