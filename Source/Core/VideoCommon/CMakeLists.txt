@@ -182,6 +182,8 @@ add_library(videocommon
   VertexLoaderBase.h
   VertexLoaderManager.cpp
   VertexLoaderManager.h
+  VertexLoaderNEON.cpp
+  VertexLoaderNEON.h
   VertexLoaderUtils.h
   VertexLoader_Color.cpp
   VertexLoader_Color.h

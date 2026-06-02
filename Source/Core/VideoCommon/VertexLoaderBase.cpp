@@ -19,6 +19,7 @@
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 
+
 #include "VideoCommon/VertexLoader.h"
 #include "VideoCommon/VertexLoaderManager.h"
 #include "VideoCommon/VertexLoader_Color.h"
@@ -31,6 +32,7 @@
 #include "VideoCommon/VertexLoaderX64.h"
 #elif defined(_M_ARM_64)
 #include "VideoCommon/VertexLoaderARM64.h"
+#include "VideoCommon/VertexLoaderNEON.h"
 #endif
 
 // a hacky implementation to compare two vertex loaders
@@ -251,7 +253,12 @@ std::unique_ptr<VertexLoaderBase> VertexLoaderBase::CreateVertexLoader(const TVt
 #if defined(_M_X86_64)
   native_loader = std::make_unique<VertexLoaderX64>(vtx_desc, vtx_attr);
 #elif defined(_M_ARM_64)
-  native_loader = std::make_unique<VertexLoaderARM64>(vtx_desc, vtx_attr);
+  // iCube (jitless): NEON and Compare both build the NEON loader, so the built-in
+  // VertexLoaderTester (Compare) validates NEON bit-for-bit against the Software loader.
+  if (loader_type == VertexLoaderType::NEON || loader_type == VertexLoaderType::Compare)
+    native_loader = std::make_unique<VertexLoaderNEON>(vtx_desc, vtx_attr);
+  else
+    native_loader = std::make_unique<VertexLoaderARM64>(vtx_desc, vtx_attr);
 #endif
 
   // Use the software loader as a fallback

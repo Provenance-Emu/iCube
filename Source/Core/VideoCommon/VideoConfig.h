@@ -104,7 +104,8 @@ enum class VertexLoaderType : int
 {
   Native,
   Software,
-  Compare
+  Compare,
+  NEON  // jitless ARM64 NEON-SIMD CPU loader (iCube); validated against Software via Compare
 };
 
 // Bitmask containing information about which configuration has changed for the backend.
