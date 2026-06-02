@@ -406,5 +406,6 @@ extern const Info<bool> MAIN_CACHED_INTERPRETER_PREFETCH;
 extern const Info<bool> MAIN_FAST_FORWARD_CTR_IDLE;
 extern const Info<bool> MAIN_FP_FAST;
 extern const Info<bool> MAIN_RELAXED_IDLE_DETECTION;
+extern const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR;
 
 }  // namespace Config

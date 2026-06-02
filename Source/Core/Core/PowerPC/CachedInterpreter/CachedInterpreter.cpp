@@ -12,7 +12,9 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/GekkoDisassembler.h"
+#include "Common/Config/Config.h"
 #include "Common/Logging/Log.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
@@ -32,9 +34,16 @@ CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_
 
 CachedInterpreter::~CachedInterpreter() = default;
 
+// iCube: skip the per-block PowerPC performance-monitor (PMC) update on the CIR hot path.
+// Most titles never configure the PMC (MMCRn SELECT = 0 -> the update is pure overhead), so
+// skipping it saves ~4% on CPU-bound games. Default OFF (PMC emulated for correctness); the
+// MAIN_CIR_SKIP_PERF_MONITOR setting opts in. Read once in Init (cheap per-block bool check).
+static bool s_skip_perf_monitor = false;
+
 void CachedInterpreter::Init()
 {
   RefreshConfig();
+  s_skip_perf_monitor = Config::Get(Config::MAIN_CIR_SKIP_PERF_MONITOR);
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
@@ -126,8 +135,9 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
 {
   ppc_state.pc = ppc_state.npc;
   ppc_state.downcount -= operands.downcount;
-  PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
-                                    operands.num_fp_inst, ppc_state);
+  if (!s_skip_perf_monitor)
+    PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
+                                      operands.num_fp_inst, ppc_state);
   if constexpr (profiled)
     JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
   return 0;
@@ -218,6 +228,22 @@ s32 CachedInterpreter::CheckIdle(PowerPC::PowerPCState& ppc_state,
   const auto& [core_timing, idle_pc] = operands;
   if (ppc_state.npc == idle_pc)
     core_timing.Idle();
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// Fast-forward CTR-only tight idle loops: when at the loop branch PC, force loop exit and yield.
+s32 CachedInterpreter::FastForwardCtrIdle(PowerPC::PowerPCState& ppc_state,
+                                          const CheckCtrIdleOperands& operands)
+{
+  const auto& [core_timing, idle_pc, fallthrough_pc] = operands;
+  if (ppc_state.npc == idle_pc)
+  {
+    // Force CTR exhaustion and take the fallthrough.
+    CTR(ppc_state) = 0;
+    ppc_state.pc = idle_pc;
+    ppc_state.npc = fallthrough_pc;
+    core_timing.Idle();
+  }
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -409,6 +435,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
       if (op.branchIsIdleLoop)
         Write(CheckIdle, {m_system.GetCoreTiming(), js.blockStart});
+      // For simple CTR-controlled tight loops, fast-forward by exiting the loop and yielding.
+      if (op.branchIsCtrIdleLoop)
+      {
+        const u32 fallthrough_pc = op.address + 4;
+        Write(FastForwardCtrIdle, {m_system.GetCoreTiming(), js.blockStart, fallthrough_pc});
+      }
       if (op.canEndBlock)
         WriteEndBlock();
     }

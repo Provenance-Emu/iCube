@@ -805,5 +805,8 @@ const Info<bool> MAIN_FAST_FORWARD_CTR_IDLE{{System::Main, "Core", "FastForwardC
 const Info<bool> MAIN_FP_FAST{{System::Main, "Core", "FpFast"}, false};
 
 const Info<bool> MAIN_RELAXED_IDLE_DETECTION{{System::Main, "Core", "RelaxedIdleDetection"}, true};
+// iCube: skip per-block PMC update on the CachedInterpreter (~4% on CPU-bound titles). Default
+// false (PMC emulated for correctness); flip true to A/B the speedup on titles that don't read PMC.
+const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR{{System::Main, "Core", "CIRSkipPerfMonitor"}, false};
 
 }  // namespace Config

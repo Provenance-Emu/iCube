@@ -40,6 +40,7 @@ struct CodeOp  // 16B
   BitSet8 crOut;
   bool branchUsesCtr = false;
   bool branchIsIdleLoop = false;
+  bool branchIsCtrIdleLoop = false;
   BitSet8 wantsCR;
   bool wantsFPRF = false;
   bool wantsCA = false;

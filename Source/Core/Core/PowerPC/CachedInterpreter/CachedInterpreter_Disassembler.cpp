@@ -90,6 +90,14 @@ s32 CachedInterpreter::CheckIdle(std::ostream& stream, const CheckIdleOperands& 
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+s32 CachedInterpreter::FastForwardCtrIdle(std::ostream& stream, const CheckCtrIdleOperands& operands)
+{
+  const auto& [core_timing, idle_pc, fallthrough_pc] = operands;
+  fmt::println(stream, "FastForwardCtrIdle(idle_pc=0x{:08x}, fallthrough_pc=0x{:08x})", idle_pc,
+               fallthrough_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 static std::once_flag s_sorted_lookup_flag;
 
 std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& stream)
@@ -115,6 +123,7 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
       LOOKUP_KV(CachedInterpreter::CheckFPU),
       LOOKUP_KV(CachedInterpreter::CheckBreakpoint),
       LOOKUP_KV(CachedInterpreter::CheckIdle),
+      LOOKUP_KV(CachedInterpreter::FastForwardCtrIdle),
   });
 
 #undef LOOKUP_KV
