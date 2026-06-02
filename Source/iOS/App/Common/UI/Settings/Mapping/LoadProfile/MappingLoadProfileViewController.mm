@@ -34,14 +34,14 @@ struct Profile {
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  
+
   _profiles.clear();
-  
+
   for (const auto& filename : Common::DoFileSearch({self.inputConfig->GetUserProfileDirectoryPath()}, {".ini"}))
   {
     std::string basename;
     SplitPath(filename, nullptr, &basename, nullptr);
-    
+
     // Ignore files with an empty name to avoid multiple problems
     if (!basename.empty()) {
       _profiles.push_back({filename, basename, false});
@@ -52,22 +52,22 @@ struct Profile {
   {
     std::string basename;
     SplitPath(filename, nullptr, &basename, nullptr);
-    
+
     // We can't connect real Wii Remotes on iOS, so don't show this profile.
     if (basename == "Wii Remote with MotionPlus Pointing") {
       continue;
     }
-    
+
     // Don't show the Touchscreen profile if it exists
     if (basename == "Touchscreen" && self.filterTouchscreen) {
       continue;
     }
-    
+
     if (!basename.empty()) {
       _profiles.push_back({filename, basename, true});
     }
   }
-  
+
   [self.tableView reloadData];
 }
 
@@ -83,39 +83,42 @@ struct Profile {
 
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   MappingLoadProfileIniCell* iniCell = [tableView dequeueReusableCellWithIdentifier:@"IniCell" forIndexPath:indexPath];
-  
+
   const auto& profile = _profiles[indexPath.row];
-  
+
   NSString* profileName = CppToFoundationString(profile.name);
-  
+
   if (profile.isStock) {
     iniCell.nameLabel.text = [NSString stringWithFormat:DOLCoreLocalizedStringWithArgs(@"%1 (Stock)", @"@"), profileName];
   } else {
     iniCell.nameLabel.text = profileName;
   }
-  
+
   return iniCell;
 }
 
 - (void)tableView:(UITableView*)tableView didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
   const auto& profile = _profiles[indexPath.row];
-  
+
   Common::IniFile ini;
   ini.Load(profile.path);
 
+  const auto selectedDev = _emulatedController->GetDefaultDevice();
   _emulatedController->LoadConfig(ini.GetOrCreateSection("Profile"));
+  // Restore previously selected device if the profile specified a different one
+  _emulatedController->SetDefaultDevice(selectedDev);
   _emulatedController->UpdateReferences(g_controller_interface);
-  
+
   [self.delegate profileDidLoad:self];
-  
+
   // TODO: Localization
   UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Loaded" message:[NSString stringWithFormat:@"The profile \"%@\" was loaded.", CppToFoundationString(profile.name)] preferredStyle:UIAlertControllerStyleAlert];
   [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault handler:^(UIAlertAction*) {
     [self.navigationController dismissViewControllerAnimated:true completion: nil];
   }]];
-  
+
   [self presentViewController:alert animated:true completion:nil];
-  
+
   [tableView deselectRowAtIndexPath:indexPath animated:true];
 }
 
@@ -128,9 +131,9 @@ struct Profile {
 - (void)tableView:(UITableView*)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath*)indexPath {
   if (editingStyle == UITableViewCellEditingStyleDelete) {
     File::Delete(_profiles[indexPath.row].path);
-    
+
     _profiles.erase(_profiles.begin() + indexPath.row);
-    
+
     [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
   }
 }

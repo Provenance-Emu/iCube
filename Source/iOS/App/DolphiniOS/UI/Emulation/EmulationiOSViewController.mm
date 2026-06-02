@@ -3,10 +3,6 @@
 
 #import "EmulationiOSViewController.h"
 
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
-
-#import "Common/IOFile.h"
-
 #import "Core/ConfigManager.h"
 #import "Core/Config/iOSSettings.h"
 #import "Core/Config/MainSettings.h"
@@ -15,12 +11,12 @@
 #import "Core/HW/SI/SI_Device.h"
 #import "Core/HW/Wiimote.h"
 #import "Core/HW/WiimoteEmu/WiimoteEmu.h"
-#import "Core/IOS/USB/Emulated/Skylanders/Skylander.h"
 #import "Core/State.h"
 #import "Core/System.h"
 
 #import "InputCommon/InputConfig.h"
 
+#import "VideoCommon/Present.h"
 #import "VideoCommon/Present.h"
 
 #import "EmulationCoordinator.h"
@@ -28,6 +24,20 @@
 #import "HostQueue.h"
 #import "LocalizationUtil.h"
 #import "VirtualMFiControllerManager.h"
+#import "TVControllerMappingBridge.h"
+#if TARGET_OS_MACCATALYST
+#import <GameController/GCController.h>
+#import <GameController/GCExtendedGamepad.h>
+#import <GameController/GCMicroGamepad.h>
+#import <GameController/GCKeyboard.h>
+#import <GameController/GCDeviceHaptics.h>
+#import <GameController/GCDualShockGamepad.h>
+#import <GameController/GCDualSenseGamepad.h>
+#import <GameController/GCXboxGamepad.h>
+#else
+#import <GameController/GameController.h>
+#endif
+#import "iCube-Swift.h"
 
 typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   DOLEmulationVisibleTouchPadNone,
@@ -73,12 +83,16 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   }
 
   _stateSlot = Config::GetBase(Config::MAIN_SELECTED_STATE_SLOT);
-  
-  // On iPadOS 26, the pull down button in the upper left can be blocked by window controls.
-  if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-    self.pullDownLeftConstraint.active = false;
-    self.pullDownCenterConstraint.active = true;
-  }
+  [VirtualMFiControllerManager shared].delegate = (id<VirtualMFiControllerManagerDelegate>)self;
+}
+
+// MARK: - VirtualMFiControllerManagerDelegate
+- (void)virtualMFiControllerDidConnect {
+  [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+}
+
+- (void)virtualMFiControllerDidDisconnect {
+  [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -87,6 +101,15 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(receiveTitleChangedNotificationiOS) name:DOLHostTitleChangedNotification object:nil];
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(receiveRequestRenderWindowSizeNotificationiOS) name:DOLHostRequestRenderWindowSizeNotification object:nil];
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(receiveEmulationEndNotificationiOS) name:DOLEmulationDidEndNotification object:nil];
+
+  // Refresh touch pad visibility when assignments change via unified manager
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onControllerAssignmentsChanged) name:@"ControllerAssignmentsChanged" object:nil];
+
+  // Physical controller connect/disconnect
+  // Centralized in ControllerManager
+
+  // Reconcile at view appearance to fix phantom controllers after game start
+  [[ControllerManager shared] reconcile];
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -95,6 +118,23 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   [[NSNotificationCenter defaultCenter] removeObserver:self name:DOLHostTitleChangedNotification object:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self name:DOLHostRequestRenderWindowSizeNotification object:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self name:DOLEmulationDidEndNotification object:nil];
+  // ControllerManager handles GC notifications
+  [[NSNotificationCenter defaultCenter] removeObserver:self name:@"ControllerAssignmentsChanged" object:nil];
+}
+
+// MARK: - Physical controller observers
+- (void)onControllerAssignmentsChanged {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+    BOOL isWii = Core::System::GetInstance().IsWii();
+    BOOL showWii = [[ControllerManager shared] shouldShowWiiOverlayWithWiiSystem:isWii wiiPadAttached:[self isWiimoteTouchPadAttached] gcPadAttached:[self isGameCubeTouchPadAttached]];
+    if (showWii) {
+      [self updateVisibleTouchPadToWii];
+    } else {
+      [self updateVisibleTouchPadToGameCube];
+    }
+    [self recreateMenu];
+  });
 }
 
 - (void)recreateMenu {
@@ -104,6 +144,8 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 
   bool wiimoteTouchPadAttached = [self isWiimoteTouchPadAttached] && Core::System::GetInstance().IsWii();
   bool gamecubeTouchPadAttached = [self isGameCubeTouchPadAttached];
+  BOOL isWiiSystem = Core::System::GetInstance().IsWii();
+  BOOL shouldShowGC = [[ControllerManager shared] shouldShowGCPadWithWiiSystem:isWiiSystem wiiPadAttached:wiimoteTouchPadAttached gcPadAttached:gamecubeTouchPadAttached];
 
   if (wiimoteTouchPadAttached) {
     UIAction* wiimoteAction = [UIAction actionWithTitle:DOLCoreLocalizedString(@"Wii Remote") image:nil identifier:nil handler:^(UIAction*) {
@@ -132,7 +174,7 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
       [self.navigationController setNavigationBarHidden:true animated:true];
     }];
 
-    if (_visibleTouchPad == DOLEmulationVisibleTouchPadGameCube) {
+    if (_visibleTouchPad == DOLEmulationVisibleTouchPadGameCube || shouldShowGC) {
       gamecubeAction.state = UIMenuElementStateOn;
     } else {
       gamecubeAction.state = UIMenuElementStateOff;
@@ -144,10 +186,17 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   if (wiimoteTouchPadAttached || gamecubeTouchPadAttached) {
     UIAction* noneAction = [UIAction actionWithTitle:DOLCoreLocalizedString(@"Hide") image:nil identifier:nil handler:^(UIAction*) {
       [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadNone];
+      // If neither pad is attached, immediately recover to GC + defaults
+      if (![self isWiimoteTouchPadAttached] && ![self isGameCubeTouchPadAttached]) {
+        [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+        [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
+      }
+      [self ensureVisibleTouchPadFallbackIfAmbiguous];
       [self recreateMenu];
 
       [self.navigationController setNavigationBarHidden:true animated:true];
     }];
+    noneAction.state = [[ControllerManager shared] overlayVisible] ? UIMenuElementStateOff : UIMenuElementStateOn;
 
     if (_visibleTouchPad == DOLEmulationVisibleTouchPadNone) {
       noneAction.state = UIMenuElementStateOn;
@@ -210,76 +259,27 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 
   UIAction* selectedSlotElement = (UIAction*)[stateSlotActions objectAtIndex:Config::GetBase(Config::MAIN_SELECTED_STATE_SLOT) - 1];
   selectedSlotElement.state = UIMenuElementStateOn;
-  
-  NSMutableArray<UIMenuElement*>* menuItems = [[NSMutableArray alloc] init];
-  [menuItems addObject:[UIMenu menuWithTitle:DOLCoreLocalizedString(@"Controllers") image:nil identifier:nil options:UIMenuOptionsDisplayInline children:controllerActions]];
-  [menuItems addObject:[UIMenu menuWithTitle:DOLCoreLocalizedString(@"Save State") image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[
-    [UIMenu menuWithTitle:DOLCoreLocalizedString(@"Select State Slot") image:nil identifier:nil options:0 children:stateSlotActions],
-    [UIAction actionWithTitle:DOLCoreLocalizedString(@"Load State") image:[UIImage systemImageNamed:@"tray.and.arrow.down"] identifier:nil handler:^(UIAction*) {
-      DOLHostQueueRunAsync(^{
-        State::Load(Core::System::GetInstance(), self->_stateSlot);
-      });
 
-      [self.navigationController setNavigationBarHidden:true animated:true];
-    }],
-    [UIAction actionWithTitle:DOLCoreLocalizedString(@"Save State") image:[UIImage systemImageNamed:@"tray.and.arrow.up"] identifier:nil handler:^(UIAction*) {
-      DOLHostQueueRunAsync(^{
-        State::Save(Core::System::GetInstance(), self->_stateSlot);
-      });
+  self.navigationItem.leftBarButtonItem.menu = [UIMenu menuWithChildren:@[
+    [UIMenu menuWithTitle:DOLCoreLocalizedString(@"Controllers") image:nil identifier:nil options:UIMenuOptionsDisplayInline children:controllerActions],
+    [UIMenu menuWithTitle:DOLCoreLocalizedString(@"Save State") image:nil identifier:nil options:UIMenuOptionsDisplayInline children:@[
+      [UIMenu menuWithTitle:DOLCoreLocalizedString(@"Select State Slot") image:nil identifier:nil options:0 children:stateSlotActions],
+      [UIAction actionWithTitle:DOLCoreLocalizedString(@"Load State") image:[UIImage systemImageNamed:@"tray.and.arrow.down"] identifier:nil handler:^(UIAction*) {
+        DOLHostQueueRunAsync(^{
+          State::Load(Core::System::GetInstance(), self->_stateSlot);
+        });
 
-      [self.navigationController setNavigationBarHidden:true animated:true];
-    }]
-  ]]];
-  
-  if ([self emulateSkylanderPortal] && Core::System::GetInstance().IsWii()) {
-    [menuItems addObject:[UIMenu menuWithTitle:DOLCoreLocalizedString(@"Tools") image:nil identifier:nil options:UIMenuOptionsDisplayInline
-                 children:@[
-        [UIAction actionWithTitle:DOLCoreLocalizedString(@"Skylanders Portal") image:[UIImage systemImageNamed:@"externalDrive"] identifier:nil handler:^(UIAction*) {
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Skylanders Manager"
-                                       message:nil
-                                       preferredStyle:UIAlertControllerStyleAlert];
-        UIAlertAction* loadAction = [UIAlertAction actionWithTitle:@"Load" style:UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction* action) {
-            NSArray<UTType*>* types = @[
-                [UTType exportedTypeWithIdentifier:@"me.oatmealdome.dolphinios.skylander-dumps"]
-              ];
-            UIDocumentPickerViewController* pickerController = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types];
-            pickerController.delegate = self;
-            pickerController.modalPresentationStyle = UIModalPresentationPageSheet;
-            pickerController.allowsMultipleSelection = false;
+        [self.navigationController setNavigationBarHidden:true animated:true];
+      }],
+      [UIAction actionWithTitle:DOLCoreLocalizedString(@"Save State") image:[UIImage systemImageNamed:@"tray.and.arrow.up"] identifier:nil handler:^(UIAction*) {
+        DOLHostQueueRunAsync(^{
+          State::Save(Core::System::GetInstance(), self->_stateSlot);
+        });
 
-            [self presentViewController:pickerController animated:true completion:nil];
-
-        }];
-        UIAlertAction* clearAction = [UIAlertAction actionWithTitle:@"Clear" style:UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction* action) {
-            auto& system = Core::System::GetInstance();
-            if (self.skylanderSlot) {
-              bool removed = system.GetSkylanderPortal().RemoveSkylander(self.skylanderSlot - 1);
-              if (removed && self.skylanderSlot != 0) {
-                  self.skylanderSlot--;
-              }
-            }
-        }];
-        UIAlertAction* clearAllAction = [UIAlertAction actionWithTitle:@"Clear All" style:UIAlertActionStyleDefault
-                                                       handler:^(UIAlertAction* action) {
-            auto& system = Core::System::GetInstance();
-            if (self.skylanderSlot) {
-              for (int i = 0; i < 16; i++) {
-                  system.GetSkylanderPortal().RemoveSkylander(i);
-              }
-            }
-            self.skylanderSlot = 0;
-        }];
-        [alert addAction:loadAction];
-        [alert addAction:clearAction];
-        [alert addAction:clearAllAction];
-        [self presentViewController:alert animated:YES completion:nil];
-    }]
-    ]]];
-  }
-
-  self.navigationItem.leftBarButtonItem.menu = [UIMenu menuWithChildren:menuItems];
+        [self.navigationController setNavigationBarHidden:true animated:true];
+      }]
+    ]]
+  ]];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -287,7 +287,9 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
     g_presenter->ResizeSurface();
   }
 
+#if TARGET_OS_IOS
   [[TCDeviceMotion shared] statusBarOrientationChanged];
+#endif
 
   [self updatePointerValuesOnWiiTouchPads];
 }
@@ -298,7 +300,9 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
 
 - (void)receiveTitleChangedNotificationiOS {
   dispatch_async(dispatch_get_main_queue(), ^{
-    if (Core::System::GetInstance().IsWii()) {
+    BOOL isWii = Core::System::GetInstance().IsWii();
+    BOOL showWii = [[ControllerManager shared] shouldShowWiiOverlayWithWiiSystem:isWii wiiPadAttached:[self isWiimoteTouchPadAttached] gcPadAttached:[self isGameCubeTouchPadAttached]];
+    if (showWii) {
       [self updateVisibleTouchPadToWii];
     } else {
       [self updateVisibleTouchPadToGameCube];
@@ -332,10 +336,6 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   return true;
 }
 
-- (bool)emulateSkylanderPortal {
-  return Config::Get(Config::MAIN_EMULATE_SKYLANDER_PORTAL);
-}
-
 - (bool)isGameCubeTouchPadAttached {
   if (Config::Get(Config::GetInfoForSIDevice(0)) == SerialInterface::SIDEVICE_NONE) {
     // Nothing is plugged in to this port.
@@ -352,44 +352,12 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   return true;
 }
 
-- (void)updateVisibleTouchPadToWii {
-  if (![self isWiimoteTouchPadAttached]) {
-    // Fallback to GameCube in case port 1 is bound to the touchscreen.
-    [self updateVisibleTouchPadToGameCube];
-
-    return;
-  }
-
-  DOLEmulationVisibleTouchPad targetTouchPad;
-
-  const auto wiimote = static_cast<WiimoteEmu::Wiimote*>(Wiimote::GetConfig()->GetController(0));
-
-  if (wiimote->GetActiveExtensionNumber() == WiimoteEmu::ExtensionNumber::CLASSIC) {
-    targetTouchPad = DOLEmulationVisibleTouchPadClassic;
-  } else if (wiimote->IsSideways()) {
-    targetTouchPad = DOLEmulationVisibleTouchPadSidewaysWiimote;
-  } else {
-    targetTouchPad = DOLEmulationVisibleTouchPadWiimote;
-  }
-
-  [self updateVisibleTouchPadWithType:targetTouchPad];
-
-  [self updatePointerValuesOnWiiTouchPads];
-}
-
-- (void)updateVisibleTouchPadToGameCube {
-  if (![self isGameCubeTouchPadAttached]) {
-    return;
-  }
-
-  [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
-}
-
 - (void)updateVisibleTouchPadWithType:(DOLEmulationVisibleTouchPad)touchPad {
   if (_visibleTouchPad == touchPad) {
     return;
   }
 
+#if TARGET_OS_IOS
   TCDeviceMotion* motion = [TCDeviceMotion shared];
 
   if (touchPad == DOLEmulationVisibleTouchPadWiimote || touchPad == DOLEmulationVisibleTouchPadSidewaysWiimote || touchPad == DOLEmulationVisibleTouchPadClassic) {
@@ -398,24 +366,83 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
   } else {
     [motion setMotionEnabled:false];
   }
-
-  NSInteger targetIdx = touchPad - 1;
-
-  for (int i = 0; i < [self.touchPads count]; i++) {
-    TCView* padView = self.touchPads[i];
-    padView.userInteractionEnabled = i == targetIdx;
-  }
-
-  const float targetOpacity = Config::Get(Config::MAIN_TOUCH_PAD_OPACITY);
-
-  [UIView animateWithDuration:0.5f animations:^{
-    for (int i = 0; i < [self.touchPads count]; i++) {
-      TCView* padView = self.touchPads[i];
-      padView.alpha = i == targetIdx ? targetOpacity : 0.0f;
-    }
-  }];
+#endif
 
   _visibleTouchPad = touchPad;
+#if TARGET_OS_IOS
+  [self setNeedsStatusBarAppearanceUpdate];
+#endif
+}
+
+/// Ensures an on-screen pad is always chosen even with ambiguous mappings
+- (void)ensureVisibleTouchPadFallbackIfAmbiguous {
+  const BOOL hasWii = [self isWiimoteTouchPadAttached];
+  const BOOL hasGC  = [self isGameCubeTouchPadAttached];
+  if (!hasWii && !hasGC) {
+    // Ambiguous or none attached: force GC pad visible and default touchscreen mapping
+    [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+    [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
+  }
+}
+
+// Call the ambiguity guard after choosing a target
+- (void)updateVisibleTouchPadToWii {
+  // Per-game override
+  NSString* overrideStr = [[NSUserDefaults standardUserDefaults] stringForKey:@"current_profile_touch_override"];
+  if (overrideStr && [overrideStr isEqualToString:@"forceGameCube"]) {
+    [self updateVisibleTouchPadToGameCube];
+    return;
+  }
+  const BOOL autoSystem = [[NSUserDefaults standardUserDefaults] objectForKey:@"auto_touchpad_by_system"] ? [[NSUserDefaults standardUserDefaults] boolForKey:@"auto_touchpad_by_system"] : YES;
+  if (!autoSystem) {
+    if (![self isWiimoteTouchPadAttached]) { [self updateVisibleTouchPadToGameCube]; [self ensureVisibleTouchPadFallbackIfAmbiguous]; return; }
+  }
+  if (![self isWiimoteTouchPadAttached]) {
+    [self updateVisibleTouchPadToGameCube];
+    [self ensureVisibleTouchPadFallbackIfAmbiguous];
+    return;
+  }
+
+  DOLEmulationVisibleTouchPad targetTouchPad;
+  const auto wiimote = static_cast<WiimoteEmu::Wiimote*>(Wiimote::GetConfig()->GetController(0));
+  if (wiimote->GetActiveExtensionNumber() == WiimoteEmu::ExtensionNumber::CLASSIC) {
+    targetTouchPad = DOLEmulationVisibleTouchPadClassic;
+  } else if (wiimote->IsSideways()) {
+    targetTouchPad = DOLEmulationVisibleTouchPadSidewaysWiimote;
+  } else {
+    targetTouchPad = DOLEmulationVisibleTouchPadWiimote;
+  }
+  [self updateVisibleTouchPadWithType:targetTouchPad];
+  [self updatePointerValuesOnWiiTouchPads];
+  [self ensureVisibleTouchPadFallbackIfAmbiguous];
+}
+
+- (void)updateVisibleTouchPadToGameCube {
+  // Per-game override
+  NSString* overrideStr = [[NSUserDefaults standardUserDefaults] stringForKey:@"current_profile_touch_override"];
+  if (overrideStr && [overrideStr isEqualToString:@"forceWii"]) {
+    [self updateVisibleTouchPadToWii];
+    return;
+  }
+  const BOOL autoSystem = [[NSUserDefaults standardUserDefaults] objectForKey:@"auto_touchpad_by_system"] ? [[NSUserDefaults standardUserDefaults] boolForKey:@"auto_touchpad_by_system"] : YES;
+  if (!autoSystem) {
+    if (![self isGameCubeTouchPadAttached]) { [self ensureVisibleTouchPadFallbackIfAmbiguous]; return; }
+  }
+  if (![self isGameCubeTouchPadAttached]) {
+    BOOL isWii = Core::System::GetInstance().IsWii();
+    BOOL shouldShowWii = [[ControllerManager shared] shouldShowWiiOverlayWithWiiSystem:isWii wiiPadAttached:[self isWiimoteTouchPadAttached] gcPadAttached:[self isGameCubeTouchPadAttached]];
+    if (shouldShowWii) {
+      [self updateVisibleTouchPadToWii];
+    } else {
+      // Force GC as universal fallback
+      [EmulationCoordinator ensurePad1DefaultsToTouchscreen];
+      [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
+    }
+    [self ensureVisibleTouchPadFallbackIfAmbiguous];
+    return;
+  }
+  [self updateVisibleTouchPadWithType:DOLEmulationVisibleTouchPadGameCube];
+  [self ensureVisibleTouchPadFallbackIfAmbiguous];
 }
 
 - (void)updatePointerValuesOnWiiTouchPads {
@@ -456,42 +483,9 @@ typedef NS_ENUM(NSInteger, DOLEmulationVisibleTouchPad) {
     });
   }
 
+#if TARGET_OS_IOS
   [[TCDeviceMotion shared] setMotionEnabled:false];
-}
-
-- (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls {
-    NSString* sourcePath = [urls[0] path];
-    std::string path = std::string([sourcePath UTF8String]);
-    File::IOFile sky_file(path, "r+b");
-    if (!sky_file)
-    {
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Failed to Open Skylander File!"
-                                       message:nil
-                                       preferredStyle:UIAlertControllerStyleAlert];
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
-    }
-    std::array<u8, 0x40 * 0x10> file_data;
-    if (!sky_file.ReadBytes(file_data.data(), file_data.size()))
-    {
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Failed to Read Skylander File!"
-                                       message:nil
-                                       preferredStyle:UIAlertControllerStyleAlert];
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
-    }
-    auto& system = Core::System::GetInstance();
-    std::pair<u16, u16> id_var = system.GetSkylanderPortal().CalculateIDs(file_data);
-    u8 portal_slot = system.GetSkylanderPortal().LoadSkylander(std::make_unique<IOS::HLE::USB::SkylanderFigure>(std::move(sky_file)));
-    if (portal_slot == 0xFF)
-    {
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Failed to Load Skylander File!"
-                                       message:nil
-                                       preferredStyle:UIAlertControllerStyleAlert];
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
-    }
-    self.skylanderSlot = portal_slot + 1;
+#endif
 }
 
 @end

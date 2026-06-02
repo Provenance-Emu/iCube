@@ -68,4 +68,15 @@
   return DOLCoreLocalizedString(localizable);
 }
 
+// Swift-friendly wrappers
++ (NSString*)localizedSIDeviceForInt:(int)device {
+  SerialInterface::SIDevices d = static_cast<SerialInterface::SIDevices>(device);
+  return [self getLocalizedStringForSIDevice:d];
+}
+
++ (NSString*)localizedWiimoteSourceForInt:(int)source {
+  WiimoteSource s = static_cast<WiimoteSource>(source);
+  return [self getLocalizedStringForWiimoteSource:s];
+}
+
 @end

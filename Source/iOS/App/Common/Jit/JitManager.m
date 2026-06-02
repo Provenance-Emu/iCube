@@ -57,14 +57,26 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   if (_jitType == DOLJitTypeDebugger) {
     if (self.deviceHasTxm) {
       NSDictionary* environment = [[NSProcessInfo processInfo] environment];
-      
-      if ([environment objectForKey:@"XCODE"] != nil) {
+
+      // Detect Xcode's debugger automatically:
+      //   XCODE         — manually added to the Xcode scheme's environment variables
+      //   OS_ACTIVITY_DT_MODE — set automatically by Xcode when debugging on a real device
+      //                          (routes os_log to Xcode console; not set by StikDebug)
+      // On a TXM device the LuckTXM brk #0x69 handshake is only handled by StikDebug;
+      // LLDB will intercept it and raise EXC_BREAKPOINT instead.
+      BOOL isXcodeDebugger =
+          [environment objectForKey:@"XCODE"] != nil ||
+          [environment objectForKey:@"OS_ACTIVITY_DT_MODE"] != nil;
+
+      if (isXcodeDebugger) {
         static dispatch_once_t onceToken;
 
         dispatch_once(&onceToken, ^{
-          self.acquisitionError = @"JIT cannot be enabled while running within Xcode on iOS 26.";
+          self.acquisitionError = @"JIT cannot be enabled while running within Xcode on iOS 26. "
+                                   "To debug with JIT, use StikDebug instead. "
+                                   "If you intentionally want to suppress this, add XCODE=1 to your scheme's environment variables.";
         });
-        
+
         return;
       }
     }

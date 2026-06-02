@@ -18,6 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) UIBarButtonItem* pauseButton;
 @property (nonatomic) UIBarButtonItem* playButton;
 @property (nonatomic) UIBarButtonItem* hideBarButton;
+@property (nonatomic) UIBarButtonItem* fastForwardButton;
 
 @property (nonatomic) EmulationBootParameter* bootParameter;
 

@@ -11,12 +11,14 @@ extern int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
 @implementation JitManager (Debugger)
 
 - (bool)checkIfProcessIsDebugged {
-  int flags;
-  if (csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags) != 0)) {
+  int flags = 0;
+  // NOTE: sizeof(flags) != 0 was a parenthesis bug — evaluated to 1, not 4,
+  // causing csops to read only 1 byte and leave the rest uninitialized.
+  if (csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) != 0) {
     return false;
   }
 
-  return flags & CS_DEBUGGED;
+  return (flags & CS_DEBUGGED) != 0;
 }
 
 // The following is taken from StikDebug.

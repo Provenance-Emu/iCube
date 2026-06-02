@@ -16,51 +16,49 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-
+  
   self.palSwitch.on = Config::Get(Config::SYSCONF_PAL60);
   [self.palSwitch addValueChangedTarget:self action:@selector(palChanged)];
-
+  
   self.screenSaverSwitch.on = Config::Get(Config::SYSCONF_SCREENSAVER);
   [self.screenSaverSwitch addValueChangedTarget:self action:@selector(screenSaverChanged)];
-
+  
   self.usbKeyboardSwitch.on = Config::Get(Config::MAIN_WII_KEYBOARD);
   [self.usbKeyboardSwitch addValueChangedTarget:self action:@selector(usbKeyboardChanged)];
-
+  
   self.wc24Switch.on = Config::Get(Config::MAIN_WII_WIILINK_ENABLE);
   [self.wc24Switch addValueChangedTarget:self action:@selector(wc24Changed)];
-
-  self.skylanderPortalSwitch.on = Config::Get(Config::MAIN_EMULATE_SKYLANDER_PORTAL);
-  [self.skylanderPortalSwitch addValueChangedTarget:self action:@selector(skylanderPortalChanged)];
-
+  
   self.sdInsertedSwitch.on = Config::Get(Config::MAIN_WII_SD_CARD);
   [self.sdInsertedSwitch addValueChangedTarget:self action:@selector(sdInsertedChanged)];
-
+  
   self.sdWritesSwitch.on = Config::Get(Config::MAIN_ALLOW_SD_WRITES);
   [self.sdWritesSwitch addValueChangedTarget:self action:@selector(sdWritesChanged)];
-
+  
   self.sdSyncSwitch.on = Config::Get(Config::MAIN_WII_SD_CARD_ENABLE_FOLDER_SYNC);
   [self.sdSyncSwitch addValueChangedTarget:self action:@selector(sdSyncChanged)];
-
+#if !TARGET_OS_TV
   self.irSlider.value = Config::Get(Config::SYSCONF_SENSOR_BAR_SENSITIVITY);
-
+  
   self.speakerVolumeSlider.value = Config::Get(Config::SYSCONF_SPEAKER_VOLUME);
-
+#endif
+  
   self.rumbleSwitch.on = Config::Get(Config::SYSCONF_WIIMOTE_MOTOR);
   [self.rumbleSwitch addValueChangedTarget:self action:@selector(rumbleChanged)];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-
+  
   NSString* aspectRatio;
   if (Config::Get(Config::SYSCONF_WIDESCREEN)) {
     aspectRatio = @"16:9";
   } else {
     aspectRatio = @"4:3";
   }
-
+  
   self.aspectRatioLabel.text = DOLCoreLocalizedString(aspectRatio);
-
+  
   NSString* language;
   switch (Config::Get(Config::SYSCONF_LANGUAGE)) {
     case 0:
@@ -97,9 +95,9 @@
       language = @"Error";
       break;
   }
-
+  
   self.languageLabel.text = DOLCoreLocalizedString(language);
-
+  
   NSString* audioMode;
   switch (Config::Get(Config::SYSCONF_SOUND_MODE)) {
     case 0:
@@ -115,16 +113,16 @@
       audioMode = @"Error";
       break;
   }
-
+  
   self.audioLabel.text = DOLCoreLocalizedString(audioMode);
-
+  
   NSString* position;
   if (Config::Get(Config::SYSCONF_SENSOR_BAR_POSITION) == 0) {
     position = @"Bottom";
   } else {
     position = @"Top";
   }
-
+  
   self.sensorBarLabel.text = DOLCoreLocalizedString(position);
 }
 
@@ -144,10 +142,6 @@
   Config::SetBase(Config::MAIN_WII_WIILINK_ENABLE, self.wc24Switch.on);
 }
 
-- (void)skylanderPortalChanged {
-  Config::SetBaseOrCurrent(Config::MAIN_EMULATE_SKYLANDER_PORTAL, self.skylanderPortalSwitch.on);
-}
-
 - (void)sdInsertedChanged {
   Config::SetBaseOrCurrent(Config::MAIN_WII_SD_CARD, self.sdInsertedSwitch.on);
 }
@@ -161,13 +155,17 @@
 }
 
 - (IBAction)irChanged:(id)sender {
+#if !TARGET_OS_TV
   Config::SetBase(Config::SYSCONF_SENSOR_BAR_SENSITIVITY, (int)self.irSlider.value);
   self.irSlider.value = (int)self.irSlider.value;
+#endif
 }
 
 - (IBAction)speakerVolumeChanged:(id)sender {
+#if !TARGET_OS_TV
   Config::SetBase(Config::SYSCONF_SPEAKER_VOLUME, (int)self.speakerVolumeSlider.value);
   self.speakerVolumeSlider.value = (int)self.speakerVolumeSlider.value;
+#endif
 }
 
 - (void)rumbleChanged {

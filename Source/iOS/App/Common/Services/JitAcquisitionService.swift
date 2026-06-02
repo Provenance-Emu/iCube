@@ -3,20 +3,20 @@
 
 import UIKit
 
-class JitAcquisitionService : UIResponder, UIApplicationDelegate {
-  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+class JitAcquisitionService: UIResponder, UIApplicationDelegate {
+  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     let manager = JitManager.shared()
-    
+
     manager.recheckIfJitIsAcquired()
-    
-    if (!manager.acquiredJit) {
+
+    if !manager.acquiredJit {
       manager.acquireJitByPTrace()
-      
-#if NONJAILBROKEN
+
+#if NONJAILBROKEN || APPSTORE
       manager.acquireJitByAltServer()
 #endif
     }
-    
+
     return true
   }
 }

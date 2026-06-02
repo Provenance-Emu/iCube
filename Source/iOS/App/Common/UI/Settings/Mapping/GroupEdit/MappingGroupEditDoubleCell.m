@@ -11,6 +11,7 @@
   [super awakeFromNib];
   
   if (self.textField.inputAccessoryView == nil) {
+#if !TARGET_OS_TV
     UIToolbar* toolbar = [[UIToolbar alloc] init];
     toolbar.items = @[
       [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil],
@@ -19,8 +20,9 @@
     ];
     
     [toolbar sizeToFit];
-    
+#
     self.textField.inputAccessoryView = toolbar;
+#endif
   }
 }
 

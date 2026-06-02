@@ -18,7 +18,7 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  
+
   [self.fpsCell registerSetting:Config::GFX_SHOW_FPS];
   [self.vpsCell registerSetting:Config::GFX_SHOW_VPS];
   [self.speedCell registerSetting:Config::GFX_SHOW_SPEED];
@@ -38,19 +38,38 @@
   [self.cpuCullCell registerSetting:Config::GFX_CPU_CULL];
   [self.deferEfbCacheCell registerSetting:Config::GFX_HACK_EFB_DEFER_INVALIDATION];
   [self.manualSamplingCell registerSetting:Config::GFX_HACK_FAST_TEXTURE_SAMPLING shouldReverse:true];
-  
+
   [self.loadTexturesCell.boolSwitch addValueChangedTarget:self action:@selector(updatePrefetchTexturesEnabled)];
-  
+
   bool enableVsExpansionSwitch = g_backend_info.bSupportsGeometryShaders && g_backend_info.bSupportsVSLinePointExpand;
   [self.vsPointLineExpansionCell.boolSwitch setEnabled:enableVsExpansionSwitch];
-  
+
   [self updatePrefetchTexturesEnabled];
-  
+
   self.graphicsModsSwitch.on = Config::Get(Config::GFX_MODS_ENABLE);
   [self.graphicsModsSwitch addValueChangedTarget:self action:@selector(graphicsModsChanged)];
-  
+
   self.progressiveScanSwitch.on = Config::Get(Config::SYSCONF_PROGRESSIVE_SCAN);
   [self.progressiveScanSwitch addValueChangedTarget:self action:@selector(progressiveScanChanged)];
+
+  // Shader compiler thread sliders
+  const int hw_cores = (int)[[NSProcessInfo processInfo] processorCount];
+  const int default_threads = MAX(1, MIN(2, hw_cores - 1));
+  int compiler_threads = Config::Get(Config::GFX_SHADER_COMPILER_THREADS);
+  int precompiler_threads = Config::Get(Config::GFX_SHADER_PRECOMPILER_THREADS);
+  if (compiler_threads <= 0) compiler_threads = default_threads;
+  if (precompiler_threads <= 0) precompiler_threads = default_threads;
+#if !TARGET_OS_TV
+  self.shaderCompilerThreadsSlider.minimumValue = 1;
+  self.shaderCompilerThreadsSlider.maximumValue = MAX(1, hw_cores - 1);
+  self.shaderCompilerThreadsSlider.value = compiler_threads;
+  self.shaderPrecompilerThreadsSlider.minimumValue = 1;
+  self.shaderPrecompilerThreadsSlider.maximumValue = MAX(1, hw_cores - 1);
+  self.shaderPrecompilerThreadsSlider.value = precompiler_threads;
+  [self.shaderCompilerThreadsSlider addTarget:self action:@selector(shaderCompilerThreadsChanged:) forControlEvents:UIControlEventValueChanged];
+  [self.shaderPrecompilerThreadsSlider addTarget:self action:@selector(shaderPrecompilerThreadsChanged:) forControlEvents:UIControlEventValueChanged];
+#endif
+  [self updateShaderThreadLabels];
 }
 
 - (void)updatePrefetchTexturesEnabled {
@@ -65,9 +84,32 @@
   Config::SetBase(Config::SYSCONF_PROGRESSIVE_SCAN, self.progressiveScanSwitch.on);
 }
 
+#if !TARGET_OS_TV
+- (void)shaderCompilerThreadsChanged:(UISlider*)slider {
+  const int value = (int)roundf(slider.value);
+  slider.value = value;
+  Config::SetBaseOrCurrent(Config::GFX_SHADER_COMPILER_THREADS, value);
+  [self updateShaderThreadLabels];
+}
+
+- (void)shaderPrecompilerThreadsChanged:(UISlider*)slider {
+  const int value = (int)roundf(slider.value);
+  slider.value = value;
+  Config::SetBaseOrCurrent(Config::GFX_SHADER_PRECOMPILER_THREADS, value);
+  [self updateShaderThreadLabels];
+}
+#endif
+
+- (void)updateShaderThreadLabels {
+#if !TARGET_OS_TV
+  self.shaderCompilerThreadsLabel.text = [NSString stringWithFormat:@"%d", (int)roundf(self.shaderCompilerThreadsSlider.value)];
+  self.shaderPrecompilerThreadsLabel.text = [NSString stringWithFormat:@"%d", (int)roundf(self.shaderPrecompilerThreadsSlider.value)];
+#endif
+}
+
 - (void)tableView:(UITableView*)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath*)indexPath {
   NSString* message = nil;
-  
+
   switch (indexPath.section) {
     case 0:
       switch (indexPath.row) {
@@ -172,9 +214,9 @@
                                     "for expanding points and lines, selects the vertex shader for the job.  May "
                                     "affect performance."
                                     "<br><br>%1";
-          
+
           NSString* extraFormat;
-          
+
           if (!g_backend_info.bSupportsGeometryShaders) {
             extraFormat = @"Forced on because %1 doesn't support geometry shaders.";
           } else if (!g_backend_info.bSupportsVSLinePointExpand) {
@@ -182,13 +224,13 @@
           } else {
             extraFormat = @"<dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
           }
-          
+
           NSString* extraMessage = [NSString stringWithFormat:DOLCoreLocalizedStringWithArgs(extraFormat, @"s"), g_backend_info.DisplayName.c_str()];
-          
+
           NSString* message = [NSString stringWithFormat:DOLCoreLocalizedStringWithArgs(messageFormat, @"@"), extraMessage];
-          
+
           [self showHelpWithMessage:message];
-          
+
           return;
         }
         case 4:
@@ -222,7 +264,7 @@
       }
       break;
   }
-  
+
   [self showHelpWithLocalizable:message];
 }
 

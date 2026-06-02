@@ -477,40 +477,9 @@ Dolphinがアダプタを使用しようとすると、以下のエラーが発�
 {0}
 
 このエミュレートされたコンソールは停止します。";
-"Failed to initialize Realtek Bluetooth device.
-
-Bluetooth passthrough will probably not work." = "Failed to initialize Realtek Bluetooth device.
-
-Bluetooth passthrough will probably not work.";
 "Failed to open Bluetooth device {:04x}:{:04x}: {}" = "Failed to open Bluetooth device {:04x}:{:04x}: {}";
 "Failed to detach kernel driver for BT passthrough: {0}" = "BTパススルー用カーネルドライバーの切り離しに失敗しました: {0}";
 "Failed to claim interface for BT passthrough: {0}" = "BT パススルーのインターフェースを要求できませんでした: {0}";
-"HTTP GET {0}
-
-Error: {1}" = "HTTP GET {0}
-
-Error: {1}";
-"File {0} was not found on the server.
-
-This might be normal.
-
-Not all devices expect this file." = "File {0} was not found on the server.
-
-This might be normal.
-
-Not all devices expect this file.";
-"Bluetooth passthrough failed to read firmware file from:
-{0}
-
-Refer to https://wiki.dolphin-emu.org/index.php?title=Bluetooth_Passthrough for instructions." = "Bluetooth passthrough failed to read firmware file from:
-{0}
-
-Refer to https://wiki.dolphin-emu.org/index.php?title=Bluetooth_Passthrough for instructions.";
-"Bluetooth passthrough requires missing firmware: {0}
-
-Automatically download from gitlab.com now?" = "Bluetooth passthrough requires missing firmware: {0}
-
-Automatically download from gitlab.com now?";
 "The recorded game ({0}) is not the same as the selected game ({1})" = "記録されたゲーム ({0}) は選択したゲーム ({1}) と同じではありません";
 "The disc change to \"{0}\" could not be saved in the .dtm file.
 The filename of the disc image must not be longer than 40 characters." = "「{0}」へのディスク変更を .dtm ファイルに保存できませんでした。
@@ -601,16 +570,6 @@ Please recheck that you have the correct code." = "ホストコードが長す�
 "Error synchronizing cheat codes!" = "チートコードの同期中にエラーが発生しました！";
 "JIT failed to find code space after a cache clear. This should never happen. Please report this incident on the bug tracker. Dolphin will now exit." = "JIT failed to find code space after a cache clear.
 このエラーは起こらないはずです。この状況をバグトラッカーへ報告してください。Dolphinを終了します。";
-"Invalid write to {0:#010x}, PC = {1:#010x}; the game probably would have crashed on real hardware.
-
-For accurate emulation, enable MMU in advanced settings." = "Invalid write to {0:#010x}, PC = {1:#010x}; the game probably would have crashed on real hardware.
-
-For accurate emulation, enable MMU in advanced settings.";
-"Invalid read from {0:#010x}, PC = {1:#010x}; the game probably would have crashed on real hardware.
-
-For accurate emulation, enable MMU in advanced settings." = "Invalid read from {0:#010x}, PC = {1:#010x}; the game probably would have crashed on real hardware.
-
-For accurate emulation, enable MMU in advanced settings.";
 "Internal LZ4 Error - compression failed" = "内部 LZ4 エラー - 圧縮に失敗しました";
 "Internal LZO Error - decompression failed ({0}) ({1}) 
 Unable to retrieve outdated savestate version info." = "内部 LZO エラー - 展開に失敗しました ({0}) ({1})
@@ -625,7 +584,6 @@ Unable to retrieve outdated savestate version info." = "内部 LZO エラー - �
 "No undo.dtm found, aborting undo load state to prevent movie desyncs" = "undo.dtm ファイルが見つかりません。desync を防止するためステートロードの取消を中止します";
 "There is nothing to undo!" = "取り消すものがありません！";
 "Wii Menu" = "Wiiメニュー";
-"Unknown Device" = "Unknown Device";
 "WAD installation failed: The selected file is not a valid WAD." = "WAD installation failed: The selected file is not a valid WAD.";
 "WAD installation failed: Could not initialise title import (error {0})." = "WAD のインストールに失敗しました: タイトルのインポートを初期化できませんでした（エラー {0}）。";
 "WAD installation failed: Could not import content {0:08x}." = "WADのインストールに失敗しました: コンテンツ {0:08x} をインポートできませんでした。";
@@ -1510,6 +1468,7 @@ Please check the highlighted values." = "いくつかの値は不正です。
 "High" = "大";
 "Scanning for adapters..." = "Scanning for adapters...";
 "Automatic" = "Automatic";
+"Unknown Device" = "Unknown Device";
 "Wii Remotes" = "Wiiリモコン";
 "Passthrough a Bluetooth adapter" = "PC上のBluetoothアダプターをパススルーする";
 "Sync" = "シンクロ";
@@ -1966,7 +1925,6 @@ Warning: Must save the symbol map for changes to be kept.";
 "Time Average (ns)" = "Time Average (ns)";
 "Time Percent" = "Time Percent";
 "Copy Value" = "Copy Value";
-"Add or edit region label" = "Add or edit region label";
 "Show in code" = "コードを表示";
 "Memory" = "Memory";
 "Offset" = "Offset";
@@ -2003,16 +1961,12 @@ Warning: Must save the symbol map for changes to be kept.";
 "Read and write" = "Read and write";
 "Read only" = "Read only";
 "Write only" = "Write only";
-"Labels" = "Labels";
-"Data" = "データ関係";
-"Filter Label List" = "Filter Label List";
 "View" = "表示";
 "Import" = "インポート";
 "Load file to current address" = "現在のアドレスにファイルをロード";
 "Auto update memory values" = "Auto update memory values";
 "Highlight recently changed values" = "Highlight recently changed values";
 "Highlight color" = "Highlight color";
-"Show symbols and notes" = "Show symbols and notes";
 "Export" = "エクスポート";
 "Dump MRAM" = "MRAM をダンプ";
 "Dump ExRAM" = "ExRAM をダンプ";
@@ -2675,6 +2629,7 @@ Overwrite existing save data?";
 "Start" = "スタート";
 "Buffer" = "バッファ";
 "Quit" = "終了";
+"Data" = "データ関係";
 "No Save Data" = "セーブデータなし";
 "Netplay will start without any save data, and any created save data will be discarded at the end of the Netplay session." = "ネットプレイはセーブデータなしで開始され、作成されたセーブデータはネットプレイセッション終了時に破棄されます。";
 "Load Host's Save Data Only" = "ホストのセーブデータのみ読み込み";
@@ -2920,7 +2875,6 @@ Are you sure you want to continue anyway?" = "NKitディスクイメージを実
 "Audio Playback Settings" = "オーディオ再生の設定";
 "Controls the number of audio samples buffered. Lower values reduce latency but may cause more crackling or stuttering.<br><br><dolphin_emphasis>If unsure, set this to 80 ms.</dolphin_emphasis>" = "Controls the number of audio samples buffered. Lower values reduce latency but may cause more crackling or stuttering.<br><br><dolphin_emphasis>If unsure, set this to 80 ms.</dolphin_emphasis>";
 "%1 ms" = "%1 ms";
-" 000 ms" = " 000 ms";
 "Fill Audio Gaps" = "Fill Audio Gaps";
 "Mute When Disabling Speed Limit" = "速度制限の無効時にミュート";
 "Audio Buffer Size" = "オーディオバッファサイズ";
@@ -3007,7 +2961,7 @@ is either corrupted or not a GameCube memory card file.
 "Generate a New Statistics Identity" = "新しい統計IDを作成する";
 "Identity Generation" = "IDの作成";
 "New identity generated." = "新しいIDが作成されました。";
-"Separates CPU and GPU emulation work to separate threads. Reduces single-thread burden by spreading Dolphin's heaviest load across two cores, which usually improves performance. However, it can result in glitches and crashes.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Separates CPU and GPU emulation work to separate threads. Reduces single-thread burden by spreading Dolphin's heaviest load across two cores, which usually improves performance. However, it can result in glitches and crashes.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Separates CPU and GPU emulation work to separate threads. Reduces single-thread burden by spreading Dolphin's heaviest load across two cores, which usually improves performance. However, it can result in glitches and crashes.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "CPUとGPUのエミュレーション作業を別々のスレッドに分離します。Dolphinの負荷を2つのコアに分散することでシングルスレッドの負担を軽減し、通常はパフォーマンスが向上します。ただし、不具合やクラッシュが発生する可能性があります。<br><br>この設定はエミュレーションを実行中は変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Enables the use of AR and Gecko cheat codes which can be used to modify games' behavior. These codes can be configured with the Cheats Manager in the Tools menu.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ゲームの動作を変更するために使用できる AR および Gecko チート コードの使用を有効にします。これらのコードは、[ツール] メニューの [チート マネージャー] で設定できます。<br><br>エミュレーションがアクティブな間は、この設定を変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Lets you use languages and other region-related settings that the game may not be designed for. May cause various crashes and bugs.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ゲームが想定していない可能性のある言語やその他の地域関連の設定を使用できます。様々なクラッシュやバグを引き起こす可能性があります。<br><br>この設定はエミュレーションが有効な間は変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Automatically changes the game disc when requested by games with two discs. This feature requires the game to be launched in one of the following ways:<br>- From the game list, with both discs being present in the game list.<br>- With File > Open or the command line interface, with the paths to both discs being provided.<br>- By launching an M3U file with File > Open or the command line interface.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "2枚組ディスクのゲームでリクエストされたときに自動的にゲームディスクを入れ替えます。この機能を使うには、ゲームを以下に示すどれかの方法で起動する必要があります: <br> - 両方のディスクがゲームリストに存在する状態で、ゲームリストから。 <br> - 両方のディスクへのパスが提供された状態で、ファイル > 開く、もしくはコマンドラインインターフェースから。 <br> - M3Uファイルをファイル > 開く、もしくはコマンドラインインターフェースから起動する。 <br> <br> <dolphin_emphasis> よく分からなければ、チェックを入れないでください。 </dolphin_emphasis>";

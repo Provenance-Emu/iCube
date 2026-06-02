@@ -17,7 +17,7 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  
+
   [self.resolutionCell registerSetting:Config::GFX_EFB_SCALE];
   [self.filteringCell registerSetting:Config::GFX_ENHANCE_MAX_ANISOTROPY];
   [self.scaledEfbCell registerSetting:Config::GFX_HACK_COPY_EFB_SCALED];
@@ -31,7 +31,7 @@
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  
+
   const int efb_scale = Config::Get(Config::GFX_EFB_SCALE);
   if (efb_scale > 0) {
     NSString* resolution = [NSString stringWithFormat:@"%dx", efb_scale];
@@ -39,52 +39,53 @@
   } else {
     self.resolutionCell.choiceSettingLabel.text = DOLCoreLocalizedString(@"Auto");
   }
-  
-  const AnisotropicFilteringMode anisotropicMode = Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
+
+  const int maxAnisotropy = (int)Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
   const TextureFilteringMode filteringMode = Config::Get(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING);
-  
+
   NSString* filteringAnisotropy;
-  
-  switch (anisotropicMode) {
-    case AnisotropicFilteringMode::Default:
+
+  switch (maxAnisotropy) {
+    case 0:
       filteringAnisotropy = @"Default";
       break;
-    case AnisotropicFilteringMode::Force1x:
-      filteringAnisotropy = @"1x Anisotropic";
-      break;
-    case AnisotropicFilteringMode::Force2x:
+    case 1:
       filteringAnisotropy = @"2x Anisotropic";
       break;
-    case AnisotropicFilteringMode::Force4x:
+    case 2:
       filteringAnisotropy = @"4x Anisotropic";
       break;
-    case AnisotropicFilteringMode::Force8x:
+    case 3:
       filteringAnisotropy = @"8x Anisotropic";
       break;
-    case AnisotropicFilteringMode::Force16x:
+    case 4:
       filteringAnisotropy = @"16x Anisotropic";
       break;
     default:
       filteringAnisotropy = @"Error";
       break;
   }
-  
+
   NSString* filtering;
-  
+
   if (filteringMode == TextureFilteringMode::Default) {
     filtering = filteringAnisotropy;
   } else if (filteringMode == TextureFilteringMode::Nearest) {
-    filtering = @"Force Nearest and 1x Anisotropic";
+    filtering = @"Force Nearest";
   } else if (filteringMode == TextureFilteringMode::Linear) {
-    filtering = [NSString stringWithFormat:@"Force Linear and %@", filteringAnisotropy];
+    if (maxAnisotropy == 0) {
+      filtering = @"Force Linear";
+    } else {
+      filtering = [NSString stringWithFormat:@"Force Linear and %@", filteringAnisotropy];
+    }
   }
-  
+
   self.filteringCell.choiceSettingLabel.text = DOLCoreLocalizedString(filtering);
 }
 
 - (void)tableView:(UITableView*)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath*)indexPath {
   NSString* message = nil;
-  
+
   switch (indexPath.section) {
     case 0:
       switch (indexPath.row) {
@@ -154,7 +155,7 @@
       }
       break;
   }
-  
+
   [self showHelpWithLocalizable:message];
 }
 

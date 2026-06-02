@@ -3,11 +3,11 @@
 
 import UIKit
 
-class AudioSessionCategoryService : UIResponder, UIApplicationDelegate {
-  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+class AudioSessionCategoryService: UIResponder, UIApplicationDelegate {
+  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     // Set the AVAudioSession category now.
     AudioSessionManager.shared().setSessionCategory()
-    
+
     return true
   }
 }

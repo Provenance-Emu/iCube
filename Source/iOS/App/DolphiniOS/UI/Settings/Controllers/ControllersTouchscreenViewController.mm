@@ -4,8 +4,8 @@
 #import "ControllersTouchscreenViewController.h"
 
 #import "Core/Config/iOSSettings.h"
-
-#import "Swift.h"
+#include <Metal/Metal.h>
+#include "Swift.h"
 
 @interface ControllersTouchscreenViewController ()
 
@@ -16,7 +16,9 @@
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
   
+#if !TARGET_OS_TV
   self.opacitySlider.value = Config::Get(Config::MAIN_TOUCH_PAD_OPACITY);
+#endif
   
   TCWiiTouchIRMode irMode = (TCWiiTouchIRMode)Config::Get(Config::MAIN_TOUCH_PAD_IR_MODE);
   NSString* irModeString;
@@ -32,8 +34,10 @@
   self.irModeLabel.text = irModeString;
 }
 
+#if !TARGET_OS_TV
 - (IBAction)opacitySliderChanged:(id)sender {
   Config::SetBaseOrCurrent(Config::MAIN_TOUCH_PAD_OPACITY, self.opacitySlider.value);
 }
+#endif
 
 @end

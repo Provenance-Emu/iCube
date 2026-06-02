@@ -4,7 +4,6 @@
 #import "NKitWarningViewController.h"
 
 #import "Core/Config/MainSettings.h"
-
 #import "Swift.h"
 
 @interface NKitWarningViewController ()

@@ -6,5 +6,13 @@
     <true/>
     <key>get-task-allow</key>
     <true/>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.developer.activities</key>
+    <array>
+        <string>com.apple.activitykit</string>
+    </array>
 </dict>
 </plist>

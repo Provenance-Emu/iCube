@@ -3,29 +3,48 @@
 
 import UIKit
 
-class AppDelegate : UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate {
+
   var window: UIWindow?
-  
-  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+
+  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
-  
+
   func applicationWillTerminate(_ application: UIApplication) {
     ServiceManager.shared.applicationWillTerminate()
   }
-  
+
   func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
     ServiceManager.shared.applicationDidReceiveMemoryWarning()
   }
-  
-  func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+
+  func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
     ServiceManager.shared.open(url: url, options: options)
   }
-  
+
   func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-    return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+    // For tvOS, override any storyboard-based scene configuration and provide a programmatic scene.
+    // This prevents crashes due to missing storyboards and enables a SwiftUI-based root.
+    if AppConsts.useSwiftUI {
+      let role = connectingSceneSession.role
+      let config = UISceneConfiguration(name: "Default Configuration", sessionRole: role)
+      if #available(iOS 16.0, *) {
+        if role == .windowExternalDisplayNonInteractive {
+          config.delegateClass = ExternalDisplaySceneDelegate.self
+        } else {
+          config.delegateClass = MainDisplaySceneDelegate.self
+        }
+      } else {
+        config.delegateClass = MainDisplaySceneDelegate.self
+      }
+      config.storyboard = nil
+      return config
+    } else {
+      return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+    }
   }
-  
+
   func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
     //
   }

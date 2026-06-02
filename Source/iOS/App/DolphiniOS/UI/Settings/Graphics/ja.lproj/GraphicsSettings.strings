@@ -256,7 +256,7 @@
 /* Class = "UILabel"; text = "Force Linear and 8x Anisotropic"; ObjectID = "2G3-K2-Hl0"; */
 "2G3-K2-Hl0.text" = "リニアを強制、8x 異方性フィルタリング";
 
-/* Class = "UILabel"; text = "Force Linear and 1x Anisotropic"; ObjectID = "FlS-dn-3Ph"; */
+/* Class = "UILabel"; text = "Force Linear"; ObjectID = "FlS-dn-3Ph"; */
 "FlS-dn-3Ph.text" = "リニアを強制";
 
 /* Class = "UILabel"; text = "Force Linear and 16x Anisotropic"; ObjectID = "a2q-0S-sXo"; */
@@ -304,5 +304,59 @@
 /* Class = "UILabel"; text = "Cull Vertices on the CPU"; ObjectID = "edj-Ox-q0H"; */
 "edj-Ox-q0H.text" = "CPUで頂点をカリングする";
 
-/* Class = "UILabel"; text = "1x Anisotropic"; ObjectID = "mRh-h9-BHZ"; */
-"mRh-h9-BHZ.text" = "1x Anisotropic";
+/* Class = "UILabel"; text = "Show Auto IR OSD"; ObjectID = "AIR-OSD-LABEL"; */
+"AIR-OSD-LABEL.text" = "Show Auto IR OSD";
+
+/* Class = "UILabel"; text = "Enable Auto Internal Resolution"; ObjectID = "AIR-EN-LABEL"; */
+"AIR-EN-LABEL.text" = "Enable Auto Internal Resolution";
+
+/* Class = "UILabel"; text = "Max Scale"; ObjectID = "AIR-MAX-LABEL"; */
+"AIR-MAX-LABEL.text" = "Max Scale";
+
+/* Class = "UILabel"; text = "2x"; ObjectID = "AIR-MAX-VAL"; */
+"AIR-MAX-VAL.text" = "2x";
+
+/* Class = "UILabel"; text = "Min Scale"; ObjectID = "AIR-MIN-LABEL"; */
+"AIR-MIN-LABEL.text" = "Min Scale";
+
+/* Class = "UILabel"; text = "1x"; ObjectID = "AIR-MIN-VAL"; */
+"AIR-MIN-VAL.text" = "1x";
+
+/* Class = "UILabel"; text = "Target FPS"; ObjectID = "AIR-TGT-LABEL"; */
+"AIR-TGT-LABEL.text" = "Target FPS";
+
+/* Class = "UILabel"; text = "60 FPS"; ObjectID = "AIR-TGT-VAL"; */
+"AIR-TGT-VAL.text" = "60 FPS";
+
+/* Class = "UILabel"; text = "Force scale 1.0 on non‑ProMotion"; ObjectID = "FORCE-SCALE-LABEL"; */
+"FORCE-SCALE-LABEL.text" = "Force scale 1.0 on non‑ProMotion";
+
+/* Class = "UILabel"; text = "Shader Compiler Threads"; ObjectID = "SCOMP-LABEL"; */
+"SCOMP-LABEL.text" = "Shader Compiler Threads";
+
+/* Class = "UILabel"; text = "1"; ObjectID = "SCOMP-VALUE"; */
+"SCOMP-VALUE.text" = "1";
+
+/* Class = "UILabel"; text = "Shader Precompiler Threads"; ObjectID = "SPRE-LABEL"; */
+"SPRE-LABEL.text" = "Shader Precompiler Threads";
+
+/* Class = "UILabel"; text = "1"; ObjectID = "SPRE-VALUE"; */
+"SPRE-VALUE.text" = "1";
+
+/* Class = "UITableViewSection"; headerTitle = "Shader Threads"; ObjectID = "STH-SEC"; */
+"STH-SEC.headerTitle" = "Shader Threads";
+
+/* Class = "UILabel"; text = "Triple Buffering"; ObjectID = "TRI-BUF-LABEL"; */
+"TRI-BUF-LABEL.text" = "Triple Buffering";
+
+/* Class = "UINavigationItem"; title = "Max Scale"; ObjectID = "AIR-MAX-NAV"; */
+"AIR-MAX-NAV.title" = "Max Scale";
+
+/* Class = "UINavigationItem"; title = "Min Scale"; ObjectID = "AIR-MIN-NAV"; */
+"AIR-MIN-NAV.title" = "Min Scale";
+
+/* Class = "UINavigationItem"; title = "Target FPS"; ObjectID = "AIR-TGT-NAV"; */
+"AIR-TGT-NAV.title" = "Target FPS";
+
+/* Class = "UILabel"; text = "Asynchronous Present"; ObjectID = "ASYNC-PRESENT-LABEL"; */
+"ASYNC-PRESENT-LABEL.text" = "Asynchronous Present";

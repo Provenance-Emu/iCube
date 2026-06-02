@@ -3,6 +3,8 @@
 
 #import "DOLUIKitSwitch.h"
 
+#if !TARGET_OS_TV
+
 @implementation DOLUIKitSwitch
 
 - (void)addValueChangedTarget:(nullable id)target action:(SEL)action {
@@ -10,3 +12,5 @@
 }
 
 @end
+
+#endif

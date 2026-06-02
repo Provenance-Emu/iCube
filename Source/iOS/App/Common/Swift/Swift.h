@@ -7,8 +7,8 @@
 // This header imports the necessary framework headers in place of modules
 // so that Swift code can be used within Objective-C++.
 
-#import <UIKit/UIKit.h>
+#include <UIKit/UIKit.h>
 
 // Import the Swift header now.
 
-#import "DolphiniOS-Swift.h"
+#include "iCube-Swift.h"

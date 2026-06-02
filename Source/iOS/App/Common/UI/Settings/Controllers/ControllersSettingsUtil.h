@@ -13,6 +13,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString*)getLocalizedStringForSIDevice:(SerialInterface::SIDevices)device;
 + (NSString*)getLocalizedStringForWiimoteSource:(WiimoteSource)source;
 
+// Swift-friendly helpers (avoid exposing C++ enums to Swift)
++ (NSString*)localizedSIDeviceForInt:(int)device;
++ (NSString*)localizedWiimoteSourceForInt:(int)source;
+
 @end
 
 NS_ASSUME_NONNULL_END

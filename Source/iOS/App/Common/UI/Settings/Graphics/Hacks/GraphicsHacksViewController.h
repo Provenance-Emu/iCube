@@ -13,7 +13,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* efbToTextureCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* formatChangesCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* deferEfbCell;
+// TODO: A tvOS compatible widget for this setting @JoeMatt
+#if !TARGET_OS_TV
 @property (weak, nonatomic) IBOutlet UISlider* textureAccuracySlider;
+#endif
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* gpuTextureCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* xfbToTextureCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* presentXfbCell;
@@ -23,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* boundingBoxCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* textureCacheCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* viSkipCell;
+// Tri-state VISkip segmented control inserted programmatically into viSkipCell
+@property (strong, nonatomic) UISegmentedControl* viSkipModeControl;
 
 @end
 

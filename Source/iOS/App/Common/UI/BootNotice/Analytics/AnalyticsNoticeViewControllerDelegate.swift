@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import Foundation
-
-@objc protocol AnalyticsNoticeViewControllerDelegate : AnyObject {
+#if !os(tvOS)
+@objc protocol AnalyticsNoticeViewControllerDelegate: AnyObject {
   func didFinishAnalyticsNotice(result: Bool, sender: Any)
 }
+#endif

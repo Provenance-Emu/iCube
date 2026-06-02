@@ -20,11 +20,17 @@
 
 #pragma mark - Table view data source
 
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  // Ensure our cell can be dequeued when no storyboard/nib is present (e.g., tvOS SwiftUI wrapper)
+  [self.tableView registerClass:CpuEngineCell.class forCellReuseIdentifier:@"EngineCell"];
+}
+
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  
+
   _cores = PowerPC::AvailableCPUCores();
-  
+
   const auto currentCore = Config::Get(Config::MAIN_CPU_CORE);
   for (NSInteger i = 0; i < _cores.size(); i++) {
     if (currentCore == _cores[i]) {
@@ -44,7 +50,7 @@
 
 - (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   CpuEngineCell* cell = [tableView dequeueReusableCellWithIdentifier:@"EngineCell" forIndexPath:indexPath];
-  
+
   NSString* cpuCore;
   switch (_cores[indexPath.row]) {
     case PowerPC::CPUCore::Interpreter:
@@ -63,15 +69,15 @@
       cpuCore = @"Error";
       break;
   }
-  
+
   cell.engineCell.text = DOLCoreLocalizedString(cpuCore);
-  
+
   if (indexPath.row == _lastSelected) {
     cell.accessoryType = UITableViewCellAccessoryCheckmark;
   } else {
     cell.accessoryType = UITableViewCellAccessoryNone;
   }
-  
+
   return cell;
 }
 
@@ -81,13 +87,13 @@
 
     CpuEngineCell* cell = [tableView cellForRowAtIndexPath:indexPath];
     cell.accessoryType = UITableViewCellAccessoryCheckmark;
-    
+
     CpuEngineCell* oldCell = [tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:_lastSelected inSection:0]];
     oldCell.accessoryType = UITableViewCellAccessoryNone;
-    
+
     _lastSelected = indexPath.row;
   }
-  
+
   [tableView deselectRowAtIndexPath:indexPath animated:true];
 }
 

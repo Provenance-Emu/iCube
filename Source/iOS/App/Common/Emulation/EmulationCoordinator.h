@@ -6,8 +6,8 @@
 @class EmulationBootParameter;
 @class UIView;
 
-NSString* const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
-NSString* const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotification";
+NSString* _Nonnull const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
+NSString* _Nonnull const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotification";
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -22,6 +22,19 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)registerExternalDisplayView:(UIView*)externalView;
 - (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter;
 - (void)clearMetalLayer;
+
+/// Expose the current main display view used for rendering
+- (nullable UIView*)mainDisplayView;
+
+/// Ensures GameCube Pad 1 is bound to the iOS Touchscreen when no default device is connected.
+/// Also provides auto-assignment for newly connected external controllers.
++ (void)ensurePad1DefaultsToTouchscreen;
+/// Assign the most recently connected external controller to the first available player slot
+/// that is not already bound to a connected physical controller (ignores touchscreen bindings).
++ (void)autoAssignNewestExternalControllerToFirstAvailableSlot;
+
+// Ensure a given Wiimote port (1-based) is set to Emulated and uses the iOS Touchscreen profile
++ (void)ensureWiimoteDefaultsToTouchscreenForPort:(NSInteger)portOneBased;
 
 @end
 

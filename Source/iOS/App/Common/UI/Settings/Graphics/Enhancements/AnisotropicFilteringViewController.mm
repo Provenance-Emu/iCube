@@ -3,8 +3,6 @@
 
 #import "AnisotropicFilteringViewController.h"
 
-#import "Common/EnumUtils.h"
-
 #import "Core/Config/GraphicsSettings.h"
 
 #import "VideoCommon/VideoConfig.h"
@@ -19,98 +17,90 @@
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  
-  const AnisotropicFilteringMode anisotropicMode = Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
+
+  const int maxAnisotropy = (int)Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);
   const TextureFilteringMode filteringMode = Config::Get(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING);
-  
+
   if (filteringMode == TextureFilteringMode::Default) {
-    if (anisotropicMode == AnisotropicFilteringMode::Default) {
-      _lastSelected = 0;
-    } else {
-      _lastSelected = 1 + Common::ToUnderlying(anisotropicMode);
-    }
+    _lastSelected = maxAnisotropy;
   } else if (filteringMode == TextureFilteringMode::Nearest) {
-    _lastSelected = 6;
+    _lastSelected = 5;
   } else if (filteringMode == TextureFilteringMode::Linear) {
-    _lastSelected = 7 + Common::ToUnderlying(anisotropicMode);
+    _lastSelected = 6 + maxAnisotropy;
   }
-  
+
   UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:_lastSelected inSection:0]];
   [cell setAccessoryType:UITableViewCellAccessoryCheckmark];
 }
 
 - (void)tableView:(UITableView*)tableView didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
   if (_lastSelected != indexPath.row) {
-    AnisotropicFilteringMode anisotropicMode;
+    int maxAnisotropy;
     TextureFilteringMode filteringMode;
-    
+
     switch (indexPath.row) {
       case 0: // Default
-        anisotropicMode = AnisotropicFilteringMode::Default;
+        maxAnisotropy = 0;
         filteringMode = TextureFilteringMode::Default;
         break;
-      case 1: // Aniso 1x
-        anisotropicMode = AnisotropicFilteringMode::Force1x;
+      case 1: // Aniso 2x
+        maxAnisotropy = 1;
         filteringMode = TextureFilteringMode::Default;
         break;
-      case 2: // Aniso 2x
-        anisotropicMode = AnisotropicFilteringMode::Force2x;
+      case 2: // Aniso 4x
+        maxAnisotropy = 2;
         filteringMode = TextureFilteringMode::Default;
         break;
-      case 3: // Aniso 4x
-        anisotropicMode = AnisotropicFilteringMode::Force4x;
+      case 3: // Aniso 8x
+        maxAnisotropy = 3;
         filteringMode = TextureFilteringMode::Default;
         break;
-      case 4: // Aniso 8x
-        anisotropicMode = AnisotropicFilteringMode::Force8x;
+      case 4: // Aniso 16x
+        maxAnisotropy = 4;
         filteringMode = TextureFilteringMode::Default;
         break;
-      case 5: // Aniso 16x
-        anisotropicMode = AnisotropicFilteringMode::Force16x;
-        filteringMode = TextureFilteringMode::Default;
-        break;
-      case 6: // Force Nearest
-        anisotropicMode = AnisotropicFilteringMode::Force1x;
+      case 5: // Force Nearest
+        maxAnisotropy = 0;
         filteringMode = TextureFilteringMode::Nearest;
         break;
-      case 7: // Linear
-        anisotropicMode = AnisotropicFilteringMode::Force1x;
+      case 6: // Linear
+        maxAnisotropy = 0;
         filteringMode = TextureFilteringMode::Linear;
         break;
-      case 8: // Force Linear + Aniso 2x
-        anisotropicMode = AnisotropicFilteringMode::Force2x;
+      case 7: // Force Linear + Aniso 2x
+        maxAnisotropy = 1;
         filteringMode = TextureFilteringMode::Linear;
         break;
-      case 9: // Force Linear + Aniso 4x
-        anisotropicMode = AnisotropicFilteringMode::Force4x;
+      case 8: // Force Linear + Aniso 4x
+        maxAnisotropy = 2;
         filteringMode = TextureFilteringMode::Linear;
         break;
-      case 10: // Force Linear + Aniso 8x
-        anisotropicMode = AnisotropicFilteringMode::Force8x;
+      case 9: // Force Linear + Aniso 8x
+        maxAnisotropy = 3;
         filteringMode = TextureFilteringMode::Linear;
         break;
-      case 11: // Force Linear + Aniso 16x
-        anisotropicMode = AnisotropicFilteringMode::Force16x;
+      case 10: // Force Linear + Aniso 16x
+        maxAnisotropy = 4;
         filteringMode = TextureFilteringMode::Linear;
         break;
       default:
-        anisotropicMode = AnisotropicFilteringMode::Default;
+        maxAnisotropy = 0;
         filteringMode = TextureFilteringMode::Default;
         break;
     }
-    
-    Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY, anisotropicMode);
+
+    Config::SetBase(Config::GFX_ENHANCE_MAX_ANISOTROPY, static_cast<AnisotropicFilteringMode>(maxAnisotropy));
     Config::SetBase(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING, filteringMode);
-    
+
     UITableViewCell* cell = [tableView cellForRowAtIndexPath:indexPath];
     cell.accessoryType = UITableViewCellAccessoryCheckmark;
-    
+
     UITableViewCell* oldCell = [tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:_lastSelected inSection:0]];
     oldCell.accessoryType = UITableViewCellAccessoryNone;
-    
+
     _lastSelected = indexPath.row;
   }
-  
+
   [tableView deselectRowAtIndexPath:indexPath animated:true];
 }
 

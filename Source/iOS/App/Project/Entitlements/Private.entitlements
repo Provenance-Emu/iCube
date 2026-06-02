@@ -24,7 +24,7 @@
 	<true/>
 	<key>com.apple.security.exception.files.absolute-path.read-write</key>
 	<array>
-		<string>/private/var/mobile/Documents/DolphiniOS/</string>
+		<string>/private/var/mobile/Documents/iCube/</string>
 	</array>
 </dict>
 </plist>

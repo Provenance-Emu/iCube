@@ -6,6 +6,8 @@
 	<string>NotSet</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>UIAppSupportsHDR</key>
+	<true/>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -20,6 +22,10 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>me.oatmealdome.dolphinios.generic-software</string>
+				<string>public.iso-image</string>
+				<string>me.oatmealdome.dolphinios.rvz-image</string>
+				<string>me.oatmealdome.dolphinios.dol-executable</string>
+				<string>me.oatmealdome.dolphinios.elf-executable</string>
 			</array>
 		</dict>
 		<dict>
@@ -65,6 +71,17 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>me.oatmealdome.dolphinios</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dolphinios</string>
+			</array>
+		</dict>
+	</array>
 	<key>DOLBuildSource</key>
 	<string>$(DOL_BUILD_SOURCE)</string>
 	<key>DOLCoreVersion</key>
@@ -84,20 +101,33 @@
 			<string>DirectionalGamepad</string>
 		</dict>
 	</array>
-	<key>GCSupportsControllerUserInteraction</key>
-	<true/>
-	<key>GCSupportsGameMode</key>
-	<true/>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.games</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>media.retroachievements.org</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+			<key>retroachievements.org</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
 	</dict>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_altserver._tcp</string>
+		<string>_webdav._tcp</string>
+		<string>_dolphin-dsu._udp</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
@@ -129,6 +159,33 @@
 			</array>
 		</dict>
 	</dict>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypePlay</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Continue Last Game</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>dios.quick.continue</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeAdd</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Import Game</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>dios.quick.import</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeCompose</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Settings</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>dios.quick.settings</string>
+		</dict>
+	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UTExportedTypeDeclarations</key>
@@ -137,6 +194,7 @@
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
+				<string>public.archive</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>GameCube / Wii Software</string>
@@ -160,6 +218,7 @@
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
+				<string>public.archive</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>GameCube Software</string>
@@ -181,6 +240,7 @@
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
+				<string>public.archive</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Wii Software</string>
@@ -214,6 +274,82 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>sky</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>ISO Disk Image</string>
+			<key>UTTypeIdentifier</key>
+			<string>public.iso-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>iso</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+				<string>public.compressed-archive</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>RVZ Compressed Disk Image</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.rvz-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>rvz</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.executable</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>GameCube/Wii Executable</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.dol-executable</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>dol</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.executable</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>ELF Executable</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.elf-executable</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>elf</string>
 				</array>
 			</dict>
 		</dict>

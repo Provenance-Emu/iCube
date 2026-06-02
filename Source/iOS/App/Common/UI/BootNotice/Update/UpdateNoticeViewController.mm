@@ -14,7 +14,7 @@
 - (void)viewDidLoad {
   [super viewDidLoad];
   
-  NSString* message = [NSString stringWithFormat:@"DolphiniOS version %@ is now available.", self.updateInfo[@"version"]];
+  NSString* message = [NSString stringWithFormat:@"iCube version %@ is now available.", self.updateInfo[@"version"]];
   [self.versionLabel setText:message];
   
   [self.changesLabel setText:self.updateInfo[@"changes"]];

@@ -14,6 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) std::string gameId;
 @property (nonatomic) u16 revision;
 
+- (void)setGameIdString:(NSString*)value;
+- (void)setRevisionNumber:(NSNumber*)value;
+
 @end
 
 NS_ASSUME_NONNULL_END

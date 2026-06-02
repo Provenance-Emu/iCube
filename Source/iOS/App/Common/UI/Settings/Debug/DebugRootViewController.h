@@ -18,6 +18,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet UILabel* fastmemStatusLabel;
 @property (weak, nonatomic) IBOutlet UILabel* launchTimesLabel;
 
+@property (weak, nonatomic) IBOutlet DOLSwitch* loggingSwitch;
+@property (weak, nonatomic) IBOutlet UILabel* loggingVerbosityLabel;
+
 @end
 
 NS_ASSUME_NONNULL_END

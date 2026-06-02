@@ -5,8 +5,7 @@ import Foundation
 
 // based off ButtonManager::ButtonType
 @objc
-enum TCButtonType: Int
-{
+enum TCButtonType: Int {
   // GameCube
   case gcButtonA = 0
   case gcButtonB = 1
@@ -127,11 +126,9 @@ enum TCButtonType: Int
   case nunchukAccelUp = 904
   case nunchukAccelDown = 905
   // TODO: Guitar, Drums, Turntable, Rumble
-  
-  func getImageName() -> String
-  {
-    switch self
-    {
+
+  func getImageName() -> String {
+    switch self {
     case .gcButtonA:
       return "gcpad_a"
     case .gcButtonB:
@@ -193,11 +190,9 @@ enum TCButtonType: Int
       return "gcpad_a"
     }
   }
-  
-  func getButtonScale() -> CGFloat
-  {
-    switch self
-    {
+
+  func getButtonScale() -> CGFloat {
+    switch self {
     case .gcButtonA, .gcButtonZ, .gcTriggerL, .gcTriggerR, .wiiButtonB, .nunchukButtonZ, .classicButtonZL, .classicButtonZR, .classicTriggerL, .classicTriggerR:
       return 0.6
     case .gcButtonB, .gcButtonStart, .wiiButtonOne, .wiiButtonTwo, .wiiButtonA, .classicButtonA, .classicButtonB, .classicButtonX, .classicButtonY:

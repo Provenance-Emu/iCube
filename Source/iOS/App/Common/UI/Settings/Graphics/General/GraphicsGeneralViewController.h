@@ -13,8 +13,16 @@ NS_ASSUME_NONNULL_BEGIN
 @property (weak, nonatomic) IBOutlet UILabel* backendLabel;
 @property (weak, nonatomic) IBOutlet GraphicsChoiceCell* aspectRatioCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* vsyncCell;
+@property (weak, nonatomic) IBOutlet GraphicsBoolCell* autoIrEnableCell;
+@property (weak, nonatomic) IBOutlet GraphicsBoolCell* autoIrOsdCell;
+@property (weak, nonatomic) IBOutlet GraphicsChoiceCell* autoIrTargetFpsCell;
+@property (weak, nonatomic) IBOutlet GraphicsChoiceCell* autoIrMinScaleCell;
+@property (weak, nonatomic) IBOutlet GraphicsChoiceCell* autoIrMaxScaleCell;
 @property (weak, nonatomic) IBOutlet GraphicsChoiceCell* shaderModeCell;
 @property (weak, nonatomic) IBOutlet GraphicsBoolCell* shaderCompileCell;
+@property (weak, nonatomic) IBOutlet GraphicsBoolCell* tripleBufferCell;
+@property (weak, nonatomic) IBOutlet GraphicsBoolCell* forceScaleOneCell;
+@property (weak, nonatomic) IBOutlet GraphicsBoolCell* asyncPresentCell;
 
 @end
 

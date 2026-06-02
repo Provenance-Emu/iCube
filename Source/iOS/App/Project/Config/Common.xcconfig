@@ -1,7 +1,10 @@
 // Copyright 2022 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-LIBRARY_SEARCH_PATHS = $(inherited) "$(SRCROOT)/../../../build-$(PLATFORM_NAME)-$(DOL_CORE_BUILD_TARGET)/Source/iOS/Library"
-HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../Externals/mbedtls/include" "$(SRCROOT)/../../../Externals/fmt/fmt/include" "$(SRCROOT)/../../../Externals/soundtouch/" "$(SRCROOT)/../../../Externals/picojson/"
+LIBRARY_SEARCH_PATHS = $(inherited) "$(SRCROOT)/../../../Externals/MoltenVK-macOS"
+HEADER_SEARCH_PATHS =  $(inherited) "$(SRCROOT)/../../../Externals/mbedtls/include" "$(SRCROOT)/../../../Externals/fmt/fmt/include" "$(SRCROOT)/../../../Externals/soundtouch/" "$(SRCROOT)/../../../Externals/picojson/" "$(SRCROOT)/../../../Externals" "$(SRCROOT)/../../../Externals/rcheevos" "$(SRCROOT)/../../../Externals/rcheevos/rcheevos/include"
 USER_HEADER_SEARCH_PATHS = $(inherited) "$(SRCROOT)/../../Core/**" "$(SRCROOT)/../Library/"
 SWIFT_OBJC_BRIDGING_HEADER = Common/Swift/BridgingHeader.h
+
+DOL_APP_ICON_ASSET_NAME_TV = tvOS Icons
+ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*] = $(DOL_APP_ICON_ASSET_NAME_TV)
