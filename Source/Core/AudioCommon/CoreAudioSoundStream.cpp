@@ -88,7 +88,14 @@ OSStatus CoreAudioSound::callback(void* ref_con, AudioUnitRenderActionFlags* act
     // 16-bit stereo: 4 bytes per frame; use shift to avoid divide in callback.
     sound->m_mixer->Mix(static_cast<short*>(buffer.mData), buffer.mDataByteSize >> 2);
 
-    // Post-processing: convert to float, process, then back to int16_t
+    // Post-processing: convert to float, process, then back to int16_t.
+    // RT-safety/perf: skip the entire int16->float->int16 round-trip when no FX
+    // are active (the default). Output is then bit-identical to the raw Mix.
+    const bool fx_active =
+        sound->m_bitcrush_enabled || sound->m_eq_enabled || sound->m_delay_enabled;
+    if (!fx_active)
+      continue;
+
     const UInt32 frames = buffer.mDataByteSize >> 2;
     int16_t* pcm = static_cast<int16_t*>(buffer.mData);
     for (UInt32 f = 0; f < frames; ++f)
