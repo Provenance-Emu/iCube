@@ -29,8 +29,36 @@
 #endif
 #endif
 
+#include <errno.h>
+
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if defined(__APPLE__) && defined(_M_ARM_64)
+#include <dlfcn.h>
+#endif
+
 namespace Common
 {
+#if defined(__APPLE__) && defined(_M_ARM_64)
+// iCube TXM port: minimal slice of Joe's MemoryUtil helpers. Detects whether the
+// per-thread W^X toggle (pthread_jit_write_protect_np) is present. Used by
+// WriteProtect/UnWriteProtect below to skip mprotect on macOS-ARM64 desktop (where
+// the toggle manages W^X and mprotect on MAP_JIT pages is disallowed) — matching
+// 2509's prior macOS-ARM mprotect-skip. On iOS/tvOS these are compiled but unused
+// (the iOS branch skips mprotect entirely).
+using ToggleFn = void (*)(int);
+static inline ToggleFn AppleGetJitToggle()
+{
+  static ToggleFn fn_cached = (ToggleFn)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");
+  return fn_cached;
+}
+static inline bool AppleHasJitToggle()
+{
+  return AppleGetJitToggle() != nullptr;
+}
+#endif
+
 // This is purposely not a full wrapper for virtualalloc/mmap, but it
 // provides exactly the primitive operations that Dolphin needs.
 
@@ -219,10 +247,24 @@ bool WriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     PanicAlertFmt("WriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
     return false;
   }
-#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
-  // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
-  // that were marked executable, instead it uses the protections offered by MAP_JIT
-  // for write protection.
+#elif defined(__APPLE__) && defined(_M_ARM_64)
+  // On iOS/tvOS, JIT memory permissions are managed by the per-JIT-type implementations
+  // (pthread_jit_write_protect_np for Legacy, vm_remap mirrors for LuckNoTXM, lwmem for
+  // LuckTXM). mprotect() returns EPERM on MAP_JIT and vm_remap'd pages — skip it on iOS/tvOS.
+#if !(TARGET_OS_IOS || TARGET_OS_TV)
+  // macOS-ARM64 desktop: only mprotect on the legacy (no JIT-toggle) path; when
+  // pthread_jit_write_protect_np is present, W^X is toggled per-thread and mprotect on
+  // MAP_JIT pages is disallowed (preserves 2509's "MacOS 11.2 on ARM" skip behavior).
+  if (!AppleHasJitToggle())
+  {
+    if (mprotect(ptr, size, allowExecute ? (PROT_READ | PROT_EXEC) : PROT_READ) != 0)
+    {
+      PanicAlertFmt("WriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
+      return false;
+    }
+  }
+#endif  // !(TARGET_OS_IOS || TARGET_OS_TV)
+#else
   if (mprotect(ptr, size, allowExecute ? (PROT_READ | PROT_EXEC) : PROT_READ) != 0)
   {
     PanicAlertFmt("WriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
@@ -241,10 +283,21 @@ bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     PanicAlertFmt("UnWriteProtectMemory failed!\nVirtualProtect: {}", GetLastErrorString());
     return false;
   }
-#elif !(defined(_M_ARM_64) && defined(__APPLE__) && !defined(IPHONEOS))
-  // MacOS 11.2 on ARM does not allow for changing the access permissions of pages
-  // that were marked executable, instead it uses the protections offered by MAP_JIT
-  // for write protection.
+#elif defined(__APPLE__) && defined(_M_ARM_64)
+  // On iOS/tvOS, mprotect() returns EPERM on MAP_JIT and vm_remap'd pages — skip it entirely.
+#if !(TARGET_OS_IOS || TARGET_OS_TV)
+  // macOS-ARM64 desktop: only mprotect on the legacy (no JIT-toggle) path; preserves 2509 skip.
+  if (!AppleHasJitToggle())
+  {
+    if (mprotect(ptr, size,
+                 allowExecute ? (PROT_READ | PROT_WRITE | PROT_EXEC) : PROT_WRITE | PROT_READ) != 0)
+    {
+      PanicAlertFmt("UnWriteProtectMemory failed!\nmprotect: {}", LastStrerrorString());
+      return false;
+    }
+  }
+#endif  // !(TARGET_OS_IOS || TARGET_OS_TV)
+#else
   if (mprotect(ptr, size,
                allowExecute ? (PROT_READ | PROT_WRITE | PROT_EXEC) : PROT_WRITE | PROT_READ) != 0)
   {

@@ -8,7 +8,7 @@
 
 namespace Common
 {
-static JitType g_jit_type = JitType::LuckTXM;
+static JitType g_jit_type = JitType::Legacy;
 
 void SetJitType(JitType type)
 {
@@ -97,5 +97,12 @@ void JITPageWriteDisableExecuteEnable(void* ptr)
   {
     JITPageWriteDisableExecuteEnable_Legacy(ptr);
   }
+}
+
+bool IsTXMAvailable()
+{
+  if (g_jit_type == JitType::LuckTXM)
+    return IsTXMJITAvailable_LuckTXM();
+  return false;
 }
 }  // namespace Common

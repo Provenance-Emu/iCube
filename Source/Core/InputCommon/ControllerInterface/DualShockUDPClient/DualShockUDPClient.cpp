@@ -7,6 +7,7 @@
 #include <array>
 #include <chrono>
 #include <tuple>
+#include <atomic>
 
 #include <SFML/Network/SocketSelector.hpp>
 #include <SFML/Network/UdpSocket.hpp>
@@ -28,6 +29,8 @@
 namespace ciface::DualShockUDPClient
 {
 constexpr std::string_view DUALSHOCKUDP_SOURCE_NAME = "DSUClient";
+// Global RX counter for PadData, useful for debug UIs (read via bridge)
+std::atomic<uint64_t> g_rx_counter{0};
 
 namespace Settings
 {
@@ -644,6 +647,7 @@ Core::DeviceRemoval Device::UpdateInput()
     if (auto pad_data = msg.CheckAndCastTo<Proto::MessageType::PadDataResponse>())
     {
       m_pad_data = *pad_data;
+      g_rx_counter.fetch_add(1, std::memory_order_relaxed);
 
       // Update touch pad relative coordinates
       if (m_pad_data.touch1.id != m_prev_touch.id)

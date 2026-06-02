@@ -5,12 +5,11 @@
 
 #include <cstddef>
 #include <string>
-
-#include "Common/CommonTypes.h"
-
-#ifdef __APPLE__
+#if defined(__APPLE__)
 #include <TargetConditionals.h>
 #endif
+
+#include "Common/CommonTypes.h"
 
 namespace Common
 {
@@ -21,7 +20,7 @@ void* AllocateExecutableMemory(size_t size);
 // In general where applicable the ScopedJITPageWriteAndNoExecute wrapper
 // should be used to prevent bugs from not pairing up the calls properly.
 
-#ifndef IPHONEOS
+#if !(defined(__APPLE__) && (TARGET_OS_IPHONE || TARGET_OS_TV))
 // Allows a thread to write to executable memory, but not execute the data.
 void JITPageWriteEnableExecuteDisable();
 // Allows a thread to execute memory allocated for execution, but not write to it.
@@ -34,8 +33,9 @@ struct ScopedJITPageWriteAndNoExecute
   ~ScopedJITPageWriteAndNoExecute() { JITPageWriteDisableExecuteEnable(); }
 };
 #else
-void JITPageWriteEnableExecuteDisable(void* ptr);
-void JITPageWriteDisableExecuteEnable(void* ptr);
+  #define APPLE_MOBILE (TARGET_OS_IPHONE || TARGET_OS_TV)
+  void JITPageWriteEnableExecuteDisable(void* ptr);
+  void JITPageWriteDisableExecuteEnable(void* ptr);
 
 struct ScopedJITPageWriteAndNoExecute
 {
@@ -58,7 +58,7 @@ bool WriteProtectMemory(void* ptr, size_t size, bool executable = false);
 bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute = false);
 size_t MemPhysical();
 
-#if defined(IPHONEOS) || TARGET_OS_IOS
+#if defined(IPHONEOS) || TARGET_OS_IOS || TARGET_OS_TV
 
 enum class JitType
 {
@@ -69,7 +69,6 @@ enum class JitType
 
 void SetJitType(JitType type);
 
-void* AllocateExecutableMemory(size_t size);
 void FreeExecutableMemory(void* ptr, size_t size);
 void AllocateExecutableMemoryRegion();
 ptrdiff_t AllocateWritableRegionAndGetDiff(void* rx_ptr, size_t size);
@@ -80,6 +79,12 @@ void* AllocateExecutableMemory_LuckTXM(size_t size);
 void FreeExecutableMemory_LuckTXM(void* ptr);
 void AllocateExecutableMemoryRegion_LuckTXM();
 ptrdiff_t AllocateWritableRegionAndGetDiff_LuckTXM();
+bool IsTXMJITAvailable_LuckTXM();
+
+// Returns true when LuckTXM is in use and TXM authorization succeeded (StikDebug
+// intercepted brk #0x69).  Returns false when running under Xcode (LLDB script
+// skipped the brk and cleared dolphin_txm_auth_status) or when not using LuckTXM.
+bool IsTXMAvailable();
 
 // LuckNoTXM
 void* AllocateExecutableMemory_LuckNoTXM(size_t size);

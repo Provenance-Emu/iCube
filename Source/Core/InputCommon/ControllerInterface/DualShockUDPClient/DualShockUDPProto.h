@@ -9,6 +9,8 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/Hash.h"
+#include "InputCommon/ControllerInterface/ControllerInterface.h"
+#include "Common/Logging/Log.h"
 
 namespace ciface::DualShockUDPClient::Proto
 {

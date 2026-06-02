@@ -8,6 +8,7 @@
 
 #include "AudioCommon/AlsaSoundStream.h"
 #include "AudioCommon/CoreAudioSoundStream.h"
+#include "AudioCommon/AVAudioEngineSoundStream.h"
 #include "AudioCommon/CubebStream.h"
 #include "AudioCommon/Mixer.h"
 #include "AudioCommon/NullSoundStream.h"
@@ -43,8 +44,15 @@ static std::unique_ptr<SoundStream> CreateSoundStreamForBackend(std::string_view
     return std::make_unique<OpenSLESStream>();
   else if (backend == BACKEND_WASAPI && WASAPIStream::IsValid())
     return std::make_unique<WASAPIStream>();
+#ifdef IPHONEOS
+  else if (backend == "AVAudioEngine" && ::AVAudioEngineSound::IsValid())
+    return std::unique_ptr<SoundStream>(new ::AVAudioEngineSound());
   else if (backend == BACKEND_COREAUDIO && CoreAudioSound::IsValid())
     return std::make_unique<CoreAudioSound>();
+#else
+  else if (backend == BACKEND_COREAUDIO && CoreAudioSound::IsValid())
+    return std::make_unique<CoreAudioSound>();
+#endif
   return {};
 }
 
@@ -97,10 +105,12 @@ void ShutdownSoundStream(Core::System& system)
 
 std::string GetDefaultSoundBackend()
 {
+#if defined(IPHONEOS)
+  return BACKEND_COREAUDIO;
+#endif
+
 #if defined(ANDROID)
   return BACKEND_OPENSLES;
-#elif defined(IPHONEOS)
-  return BACKEND_COREAUDIO;
 #else
   if (CubebStream::IsValid())
     return BACKEND_CUBEB;
@@ -136,8 +146,14 @@ std::vector<std::string> GetSoundBackends()
     backends.emplace_back(BACKEND_OPENSLES);
   if (WASAPIStream::IsValid())
     backends.emplace_back(BACKEND_WASAPI);
+#ifdef IPHONEOS
+  backends.emplace_back("AVAudioEngine");
   if (CoreAudioSound::IsValid())
     backends.emplace_back(BACKEND_COREAUDIO);
+#else
+  if (CoreAudioSound::IsValid())
+    backends.emplace_back(BACKEND_COREAUDIO);
+#endif
 
   return backends;
 }
@@ -281,4 +297,16 @@ void ToggleMuteVolume(Core::System& system)
   Config::SetBaseOrCurrent(Config::MAIN_AUDIO_MUTED, !isMuted);
   UpdateSoundStream(system);
 }
+
+#ifdef IPHONEOS
+::AVAudioEngineSound* GetActiveAVAudioEngineSound()
+{
+  using namespace Core;
+  System& sys = System::GetInstance();
+  SoundStream* ss = sys.GetSoundStream();
+  if (!ss)
+    return nullptr;
+  return dynamic_cast<::AVAudioEngineSound*>(ss);
+}
+#endif
 }  // namespace AudioCommon
