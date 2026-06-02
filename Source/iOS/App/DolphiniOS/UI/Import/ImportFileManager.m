@@ -77,10 +77,35 @@
   };
   
   NSString* sourcePath = [url path];
-  NSString* destinationPath = [[UserFolderUtil getSoftwareFolder] stringByAppendingPathComponent:[sourcePath lastPathComponent]];
-  
+  NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
+  NSString* destinationPath = [softwareFolder stringByAppendingPathComponent:[sourcePath lastPathComponent]];
+
   NSFileManager* fileManager = [NSFileManager defaultManager];
-  
+
+  // Archive imports: extract the zip and move only the supported disc images it
+  // contains into the Software folder where the scanner looks. The zip itself is
+  // never copied into the library, so a failed/empty archive leaves no phantom
+  // file that would block a retry ("already imported"). Extraction is
+  // synchronous so the security-scoped resource is still valid throughout.
+  if ([[[sourcePath pathExtension] lowercaseString] isEqualToString:@"zip"]) {
+    DOLZipImportResult* result = [DOLZipImportHelper extractZipAtPath:sourcePath toFolder:softwareFolder];
+
+    if (result.errorMessage != nil) {
+      UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:result.errorMessage preferredStyle:UIAlertControllerStyleAlert];
+
+      [errorAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
+        handler:^(UIAlertAction* action) {
+        finish();
+      }]];
+
+      [self presentViewControllerOnWindow:errorAlert];
+    } else {
+      finish();
+    }
+
+    return;
+  }
+
   if ([fileManager fileExistsAtPath:destinationPath]) {
     UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:@"This software has already been imported." preferredStyle:UIAlertControllerStyleAlert];
     
