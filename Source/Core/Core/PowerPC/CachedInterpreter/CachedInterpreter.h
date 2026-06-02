@@ -92,6 +92,12 @@ private:
   // iCube: operands for the block-linking trampoline (MAIN_CIR_BLOCK_LINKING). See LinkBlock.
   struct LinkBlockOperands;
   struct InterpretOperands;
+  // iCube: specialized-only payload (MAIN_CIR_SPECIALIZED_OPS). Layout-COMPATIBLE prefix with
+  // InterpretOperands plus a trailing compact op-id, so the dispatch switch in ExecuteOneBlock can
+  // jump-table on the id instead of comparing the callback pointer N times. Deliberately a SEPARATE
+  // struct from InterpretOperands: the generic (flag-off) path must never see a widened payload, so
+  // its stream layout/advancement stays byte-identical to stock 2509.
+  struct SpecializedInterpretOperands;
   struct InterpretAndCheckExceptionsOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
@@ -120,15 +126,19 @@ private:
   static s32 Interpret(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   template <bool write_pc>
   static s32 Interpret(std::ostream& stream, const InterpretOperands& operands);
-  // iCube: specialized variant of Interpret<write_pc>. Func is a compile-time-constant
-  // Interpreter:: handler pointer, so the per-op call is direct (and inlinable under ThinLTO)
-  // instead of the indirect operands.func(...) load+call. Reproduces the Interpret<write_pc>
-  // bookkeeping contract EXACTLY: write_pc => pc=current_pc, npc=current_pc+4; run handler;
-  // return sizeof(AnyCallback)+sizeof(InterpretOperands). Reuses the InterpretOperands payload
-  // layout so dispatch advancement is identical. Gated by MAIN_CIR_SPECIALIZED_OPS at emit time.
-  template <Interpreter::Instruction Func, bool write_pc>
+  // iCube: specialized dispatch (MAIN_CIR_SPECIALIZED_OPS). There are exactly TWO instantiations
+  // (write_pc false/true), each a single marker callback whose value ExecuteOneBlock recognizes to
+  // enter the inline jump-table; the actual per-op handler is selected by a switch on the compact
+  // op-id carried in SpecializedInterpretOperands and called by its compile-time-constant pointer
+  // Interpreter::name(...) (direct/inlinable, ZERO indirect calls — same property as the prior
+  // per-op compare-chain). The body is also a correct standalone callback (same switch), so it is
+  // safe if ever reached through the generic indirect tail. Reproduces the Interpret<write_pc>
+  // bookkeeping contract EXACTLY: write_pc => pc=current_pc, npc=current_pc+4; run handler; return
+  // sizeof(AnyCallback)+sizeof(SpecializedInterpretOperands). The dispatch switch is shared with
+  // ExecuteOneBlock via the CIR_SPEC_SWITCH macro so the two can never diverge.
+  template <bool write_pc>
   static s32 InterpretSpecialized(PowerPC::PowerPCState& ppc_state,
-                                  const InterpretOperands& operands);
+                                  const SpecializedInterpretOperands& operands);
   template <bool write_pc>
   static s32 InterpretAndCheckExceptions(PowerPC::PowerPCState& ppc_state,
                                          const InterpretAndCheckExceptionsOperands& operands);
@@ -201,6 +211,19 @@ struct CachedInterpreter::InterpretOperands
   void (*func)(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction
   u32 current_pc;
   UGeckoInstruction inst;
+};
+
+// iCube: specialized-op payload (MAIN_CIR_SPECIALIZED_OPS). Inherits the full InterpretOperands so
+// the handler-invocation fields (interpreter, func, current_pc, inst) are reused verbatim, then adds
+// the compact op-id the ExecuteOneBlock jump-table dispatches on. This is a DISTINCT type from
+// InterpretOperands on purpose: the generic flag-off path keeps the unmodified 24-byte
+// InterpretOperands, so its stream layout and advancement are byte-identical to stock 2509. The id
+// makes this struct larger (id + padding to alignof(AnyCallback)); the specialized branch in
+// ExecuteOneBlock advances by sizeof(SpecializedInterpretOperands) accordingly. Trivially copyable;
+// the trailing padding keeps sizeof % alignof(AnyCallback) == 0 for the emitter's static_assert.
+struct CachedInterpreter::SpecializedInterpretOperands : InterpretOperands
+{
+  u16 op_id;  // CirSpecOp value; index into the dispatch jump-table
 };
 
 struct CachedInterpreter::InterpretAndCheckExceptionsOperands : InterpretOperands
