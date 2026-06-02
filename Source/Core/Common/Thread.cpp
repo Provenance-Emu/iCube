@@ -13,6 +13,8 @@
 
 #ifdef __APPLE__
 #include <mach/mach.h>
+#include <cstring>
+#include <pthread/qos.h>
 #elif defined BSD4_4 || defined __FreeBSD__ || defined __OpenBSD__
 #include <pthread_np.h>
 #elif defined __NetBSD__
@@ -165,10 +167,36 @@ void SwitchCurrentThread()
   usleep(1000 * 1);
 }
 
+#ifdef __APPLE__
+// iCube: tag emulation threads with a QoS class so Apple Silicon biases the hot
+// threads onto P-cores — QoS is the only P/E-core steering knob on AS, and the
+// std::thread CPU/GPU/DSP threads otherwise run at QOS_CLASS_DEFAULT (can be
+// parked on E-cores). Recovered from the pre-2509 fork; hints only, so a name
+// mismatch is a harmless no-op. Lives in the core, so iCube + Provenance share it.
+static void SetCurrentThreadQoS_Apple(const char* name)
+{
+  if (!name)
+    return;
+  qos_class_t qos = QOS_CLASS_DEFAULT;
+  if (std::strstr(name, "CPU"))
+    qos = QOS_CLASS_USER_INTERACTIVE;
+  else if (std::strstr(name, "DSP") || std::strstr(name, "Audio") || std::strstr(name, "Video") ||
+           std::strstr(name, "GPU") || std::strstr(name, "FIFO-GPU") ||
+           std::strstr(name, "AsyncShaderCompiler"))
+    qos = QOS_CLASS_USER_INITIATED;
+  else if (std::strstr(name, "DVD") || std::strstr(name, "Memcard") || std::strstr(name, "Asset") ||
+           std::strstr(name, "Analytics") || std::strstr(name, "FrameDumping") ||
+           std::strstr(name, "USB") || std::strstr(name, "Wiimote"))
+    qos = QOS_CLASS_UTILITY;
+  pthread_set_qos_class_self_np(qos, 0);
+}
+#endif
+
 void SetCurrentThreadName(const char* name)
 {
 #ifdef __APPLE__
   pthread_setname_np(name);
+  SetCurrentThreadQoS_Apple(name);
 #elif defined __FreeBSD__ || defined __OpenBSD__
   pthread_set_name_np(pthread_self(), name);
 #elif defined(__NetBSD__)
