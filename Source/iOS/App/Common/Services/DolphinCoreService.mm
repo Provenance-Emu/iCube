@@ -131,6 +131,12 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::GFX_SHADER_COMPILER_THREADS, threads);
   SetBaseIfUnspecified(Config::GFX_SHADER_PRECOMPILER_THREADS, threads);
 
+  // Compile shaders up front (a one-time wait at boot) rather than on first
+  // encounter during gameplay — far better than mid-game stutter on the jitless
+  // CPU-bound path. Pairs with the on-disk Metal binary-archive (persists PSOs
+  // across launches, so the boot wait shrinks on subsequent runs).
+  SetBaseIfUnspecified(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING, true);
+
   // Prefer asynchronous present on iOS/tvOS by default (can be toggled in UI)
   SetBaseIfUnspecified(Config::GFX_ASYNC_PRESENT, true);
 
