@@ -196,11 +196,16 @@ if ((DEFINED CMAKE_ANDROID_ARCH_ABI AND CMAKE_ANDROID_ARCH_ABI MATCHES "x86|x86_
 endif()
 
 if (APPLE)
+  # HttpRequest.cpp uses CFNetwork's CFReadStream HTTP API (CFReadStreamCreateForHTTPRequest,
+  # kCFStreamPropertyHTTPResponseHeader, etc.) as an iOS/tvOS fallback when curl fails. CFNetwork
+  # is not found at top level (only CoreFoundation is), so find + link it here.
+  find_library(CFNETWORK_LIBRARY CFNetwork)
   target_link_libraries(common
   PRIVATE
     ${APPKIT_LIBRARY}
     ${COREFOUNDATION_LIBRARY}
     ${IOK_LIBRARY}
+    ${CFNETWORK_LIBRARY}
   )
 elseif(WIN32)
   target_link_libraries(common

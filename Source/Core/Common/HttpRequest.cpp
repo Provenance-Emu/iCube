@@ -5,9 +5,26 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdlib>
 #include <mutex>
 
 #include <curl/curl.h>
+
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if TARGET_OS_IOS || TARGET_OS_TV
+#include <CoreFoundation/CoreFoundation.h>
+#include <CFNetwork/CFNetwork.h>
+#endif
+#endif
+
+#if !defined(_WIN32)
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#endif
 
 #include "Common/CommonPaths.h"
 #include "Common/FileUtil.h"
@@ -43,11 +60,18 @@ public:
   std::string EscapeComponent(const std::string& string);
 
 private:
+  // iOS curl threaded-resolver workaround: pre-resolve the host via the system
+  // resolver and feed the result to curl through CURLOPT_RESOLVE. Internal only;
+  // not exposed on the public HttpRequest interface.
+  void PreResolveHost(const std::string& host, int port);
+
   static inline std::once_flag s_curl_was_initialized;
   ProgressCallback m_callback;
   Headers m_response_headers;
   std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> m_curl{nullptr, curl_easy_cleanup};
   std::string m_error_string;
+  std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> m_resolve{nullptr,
+                                                                        curl_slist_free_all};
 };
 
 HttpRequest::HttpRequest(std::chrono::milliseconds timeout_ms, ProgressCallback callback)
@@ -189,6 +213,62 @@ void HttpRequest::Impl::FollowRedirects(long max)
   curl_easy_setopt(m_curl.get(), CURLOPT_MAXREDIRS, max);
 }
 
+void HttpRequest::Impl::PreResolveHost(const std::string& host, int port)
+{
+#if !defined(_WIN32)
+  // Attempt to resolve host via system and provide hint to curl
+  addrinfo hints{};
+  hints.ai_family = AF_UNSPEC; // IPv4 or IPv6
+  hints.ai_socktype = SOCK_STREAM;
+  addrinfo* res = nullptr;
+  const std::string port_str = std::to_string(port);
+  if (getaddrinfo(host.c_str(), port_str.c_str(), &hints, &res) == 0 && res)
+  {
+    for (addrinfo* ai = res; ai != nullptr; ai = ai->ai_next)
+    {
+      char ipbuf[INET6_ADDRSTRLEN] = {0};
+      std::string ip;
+      if (ai->ai_family == AF_INET)
+      {
+        auto* a = reinterpret_cast<sockaddr_in*>(ai->ai_addr);
+        inet_ntop(AF_INET, &a->sin_addr, ipbuf, sizeof(ipbuf));
+        ip.assign(ipbuf);
+      }
+      else if (ai->ai_family == AF_INET6)
+      {
+        auto* a6 = reinterpret_cast<sockaddr_in6*>(ai->ai_addr);
+        inet_ntop(AF_INET6, &a6->sin6_addr, ipbuf, sizeof(ipbuf));
+        ip.assign(ipbuf);
+      }
+      if (!ip.empty())
+      {
+        // If IPv6, bracket the literal as required by CURLOPT_RESOLVE and skip if libcurl has no IPv6
+        bool is_ipv6 = ip.find(':') != std::string::npos;
+        if (is_ipv6)
+        {
+          const curl_version_info_data* vi = curl_version_info(CURLVERSION_NOW);
+          if (!(vi && (vi->features & CURL_VERSION_IPV6)))
+          {
+            // libcurl built without IPv6 support; skip this entry
+            continue;
+          }
+        }
+        const std::string ip_literal = is_ipv6 ? ("[" + ip + "]") : ip;
+        std::string entry = host + ":" + port_str + ":" + ip_literal;
+        curl_slist* raw = m_resolve.release();
+        raw = curl_slist_append(raw, entry.c_str());
+        m_resolve.reset(raw);
+        fprintf(stderr, "[HTTP] PreResolved %s:%s -> %s\n", host.c_str(), port_str.c_str(), ip.c_str());
+      }
+    }
+    curl_easy_setopt(m_curl.get(), CURLOPT_RESOLVE, m_resolve.get());
+    freeaddrinfo(res);
+  }
+#else
+  (void)host; (void)port;
+#endif
+}
+
 std::string HttpRequest::Impl::GetHeaderValue(std::string_view name) const
 {
   for (const auto& [key, value] : m_response_headers)
@@ -277,6 +357,32 @@ HttpRequest::Response HttpRequest::Impl::Fetch(const std::string& url, Method me
   curl_easy_setopt(m_curl.get(), CURLOPT_HEADERFUNCTION, header_callback);
   curl_easy_setopt(m_curl.get(), CURLOPT_HEADERDATA, static_cast<void*>(&m_response_headers));
 
+  // Auto pre-resolve host to avoid curl's threaded resolver issues
+#if !defined(_WIN32)
+  {
+    size_t scheme_pos = url.find("://");
+    std::string scheme = scheme_pos != std::string::npos ? url.substr(0, scheme_pos) : std::string();
+    size_t host_start = (scheme_pos != std::string::npos) ? scheme_pos + 3 : 0;
+    size_t path_pos = url.find('/', host_start);
+    size_t colon_pos = url.find(':', host_start);
+    size_t host_end = (path_pos == std::string::npos) ? url.size() : path_pos;
+    if (colon_pos != std::string::npos && colon_pos < host_end)
+      host_end = colon_pos;
+    if (host_end > host_start)
+    {
+      std::string host = url.substr(host_start, host_end - host_start);
+      int port = (scheme == "https") ? 443 : 80;
+      if (colon_pos != std::string::npos)
+      {
+        size_t port_end = (path_pos == std::string::npos) ? url.size() : path_pos;
+        std::string port_str = url.substr(colon_pos + 1, port_end - (colon_pos + 1));
+        if (!port_str.empty()) port = std::atoi(port_str.c_str());
+      }
+      PreResolveHost(host, port);
+    }
+  }
+#endif
+
   std::vector<u8> buffer;
   curl_easy_setopt(m_curl.get(), CURLOPT_WRITEFUNCTION, CurlWriteCallback);
   curl_easy_setopt(m_curl.get(), CURLOPT_WRITEDATA, &buffer);
@@ -286,6 +392,85 @@ HttpRequest::Response HttpRequest::Impl::Fetch(const std::string& url, Method me
   if (res != CURLE_OK)
   {
     ERROR_LOG_FMT(COMMON, "Failed to {} {}: {}", type, url, m_error_string);
+
+#if defined(__APPLE__) && (TARGET_OS_IOS || TARGET_OS_TV)
+    // Fallback to CFNetwork (system stack) on iOS/tvOS. curl failed (TLS/cert,
+    // DNS, redirect, etc.); retry through the OS HTTP stack, which uses the
+    // system trust store and follows redirects automatically.
+    CFStringRef cf_url_str = CFStringCreateWithCString(kCFAllocatorDefault, url.c_str(), kCFStringEncodingUTF8);
+    if (cf_url_str)
+    {
+      CFURLRef cf_url = CFURLCreateWithString(kCFAllocatorDefault, cf_url_str, nullptr);
+      if (cf_url)
+      {
+        CFStringRef cf_method = CFStringCreateWithCString(kCFAllocatorDefault, type, kCFStringEncodingUTF8);
+        CFHTTPMessageRef req = CFHTTPMessageCreateRequest(kCFAllocatorDefault, cf_method, cf_url, kCFHTTPVersion1_1);
+        if (req)
+        {
+          // Minimal headers
+          CFHTTPMessageSetHeaderFieldValue(req, CFSTR("User-Agent"), CFSTR("Dolphin/CFNetwork"));
+          CFHTTPMessageSetHeaderFieldValue(req, CFSTR("Accept"), CFSTR("application/json"));
+          if (method == Method::POST && payload && size > 0)
+          {
+            CFDataRef body = CFDataCreate(kCFAllocatorDefault, payload, size);
+            if (body)
+            {
+              // Ensure RA/PHP parses form body like curl would
+              CFHTTPMessageSetHeaderFieldValue(req, CFSTR("Content-Type"),
+                                               CFSTR("application/x-www-form-urlencoded; charset=utf-8"));
+              CFHTTPMessageSetBody(req, body);
+              CFRelease(body);
+            }
+          }
+
+          CFReadStreamRef stream = CFReadStreamCreateForHTTPRequest(kCFAllocatorDefault, req);
+          if (stream)
+          {
+            Boolean autoRedirect = true;
+            CFReadStreamSetProperty(stream, kCFStreamPropertyHTTPShouldAutoredirect, autoRedirect ? kCFBooleanTrue : kCFBooleanFalse);
+            if (CFReadStreamOpen(stream))
+            {
+              std::vector<u8> alt_buffer;
+              u8 tmp[4096];
+              CFIndex r = 0;
+              while ((r = CFReadStreamRead(stream, (UInt8*)tmp, sizeof(tmp))) > 0)
+              {
+                alt_buffer.insert(alt_buffer.end(), tmp, tmp + r);
+              }
+              CFTypeRef resp_cf = CFReadStreamCopyProperty(stream, kCFStreamPropertyHTTPResponseHeader);
+              long code = 0;
+              if (resp_cf)
+              {
+                CFHTTPMessageRef resp = (CFHTTPMessageRef)resp_cf;
+                code = CFHTTPMessageGetResponseStatusCode(resp);
+                CFRelease(resp_cf);
+              }
+              CFReadStreamClose(stream);
+              CFRelease(stream);
+              CFRelease(req);
+              CFRelease(cf_method);
+              CFRelease(cf_url);
+              CFRelease(cf_url_str);
+
+              fprintf(stderr, "[HTTP] CFNetwork fallback %s %s -> %ld with %zu bytes\n", type, url.c_str(), code, alt_buffer.size());
+
+              if (codes == AllowedReturnCodes::All)
+                return alt_buffer;
+
+              if (code != 200)
+                return {};
+
+              return alt_buffer;
+            }
+            CFRelease(stream);
+          }
+          CFRelease(req);
+        }
+        CFRelease(cf_method);
+      }
+      CFRelease(cf_url);
+    }
+#endif
     return {};
   }
 
