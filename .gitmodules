@@ -60,7 +60,7 @@
 	shallow = true
 [submodule "Externals/fmt/fmt"]
 	path = Externals/fmt/fmt
-	url = https://github.com/fmtlib/fmt.git
+	url = https://github.com/Provenance-Emu/fmt.git
 	shallow = true
 [submodule "Externals/lz4/lz4"]
 	path = Externals/lz4/lz4
