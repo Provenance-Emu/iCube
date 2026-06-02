@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <string>
@@ -13,16 +14,129 @@
 #include "Common/CommonTypes.h"
 #include "Common/IOFile.h"
 #include "Common/MsgHandler.h"
+#include "Common/StringUtil.h"
 
 #include "DiscIO/CISOBlob.h"
 #include "DiscIO/CompressedBlob.h"
 #include "DiscIO/DirectoryBlob.h"
 #include "DiscIO/FileBlob.h"
+#include "DiscIO/HttpBlobReader.h"
 #include "DiscIO/NFSBlob.h"
 #include "DiscIO/SplitFileBlob.h"
 #include "DiscIO/TGCBlob.h"
 #include "DiscIO/WIABlob.h"
 #include "DiscIO/WbfsBlob.h"
+
+// Helper function to check for cached files
+static std::string CheckForCachedFile(const std::string& http_url)
+{
+  // Check if this HTTP URL has a cached version available
+  // We need to integrate with the Swift WebDAVSource cache system
+
+  INFO_LOG_FMT(DISCIO, "CheckForCachedFile: checking cache for URL: {}", http_url);
+
+  // For iOS/tvOS, we can check the standard cache directory structure
+  // Cache files are stored in ~/Library/Caches/RemoteCache/{sourceId}/
+
+#ifdef __APPLE__
+  // Only handle WebDAV URLs for now
+  std::string lower_url = http_url;
+  Common::ToLower(&lower_url);
+  if (lower_url.find("http://") != 0 && lower_url.find("https://") != 0)
+  {
+    return "";
+  }
+
+  // Extract filename from URL path
+  size_t filename_start = http_url.find_last_of('/');
+  if (filename_start == std::string::npos)
+    return "";
+
+  std::string filename = http_url.substr(filename_start + 1);
+
+  // URL decode the filename
+  std::string decoded_filename;
+  for (size_t i = 0; i < filename.length(); ++i)
+  {
+    if (filename[i] == '%' && i + 2 < filename.length())
+    {
+      // Simple URL decoding for common cases
+      if (filename.substr(i, 3) == "%20")
+      {
+        decoded_filename += ' ';
+        i += 2;
+      }
+      else if (filename.substr(i, 3) == "%21")
+      {
+        decoded_filename += '!';
+        i += 2;
+      }
+      else
+      {
+        decoded_filename += filename[i];
+      }
+    }
+    else
+    {
+      decoded_filename += filename[i];
+    }
+  }
+
+    // Parse URL to extract host and port for consistent ID generation (matches Swift logic)
+  size_t protocol_end = lower_url.find("://");
+  if (protocol_end == std::string::npos)
+    return "";
+
+  size_t host_start = protocol_end + 3;
+  size_t path_start = lower_url.find('/', host_start);
+  if (path_start == std::string::npos)
+    path_start = lower_url.length();
+
+  std::string host_port_part = lower_url.substr(host_start, path_start - host_start);
+
+  // Extract host and port
+  std::string host;
+  int port = 80; // Default port
+  size_t port_pos = host_port_part.find(':');
+  if (port_pos != std::string::npos)
+  {
+    host = host_port_part.substr(0, port_pos);
+    port = std::stoi(host_port_part.substr(port_pos + 1));
+  }
+  else
+  {
+    host = host_port_part;
+    // Determine default port based on scheme
+    if (lower_url.find("https://") == 0)
+      port = 443;
+  }
+
+  // Generate consistent ID (matches Swift logic exactly)
+  std::string host_with_port = host + ":" + std::to_string(port);
+  std::string source_id = host_with_port;
+  std::replace(source_id.begin(), source_id.end(), '.', '_');
+  std::replace(source_id.begin(), source_id.end(), ':', '_');
+
+  // Check for cached file using consistent source ID
+  // ~/Library/Caches/RemoteCache/{sourceId}/{filename}
+  std::string home_dir = getenv("HOME") ? getenv("HOME") : "";
+  if (home_dir.empty())
+    return "";
+
+  std::string cache_path = home_dir + "/Library/Caches/RemoteCache/" + source_id + "/" + decoded_filename;
+
+  // Check if the cached file exists
+  if (File::Exists(cache_path))
+  {
+    INFO_LOG_FMT(DISCIO, "CheckForCachedFile: found cached file at: {}", cache_path);
+    return cache_path;
+  }
+
+  INFO_LOG_FMT(DISCIO, "CheckForCachedFile: no cached file found for: {} (source_id: {})", decoded_filename, source_id);
+#endif
+
+  return ""; // No cached file found
+}
 
 namespace DiscIO
 {
@@ -213,10 +327,125 @@ u32 SectorReader::ReadChunk(u8* buffer, u64 chunk_num)
 
 std::unique_ptr<BlobReader> CreateBlobReader(const std::string& filename)
 {
+  INFO_LOG_FMT(DISCIO, "CreateBlobReader called with filename: {}", filename);
+
+  // Remote URL support: if path looks like http(s)/webdav(s), use HttpBlobReader
+  std::string lower = filename;
+  Common::ToLower(&lower);
+  if (lower.rfind("http://", 0) == 0 || lower.rfind("https://", 0) == 0 ||
+      lower.rfind("webdav://", 0) == 0 || lower.rfind("webdavs://", 0) == 0)
+  {
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected HTTP URL, checking for cached files");
+
+    // Check if we have a cached version of this file
+    std::string cachedPath = CheckForCachedFile(filename);
+    if (!cachedPath.empty())
+    {
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: found cached file at {}, using local reader", cachedPath);
+      return CreateBlobReader(cachedPath); // Recursive call with local path
+    }
+
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: no cached file found, checking for compressed formats");
+
+    // Create HttpBlobReader to read magic number
+    auto http_reader = HttpBlobReader::Create(filename);
+    if (!http_reader)
+    {
+      ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpBlobReader::Create returned nullptr for {}", filename);
+      return nullptr;
+    }
+
+    // Read magic number from HTTP stream
+    u32 magic = 0;
+    if (!http_reader->Read(0, sizeof(magic), reinterpret_cast<u8*>(&magic)))
+    {
+      ERROR_LOG_FMT(DISCIO, "CreateBlobReader: failed to read magic number from HTTP URL {}", filename);
+      // For uncompressed formats, return the HttpBlobReader as-is
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: assuming uncompressed format, returning HttpBlobReader");
+      return http_reader;
+    }
+
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: read magic number 0x{:08x} from HTTP URL {}", magic, filename);
+
+    // Check for compressed formats and create appropriate readers
+    switch (magic)
+    {
+    case CISO_MAGIC:
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected CISO format in HTTP stream, creating HttpCISOReader");
+      {
+        auto reader = HttpCISOReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpCISOReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
+
+    case RVZ_MAGIC:
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected RVZ format in HTTP stream, creating HttpRVZReader");
+      {
+        auto reader = HttpRVZReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpRVZReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
+
+    case GCZ_MAGIC:
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected GCZ format in HTTP stream, creating HttpGCZReader");
+      {
+        auto reader = HttpGCZReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpGCZReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
+
+    case 0x01414957: // WIA_MAGIC
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected WIA format in HTTP stream, creating HttpWIAReader");
+      {
+        auto reader = HttpWIAReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpWIAReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
+
+    case 0xA2380FAE: // TGC_MAGIC
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected TGC format in HTTP stream, creating HttpTGCReader");
+      {
+        auto reader = HttpTGCReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpTGCReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
+
+    case 0x53464257: // WBFS_MAGIC
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected WBFS format in HTTP stream, creating HttpWBFSReader");
+      {
+        auto reader = HttpWBFSReader::Create(filename);
+        if (!reader) {
+          ERROR_LOG_FMT(DISCIO, "CreateBlobReader: HttpWBFSReader::Create failed for {}", filename);
+        }
+        return reader;
+      }
+
+    default:
+      // Uncompressed format - return the HttpBlobReader
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: uncompressed format detected, returning HttpBlobReader");
+      return http_reader;
+    }
+  }
+
   File::IOFile file(filename, "rb");
   u32 magic;
   if (!file.ReadArray(&magic, 1))
+  {
+    ERROR_LOG_FMT(DISCIO, "CreateBlobReader: failed to read magic number from {}", filename);
     return nullptr;
+  }
+
+  INFO_LOG_FMT(DISCIO, "CreateBlobReader: read magic number 0x{:08x} from {}", magic, filename);
 
   // Conveniently, every supported file format (except for plain disc images and
   // extracted discs) starts with a 4-byte magic number that identifies the format,
@@ -229,25 +458,40 @@ std::unique_ptr<BlobReader> CreateBlobReader(const std::string& filename)
   switch (magic)
   {
   case CISO_MAGIC:
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected CISO format for {}", filename);
     return CISOFileReader::Create(std::move(file));
   case GCZ_MAGIC:
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected GCZ format for {}", filename);
     return CompressedBlobReader::Create(std::move(file), filename);
   case TGC_MAGIC:
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected TGC format for {}", filename);
     return TGCFileReader::Create(std::move(file));
   case WBFS_MAGIC:
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected WBFS format for {}", filename);
     return WbfsFileReader::Create(std::move(file), filename);
   case WIA_MAGIC:
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected WIA format for {}", filename);
     return WIAFileReader::Create(std::move(file), filename);
   case RVZ_MAGIC:
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected RVZ format for {}", filename);
     return RVZFileReader::Create(std::move(file), filename);
   case NFS_MAGIC:
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: detected NFS format for {}", filename);
     return NFSFileReader::Create(std::move(file), filename);
   default:
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: no specific format detected, trying directory/split/plain for {}", filename);
     if (auto directory_blob = DirectoryBlobReader::Create(filename))
+    {
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: created DirectoryBlobReader for {}", filename);
       return std::move(directory_blob);
+    }
     if (auto split_blob = SplitPlainFileReader::Create(filename))
+    {
+      INFO_LOG_FMT(DISCIO, "CreateBlobReader: created SplitPlainFileReader for {}", filename);
       return std::move(split_blob);
+    }
 
+    INFO_LOG_FMT(DISCIO, "CreateBlobReader: creating PlainFileReader for {}", filename);
     return PlainFileReader::Create(std::move(file));
   }
 }

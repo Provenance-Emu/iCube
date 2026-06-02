@@ -23,6 +23,8 @@ add_library(discio
   Filesystem.h
   GameModDescriptor.cpp
   GameModDescriptor.h
+  HttpBlobReader.cpp
+  HttpBlobReader.h
   LaggedFibonacciGenerator.cpp
   LaggedFibonacciGenerator.h
   MultithreadedCompressor.h
