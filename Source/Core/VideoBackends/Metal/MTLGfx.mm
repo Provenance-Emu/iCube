@@ -12,6 +12,9 @@
 #include "VideoBackends/Metal/MTLVertexFormat.h"
 #include "VideoBackends/Metal/MTLVertexManager.h"
 
+#include "Common/Config/Config.h"            // iCube FastMath: Config::Get
+#include "Core/Config/GraphicsSettings.h"    // iCube FastMath: GFX_HACK_FAST_MATH
+
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/VideoBackendBase.h"
@@ -207,8 +210,27 @@ std::unique_ptr<AbstractShader> Metal::Gfx::CreateShaderFromMSL(ShaderStage stag
       PanicAlertFmt("{} (written to {})\n", msg, filename);
     };
 
+    // iCube FastMath: enable relaxed/fast floating-point math for shader compilation
+    // when GFX_HACK_FAST_MATH is set (default true). Matches feature/icube-testflight,
+    // which set opt.fastMathEnabled here. Apple deprecated fastMathEnabled in favor of
+    // mathMode (iOS 18 / macOS 15); use mathMode where available and fall back otherwise.
+    MRCOwned<MTLCompileOptions*> opt = MRCTransfer([MTLCompileOptions new]);
+    {
+      const bool fast_math = Config::Get(Config::GFX_HACK_FAST_MATH);
+      if (@available(iOS 18.0, tvOS 18.0, macOS 15.0, *))
+      {
+        opt.Get().mathMode = fast_math ? MTLMathModeFast : MTLMathModeSafe;
+      }
+      else
+      {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        opt.Get().fastMathEnabled = fast_math;
+#pragma clang diagnostic pop
+      }
+    }
     auto lib = MRCTransfer([g_device newLibraryWithSource:[NSString stringWithUTF8String:msl.data()]
-                                                  options:nil
+                                                  options:opt
                                                     error:&err]);
     if (err)
     {
@@ -281,7 +303,10 @@ void Metal::Gfx::WaitForGPUIdle()
   @autoreleasepool
   {
     g_state_tracker->FlushEncoders();
-    g_state_tracker->WaitForFlushedEncoders();
+    // iCube async present: don't block the CPU thread waiting on the GPU when async
+    // present is enabled (default on Apple ARM). Matches feature/icube-testflight.
+    if (!g_ActiveConfig.bAsyncPresent)
+      g_state_tracker->WaitForFlushedEncoders();
   }
 }
 
@@ -457,7 +482,21 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
   {
     CheckForSurfaceChange();
     CheckForSurfaceResize();
-    m_drawable = MRCRetain([m_layer nextDrawable]);
+    // iCube async present: configure the layer to fail fast instead of blocking the
+    // CPU thread when a drawable isn't ready, then skip the frame if none is available.
+    // Matches feature/icube-testflight. Default on Apple ARM via GFX_ASYNC_PRESENT.
+    CAMetalLayer* layer = m_layer;
+    if ([layer respondsToSelector:@selector(setAllowsNextDrawableTimeout:)])
+      layer.allowsNextDrawableTimeout = NO;
+    if ([layer respondsToSelector:@selector(setMaximumDrawableCount:)])
+      layer.maximumDrawableCount = 3;
+    id<CAMetalDrawable> next = [layer nextDrawable];
+    if (!next && g_ActiveConfig.bAsyncPresent)
+    {
+      // No drawable ready: skip this frame rather than stall the CPU thread.
+      return false;
+    }
+    m_drawable = MRCRetain(next);
     m_backbuffer->UpdateBackbufferTexture([m_drawable texture]);
     SetAndClearFramebuffer(m_backbuffer.get(), clear_color);
     return m_drawable != nullptr;

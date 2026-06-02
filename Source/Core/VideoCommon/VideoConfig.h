@@ -283,6 +283,7 @@ struct VideoConfig final
   bool bPerfQueriesEnable = false;
   bool bBBoxEnable = false;
   bool bCPUCull = false;
+  bool bNEONTextureDecode = true;  // iCube: ARM64 NEON texture decoder (default on; A/B toggle)
 
   bool bEFBEmulateFormatChanges = false;
   bool bSkipEFBCopyToRam = false;
@@ -323,6 +324,9 @@ struct VideoConfig final
   // Metal only config
   TriState iManuallyUploadBuffers = TriState::Auto;
   TriState iUsePresentDrawable = TriState::Auto;
+  // iCube: non-blocking present path (default true on Apple ARM via GFX_ASYNC_PRESENT key).
+  // Populated in Refresh(); arch default lives on the config key, not the field.
+  bool bAsyncPresent = false;
 
   // Enable API validation layers, currently only supported with Vulkan.
   bool bEnableValidationLayer = false;

@@ -9,7 +9,9 @@
 #include <TargetConditionals.h>
 #include <spirv_msl.hpp>
 
+#include "Common/Config/Config.h"          // iCube FastMath: Config::Get
 #include "Common/MsgHandler.h"
+#include "Core/Config/GraphicsSettings.h"  // iCube FastMath: GFX_HACK_FAST_MATH
 
 #include "VideoCommon/Constants.h"
 #include "VideoCommon/DriverDetails.h"
@@ -157,6 +159,28 @@ static bool RenderSinglePixel(id<MTLDevice> dev, id<MTLFunction> vs, id<MTLFunct
   return [cmdbuf status] == MTLCommandBufferStatusCompleted;
 }
 
+// iCube FastMath: build MTLCompileOptions honoring GFX_HACK_FAST_MATH (default true).
+// Matches feature/icube-testflight, which set opt.fastMathEnabled on these detection
+// shaders. Apple deprecated fastMathEnabled in favor of mathMode (iOS 18 / macOS 15);
+// use mathMode where available, fall back to fastMathEnabled otherwise.
+static MRCOwned<MTLCompileOptions*> MakeFastMathCompileOptions()
+{
+  MTLCompileOptions* opt = [MTLCompileOptions new];
+  const bool fast_math = Config::Get(Config::GFX_HACK_FAST_MATH);
+  if (@available(iOS 18.0, tvOS 18.0, macOS 15.0, *))
+  {
+    opt.mathMode = fast_math ? MTLMathModeFast : MTLMathModeSafe;
+  }
+  else
+  {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    opt.fastMathEnabled = fast_math;
+#pragma clang diagnostic pop
+  }
+  return MRCTransfer(opt);
+}
+
 static bool DetectIntelGPUFBFetch(id<MTLDevice> dev)
 {
   // Even though it's nowhere in the feature set tables, some Intel GPUs support fbfetch!
@@ -175,7 +199,7 @@ fragment float4 fbfetch_test(float4 in [[color(0), raster_order_group(0)]]) {
 }
 )";
   auto lib = MRCTransfer([dev newLibraryWithSource:[NSString stringWithUTF8String:shader]
-                                           options:nil
+                                           options:MakeFastMathCompileOptions()
                                              error:nil]);
   if (!lib)
     return false;
@@ -216,7 +240,7 @@ fragment float4 is_helper_test() {
 )";
 
   auto lib = MRCTransfer([dev newLibraryWithSource:[NSString stringWithUTF8String:shader]
-                                           options:nil
+                                           options:MakeFastMathCompileOptions()
                                              error:nil]);
   if (!lib)
     return DetectionResult::Unsure;

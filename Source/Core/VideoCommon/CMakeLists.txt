@@ -131,6 +131,8 @@ add_library(videocommon
   PerfQueryBase.h
   PerformanceMetrics.cpp
   PerformanceMetrics.h
+  AutoIRController.cpp
+  AutoIRController.h
   PerformanceTracker.cpp
   PerformanceTracker.h
   PixelEngine.cpp
@@ -240,7 +242,7 @@ elseif(_M_ARM_64)
   target_sources(videocommon PRIVATE
     VertexLoaderARM64.cpp
     VertexLoaderARM64.h
-    TextureDecoder_Generic.cpp
+    TextureDecoder_arm64.cpp
   )
 else()
   target_sources(videocommon PRIVATE

@@ -6,6 +6,8 @@
 #include "VideoBackends/Metal/MTLObjectCache.h"
 #include "VideoBackends/Metal/MTLStateTracker.h"
 
+#include "VideoCommon/VideoConfig.h"  // iCube async present: g_ActiveConfig.bAsyncPresent
+
 static constexpr size_t BUFFER_SIZE = sizeof(BBoxType) * NUM_BBOX_VALUES;
 
 Metal::BoundingBox::~BoundingBox()
@@ -37,7 +39,11 @@ std::vector<BBoxType> Metal::BoundingBox::Read(u32 index, u32 length)
     g_state_tracker->EndRenderPass();
     g_state_tracker->FlushEncoders();
     g_state_tracker->NotifyOfCPUGPUSync();
-    g_state_tracker->WaitForFlushedEncoders();
+    // iCube async present: skip the blocking wait when async present is enabled
+    // (default on Apple ARM). BBox readback may be one frame stale in exchange for
+    // not stalling the CPU thread. Matches feature/icube-testflight.
+    if (!g_ActiveConfig.bAsyncPresent)
+      g_state_tracker->WaitForFlushedEncoders();
     return std::vector<BBoxType>(m_cpu_buffer_ptr + index, m_cpu_buffer_ptr + index + length);
   }
 }
