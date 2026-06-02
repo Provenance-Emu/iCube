@@ -15,7 +15,7 @@
 # SettingsRootView.swift uses a compact inline-enum layout that mis-parses
 # swiftformat's scope tracker (redundantSelf errors; indent would silently
 # mis-indent). Excluded as a known-hazard file — flagged for manual cleanup.
---exclude Source/iOS/App/Project.swift,Source/iOS/App/Tuist.swift,Source/iOS/App/Common/UI/Settings/SwiftUI/SettingsRootView.swift,**/venv,**/Externals,**/build,**/Pods,**/Carthage,**/.build
+--exclude Source/iOS/App/Project.swift,Source/iOS/App/Tuist.swift,Source/iOS/App/Common/UI/Settings/SwiftUI/SettingsRootView.swift,Source/iOS/App/Common/Swift/WebDAVSource.swift,Source/iOS/App/Common/Swift/TVLibraryView.swift,**/venv,**/Externals,**/build,**/Pods,**/Carthage,**/.build
 
 # --- Header protection (GPL SPDX headers must never be modified) ---------------
 --header ignore
@@ -83,7 +83,6 @@
   redundantPattern,\
   redundantRawValues,\
   redundantReturn,\
-  redundantSelf,\
   redundantVoidReturnType,\
   semicolons,\
   sortImports,\

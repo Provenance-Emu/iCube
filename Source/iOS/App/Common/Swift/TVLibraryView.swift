@@ -1,8 +1,7 @@
-import GameController
 import SwiftUI
 import UIKit
+import GameController
 import UniformTypeIdentifiers
-
 #if os(iOS)
 #endif
 import Combine
@@ -31,7 +30,7 @@ private struct KeyCommandHostView: UIViewRepresentable {
     return v
   }
 
-  func updateUIView(_ uiView: KeyInputView, context: Context) {}
+  func updateUIView(_ uiView: KeyInputView, context: Context) { }
 }
 #endif // os(iOS) || targetEnvironment(macCatalyst)
 
@@ -39,11 +38,11 @@ private struct KeyCommandHostView: UIViewRepresentable {
 
 enum LibraryLayout {
   static var cardSize: CGSize {
-    #if os(tvOS)
+#if os(tvOS)
     return CGSize(width: 260, height: 390)
-    #else
+#else
     return CGSize(width: 140, height: 210)
-    #endif
+#endif
   }
 }
 
@@ -65,7 +64,6 @@ private final class KeyInputView: UIView {
       UIKeyCommand(input: " ", modifierFlags: [], action: #selector(handleSpace))
     ]
   }
-
   @objc private func handleLeft() { onLeft?() }
   @objc private func handleRight() { onRight?() }
   @objc private func handleUp() { onUp?() }
@@ -84,13 +82,13 @@ private extension View {
   }
 
   func retroFocusScale(active: Bool) -> some View {
-    scaleEffect(active ? 1.10 : 1.0)
+    self
+      .scaleEffect(active ? 1.10 : 1.0)
       .animation(.spring(response: 0.35, dampingFraction: 0.75, blendDuration: 0.0), value: active)
   }
 }
 
 // MARK: - Clean Game Card Implementation
-
 // All game card logic is now inline in GameGridItem for better control
 
 @MainActor
@@ -166,49 +164,49 @@ final class TVLibraryViewModel: ObservableObject {
   }
 
   private func groupAndDedup(items: [TVGameItem]) {
-    #if DEBUG
+#if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): processing \(items.count) items")
-    #endif
+#endif
     var grouped: [String: [TVGameItem]] = [:]
     for it in items {
       let itemKey = key(for: it)
       let isRemote = !isLocal(it)
-      #if DEBUG
+#if DEBUG
       print("  Item: '\(it.title)' -> Key: '\(itemKey)' (gameID: '\(it.gameID)', discNumber: \(it.discNumber), revision: \(it.revision), isRemote: \(isRemote), titleEmpty: \(it.title.isEmpty))")
-      #endif
+#endif
       grouped[itemKey, default: []].append(it)
     }
-    #if DEBUG
+#if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): created \(grouped.count) groups")
-    #endif
+#endif
     groupsByKey = grouped
     var representatives: [TVGameItem] = []
     for (groupKey, group) in grouped {
-      #if DEBUG
+#if DEBUG
       print("  Group '\(groupKey)': \(group.count) items")
       for (idx, item) in group.enumerated() {
         print("    [\(idx)]: '\(item.title)' (isLocal: \(isLocal(item)), titleEmpty: \(item.title.isEmpty))")
       }
-      #endif
+#endif
       if let local = group.first(where: { isLocal($0) }) {
-        #if DEBUG
+#if DEBUG
         print("    -> Using local representative: '\(local.title)'")
-        #endif
+#endif
         representatives.append(local)
       } else if let any = group.first {
-        #if DEBUG
+#if DEBUG
         print("    -> Using first representative: '\(any.title)' (titleEmpty: \(any.title.isEmpty))")
-        #endif
+#endif
         representatives.append(any)
       } else {
-        #if DEBUG
+#if DEBUG
         print("    -> No representative found (empty group)")
-        #endif
+#endif
       }
     }
-    #if DEBUG
+#if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): found \(representatives.count) representatives")
-    #endif
+#endif
     // Sort games alphabetically using fallback to filename when title is empty
     games = representatives.sorted { (a: TVGameItem, b: TVGameItem) -> Bool in
       let at: String = {
@@ -223,9 +221,9 @@ final class TVLibraryViewModel: ObservableObject {
       }()
       return at.localizedCaseInsensitiveCompare(bt) == .orderedAscending
     }
-    #if DEBUG
+#if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): final games count: \(games.count)")
-    #endif
+#endif
   }
 
   func sources(for item: TVGameItem) -> [TVGameItem] {
@@ -234,6 +232,7 @@ final class TVLibraryViewModel: ObservableObject {
 }
 
 struct TVLibraryView: View {
+
   @Environment(\.colorScheme) private var colorScheme
 
   // MARK: - UI Settings
@@ -242,9 +241,9 @@ struct TVLibraryView: View {
   @AppStorage("library_show_subtitles") private var showSubtitles: Bool = true
 
   enum BackgroundStyle: String, CaseIterable {
-    case clean
-    case gradient
-    case animated
+    case clean = "clean"
+    case gradient = "gradient"
+    case animated = "animated"
 
     var displayName: String {
       switch self {
@@ -293,34 +292,34 @@ struct TVLibraryView: View {
     let id = UUID()
   }
 
-  #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
   private var settingsBinding: Binding<NavigationItem?> {
     Binding(
       get: { navigateToSettings ? NavigationItem() : nil },
       set: { navigateToSettings = ($0 != nil) }
     )
   }
-  #endif
+#endif
 
   // MARK: - Navigation Configuration (extracted to prevent compiler timeout)
 
   @ViewBuilder
   private var navigationContent: some View {
     mainContent
-    #if os(iOS) || targetEnvironment(macCatalyst)
-    .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
-      handleDrop(providers: providers)
-      return true
-    }
-    #endif
-    .modifier(iOS16NavigationStyleModifier())
-    .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
-      SaveStateFilmstripView(gameID: route.id)
-    }
-    .navigationDestinationItemCompat(item: $navigateTo) { item in
-      EmulationScreen(game: item)
-        .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
-    }
+#if os(iOS) || targetEnvironment(macCatalyst)
+      .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
+        handleDrop(providers: providers)
+        return true
+      }
+#endif
+      .modifier(iOS16NavigationStyleModifier())
+      .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
+        SaveStateFilmstripView(gameID: route.id)
+      }
+      .navigationDestinationItemCompat(item: $navigateTo) { item in
+        EmulationScreen(game: item)
+          .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
+      }
   }
 
   @ViewBuilder
@@ -328,22 +327,21 @@ struct TVLibraryView: View {
     navigationContent
       .navigationTitle(storeForBanner.isScanning ? "" : "iCube Library")
       .toolbar { libraryToolbar }
-    #if !os(tvOS)
+#if !os(tvOS)
       .navigationBarTitleDisplayMode(.large)
-    #endif
-    #if os(iOS) || targetEnvironment(macCatalyst)
-    .navigationDestinationItemCompat(item: settingsBinding) { _ in
-      TVSettingsPage()
-        .navigationBarTitleDisplayMode(.inline)
-    }
-    .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
-    .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-    #endif
-    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FavoritesChanged"))) { _ in
-      favoritesVersion &+= 1
-    }
+#endif
+#if os(iOS) || targetEnvironment(macCatalyst)
+      .navigationDestinationItemCompat(item: settingsBinding) { _ in
+        TVSettingsPage()
+          .navigationBarTitleDisplayMode(.inline)
+      }
+      .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
+      .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+#endif
+      .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FavoritesChanged"))) { _ in
+        favoritesVersion &+= 1
+      }
   }
-
   /// Game to present in the SwiftUI properties sheet
   @State private var showPropertiesFor: TVGameItem?
   /// Game pending deletion confirmation
@@ -395,7 +393,7 @@ struct TVLibraryView: View {
   @State private var emulationRunning = false
 
   /// iOS document pickers
-  #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
   @State private var showImportSoftwarePicker = false
   @State private var showImportNANDPicker = false
   /// Navigate to settings as a push on iOS
@@ -415,7 +413,7 @@ struct TVLibraryView: View {
   // Library GCController observers
   @State private var libGCConnectObs: NSObjectProtocol?
   @State private var libGCDisconnectObs: NSObjectProtocol?
-  #endif
+#endif
 
   /// Storage space management
   static let STORAGE_BUFFER_MB: Int64 = 100 * 1024 * 1024 // 100MB buffer
@@ -490,7 +488,7 @@ struct TVLibraryView: View {
         colors: [
           Color(red: 0.90, green: 0.93, blue: 0.98), // light top
           Color(red: 0.84, green: 0.89, blue: 0.98), // mid
-          Color(red: 0.96, green: 0.97, blue: 1.00) // near white
+          Color(red: 0.96, green: 0.97, blue: 1.00)  // near white
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -531,15 +529,15 @@ struct TVLibraryView: View {
       }
 
       // Elegant animated orbs with GameCube/Wii theming
-      ForEach(0 ..< 5, id: \.self) { index in
+      ForEach(0..<5, id: \.self) { index in
         Circle()
           .fill(
             RadialGradient(
               colors: [
-                colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05))
-                  : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10)),
-                colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025))
-                  : Color.white.opacity(0.0),
+                (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05))
+                 : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10))),
+                (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025))
+                 : Color.white.opacity(0.0)),
                 Color.clear
               ],
               center: .center,
@@ -547,14 +545,14 @@ struct TVLibraryView: View {
               endRadius: 180
             )
           )
-          .frame(width: CGFloat.random(in: 200 ... 400), height: CGFloat.random(in: 200 ... 400))
+          .frame(width: CGFloat.random(in: 200...400), height: CGFloat.random(in: 200...400))
           .offset(
-            x: CGFloat.random(in: -150 ... 150),
-            y: CGFloat.random(in: -200 ... 200)
+            x: CGFloat.random(in: -150...150),
+            y: CGFloat.random(in: -200...200)
           )
           .scaleEffect(0.8 + CGFloat(index) * 0.1)
           .animation(
-            Animation.easeInOut(duration: Double.random(in: 10 ... 18))
+            Animation.easeInOut(duration: Double.random(in: 10...18))
               .repeatForever(autoreverses: true)
               .delay(Double(index) * 1.5),
             value: UUID()
@@ -566,9 +564,9 @@ struct TVLibraryView: View {
         let spacing: CGFloat = 80
         let lineWidth: CGFloat = 0.5
         let gradient = Gradient(colors: [
-          colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.06),
+          (colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.06)),
           .clear,
-          colorScheme == .dark ? .white.opacity(0.04) : .black.opacity(0.03)
+          (colorScheme == .dark ? .white.opacity(0.04) : .black.opacity(0.03))
         ])
 
         context.stroke(
@@ -584,7 +582,7 @@ struct TVLibraryView: View {
           },
           with: .linearGradient(
             gradient,
-            startPoint: CGPoint.zero,
+            startPoint: CGPoint(x: 0, y: 0),
             endPoint: CGPoint(x: size.width, y: size.height)
           ),
           lineWidth: lineWidth
@@ -617,22 +615,22 @@ struct TVLibraryView: View {
       .opacity(colorScheme == .dark ? 0.25 : 0.12)
 
       // Floating elements
-      ForEach(0 ..< 8, id: \.self) { index in
+      ForEach(0..<8, id: \.self) { index in
         RoundedRectangle(cornerRadius: 4, style: .continuous)
           .fill(
             LinearGradient(
               colors: [
-                colorScheme == .dark ? Color.white.opacity(0.03) : Color.white.opacity(0.5),
+                (colorScheme == .dark ? Color.white.opacity(0.03) : Color.white.opacity(0.5)),
                 Color.clear
               ],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             )
           )
-          .frame(width: CGFloat.random(in: 20 ... 40), height: CGFloat.random(in: 20 ... 40))
-          .offset(x: CGFloat.random(in: -200 ... 200), y: CGFloat.random(in: -300 ... 300))
-          .rotationEffect(.degrees(Double.random(in: 0 ... 360)))
-          .animation(Animation.linear(duration: Double.random(in: 20 ... 30)).repeatForever(autoreverses: false).delay(Double(index) * 2), value: UUID())
+          .frame(width: CGFloat.random(in: 20...40), height: CGFloat.random(in: 20...40))
+          .offset(x: CGFloat.random(in: -200...200), y: CGFloat.random(in: -300...300))
+          .rotationEffect(.degrees(Double.random(in: 0...360)))
+          .animation(Animation.linear(duration: Double.random(in: 20...30)).repeatForever(autoreverses: false).delay(Double(index) * 2), value: UUID())
       }
     }
     .clipped()
@@ -644,49 +642,45 @@ struct TVLibraryView: View {
   static func isRemoteURL(_ urlString: String) -> Bool {
     let lower = urlString.lowercased()
     return lower.hasPrefix("http://") ||
-      lower.hasPrefix("https://") ||
-      lower.hasPrefix("webdav://") ||
-      lower.hasPrefix("webdavs://")
+    lower.hasPrefix("https://") ||
+    lower.hasPrefix("webdav://") ||
+    lower.hasPrefix("webdavs://")
   }
 
   private enum Constants {
     static let gridVerticalSpacing: CGFloat = {
-      #if os(tvOS)
-      return 40 // More breathing room for focus effects
-      #else
-      return 20 // Enhanced spacing for iOS
-      #endif
+#if os(tvOS)
+      return 40  // More breathing room for focus effects
+#else
+      return 20  // Enhanced spacing for iOS
+#endif
     }()
-
     static let gridHorizontalSpacing: CGFloat = {
-      #if os(tvOS)
-      return 52 // Better visual balance
-      #else
-      return 16 // Modern iOS spacing
-      #endif
+#if os(tvOS)
+      return 52  // Better visual balance
+#else
+      return 16  // Modern iOS spacing
+#endif
     }()
-
-    #if os(tvOS)
-    static let gridNumberOfColumns = 5 // Better proportion for wide screens
-    #else
+#if os(tvOS)
+    static let gridNumberOfColumns = 5  // Better proportion for wide screens
+#else
     static let gridNumberOfColumns = 3
-    #endif
+#endif
     static let gridHorizontalPadding: CGFloat = {
-      #if os(tvOS)
-      return 80 // More immersive padding
-      #else
-      return 20 // Clean iOS margins
-      #endif
+#if os(tvOS)
+      return 80  // More immersive padding
+#else
+      return 20  // Clean iOS margins
+#endif
     }()
-
     static let gridVerticalPadding: CGFloat = {
-      #if os(tvOS)
-      return 100 // Premium spacing for focus effects
-      #else
-      return 28 // Modern iOS vertical rhythm
-      #endif
+#if os(tvOS)
+      return 100  // Premium spacing for focus effects
+#else
+      return 28   // Modern iOS vertical rhythm
+#endif
     }()
-
     static var columns: [GridItem] {
       return Array(repeating: GridItem(.flexible(), spacing: gridHorizontalSpacing), count: gridNumberOfColumns)
     }
@@ -705,13 +699,13 @@ struct TVLibraryView: View {
       }
     }
     .task {
-      #if canImport(TipKit)
+#if canImport(TipKit)
       if #available(iOS 17, tvOS 17, *), !didReloadOnce {
         // Wait for first load to complete before showing tips
         // Simple debounce: small delay after initial load to allow UI to settle
         try? await Task.sleep(nanoseconds: 300_000_000)
       }
-      #endif
+#endif
     }
   }
 
@@ -721,7 +715,7 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private var libraryView: some View {
-    _ = favoritesVersion
+    let _ = favoritesVersion
     // Shared filtered view of games for both platforms
     let displayGames: [TVGameItem] = {
       let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -745,11 +739,11 @@ struct TVLibraryView: View {
         return false
       }
     }()
-    #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
     libraryView_iOS(displayGames)
-    #else
+#else
     libraryView_tvOS(displayGames)
-    #endif
+#endif
   }
 
   #if os(tvOS)
@@ -1069,9 +1063,7 @@ struct TVLibraryView: View {
             c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
             if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] cleared handlers for \(c.vendorName ?? "(nil)")") }
             // Ensure microGamepad behaves sanely for library nav
-            if let mg = c.microGamepad { mg.reportsAbsoluteDpadValues = true
-              mg.allowsRotation = true
-            }
+            if let mg = c.microGamepad { mg.reportsAbsoluteDpadValues = true; mg.allowsRotation = true }
           }
           if GCController.controllers().isEmpty { GCController.startWirelessControllerDiscovery(completionHandler: {}) }
           if focusedFilePath == nil, let first = displayGames.first?.filePath { focusedFilePath = first }
@@ -1105,18 +1097,10 @@ struct TVLibraryView: View {
           }
         }
         .onDisappear {
-          if let t = emuStartObs { NotificationCenter.default.removeObserver(t)
-            emuStartObs = nil
-          }
-          if let t = emuEndObs { NotificationCenter.default.removeObserver(t)
-            emuEndObs = nil
-          }
-          if let t = libGCConnectObs { NotificationCenter.default.removeObserver(t)
-            libGCConnectObs = nil
-          }
-          if let t = libGCDisconnectObs { NotificationCenter.default.removeObserver(t)
-            libGCDisconnectObs = nil
-          }
+          if let t = emuStartObs { NotificationCenter.default.removeObserver(t); emuStartObs = nil }
+          if let t = emuEndObs { NotificationCenter.default.removeObserver(t); emuEndObs = nil }
+          if let t = libGCConnectObs { NotificationCenter.default.removeObserver(t); libGCConnectObs = nil }
+          if let t = libGCDisconnectObs { NotificationCenter.default.removeObserver(t); libGCDisconnectObs = nil }
           teardownControllerNavigation()
         }
       }
@@ -1213,7 +1197,7 @@ struct TVLibraryView: View {
           Button(action: { model.performOnlineSystemUpdate() }) {
             Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
           }
-          #if os(iOS)
+#if os(iOS)
           Button(action: {
             let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
             if role == "receiver" {
@@ -1224,11 +1208,11 @@ struct TVLibraryView: View {
           }) {
             Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
           }
-          #endif
+#endif
           Button(action: {
-            #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
             showImportNANDPicker = true
-            #endif
+#endif
           }) {
             Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
           }
@@ -1258,9 +1242,9 @@ struct TVLibraryView: View {
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: {
-        #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
         showImportSoftwarePicker = true
-        #endif
+#endif
       }) {
         Image(systemName: "plus")
       }
@@ -1269,11 +1253,12 @@ struct TVLibraryView: View {
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: {
-        #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
         navigateToSettings = true
-        #endif
+#endif
       }) { Image(systemName: "gearshape") }
     }
+
   }
   #endif
 
@@ -1295,7 +1280,7 @@ struct TVLibraryView: View {
       NavigationStack { SaveStatesBrowserView() }
     }
     // DSU controller session (iOS only)
-    #if os(iOS)
+#if os(iOS)
     .sheet(isPresented: $showDSUSession) {
       if #available(iOS 17.0, *) {
         DSUSessionView()
@@ -1303,7 +1288,7 @@ struct TVLibraryView: View {
         // Fallback on earlier versions
       }
     }
-    #endif
+#endif
     .onAppear {
       // Tips setup
       if #available(iOS 17, tvOS 17, *) {
@@ -1335,18 +1320,17 @@ struct TVLibraryView: View {
 
       // Quick actions
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowImportGame"), object: nil, queue: .main) { _ in
-        #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
         showImportSoftwarePicker = true
-        #endif
+#endif
       }
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowSettings"), object: nil, queue: .main) { _ in
-        #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
         navigateToSettings = true
-        #endif
+#endif
       }
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowSnackbar"), object: nil, queue: .main) { note in
-        if let text = note.userInfo?["text"] as? String { snackbarText = text
-          withAnimation { snackbarVisible = true }
+        if let text = note.userInfo?["text"] as? String { snackbarText = text; withAnimation { snackbarVisible = true };
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation { snackbarVisible = false } }
         }
       }
@@ -1375,7 +1359,7 @@ struct TVLibraryView: View {
       }
       removeAllObservers()
     }
-    #if os(tvOS)
+#if os(tvOS)
     .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
     .sheet(isPresented: $showSearchSheet) {
       NavigationStack {
@@ -1401,14 +1385,14 @@ struct TVLibraryView: View {
               }()
               return title.contains(q) || maker.contains(q) || gid.contains(q) || gtdb.contains(q) || country.contains(q) || filename.contains(q) || item.filePath.lowercased().contains(q)
             }.count))
-              .foregroundStyle(.secondary)
+            .foregroundStyle(.secondary)
           }
         }
         .navigationTitle(L("Search"))
         .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { showSearchSheet = false } } }
       }
     }
-    #endif
+#endif
     .confirmationDialog(L("More"), isPresented: $showMoreMenu, titleVisibility: .visible) {
       Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
       Button(L("Perform Online System Update")) { showUpdateRegions = true }
@@ -1432,22 +1416,22 @@ struct TVLibraryView: View {
         }
       }
       Button(L("Continue Current Game"), role: .cancel) { if let current = model.currentGame { navigateTo = current } }
-      Button(L("Cancel")) {}
+      Button(L("Cancel")) { }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
-    .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0) }
-    .sheet(item: $showCheatListFor) { TVCheatListView(item: $0) }
-    .sheet(isPresented: Binding(get: { sourcePickerItems != nil }, set: { if !$0 { sourcePickerItems = nil } })) {
-      if let items = sourcePickerItems {
-        SourcePickerView(items: items) { chosen in
-          sourcePickerItems = nil
-          launchGame(chosen)
+      .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0) }
+      .sheet(item: $showCheatListFor) { TVCheatListView(item: $0) }
+      .sheet(isPresented: Binding(get: { sourcePickerItems != nil }, set: { if !$0 { sourcePickerItems = nil } })) {
+        if let items = sourcePickerItems {
+          SourcePickerView(items: items) { chosen in
+            sourcePickerItems = nil
+            launchGame(chosen)
+          }
         }
       }
-    }
     // Sources sheet
-    .sheet(isPresented: $showSources) { SourcesView() }
-    #if os(iOS) || targetEnvironment(macCatalyst)
-      // iOS Document Pickers
+      .sheet(isPresented: $showSources) { SourcesView() }
+#if os(iOS) || targetEnvironment(macCatalyst)
+    // iOS Document Pickers
       .sheet(isPresented: $showImportSoftwarePicker) {
         NavigationStack {
           DocumentPickerView(
@@ -1470,8 +1454,8 @@ struct TVLibraryView: View {
           .navigationTitle(L("Import BootMii NAND Backup"))
         }
       }
-    #endif
-      /// Delete confirmation and action
+#endif
+    /// Delete confirmation and action
       .alert(L("Delete Game?"), isPresented: Binding(get: { itemPendingDelete != nil }, set: { if !$0 { itemPendingDelete = nil } })) {
         Button(L("Delete"), role: .destructive) {
           if let toDelete = itemPendingDelete {
@@ -1482,11 +1466,11 @@ struct TVLibraryView: View {
         }
         Button(L("Cancel"), role: .cancel) { itemPendingDelete = nil }
       } message: { if let item = itemPendingDelete { Text(L("This will delete \(item.title). This action cannot be undone.")) } }
-      // Storage error alert
+    // Storage error alert
       .alert(L("Storage Error"), isPresented: $showStorageErrorAlert) {
         Button(L("OK")) {}
       } message: { Text(storageAlertMessage) }
-      // Low storage warning - using confirmationDialog instead of alert to avoid conflicts
+    // Low storage warning - using confirmationDialog instead of alert to avoid conflicts
       .confirmationDialog(L("Low Storage Warning"), isPresented: $showLowStorageWarning, titleVisibility: .visible) {
         Button(L("Continue Anyway")) {
           if let item = itemPendingLaunch {
@@ -1500,21 +1484,21 @@ struct TVLibraryView: View {
       }
       .overlay(blockingPrecacheOverlay)
       .overlay(offlineBanner)
-    #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
       .overlay(dropHighlight)
-    #endif
+#endif
       .overlay(searchHintBanner)
       .overlay(snackbar)
       .overlay(dsuApprovalBanner)
       .overlay(onboardingOverlay)
-    #if os(iOS)
+#if os(iOS)
       .sheet(isPresented: Binding(get: { showGeckoEditorFor != nil }, set: { if !$0 { showGeckoEditorFor = nil } })) {
         if let item = showGeckoEditorFor { GeckoCodesModal(item: item) }
       }
       .sheet(isPresented: Binding(get: { showAREditorFor != nil }, set: { if !$0 { showAREditorFor = nil } })) {
         if let item = showAREditorFor { ActionReplayCodesModal(item: item) }
       }
-    #endif
+#endif
   }
 
   @State private var snackbarText: String = ""
@@ -1524,9 +1508,9 @@ struct TVLibraryView: View {
   @State private var offlineBannerDismissed: Bool = false
   // DSU approval banner state
   @State private var approvalBannerAddr: String? = nil
-  #if os(tvOS)
+#if os(tvOS)
   @State private var showSearchSheet: Bool = false
-  #endif
+#endif
 
   @ViewBuilder private var snackbar: some View {
     if snackbarVisible {
@@ -1579,9 +1563,9 @@ struct TVLibraryView: View {
       .contentShape(Rectangle())
       .onTapGesture {
         // Open DSU Controller sheet for details
-        #if os(iOS)
+#if os(iOS)
         showDSUSession = true
-        #endif
+#endif
         // Dismiss the banner after opening
         approvalBannerAddr = nil
       }
@@ -1593,7 +1577,7 @@ struct TVLibraryView: View {
     // Only surface a source that is reachable (the host answered our probe) but returning errors —
     // e.g. bad auth, wrong path, a 5xx. A source that's simply unreachable because we're off its
     // network is NOT worth nagging about every boot, so it's excluded (serverReachable == false).
-    let anyServerError = storeForBanner.sources.contains { src -> Bool in
+    let anyServerError = storeForBanner.sources.contains { (src) -> Bool in
       guard let w = src as? WebDAVSource else { return false }
       return w.isOnline == false && w.serverReachable
     }
@@ -1632,7 +1616,7 @@ struct TVLibraryView: View {
   }
 
   @ViewBuilder private var searchHintBanner: some View {
-    #if os(tvOS)
+#if os(tvOS)
     let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     if !q.isEmpty {
       let needle = q.lowercased()
@@ -1674,9 +1658,9 @@ struct TVLibraryView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
       } else { EmptyView() }
     } else { EmptyView() }
-    #else
+#else
     EmptyView()
-    #endif
+#endif
   }
 
   @ViewBuilder
@@ -1724,12 +1708,12 @@ struct TVLibraryView: View {
               blockingPrecacheProgress = 0
               emulationRunning = false
               // Restore controller navigation if we were in library
-              #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
               Task { @MainActor in
                 // Re-setup navigation using the last known grid column count
                 setupControllerNavigation(columns: max(2, gridColumnCount))
               }
-              #endif
+#endif
             } label: {
               Text(L("Cancel"))
                 .font(.callout).fontWeight(.semibold)
@@ -1786,9 +1770,9 @@ struct TVLibraryView: View {
           // Primary actions
           HStack(spacing: 12) {
             Button(action: {
-              #if os(iOS) || targetEnvironment(macCatalyst)
+#if os(iOS) || targetEnvironment(macCatalyst)
               showImportSoftwarePicker = true
-              #endif
+#endif
               UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
               withAnimation { showOnboarding = false }
             }) {
@@ -1847,27 +1831,19 @@ struct TVLibraryView: View {
   }
 
   private func presentCheatInput(for item: TVGameItem, type: CheatType) {
-    cheatName = ""
-    cheatCreator = ""
-    cheatBody = ""
-    cheatNotes = ""
-    cheatInputFor = (item, type)
-    showCheatError = nil
+    cheatName = ""; cheatCreator = ""; cheatBody = ""; cheatNotes = ""
+    cheatInputFor = (item, type); showCheatError = nil
   }
 
   private func saveCheat(_ ctx: (item: TVGameItem, type: CheatType)) {
-    #if os(tvOS)
+#if os(tvOS)
     if ctx.type == .gecko {
-      if !TVCheatsBridge.addGeckoCode(forGameId: ctx.item.gameID, revision: ctx.item.revision, name: cheatName, creator: cheatCreator, codeText: cheatBody, notesText: cheatNotes) { showCheatError = L("Failed to add Gecko code")
-        return
-      }
+      if !TVCheatsBridge.addGeckoCode(forGameId: ctx.item.gameID, revision: ctx.item.revision, name: cheatName, creator: cheatCreator, codeText: cheatBody, notesText: cheatNotes) { showCheatError = L("Failed to add Gecko code"); return }
     } else {
-      if !TVCheatsBridge.addActionReplayCode(forGameId: ctx.item.gameID, revision: ctx.item.revision, name: cheatName, codeText: cheatBody) { showCheatError = L("Failed to add AR code")
-        return
-      }
+      if !TVCheatsBridge.addActionReplayCode(forGameId: ctx.item.gameID, revision: ctx.item.revision, name: cheatName, codeText: cheatBody) { showCheatError = L("Failed to add AR code"); return }
     }
     cheatInputFor = nil
-    #endif
+#endif
   }
 
   private func selectGame(_ item: TVGameItem) {
@@ -1887,14 +1863,14 @@ struct TVLibraryView: View {
       let availableSpace = TVLibraryView.getAvailableStorageSpace()
       itemPendingLaunch = item
       storageAlertMessage = """
-      Warning: Low Storage Space
+            Warning: Low Storage Space
 
-      Available space: \(TVLibraryView.formatStorageSpace(availableSpace))
+            Available space: \(TVLibraryView.formatStorageSpace(availableSpace))
 
-      The emulator may act erratically with low storage space. Consider freeing up some space before playing.
+            The emulator may act erratically with low storage space. Consider freeing up some space before playing.
 
-      Do you want to continue anyway?
-      """
+            Do you want to continue anyway?
+            """
       showLowStorageWarning = true
       return
     }
@@ -1909,7 +1885,7 @@ struct TVLibraryView: View {
             blockingPrecacheProgress = 0
             Task {
               do {
-                _ = try await webdav.preCacheItem(remoteItem) { progress in
+                let _ = try await webdav.preCacheItem(remoteItem) { progress in
                   DispatchQueue.main.async { blockingPrecacheProgress = progress }
                 }
                 DispatchQueue.main.async {
@@ -1974,7 +1950,7 @@ struct TVLibraryView: View {
 
                 // Check if already cached with correct size
                 if !webdavSource.isCached(remoteItem) {
-                  _ = try await webdavSource.preCacheItem(remoteItem) { progress in
+                  let _ = try await webdavSource.preCacheItem(remoteItem) { progress in
                     DispatchQueue.main.async {
                       autoPreCacheProgress[gameKey] = progress
                     }
@@ -2004,7 +1980,7 @@ struct TVLibraryView: View {
 
   private func spotlightLaunchByGameID(_ gameID: String, attempts: Int) {
     let match = model.games.first { $0.gameID == gameID }
-      ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
+    ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
     guard let item = match else {
       if attempts > 0 {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -2022,7 +1998,7 @@ struct TVLibraryView: View {
           blockingPrecacheProgress = 0
           Task {
             do {
-              _ = try await webdav.preCacheItem(remoteItem) { progress in
+              let _ = try await webdav.preCacheItem(remoteItem) { progress in
                 DispatchQueue.main.async { blockingPrecacheProgress = progress }
               }
               DispatchQueue.main.async {
@@ -2044,7 +2020,7 @@ struct TVLibraryView: View {
   }
 
   private func setupControllerNavigation(columns: Int) {
-    #if !os(tvOS)
+#if !os(tvOS)
     GCController.shouldMonitorBackgroundEvents = false
     for c in GCController.controllers() {
       c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
@@ -2102,7 +2078,7 @@ struct TVLibraryView: View {
         mgp.allowsRotation = true
         let cid = ObjectIdentifier(c)
         if prevMGPHandlers[cid] == nil { prevMGPHandlers[cid] = mgp.valueChangedHandler }
-        mgp.valueChangedHandler = { (gamepad: GCMicroGamepad, element: GCControllerElement) in
+        mgp.valueChangedHandler = {(gamepad: GCMicroGamepad, element: GCControllerElement) in
           guard !model.games.isEmpty else { return }
           let index: Int = {
             if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
@@ -2132,11 +2108,11 @@ struct TVLibraryView: View {
         }
       }
     }
-    #endif
+#endif
   }
 
   private func teardownControllerNavigation() {
-    #if !os(tvOS)
+#if !os(tvOS)
     for c in GCController.controllers() {
       let cid = ObjectIdentifier(c)
       if let egp = c.extendedGamepad {
@@ -2158,18 +2134,18 @@ struct TVLibraryView: View {
       prevEGPHandlers.removeValue(forKey: cid)
       prevMGPHandlers.removeValue(forKey: cid)
     }
-    #endif
+#endif
   }
 
   private func favorites() -> [TVGameItem]? {
     let favDict = UserDefaults.standard.dictionary(forKey: "favorites_by_gameid") as? [String: Any] ?? [:]
-    let set = Set(favDict.compactMap { k, v in (v as? Bool) == true ? k : nil })
+    let set = Set(favDict.compactMap { (k, v) in (v as? Bool) == true ? k : nil })
     guard !set.isEmpty else { return [] }
     return model.games.filter { set.contains($0.gameID) }
   }
 
   private func toggleFavorite(for item: TVGameItem) {
-    item.isFavorite.toggle()
+    item.isFavorite = !item.isFavorite
     // Nudge UI to update favorites row
     // Reload lightweight by touching state
   }
@@ -2187,10 +2163,11 @@ func getMatchingWebDAVSource(for url: URL) -> WebDAVSource? {
     let base = w.baseURL
     guard let baseHost = base.host?.lowercased() else { continue }
     let basePort = base.port ?? defaultPort(for: base.scheme)
-    if baseHost == urlHost, basePort == urlPort { return w }
+    if baseHost == urlHost && basePort == urlPort { return w }
   }
   return nil
 }
+
 
 private struct SourcePickerView: View {
   let items: [TVGameItem]
@@ -2249,13 +2226,11 @@ struct ShareSheet: UIViewControllerRepresentable {
   func makeUIViewController(context: Context) -> UIActivityViewController {
     UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
   }
-
   func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 #endif
 
 // MARK: - Remote scan progress view (toolbar)
-
 private struct RemoteScanProgressView: View {
   @StateObject private var store = RemoteSourcesStore.shared
   var body: some View {
@@ -2272,7 +2247,6 @@ private struct RemoteScanProgressView: View {
 }
 
 // MARK: - Safe index helper
-
 private extension Array {
   subscript(safe index: Int) -> Element? {
     return indices.contains(index) ? self[index] : nil
@@ -2304,7 +2278,7 @@ extension TVLibraryView {
           .padding(.top, 8)
           Spacer()
         }
-        .transition(.move(edge: .top).combined(with: .opacity))
+          .transition(.move(edge: .top).combined(with: .opacity))
       )
     }
     return AnyView(EmptyView())
@@ -2317,7 +2291,7 @@ extension TVLibraryView {
     for provider in providers {
       if provider.hasItemConformingToTypeIdentifier(wanted) {
         group.enter()
-        provider.loadItem(forTypeIdentifier: wanted, options: nil) { item, _ in
+        provider.loadItem(forTypeIdentifier: wanted, options: nil) { (item, error) in
           defer { group.leave() }
           if let nsURL = item as? NSURL, let url = nsURL as URL? {
             pendingURLs.append(url)
@@ -2338,7 +2312,7 @@ extension TVLibraryView {
   }
 
   private func expandAndFilterImportURLs(_ urls: [URL]) -> [URL] {
-    let allowed: Set<String> = ["iso", "gcm", "wbfs", "gcz", "ciso", "rvz", "wad", "dol", "elf"]
+    let allowed: Set<String> = ["iso","gcm","wbfs","gcz","ciso","rvz","wad","dol","elf"]
     var results: [URL] = []
     let fm = FileManager.default
     for url in urls {
@@ -2367,7 +2341,6 @@ extension TVLibraryView {
 
 #if canImport(TipKit)
 import TipKit
-
 @available(iOS 17, tvOS 17, *)
 private struct AttachTipModifier: ViewModifier {
   enum Kind { case importGame, addSource, search }
@@ -2395,16 +2368,16 @@ private extension View {
   func onChangeCompat<T: Equatable>(of value: T, initial: Bool = false,
                                     _ handler: @escaping (_ old: T?, _ new: T) -> Void) -> some View {
     if #available(iOS 17, tvOS 17, *) {
-      onChange(of: value, initial: initial, handler)
+      self.onChange(of: value, initial: initial, handler)
     } else {
-      onChange(of: value) { new in handler(nil, new) }
+      self.onChange(of: value) { new in handler(nil, new) }
     }
   }
 
   @ViewBuilder
   func navigationDestinationItemCompat<Item: Identifiable, Destination: View>(item: Binding<Item?>,
                                                                               @ViewBuilder destination: @escaping (Item) -> Destination) -> some View {
-    background(
+    self.background(
       NavigationLink(
         destination: Group {
           if let it = item.wrappedValue { destination(it) } else { EmptyView() }
@@ -2417,7 +2390,7 @@ private extension View {
 
   @ViewBuilder
   func tipAttachCompat(_ kind: TipKind) -> some View {
-    #if canImport(TipKit)
+#if canImport(TipKit)
     if #available(iOS 17, tvOS 17, *) {
       let mapped: AttachTipModifier.Kind = {
         switch kind {
@@ -2426,13 +2399,13 @@ private extension View {
         case .search: return .search
         }
       }()
-      modifier(AttachTipModifier.tip(mapped))
+      self.modifier(AttachTipModifier.tip(mapped))
     } else {
       self
     }
-    #else
+#else
     self
-    #endif
+#endif
   }
 }
 
@@ -2451,8 +2424,8 @@ struct iOS16NavigationStyleModifier: ViewModifier {
     content
       .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)
-    #if !os(tvOS)
+#if !os(tvOS)
       .scrollContentBackground(.hidden)
-    #endif
+#endif
   }
 }
