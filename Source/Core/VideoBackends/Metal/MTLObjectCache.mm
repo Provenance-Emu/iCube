@@ -16,6 +16,7 @@
 
 #include "VideoCommon/AbstractPipeline.h"
 #include "VideoCommon/NativeVertexFormat.h"
+#include "VideoCommon/ShaderGenCommon.h"
 #include "VideoCommon/VertexShaderGen.h"
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoConfig.h"
@@ -23,6 +24,22 @@
 MRCOwned<id<MTLDevice>> Metal::g_device;
 MRCOwned<id<MTLCommandQueue>> Metal::g_queue;
 std::unique_ptr<Metal::ObjectCache> Metal::g_object_cache;
+
+// On-disk binary-archive PSO cache. File-local: the read/populate API is exposed via free
+// functions in MTLObjectCache.h, the archive object and its mutex are not.
+static MRCOwned<id<MTLBinaryArchive>> s_pipeline_archive;
+// Guards mutation of s_pipeline_archive (add* and serializeToURL:). NOT m_mtx — using the pipeline
+// map's mutex would re-serialize background compiles and kill the background-compile benefit.
+// Reading from the archive (setBinaryArchives:/creation) is the driver's documented use and is safe
+// unguarded.
+static std::mutex s_pipeline_archive_mtx;
+
+static std::string PipelineArchivePath()
+{
+  // Reuse VideoCommon's per-host-config cache path so an archive built under one shader config
+  // isn't loaded under another.
+  return GetDiskShaderCacheFileName(APIType::Metal, "MetalPipelineArchive", false, true, true);
+}
 
 static void SetupDepthStencil(
     MRCOwned<id<MTLDepthStencilState>> (&dss)[Metal::DepthStencilSelector::N_VALUES]);
@@ -41,14 +58,113 @@ void Metal::ObjectCache::Initialize(MRCOwned<id<MTLDevice>> device)
 {
   g_device = std::move(device);
   g_queue = MRCTransfer([g_device newCommandQueue]);
+
+  // Best-effort on-disk PSO cache. MTLBinaryArchive needs iOS 14+/macOS 11+; our min is iOS 17, so
+  // this always runs, but the @available keeps the symbol guarded and futureproofs the macOS build.
+  if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+  {
+    @autoreleasepool
+    {
+      const std::string path = PipelineArchivePath();
+      NSString* ns_path = [NSString stringWithUTF8String:path.c_str()];
+      NSURL* url = [NSURL fileURLWithPath:ns_path];
+      const bool have_existing = [[NSFileManager defaultManager] fileExistsAtPath:ns_path];
+
+      // -fno-objc-arc in this TU: own the descriptor explicitly or it leaks one per launch.
+      MRCOwned<MTLBinaryArchiveDescriptor*> desc = MRCTransfer([MTLBinaryArchiveDescriptor new]);
+      // Only point the descriptor at the file if it actually exists — passing a URL to a missing
+      // file makes newBinaryArchiveWithDescriptor: return nil rather than an empty archive.
+      if (have_existing)
+        [desc setUrl:url];
+
+      NSError* err = nil;
+      s_pipeline_archive = MRCTransfer([g_device newBinaryArchiveWithDescriptor:desc error:&err]);
+
+      // Invalidation safety: an archive written by an older OS/driver (or a corrupt file) can fail
+      // to load. Discard it and start fresh from an empty archive so we never crash and the stale
+      // file is overwritten on the next shutdown serialize.
+      if (!s_pipeline_archive && have_existing)
+      {
+        [desc setUrl:nil];
+        err = nil;
+        s_pipeline_archive = MRCTransfer([g_device newBinaryArchiveWithDescriptor:desc error:&err]);
+      }
+      // If it's still nil, every Apply/Populate below no-ops and we fall back to normal compiles.
+    }
+  }
+
   g_object_cache = std::unique_ptr<ObjectCache>(new ObjectCache);
 }
 
 void Metal::ObjectCache::Shutdown()
 {
+  if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+  {
+    std::lock_guard<std::mutex> lock(s_pipeline_archive_mtx);
+    if (s_pipeline_archive)
+    {
+      @autoreleasepool
+      {
+        const std::string path = PipelineArchivePath();
+        NSURL* url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:path.c_str()]];
+        NSError* err = nil;
+        // Best-effort: a failed serialize just means no cross-launch cache this time.
+        [s_pipeline_archive serializeToURL:url error:&err];
+      }
+      s_pipeline_archive = nullptr;
+    }
+  }
+
   g_object_cache.reset();
   g_queue = nullptr;
   g_device = nullptr;
+}
+
+void Metal::ApplyPipelineBinaryArchive(MTLRenderPipelineDescriptor* desc)
+{
+  if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+  {
+    if (s_pipeline_archive)
+      [desc setBinaryArchives:@[ s_pipeline_archive ]];
+  }
+}
+
+void Metal::ApplyPipelineBinaryArchive(MTLComputePipelineDescriptor* desc)
+{
+  if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+  {
+    if (s_pipeline_archive)
+      [desc setBinaryArchives:@[ s_pipeline_archive ]];
+  }
+}
+
+void Metal::PopulatePipelineBinaryArchive(MTLRenderPipelineDescriptor* desc)
+{
+  if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+  {
+    std::lock_guard<std::mutex> lock(s_pipeline_archive_mtx);
+    if (!s_pipeline_archive)
+      return;
+    // Avoid adding to an archive the descriptor still references.
+    [desc setBinaryArchives:nil];
+    NSError* err = nil;
+    // Best-effort: re-adding an already-present entry errors harmlessly; ignore all failures.
+    [s_pipeline_archive addRenderPipelineFunctionsWithDescriptor:desc error:&err];
+  }
+}
+
+void Metal::PopulatePipelineBinaryArchive(MTLComputePipelineDescriptor* desc)
+{
+  if (@available(iOS 14.0, tvOS 14.0, macOS 11.0, *))
+  {
+    std::lock_guard<std::mutex> lock(s_pipeline_archive_mtx);
+    if (!s_pipeline_archive)
+      return;
+    // Avoid adding to an archive the descriptor still references.
+    [desc setBinaryArchives:nil];
+    NSError* err = nil;
+    [s_pipeline_archive addComputePipelineFunctionsWithDescriptor:desc error:&err];
+  }
 }
 
 // MARK: Depth Stencil State
@@ -437,6 +553,8 @@ public:
       [desc setDepthAttachmentPixelFormat:Util::FromAbstract(fs.depth_texture_format)];
       if (Util::HasStencil(fs.depth_texture_format))
         [desc setStencilAttachmentPixelFormat:Util::FromAbstract(fs.depth_texture_format)];
+      // Attach the on-disk archive so a previously-cached PSO loads from disk instead of compiling.
+      ApplyPipelineBinaryArchive(desc);
       NSError* err = nullptr;
       MTLRenderPipelineReflection* reflection = nullptr;
       id<MTLRenderPipelineState> pipe =
@@ -508,6 +626,11 @@ public:
                       [[err localizedDescription] UTF8String], file_msg);
         return std::make_pair(nullptr, PipelineReflection());
       }
+
+      // Persist the just-compiled PSO into the archive (serialized to disk on shutdown). Populate
+      // every time: there's no cheap way to tell a cache hit from a miss, and re-adding an existing
+      // entry is harmless. Best-effort under the dedicated mutex.
+      PopulatePipelineBinaryArchive(desc);
 
       return std::make_pair(MRCTransfer(pipe), PipelineReflection(reflection));
     }
