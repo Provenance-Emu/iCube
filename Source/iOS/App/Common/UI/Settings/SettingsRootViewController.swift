@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import Foundation
-import UIKit
 import SwiftUI
+import UIKit
 
 class SettingsRootViewController: UITableViewController {
   @IBOutlet weak var versionLabel: UILabel!
@@ -31,5 +31,5 @@ class SettingsRootViewController: UITableViewController {
     tableView.deselectRow(at: indexPath, animated: true)
   }
 
-  @IBAction func unwindToSettings( _ seg: UIStoryboardSegue) {}
+  @IBAction func unwindToSettings(_ seg: UIStoryboardSegue) {}
 }

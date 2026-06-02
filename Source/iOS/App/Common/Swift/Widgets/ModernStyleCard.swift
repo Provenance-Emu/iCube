@@ -4,6 +4,7 @@
 import SwiftUI
 
 // MARK: - Modern Style Card
+
 internal struct ModernStyleCard: View {
   let title: String
   let subtitle: String

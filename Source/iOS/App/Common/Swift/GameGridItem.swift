@@ -30,9 +30,9 @@ struct GameGridItem: View {
   @State private var isPreCaching = false
   @State private var cacheStateVersion = 0 // Force UI updates when cache state changes
 
-#if os(tvOS)
+  #if os(tvOS)
   @State private var isFocused: Bool = false
-#endif
+  #endif
 
   /// Determines remote source type and appropriate icon
   private var remoteIconName: String? {
@@ -47,58 +47,58 @@ struct GameGridItem: View {
   /// Check if this is a remote game
   private var isRemoteGame: Bool {
     let result = remoteIconName != nil
-#if DEBUG
+    #if DEBUG
     print("DEBUG: isRemoteGame for '\(item.title)' (path: '\(item.filePath)') = \(result)")
-#endif
+    #endif
     return result
   }
 
   /// Get the WebDAV source for this game (if any)
   private func getWebDAVSource() -> WebDAVSource? {
     guard isRemoteGame, let url = URL(string: item.filePath) else {
-#if DEBUG
+      #if DEBUG
       print("DEBUG: getWebDAVSource early return - isRemoteGame: \(isRemoteGame), url valid: \(URL(string: item.filePath) != nil)")
-#endif
+      #endif
       return nil
     }
 
     func defaultPort(for scheme: String?) -> Int {
-      switch (scheme?.lowercased()) {
+      switch scheme?.lowercased() {
       case "https", "webdavs": return 443
       default: return 80
       }
     }
 
     guard let urlHost = url.host?.lowercased() else {
-#if DEBUG
+      #if DEBUG
       print("DEBUG: getWebDAVSource no host for URL: \(url)")
-#endif
+      #endif
       return nil
     }
     let urlPort = url.port ?? defaultPort(for: url.scheme)
     let urlPath = url.path
 
-#if DEBUG
+    #if DEBUG
     print("DEBUG: Looking for WebDAV source matching host: \(urlHost), port: \(urlPort), path: \(urlPath)")
     print("DEBUG: Available sources: \(RemoteSourcesStore.shared.sources.count)")
-#endif
+    #endif
 
     var bestMatch: (source: WebDAVSource, score: Int)? = nil
 
     for (index, source) in RemoteSourcesStore.shared.sources.enumerated() {
-#if DEBUG
+      #if DEBUG
       print("DEBUG: Source \(index): \(type(of: source))")
-#endif
+      #endif
       guard let webdavSource = source as? WebDAVSource else { continue }
       let base = webdavSource.baseURL
-#if DEBUG
+      #if DEBUG
       print("DEBUG: WebDAV source base URL: \(base)")
-#endif
+      #endif
       guard let baseHost = base.host?.lowercased() else { continue }
       let basePort = base.port ?? defaultPort(for: base.scheme)
-#if DEBUG
+      #if DEBUG
       print("DEBUG: Comparing - base host: \(baseHost), port: \(basePort) vs url host: \(urlHost), port: \(urlPort)")
-#endif
+      #endif
       guard urlHost == baseHost && urlPort == basePort else { continue }
 
       // Prefer the source with the longest base path prefix match
@@ -108,24 +108,24 @@ struct GameGridItem: View {
       else if urlPath.hasPrefix(basePath) { score = max(2, basePath.count) }
       else { score = 1 } // host/port match only
 
-#if DEBUG
+      #if DEBUG
       print("DEBUG: Found matching source with score \(score), basePath: '\(basePath)', isPreCachingEnabled: \(webdavSource.isPreCachingEnabled)")
-#endif
+      #endif
       if bestMatch == nil || score > bestMatch!.score {
         bestMatch = (webdavSource, score)
       }
     }
 
     let result = bestMatch?.source
-#if DEBUG
+    #if DEBUG
     print("DEBUG: getWebDAVSource result: \(result != nil ? "found" : "nil"), final isPreCachingEnabled: \(result?.isPreCachingEnabled ?? false)")
-#endif
+    #endif
     return result
   }
 
   /// Check if this remote game is cached locally
   private var isCached: Bool {
-    let _ = cacheStateVersion // Force dependency on cache state changes
+    _ = cacheStateVersion // Force dependency on cache state changes
     guard let source = getWebDAVSource(),
           let url = URL(string: item.filePath) else { return false }
 
@@ -139,29 +139,29 @@ struct GameGridItem: View {
     // GameCubeDisc = 0, WiiDisc = 1, WiiWAD = 2, ELFOrDOL = 3
     switch item.platform {
     case 0: // GameCubeDisc
-#if DEBUG
+      #if DEBUG
       print("DEBUG: Platform-detected GameCube game: '\(item.gameID)' for '\(item.title)'")
-#endif
+      #endif
       return .gamecube
 
     case 1, 2: // WiiDisc, WiiWAD
-#if DEBUG
+      #if DEBUG
       print("DEBUG: Platform-detected Wii game: '\(item.gameID)' for '\(item.title)' (platform: \(item.platform))")
-#endif
+      #endif
       return .wii
 
     case 3: // ELFOrDOL
       // ELF/DOL files can be either GameCube or Wii, but are typically GameCube homebrew
-#if DEBUG
+      #if DEBUG
       print("DEBUG: Platform-detected ELF/DOL: '\(item.gameID)' for '\(item.title)' - defaulting to GameCube")
-#endif
+      #endif
       return .gamecube
 
     default:
       // Unknown platform, default to GameCube as fallback
-#if DEBUG
+      #if DEBUG
       print("DEBUG: Unknown platform \(item.platform) for '\(item.gameID)' '\(item.title)' - defaulting to GameCube")
-#endif
+      #endif
       return .gamecube
     }
   }
@@ -171,13 +171,13 @@ struct GameGridItem: View {
 
     var templateImageName: String {
       switch self {
-        #if APPSTORE
+      #if APPSTORE
       case .gamecube: return "GCCoverTemplate-NoLogo"
       case .wii: return "WiiCoverTemplate-NoLogo"
-        #else
+      #else
       case .gamecube: return "GCCoverTemplate"
       case .wii: return "WiiCoverTemplate"
-        #endif
+      #endif
       }
     }
   }
@@ -192,18 +192,18 @@ struct GameGridItem: View {
     let desc = image.description.lowercased()
 
     let isPlaceholder = image.size.width <= 1 ||
-    image.size.height <= 1 ||
-    desc.contains("nocover") ||
-    desc.contains("placeholder") ||
-    desc.contains("default") ||
-    // Check for very small images that are likely placeholders
-    (image.size.width < 50 && image.size.height < 50)
+      image.size.height <= 1 ||
+      desc.contains("nocover") ||
+      desc.contains("placeholder") ||
+      desc.contains("default") ||
+      // Check for very small images that are likely placeholders
+      (image.size.width < 50 && image.size.height < 50)
 
-#if DEBUG
+    #if DEBUG
     if isPlaceholder {
       print("DEBUG: Using placeholder cover for '\(item.title)' (gameID: '\(item.gameID)'), system: \(gameSystem)")
     }
-#endif
+    #endif
 
     return isPlaceholder
   }
@@ -217,15 +217,15 @@ struct GameGridItem: View {
         .fill(
           RadialGradient(
             colors: gameSystem == .gamecube ?
-            [
-              Color(red: 0.35, green: 0.25, blue: 0.75), // GameCube purple
-              Color(red: 0.25, green: 0.15, blue: 0.65),
-              Color(red: 0.15, green: 0.08, blue: 0.55)
-            ] : [
-              Color(red: 0.25, green: 0.55, blue: 0.95), // Wii blue
-              Color(red: 0.15, green: 0.45, blue: 0.85),
-              Color(red: 0.08, green: 0.35, blue: 0.75)
-            ],
+              [
+                Color(red: 0.35, green: 0.25, blue: 0.75), // GameCube purple
+                Color(red: 0.25, green: 0.15, blue: 0.65),
+                Color(red: 0.15, green: 0.08, blue: 0.55)
+              ] : [
+                Color(red: 0.25, green: 0.55, blue: 0.95), // Wii blue
+                Color(red: 0.15, green: 0.45, blue: 0.85),
+                Color(red: 0.08, green: 0.35, blue: 0.75)
+              ],
             center: .topLeading,
             startRadius: 20,
             endRadius: 200
@@ -416,7 +416,7 @@ struct GameGridItem: View {
       .padding(.bottom, screenScaledPadding(base: 16))
 
       // Subtle animated sparkles for magic ✨
-      ForEach(0..<3, id: \.self) { index in
+      ForEach(0 ..< 3, id: \.self) { index in
         Image(systemName: "sparkle")
           .font(.system(size: screenScaledFontSize(base: 8), weight: .light))
           .foregroundColor(.white.opacity(0.4))
@@ -440,20 +440,20 @@ struct GameGridItem: View {
 
   /// Scale font sizes appropriately for tvOS vs iOS
   private func screenScaledFontSize(base: CGFloat) -> CGFloat {
-#if os(tvOS)
+    #if os(tvOS)
     return base * 1.4
-#else
+    #else
     return base
-#endif
+    #endif
   }
 
   /// Scale padding appropriately for tvOS vs iOS
   private func screenScaledPadding(base: CGFloat) -> CGFloat {
-#if os(tvOS)
+    #if os(tvOS)
     return base * 1.5
-#else
+    #else
     return base
-#endif
+    #endif
   }
 
   /// Enhanced headline font with iOS version compatibility
@@ -466,9 +466,8 @@ struct GameGridItem: View {
     return .system(.caption, design: .monospaced, weight: .medium)
   }
 
-
   var body: some View {
-#if os(tvOS)
+    #if os(tvOS)
     // Clean, simple approach for tvOS
     VStack(alignment: .leading, spacing: 12) {
       ZStack(alignment: .topTrailing) {
@@ -499,7 +498,7 @@ struct GameGridItem: View {
                   RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 )
-              // Add subtle 3D perspective to real covers too
+                // Add subtle 3D perspective to real covers too
                 .rotation3DEffect(
                   .degrees(1),
                   axis: (x: 0.05, y: 1.0, z: 0),
@@ -547,10 +546,12 @@ struct GameGridItem: View {
         )
 
         if isFocused {
-          VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center); Spacer() }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
-            .allowsHitTesting(false)
+          VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center)
+            Spacer()
+          }
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+          .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
+          .allowsHitTesting(false)
         }
 
         if let icon = remoteIconName {
@@ -593,8 +594,6 @@ struct GameGridItem: View {
             .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height, alignment: .topLeading)
             .allowsHitTesting(false)
         }
-
-
       }
 
       VStack(alignment: .leading, spacing: 6) {
@@ -768,7 +767,7 @@ struct GameGridItem: View {
       Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
     .zIndex(isFocused ? 1 : 0)
-#else
+    #else
     Button(action: { select(item) }) {
       VStack(alignment: .leading, spacing: 12) {
         ZStack(alignment: .topTrailing) {
@@ -797,7 +796,7 @@ struct GameGridItem: View {
                   RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 )
-              // Add subtle 3D perspective to real covers too
+                // Add subtle 3D perspective to real covers too
                 .rotation3DEffect(
                   .degrees(0.8),
                   axis: (x: 0.05, y: 1.0, z: 0),
@@ -835,8 +834,6 @@ struct GameGridItem: View {
             .background(.ultraThinMaterial, in: Circle())
             .padding(8)
           }
-
-
         }
 
         VStack(alignment: .leading, spacing: 6) {
@@ -981,7 +978,7 @@ struct GameGridItem: View {
       }
       Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
-#endif
+    #endif
   }
 
   // MARK: - Pre-cache Methods
@@ -998,10 +995,10 @@ struct GameGridItem: View {
       do {
         // Use the file size from TVGameItem (which comes from WebDAV PROPFIND)
         let fileSize = Int64(item.fileSize)
-#if DEBUG
+        #if DEBUG
         print("Using cached file size for \(item.title): \(fileSize) bytes")
         print("DEBUG: TVGameItem.fileSize = \(item.fileSize)")
-#endif
+        #endif
 
         // Check if we have enough storage space (file size + 100MB buffer)
         if !TVLibraryView.hasEnoughSpaceForPreCache(fileSize: fileSize) {
@@ -1012,13 +1009,13 @@ struct GameGridItem: View {
             self.isPreCaching = false
             self.showPreCacheProgress = false
             let message = """
-                        Not enough storage space to download \(self.item.title).
+            Not enough storage space to download \(self.item.title).
 
-                        Available: \(TVLibraryView.formatStorageSpace(availableSpace))
-                        Required: \(TVLibraryView.formatStorageSpace(requiredSpace))
+            Available: \(TVLibraryView.formatStorageSpace(availableSpace))
+            Required: \(TVLibraryView.formatStorageSpace(requiredSpace))
 
-                        Please free up some space and try again.
-                        """
+            Please free up some space and try again.
+            """
             self.showStorageAlert(message)
           }
           return
@@ -1031,7 +1028,7 @@ struct GameGridItem: View {
           size: fileSize
         )
 
-        let _ = try await source.preCacheItem(remoteItem) { progress in
+        _ = try await source.preCacheItem(remoteItem) { progress in
           DispatchQueue.main.async {
             self.preCacheProgress = progress
           }
@@ -1051,19 +1048,19 @@ struct GameGridItem: View {
 
           // Show user-friendly error message
           let message: String
-          if let nsError = error as NSError?, nsError.domain == NSPOSIXErrorDomain && nsError.code == 28 {
+          if let nsError = error as NSError?, nsError.domain == NSPOSIXErrorDomain, nsError.code == 28 {
             message = """
-                        Download failed: Not enough storage space.
+            Download failed: Not enough storage space.
 
-                        The device ran out of space while downloading \(self.item.title).
-                        Please free up some space and try again.
-                        """
+            The device ran out of space while downloading \(self.item.title).
+            Please free up some space and try again.
+            """
           } else {
             message = """
-                        Download failed: \(error.localizedDescription)
+            Download failed: \(error.localizedDescription)
 
-                        Unable to download \(self.item.title) to cache.
-                        """
+            Unable to download \(self.item.title) to cache.
+            """
           }
           self.showStorageAlert(message)
           print("Pre-cache failed for \(self.item.title): \(error)")

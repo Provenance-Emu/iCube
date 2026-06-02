@@ -4,10 +4,11 @@ import MetalKit
 
 @objc final class DOLShaderPostProcessor: NSObject {
   @objc static let shared = DOLShaderPostProcessor()
-  private override init() {
+  override private init() {
     super.init()
     NotificationCenter.default.addObserver(self, selector: #selector(_shaderSettingsChanged(_:)), name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
   }
+
   private var device: MTLDevice?
   private var filter: FilterChain?
   private var library: CompiledShaderContainer?
@@ -42,10 +43,10 @@ import MetalKit
   @objc func configureWithDevice(_ device: MTLDevice) {
     if self.device?.registryID != device.registryID {
       self.device = device
-      self.filter = try? FilterChain(device: device)
-      self.library = nil
-      self.cachedPresetPath = nil
-      self.debugChecker = nil
+      filter = try? FilterChain(device: device)
+      library = nil
+      cachedPresetPath = nil
+      debugChecker = nil
     }
   }
 
@@ -139,7 +140,7 @@ import MetalKit
       return
     }
     // Reload if path changed OR we currently have no shader loaded
-    if p == cachedPresetPath && filter.hasShader {
+    if p == cachedPresetPath, filter.hasShader {
       return
     }
     guard let url = resolvePresetURL(from: p) else {
@@ -211,22 +212,22 @@ import MetalKit
     let width = tile * tiles
     let height = tile * tiles
     var data = [UInt32](repeating: 0, count: width * height)
-    let c0: UInt32 = 0xFF000000 // black BGRA
-    let c1: UInt32 = 0xFFFFFFFF // white BGRA
-    for y in 0..<height {
-      for x in 0..<width {
+    let c0: UInt32 = 0xFF00_0000 // black BGRA
+    let c1: UInt32 = 0xFFFF_FFFF // white BGRA
+    for y in 0 ..< height {
+      for x in 0 ..< width {
         let sx = x / tile
         let sy = y / tile
         data[y * width + x] = ((sx + sy) & 1) == 0 ? c0 : c1
       }
     }
     guard let ctx = CGContext(data: &data,
-                 width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: width * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue)
+                              width: width,
+                              height: height,
+                              bitsPerComponent: 8,
+                              bytesPerRow: width * 4,
+                              space: CGColorSpaceCreateDeviceRGB(),
+                              bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue)
     else { return nil }
     guard let img = ctx.makeImage() else { return nil }
     let loader = MTKTextureLoader(device: device)
@@ -304,7 +305,7 @@ import MetalKit
 
     // Pre-copy is bandwidth-heavy; keep it opt-in via a setting, and allow debug override to disable
     let preCopyEnabled = (UserDefaults.standard.object(forKey: "shader_precopy_enabled") as? Bool) ?? false
-    if preCopyEnabled && !(UserDefaults.standard.bool(forKey: "shader_debug_disable_precopy")) {
+    if preCopyEnabled, !(UserDefaults.standard.bool(forKey: "shader_debug_disable_precopy")) {
       let preMarker = cb.makeBlitCommandEncoder()
       preMarker?.label = "PostProcess preCopy"
       preMarker?.copy(from: source, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x: 0, y: 0, z: 0), sourceSize: .init(width: source.width, height: source.height, depth: 1), to: dst, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init(x: 0, y: 0, z: 0))
@@ -347,11 +348,11 @@ import MetalKit
       }
     }
 
-            // Invoke the filter
-        /// Default to no vertical flip to match OpenEmu orientation assumptions
-        let flip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
-        filter.render(sourceTexture: source, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip)
-        // print("[Shaders] Swift: render end (flip=\(flip))")
+    // Invoke the filter
+    /// Default to no vertical flip to match OpenEmu orientation assumptions
+    let flip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
+    filter.render(sourceTexture: source, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip)
+    // print("[Shaders] Swift: render end (flip=\(flip))")
   }
 
   /// Expose compiled parameter metadata for UI
@@ -359,11 +360,13 @@ import MetalKit
     guard let lib = library else { return [] }
     return lib.shader.parameters
   }
+
   /// Read the current parameter value by index
   @objc func currentValueForParameter(index: Int) -> CGFloat {
     guard let f = filter else { return 0 }
     return f.getValue(forParameterIndex: index)
   }
+
   /// Update parameter by index and apply immediately
   @objc func setValue(_ value: CGFloat, forParameterIndex index: Int) {
     filter?.setValue(value, forParameterIndex: index)

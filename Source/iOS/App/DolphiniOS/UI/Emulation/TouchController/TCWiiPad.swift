@@ -14,7 +14,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   /// Tracked game-content rect within this view for precise mapping
   private var gameRectLocal: CGRect = .zero
 
-  var touchStartPoint: CGPoint = CGPoint(x: 0, y: 0)
+  var touchStartPoint: CGPoint = CGPoint.zero
   var oldX: CGFloat = 0
   var oldY: CGFloat = 0
   private var irPressRecognizer: UILongPressGestureRecognizer!
@@ -32,48 +32,48 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     super.init(coder: coder)
 
     // Register our "long press" gesture recognizer
-    irPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+    self.irPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
     irPressRecognizer.minimumPressDuration = 0
     #if os(iOS)
     irPressRecognizer.numberOfTouchesRequired = 1
     #endif
     irPressRecognizer.cancelsTouchesInView = false
     irPressRecognizer.delegate = self
-    self.real_view!.addGestureRecognizer(irPressRecognizer)
+    real_view!.addGestureRecognizer(irPressRecognizer)
 
     // Three-finger hold to center IR
-    centerHoldRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleThreeFingerHold))
+    self.centerHoldRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleThreeFingerHold))
     centerHoldRecognizer.minimumPressDuration = 3.0
     #if os(iOS)
     centerHoldRecognizer.numberOfTouchesRequired = 3
     #endif
     centerHoldRecognizer.cancelsTouchesInView = false
     centerHoldRecognizer.delegate = self
-    self.real_view!.addGestureRecognizer(centerHoldRecognizer)
+    real_view!.addGestureRecognizer(centerHoldRecognizer)
 
     debugLog("[TOUCH] TCWiiPad initialized; gesture recognizer installed")
   }
 
   override init(frame: CGRect) {
     super.init(frame: frame)
-    irPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+    self.irPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
     irPressRecognizer.minimumPressDuration = 0
     #if os(iOS)
     irPressRecognizer.numberOfTouchesRequired = 1
     #endif
     irPressRecognizer.cancelsTouchesInView = false
     irPressRecognizer.delegate = self
-    self.real_view!.addGestureRecognizer(irPressRecognizer)
+    real_view!.addGestureRecognizer(irPressRecognizer)
 
     // Three-finger hold to center IR
-    centerHoldRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleThreeFingerHold))
+    self.centerHoldRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(handleThreeFingerHold))
     centerHoldRecognizer.minimumPressDuration = 3.0
     #if os(iOS)
     centerHoldRecognizer.numberOfTouchesRequired = 3
     #endif
     centerHoldRecognizer.cancelsTouchesInView = false
     centerHoldRecognizer.delegate = self
-    self.real_view!.addGestureRecognizer(centerHoldRecognizer)
+    real_view!.addGestureRecognizer(centerHoldRecognizer)
 
     debugLog("[TOUCH] TCWiiPad init(frame:) gesture recognizer installed")
   }
@@ -89,11 +89,11 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     let surfaceAR = gameWidth / gameHeight
     let gameAR = game_aspect
     if gameAR <= surfaceAR {
-        // Black bars on left/right
-        gameWidth = gameHeight * gameAR
+      // Black bars on left/right
+      gameWidth = gameHeight * gameAR
     } else {
-        // Black bars on top/bottom
-        gameHeight = gameWidth / gameAR
+      // Black bars on top/bottom
+      gameHeight = gameWidth / gameAR
     }
 
     gameWidthHalfInv = 1 / (gameWidth * 0.5)
@@ -113,14 +113,14 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     super.layoutSubviews()
     let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
     let vr = TVEmulationBridge.currentVideoContentRect()
-    let rect = vr == .zero ? self.bounds : vr
+    let rect = vr == .zero ? bounds : vr
     recalculatePointerValues(new_rect: rect, game_aspect: ar)
   }
 
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
     // Do not start IR gestures when touches begin inside joystick/dpad/button controls
     if viewIsInsideControl(touch.view) { return false }
-    if let rv = self.real_view { return touch.view?.isDescendant(of: rv) ?? true }
+    if let rv = real_view { return touch.view?.isDescendant(of: rv) ?? true }
 
     return true
   }
@@ -148,7 +148,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     var rect = gameRectLocal
     if rect.isEmpty {
       // Fallback to full bounds if we haven't been told yet; assume centered with aspect already accounted for by inv factors
-      rect = self.bounds
+      rect = bounds
     }
     let cx = rect.midX
     let cy = rect.midY
@@ -176,9 +176,9 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
 
     if gesture.state == .began {
       touchStartPoint = point
-    #if os(iOS)
+      #if os(iOS)
       TVEmulationBridge.setWiiIMUPointEnabled(false)
-    #endif
+      #endif
       debugLog(String(format: "[TOUCH] Wii IR begin at (%.3f, %.3f) port=%d mode=%d", point.x, point.y, port, mode.rawValue))
       return
     }
@@ -192,19 +192,20 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
       y = n.y
     } else {
       // Drag delta mapping using content rect scaling for correct sensitivity
-      let rect = gameRectLocal.isEmpty ? self.bounds : gameRectLocal
+      let rect = gameRectLocal.isEmpty ? bounds : gameRectLocal
       let halfW = max(1.0, rect.width * 0.5)
       let halfH = max(1.0, rect.height * 0.5)
       let dx = (point.x - touchStartPoint.x) / halfW
       let dy = (point.y - touchStartPoint.y) / halfH
       x = oldX + dx
       y = oldY + dy
-      x = clamp(x); y = clamp(y)
+      x = clamp(x)
+      y = clamp(y)
     }
 
     sendIR(x: x, y: y)
 
-    if gesture.state == .ended && mode == .drag {
+    if gesture.state == .ended, mode == .drag {
       oldX = x
       oldY = y
       debugLog(String(format: "[TOUCH] Wii IR end; persisted (x=%.4f,y=%.4f)", x, y))
@@ -212,7 +213,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   }
 
   @objc func setTouchIRMode(_ newMode: TCWiiTouchIRMode) {
-    self.mode = newMode
+    mode = newMode
     #if os(iOS)
     let useIMU = (newMode == .none)
     TVEmulationBridge.setWiiIMUPointEnabled(useIMU)
@@ -223,7 +224,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   }
 
   @objc func resetPointer() {
-    touchStartPoint = CGPoint(x: 0, y: 0)
+    touchStartPoint = CGPoint.zero
     oldX = 0
     oldY = 0
     debugLog("[TOUCH] Wii IR pointer reset")
@@ -240,7 +241,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     let axisStartIdx = TCButtonType.wiiInfrared
     for (i, axis) in [y, y, x, x].enumerated() {
       let idx = axisStartIdx.rawValue + i + 1
-      TCManagerInterface.setAxisValueFor(idx, controller: self.port, value: Float(axis))
+      TCManagerInterface.setAxisValueFor(idx, controller: port, value: Float(axis))
       debugLog(String(format: "[TOUCH] Wii IR axis send idx=%d val=%.4f port=%d", idx, axis, port))
     }
     #endif

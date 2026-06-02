@@ -1,8 +1,9 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import SwiftUI
 import GameController
+import SwiftUI
+
 #if os(iOS)
 #endif
 
@@ -17,7 +18,7 @@ struct ControllerPickerSheet: View {
   private enum FocusField: Hashable { case back, row(Int), done }
 
   var body: some View {
-#if os(iOS)
+    #if os(iOS)
     NavigationStack {
       List {
         Section(header: Text(L("Select Controller"))) {
@@ -67,12 +68,16 @@ struct ControllerPickerSheet: View {
       }
       .navigationTitle(L("Assign to Player") + " \(port)")
       .toolbar {
-        ToolbarItem(placement: .navigationBarLeading) { Button(L("Cancel")) { onDone(nil); dismiss() } }
-        ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { onDone(selection); dismiss() } }
+        ToolbarItem(placement: .navigationBarLeading) { Button(L("Cancel")) { onDone(nil)
+          dismiss()
+        } }
+        ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { onDone(selection)
+          dismiss()
+        } }
       }
       .onAppear { controllers = GCController.controllers() }
     }
-#else
+    #else
     ZStack {
       // Background
       Image(uiImage: game.coverImage)
@@ -99,7 +104,7 @@ struct ControllerPickerSheet: View {
         VStack(alignment: .leading, spacing: 16) {
           Image(uiImage: game.coverImage)
             .resizable()
-            .aspectRatio(2.0/3.0, contentMode: .fit)
+            .aspectRatio(2.0 / 3.0, contentMode: .fit)
             .frame(width: 180, height: 270)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
@@ -119,7 +124,9 @@ struct ControllerPickerSheet: View {
         VStack(alignment: .leading, spacing: 24) {
           // Header actions
           HStack(alignment: .center, spacing: 20) {
-            Button(action: { onDone(nil); dismiss() }) {
+            Button(action: { onDone(nil)
+              dismiss()
+            }) {
               HStack(spacing: 12) {
                 Image(systemName: "chevron.left")
                   .font(.system(size: 16, weight: .semibold))
@@ -143,7 +150,9 @@ struct ControllerPickerSheet: View {
 
             Spacer()
 
-            Button(action: { onDone(selection); dismiss() }) {
+            Button(action: { onDone(selection)
+              dismiss()
+            }) {
               HStack(spacing: 12) {
                 Text(L("Done"))
                   .font(.system(size: 18, weight: .semibold))
@@ -212,12 +221,14 @@ struct ControllerPickerSheet: View {
       }
       .padding(.horizontal, 60)
     }
-#if os(tvOS)
+    #if os(tvOS)
     .focusSection()
-    .onExitCommand { onDone(selection); dismiss() }
-#endif
+    .onExitCommand { onDone(selection)
+      dismiss()
+    }
+    #endif
     .defaultFocus($focused, .back)
     .onAppear { controllers = GCController.controllers() }
-#endif
+    #endif
   }
 }

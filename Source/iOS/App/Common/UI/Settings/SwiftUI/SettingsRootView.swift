@@ -1138,7 +1138,7 @@ struct ControllersRootView: View {
 
 #if os(iOS)
   /// Test rumble/haptic feedback on device and connected controllers
-  private func testRumble() {
+  func testRumble() {
     var controllersTestedCount = 0
     var deviceTested = false
     #if canImport(GameController)

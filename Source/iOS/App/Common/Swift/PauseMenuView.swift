@@ -1,8 +1,9 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import SwiftUI
 import GameController
+import SwiftUI
+
 #if os(iOS)
 #endif
 
@@ -30,7 +31,6 @@ internal struct PauseMenuView: View {
       Color.black
         .ignoresSafeArea()
 
-
       switch pane {
       case .main:
         mainMenu
@@ -56,9 +56,9 @@ internal struct PauseMenuView: View {
     .onDisappear {
       if TVEmulationBridge.isRunning() && TVEmulationBridge.isPaused() { TVEmulationBridge.resume() }
     }
-#if os(tvOS)
+    #if os(tvOS)
     .focusSection()
-#endif
+    #endif
     .onChange(of: pane) { p in
       DispatchQueue.main.async {
         switch p {
@@ -73,7 +73,7 @@ internal struct PauseMenuView: View {
         }
       }
     }
-#if os(tvOS)
+    #if os(tvOS)
     .onExitCommand {
       if pane == .main {
         onClose()
@@ -81,18 +81,18 @@ internal struct PauseMenuView: View {
         pane = .main
       }
     }
-#endif
+    #endif
     .modifier(DefaultFocusCompat(focused: $focused, value: .resume))
     .sheet(isPresented: $showShaders) {
       NavigationStack {
         ShaderSettingsView()
           .navigationTitle(L("Shaders"))
       }
-#if os(tvOS)
+      #if os(tvOS)
       .focusSection()
-#endif
+      #endif
     }
-#if os(iOS)
+    #if os(iOS)
     .sheet(isPresented: $showSettingsSheet) {
       NavigationStack {
         SettingsRootView()
@@ -100,7 +100,7 @@ internal struct PauseMenuView: View {
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showSettingsSheet = false } } }
       }
     }
-#endif
+    #endif
   }
 
   // Add pull-down to dismiss for iOS
@@ -170,7 +170,7 @@ internal struct PauseMenuView: View {
         HStack(alignment: .top, spacing: 12) {
           Image(uiImage: game.coverImage)
             .resizable()
-            .aspectRatio(2.0/3.0, contentMode: .fit)
+            .aspectRatio(2.0 / 3.0, contentMode: .fit)
             .frame(width: 96)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
           VStack(alignment: .leading, spacing: 4) {
@@ -187,7 +187,8 @@ internal struct PauseMenuView: View {
         // Adaptive grid: 1 column portrait, 2+ landscape based on width automatically
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12)], spacing: 12) {
           menuButtonIOS(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue) {
-            TVEmulationBridge.resume(); onClose()
+            TVEmulationBridge.resume()
+            onClose()
           }
           menuButtonIOS(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple) { pane = .saves }
           menuButtonIOS(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow) { pane = .cheats }
@@ -310,7 +311,7 @@ internal struct PauseMenuView: View {
         VStack(alignment: .leading, spacing: 16) {
           Image(uiImage: game.coverImage)
             .resizable()
-            .aspectRatio(2.0/3.0, contentMode: .fit)
+            .aspectRatio(2.0 / 3.0, contentMode: .fit)
             .frame(width: 180, height: 270)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
@@ -331,7 +332,9 @@ internal struct PauseMenuView: View {
         // Right side - Menu options
         VStack(alignment: .leading, spacing: 24) {
           // Hero resume button
-          Button(action: { TVEmulationBridge.resume(); onClose() }) {
+          Button(action: { TVEmulationBridge.resume()
+            onClose()
+          }) {
             HStack(spacing: 16) {
               Text(L("Resume Game"))
                 .font(.system(size: 20, weight: .bold))
@@ -590,7 +593,7 @@ internal struct PauseMenuView: View {
             Section(header: Text(L("Quick Slots"))) {
               ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                  ForEach(1...10, id: \.self) { i in
+                  ForEach(1 ... 10, id: \.self) { i in
                     Button(action: { selectedSlot = i }) {
                       Label(String(format: L("Slot %d"), i), systemImage: selectedSlot == i ? "checkmark.circle.fill" : "circle")
                     }
@@ -601,14 +604,24 @@ internal struct PauseMenuView: View {
               }
             }
             Section(header: Text(L("Actions"))) {
-              Button { TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true); NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved to Slot %d"), selectedSlot)]) } label: {
-                HStack { Image(systemName: ControllerGlyphs.glyphName(for: "confirm", set: ControllerStyleManager.shared.current())); Text(String(format: L("Save to Slot %d"), selectedSlot)) }
+              Button { TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
+                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved to Slot %d"), selectedSlot)])
+              } label: {
+                HStack { Image(systemName: ControllerGlyphs.glyphName(for: "confirm", set: ControllerStyleManager.shared.current()))
+                  Text(String(format: L("Save to Slot %d"), selectedSlot))
+                }
               }
-              Button { TVEmulationBridge.loadState(fromSlot: selectedSlot); NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Loaded Slot %d"), selectedSlot)]) } label: {
-                HStack { Image(systemName: "arrow.down.circle"); Text(String(format: L("Load Slot %d"), selectedSlot)) }
+              Button { TVEmulationBridge.loadState(fromSlot: selectedSlot)
+                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Loaded Slot %d"), selectedSlot)])
+              } label: {
+                HStack { Image(systemName: "arrow.down.circle")
+                  Text(String(format: L("Load Slot %d"), selectedSlot))
+                }
               }
               Button { showFilmstripSheet = true } label: {
-                HStack { Image(systemName: "film"); Text(L("Open Filmstrip")) }
+                HStack { Image(systemName: "film")
+                  Text(L("Open Filmstrip"))
+                }
               }
             }
           }
@@ -687,7 +700,7 @@ internal struct PauseMenuView: View {
 
               ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                  ForEach(1...10, id: \.self) { i in
+                  ForEach(1 ... 10, id: \.self) { i in
                     Button(action: { selectedSlot = i }) {
                       VStack(spacing: 4) {
                         ZStack {
@@ -778,14 +791,13 @@ internal struct PauseMenuView: View {
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .zIndex(100)
         }
-#if os(tvOS)
+        #if os(tvOS)
         .onExitCommand { pane = .main }
-#endif
+        #endif
       }
     }
   }
 }
-
 
 /// Card container used in the tvOS pause overlay
 private struct TvOSCard<Content: View>: View {
@@ -807,6 +819,7 @@ private struct TvOSCard<Content: View>: View {
 
 #if DEBUG
 import UIKit
+
 private func makePreviewGame() -> TVGameItem {
   let clsName = "TVGameItem"
   if let cls = NSClassFromString(clsName) as? NSObject.Type {

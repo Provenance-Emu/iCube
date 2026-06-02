@@ -49,7 +49,7 @@ struct DolphinSplashView: View {
 
         // Multiple jumping dolphins
         ZStack {
-          ForEach(0..<5, id: \.self) { index in
+          ForEach(0 ..< 5, id: \.self) { index in
             Image("DolphinLogo")
               .resizable()
               .scaledToFit()
@@ -63,28 +63,28 @@ struct DolphinSplashView: View {
               )
               .animation(
                 .easeInOut(duration: dolphinDuration(for: index))
-                .delay(dolphinDelay(for: index))
-                .repeatForever(autoreverses: true),
+                  .delay(dolphinDelay(for: index))
+                  .repeatForever(autoreverses: true),
                 value: dolphinOffsets[index]
               )
               .animation(
                 .easeInOut(duration: dolphinDuration(for: index) * 0.8)
-                .delay(dolphinDelay(for: index))
-                .repeatForever(autoreverses: true),
+                  .delay(dolphinDelay(for: index))
+                  .repeatForever(autoreverses: true),
                 value: dolphinRotations[index]
               )
               .animation(
                 .easeInOut(duration: dolphinDuration(for: index) * 1.2)
-                .delay(dolphinDelay(for: index))
-                .repeatForever(autoreverses: true),
+                  .delay(dolphinDelay(for: index))
+                  .repeatForever(autoreverses: true),
                 value: dolphinScales[index]
               )
           }
 
           // Sparkle effects
-          ForEach(0..<12, id: \.self) { index in
+          ForEach(0 ..< 12, id: \.self) { index in
             Image(systemName: "sparkle")
-              .font(.system(size: CGFloat.random(in: 8...16)))
+              .font(.system(size: CGFloat.random(in: 8 ... 16)))
               .foregroundColor(Color(.dolphinTint).opacity(0.6))
               .offset(
                 x: cos(Double(index) * .pi / 6) * 140,
@@ -93,8 +93,8 @@ struct DolphinSplashView: View {
               .opacity(sparkleOpacity)
               .animation(
                 .easeInOut(duration: 1.5)
-                .delay(Double(index) * 0.1)
-                .repeatForever(autoreverses: true),
+                  .delay(Double(index) * 0.1)
+                  .repeatForever(autoreverses: true),
                 value: sparkleOpacity
               )
           }
@@ -183,10 +183,10 @@ struct DolphinSplashView: View {
     waveOffset = 200
 
     // Start dolphin jumping animations
-    for i in 0..<5 {
-      dolphinOffsets[i] = -CGFloat.random(in: 30...80)
-      dolphinRotations[i] = Double.random(in: -15...15)
-      dolphinScales[i] = CGFloat.random(in: 1.1...1.3)
+    for i in 0 ..< 5 {
+      dolphinOffsets[i] = -CGFloat.random(in: 30 ... 80)
+      dolphinRotations[i] = Double.random(in: -15 ... 15)
+      dolphinScales[i] = CGFloat.random(in: 1.1 ... 1.3)
     }
 
     // Start text animations
@@ -226,28 +226,28 @@ struct DolphinSplashView: View {
 
   private func dolphinXPosition(for index: Int) -> CGFloat {
     switch index {
-    case 0: return 0     // Center
-    case 1: return -60   // Left
-    case 2: return 60    // Right
-    case 3: return -100  // Far left
-    case 4: return 100   // Far right
+    case 0: return 0 // Center
+    case 1: return -60 // Left
+    case 2: return 60 // Right
+    case 3: return -100 // Far left
+    case 4: return 100 // Far right
     default: return 0
     }
   }
 
   private func dolphinDuration(for index: Int) -> Double {
     switch index {
-    case 0: return 2.0   // Main dolphin - steady rhythm
-    case 1: return 1.8   // Slightly faster
-    case 2: return 2.2   // Slightly slower
-    case 3: return 1.5   // Quick jumps
-    case 4: return 2.5   // Leisurely jumps
+    case 0: return 2.0 // Main dolphin - steady rhythm
+    case 1: return 1.8 // Slightly faster
+    case 2: return 2.2 // Slightly slower
+    case 3: return 1.5 // Quick jumps
+    case 4: return 2.5 // Leisurely jumps
     default: return 2.0
     }
   }
 
   private func dolphinDelay(for index: Int) -> Double {
-    Double(index) * 0.2  // Staggered start times
+    Double(index) * 0.2 // Staggered start times
   }
 }
 

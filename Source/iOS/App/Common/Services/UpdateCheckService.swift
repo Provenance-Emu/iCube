@@ -31,7 +31,7 @@ class UpdateCheckService: UIResponder, UIApplicationDelegate {
     let session = URLSession(configuration: URLSessionConfiguration.ephemeral)
     let updateUrl = URL(string: "https://icube-emu.com/api/v2/update.json")!
 
-    session.dataTask(with: updateUrl) { (data, _, _) in
+    session.dataTask(with: updateUrl) { data, _, _ in
       if versionManager.appVersion.source != .official {
         return
       }
@@ -60,19 +60,19 @@ class UpdateCheckService: UIResponder, UIApplicationDelegate {
       }
 
       var key: String
-#if BETA
-#if NONJAILBROKEN
+      #if BETA
+      #if NONJAILBROKEN
       key = "public_beta_njb"
-#else
+      #else
       key = "public_beta"
-#endif
-#else
-#if NONJAILBROKEN
+      #endif
+      #else
+      #if NONJAILBROKEN
       key = "public_njb"
-#else
+      #else
       key = "public"
-#endif
-#endif
+      #endif
+      #endif
 
       let versionInfo = json[key] as! [AnyHashable: Any]
       let newVersionStr = versionInfo["version"] as! String

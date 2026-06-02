@@ -4,5 +4,4 @@
 import Foundation
 import UIKit
 
-class TCGameCubePad: TCView {
-}
+class TCGameCubePad: TCView {}

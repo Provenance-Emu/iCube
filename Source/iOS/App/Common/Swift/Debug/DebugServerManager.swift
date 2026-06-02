@@ -31,7 +31,7 @@ final class DebugServerManager: NSObject {
   private let server = NativeWebServer(port: DebugServerManager.port)
   private let routes = DebugAPIRoutes()
 
-  private override init() { super.init() }
+  override private init() { super.init() }
 
   /// Start the server. No-op unless this is a DEBUG build.
   @objc func start() {

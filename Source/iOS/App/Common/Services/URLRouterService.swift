@@ -4,7 +4,7 @@
 import UIKit
 
 final class URLRouterService: NSObject, UIApplicationDelegate {
-  func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+  func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
     // Supported:
     // dolphinios://dsu/add?ip=192.168.1.23&port=26760&desc=My%20iPhone
     // Also accept legacy: dsu://192.168.1.23:26760

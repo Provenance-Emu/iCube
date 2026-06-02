@@ -13,7 +13,7 @@ final class AssignmentEngine {
       return AssignmentDecision(reassignPortOneBased: nil, assignQualifierToPort: nil)
     }
     // If no physical assigned, ensure Pad1 has Touchscreen
-    if let p1 = state.portAssignments.first(where: { $0.portOneBased == 1 }), (p1.defaultDeviceQualifier.isEmpty || !p1.defaultDeviceQualifier.contains("Touchscreen")) {
+    if let p1 = state.portAssignments.first(where: { $0.portOneBased == 1 }), p1.defaultDeviceQualifier.isEmpty || !p1.defaultDeviceQualifier.contains("Touchscreen") {
       return AssignmentDecision(reassignPortOneBased: 1, assignQualifierToPort: nil)
     }
     return AssignmentDecision(reassignPortOneBased: nil, assignQualifierToPort: nil)

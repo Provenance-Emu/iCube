@@ -25,70 +25,70 @@
 import Foundation
 
 class ShaderPassUniformBinding: CustomDebugStringConvertible {
-    let data: UnsafeRawPointer
-    let size: Int
-    let offset: Int
-    let name: String
+  let data: UnsafeRawPointer
+  let size: Int
+  let offset: Int
+  let name: String
 
-    init(data: UnsafeRawPointer, size: Int, offset: Int, name: String) {
-        self.data = data
-        self.size = size
-        self.offset = offset
-        self.name = name
-    }
+  init(data: UnsafeRawPointer, size: Int, offset: Int, name: String) {
+    self.data = data
+    self.size = size
+    self.offset = offset
+    self.name = name
+  }
 
-    public var debugDescription: String {
-        "\(name) size=\(size), offset=\(offset), data=\(data)"
-    }
+  public var debugDescription: String {
+    "\(name) size=\(size), offset=\(offset), data=\(data)"
+  }
 }
 
 class ShaderPassBufferBinding {
-    var bindingVert: Int?
-    var bindingFrag: Int?
-    var size: Int = 0
-    var uniforms: [ShaderPassUniformBinding] = []
+  var bindingVert: Int?
+  var bindingFrag: Int?
+  var size: Int = 0
+  var uniforms: [ShaderPassUniformBinding] = []
 
-    @discardableResult
-    func addUniformData(_ data: UnsafeRawPointer, size: Int, offset: Int, name: String) -> ShaderPassUniformBinding {
-        let u = ShaderPassUniformBinding(data: data, size: size, offset: offset, name: name)
-        uniforms.append(u)
-        return u
-    }
+  @discardableResult
+  func addUniformData(_ data: UnsafeRawPointer, size: Int, offset: Int, name: String) -> ShaderPassUniformBinding {
+    let u = ShaderPassUniformBinding(data: data, size: size, offset: offset, name: name)
+    uniforms.append(u)
+    return u
+  }
 }
 
 class ShaderPassTextureBinding {
-    let texture: UnsafeRawPointer
-    let binding: Int
-    let name: String
-    var wrap: ShaderPassWrap = .default
-    var filter: ShaderPassFilter = .nearest
+  let texture: UnsafeRawPointer
+  let binding: Int
+  let name: String
+  var wrap: ShaderPassWrap = .default
+  var filter: ShaderPassFilter = .nearest
 
-    init(texture: UnsafeRawPointer, binding: Int, name: String) {
-        self.texture = texture
-        self.binding = binding
-        self.name = name
-    }
+  init(texture: UnsafeRawPointer, binding: Int, name: String) {
+    self.texture = texture
+    self.binding = binding
+    self.name = name
+  }
 }
 
 class ShaderPassBindings {
-    public private(set) var buffers = [ShaderPassBufferBinding(), ShaderPassBufferBinding()] // equivalent to Constants.maxConstantBuffers
-    public private(set) var textures: [ShaderPassTextureBinding] = []
+  public private(set) var buffers = [ShaderPassBufferBinding(), ShaderPassBufferBinding()] // equivalent to Constants.maxConstantBuffers
+  public private(set) var textures: [ShaderPassTextureBinding] = []
 
-    func addTexture(_ texture: UnsafeRawPointer, binding: Int, name: String) -> ShaderPassTextureBinding {
-        let t = ShaderPassTextureBinding(texture: texture, binding: binding, name: name)
-        textures.append(t)
-        return t
-    }
+  func addTexture(_ texture: UnsafeRawPointer, binding: Int, name: String) -> ShaderPassTextureBinding {
+    let t = ShaderPassTextureBinding(texture: texture, binding: binding, name: name)
+    textures.append(t)
+    return t
+  }
 
-    func sort() {
-        textures.sort { l, r in
-            l.binding < r.binding
-        }
-        buffers[0].uniforms.sort { l, r in
-            l.offset < r.offset
-        }
-        buffers[1].uniforms.sort { l, r in
-            l.offset < r.offset
-        }
+  func sort() {
+    textures.sort { l, r in
+      l.binding < r.binding
     }
+    buffers[0].uniforms.sort { l, r in
+      l.offset < r.offset
+    }
+    buffers[1].uniforms.sort { l, r in
+      l.offset < r.offset
+    }
+  }
 }

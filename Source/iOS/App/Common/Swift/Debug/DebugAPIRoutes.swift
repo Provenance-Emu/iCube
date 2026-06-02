@@ -19,7 +19,6 @@
 import Foundation
 
 final class DebugAPIRoutes {
-
   private var registered = false
 
   func registerRoutes(on server: NativeWebServer) {

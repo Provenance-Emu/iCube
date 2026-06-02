@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // MARK: - DSU Controller Session (iOS)
+
 #if os(iOS)
-import SwiftUI
-import Foundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import Foundation
+import SwiftUI
 
 @available(iOS 17.0, *)
 struct DSUSessionView: View {
@@ -35,7 +36,7 @@ struct DSUSessionView: View {
           HStack {
             Text(L("Address"))
             Spacer()
-            Text("\(ip.isEmpty ? "-" : ip) : \((running ? port : (Int(portText) ?? 26760)))")
+            Text("\(ip.isEmpty ? "-" : ip) : \(running ? port : (Int(portText) ?? 26760))")
               .foregroundStyle(.secondary)
           }
           .alert(isPresented: $showApprovalAlert) {
@@ -79,7 +80,8 @@ struct DSUSessionView: View {
                 let p = validatedPort()
                 let ok = DSUServerBridge.start(onPort: NSNumber(value: p).intValue)
                 if ok {
-                  ip = DSUServerBridge.ipAddress(); port = p
+                  ip = DSUServerBridge.ipAddress()
+                  port = p
                   UserDefaults.standard.set(p, forKey: "dsu_server_port")
                 } else {
                   let err = DSUServerBridge.lastError()
@@ -87,7 +89,8 @@ struct DSUSessionView: View {
                   running = false
                 }
               } else {
-                DSUServerBridge.stop(); ip = ""
+                DSUServerBridge.stop()
+                ip = ""
               }
             }
           Toggle(L("Auto‑start when opening"), isOn: $autoStart)
@@ -119,7 +122,10 @@ struct DSUSessionView: View {
             VStack(alignment: .center) {
               let p = running ? port : (Int(portText) ?? 26760)
               let payload = "dolphinios://dsu/add?ip=\(ip)&port=\(p)"
-              HStack { Spacer(); QRCodeView(text: payload).frame(width: 160, height: 160); Spacer() }
+              HStack { Spacer()
+                QRCodeView(text: payload).frame(width: 160, height: 160)
+                Spacer()
+              }
               Text(payload).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
           }
@@ -127,8 +133,14 @@ struct DSUSessionView: View {
 
         if showDebug {
           Section(header: Text(L("DSU Debug"))) {
-            HStack { Text("TX"); Spacer(); Text("\(txCount)").foregroundStyle(.secondary) }
-            HStack { Text("RX"); Spacer(); Text("\(rxCount)").foregroundStyle(.secondary) }
+            HStack { Text("TX")
+              Spacer()
+              Text("\(txCount)").foregroundStyle(.secondary)
+            }
+            HStack { Text("RX")
+              Spacer()
+              Text("\(rxCount)").foregroundStyle(.secondary)
+            }
           }
         }
 
@@ -181,11 +193,16 @@ struct DSUSessionView: View {
         }
         approvalRequired = DSUServerBridge.approvalRequired()
         if running {
-          ip = DSUServerBridge.ipAddress(); let cur = DSUServerBridge.port(); port = Int(cur); portText = String(cur)
+          ip = DSUServerBridge.ipAddress()
+          let cur = DSUServerBridge.port()
+          port = Int(cur)
+          portText = String(cur)
         } else if autoStart {
           let p = validatedPort()
           if DSUServerBridge.start(onPort: NSNumber(value: p).intValue) {
-            running = true; ip = DSUServerBridge.ipAddress(); port = p
+            running = true
+            ip = DSUServerBridge.ipAddress()
+            port = p
             UserDefaults.standard.set(p, forKey: "dsu_server_port")
           } else {
             let err = DSUServerBridge.lastError()

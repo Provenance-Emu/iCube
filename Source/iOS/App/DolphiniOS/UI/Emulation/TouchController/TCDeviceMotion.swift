@@ -33,16 +33,16 @@ import Foundation
     // Set the sensor update times
     // 200Hz is the Wiimote update interval
     let updateInterval: Double = 1.0 / 200.0
-    self.motionManager.accelerometerUpdateInterval = updateInterval
-    self.motionManager.gyroUpdateInterval = updateInterval
-    self.motionManager.deviceMotionUpdateInterval = 1.0 / 60.0 // Device motion for enhanced features
+    motionManager.accelerometerUpdateInterval = updateInterval
+    motionManager.gyroUpdateInterval = updateInterval
+    motionManager.deviceMotionUpdateInterval = 1.0 / 60.0 // Device motion for enhanced features
 
     func clamp(_ v: Double) -> Float { return Float(max(-1.0, min(1.0, v))) }
     let accelGain: Double = 1.0 / 9.81 // scale to ~[-1,1] before clamping
-    let gyroGain: Double = 1.0 / 8.0   // reduce gyro sensitivity
+    let gyroGain: Double = 1.0 / 8.0 // reduce gyro sensitivity
 
     // Register the handlers
-    self.motionManager.startAccelerometerUpdates(to: operationQueue) { (data, error) in
+    motionManager.startAccelerometerUpdates(to: operationQueue) { data, error in
       if error != nil { return }
       // Get the data
       let acceleration = data!.acceleration
@@ -99,13 +99,13 @@ import Foundation
       }
     }
 
-    self.motionManager.startGyroUpdates(to: operationQueue) { (data, error) in
+    motionManager.startGyroUpdates(to: operationQueue) { data, error in
       if error != nil { return }
 
       let rr = data!.rotationRate
 
       var horiz: Double = 0.0 // from yaw (z)
-      var vert: Double = 0.0  // from pitch (x or y depending on orientation)
+      var vert: Double = 0.0 // from pitch (x or y depending on orientation)
 
       switch self.orientation {
       case .portrait, .unknown:
@@ -125,7 +125,7 @@ import Foundation
       }
 
       horiz *= gyroGain
-      vert  *= gyroGain
+      vert *= gyroGain
 
       // Check if 6DOF motion mapping is enabled - if so, skip original gyro mappings to avoid conflicts
       let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
@@ -145,8 +145,8 @@ import Foundation
     }
 
     // Enhanced device motion updates for shake detection, IR cursor, and 6DOF motion
-    if self.motionManager.isDeviceMotionAvailable {
-      self.motionManager.startDeviceMotionUpdates(using: .xMagneticNorthZVertical, to: operationQueue) { (motion, error) in
+    if motionManager.isDeviceMotionAvailable {
+      motionManager.startDeviceMotionUpdates(using: .xMagneticNorthZVertical, to: operationQueue) { motion, error in
         guard let motion = motion, error == nil else { return }
 
         self.handleEnhancedMotionFeatures(motion: motion)
@@ -169,7 +169,7 @@ import Foundation
 
     // Full 6DOF motion mapping (when not using gyro IR)
     let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
-    if irMode != 0 && full6DOFEnabled {
+    if irMode != 0, full6DOFEnabled {
       // Debug logging to verify this is being called
 //      if UserDefaults.standard.bool(forKey: "input_debug") {
 //        NSLog("[MOTION] 6DOF mapping active: IR mode=\(irMode), 6DOF enabled=\(full6DOFEnabled)")
@@ -200,7 +200,7 @@ import Foundation
     let hasHighVariance = standardDeviation > varianceThreshold
     let hasHighAcceleration = magnitude > accelerationThreshold
 
-    if hasHighVariance && hasHighAcceleration {
+    if hasHighVariance, hasHighAcceleration {
       let currentTime = Date().timeIntervalSinceReferenceDate
       let shakeCooldown: TimeInterval = 0.5
 
@@ -299,15 +299,15 @@ import Foundation
   }
 
   @objc func setMotionEnabled(_ mode: Bool) {
-    if self.motionEnabled == mode { return }
-    self.motionEnabled = mode
+    if motionEnabled == mode { return }
+    motionEnabled = mode
 
-    if self.motionEnabled {
-      self.registerMotionHandlers()
+    if motionEnabled {
+      registerMotionHandlers()
     } else {
-      self.motionManager.stopAccelerometerUpdates()
-      self.motionManager.stopGyroUpdates()
-      self.motionManager.stopDeviceMotionUpdates()
+      motionManager.stopAccelerometerUpdates()
+      motionManager.stopGyroUpdates()
+      motionManager.stopDeviceMotionUpdates()
     }
   }
 
@@ -318,11 +318,11 @@ import Foundation
   @objc func statusBarOrientationChanged() {
     if #available(iOS 13.0, *) {
       if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-        self.orientation = scene.interfaceOrientation
+        orientation = scene.interfaceOrientation
         return
       }
     }
-    self.orientation = UIApplication.shared.statusBarOrientation
+    orientation = UIApplication.shared.statusBarOrientation
   }
 }
 #endif

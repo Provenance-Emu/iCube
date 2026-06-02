@@ -4,6 +4,7 @@
 import SwiftUI
 
 // MARK: - Modern Cheat Section
+
 internal struct ModernCheatSection: View {
   let title: String
   let codes: [ModernCheatItem]

@@ -16,24 +16,24 @@ import Foundation
   public init(shortVersion: String, version: String, buildSource: DOLBuildSource) {
     let splitShort = shortVersion.split(separator: ".")
 
-    major = Int(splitShort[0])!
-    minor = Int(splitShort[1])!
+    self.major = Int(splitShort[0])!
+    self.minor = Int(splitShort[1])!
 
     let patchStr = splitShort[2]
 
     if patchStr.contains("b") {
       let splitPatchStr = patchStr.split(separator: "b")
 
-      patch = Int(splitPatchStr[0])!
-      betaNumber = Int(splitPatchStr[1])!
+      self.patch = Int(splitPatchStr[0])!
+      self.betaNumber = Int(splitPatchStr[1])!
     } else {
-      patch = Int(patchStr)!
-      betaNumber = nil
+      self.patch = Int(patchStr)!
+      self.betaNumber = nil
     }
 
-    build = Int(version)!
+    self.build = Int(version)!
 
-    source = buildSource
+    self.source = buildSource
 
     let overrideBuild: String
 
@@ -56,7 +56,7 @@ import Foundation
       betaComponent = ""
     }
 
-    userFacing = String(format: "%d.%d.%d%@ (%@)", major, minor, patch, betaComponent, overrideBuild)
+    self.userFacing = String(format: "%d.%d.%d%@ (%@)", major, minor, patch, betaComponent, overrideBuild)
   }
 
   public convenience init(jsonVersion: String) {
@@ -69,7 +69,7 @@ import Foundation
     self.init(shortVersion: String(splitVersion[0]), version: sanitizedBuild, buildSource: .official)
   }
 
-  public convenience override init() {
+  override public convenience init() {
     let info = Bundle.main.infoDictionary!
 
     let shortVersion = info["CFBundleShortVersionString"] as! String

@@ -25,10 +25,10 @@
 import Foundation
 
 enum Constants {
-    static let maxShaderPasses = 64
-    static let maxTextures = 32
-    static let maxParameters = 256
-    static let maxFrameHistory = 128
-    static let maxConstantBuffers = 2
-    static let maxShaderBindings = 16
+  static let maxShaderPasses = 64
+  static let maxTextures = 32
+  static let maxParameters = 256
+  static let maxFrameHistory = 128
+  static let maxConstantBuffers = 2
+  static let maxShaderBindings = 16
 }

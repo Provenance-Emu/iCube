@@ -1,8 +1,8 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import SwiftUI
 import GameController
+import SwiftUI
 import UIKit
 
 #if os(iOS)
@@ -81,7 +81,7 @@ struct DSUControllerView: View {
       let isLandscape = geo.size.width > geo.size.height
       ZStack {
         Color.black.ignoresSafeArea()
-        
+
         Group {
           switch DSUControllerLayout(rawValue: layoutRaw) ?? .appleVirtual {
           case .appleVirtual:
@@ -102,17 +102,17 @@ struct DSUControllerView: View {
               .onAppear { stopVirtualController() }
           }
         }
-        
+
         // Touch area overlay (for layouts that support touch)
         if shouldShowTouchArea {
           TouchAreaOverlay()
         }
-        
+
         // Tooltip overlay
         if let tooltip = activeTooltip, showTooltips {
           TooltipOverlay(text: tooltip)
         }
-        
+
         // Status HUD
         VStack {
           HStack(spacing: 12) {
@@ -160,19 +160,19 @@ struct DSUControllerView: View {
           }
         }
         // Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping)
-#if canImport(CoreMotion)
+        #if canImport(CoreMotion)
         TCDeviceMotion.shared.setPort(0)
         TCDeviceMotion.shared.setMotionEnabled(true)
-#endif
+        #endif
       }
       .onDisappear {
         // Restore default orientation allowances when not using app-level lock
         if !lockLayout {
           OrientationHelper.unlock()
         }
-#if canImport(CoreMotion)
+        #if canImport(CoreMotion)
         TCDeviceMotion.shared.setMotionEnabled(false)
-#endif
+        #endif
       }
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
@@ -210,7 +210,9 @@ struct DSUControllerView: View {
         ToolbarItem(placement: .navigationBarLeading) {
           Button(action: {
             lockLayout.toggle()
-            if !lockLayout { lockedLandscape = nil; OrientationHelper.unlock() }
+            if !lockLayout { lockedLandscape = nil
+              OrientationHelper.unlock()
+            }
           }) {
             Label(lockLayout ? L("Unlock Layout") : L("Lock Layout"), systemImage: lockLayout ? "lock.open" : "lock")
           }
@@ -220,15 +222,17 @@ struct DSUControllerView: View {
         ToolbarItem(placement: .navigationBarLeading) {
           Menu {
             Button(action: {
-              restrictClient = ""; DSUServerBridge.setRestrictToClient(nil)
+              restrictClient = ""
+              DSUServerBridge.setRestrictToClient(nil)
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Target: All receivers")])
             }) { Label(L("All Receivers"), systemImage: restrictClient.isEmpty ? "checkmark" : "person.3") }
             if clients.isEmpty { Text(L("No receivers seen yet")).foregroundColor(.secondary) }
             ForEach(clients, id: \.self) { addr in
               Button(action: {
-                restrictClient = addr; DSUServerBridge.setRestrictToClient(addr)
+                restrictClient = addr
+                DSUServerBridge.setRestrictToClient(addr)
                 NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Target: %@"), addr)])
-              }) { Label(addr, systemImage: (restrictClient == addr ? "checkmark" : "antenna.radiowaves.left.and.right")) }
+              }) { Label(addr, systemImage: restrictClient == addr ? "checkmark" : "antenna.radiowaves.left.and.right") }
             }
           } label: {
             Label(L("Target"), systemImage: "antenna.radiowaves.left.and.right")
@@ -344,7 +348,8 @@ struct DSUControllerView: View {
     refreshIRLabel()
     // Haptic and toast for feedback
     #if os(iOS)
-    let gen = UINotificationFeedbackGenerator(); gen.notificationOccurred(.success)
+    let gen = UINotificationFeedbackGenerator()
+    gen.notificationOccurred(.success)
     #endif
     NotificationCenter.default.post(
       name: NSNotification.Name("DOLShowSnackbar"),
@@ -446,19 +451,19 @@ private struct MotionQuickSettingsView: View {
       Form {
         Section(header: Text(L("Gyro Gain"))) {
           HStack {
-            Slider(value: $gain, in: 0.1...3.0, step: 0.05)
+            Slider(value: $gain, in: 0.1 ... 3.0, step: 0.05)
             Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
           }
         }
         Section(header: Text(L("Deadzone"))) {
           HStack {
-            Slider(value: $deadzone, in: 0.0...0.49, step: 0.01)
+            Slider(value: $deadzone, in: 0.0 ... 0.49, step: 0.01)
             Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
           }
         }
         Section(header: Text(L("Smoothing"))) {
           HStack {
-            Slider(value: $smoothing, in: 0.0...0.9, step: 0.05)
+            Slider(value: $smoothing, in: 0.0 ... 0.9, step: 0.05)
             Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
           }
         }
@@ -475,11 +480,11 @@ private struct MotionQuickSettingsView: View {
 // MARK: - Layout Picker
 
 private enum DSUControllerLayout: String, CaseIterable {
-  case appleVirtual = "appleVirtual"
-  case gamecube = "gamecube"
-  case wiiRemote = "wiiRemote"
-  case wiiClassic = "wiiClassic"
-  case wiiSideways = "wiiSideways"
+  case appleVirtual
+  case gamecube
+  case wiiRemote
+  case wiiClassic
+  case wiiSideways
 
   var displayName: String {
     switch self {
@@ -505,7 +510,9 @@ private struct LayoutPickerSheet: View {
             if opt.rawValue == selectedRaw { Image(systemName: "checkmark").foregroundColor(.accentColor) }
           }
           .contentShape(Rectangle())
-          .onTapGesture { selectedRaw = opt.rawValue; dismiss() }
+          .onTapGesture { selectedRaw = opt.rawValue
+            dismiss()
+          }
         }
       }
       .navigationTitle(L("Controller Layout"))
@@ -535,6 +542,8 @@ private final class TouchControllerHostViewController: UIViewController {
     self.layout = layout
     super.init(nibName: nil, bundle: nil)
   }
+
+  @available(*, unavailable)
   required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
   override func viewDidLoad() {
@@ -591,12 +600,12 @@ private struct TouchAreaOverlay: View {
                 ZStack {
                   // Crosshair guides
                   Path { p in
-                    p.move(to: CGPoint(x: areaWidth/2, y: 0))
-                    p.addLine(to: CGPoint(x: areaWidth/2, y: touchAreaHeight))
-                    p.move(to: CGPoint(x: 0, y: touchAreaHeight/2))
-                    p.addLine(to: CGPoint(x: areaWidth, y: touchAreaHeight/2))
+                    p.move(to: CGPoint(x: areaWidth / 2, y: 0))
+                    p.addLine(to: CGPoint(x: areaWidth / 2, y: touchAreaHeight))
+                    p.move(to: CGPoint(x: 0, y: touchAreaHeight / 2))
+                    p.addLine(to: CGPoint(x: areaWidth, y: touchAreaHeight / 2))
                   }
-                  .stroke(Color(.dolphinTint).opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5,4]))
+                  .stroke(Color(.dolphinTint).opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
 
                   // Title badge
                   Text(L("Touch Area"))
@@ -606,7 +615,7 @@ private struct TouchAreaOverlay: View {
                     .background(Color.black.opacity(0.6))
                     .foregroundColor(.white)
                     .clipShape(Capsule())
-                    .position(x: areaWidth/2, y: 16)
+                    .position(x: areaWidth / 2, y: 16)
                 }
               )
           )
@@ -630,7 +639,8 @@ private struct TouchPadCapture: UIViewRepresentable {
     v.backgroundColor = .clear
     return v
   }
-  func updateUIView(_ uiView: TouchPadCaptureView, context: Context) { }
+
+  func updateUIView(_ uiView: TouchPadCaptureView, context: Context) {}
 }
 
 private final class TouchPadCaptureView: UIView {
@@ -640,14 +650,21 @@ private final class TouchPadCaptureView: UIView {
     super.init(frame: frame)
     isMultipleTouchEnabled = true
   }
-  required init?(coder: NSCoder) { super.init(coder: coder); isMultipleTouchEnabled = true }
+
+  required init?(coder: NSCoder) { super.init(coder: coder)
+    isMultipleTouchEnabled = true
+  }
 
   private func assignId(for touch: UITouch) -> Int? {
     if let id = touchToId[touch] { return id }
     // Assign lowest free id 0 or 1
     let used = Set(touchToId.values)
-    if !used.contains(0) { touchToId[touch] = 0; return 0 }
-    if !used.contains(1) { touchToId[touch] = 1; return 1 }
+    if !used.contains(0) { touchToId[touch] = 0
+      return 0
+    }
+    if !used.contains(1) { touchToId[touch] = 1
+      return 1
+    }
     return nil
   }
 
@@ -680,6 +697,7 @@ private final class TouchPadCaptureView: UIView {
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
     endTouches(touches)
   }
+
   override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
     endTouches(touches)
   }

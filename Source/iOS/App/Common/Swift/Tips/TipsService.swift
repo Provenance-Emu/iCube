@@ -19,6 +19,7 @@ public final class NoopTipsService: TipsProviding {
 
 #if canImport(TipKit)
 import TipKit
+
 @available(iOS 17, tvOS 17, *)
 @MainActor
 public final class LiveTipsService: TipsProviding {

@@ -5,15 +5,15 @@ import Foundation
 
 @objc class UserFolderUtil: NSObject {
   @objc static func getUserFolder() -> String {
-#if NONJAILBROKEN || TROLLSTORE || APPSTORE
-  #if os(tvOS)
+    #if NONJAILBROKEN || TROLLSTORE || APPSTORE
+    #if os(tvOS)
     return NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true)[0]
-  #else // !tvOS
+    #else // !tvOS
     return NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
-  #endif
-#else
+    #endif
+    #else
     return "/private/var/mobile/Documents/iCube"
-#endif
+    #endif
   }
 
   @objc static func getSoftwareFolder() -> String {

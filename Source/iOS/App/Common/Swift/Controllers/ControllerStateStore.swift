@@ -4,7 +4,7 @@ import GameController
 @objcMembers
 final class ControllerStateStore: NSObject, Sendable {
   static let shared = ControllerStateStore()
-  private override init() {}
+  override private init() {}
 
   struct ControllerInfo: Equatable {
     let id: ObjectIdentifier
@@ -31,12 +31,12 @@ final class ControllerStateStore: NSObject, Sendable {
         id: ObjectIdentifier(c),
         vendorName: c.vendorName ?? "",
         category: c.productCategory,
-        hasExtendedGamepad: (c.extendedGamepad != nil),
-        hasMicroGamepad: (c.microGamepad != nil)
+        hasExtendedGamepad: c.extendedGamepad != nil,
+        hasMicroGamepad: c.microGamepad != nil
       )
     }
     var assigns: [PortAssignment] = []
-    for port in 1...4 {
+    for port in 1 ... 4 {
       let q = TVControllerMappingBridge.defaultDevice(forGCPort: port) as String
       assigns.append(PortAssignment(portOneBased: port, defaultDeviceQualifier: q))
     }

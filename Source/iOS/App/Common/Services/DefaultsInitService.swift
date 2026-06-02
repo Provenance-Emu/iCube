@@ -20,9 +20,9 @@ class DefaultsInitService: UIResponder, UIApplicationDelegate {
     var softwareFolderUrl: URL = URL(fileURLWithPath: softwareFolder)
     try! softwareFolderUrl.setResourceValues(softwareResourceValues)
 
-#if targetEnvironment(simulator)
+    #if targetEnvironment(simulator)
     NSLog("User folder: %@", userFolder)
-#endif
+    #endif
 
     return true
   }

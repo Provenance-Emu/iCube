@@ -10,7 +10,7 @@ private struct SlotsGrid: View {
   private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
   var body: some View {
     LazyVGrid(columns: columns, spacing: 8) {
-      ForEach(1...10, id: \.self) { i in
+      ForEach(1 ... 10, id: \.self) { i in
         Button(action: { selectedSlot = i }) {
           HStack {
             if selectedSlot == i { Image(systemName: "checkmark") }

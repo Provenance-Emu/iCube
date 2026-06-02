@@ -19,7 +19,6 @@ import Network
 
 /// A lightweight loopback HTTP/JSON server for the debug + benchmark API.
 final class NativeWebServer: @unchecked Sendable {
-
   // MARK: - Types
 
   /// Handler signature: returns a JSON-serializable dictionary, or nil for 404.
@@ -54,7 +53,8 @@ final class NativeWebServer: @unchecked Sendable {
   // MARK: - Public API
 
   var isRunning: Bool {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     return listener?.state == .ready
   }
 
@@ -96,10 +96,14 @@ final class NativeWebServer: @unchecked Sendable {
       listener.stateUpdateHandler = { [weak self] state in
         switch state {
         case .ready:
-          if !resumed { resumed = true; continuation.resume() }
+          if !resumed { resumed = true
+            continuation.resume()
+          }
         case .failed(let error):
           self?.stop()
-          if !resumed { resumed = true; continuation.resume(throwing: error) }
+          if !resumed { resumed = true
+            continuation.resume(throwing: error)
+          }
         case .cancelled:
           if !resumed {
             resumed = true
@@ -129,14 +133,16 @@ final class NativeWebServer: @unchecked Sendable {
 
   func addCustomHandler(forMethod method: String, path: String,
                         handler: @escaping CustomHandlerBlock) {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     customRoutes.append(CustomRoute(method: method.uppercased(),
                                     path: path, regex: nil, handler: handler))
   }
 
   func addCustomHandler(forMethod method: String, pathRegex pattern: String,
                         handler: @escaping CustomHandlerBlock) {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     guard let regex = try? NSRegularExpression(pattern: "^\(pattern)$", options: [])
     else { return }
     customRoutes.append(CustomRoute(method: method.uppercased(),
@@ -195,13 +201,15 @@ final class NativeWebServer: @unchecked Sendable {
       [weak self] data, _, isComplete, error in
       guard let self else { return }
 
-      if error != nil { connection.cancel(); return }
+      if error != nil { connection.cancel()
+        return
+      }
 
       var buffer = accumulated
       if let data { buffer.append(data) }
 
       if let headerEnd = buffer.findRange(of: Data([0x0D, 0x0A, 0x0D, 0x0A])) {
-        let headersData = buffer[buffer.startIndex..<headerEnd.lowerBound]
+        let headersData = buffer[buffer.startIndex ..< headerEnd.lowerBound]
         let bodyStart = buffer[headerEnd.upperBound...]
 
         guard let headersStr = String(data: headersData, encoding: .utf8),
@@ -212,7 +220,7 @@ final class NativeWebServer: @unchecked Sendable {
         }
 
         let contentLength = request.contentLength
-        if contentLength > 0 && bodyStart.count < contentLength {
+        if contentLength > 0, bodyStart.count < contentLength {
           self.bufferRemainingBody(on: connection, initial: Data(bodyStart),
                                    remaining: contentLength - bodyStart.count) { fullBody in
             self.routeRequest(on: connection, request: request, body: fullBody)
@@ -236,7 +244,9 @@ final class NativeWebServer: @unchecked Sendable {
                                    remaining: Int, completion: @escaping (Data) -> Void) {
     var buffer = initial
     func readRemaining(_ bytesLeft: Int) {
-      if bytesLeft <= 0 { completion(buffer); return }
+      if bytesLeft <= 0 { completion(buffer)
+        return
+      }
       connection.receive(minimumIncompleteLength: 1,
                          maximumLength: min(bytesLeft, 65536)) { data, _, isComplete, error in
         if let data { buffer.append(data) }
@@ -365,7 +375,7 @@ private struct HTTPRequest {
 
     let (path, query): (String, String?)
     if let qIdx = rawURI.firstIndex(of: "?") {
-      path = String(rawURI[rawURI.startIndex..<qIdx])
+      path = String(rawURI[rawURI.startIndex ..< qIdx])
       query = String(rawURI[rawURI.index(after: qIdx)...])
     } else {
       path = rawURI
@@ -375,7 +385,7 @@ private struct HTTPRequest {
     var headers: [String: String] = [:]
     for line in lines.dropFirst() {
       guard let colonIdx = line.firstIndex(of: ":") else { continue }
-      let key = line[line.startIndex..<colonIdx]
+      let key = line[line.startIndex ..< colonIdx]
         .trimmingCharacters(in: .whitespaces).lowercased()
       let value = line[line.index(after: colonIdx)...]
         .trimmingCharacters(in: .whitespaces)
@@ -391,12 +401,12 @@ private struct HTTPRequest {
 private extension Data {
   /// Range of the first occurrence of `pattern`.
   func findRange(of pattern: Data) -> Range<Data.Index>? {
-    guard !pattern.isEmpty, pattern.count <= self.count else { return nil }
-    let end = self.count - pattern.count
-    for i in 0...end {
-      let start = self.index(self.startIndex, offsetBy: i)
-      let stop = self.index(start, offsetBy: pattern.count)
-      if self[start..<stop] == pattern { return start..<stop }
+    guard !pattern.isEmpty, pattern.count <= count else { return nil }
+    let end = count - pattern.count
+    for i in 0 ... end {
+      let start = index(startIndex, offsetBy: i)
+      let stop = index(start, offsetBy: pattern.count)
+      if self[start ..< stop] == pattern { return start ..< stop }
     }
     return nil
   }

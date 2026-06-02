@@ -4,6 +4,7 @@
 import SwiftUI
 
 // MARK: - Unified Game Card
+
 // Both iOS and tvOS now use the same clean implementation in GameGridItem
 
 /// View showing cache information for a remote game
@@ -64,7 +65,7 @@ struct CacheInfoView: View {
                 HStack(alignment: .top, spacing: 16) {
                   Image(uiImage: item.coverImage)
                     .resizable()
-                    .aspectRatio(2.0/3.0, contentMode: .fit)
+                    .aspectRatio(2.0 / 3.0, contentMode: .fit)
                     .frame(width: 120)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 6)
@@ -111,8 +112,10 @@ struct CacheInfoView: View {
                 if let info = cacheInfo {
                   LazyVGrid(columns: gridCols, spacing: 12) {
                     Button(role: .destructive) { performRemove() } label: {
-                      HStack { Image(systemName: "trash"); Text(L("Remove")) }
-                        .frame(maxWidth: .infinity)
+                      HStack { Image(systemName: "trash")
+                        Text(L("Remove"))
+                      }
+                      .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
@@ -128,34 +131,42 @@ struct CacheInfoView: View {
                         )
                         .frame(maxWidth: .infinity)
                       } else {
-                        HStack { Image(systemName: "arrow.down.circle"); Text(L("Re-download")) }
-                          .frame(maxWidth: .infinity)
+                        HStack { Image(systemName: "arrow.down.circle")
+                          Text(L("Re-download"))
+                        }
+                        .frame(maxWidth: .infinity)
                       }
                     }
                     .buttonStyle(.bordered)
                     .disabled(isWorking)
 
                     Button { copyToPasteboard(info.originalURL) } label: {
-                      HStack { Image(systemName: "doc.on.doc"); Text(L("Copy URL")) }
-                        .frame(maxWidth: .infinity)
+                      HStack { Image(systemName: "doc.on.doc")
+                        Text(L("Copy URL"))
+                      }
+                      .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
 
                     Button { copyToPasteboard(info.localPath) } label: {
-                      HStack { Image(systemName: "folder"); Text(L("Copy Path")) }
-                        .frame(maxWidth: .infinity)
+                      HStack { Image(systemName: "folder")
+                        Text(L("Copy Path"))
+                      }
+                      .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
 
-#if os(iOS)
+                    #if os(iOS)
                     if FileManager.default.fileExists(atPath: info.localPath) {
                       Button { shareFile(path: info.localPath) } label: {
-                        HStack { Image(systemName: "square.and.arrow.up"); Text(L("Share")) }
-                          .frame(maxWidth: .infinity)
+                        HStack { Image(systemName: "square.and.arrow.up")
+                          Text(L("Share"))
+                        }
+                        .frame(maxWidth: .infinity)
                       }
                       .buttonStyle(.bordered)
                     }
-#endif
+                    #endif
                   }
                   .padding(.top, 8)
                 }
@@ -164,7 +175,6 @@ struct CacheInfoView: View {
               .padding(.horizontal, 16)
               .frame(maxWidth: .infinity, alignment: .leading)
               .padding(.vertical, 16)
-
             }
           } else {
             VStack(spacing: 12) {
@@ -189,7 +199,7 @@ struct CacheInfoView: View {
       .onAppear {
         loadCacheInfo()
       }
-#if os(iOS)
+      #if os(iOS)
       .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
         Group {
           if let url = shareURL {
@@ -200,7 +210,7 @@ struct CacheInfoView: View {
           }
         }
       }
-#endif
+      #endif
       .overlay(
         Group {
           if let toast = toastText {
@@ -302,7 +312,7 @@ struct CacheInfoView: View {
     redownloadProgress = 0
     Task {
       do {
-        let _ = try await source.forcePreCacheItem(remoteItem) { progress in
+        _ = try await source.forcePreCacheItem(remoteItem) { progress in
           DispatchQueue.main.async { self.redownloadProgress = progress }
         }
         await MainActor.run {
@@ -322,23 +332,25 @@ struct CacheInfoView: View {
   }
 
   private func copyToPasteboard(_ text: String) {
-#if os(iOS)
+    #if os(iOS)
     UIPasteboard.general.string = text
     showCopiedToast = true
     toastText = L("Copied")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { showCopiedToast = false; toastText = nil }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { showCopiedToast = false
+      toastText = nil
+    }
     alertTitle = L("Copied")
     alertMessage = text
     showAlert = true
-#endif
+    #endif
   }
 
-#if os(iOS)
+  #if os(iOS)
   private func shareFile(path: String) {
     let url = URL(fileURLWithPath: path)
     shareURL = url
   }
-#endif
+  #endif
 }
 
 /// Labeled row with SF Symbol and value, used in cache details card
@@ -358,19 +370,19 @@ private struct KVRow: View {
           .font(.caption)
           .foregroundColor(.secondary)
           .textCase(.uppercase)
-#if os(tvOS)
+        #if os(tvOS)
         if monospaced {
           Text(value).font(.callout).monospaced().lineLimit(nil)
         } else {
           Text(value).font(.callout).lineLimit(nil)
         }
-#else
+        #else
         if monospaced {
           Text(value).font(.callout).textSelection(.enabled).monospaced().lineLimit(nil)
         } else {
           Text(value).font(.callout).textSelection(.enabled).lineLimit(nil)
         }
-#endif
+        #endif
       }
       Spacer(minLength: 0)
     }

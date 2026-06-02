@@ -10,16 +10,16 @@ struct SwimmingDolphinsView: View {
   let direction: Direction
   let maxSize: CGFloat
   let opacity: Double
-  
+
   init(count: Int = 3, direction: Direction = .leftToRight, maxSize: CGFloat = 110, opacity: Double = 0.2) {
     self.count = count
     self.direction = direction
     self.maxSize = max(60, maxSize)
     self.opacity = opacity
   }
-  
-  private func size(for i: Int) -> CGFloat { maxSize * (0.85 + CGFloat((i % 3)) * 0.08) }
-  
+
+  private func size(for i: Int) -> CGFloat { maxSize * (0.85 + CGFloat(i % 3) * 0.08) }
+
   // Pre-mirrored sprites to avoid runtime flipping artifacts
   private enum SpriteCache {
     static let normal: UIImage = UIImage(named: "DolphinLogo") ?? UIImage()
@@ -30,7 +30,7 @@ struct SwimmingDolphinsView: View {
       return UIImage()
     }()
   }
-  
+
   var body: some View {
     GeometryReader { geo in
       let w = max(geo.size.width, 1)
@@ -38,25 +38,25 @@ struct SwimmingDolphinsView: View {
       TimelineView(.animation) { timeline in
         let t = timeline.date.timeIntervalSinceReferenceDate
         ZStack {
-          ForEach(0..<count, id: \.self) { i in
+          ForEach(0 ..< count, id: \.self) { i in
             Group {
               // Parameters per dolphin
-              let base = Double(h) * (0.35 + Double((i % 5)) * 0.1)
-              let amplitude = 16.0 + Double((i % 3)) * 10.0
+              let base = Double(h) * (0.35 + Double(i % 5) * 0.1)
+              let amplitude = 16.0 + Double(i % 3) * 10.0
               let phase = Double(i) * .pi / 3.0
-              
+
               // Progress 0..1 controls full path traversal per dolphin
               let pad = 110.0
               let pathLen = Double(w) + 2.0 * pad
               let cyclesPerSecond = 0.03 + Double(i % 4) * 0.012
               let prog = (t * cyclesPerSecond + Double(i) * 0.173)
               let p = prog - floor(prog) // normalize
-              
+
               // Position by direction (no ambiguity)
               let x = (direction == .leftToRight)
-              ? (-pad + p * pathLen)
-              : (Double(w) + pad - p * pathLen)
-              
+                ? (-pad + p * pathLen)
+                : (Double(w) + pad - p * pathLen)
+
               // Per-dolphin pseudo-random to de-sync cycles
               let r1 = abs(sin(Double(i) * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1.0)
               let r2 = abs(sin(Double(i) * 78.233) * 19341.923).truncatingRemainder(dividingBy: 1.0)
@@ -64,7 +64,7 @@ struct SwimmingDolphinsView: View {
               let speedMul = 0.85 + 0.45 * r1
               let phaseExtra = r2 * 2.0 * .pi
               let ampMul = 0.85 + 0.45 * r3
-              
+
               // Vertical wave + occasional jump; subtle yaw/pitch
               let theta = p * 2.0 * .pi * speedMul + phase + phaseExtra
               let baseWave = (amplitude * ampMul) * sin(theta)
@@ -80,16 +80,16 @@ struct SwimmingDolphinsView: View {
               let wag = (direction == .leftToRight ? 10.0 : -10.0) * motionMul * sin(theta)
               let yaw = (direction == .leftToRight ? 8.0 : -8.0) * motionMul * sin(theta * 1.2)
               let pitch = 6.0 * motionMul * cos(theta * 1.3)
-              
+
               // Choose pre-mirrored sprite once per direction
               let uiImage = (direction == .leftToRight) ? SpriteCache.mirrored : SpriteCache.normal
               let sprite = Image(uiImage: uiImage)
-              
+
               // Depth factor
               let depth = 0.90 + Double(i % 3) * 0.06
               let baseSize = size(for: i) * depth
               let alpha = opacity * (0.9 - Double(i % 3) * 0.08)
-              
+
               // Caustic shimmer under-body
               let shimmer = 0.55 + 0.45 * sin(theta * 0.6 + 2.0)
               Group {
@@ -101,9 +101,9 @@ struct SwimmingDolphinsView: View {
                   .opacity(alpha * 0.6)
                   .blendMode(.screen)
               }
-              
+
               // Trail ghosts (simple motion blur)
-              ForEach(1...2, id: \.self) { g in
+              ForEach(1 ... 2, id: \.self) { g in
                 let pTrail = (p - Double(g) * 0.03)
                 let pT = pTrail - floor(pTrail)
                 let xT = (direction == .leftToRight) ? (-pad + pT * pathLen) : (Double(w) + pad - pT * pathLen)
@@ -121,7 +121,7 @@ struct SwimmingDolphinsView: View {
                     .blur(radius: g == 1 ? 0.7 : 1.2)
                 }
               }
-              
+
               // Main sprite
               Group {
                 sprite
@@ -137,11 +137,11 @@ struct SwimmingDolphinsView: View {
                   .opacity(alpha)
                   .blendMode(.plusLighter)
               }
-              
+
               // Leap splashes (particles) when jumping
               if isJump {
                 let tJump = (jMod - 0.05) / 0.13
-                ForEach(0..<5, id: \.self) { k in
+                ForEach(0 ..< 5, id: \.self) { k in
                   let rk = abs(sin(Double(k) * 17.23 + Double(i) * 3.11))
                   let ang = 2.0 * .pi * rk
                   let radius = (baseSize * 0.06) * (0.6 + rk) * (0.3 + tJump) * 2.0

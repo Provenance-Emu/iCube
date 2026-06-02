@@ -1,6 +1,6 @@
-import SwiftUI
-import Foundation
 import Combine
+import Foundation
+import SwiftUI
 #if canImport(SafariServices)
 import SafariServices
 #endif
@@ -52,26 +52,26 @@ struct DolphinBlogView: View {
       }
       .navigationTitle("Dolphin Blog")
       #if !os(tvOS)
-      .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.large)
       #endif
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button(action: {
-            Task { await refreshFeed() }
-          }) {
-            Image(systemName: refreshing ? "arrow.clockwise" : "arrow.clockwise")
-              .rotationEffect(.degrees(refreshing ? 360 : 0))
-              .animation(refreshing ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: refreshing)
+        .toolbar {
+          ToolbarItem(placement: .navigationBarTrailing) {
+            Button(action: {
+              Task { await refreshFeed() }
+            }) {
+              Image(systemName: refreshing ? "arrow.clockwise" : "arrow.clockwise")
+                .rotationEffect(.degrees(refreshing ? 360 : 0))
+                .animation(refreshing ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: refreshing)
+            }
+            .disabled(refreshing)
           }
-          .disabled(refreshing)
         }
-      }
-      .sheet(item: $selectedPost) { post in
-        BlogPostDetailView(post: post)
-      }
-      .task {
-        await loadInitialFeed()
-      }
+        .sheet(item: $selectedPost) { post in
+          BlogPostDetailView(post: post)
+        }
+        .task {
+          await loadInitialFeed()
+        }
     }
   }
 
@@ -79,7 +79,7 @@ struct DolphinBlogView: View {
     VStack(spacing: 12) {
       // Swimming dolphins header
       HStack(spacing: 20) {
-        ForEach(0..<3, id: \.self) { index in
+        ForEach(0 ..< 3, id: \.self) { index in
           SwimmingDolphinHeader(delay: Double(index) * 0.3)
         }
       }
@@ -95,7 +95,7 @@ struct DolphinBlogView: View {
         .foregroundColor(.secondary)
         .multilineTextAlignment(.center)
     }
-        .padding(.vertical, 20)
+    .padding(.vertical, 20)
   }
 
   private var footerView: some View {
@@ -146,7 +146,7 @@ struct DolphinBlogView: View {
       DolphinLoadingView(message: "Fetching latest blog posts...")
 
       // Skeleton loading cards
-      ForEach(0..<3, id: \.self) { _ in
+      ForEach(0 ..< 3, id: \.self) { _ in
         BlogPostSkeletonCard()
       }
     }
@@ -451,7 +451,7 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
     return posts
   }
 
-  func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String] = [:]) {
+  func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
     currentElement = elementName
 
     // Handle both RSS <item> and Atom <entry>
@@ -467,12 +467,12 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
     }
 
     // Handle Atom <author> container
-    if elementName == "author" && isInEntry {
+    if elementName == "author", isInEntry {
       isInAuthor = true
     }
 
     // Handle Atom <link> with href attribute
-    if elementName == "link" && isInEntry {
+    if elementName == "link", isInEntry {
       if let href = attributeDict["href"], attributeDict["rel"] == "alternate" {
         currentLink = href
       }
@@ -481,7 +481,7 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
 
   func parser(_ parser: XMLParser, foundCharacters string: String) {
     let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty && isInEntry else { return }
+    guard !trimmed.isEmpty, isInEntry else { return }
 
     switch currentElement {
     case "title":
@@ -510,20 +510,20 @@ class DolphinRSSParser: NSObject, XMLParserDelegate {
   }
 
   func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-    if elementName == "author" && isInEntry {
+    if elementName == "author", isInEntry {
       isInAuthor = false
     }
 
-    if (elementName == "item" || elementName == "entry") && isInEntry {
+    if elementName == "item" || elementName == "entry", isInEntry {
       // Create blog post
       let dateFormatter = DateFormatter()
 
       // Try multiple date formats (RSS and Atom)
       let dateFormats = [
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ", // Atom with microseconds
-        "yyyy-MM-dd'T'HH:mm:ssZZZZZ",        // Atom standard
-        "yyyy-MM-dd'T'HH:mm:ss'Z'",          // Atom UTC
-        "E, dd MMM yyyy HH:mm:ss Z"          // RSS
+        "yyyy-MM-dd'T'HH:mm:ssZZZZZ", // Atom standard
+        "yyyy-MM-dd'T'HH:mm:ss'Z'", // Atom UTC
+        "E, dd MMM yyyy HH:mm:ss Z" // RSS
       ]
 
       var pubDate = Date()
@@ -594,23 +594,23 @@ struct BlogPostDetailView: View {
         )
       )
       .navigationTitle("Blog Post")
-#if !os(tvOS)
-      .navigationBarTitleDisplayMode(.inline)
-#endif
-      .toolbar {
-        ToolbarItem(placement: .navigationBarLeading) {
-          Button("Done") {
-            dismiss()
+      #if !os(tvOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+        .toolbar {
+          ToolbarItem(placement: .navigationBarLeading) {
+            Button("Done") {
+              dismiss()
+            }
           }
-        }
 
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button("Read Full Post") {
-            showingSafari = true
+          ToolbarItem(placement: .navigationBarTrailing) {
+            Button("Read Full Post") {
+              showingSafari = true
+            }
+            .foregroundColor(.blue)
           }
-          .foregroundColor(.blue)
         }
-      }
     }
     .sheet(isPresented: $showingSafari) {
       #if canImport(SafariServices)
@@ -732,7 +732,7 @@ struct BlogPostDetailView: View {
       }
 
       // Share button
-#if !os(tvOS)
+      #if !os(tvOS)
       ShareLink(item: URL(string: post.link)!, subject: Text(post.title)) {
         HStack {
           Image(systemName: "square.and.arrow.up")
@@ -745,7 +745,7 @@ struct BlogPostDetailView: View {
         .background(Color.blue.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
       }
-#endif // !tvOS
+      #endif // !tvOS
     }
     .padding(.top, 20)
   }
@@ -753,7 +753,7 @@ struct BlogPostDetailView: View {
   private func sharePost(url: String, title: String) {
     guard let urlToShare = URL(string: url) else { return }
 
-#if !os(tvOS)
+    #if !os(tvOS)
     let activityViewController = UIActivityViewController(
       activityItems: [title, urlToShare],
       applicationActivities: nil
@@ -763,7 +763,6 @@ struct BlogPostDetailView: View {
     if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
        let window = windowScene.windows.first,
        let rootViewController = window.rootViewController {
-
       // Handle iPad popover
       if let popover = activityViewController.popoverPresentationController {
         popover.sourceView = window
@@ -773,7 +772,7 @@ struct BlogPostDetailView: View {
 
       rootViewController.present(activityViewController, animated: true)
     }
-#endif // !os(tvOS)
+    #endif // !os(tvOS)
   }
 }
 

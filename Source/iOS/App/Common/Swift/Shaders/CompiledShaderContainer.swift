@@ -26,10 +26,10 @@ import Foundation
 
 /// Common errors shared by all ``CompiledShaderContainer`` implementations.
 enum CompiledShaderContainerError: Swift.Error {
-    case invalidLUTName
+  case invalidLUTName
 }
 
 public protocol CompiledShaderContainer {
-    var shader: Compiled.Shader { get }
-    func getLUTByName(_ name: String) throws -> Data
+  var shader: Compiled.Shader { get }
+  func getLUTByName(_ name: String) throws -> Data
 }

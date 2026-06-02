@@ -5,9 +5,9 @@ import Foundation
 import UIKit
 
 class TCButton: UIButton {
-#if os(iOS)
+  #if os(iOS)
   let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
-#endif
+  #endif
   @IBInspectable var controllerButton: Int = 0 { // default: GC A button
     didSet {
       updateImage()
@@ -31,22 +31,22 @@ class TCButton: UIButton {
   }
 
   func sharedInit() {
-    self.setTitle("", for: .normal)
-    self.addTarget(self, action: #selector(buttonPressed), for: .touchDown)
-    self.addTarget(self, action: #selector(buttonReleased), for: .touchUpInside)
+    setTitle("", for: .normal)
+    addTarget(self, action: #selector(buttonPressed), for: .touchDown)
+    addTarget(self, action: #selector(buttonReleased), for: .touchUpInside)
 
     // TODO: Setting for hapic touch analog triggers enabled
-    self.useHapicTouch = self.traitCollection.forceTouchCapability == .available
+    useHapicTouch = traitCollection.forceTouchCapability == .available
   }
 
   func updateImage() {
     let buttonType = TCButtonType(rawValue: controllerButton)!
 
     let buttonImage = getImage(named: buttonType.getImageName(), scale: buttonType.getButtonScale())
-    self.setImage(buttonImage, for: .normal)
+    setImage(buttonImage, for: .normal)
 
     let buttonPressedImage = getImage(named: buttonType.getImageName() + "_pressed", scale: buttonType.getButtonScale())
-    self.setImage(buttonPressedImage, for: .selected)
+    setImage(buttonPressedImage, for: .selected)
   }
 
   func getImage(named: String, scale: CGFloat) -> UIImage {
@@ -67,34 +67,34 @@ class TCButton: UIButton {
   }
 
   @objc func buttonPressed() {
-    if isAxis && useHapicTouch {
+    if isAxis, useHapicTouch {
       return
     }
 
-#if os(iOS)
+    #if os(iOS)
     hapticGenerator.impactOccurred()
-#endif
+    #endif
 
     if isAxis {
-#if os(iOS)
+      #if os(iOS)
       TCManagerInterface.setAxisValueFor(controllerButton, controller: port, value: 1.0)
-#endif
+      #endif
     } else {
-#if os(iOS)
+      #if os(iOS)
       TCManagerInterface.setButtonStateFor(controllerButton, controller: port, state: true)
-#endif
+      #endif
     }
   }
 
   @objc func buttonReleased() {
     if isAxis {
-#if os(iOS)
+      #if os(iOS)
       TCManagerInterface.setAxisValueFor(controllerButton, controller: port, value: 0.0)
-#endif
+      #endif
     } else {
-#if os(iOS)
+      #if os(iOS)
       TCManagerInterface.setButtonStateFor(controllerButton, controller: port, state: false)
-#endif
+      #endif
     }
   }
 
@@ -108,17 +108,16 @@ class TCButton: UIButton {
     let maxForce = touch.maximumPossibleForce
     let percentage: Float = Float(force / maxForce)
 
-#if os(iOS)
+    #if os(iOS)
     TCManagerInterface.setAxisValueFor(controllerButton, controller: port, value: percentage)
-#endif
+    #endif
 
-    if self.lastForce != force && force == maxForce {
-#if os(iOS)
+    if lastForce != force, force == maxForce {
+      #if os(iOS)
       hapticGenerator.impactOccurred()
-#endif
+      #endif
     }
 
-    self.lastForce = force
+    lastForce = force
   }
-
 }

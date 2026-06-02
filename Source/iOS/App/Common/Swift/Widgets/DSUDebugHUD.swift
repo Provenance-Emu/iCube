@@ -27,15 +27,15 @@ struct DSUDebugHUD: View {
           Button("Ping") {
             DSUPingBridge.pingServerAddress(addr, port: port, timeout: 1.0) { ok, info in
               let msg = ok ?
-              "[DSU] Ping OK: \(info ?? "" )" :
-              "[DSU] Ping Timeout"
+                "[DSU] Ping OK: \(info ?? "")" :
+                "[DSU] Ping Timeout"
               NSLog("%@", msg)
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": msg])
             }
           }
           .buttonStyle(.bordered)
           #if !os(tvOS)
-          .controlSize(.mini)
+            .controlSize(.mini)
           #endif
         }
       }

@@ -3,6 +3,7 @@ import SwiftUI
 
 #if canImport(TipKit)
 import TipKit
+
 @available(iOS 17, tvOS 17, *)
 struct ImportGameTip: Tip {
   var title: Text { Text(L("Import Game")) }

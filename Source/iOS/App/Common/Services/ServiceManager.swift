@@ -10,7 +10,7 @@ class ServiceManager {
 
   var application: UIApplication?
 
-#if os(tvOS) || targetEnvironment(macCatalyst)
+  #if os(tvOS) || targetEnvironment(macCatalyst)
   let services: [UIApplicationDelegate] = [
     DefaultsInitService(),
     DolphinCoreService(),
@@ -36,7 +36,7 @@ class ServiceManager {
     AudioSessionCategoryService(),
 //    UpdateCheckService()
   ]
-#endif
+  #endif
 
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     self.application = application
@@ -56,31 +56,31 @@ class ServiceManager {
 
   func applicationWillTerminate() {
     for service in services {
-      service.applicationWillTerminate?(self.application!)
+      service.applicationWillTerminate?(application!)
     }
   }
 
   func applicationDidBecomeActive() {
     for service in services {
-      service.applicationDidBecomeActive?(self.application!)
+      service.applicationDidBecomeActive?(application!)
     }
   }
 
   func applicationWillResignActive() {
     for service in services {
-      service.applicationWillResignActive?(self.application!)
+      service.applicationWillResignActive?(application!)
     }
   }
 
   func applicationDidEnterBackground() {
     for service in services {
-      service.applicationDidEnterBackground?(self.application!)
+      service.applicationDidEnterBackground?(application!)
     }
   }
 
   func applicationDidReceiveMemoryWarning() {
     for service in services {
-      service.applicationDidReceiveMemoryWarning?(self.application!)
+      service.applicationDidReceiveMemoryWarning?(application!)
     }
   }
 
@@ -88,7 +88,7 @@ class ServiceManager {
     var returnedResult: Bool = true
 
     for service in services {
-      let result = service.application?(self.application!, open: url, options: options) ?? true
+      let result = service.application?(application!, open: url, options: options) ?? true
 
       if !result {
         returnedResult = false

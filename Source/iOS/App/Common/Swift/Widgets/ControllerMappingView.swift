@@ -1,8 +1,9 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import SwiftUI
 import GameController
+import SwiftUI
+
 #if os(iOS)
 #endif
 
@@ -38,7 +39,7 @@ internal struct ControllerMappingView: View {
 
   private func reload() {
     controllers = GCController.controllers()
-    for port in 1...4 {
+    for port in 1 ... 4 {
       currentQualifiers[port] = ControllerManager.shared.defaultDeviceQualifier(forGCPort: port)
       gcPortDevices[port - 1] = DOLConfigBridge.gcPortDevice(forPort: port)
       wiiSources[port - 1] = DOLConfigBridge.wiimoteSource(for: port)
@@ -57,7 +58,7 @@ internal struct ControllerMappingView: View {
 
   /// Initialize Wiimote extension/sideways state from the bridge.
   private func syncWiimoteState() {
-    for i in 0..<4 {
+    for i in 0 ..< 4 {
       let ext = Int(DOLWiimoteBridge.selectedExtension(forWiimote: Int(i)))
       let side = DOLWiimoteBridge.isSideways(forWiimote: Int(i))
       wiiExtension[i] = ext
@@ -65,10 +66,10 @@ internal struct ControllerMappingView: View {
     }
   }
 
-#if os(iOS)
+  #if os(iOS)
   var sectionPlayers: some View {
     Section(header: Text(L("Players"))) {
-      ForEach(1...4, id: \.self) { port in
+      ForEach(1 ... 4, id: \.self) { port in
         HStack(spacing: 12) {
           VStack(alignment: .leading, spacing: 4) {
             Text(String(format: L("Player %d"), port)).font(.headline)
@@ -105,12 +106,14 @@ internal struct ControllerMappingView: View {
 
   var sectionWiiMotes: some View {
     Section(header: Text(L("Wii Remotes (Quick)"))) {
-      ForEach(1...4, id: \.self) { w in
+      ForEach(1 ... 4, id: \.self) { w in
         VStack(alignment: .leading, spacing: 8) {
           HStack {
             Text(String(format: L("Wii Remote %d"), w)).font(.headline)
             Spacer()
-            Button(L("Profiles")) { showProfileForWiimote = w; loadWiimoteProfiles(forWiimote: w) }
+            Button(L("Profiles")) { showProfileForWiimote = w
+              loadWiimoteProfiles(forWiimote: w)
+            }
           }
           // Clear, separate affordances for extension and sideways
           HStack(spacing: 16) {
@@ -164,10 +167,10 @@ internal struct ControllerMappingView: View {
       }
     }
   }
-#endif
+  #endif
 
   var body: some View {
-#if os(iOS)
+    #if os(iOS)
     NavigationStack {
       List {
         sectionPlayers
@@ -180,7 +183,9 @@ internal struct ControllerMappingView: View {
           Button(L("Back")) { onBack() }
         }
       })
-      .onAppear { reload(); syncWiimoteState() }
+      .onAppear { reload()
+        syncWiimoteState()
+      }
       .sheet(isPresented: Binding(get: { showPickerForPort != nil }, set: { if !$0 { showPickerForPort = nil } })) {
         if let port = showPickerForPort {
           ControllerPickerSheet(game: game, port: port) { selected in
@@ -188,8 +193,7 @@ internal struct ControllerMappingView: View {
               ControllerManager.shared.assign(controllers[idx], toGCPort: port)
               reload()
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Assigned to Player %d"), port)])
-            }
-            else if selected == -1 {
+            } else if selected == -1 {
               ControllerManager.shared.assignTouchscreen(toGCPort: port)
               reload()
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Touchscreen assigned to Player %d"), port)])
@@ -235,7 +239,7 @@ internal struct ControllerMappingView: View {
         }
       }
     }
-#else
+    #else
     ZStack {
       // Beautiful blurred background
       Image(uiImage: game.coverImage)
@@ -295,7 +299,7 @@ internal struct ControllerMappingView: View {
 
         // Player cards
         VStack(spacing: 20) {
-          ForEach(1...4, id: \.self) { port in
+          ForEach(1 ... 4, id: \.self) { port in
             VStack(spacing: 16) {
               // Player info
               HStack(spacing: 20) {
@@ -449,8 +453,7 @@ internal struct ControllerMappingView: View {
               ControllerManager.shared.assign(controllers[idx], toGCPort: port)
               reload()
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Assigned to Player %d"), port)])
-            }
-            else if selected == -1 {
+            } else if selected == -1 {
               ControllerManager.shared.assignTouchscreen(toGCPort: port)
               reload()
               NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Touchscreen assigned to Player %d"), port)])
@@ -460,12 +463,13 @@ internal struct ControllerMappingView: View {
         }
       }
     }
-#endif
+    #endif
   }
 }
 
 #if DEBUG
 import UIKit
+
 private func makePreviewGame() -> TVGameItem {
   let clsName = "TVGameItem"
   if let cls = NSClassFromString(clsName) as? NSObject.Type {
@@ -480,15 +484,11 @@ private func makePreviewGame() -> TVGameItem {
 }
 
 #Preview("iPhone Portrait") {
-  ControllerMappingView(game: makePreviewGame(), onBack: {
-
-  })
+  ControllerMappingView(game: makePreviewGame(), onBack: {})
 }
 
 #Preview("iPhone Landscape") {
-  ControllerMappingView(game: makePreviewGame(), onBack: {
-
-  })
-  .previewInterfaceOrientation(.landscapeLeft)
+  ControllerMappingView(game: makePreviewGame(), onBack: {})
+    .previewInterfaceOrientation(.landscapeLeft)
 }
 #endif

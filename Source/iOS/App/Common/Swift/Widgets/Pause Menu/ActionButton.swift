@@ -15,6 +15,7 @@ private struct ActionButton: View {
     self.action = action
     self.focused = focused
   }
+
   var body: some View {
     Button(title, action: action)
       .buttonStyle(.bordered)

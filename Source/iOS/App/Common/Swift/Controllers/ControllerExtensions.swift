@@ -21,6 +21,7 @@ private struct ShakeState {
   var lastTriggerY: TimeInterval = 0
   var lastTriggerZ: TimeInterval = 0
 }
+
 private var shakeStates: [ObjectIdentifier: ShakeState] = [:]
 
 /// Shoulder state tracking for pause/fast-forward gestures
@@ -31,6 +32,7 @@ private final class ShoulderState {
   var r2: Bool = false
   var allPressed: Bool { l1 && r1 && l2 && r2 }
 }
+
 private var shoulderStates: [ObjectIdentifier: ShoulderState] = [:]
 
 /// Helper to show the pause menu consistently
@@ -73,7 +75,7 @@ func configureAllControllers() {
   }
 }
 
-fileprivate func installMotionHandler(_ c: GCController) {
+private func installMotionHandler(_ c: GCController) {
   // Map controller motion (if available) to Wii accelerometer and gyro
   if #available(iOS 14.0, tvOS 14.0, *), let motion = c.motion {
     /// Some controllers (e.g. DualShock 4) require manual activation for motion sensors
@@ -137,11 +139,11 @@ fileprivate func installMotionHandler(_ c: GCController) {
         if abs(az) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ) }
 
         // Combined magnitude thresholds (accel and rotation) as fallback
-        let amag = sqrtf(ax*ax + ay*ay + az*az)
+        let amag = sqrtf(ax * ax + ay * ay + az * az)
         if amag > accelMagThresh {
           trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ)
         } else {
-          let rmag = sqrtf(gx*gx + gy*gy + gz*gz)
+          let rmag = sqrtf(gx * gx + gy * gy + gz * gz)
           if rmag > rotMagThresh {
             trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ)
           }
@@ -176,8 +178,7 @@ private func installTouchpadIRHandlers(_ c: GCController, eg: GCExtendedGamepad)
   }
 
   // Internal func
-  func mapTouch(_ touchpad: GCControllerDirectionPad?)
-  {
+  func mapTouch(_ touchpad: GCControllerDirectionPad?) {
     NSLog("mapTouch: \(String(describing: touchpad))")
     guard let slot = ControllerManager.shared.wiimoteIndex(for: c) else { return }
     let controllerId = 3 + slot
@@ -212,12 +213,12 @@ private func installTouchpadIRHandlers(_ c: GCController, eg: GCExtendedGamepad)
 //      state.oldY = yVal
 //      // Sensitivity tuned for comfortable cursor speed
 //      let sens: Float = 2.0
-////      let curX = max(-1, min(1, ((touchpad?.value(forKey: "_pv_ir_accum_x") as? Float) ?? 0) + dx * sens))
-////      let curY = max(-1, min(1, ((touchpad?.value(forKey: "_pv_ir_accum_y") as? Float) ?? 0) - dy * sens))
+    ////      let curX = max(-1, min(1, ((touchpad?.value(forKey: "_pv_ir_accum_x") as? Float) ?? 0) + dx * sens))
+    ////      let curY = max(-1, min(1, ((touchpad?.value(forKey: "_pv_ir_accum_y") as? Float) ?? 0) - dy * sens))
 //      setIR(controllerId: controllerId, x: curX, y: curY)
 //      // This chrashes
-////      touchpad?.setValue(curX, forKey: "_pv_ir_accum_x")
-////      touchpad?.setValue(curY, forKey: "_pv_ir_accum_y")
+    ////      touchpad?.setValue(curX, forKey: "_pv_ir_accum_x")
+    ////      touchpad?.setValue(curY, forKey: "_pv_ir_accum_y")
     default:
       break
     }
@@ -253,7 +254,6 @@ private func installTouchpadIRHandlers(_ c: GCController, eg: GCExtendedGamepad)
 }
 
 func installExtraInputHandlers(_ c: GCController) {
-
   installMotionHandler(c)
 
   // Pause + shoulder gesture handling

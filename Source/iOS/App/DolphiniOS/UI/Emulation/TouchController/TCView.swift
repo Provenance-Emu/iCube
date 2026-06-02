@@ -29,10 +29,10 @@ import UIKit
     // Load ourselves from the nib
     let name = String(describing: type(of: self))
     let view = Bundle(for: type(of: self)).loadNibNamed(name, owner: self, options: nil)![0] as! UIView
-    view.frame = self.bounds
-    self.addSubview(view)
+    view.frame = bounds
+    addSubview(view)
 
-    real_view = view
+    self.real_view = view
     debugLog("[TOUCH] TCView loaded nib=\(name); real_view=\(String(describing: real_view))")
   }
 
@@ -40,10 +40,10 @@ import UIKit
     super.init(frame: frame)
     let name = String(describing: type(of: self))
     if let view = Bundle(for: type(of: self)).loadNibNamed(name, owner: self, options: nil)?.first as? UIView {
-      view.frame = self.bounds
+      view.frame = bounds
       view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      self.addSubview(view)
-      real_view = view
+      addSubview(view)
+      self.real_view = view
       debugLog("[TOUCH] TCView init(frame:) loaded nib=\(name)")
     } else {
       debugLog("[TOUCH] TCView init(frame:) failed to load nib=\(name)")

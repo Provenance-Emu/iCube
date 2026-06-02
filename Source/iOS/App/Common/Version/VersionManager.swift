@@ -4,7 +4,6 @@
 import Foundation
 
 @objcMembers class VersionManager: NSObject {
-
   private static let sharedInstance = VersionManager()
 
   class func shared() -> VersionManager {
@@ -14,11 +13,11 @@ import Foundation
   let appVersion: DOLAppVersion
   let coreVersion: String // "5.0-12345"
 
-  private override init() {
-    appVersion = DOLAppVersion()
+  override private init() {
+    self.appVersion = DOLAppVersion()
 
     let info = Bundle.main.infoDictionary!
 
-    coreVersion = info["DOLCoreVersion"] as! String
+    self.coreVersion = info["DOLCoreVersion"] as! String
   }
 }

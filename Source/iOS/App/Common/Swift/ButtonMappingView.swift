@@ -37,6 +37,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
 }
 
 #if os(tvOS)
+
 // MARK: - Programmatic MappingRootViewController for tvOS
 
 /// Programmatic version of MappingRootViewController that doesn't rely on storyboards
@@ -48,7 +49,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
   private var controller: UnsafeMutableRawPointer?
   private var sections: [[String: Any]] = []
 
-    // Initialize with grouped style
+  // Initialize with grouped style
   override init(style: UITableView.Style) {
     #if os(tvOS)
     super.init(style: .grouped)
@@ -57,7 +58,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
     #endif
   }
 
-  convenience override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+  override convenience init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
     #if os(tvOS)
     self.init(style: .grouped)
     #else
@@ -103,7 +104,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "InputDisplayCell")
   }
 
-    private func initializeDolphinConfig() {
+  private func initializeDolphinConfig() {
     // Nothing needed here in Swift; we will access config via bridges when needed
   }
 
@@ -152,21 +153,21 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
         ]
       ])
     } else {
-          // Wii Remote sections
-    sections.append([
-      "title": L("General"),
-      "items": [
-        ["type": "group", "title": L("Buttons"), "subtitle": ""],
-        ["type": "group", "title": L("D-Pad"), "subtitle": ""],
-        ["type": "group", "title": L("IR"), "subtitle": ""],
-        ["type": "group", "title": L("Swing"), "subtitle": ""],
-        ["type": "group", "title": L("Tilt"), "subtitle": ""],
-        ["type": "group", "title": L("Shake"), "subtitle": ""],
-        ["type": "extension", "title": L("Extension"), "subtitle": currentDefaultWiimoteExtensionDisplayName()],
-        ["type": "group", "title": L("Rumble"), "subtitle": ""],
-        ["type": "group", "title": L("Options"), "subtitle": ""]
-      ]
-    ])
+      // Wii Remote sections
+      sections.append([
+        "title": L("General"),
+        "items": [
+          ["type": "group", "title": L("Buttons"), "subtitle": ""],
+          ["type": "group", "title": L("D-Pad"), "subtitle": ""],
+          ["type": "group", "title": L("IR"), "subtitle": ""],
+          ["type": "group", "title": L("Swing"), "subtitle": ""],
+          ["type": "group", "title": L("Tilt"), "subtitle": ""],
+          ["type": "group", "title": L("Shake"), "subtitle": ""],
+          ["type": "extension", "title": L("Extension"), "subtitle": currentDefaultWiimoteExtensionDisplayName()],
+          ["type": "group", "title": L("Rumble"), "subtitle": ""],
+          ["type": "group", "title": L("Options"), "subtitle": ""]
+        ]
+      ])
     }
 
     tableView.reloadData()
@@ -301,7 +302,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
     navigationController?.pushViewController(deviceVC, animated: true)
   }
 
-    private func showExtensionSelection() {
+  private func showExtensionSelection() {
     // Create programmatic extension selection view controller
     let extensionVC = ExtensionSelectionViewController()
     extensionVC.mappingType = mappingType
@@ -337,7 +338,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
     profileLoadVC.mappingPort = mappingPort
     profileLoadVC.delegate = self
 
-        let navController = UINavigationController(rootViewController: profileLoadVC)
+    let navController = UINavigationController(rootViewController: profileLoadVC)
     #if os(tvOS)
     navController.modalPresentationStyle = .fullScreen
     #else
@@ -434,7 +435,7 @@ class DeviceSelectionViewController: UITableViewController {
   private var devices: [String] = []
   private var selectedIndex: Int = -1
 
-      override func viewDidLoad() {
+  override func viewDidLoad() {
     super.viewDidLoad()
     title = L("Device")
 
@@ -450,16 +451,18 @@ class DeviceSelectionViewController: UITableViewController {
     NotificationCenter.default.addObserver(self, selector: #selector(devicesChanged), name: NSNotification.Name("TVControllerDevicesChangedNotification"), object: nil)
     TVControllerMappingBridge.beginPostingDevicesChangedNotifications()
 
-        // Load available devices
+    // Load available devices
     loadDevices()
 
     // Nudge device discovery and schedule a couple delayed reloads
     TVControllerMappingBridge.refreshDevices()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-      TVControllerMappingBridge.refreshDevices(); self.loadDevices()
+      TVControllerMappingBridge.refreshDevices()
+      self.loadDevices()
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-      TVControllerMappingBridge.refreshDevices(); self.loadDevices()
+      TVControllerMappingBridge.refreshDevices()
+      self.loadDevices()
     }
   }
 
@@ -472,7 +475,7 @@ class DeviceSelectionViewController: UITableViewController {
     loadDevices()
   }
 
-      private func loadDevices() {
+  private func loadDevices() {
     // Enumerate devices via bridge
     devices = TVControllerMappingBridge.allQualifiedDevices() as [String]
 
@@ -510,7 +513,7 @@ class DeviceSelectionViewController: UITableViewController {
     return cell
   }
 
-      override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+  override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
 
     // Update selection and persist via bridge
@@ -548,7 +551,7 @@ private func friendlyName(forQualified q: String) -> String {
 
 private func defaultProfileName(forQualified q: String) -> String? {
   if q.hasPrefix("DSUClient/") { return "DSU" }
-  if q.hasPrefix("iOS/" ) { return "Touchscreen" }
+  if q.hasPrefix("iOS/") { return "Touchscreen" }
   if q.hasPrefix("MFi") { return "Physical Controller" }
   return nil
 }
@@ -560,7 +563,7 @@ class GroupEditViewController: UITableViewController {
   var groupName: String = ""
   weak var delegate: GroupEditDelegate?
 
-    private var controls: [String] = []
+  private var controls: [String] = []
   private var controlExpressions: [String] = []
 
   override func viewDidLoad() {
@@ -630,7 +633,7 @@ class GroupEditViewController: UITableViewController {
   override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
 
-        // Start input detection via MappingCommon dialog on UIKit controller
+    // Start input detection via MappingCommon dialog on UIKit controller
     let alert = UIAlertController(title: L("Press Input"), message: L("Press the input you want to map to \(controls[indexPath.row])"), preferredStyle: .alert)
     alert.addTextField { tf in tf.placeholder = L("Enter expression or press input") }
     alert.addAction(UIAlertAction(title: L("Cancel"), style: .cancel))
@@ -677,7 +680,7 @@ class ProfileLoadViewController: UITableViewController {
     dismiss(animated: true)
   }
 
-    private func loadProfiles() {
+  private func loadProfiles() {
     if mappingType == .DOLMappingTypePad {
       profiles = TVControllerMappingBridge.profiles(forGCPort: Int(mappingPort + 1))
     } else {
@@ -699,7 +702,7 @@ class ProfileLoadViewController: UITableViewController {
   override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
 
-        // Load the selected profile
+    // Load the selected profile
     let name = profiles[indexPath.row]
     let ok: Bool
     if mappingType == .DOLMappingTypePad {
@@ -733,7 +736,7 @@ class ExtensionSelectionViewController: UITableViewController {
   }
 
   private func loadExtensions() {
-        // Wii Remote extensions via bridge
+    // Wii Remote extensions via bridge
     extensions = TVControllerMappingBridge.wiimoteAttachmentDisplayNames(for: Int(mappingPort + 1))
     selectedIndex = TVControllerMappingBridge.selectedWiimoteAttachment(for: Int(mappingPort + 1))
     tableView.reloadData()
@@ -786,7 +789,7 @@ class InputDisplayViewController: UITableViewController {
     super.viewWillAppear(animated)
 
     // Start update timer
-    updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { _ in
+    updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
       self.updateInputValues()
     }
   }
@@ -844,7 +847,7 @@ class InputDisplayViewController: UITableViewController {
     }
   }
 
-    private func updateInputValues() {
+  private func updateInputValues() {
     // Read states from the current default device via bridge when possible
     let qualified: String
     if mappingType == .DOLMappingTypePad {

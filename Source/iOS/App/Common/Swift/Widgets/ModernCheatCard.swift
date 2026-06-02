@@ -4,6 +4,7 @@
 import SwiftUI
 
 // MARK: - Modern Cheat Card
+
 internal struct ModernCheatCard: View {
   let item: ModernCheatItem
   let index: Int
@@ -93,6 +94,7 @@ internal struct ModernCheatCard: View {
 }
 
 // MARK: - Modern Empty State
+
 internal struct ModernEmptyState: View {
   @State private var isAnimating = false
 

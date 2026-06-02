@@ -1,0 +1,73 @@
+# SwiftLint configuration for iCube (DolphiniOS) app layer.
+# Scope is Joe's app Swift only. swiftformat owns formatting/whitespace;
+# the overlapping swiftlint rules are disabled below so the two tools don't
+# fight each other on repeated runs.
+
+included:
+  - Source/iOS/App
+
+excluded:
+  - Source/iOS/App/Project.swift
+  - Source/iOS/App/Tuist.swift
+  - Source/iOS/App/DolphiniOSTests
+  - "**/venv"
+  - "**/build"
+  - "**/Externals"
+  - "**/.build"
+
+# --- Rules disabled because swiftformat owns this formatting concern ----------
+# (keeping these on would cause swiftformat <-> swiftlint ping-pong)
+disabled_rules:
+  - trailing_whitespace
+  - vertical_whitespace
+  - opening_brace
+  - closing_brace
+  - colon
+  - comma
+  - trailing_comma
+  - statement_position
+  - switch_case_alignment # swiftformat owns case indentation (--indentcase false)
+  - return_arrow_whitespace
+  - function_name_whitespace        # (was operator_whitespace)
+  - leading_whitespace
+  - implicit_optional_initialization # swiftformat redundantNilInit owns this (was redundant_optional_initialization)
+  - unneeded_break_in_switch          # swiftformat redundantBreak owns this
+  # --- Noisy metric/naming rules: silenced so the by-type catalog has signal
+  #     (e.g. FilterChain.swift is 58KB; line_length would bury everything)
+  - line_length
+  - file_length
+  - type_body_length
+  - function_body_length
+  - function_parameter_count
+  - cyclomatic_complexity
+  - identifier_name
+  - type_name
+  - large_tuple
+  - todo
+  - nesting
+
+# --- Opt-in rules that are safe + useful (mostly --fix-able) -------------------
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - empty_collection_literal
+  - first_where
+  - last_where
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - sorted_first_last
+  - toggle_bool
+  - prefer_zero_over_explicit_init
+  - redundant_nil_coalescing
+  - joined_default_parameter
+  - explicit_init
+  - fatal_error_message
+
+# Analyzer rules require `swiftlint analyze` + a compiler build log (not plain
+# `lint`). Listed here so Joe can run them against his Xcode build output.
+analyzer_rules:
+  - unused_import
+  - unused_declaration
+
+reporter: "xcode"

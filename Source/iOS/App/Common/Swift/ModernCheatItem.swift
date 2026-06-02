@@ -4,6 +4,7 @@
 import SwiftUI
 
 // MARK: - Modern Cheat Item
+
 internal enum ModernCheatItem {
   case gecko(TVGeckoCodeInfo)
   case actionReplay(TVActionReplayCodeInfo)

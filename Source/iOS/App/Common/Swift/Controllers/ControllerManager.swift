@@ -1,6 +1,6 @@
+import Combine
 import Foundation
 import GameController
-import Combine
 
 @objcMembers
 final class ControllerManager: NSObject, ObservableObject {
@@ -20,21 +20,24 @@ final class ControllerManager: NSObject, ObservableObject {
       ControllerStyleManager.shared.applyPresetDefaults()
     }
   }
+
   let presets = PresetManager()
 
-  private override init() {}
+  override private init() {}
 
   // ObjC proxies for wrapped Swift properties
-  @objc var overlayVisibleObjc: Bool {
+  var overlayVisibleObjc: Bool {
     get { overlayVisible }
     set { overlayVisible = newValue }
   }
-  @objc var overlayModeRaw: Int {
+
+  var overlayModeRaw: Int {
     get { overlayMode.rawValue }
     set { overlayMode = OverlayMode(rawValue: newValue) ?? .auto }
   }
 
   // MARK: Observing / Publishers
+
   private var observers: [NSObjectProtocol] = []
   private var cancellables = Set<AnyCancellable>()
   private let controllerConnectedSubject = PassthroughSubject<GCController, Never>()
@@ -65,7 +68,9 @@ final class ControllerManager: NSObject, ObservableObject {
         if #available(iOS 14.0, tvOS 14.0, *), let battery = c.battery {
           let level = battery.batteryLevel
           var state = ""
-          switch battery.batteryState { case .charging: state = L("Charging"); case .full: state = L("Full"); default: state = "" }
+          switch battery.batteryState { case .charging: state = L("Charging")
+          case .full: state = L("Full")
+          default: state = "" }
           if level >= 0.0 {
             let pct = Int((level * 100.0).rounded())
             let text = state.isEmpty ? String(format: L("Controller Battery: %d%%"), pct) : String(format: L("Controller Battery: %d%% (%@)"), pct, state)
@@ -124,14 +129,17 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   // MARK: Overrides (GC)
+
   func registerGCOverride(forController index: Int) {
     InputOverriderBridge.registerGameCubeOverride(forController: index)
   }
+
   func unregisterGCOverride(forController index: Int) {
     InputOverriderBridge.unregisterGameCubeOverride(forController: index)
   }
 
   // MARK: Overlays
+
   func overlayIsWii(isWiiSystem: Bool) -> Bool {
     switch overlayMode {
     case .auto: return isWiiSystem
@@ -174,6 +182,7 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   // MARK: Ensure Wiimote1 Touchscreen
+
   func ensureWiimote1EmulatedTouchscreen() {
     DOLConfigBridge.setWiimoteSourceFor(1, source: 1)
     DOLConfigBridge.setConnectWiimotesForControllerInterface(true)
@@ -183,6 +192,7 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   // MARK: Reconcile
+
   func reconcile() {
     TVControllerMappingBridge.reconcileAssignments()
 
@@ -196,6 +206,7 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   // MARK: Assign
+
   func assignTouchscreen(toGCPort portOneBased: Int) {
     TVControllerMappingBridge.assignTouchscreen(toGCPort: portOneBased)
     reconcile()
@@ -207,6 +218,7 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   // MARK: Defaults API
+
   func clearDefaultDevice(forGCPort portOneBased: Int) {
     TVControllerMappingBridge.clearDefaultDevice(forGCPort: portOneBased)
     reconcile()
@@ -225,7 +237,7 @@ final class ControllerManager: NSObject, ObservableObject {
     wiimoteSlotByController.removeAll()
 
     // Disable all P2–P4 by default
-    for s in 2...4 { DOLConfigBridge.setWiimoteSourceFor(s, source: 0) }
+    for s in 2 ... 4 { DOLConfigBridge.setWiimoteSourceFor(s, source: 0) }
 
     for c in GCController.controllers() {
       guard nextSlot <= 4 else { break }

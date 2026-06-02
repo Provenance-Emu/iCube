@@ -1,0 +1,103 @@
+# SwiftFormat configuration for iCube (DolphiniOS) app layer.
+# Conservative: formatting / whitespace / redundancy only. No semantic rewrites.
+# swiftformat owns ALL formatting; swiftlint's formatting rules are disabled
+# (see .swiftlint.yml) so the two tools don't ping-pong on repeated runs.
+#
+# This is an EXPLICIT --rules allowlist: ONLY the rules listed below run.
+# Anything not listed (acronyms, markTypes, organizeDeclarations,
+# hoistPatternLet, trailingClosures, extensionAccessControl, wrapMultiline
+# statements, etc.) is therefore off by construction.
+
+# --- Language / scope ---------------------------------------------------------
+# Project declares SWIFT_VERSION 5.0 (Xcode language mode). Pin to 5.0 so no
+# Swift 6 concurrency-era rewrites are attempted. Toolchain here is 6.3.
+--swiftversion 5.0
+# SettingsRootView.swift uses a compact inline-enum layout that mis-parses
+# swiftformat's scope tracker (redundantSelf errors; indent would silently
+# mis-indent). Excluded as a known-hazard file — flagged for manual cleanup.
+--exclude Source/iOS/App/Project.swift,Source/iOS/App/Tuist.swift,Source/iOS/App/Common/UI/Settings/SwiftUI/SettingsRootView.swift,**/venv,**/Externals,**/build,**/Pods,**/Carthage,**/.build
+
+# --- Header protection (GPL SPDX headers must never be modified) ---------------
+--header ignore
+
+# --- Indentation / whitespace (matches .editorconfig indent_size = 2) ----------
+--indent 2
+--indentcase false
+--ifdef no-indent
+
+# --- Wrapping: PRESERVE everything (do not re-flow author line choices) --------
+--maxwidth none
+--wraparguments preserve
+--wrapparameters preserve
+--wrapcollections preserve
+--wrapconditions preserve
+--wrapreturntype preserve
+--wraptypealiases preserve
+--closingparen balanced
+--commas inline
+
+# --- self handling: init-only keeps explicit self inside escaping closures -----
+--self init-only
+--selfrequired
+
+# --- Misc safe options used by the enabled rules ------------------------------
+--semicolons never
+--patternlet inline
+--voidtype void
+--emptybraces no-space
+--importgrouping testable-last
+
+# --- Enabled rules: explicit safe allowlist -----------------------------------
+--rules \
+  andOperator,\
+  anyObjectProtocol,\
+  blankLineAfterImports,\
+  blankLinesAroundMark,\
+  blankLinesAtEndOfScope,\
+  blankLinesAtStartOfScope,\
+  blankLinesBetweenScopes,\
+  braces,\
+  consecutiveBlankLines,\
+  consecutiveSpaces,\
+  duplicateImports,\
+  elseOnSameLine,\
+  emptyBraces,\
+  indent,\
+  initCoderUnavailable,\
+  isEmpty,\
+  leadingDelimiters,\
+  linebreakAtEndOfFile,\
+  linebreaks,\
+  modifierOrder,\
+  numberFormatting,\
+  redundantBackticks,\
+  redundantBreak,\
+  redundantExtensionACL,\
+  redundantGet,\
+  redundantInit,\
+  redundantLet,\
+  redundantLetError,\
+  redundantNilInit,\
+  redundantObjc,\
+  redundantParens,\
+  redundantPattern,\
+  redundantRawValues,\
+  redundantReturn,\
+  redundantSelf,\
+  redundantVoidReturnType,\
+  semicolons,\
+  sortImports,\
+  spaceAroundBraces,\
+  spaceAroundBrackets,\
+  spaceAroundComments,\
+  spaceAroundGenerics,\
+  spaceAroundOperators,\
+  spaceAroundParens,\
+  spaceInsideBraces,\
+  spaceInsideBrackets,\
+  spaceInsideComments,\
+  spaceInsideGenerics,\
+  spaceInsideParens,\
+  todos,\
+  trailingSpace,\
+  void

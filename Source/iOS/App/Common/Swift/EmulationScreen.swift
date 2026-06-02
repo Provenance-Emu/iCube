@@ -1,7 +1,8 @@
+import Combine
+import GameController
 import SwiftUI
 import UIKit
-import GameController
-import Combine
+
 #if os(iOS)
 #endif
 
@@ -19,17 +20,18 @@ private struct EmulationSurfaceView: UIViewRepresentable {
     }
     return host
   }
-  func updateUIView(_ uiView: UIView, context: Context) { }
+
+  func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
 private final class EmuContainerViewController: UIViewController {
   private weak var emuVC: EmuEventVC?
   private var exitObserver: NSObjectProtocol?
   var gamePath: String = ""
-#if os(tvOS)
+  #if os(tvOS)
   private var pauseShownObserver: NSObjectProtocol?
   private var pauseHiddenObserver: NSObjectProtocol?
-#endif
+  #endif
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -57,7 +59,7 @@ private final class EmuContainerViewController: UIViewController {
     vc.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     view.addSubview(vc.view)
     vc.didMove(toParent: self)
-    self.emuVC = vc
+    emuVC = vc
     _ = vc.becomeFirstResponder()
     NSLog("[INPUT] EmuEventVC becomeFirstResponder attempted")
 
@@ -82,7 +84,7 @@ private final class EmuContainerViewController: UIViewController {
     let manager = JitManager.shared()
     let currentCore = DOLConfigBridge.mainCpuCore()
     let isJitCoreSelected = (currentCore == 3) // JITARM64
-    if !manager.acquiredJit && isJitCoreSelected {
+    if !manager.acquiredJit, isJitCoreSelected {
       let alert = UIAlertController(title: "Waiting for JIT", message: "iCube may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode.", preferredStyle: .alert)
       alert.addAction(UIAlertAction(title: "Help", style: .default, handler: { _ in
         if let url = URL(string: "https://dolphinios.oatmealdome.me/jit-help") {
@@ -104,7 +106,7 @@ private final class EmuContainerViewController: UIViewController {
     exitObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil, queue: .main) { [weak self] _ in
       self?.handleExit()
     }
-#if os(tvOS)
+    #if os(tvOS)
     // Toggle GC controller interception based on pause overlay visibility
     pauseShownObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLPauseOverlayShown"), object: nil, queue: .main) { [weak self] _ in
       guard let self = self, let evc = self.emuVC else { return }
@@ -122,7 +124,7 @@ private final class EmuContainerViewController: UIViewController {
         NSLog("[INPUT] EmuContainer restored GC interaction to %d after PauseMenu", evc.controllerUserInteractionEnabled)
       }
     }
-#endif
+    #endif
   }
 
   private func handleExit() {
@@ -133,10 +135,10 @@ private final class EmuContainerViewController: UIViewController {
     if let token = exitObserver {
       NotificationCenter.default.removeObserver(token)
     }
-#if os(tvOS)
+    #if os(tvOS)
     if let t = pauseShownObserver { NotificationCenter.default.removeObserver(t) }
     if let t = pauseHiddenObserver { NotificationCenter.default.removeObserver(t) }
-#endif
+    #endif
   }
 }
 
@@ -147,12 +149,13 @@ private struct EmulationSurfaceController: UIViewControllerRepresentable {
     vc.gamePath = resolveCachedPathIfAvailable(gamePath)
     return vc
   }
-  func updateUIViewController(_ uiViewController: EmuContainerViewController, context: Context) { }
+
+  func updateUIViewController(_ uiViewController: EmuContainerViewController, context: Context) {}
 }
 
 @MainActor
 private func resolveCachedPathIfAvailable(_ path: String) -> String {
-  guard let url = URL(string: path), let scheme = url.scheme?.lowercased(), ["http","https","webdav","webdavs"].contains(scheme) else {
+  guard let url = URL(string: path), let scheme = url.scheme?.lowercased(), ["http", "https", "webdav", "webdavs"].contains(scheme) else {
     return path
   }
   func defaultPort(_ scheme: String?) -> Int { (scheme?.lowercased() == "https" || scheme?.lowercased() == "webdavs") ? 443 : 80 }
@@ -186,35 +189,35 @@ private struct EmulationProgrammaticHost: UIViewControllerRepresentable {
     }
   }
 
-  func updateUIViewController(_ uiViewController: UIViewController, context: Context) { }
+  func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
 struct EmulationScreen: View {
   let game: TVGameItem
   @Environment(\.dismiss) private var dismiss
   @State private var endObserver: NSObjectProtocol?
-#if os(tvOS)
+  #if os(tvOS)
   @State private var exitObserver: NSObjectProtocol?
   @State private var showMotionDebug = false
   @State private var tvPauseObserver: NSObjectProtocol?
-#endif
+  #endif
 
   // Pause menu state
   @State private var showPauseMenu = false
   @State private var selectedSlot = 1
   @State private var showSettings = false
   @AppStorage("ui_show_dsu_debug_hud") private var showDSUDebugHUD: Bool = {
-#if DEBUG
+    #if DEBUG
     return true
-#else
+    #else
     return false
-#endif
+    #endif
   }()
 
   @State private var obsShowPause: NSObjectProtocol?
 
   // iOS top overlay
-#if os(iOS)
+  #if os(iOS)
 
   @State var isTouchControlsActive = false
   @State var userOverrideTouchControls = false
@@ -244,7 +247,7 @@ struct EmulationScreen: View {
   @StateObject var touchVM = TouchControlsViewModel()
   @State private var wiiOverlaySignature: Int = 0
   @ObservedObject private var controllerManager = ControllerManager.shared
-#endif
+  #endif
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
   @State var isWiiSystem: Bool = false
@@ -263,16 +266,16 @@ struct EmulationScreen: View {
   @State private var efbMaxScaleQuick: Int = 6
   @State private var anisotropyQuick: Int = 1
 
-#if os(iOS)
+  #if os(iOS)
   @State private var showSkyMenu = false
   @State private var showSkyImporter = false
   @State private var skyPickedURL: URL? = nil
   @State private var showSkyClearPicker = false
   @State private var skyLastLoadedSlot: Int = 0
-#endif
+  #endif
 
   var body: some View {
-#if os(tvOS)
+    #if os(tvOS)
     ZStack {
       EmulationSurfaceController(gamePath: game.filePath)
         .ignoresSafeArea()
@@ -304,7 +307,7 @@ struct EmulationScreen: View {
           HStack {
             Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8))
             Spacer()
-            TVIntStepperOverlay(value: $ocPercent, range: 1...400, step: 1)
+            TVIntStepperOverlay(value: $ocPercent, range: 1 ... 400, step: 1)
               .disabled(!ocEnabled)
               .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
           }
@@ -319,7 +322,7 @@ struct EmulationScreen: View {
           HStack {
             Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8))
             Spacer()
-            TVIntStepperOverlay(value: $vbiPercentQuick, range: 1...400, step: 1)
+            TVIntStepperOverlay(value: $vbiPercentQuick, range: 1 ... 400, step: 1)
               .disabled(!vbiEnabledQuick)
               .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
           }
@@ -327,30 +330,38 @@ struct EmulationScreen: View {
           Divider().background(.white.opacity(0.2))
 
           // Overlays (FPS/VPS/Speed/VBlank)
-          Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
-            .tint(.blue)
-            .foregroundColor(.white)
-          Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
-            .tint(.blue)
-            .foregroundColor(.white)
-          Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
-            .tint(.blue)
-            .foregroundColor(.white)
-          Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
-            .tint(.blue)
-            .foregroundColor(.white)
+          Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v
+            DOLConfigBridge.setGfxShowFPS(v)
+          }))
+          .tint(.blue)
+          .foregroundColor(.white)
+          Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v
+            DOLConfigBridge.setGfxShowVPS(v)
+          }))
+          .tint(.blue)
+          .foregroundColor(.white)
+          Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v
+            DOLConfigBridge.setGfxShowSpeed(v)
+          }))
+          .tint(.blue)
+          .foregroundColor(.white)
+          Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v
+            DOLConfigBridge.setGfxShowVTimes(v)
+          }))
+          .tint(.blue)
+          .foregroundColor(.white)
 
           // Graphics quick controls
           HStack {
             Text("Internal Resolution: \(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x")").foregroundColor(.white.opacity(0.8))
             Spacer()
-            TVIntStepperOverlay(value: $efbScaleQuick, range: 0...efbMaxScaleQuick, step: 1)
+            TVIntStepperOverlay(value: $efbScaleQuick, range: 0 ... efbMaxScaleQuick, step: 1)
               .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
           }
           HStack {
             Text("Anisotropic: \(anisotropyQuick)x").foregroundColor(.white.opacity(0.8))
             Spacer()
-            TVIntStepperOverlay(value: $anisotropyQuick, range: 1...16, step: 1)
+            TVIntStepperOverlay(value: $anisotropyQuick, range: 1 ... 16, step: 1)
               .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
           }
         }
@@ -492,25 +503,33 @@ struct EmulationScreen: View {
       efbScaleQuick = DOLConfigBridge.gfxEfbScale()
       anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
       // Live Activity start
-#if canImport(ActivityKit)
+      #if canImport(ActivityKit)
       GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
-#endif
+      #endif
       // Start elapsed timer
       timer?.invalidate()
       timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
         elapsedSeconds += 1
-#if canImport(ActivityKit)
+        #if canImport(ActivityKit)
         GameActivityManager.update(isPaused: TVEmulationBridge.isPaused(), elapsedSeconds: elapsedSeconds)
-#endif
+        #endif
       }
     }
     .onDisappear {
-      if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
-      if let token = obsShowPause { NotificationCenter.default.removeObserver(token); obsShowPause = nil }
-#if os(tvOS)
-      if let token = exitObserver { NotificationCenter.default.removeObserver(token); exitObserver = nil }
-      if let token = tvPauseObserver { NotificationCenter.default.removeObserver(token); tvPauseObserver = nil }
-#endif
+      if let token = endObserver { NotificationCenter.default.removeObserver(token)
+        endObserver = nil
+      }
+      if let token = obsShowPause { NotificationCenter.default.removeObserver(token)
+        obsShowPause = nil
+      }
+      #if os(tvOS)
+      if let token = exitObserver { NotificationCenter.default.removeObserver(token)
+        exitObserver = nil
+      }
+      if let token = tvPauseObserver { NotificationCenter.default.removeObserver(token)
+        tvPauseObserver = nil
+      }
+      #endif
       ControllerManager.shared.unregisterGCOverride(forController: 0)
       for c in GCController.controllers() {
         c.extendedGamepad?.valueChangedHandler = nil
@@ -519,13 +538,14 @@ struct EmulationScreen: View {
         c.extendedGamepad?.buttonMenu.pressedChangedHandler = nil
         c.microGamepad?.buttonMenu.pressedChangedHandler = nil
       }
-#if !os(tvOS)
-      arPollTask?.cancel(); arPollTask = nil
-#endif
+      #if !os(tvOS)
+      arPollTask?.cancel()
+      arPollTask = nil
+      #endif
       // Live Activity end
-#if canImport(ActivityKit)
+      #if canImport(ActivityKit)
       GameActivityManager.end()
-#endif
+      #endif
       timer?.invalidate()
       timer = nil
       elapsedSeconds = 0
@@ -534,14 +554,16 @@ struct EmulationScreen: View {
     }
     .onChange(of: showPauseMenu) { visible in
       NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
-#if canImport(ActivityKit)
+      #if canImport(ActivityKit)
       GameActivityManager.update(isPaused: visible, elapsedSeconds: elapsedSeconds)
-#endif
+      #endif
     }
-    .onExitCommand { if showPauseMenu { TVEmulationBridge.resume(); showPauseMenu = false } }
-    .onPlayPauseCommand { }
+    .onExitCommand { if showPauseMenu { TVEmulationBridge.resume()
+      showPauseMenu = false
+    } }
+    .onPlayPauseCommand {}
     .navigationBarBackButtonHidden(true)
-#else // os(iOS)
+    #else // os(iOS)
     NavigationStack {
       ZStack {
         Color.black.ignoresSafeArea()
@@ -666,7 +688,7 @@ struct EmulationScreen: View {
                   .font(.title2)
               }
 
-#if os(iOS)
+              #if os(iOS)
               // Thermal badge
               if UserDefaults.standard.bool(forKey: "thermal_auto_enable") {
                 ThermalBadgeView()
@@ -679,7 +701,7 @@ struct EmulationScreen: View {
                   Image(systemName: "clock.arrow.circlepath").font(.title2)
                 }
               }
-#endif // os(iOS)
+              #endif // os(iOS)
               Menu {
                 Button {
                   hasTopBarInteraction = true
@@ -705,7 +727,7 @@ struct EmulationScreen: View {
 
               Menu {
                 Menu {
-                  ForEach(1...10, id: \.self) { slot in
+                  ForEach(1 ... 10, id: \.self) { slot in
                     Button("Slot \(slot)") {
                       hasTopBarInteraction = true
                       selectedSlot = slot
@@ -716,7 +738,7 @@ struct EmulationScreen: View {
                   Label("Save State", systemImage: "square.and.arrow.down")
                 }
                 Menu {
-                  ForEach(1...10, id: \.self) { slot in
+                  ForEach(1 ... 10, id: \.self) { slot in
                     Button("Slot \(slot)") {
                       hasTopBarInteraction = true
                       selectedSlot = slot
@@ -726,7 +748,7 @@ struct EmulationScreen: View {
                 } label: {
                   Label("Load State", systemImage: "square.and.arrow.up")
                 }
-#if os(iOS)
+                #if os(iOS)
                 Menu {
                   let currentIR = DOLConfigBridge.mainTouchPadIRMode()
                   Button {
@@ -759,7 +781,7 @@ struct EmulationScreen: View {
                 } label: {
                   Label("Touch Cursor Mode", systemImage: "cursor.rays")
                 }
-#endif
+                #endif
                 Button {
                   hasTopBarInteraction = true
                   showMotionDebug = true
@@ -769,8 +791,12 @@ struct EmulationScreen: View {
               } label: {
                 Image(systemName: "square.stack.3d.up").font(.title2)
               }
-              Button { hasTopBarInteraction = true; showPauseMenu = true } label: { Image(systemName: "list.bullet.rectangle").font(.title2) }
-              Button { hasTopBarInteraction = true; hideTopBar(now: true) } label: { Image(systemName: "chevron.up.circle.fill").font(.title2) }
+              Button { hasTopBarInteraction = true
+                showPauseMenu = true
+              } label: { Image(systemName: "list.bullet.rectangle").font(.title2) }
+              Button { hasTopBarInteraction = true
+                hideTopBar(now: true)
+              } label: { Image(systemName: "chevron.up.circle.fill").font(.title2) }
             }
             .padding(.horizontal)
             .padding(.top, 12)
@@ -809,7 +835,7 @@ struct EmulationScreen: View {
                       .tint(.blue)
                       .foregroundColor(.white)
                       HStack {
-                        Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1...400)
+                        Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
                           .disabled(!ocEnabled)
                           .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
                         Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
@@ -822,7 +848,7 @@ struct EmulationScreen: View {
                       .tint(.blue)
                       .foregroundColor(.white)
                       HStack {
-                        Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1...400)
+                        Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
                           .disabled(!vbiEnabledQuick)
                           .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
                         Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
@@ -834,7 +860,7 @@ struct EmulationScreen: View {
                           .foregroundColor(.white.opacity(0.8))
                           .font(.caption)
                         Spacer()
-                        Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0...Double(max(1, efbMaxScaleQuick)), step: 1)
+                        Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
                           .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
                         Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
                       }
@@ -843,7 +869,7 @@ struct EmulationScreen: View {
                           .foregroundColor(.white.opacity(0.8))
                           .font(.caption)
                         Spacer()
-                        Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1...16, step: 1)
+                        Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
                           .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
                         Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
                       }
@@ -853,18 +879,26 @@ struct EmulationScreen: View {
                     // Right column - Overlay toggles
                     VStack(alignment: .leading, spacing: 12) {
                       Text("Display Overlays").font(.subheadline).foregroundColor(.white.opacity(0.8))
-                      Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
-                        .tint(.blue)
-                        .foregroundColor(.white)
-                      Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
-                        .tint(.blue)
-                        .foregroundColor(.white)
-                      Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
-                        .tint(.blue)
-                        .foregroundColor(.white)
-                      Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
-                        .tint(.blue)
-                        .foregroundColor(.white)
+                      Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v
+                        DOLConfigBridge.setGfxShowFPS(v)
+                      }))
+                      .tint(.blue)
+                      .foregroundColor(.white)
+                      Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v
+                        DOLConfigBridge.setGfxShowVPS(v)
+                      }))
+                      .tint(.blue)
+                      .foregroundColor(.white)
+                      Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v
+                        DOLConfigBridge.setGfxShowSpeed(v)
+                      }))
+                      .tint(.blue)
+                      .foregroundColor(.white)
+                      Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v
+                        DOLConfigBridge.setGfxShowVTimes(v)
+                      }))
+                      .tint(.blue)
+                      .foregroundColor(.white)
                     }
                     .frame(maxWidth: .infinity)
                   }
@@ -886,7 +920,7 @@ struct EmulationScreen: View {
                   .tint(.blue)
                   .foregroundColor(.white)
                   HStack {
-                    Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1...400)
+                    Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
                       .disabled(!ocEnabled)
                       .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
                     Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
@@ -898,7 +932,7 @@ struct EmulationScreen: View {
                   .tint(.blue)
                   .foregroundColor(.white)
                   HStack {
-                    Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1...400)
+                    Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
                       .disabled(!vbiEnabledQuick)
                       .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
                     Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
@@ -906,25 +940,33 @@ struct EmulationScreen: View {
 
                   Divider().background(.white.opacity(0.2))
                   // Overlay toggles
-                  Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
-                    .tint(.blue)
-                    .foregroundColor(.white)
-                  Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
-                    .tint(.blue)
-                    .foregroundColor(.white)
-                  Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
-                    .tint(.blue)
-                    .foregroundColor(.white)
-                  Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
-                    .tint(.blue)
-                    .foregroundColor(.white)
+                  Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v
+                    DOLConfigBridge.setGfxShowFPS(v)
+                  }))
+                  .tint(.blue)
+                  .foregroundColor(.white)
+                  Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v
+                    DOLConfigBridge.setGfxShowVPS(v)
+                  }))
+                  .tint(.blue)
+                  .foregroundColor(.white)
+                  Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v
+                    DOLConfigBridge.setGfxShowSpeed(v)
+                  }))
+                  .tint(.blue)
+                  .foregroundColor(.white)
+                  Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v
+                    DOLConfigBridge.setGfxShowVTimes(v)
+                  }))
+                  .tint(.blue)
+                  .foregroundColor(.white)
 
                   // Quick graphics controls
                   HStack {
                     Text(L("Internal Resolution"))
                       .foregroundColor(.white.opacity(0.8))
                     Spacer()
-                    Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0...Double(max(1, efbMaxScaleQuick)), step: 1)
+                    Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
                       .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
                     Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
                   }
@@ -932,7 +974,7 @@ struct EmulationScreen: View {
                     Text(L("Anisotropic Filtering"))
                       .foregroundColor(.white.opacity(0.8))
                     Spacer()
-                    Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1...16, step: 1)
+                    Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
                       .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
                     Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
                   }
@@ -949,7 +991,6 @@ struct EmulationScreen: View {
           }
           .zIndex(5)
         }
-
 
         // Legacy touch pads
         if isTouchControlsActive {
@@ -990,7 +1031,7 @@ struct EmulationScreen: View {
         ToolbarItem(placement: .navigationBarLeading) {
           HStack(spacing: 12) {
             Button { showPauseMenu = true } label: { Image(systemName: "line.3.horizontal") }
-#if os(iOS)
+            #if os(iOS)
             if DOLConfigBridge.mainEmulateSkylanderPortal() && isWiiSystem {
               Menu {
                 Button("Load Skylander…") { showSkyImporter = true }
@@ -1002,7 +1043,7 @@ struct EmulationScreen: View {
                 Image(systemName: "externaldrive")
               }
             }
-#endif // os(iOS)
+            #endif // os(iOS)
           }
         }
       }
@@ -1015,7 +1056,7 @@ struct EmulationScreen: View {
         }
       }
       .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {
-        ForEach(1...16, id: \.self) { slot in
+        ForEach(1 ... 16, id: \.self) { slot in
           Button("Slot \(slot)") { _ = DOLConfigBridge.skylanderRemove(atSlot: slot) }
         }
         if skyLastLoadedSlot > 0 {
@@ -1023,9 +1064,8 @@ struct EmulationScreen: View {
             _ = DOLConfigBridge.skylanderRemove(atSlot: skyLastLoadedSlot)
           }
         }
-        Button(L("Cancel"), role: .cancel) { }
+        Button(L("Cancel"), role: .cancel) {}
       }
-
     }
     .onAppear {
       NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
@@ -1033,7 +1073,7 @@ struct EmulationScreen: View {
       ControllerManager.shared.startObserving()
       // Initialize expected system early from metadata to avoid startup races
       isWiiSystem = inferIsWii(from: game)
-            irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
+      irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
       let useIMU = (irModeRaw == 0)
       let wantsMotionForShake = UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") && isWiiSystem
       TVEmulationBridge.setWiiIMUPointEnabled(useIMU || wantsMotionForShake)
@@ -1070,19 +1110,19 @@ struct EmulationScreen: View {
       EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
       // Configure Wiimote sources based on connected controllers
       ControllerManager.shared.updateWiimoteEmulationForExternalControllers()
-#if os(iOS)
+      #if os(iOS)
       ReplayKitManager.shared.startBufferingIfEnabled()
       if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
-#endif
+      #endif
       // On iOS, do not hand controller button presses to the system while in-game
       GCController.shouldMonitorBackgroundEvents = false
 
       logCurrentControllers()
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
       for c in GCController.controllers() { installExtraInputHandlers(c) }
-#if os(iOS)
+      #if os(iOS)
       SiriShortcutManager.shared.donatePlay(game: game)
-#endif
+      #endif
       // Controller connect/disconnect handled by ControllerManager
       // NotificationCenter bridging for assignments remains
       NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
@@ -1144,17 +1184,28 @@ struct EmulationScreen: View {
       // Show bar on appear and schedule one-time auto-hide
       showTopBar = true
       hasTopBarInteraction = false
-      if !autoHideScheduled { autoHideScheduled = true; scheduleAutoHide() }
+      if !autoHideScheduled { autoHideScheduled = true
+        scheduleAutoHide()
+      }
     }
     .onDisappear {
-      if let token = endObserver { NotificationCenter.default.removeObserver(token); endObserver = nil }
-      if let t = obsGCConnect { NotificationCenter.default.removeObserver(t); obsGCConnect = nil }
-      if let t = obsGCDisconnect { NotificationCenter.default.removeObserver(t); obsGCDisconnect = nil }
-      if let t = obsShowPause { NotificationCenter.default.removeObserver(t); obsShowPause = nil }
+      if let token = endObserver { NotificationCenter.default.removeObserver(token)
+        endObserver = nil
+      }
+      if let t = obsGCConnect { NotificationCenter.default.removeObserver(t)
+        obsGCConnect = nil
+      }
+      if let t = obsGCDisconnect { NotificationCenter.default.removeObserver(t)
+        obsGCDisconnect = nil
+      }
+      if let t = obsShowPause { NotificationCenter.default.removeObserver(t)
+        obsShowPause = nil
+      }
       ControllerManager.shared.stopObserving()
       // Disable motion when leaving screen
       TCDeviceMotion.shared.setMotionEnabled(false)
-      arPollTask?.cancel(); arPollTask = nil
+      arPollTask?.cancel()
+      arPollTask = nil
     }
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
       // Ask the renderer to resize/reconfigure
@@ -1219,29 +1270,29 @@ struct EmulationScreen: View {
       Button("Save & Quit") {
         TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
         TVEmulationBridge.stop()
-#if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
         GameActivityManager.end()
-#endif
+        #endif
         NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
       }
       Button("Quit", role: .destructive) {
         TVEmulationBridge.stop()
-#if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
         GameActivityManager.end()
-#endif
+        #endif
         NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
       }
       Button("Continue", role: .cancel) {
         TVEmulationBridge.resume()
-#if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
         GameActivityManager.update(isPaused: false, elapsedSeconds: elapsedSeconds)
-#endif
+        #endif
         withAnimation { showTopBar = false }
       }
     } message: {
       Text("Do you want to stop the current game and return to the library?")
     }
-#endif
+    #endif
   }
 
   private func logCurrentControllers() {
@@ -1261,9 +1312,9 @@ private struct SettingsNavigationFallback: ViewModifier {
       content
         .navigationDestination(isPresented: $showSettings) {
           SettingsRootView()
-#if !os(tvOS)
+          #if !os(tvOS)
             .navigationBarTitleDisplayMode(.inline)
-#endif
+          #endif
         }
     }
   }

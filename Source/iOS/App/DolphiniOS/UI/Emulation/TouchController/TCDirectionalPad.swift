@@ -5,9 +5,9 @@ import Foundation
 import UIKit
 
 class TCDirectionalPad: UIView {
-#if os(iOS)
+  #if os(iOS)
   let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
-#endif
+  #endif
 
   var dpadNoPressed: UIImage?
   var dpadOnePressed: UIImage?
@@ -38,19 +38,19 @@ class TCDirectionalPad: UIView {
     dpadTwoPressed = getImage(imageName: "gcwii_dpad_pressed_two_directions")
 
     // Create the image view
-    let imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: self.frame.width, height: self.frame.height))
+    let imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: frame.width, height: frame.height))
     imageView.image = dpadNoPressed
-    imageView.center = self.convert(self.center, from: self.superview)
+    imageView.center = convert(center, from: superview)
     imageView.isUserInteractionEnabled = true
 
     let pressHandler = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
     pressHandler.minimumPressDuration = 0
     imageView.addGestureRecognizer(pressHandler)
 
-    self.addSubview(imageView)
+    addSubview(imageView)
 
     // Set background color to transparent
-    self.backgroundColor = UIColor.clear
+    backgroundColor = UIColor.clear
   }
 
   func getImage(imageName: String) -> UIImage {
@@ -62,17 +62,17 @@ class TCDirectionalPad: UIView {
   @objc func handleLongPress(gesture: UILongPressGestureRecognizer) {
     let imageView = gesture.view as! UIImageView
     let point = gesture.location(in: self)
-    var buttonPresses: [Bool] = [ false, false, false, false ]
+    var buttonPresses: [Bool] = [false, false, false, false]
 
     if gesture.state == .ended {
       imageView.image = dpadNoPressed
-      self.isPressed = false
+      isPressed = false
     } else {
-      if !self.isPressed {
-#if os(iOS)
+      if !isPressed {
+        #if os(iOS)
         hapticGenerator.impactOccurred()
-#endif
-        self.isPressed = true
+        #endif
+        isPressed = true
       }
 
       // Get button boundary
@@ -96,16 +96,16 @@ class TCDirectionalPad: UIView {
 
       // TODO: is there a better way to structure this?
       // Left and Up
-      if buttonPresses[2] && buttonPresses[0] {
+      if buttonPresses[2], buttonPresses[0] {
         imageView.image = dpadTwoPressed
         rotation = 0
-      } else if buttonPresses[0] && buttonPresses[3] { // Up and Right
+      } else if buttonPresses[0], buttonPresses[3] { // Up and Right
         imageView.image = dpadTwoPressed
         rotation = 90
-      } else if buttonPresses[3] && buttonPresses[1] { // Right and Down
+      } else if buttonPresses[3], buttonPresses[1] { // Right and Down
         imageView.image = dpadTwoPressed
         rotation = 180
-      } else if buttonPresses[1] && buttonPresses[2] { // Down and Left
+      } else if buttonPresses[1], buttonPresses[2] { // Down and Left
         imageView.image = dpadTwoPressed
         rotation = 270
       } else if buttonPresses[0] { // Up
@@ -128,12 +128,11 @@ class TCDirectionalPad: UIView {
       imageView.transform = CGAffineTransform.identity.rotated(by: radians)
     }
 
-#if os(iOS)
+    #if os(iOS)
     // Send button values
     for (i, press) in buttonPresses.enumerated() {
       TCManagerInterface.setButtonStateFor(directionalPadType + i, controller: port, state: press)
     }
-#endif
+    #endif
   }
-
 }

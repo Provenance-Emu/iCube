@@ -25,35 +25,35 @@
 import Foundation
 
 public class ShaderParameter: CustomStringConvertible {
-    public var name: String
-    public var desc: String
-    public var initial: Decimal = 0.0
-    public var minimum: Decimal = 0.0
-    public var maximum: Decimal = 1.0
-    public var step: Decimal = 0.01
+  public var name: String
+  public var desc: String
+  public var initial: Decimal = 0.0
+  public var minimum: Decimal = 0.0
+  public var maximum: Decimal = 1.0
+  public var step: Decimal = 0.01
 
-    public init(name: String, desc: String) {
-        self.name = name
-        self.desc = desc
-    }
+  public init(name: String, desc: String) {
+    self.name = name
+    self.desc = desc
+  }
 
-    public var description: String {
-        "\(desc) (\(initial))"
-    }
+  public var description: String {
+    "\(desc) (\(initial))"
+  }
 
-    public var initialFloat: CGFloat { (initial as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: initial as NSDecimalNumber) : 0 }
-    public var minFloat: CGFloat { (minimum as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: minimum as NSDecimalNumber) : 0 }
-    public var maxFloat: CGFloat { (maximum as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: maximum as NSDecimalNumber) : 1 }
-    public var stepFloat: CGFloat { (step as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: step as NSDecimalNumber) : 0.01 }
+  public var initialFloat: CGFloat { (initial as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: initial as NSDecimalNumber) : 0 }
+  public var minFloat: CGFloat { (minimum as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: minimum as NSDecimalNumber) : 0 }
+  public var maxFloat: CGFloat { (maximum as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: maximum as NSDecimalNumber) : 1 }
+  public var stepFloat: CGFloat { (step as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: step as NSDecimalNumber) : 0.01 }
 }
 
 extension ShaderParameter: Equatable {
-    public static func == (lhs: ShaderParameter, rhs: ShaderParameter) -> Bool {
-        lhs.name == rhs.name &&
-            lhs.desc == rhs.desc &&
-            lhs.initial == rhs.initial &&
-            lhs.minimum == rhs.minimum &&
-            lhs.maximum == rhs.maximum &&
-            lhs.step == rhs.step
-    }
+  public static func == (lhs: ShaderParameter, rhs: ShaderParameter) -> Bool {
+    lhs.name == rhs.name &&
+      lhs.desc == rhs.desc &&
+      lhs.initial == rhs.initial &&
+      lhs.minimum == rhs.minimum &&
+      lhs.maximum == rhs.maximum &&
+      lhs.step == rhs.step
+  }
 }

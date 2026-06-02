@@ -1,16 +1,16 @@
 // Copyright 2022 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import UIKit
-import SwiftUI
 import CoreSpotlight
 import QuartzCore
+import SwiftUI
+import UIKit
 
 class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
-#if !os(tvOS)
+  #if !os(tvOS)
   private var pendingShortcutItem: UIApplicationShortcutItem?
-#endif
+  #endif
 
   func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
     MainSceneCoordinator.shared().mainScene = scene as? UIWindowScene
@@ -28,7 +28,7 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       self.window = window
       window.makeKeyAndVisible()
       applyFrameCap(to: windowScene)
-#if !os(tvOS)
+      #if !os(tvOS)
       // Handle cold-boot quick actions after UI is ready
       if let shortcut = connectionOptions.shortcutItem {
         pendingShortcutItem = shortcut
@@ -39,7 +39,7 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
           }
         }
       }
-#endif
+      #endif
     }
   }
 
@@ -77,7 +77,7 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     #endif
   }
 
-#if !os(tvOS)
+  #if !os(tvOS)
   func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
     // Defer slightly to ensure UI has mounted
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -103,7 +103,7 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       completion(false)
     }
   }
-#endif
+  #endif
 
   private func attemptContinue(attempt: Int) {
     let games = TVLibraryBridge.currentGames()

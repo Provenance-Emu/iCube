@@ -26,9 +26,12 @@ struct GeckoCodesModal: UIViewControllerRepresentable {
     list.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .close, target: context.coordinator, action: #selector(Coordinator.close))
     return nav
   }
+
   func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
   func makeCoordinator() -> Coordinator { Coordinator() }
-  final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil); if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) } } }
+  final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) }
+  } }
 }
 
 struct ActionReplayCodesModal: UIViewControllerRepresentable {
@@ -49,8 +52,11 @@ struct ActionReplayCodesModal: UIViewControllerRepresentable {
     list.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .close, target: context.coordinator, action: #selector(Coordinator.close))
     return nav
   }
+
   func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
   func makeCoordinator() -> Coordinator { Coordinator() }
-  final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil); if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) } } }
+  final class Coordinator: NSObject { @objc func close() { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene, let root = scene.keyWindow?.rootViewController { root.dismiss(animated: true) }
+  } }
 }
 #endif

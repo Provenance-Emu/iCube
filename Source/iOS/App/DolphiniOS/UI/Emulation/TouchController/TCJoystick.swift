@@ -24,7 +24,7 @@ class TCJoystick: UIView, UIGestureRecognizerDelegate {
   func sharedInit() {
     // Create the range
     let rangeImage = createImageView(imageName: "gcwii_joystick_range")
-    self.addSubview(rangeImage)
+    addSubview(rangeImage)
 
     // Create handle
     let handleView = createImageView(imageName: TCButtonType(rawValue: joystickType)!.getImageName())
@@ -34,10 +34,10 @@ class TCJoystick: UIView, UIGestureRecognizerDelegate {
     panHandler.delegate = self
     handleView.isUserInteractionEnabled = true
     handleView.addGestureRecognizer(panHandler)
-    self.addSubview(handleView)
+    addSubview(handleView)
 
     // Set background color to transparent
-    self.backgroundColor = UIColor.clear
+    backgroundColor = UIColor.clear
   }
 
   func createImageView(imageName: String) -> UIImageView {
@@ -46,24 +46,24 @@ class TCJoystick: UIView, UIGestureRecognizerDelegate {
     let image = UIImage(named: imageName, in: Bundle(for: type(of: self)), compatibleWith: nil)
 
     // Create the view
-    let imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: self.frame.width - (self.frame.width / 3), height: self.frame.height - (self.frame.height / 3)))
+    let imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: frame.width - (frame.width / 3), height: frame.height - (frame.height / 3)))
     imageView.image = image
-    imageView.center = self.convert(self.center, from: self.superview)
+    imageView.center = convert(center, from: superview)
 
     return imageView
   }
 
   @objc func handlePan(gesture: UIPanGestureRecognizer) {
     var point: CGPoint
-    var joyAxises: [CGFloat] = [ 0, 0, 0, 0 ]
+    var joyAxises: [CGFloat] = [0, 0, 0, 0]
 
     if gesture.state == .ended {
       // Reset to center
-      point = self.convert(self.center, from: self.superview)
+      point = convert(center, from: superview)
     } else {
       // Get points
       point = gesture.location(in: self)
-      let joystickCenter = self.convert(self.center, from: self.superview)
+      let joystickCenter = convert(center, from: superview)
 
       // Calculate differences
       let xDiff = point.x - joystickCenter.x
@@ -71,7 +71,7 @@ class TCJoystick: UIView, UIGestureRecognizerDelegate {
 
       // Calculate distance
       let distance = sqrt(pow(xDiff, 2) + pow(yDiff, 2))
-      let maxDistance = self.frame.width / 3
+      let maxDistance = frame.width / 3
 
       if distance > maxDistance {
         // Calculate maximum points
@@ -90,9 +90,9 @@ class TCJoystick: UIView, UIGestureRecognizerDelegate {
     // Send axises values
     let axisStartIdx = joystickType
     for (i, axis) in joyAxises.enumerated() {
-#if os(iOS)
+      #if os(iOS)
       TCManagerInterface.setAxisValueFor(axisStartIdx + i + 1, controller: port, value: Float(axis))
-#endif
+      #endif
     }
 
     gesture.view?.center = point
