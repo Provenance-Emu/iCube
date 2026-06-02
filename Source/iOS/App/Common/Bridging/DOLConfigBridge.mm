@@ -591,6 +591,13 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   // backend multithreading on — so deleting them is correct.)
   Config::SetBase(Config::MAIN_CPU_THREAD, true);
 
+  // GFX_WAIT_FOR_SHADERS_BEFORE_STARTING defaults FALSE upstream, which gives the awful combo of
+  // Synchronous shader compilation WITHOUT precompiling = mid-gameplay stutter. iCube precompiles
+  // up front (one-time boot wait, then no stutter), so force it on at reset too — a plain
+  // delete-to-default would silently land back on the stuttery upstream default. Mode stays
+  // Synchronous/Specialized (the upstream default reset lands on = the intended iCube mode).
+  Config::SetBase(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING, true);
+
   // NOTE: intentionally NOT reset (identity/custom/non-gameplay):
   //   - DSU servers/enable (ciface DualShockUDPClient::SERVERS / SERVERS_ENABLED)
   //   - RA_USERNAME / RA_HOST_URL / RA_* (RetroAchievements login)
