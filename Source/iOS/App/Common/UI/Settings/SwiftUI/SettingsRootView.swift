@@ -1494,7 +1494,7 @@ struct ConfigGeneralView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("Basic Settings")), footer: Text(L("These settings provide performance improvements for most games. Dual Core and DSP Thread offer significant speedups on multi-core devices."))) {
+      Section(header: Text(L("Basic Settings")), footer: Text(L("Dual Core runs the CPU and GPU on separate threads — a large speedup, recommended ON; turn it off only to debug rare timing-sensitive games. DSP Thread runs audio on its own thread (small speedup, safe ON). Enable Cheats activates AR/Gecko codes for the running game. Override Region Mismatch lets a game boot under a different region's settings (can cause issues; leave OFF unless needed). Auto Disc Change automatically swaps to the next disc for multi-disc games. Fast Disc Speed removes emulated disc-read delays — speeds up loading in most games but breaks a few that depend on real timing."))) {
         Toggle(L("Enable Dual Core (speedup)"), isOn: $dualCore)
           .onChange(of: dualCore) { DOLConfigBridge.setMainCpuThread($0) }
         Toggle(L("Enable Cheats"), isOn: $cheats)
@@ -2044,7 +2044,8 @@ struct ConfigInterfaceView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("Game List"))) {
+      Section(header: Text(L("Game List")),
+              footer: Text(L("Controls how your games are labeled and illustrated. The built-in database replaces raw disc IDs with proper game titles. Downloading covers fetches box art from GameTDB.com over the network (one-time per game) for grid view; turn it off to stay fully offline."))) {
         Toggle(L("Use Built-In Database of Game Names"), isOn: $useNamesDB)
           .onChange(of: useNamesDB) { DOLConfigBridge.setMainUseBuiltInTitleDatabase($0) }
         Toggle(L("Download Game Covers from GameTDB.com for Use in Grid Mode"), isOn: $useCovers)
@@ -2069,7 +2070,8 @@ struct ConfigInterfaceView: View {
         }
       }
 
-      Section(header: Text(L("General"))) {
+      Section(header: Text(L("General")),
+              footer: Text(L("Confirm on Stop asks before quitting a running game so you don't lose unsaved progress. Panic Handlers show a dialog when the core hits an internal error instead of failing silently. On-Screen Display Messages are the transient status overlays (save-state notices, performance toggles) drawn over the game."))) {
         Toggle(L("Confirm on Stop"), isOn: $confirmOnStop)
           .onChange(of: confirmOnStop) { DOLConfigBridge.setMainConfirmOnStop($0) }
         Toggle(L("Use Panic Handlers"), isOn: $usePanicHandlers)
@@ -2225,15 +2227,17 @@ private struct BackendPickerView: View {
 /// GameCube config placeholder
 struct ConfigGameCubeView: View {
   @State private var skipIPL: Bool = false
-  @State private var gcLanguage: Int = 1
+  @State private var gcLanguage: Int = 0 // English; real value set in syncGC() from config/locale
   var body: some View {
     List {
-      Section(header: Text(L("General"))) {
+      Section(header: Text(L("General")),
+              footer: Text(L("When ON, GameCube games boot through the console's built-in startup menu (the IPL/BIOS animation) instead of launching straight into the game. This requires a GameCube IPL dump installed for the matching region; without one, games boot directly regardless. Turn OFF to skip the BIOS and start games faster."))) {
         Toggle(L("Load GameCube Main Menu"), isOn: Binding(get: { !skipIPL }, set: { skipIPL = !$0 }))
           .onChange(of: skipIPL) { DOLConfigBridge.setMainSkipIPL($0) }
       }
 
-      Section(header: Text(L("System Language"))) {
+      Section(header: Text(L("System Language")),
+              footer: Text(L("The language the emulated GameCube reports to games. Many first-party titles read this to choose their in-game text and audio language. The GameCube supports English, German, French, Spanish, Italian, and Dutch only. Defaults to your device language where supported, otherwise English."))) {
         NavigationLink(languageLabel(for: gcLanguage), destination: GCLanguagePicker(selected: $gcLanguage))
           .onChange(of: gcLanguage) { DOLConfigBridge.setMainGCLanguage($0) }
       }
@@ -2244,23 +2248,48 @@ struct ConfigGameCubeView: View {
 
   private func syncGC() {
     skipIPL = DOLConfigBridge.mainSkipIPL()
-    let lang = DOLConfigBridge.mainGCLanguage()
-    if (0...6).contains(lang) {
-      gcLanguage = lang
+    // Bug 6: MAIN_GC_LANGUAGE ("SelectedLanguage") is a 0-based GameCube index:
+    // 0=English, 1=German, 2=French, 3=Spanish, 4=Italian, 5=Dutch (DiscIO::FromGameCubeLanguage
+    // maps index N -> Language(N+1), so 0 == English; the GameCube IPL has no Japanese option).
+    // The picker previously mislabeled this as the Wii order (0=Japanese, 1=English, ...), which
+    // made the stored default 0 display as "Japanese" and made selecting "English" store 1 (German).
+    if DOLConfigBridge.mainGCLanguageIsSet() {
+      // User has an explicit value persisted: trust it, but clamp to the valid GC range in case
+      // it was written by the old buggy 0...6 picker.
+      let lang = DOLConfigBridge.mainGCLanguage()
+      gcLanguage = (0...5).contains(lang) ? lang : 0
     } else {
-      gcLanguage = 1
-      DOLConfigBridge.setMainGCLanguage(1)
+      // First run / never chosen: derive a sensible default from the device locale,
+      // falling back to English, and persist it so the picker reflects it.
+      let derived = ConfigGameCubeView.gcLanguageFromLocale()
+      gcLanguage = derived
+      DOLConfigBridge.setMainGCLanguage(derived)
     }
   }
 
+  /// Maps the user's preferred language to the nearest GameCube IPL language index.
+  /// GameCube supports only English/German/French/Spanish/Italian/Dutch; everything
+  /// else (incl. Japanese, which the GC IPL menu has no entry for) falls back to English.
+  static func gcLanguageFromLocale() -> Int {
+    let code = (Locale.preferredLanguages.first
+                ?? Locale.current.identifier).lowercased()
+    // Match on the leading ISO-639 language subtag.
+    if code.hasPrefix("de") { return 1 } // German
+    if code.hasPrefix("fr") { return 2 } // French
+    if code.hasPrefix("es") { return 3 } // Spanish
+    if code.hasPrefix("it") { return 4 } // Italian
+    if code.hasPrefix("nl") { return 5 } // Dutch
+    return 0 // English (also the fallback for en/ja/zh/ko/etc.)
+  }
+
   private func languageLabel(for value: Int) -> String {
-    switch value { case 0: return L("Japanese"); case 1: return L("English"); case 2: return L("German"); case 3: return L("French"); case 4: return L("Spanish"); case 5: return L("Italian"); case 6: return L("Dutch"); default: return L("Error") }
+    switch value { case 0: return L("English"); case 1: return L("German"); case 2: return L("French"); case 3: return L("Spanish"); case 4: return L("Italian"); case 5: return L("Dutch"); default: return L("Error") }
   }
 }
 
 private struct GCLanguagePicker: View {
   @Binding var selected: Int
-  private let options: [Int] = [0, 1, 2, 3, 4, 5, 6]
+  private let options: [Int] = [0, 1, 2, 3, 4, 5]
   var body: some View {
     List {
       ForEach(options, id: \.self) { v in
@@ -2270,7 +2299,7 @@ private struct GCLanguagePicker: View {
     .navigationTitle(L("System Language"))
   }
   private func label(_ v: Int) -> String {
-    switch v { case 0: return L("Japanese"); case 1: return L("English"); case 2: return L("German"); case 3: return L("French"); case 4: return L("Spanish"); case 5: return L("Italian"); case 6: return L("Dutch"); default: return L("Error") }
+    switch v { case 0: return L("English"); case 1: return L("German"); case 2: return L("French"); case 3: return L("Spanish"); case 4: return L("Italian"); case 5: return L("Dutch"); default: return L("Error") }
   }
 }
 /// Wii config placeholder
@@ -2293,7 +2322,8 @@ struct ConfigWiiView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("Video"))) {
+      Section(header: Text(L("Video")),
+              footer: Text(L("These write to the emulated Wii's SYSCONF (the console's own saved settings), so they affect Wii titles only and persist like a real Wii would. PAL60 lets PAL games output 60 Hz (EuRGB60) when a game supports it. Aspect Ratio sets the console's 4:3 vs 16:9 flag, which many Wii games read to choose their own widescreen rendering."))) {
         Toggle(L("Use PAL60 Mode (EuRGB60)"), isOn: $pal60).onChange(of: pal60) { DOLConfigBridge.setSysconfPAL60($0) }
         /// Wii System Aspect Ratio (4:3 vs 16:9)
         HStack {
@@ -2305,7 +2335,8 @@ struct ConfigWiiView: View {
         .onChange(of: widescreen) { DOLConfigBridge.setSysconfWidescreen($0) }
       }
 
-      Section(header: Text(L("General"))) {
+      Section(header: Text(L("General")),
+              footer: Text(L("System Language and Audio (Mono/Stereo/Surround) are the Wii's own menu settings; games read them to pick their in-game language and audio output. The Screen Saver toggle only controls the emulated Wii's idle dimming and has no effect on battery or performance on this device."))) {
         Toggle(L("Enable Screen Saver"), isOn: $screensaver).onChange(of: screensaver) { DOLConfigBridge.setSysconfScreensaver($0) }
         HStack {
           Text(L("System Language"))
@@ -2323,7 +2354,8 @@ struct ConfigWiiView: View {
         .onChange(of: soundMode) { DOLConfigBridge.setSysconfSoundMode($0) }
       }
 
-      Section(header: Text(L("Wii Remotes"))) {
+      Section(header: Text(L("Wii Remotes")),
+              footer: Text(L("Emulated Wii Remote settings. Sensor Bar Position must match where you tell the game your sensor bar sits (Top or Bottom) or the on-screen pointer will be inverted; on iCube the pointer is driven by touch, so set this to match the game's expectation. IR Sensitivity and Speaker Volume mirror the real Wii's menu sliders. Rumble has no physical effect on this device but some games gate behavior on it being enabled."))) {
         HStack {
           Text(L("Sensor Bar Position")); Spacer(); NavigationLink(posLabel(sensorBarPos), destination: WiiSensorBarPosPicker(selected: $sensorBarPos)).frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -2353,7 +2385,8 @@ struct ConfigWiiView: View {
           .onChange(of: touchpadIRFollowWithoutClick) { UserDefaults.standard.set($0, forKey: "touchpad_ir_follow_without_click") }
       }
 
-      Section(header: Text(L("USB / SD"))) {
+      Section(header: Text(L("USB / SD")),
+              footer: Text(L("Emulated Wii peripherals. Insert SD Card exposes a virtual SD card to games and the System Menu; Allow Writes to SD Card lets titles modify it (off keeps it read-only). Folder Sync mirrors a host folder to/from the card image on start/stop. WiiConnect24 via WiiLink enables fan-revived online channels. These are storage/peripheral options and have no effect on emulation speed."))) {
         Toggle(L("Emulate Skylander Portal"), isOn: Binding(get: { DOLConfigBridge.mainEmulateSkylanderPortal() }, set: { DOLConfigBridge.setMainEmulateSkylanderPortal($0) }))
         Toggle(L("Connect USB Keyboard"), isOn: $keyboard).onChange(of: keyboard) { DOLConfigBridge.setMainWiiKeyboard($0) }
         Toggle(L("Enable WiiConnect24 via WiiLink"), isOn: $wiilink).onChange(of: wiilink) { DOLConfigBridge.setMainWiiWiiLinkEnable($0) }
@@ -2677,7 +2710,8 @@ struct GraphicsGeneralView: View {
       }
 #endif
 
-      Section(header: Text(L("Shader Compilation"))) {
+      Section(header: Text(L("Shader Compilation")),
+              footer: Text(L("How shaders are built when a game needs them. Asynchronous (Uber) Shaders avoid stutter by drawing with a generic shader until the specialized one is ready — the recommended default. Synchronous modes wait for each shader, which is hitch-free once warmed but stutters on first encounter. \"Compile shaders before starting\" pre-builds the cache at launch: longer load, smoother first run. On the CPU-bound iCube path the async default is almost always best."))) {
         NavigationLink(destination: GraphicsShaderTypeView(selected: $shaderType)) {
           Text("\(L("Type")): \(shaderType.label)")
         }

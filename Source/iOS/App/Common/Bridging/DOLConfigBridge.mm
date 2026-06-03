@@ -168,11 +168,23 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 // Cached Interpreter: block linking toggle
 
 + (BOOL)mainLowDCBZHack { return Config::Get(Config::MAIN_LOW_DCBZ_HACK); }
-+ (void)setMainLowDCBZHack:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_LOW_DCBZ_HACK, (bool)enabled); }
++ (void)setMainLowDCBZHack:(BOOL)enabled {
+  Config::SetBaseOrCurrent(Config::MAIN_LOW_DCBZ_HACK, (bool)enabled);
+  // Bug 2: flush Base layer to disk immediately so the toggle round-trips across a
+  // full app relaunch (mirrors the DSU setters). When not emulating, SetBaseOrCurrent
+  // writes Base; Config::Save() persists Base to the INI. Harmless while emulating
+  // (writes CurrentRun, Save() is a no-op for that key).
+  Config::Save();
+}
 
 // Cached Interpreter: fast FP paths (experimental)
 + (BOOL)mainFpFast { return Config::Get(Config::MAIN_FP_FAST); }
-+ (void)setMainFpFast:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_FP_FAST, (bool)enabled); }
++ (void)setMainFpFast:(BOOL)enabled {
+  Config::SetBaseOrCurrent(Config::MAIN_FP_FAST, (bool)enabled);
+  // Bug 2: flush Base layer to disk immediately so the toggle round-trips across a
+  // full app relaunch (mirrors the DSU setters). See setMainLowDCBZHack above.
+  Config::Save();
+}
 // Cached Interpreter: Apple-Silicon hot-loop software-prefetch (default on; A/B toggle)
 + (BOOL)mainCachedInterpreterPrefetch { return Config::Get(Config::MAIN_CACHED_INTERPRETER_PREFETCH); }
 + (void)setMainCachedInterpreterPrefetch:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CACHED_INTERPRETER_PREFETCH, (bool)enabled); }
@@ -242,7 +254,18 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (BOOL)mainSkipIPL { return Config::Get(Config::MAIN_SKIP_IPL); }
 + (void)setMainSkipIPL:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_SKIP_IPL, (bool)enabled); }
 + (NSInteger)mainGCLanguage { return (NSInteger)Config::Get(Config::MAIN_GC_LANGUAGE); }
-+ (void)setMainGCLanguage:(NSInteger)lang { Config::SetBaseOrCurrent(Config::MAIN_GC_LANGUAGE, (int)lang); }
++ (void)setMainGCLanguage:(NSInteger)lang {
+  Config::SetBaseOrCurrent(Config::MAIN_GC_LANGUAGE, (int)lang);
+  // Bug 6: persist immediately so the selection survives a relaunch and so
+  // mainGCLanguageIsSet reports YES afterward (matches DSU/Save idiom).
+  Config::Save();
+}
++ (BOOL)mainGCLanguageIsSet {
+  // Base layer always exists once config is loaded; Exists() distinguishes an
+  // explicitly-stored value from the compiled Info<> default (0).
+  std::shared_ptr<Config::Layer> base = Config::GetLayer(Config::LayerType::Base);
+  return (base && base->Exists(Config::MAIN_GC_LANGUAGE.GetLocation())) ? YES : NO;
+}
 
 // Config > Wii
 + (BOOL)sysconfPAL60 { return Config::Get(Config::SYSCONF_PAL60); }

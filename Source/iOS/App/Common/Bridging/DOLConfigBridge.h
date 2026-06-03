@@ -179,6 +179,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setMainSkipIPL:(BOOL)enabled;
 + (NSInteger)mainGCLanguage;
 + (void)setMainGCLanguage:(NSInteger)lang;
+// YES if MAIN_GC_LANGUAGE has ever been explicitly persisted to the Base layer
+// (i.e. the user picked a language). NO means the value is still the compiled
+// default and the UI may derive a locale-based default instead. (Bug 6)
++ (BOOL)mainGCLanguageIsSet;
 
 // Config > Wii (SYSCONF and MAIN)
 + (BOOL)sysconfPAL60;
