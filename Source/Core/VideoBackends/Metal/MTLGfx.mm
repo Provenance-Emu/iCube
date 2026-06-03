@@ -99,10 +99,7 @@ Metal::Gfx::CreateStagingTexture(StagingTextureType type, const TextureConfig& c
     const size_t stride = config.GetStride();
     const size_t buffer_size = stride * static_cast<size_t>(config.height);
 
-    // Staging textures are explicitly CPU-synchronized (see StagingTexture::Flush), so Metal's
-    // driver-side hazard tracking is pure overhead. Mark them untracked.
-    MTLResourceOptions options =
-        MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked;
+    MTLResourceOptions options = MTLStorageModeShared;
     if (type == StagingTextureType::Upload)
       options |= MTLResourceCPUCacheModeWriteCombined;
 
@@ -260,8 +257,6 @@ std::unique_ptr<AbstractShader> Metal::Gfx::CreateShaderFromMSL(ShaderStage stag
       auto desc = [MTLComputePipelineDescriptor new];
       [desc setComputeFunction:fn];
       [desc setLabel:[fn label]];
-      // Load from / persist into the on-disk PSO archive (best-effort, no-op if unavailable).
-      ApplyPipelineBinaryArchive(desc);
       MRCOwned<id<MTLComputePipelineState>> pipeline =
           MRCTransfer([g_device newComputePipelineStateWithDescriptor:desc
                                                               options:MTLPipelineOptionArgumentInfo
@@ -272,7 +267,6 @@ std::unique_ptr<AbstractShader> Metal::Gfx::CreateShaderFromMSL(ShaderStage stag
         DumpBadShader(fmt::format("Failed to compile compute pipeline {}", name));
         return nullptr;
       }
-      PopulatePipelineBinaryArchive(desc);
       return std::make_unique<ComputePipeline>(stage, reflection, std::move(msl), std::move(fn),
                                                std::move(pipeline));
     }

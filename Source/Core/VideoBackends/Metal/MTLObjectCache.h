@@ -20,16 +20,6 @@ class Shader;
 extern MRCOwned<id<MTLDevice>> g_device;
 extern MRCOwned<id<MTLCommandQueue>> g_queue;
 
-// On-disk binary-archive PSO cache (best-effort, never fatal). Read = attach the archive to a
-// descriptor before pipeline creation so a cached PSO loads from disk. Populate = add the
-// just-compiled PSO to the archive so it persists on shutdown. Populate is serialized by a
-// dedicated mutex because background shader compilation creates pipelines concurrently and
-// MTLBinaryArchive mutation is not documented thread-safe. No-ops if the archive is unavailable.
-void ApplyPipelineBinaryArchive(MTLRenderPipelineDescriptor* desc);
-void ApplyPipelineBinaryArchive(MTLComputePipelineDescriptor* desc);
-void PopulatePipelineBinaryArchive(MTLRenderPipelineDescriptor* desc);
-void PopulatePipelineBinaryArchive(MTLComputePipelineDescriptor* desc);
-
 struct DepthStencilSelector
 {
   u8 value;
