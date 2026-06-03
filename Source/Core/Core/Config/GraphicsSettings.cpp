@@ -279,5 +279,12 @@ const Info<bool> GFX_HACK_VI_DECIMATE_INTERLACE{{System::GFX, "Hacks", "VIDecima
 };
 
 const Info<bool> GFX_USE_COMPUTE_EFBXFB{{System::GFX, "Hacks", "UseComputeEfbXfb"}, false};
+// iCube (jitless): offload the software vertex loader's bulk decode to a Metal compute kernel.
+// Default OFF; with it off the existing CPU vertex-loader path is used unchanged. Only the Metal
+// backend implements it, and only for a subset of direct (non-indexed) vertex formats; every other
+// case (unsupported format, live zfreeze/lighting caches, non-Metal backend) falls back to the CPU
+// loader, so behaviour is byte-identical when off.
+const Info<bool> GFX_USE_COMPUTE_VERTEX_DECODE{{System::GFX, "Hacks", "UseComputeVertexDecode"},
+                                               false};
 
 }  // namespace Config

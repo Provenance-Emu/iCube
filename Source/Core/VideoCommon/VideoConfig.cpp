@@ -138,6 +138,7 @@ void VideoConfig::Refresh()
   iShaderCompilerThreads = Config::Get(Config::GFX_SHADER_COMPILER_THREADS);
   iShaderPrecompilerThreads = Config::Get(Config::GFX_SHADER_PRECOMPILER_THREADS);
   bCPUCull = Config::Get(Config::GFX_CPU_CULL);
+  bComputeVertexDecode = Config::Get(Config::GFX_USE_COMPUTE_VERTEX_DECODE);
 
   texture_filtering_mode = Config::Get(Config::GFX_ENHANCE_FORCE_TEXTURE_FILTERING);
   iMaxAnisotropy = Config::Get(Config::GFX_ENHANCE_MAX_ANISOTROPY);

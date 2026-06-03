@@ -23,6 +23,7 @@ class NativeVertexFormat;
 class PixelShaderManager;
 class PointerWrap;
 struct PortableVertexDeclaration;
+class VertexLoaderBase;
 
 struct Slope
 {
@@ -155,6 +156,21 @@ public:
   virtual bool UploadTexelBuffer(const void* data, u32 data_size, TexelBufferFormat format,
                                  u32* out_offset, const void* palette_data, u32 palette_size,
                                  TexelBufferFormat palette_format, u32* out_palette_offset);
+
+  // iCube (jitless): optional GPU-compute vertex decode. Offloads the bulk per-vertex format
+  // conversion/dequantization that the software VertexLoader does on the CPU onto a backend compute
+  // kernel, writing the decoded native vertices straight into the streaming vertex buffer that the
+  // following draw consumes. Gated behind Config::GFX_USE_COMPUTE_VERTEX_DECODE at the call site.
+  //
+  // Returns true only if the backend fully decoded all `count` vertices into `dst`; in that case it
+  // has also populated the trailing-three position/normal/tangent/binormal caches on the CPU (so
+  // zfreeze and lighting keep working). Returns false for any case it doesn't handle (unsupported
+  // format, no Metal backend, etc.), and the caller must run the existing CPU VertexLoader instead.
+  // The default implementation always returns false (every backend except Metal falls back).
+  virtual bool TryComputeDecodeVertices(VertexLoaderBase* loader, const u8* src, u8* dst, int count)
+  {
+    return false;
+  }
 
   // Call if active config changes
   void OnConfigChange();

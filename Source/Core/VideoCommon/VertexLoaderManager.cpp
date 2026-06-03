@@ -443,10 +443,32 @@ int RunVertices(int vtx_attr_group, OpcodeDecoder::Primitive primitive, int coun
       const int max_vertices = 16380;  // Max is 16383, but 16380 is divisible by both 4 and 3
       const int run = CanSplit(primitive) && count > max_vertices ? max_vertices : count;
       count -= run;
+      // iCube (jitless): when GPU-compute vertex decode is enabled, the compute kernel writes
+      // straight into the streaming vertex buffer the following draw consumes. CPU cull reads that
+      // buffer immediately after decode, so it must be disabled for any draw we hand to the GPU
+      // (the read would race the queued, not-yet-executed compute pass). Probe whether the backend
+      // can decode this draw before committing to that; if not, fall back to the CPU path with cull
+      // intact. The probe is cheap (it only inspects the loader's format) and is gated OFF by
+      // default so the CPU path below is byte-identical to HEAD.
+      const bool try_gpu_decode =
+          !IsPreprocess && g_ActiveConfig.bComputeVertexDecode &&
+          g_vertex_manager->TryComputeDecodeVertices(loader, nullptr, nullptr, 0);
+      if (try_gpu_decode)
+        can_cpu_cull = false;
+
       DataReader dst = g_vertex_manager->PrepareForAdditionalData(primitive, run, stride,
                                                                   cullall || can_cpu_cull);
 
-      const int num_loaded = loader->RunVertices(src, dst.GetPointer(), run);
+      int num_loaded;
+      if (try_gpu_decode &&
+          g_vertex_manager->TryComputeDecodeVertices(loader, src, dst.GetPointer(), run))
+      {
+        num_loaded = run;
+      }
+      else
+      {
+        num_loaded = loader->RunVertices(src, dst.GetPointer(), run);
+      }
       src += loader->m_vertex_size * max_vertices;
 
       if (can_cpu_cull && !cullall)

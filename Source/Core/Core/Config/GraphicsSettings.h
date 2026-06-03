@@ -210,5 +210,6 @@ extern const Info<bool> GFX_HACK_GPU_EFB_PEEK_RESOLVE;
 extern const Info<bool> GFX_HACK_NEON_TEXTURE_DECODE;
 extern const Info<bool> GFX_HACK_VI_DECIMATE_INTERLACE;
 extern const Info<bool> GFX_USE_COMPUTE_EFBXFB;
+extern const Info<bool> GFX_USE_COMPUTE_VERTEX_DECODE;
 
 }  // namespace Config

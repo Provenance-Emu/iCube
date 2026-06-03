@@ -284,6 +284,9 @@ struct VideoConfig final
   bool bBBoxEnable = false;
   bool bCPUCull = false;
   bool bNEONTextureDecode = true;  // iCube: ARM64 NEON texture decoder (default on; A/B toggle)
+  // iCube (jitless): offload bulk vertex decode to a Metal compute kernel. Default off; CPU loader
+  // path is used unchanged when off, and as a fallback for unsupported formats / live caches.
+  bool bComputeVertexDecode = false;
 
   bool bEFBEmulateFormatChanges = false;
   bool bSkipEFBCopyToRam = false;
