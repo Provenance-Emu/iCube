@@ -436,56 +436,68 @@ private struct MotionSettingsView: View {
   @State private var smoothing: Double = UserDefaults.standard.object(forKey: "dsu_smoothing") as? Double ?? 0.0
   var body: some View {
     Form {
-      Section(header: Text(L("Gyro Gain")), footer: Text(L("Scales motion intensity. Higher values increase sensitivity."))) {
+      Section(header: Text(L("Gyro Gain"))) {
+        settingsCaption(
+          Group {
 #if os(tvOS)
-        TVFloatStepper(
-          value: Binding(
-            get: { CGFloat(gain) },
-            set: { gain = Double($0) }
-          ),
-          range: 0.1...3.0,
-          step: 0.05
-        )
+            TVFloatStepper(
+              value: Binding(
+                get: { CGFloat(gain) },
+                set: { gain = Double($0) }
+              ),
+              range: 0.1...3.0,
+              step: 0.05
+            )
 #else
-        HStack {
-          Slider(value: $gain, in: 0.1...3.0, step: 0.05)
-          Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
-        }
+            HStack {
+              Slider(value: $gain, in: 0.1...3.0, step: 0.05)
+              Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
+            }
 #endif
+          },
+          L("Scales motion intensity. Higher values increase sensitivity."))
       }
-      Section(header: Text(L("Deadzone")), footer: Text(L("Ignores small movements to reduce jitter."))) {
+      Section(header: Text(L("Deadzone"))) {
+        settingsCaption(
+          Group {
 #if os(tvOS)
-        TVFloatStepper(
-          value: Binding(
-            get: { CGFloat(deadzone) },
-            set: { deadzone = Double($0) }
-          ),
-          range: 0.0...0.49,
-          step: 0.01
-        )
+            TVFloatStepper(
+              value: Binding(
+                get: { CGFloat(deadzone) },
+                set: { deadzone = Double($0) }
+              ),
+              range: 0.0...0.49,
+              step: 0.01
+            )
 #else
-        HStack {
-          Slider(value: $deadzone, in: 0.0...0.49, step: 0.01)
-          Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
-        }
+            HStack {
+              Slider(value: $deadzone, in: 0.0...0.49, step: 0.01)
+              Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
+            }
 #endif
+          },
+          L("Ignores small movements to reduce jitter."))
       }
-      Section(header: Text(L("Smoothing")), footer: Text(L("Applies exponential smoothing. 0 disables smoothing."))) {
+      Section(header: Text(L("Smoothing"))) {
+        settingsCaption(
+          Group {
 #if os(tvOS)
-        TVFloatStepper(
-          value: Binding(
-            get: { CGFloat(smoothing) },
-            set: { smoothing = Double($0) }
-          ),
-          range: 0.0...0.9,
-          step: 0.05
-        )
+            TVFloatStepper(
+              value: Binding(
+                get: { CGFloat(smoothing) },
+                set: { smoothing = Double($0) }
+              ),
+              range: 0.0...0.9,
+              step: 0.05
+            )
 #else
-        HStack {
-          Slider(value: $smoothing, in: 0.0...0.9, step: 0.05)
-          Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
-        }
+            HStack {
+              Slider(value: $smoothing, in: 0.0...0.9, step: 0.05)
+              Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
+            }
 #endif
+          },
+          L("Applies exponential smoothing. 0 disables smoothing."))
       }
     }
     .navigationTitle(L("Advanced Motion Settings"))
@@ -845,24 +857,27 @@ struct ControllersRootView: View {
               .padding(.vertical, 2)
               .background(Color.blue.opacity(0.15), in: Capsule())
           }
-        },
-        footer: Text(L("Enable the DSU (Cemuhook DualShock UDP) client to receive input from compatible servers on your network. Add servers as IP:Port. Bonjour discovery will be added in a future update."))
+        }
       ) {
         #if !os(tvOS)
-        Picker(L("Role"), selection: $dsuRole) {
-          Text(L("Receiver")).tag("receiver")
-          Text(L("Sender")).tag("sender")
-        }
-        .onChange(of: dsuRole) { role in
-          if role == "sender" {
-            dsuEnabled = false
-            DOLConfigBridge.setDsuClientEnabled(false)
+        settingsCaption(
+          Picker(L("Role"), selection: $dsuRole) {
+            Text(L("Receiver")).tag("receiver")
+            Text(L("Sender")).tag("sender")
           }
-        }
+          .onChange(of: dsuRole) { role in
+            if role == "sender" {
+              dsuEnabled = false
+              DOLConfigBridge.setDsuClientEnabled(false)
+            }
+          },
+          L("Receiver pulls motion/input from a DSU server; Sender shares this device's input instead."))
         #endif
-        Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
-          .onChange(of: dsuEnabled) { DOLConfigBridge.setDsuClientEnabled($0) }
-          .disabled(dsuRole == "sender")
+        settingsCaption(
+          Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
+            .onChange(of: dsuEnabled) { DOLConfigBridge.setDsuClientEnabled($0) }
+            .disabled(dsuRole == "sender"),
+          L("Receives input from a Cemuhook DSU server on your network (e.g. a phone's gyro). Add servers below as IP:Port."))
         Toggle(L("Show DSU Debug HUD"), isOn: Binding(get: {
 #if DEBUG
           true
@@ -1000,11 +1015,15 @@ struct ControllersRootView: View {
         }
       }
 
-      Section(header: Text(L("General")), footer: Text(L("Background Input: Allows controller input when iCube is in the background.\nAuto-select On-Screen Controller: Automatically chooses GameCube or Wii controller layout based on the game being played."))) {
-        Toggle(L("Background Input"), isOn: $backgroundInput)
-          .onChange(of: backgroundInput) { newValue in DOLConfigBridge.setMainBackgroundInput(newValue) }
-        Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
-          .onChange(of: autoSelectOnScreenBySystem) { newValue in UserDefaults.standard.set(newValue, forKey: "auto_touchpad_by_system") }
+      Section(header: Text(L("General"))) {
+        settingsCaption(
+          Toggle(L("Background Input"), isOn: $backgroundInput)
+            .onChange(of: backgroundInput) { newValue in DOLConfigBridge.setMainBackgroundInput(newValue) },
+          L("Keeps accepting controller input while iCube is in the background."))
+        settingsCaption(
+          Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
+            .onChange(of: autoSelectOnScreenBySystem) { newValue in UserDefaults.standard.set(newValue, forKey: "auto_touchpad_by_system") },
+          L("Automatically shows the GameCube or Wii on-screen layout based on the game being played."))
 
 #if os(iOS)
         Button(action: { testRumble() }) {
@@ -1013,27 +1032,40 @@ struct ControllersRootView: View {
 #endif
       }
 
-      Section(header: Text(L("Wii Remotes")), footer: Text(L("Continuous Scanning: Keeps looking for new Wiimotes to connect.\nEnable Speaker: Plays audio through the Wiimote speaker (requires real Wiimote).\nConnect Wiimotes for Controller Interface: Automatically pairs Wiimotes when controller interface is used."))) {
-        Toggle(L("Continuous Scanning"), isOn: $wiimoteScan)
-          .onChange(of: wiimoteScan) { newValue in DOLConfigBridge.setWiimoteContinuousScanning(newValue) }
-        Toggle(L("Enable Speaker"), isOn: $wiimoteSpeaker)
-          .onChange(of: wiimoteSpeaker) { newValue in DOLConfigBridge.setWiimoteEnableSpeaker(newValue) }
-        Toggle(L("Connect Wiimotes for Controller Interface"), isOn: $connectWiimotes)
-          .onChange(of: connectWiimotes) { newValue in DOLConfigBridge.setConnectWiimotesForControllerInterface(newValue) }
+      Section(header: Text(L("Wii Remotes"))) {
+        settingsCaption(
+          Toggle(L("Continuous Scanning"), isOn: $wiimoteScan)
+            .onChange(of: wiimoteScan) { newValue in DOLConfigBridge.setWiimoteContinuousScanning(newValue) },
+          L("Keeps looking for new Wii Remotes to connect."))
+        settingsCaption(
+          Toggle(L("Enable Speaker"), isOn: $wiimoteSpeaker)
+            .onChange(of: wiimoteSpeaker) { newValue in DOLConfigBridge.setWiimoteEnableSpeaker(newValue) },
+          L("Plays audio through a real Wii Remote's speaker."))
+        settingsCaption(
+          Toggle(L("Connect Wiimotes for Controller Interface"), isOn: $connectWiimotes)
+            .onChange(of: connectWiimotes) { newValue in DOLConfigBridge.setConnectWiimotesForControllerInterface(newValue) },
+          L("Automatically pairs Wii Remotes when the controller interface is in use."))
       }
 
-      Section(header: Text(L("Alternate Input Sources")), footer: Text(L("Opacity: Controls transparency of on-screen touch controls.\nTouch IR Pointer: Choose how the Wiimote pointer is controlled - Gyro uses device motion, Follow/Drag use touch gestures."))) {
+      Section(header: Text(L("Alternate Input Sources"))) {
 #if os(iOS)
-        HStack {
-          Text(L("Opacity"))
-          Spacer()
-          Slider(value: Binding(get: { Double(touchOpacity) }, set: { touchOpacity = Float($0) }), in: 0...1)
-            .frame(width: 220)
-            .onChange(of: touchOpacity) { DOLConfigBridge.setMainTouchPadOpacity($0) }
-        }
+        settingsCaption(
+          HStack {
+            Text(L("Opacity"))
+            Spacer()
+            Slider(value: Binding(get: { Double(touchOpacity) }, set: { touchOpacity = Float($0) }), in: 0...1)
+              .frame(width: 220)
+              .onChange(of: touchOpacity) { DOLConfigBridge.setMainTouchPadOpacity($0) }
+          },
+          L("Transparency of the on-screen touch controls."))
 #endif
-        NavigationLink("\(L("Touch IR Pointer")): \(touchIRMode.label)", destination: TouchIRModePicker(selected: $touchIRMode))
-          .onChange(of: touchIRMode) { DOLConfigBridge.setMainTouchPadIRMode($0.rawValue) }
+        settingsNavCaption(
+          destination: TouchIRModePicker(selected: $touchIRMode),
+          L("How the Wii Remote pointer is driven. Gyro uses device motion; Follow/Drag use touch gestures.")
+        ) {
+          Text("\(L("Touch IR Pointer")): \(touchIRMode.label)")
+        }
+        .onChange(of: touchIRMode) { DOLConfigBridge.setMainTouchPadIRMode($0.rawValue) }
 
         NavigationLink(destination: EnhancedMotionControlsView()) {
           Label(L("Advanced Motion Settings"), systemImage: "gyroscope")
@@ -1278,24 +1310,32 @@ struct DebugRootView: View {
   var body: some View {
     List {
       Section(header: Text(L("CPU / Memory"))) {
-        Toggle(L("Fastmem"), isOn: $fastmem)
-          .onChange(of: fastmem) { DOLConfigBridge.setMainFastmem($0) }
-          .disabled(!fastmemAvailable)
-        Toggle(L("Sync on Skip Idle"), isOn: $syncOnSkipIdle)
-          .onChange(of: syncOnSkipIdle) { DOLConfigBridge.setMainSyncOnSkipIdle($0) }
+        settingsCaption(
+          Toggle(L("Fastmem"), isOn: $fastmem)
+            .onChange(of: fastmem) { DOLConfigBridge.setMainFastmem($0) }
+            .disabled(!fastmemAvailable),
+          L("Fast memory-access path for the CPU emulator. A large speedup where supported; disabled if the device can't provide it."))
+        settingsCaption(
+          Toggle(L("Sync on Skip Idle"), isOn: $syncOnSkipIdle)
+            .onChange(of: syncOnSkipIdle) { DOLConfigBridge.setMainSyncOnSkipIdle($0) },
+          L("Synchronizes the GPU when the CPU skips idle loops. More accurate; slightly slower."))
       }
 
       Section(header: Text(L("Controllers"))) {
-        Toggle(L("Connect MFi Controllers"), isOn: $mfiConnect)
-          .onChange(of: mfiConnect) { _ in
-            UserDefaults.standard.set(mfiConnect, forKey: "virtual_mfi_connect")
-          }
+        settingsCaption(
+          Toggle(L("Connect MFi Controllers"), isOn: $mfiConnect)
+            .onChange(of: mfiConnect) { _ in
+              UserDefaults.standard.set(mfiConnect, forKey: "virtual_mfi_connect")
+            },
+          L("Routes connected MFi/Bluetooth game controllers into the emulator."))
       }
 
-      Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
+      Section(header: Text(L("Recording"))) {
 #if os(iOS)
-        Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
-          .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }
+        settingsCaption(
+          Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
+            .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") },
+          L("Continuously buffers gameplay for instant replay. May reduce performance on older devices."))
 #endif
       }
 
@@ -1317,25 +1357,33 @@ struct DebugRootView: View {
       }
 
       Section(header: Text(L("Logging"))) {
-        Toggle(L("Enable Console Logging"), isOn: $loggingEnabled)
-          .onChange(of: loggingEnabled) { UserDefaults.standard.set($0, forKey: "logger_console_enabled") }
-        HStack {
-          Text(L("Verbosity"))
-          Spacer()
-          Button("\(loggingVerbosity)") {
-            var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = 4 }
-            v = (v % 5) + 1
-            UserDefaults.standard.set(v, forKey: "logger_console_verbosity")
-            loggingVerbosity = v
-          }
-          .buttonStyle(.bordered)
-        }
-        Toggle(L("Input Event Debug"), isOn: $inputDebug)
-          .onChange(of: inputDebug) { UserDefaults.standard.set($0, forKey: "input_debug") }
+        settingsCaption(
+          Toggle(L("Enable Console Logging"), isOn: $loggingEnabled)
+            .onChange(of: loggingEnabled) { UserDefaults.standard.set($0, forKey: "logger_console_enabled") },
+          L("Writes core log messages to the device console. For diagnostics; leave off for normal use."))
+        settingsCaption(
+          HStack {
+            Text(L("Verbosity"))
+            Spacer()
+            Button("\(loggingVerbosity)") {
+              var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = 4 }
+              v = (v % 5) + 1
+              UserDefaults.standard.set(v, forKey: "logger_console_verbosity")
+              loggingVerbosity = v
+            }
+            .buttonStyle(.bordered)
+          },
+          L("How much detail the log captures (1 = errors only, 5 = everything)."))
+        settingsCaption(
+          Toggle(L("Input Event Debug"), isOn: $inputDebug)
+            .onChange(of: inputDebug) { UserDefaults.standard.set($0, forKey: "input_debug") },
+          L("Logs every controller/touch input event. Noisy; for input troubleshooting only."))
       }
 
-      Section(header: Text(L("Screenshots / Artwork")), footer: Text(L("When enabled, iCube hides downloaded box art and always shows platform templates (GameCube/Wii). Useful for App Store screenshots."))) {
-        Toggle(L("Use Template Covers (Disable Artwork)"), isOn: $disableArtwork)
+      Section(header: Text(L("Screenshots / Artwork"))) {
+        settingsCaption(
+          Toggle(L("Use Template Covers (Disable Artwork)"), isOn: $disableArtwork),
+          L("Hides downloaded box art and shows platform templates (GameCube/Wii) instead. Handy for App Store screenshots."))
       }
     }
     .navigationTitle(L("Debug"))
@@ -1513,23 +1561,38 @@ struct ConfigGeneralView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("Basic Settings")), footer: Text(L("Dual Core runs the CPU and GPU on separate threads — a large speedup, recommended ON; turn it off only to debug rare timing-sensitive games. DSP Thread runs audio on its own thread (small speedup, safe ON). Enable Cheats activates AR/Gecko codes for the running game. Override Region Mismatch lets a game boot under a different region's settings (can cause issues; leave OFF unless needed). Auto Disc Change automatically swaps to the next disc for multi-disc games. Fast Disc Speed removes emulated disc-read delays — speeds up loading in most games but breaks a few that depend on real timing."))) {
-        Toggle(L("Enable Dual Core (speedup)"), isOn: $dualCore)
-          .onChange(of: dualCore) { DOLConfigBridge.setMainCpuThread($0) }
-        Toggle(L("Enable Cheats"), isOn: $cheats)
-          .onChange(of: cheats) { DOLConfigBridge.setMainEnableCheats($0) }
-        Toggle(L("Override Region Mismatch"), isOn: $mismatchedRegion)
-          .onChange(of: mismatchedRegion) { DOLConfigBridge.setMainOverrideRegionSettings($0) }
-        Toggle(L("Auto Disc Change"), isOn: $autoDiscChange)
-          .onChange(of: autoDiscChange) { DOLConfigBridge.setMainAutoDiscChange($0) }
-        Toggle(L("Fast Disc Speed (speedup)"), isOn: $fastDiscSpeed)
-          .onChange(of: fastDiscSpeed) { DOLConfigBridge.setMainFastDiscSpeed($0) }
-        Toggle(L("DSP Thread (speedup)"), isOn: $dspThread)
-          .onChange(of: dspThread) { DOLConfigBridge.setMainDSPThread($0) }
+      Section(header: Text(L("Basic Settings"))) {
+        settingsCaption(
+          Toggle(L("Enable Dual Core (speedup)"), isOn: $dualCore)
+            .onChange(of: dualCore) { DOLConfigBridge.setMainCpuThread($0) },
+          L("Runs the CPU and GPU on separate threads — a large speedup. Recommended ON; turn off only to debug rare timing-sensitive games."))
+        settingsCaption(
+          Toggle(L("DSP Thread (speedup)"), isOn: $dspThread)
+            .onChange(of: dspThread) { DOLConfigBridge.setMainDSPThread($0) },
+          L("Runs audio emulation on its own thread. Small speedup; safe to leave ON."))
+        settingsCaption(
+          Toggle(L("Enable Cheats"), isOn: $cheats)
+            .onChange(of: cheats) { DOLConfigBridge.setMainEnableCheats($0) },
+          L("Activates AR/Gecko cheat codes for the running game."))
+        settingsCaption(
+          Toggle(L("Override Region Mismatch"), isOn: $mismatchedRegion)
+            .onChange(of: mismatchedRegion) { DOLConfigBridge.setMainOverrideRegionSettings($0) },
+          L("Lets a game boot under a different region's settings. Can cause issues; leave OFF unless a game needs it."))
+        settingsCaption(
+          Toggle(L("Auto Disc Change"), isOn: $autoDiscChange)
+            .onChange(of: autoDiscChange) { DOLConfigBridge.setMainAutoDiscChange($0) },
+          L("Automatically swaps to the next disc for multi-disc games."))
+        settingsCaption(
+          Toggle(L("Fast Disc Speed (speedup)"), isOn: $fastDiscSpeed)
+            .onChange(of: fastDiscSpeed) { DOLConfigBridge.setMainFastDiscSpeed($0) },
+          L("Removes emulated disc-read delays. Speeds up loading in most games but breaks a few that depend on real timing."))
       }
 
       Section(header: Text(L("Speed"))) {
-        NavigationLink(destination: SpeedLimitPicker(selectedPercent: $speedLimitPercent)) {
+        settingsNavCaption(
+          destination: SpeedLimitPicker(selectedPercent: $speedLimitPercent),
+          L("Caps emulation speed as a percentage of real hardware. 100% is full speed; Unlimited runs as fast as the device allows. Lower it only to slow a game down deliberately.")
+        ) {
           HStack {
             Label(L("Speed Limit"), systemImage: "speedometer")
             Spacer()
@@ -1539,7 +1602,10 @@ struct ConfigGeneralView: View {
         }
         .onChange(of: speedLimitPercent) { DOLConfigBridge.setMainEmulationSpeedPercent($0) }
 
-        NavigationLink(destination: FastForwardSpeedPicker(selectedPercent: $fastForwardSpeedPercent)) {
+        settingsNavCaption(
+          destination: FastForwardSpeedPicker(selectedPercent: $fastForwardSpeedPercent),
+          L("Speed used while the fast-forward button is held. Unlimited runs as fast as possible; the CPU-bound interpreter may not reach high multiples.")
+        ) {
           HStack {
             Label(L("Fast Forward Speed"), systemImage: "forward.fill")
             Spacer()
@@ -1550,9 +1616,14 @@ struct ConfigGeneralView: View {
         .onChange(of: fastForwardSpeedPercent) { UserDefaults.standard.set($0, forKey: "fast_forward_speed_percent") }
       }
 
-      Section(header: Text(L("Fallback Region")), footer: Text(L("Dolphin will use this for titles whose region cannot be determined automatically."))) {
-        NavigationLink("\(L("Fallback Region")): \(fallbackRegion.label)", destination: FallbackRegionPicker(selected: $fallbackRegion))
-          .onChange(of: fallbackRegion) { DOLConfigBridge.setMainFallbackRegion($0.rawValue) }
+      Section(header: Text(L("Fallback Region"))) {
+        settingsNavCaption(
+          destination: FallbackRegionPicker(selected: $fallbackRegion),
+          L("Region used for titles whose region can't be detected automatically.")
+        ) {
+          Text("\(L("Fallback Region")): \(fallbackRegion.label)")
+        }
+        .onChange(of: fallbackRegion) { DOLConfigBridge.setMainFallbackRegion($0.rawValue) }
       }
     }
     .navigationTitle(L("General"))
@@ -1850,9 +1921,11 @@ struct ConfigAdvancedView: View {
           L("Fast-forwards counter-based idle loops instead of emulating every iteration. Can recover CPU headroom; may slightly affect timing-sensitive games. iCube tuning knob."))
       }
 
-      Section(header: Text(L("Clock Override")), footer: Text(L("Adjusts the emulated CPU's clock rate. Can also be adjusted during gameplay via the in-game menu.\n\nHigher values may make variable-framerate games run at a higher framerate, at the expense of performance. Lower values may activate a game's internal frameskip, potentially improving performance.\n\nWARNING: Changing this from the default (100%) can and will break games and cause glitches. Do so at your own risk. Please do not report bugs that occur with a non-default clock."))) {
-        Toggle(L("Enable Emulated CPU Clock Override"), isOn: $cpuClockEnabled)
-          .onChange(of: cpuClockEnabled) { DOLConfigBridge.setMainOverclockEnable($0) }
+      Section(header: Text(L("Clock Override"))) {
+        rowWithCaption(
+          Toggle(L("Enable Emulated CPU Clock Override"), isOn: $cpuClockEnabled)
+            .onChange(of: cpuClockEnabled) { DOLConfigBridge.setMainOverclockEnable($0) },
+          L("Adjusts the emulated CPU's clock rate. Higher values can raise the framerate of variable-rate games at a performance cost; lower values may trigger a game's internal frameskip. ⚠️ Changing this from 100% can and will break games — use at your own risk."))
         HStack {
 #if os(tvOS)
           TVIntStepper(value: $cpuClockPercent, range: 1...400, step: 1)
@@ -1868,9 +1941,11 @@ struct ConfigAdvancedView: View {
         .onChange(of: cpuClockPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
       }
 
-      Section(header: Text(L("Override VBI Frequency")), footer: Text(L("Makes games run at a different frame rate. Can also be adjusted during gameplay via the in-game menu.\n\nMakes emulation less demanding when lowered, or improves smoothness when increased. This may affect gameplay speed, as it is often tied to the frame rate."))) {
-        Toggle(L("Enable VBI Frequency Override"), isOn: $vbiEnabled)
-          .onChange(of: vbiEnabled) { DOLConfigBridge.setMainViOverclockEnable($0) }
+      Section(header: Text(L("Override VBI Frequency"))) {
+        rowWithCaption(
+          Toggle(L("Enable VBI Frequency Override"), isOn: $vbiEnabled)
+            .onChange(of: vbiEnabled) { DOLConfigBridge.setMainViOverclockEnable($0) },
+          L("Makes games run at a different frame rate. Lowering it makes emulation less demanding; raising it can improve smoothness. May change gameplay speed, since speed is often tied to frame rate."))
         HStack {
 #if os(tvOS)
           TVIntStepper(value: $vbiPercent, range: 1...400, step: 1)
@@ -1886,9 +1961,11 @@ struct ConfigAdvancedView: View {
         .onChange(of: vbiPercent) { DOLConfigBridge.setMainViOverclockPercent($0) }
       }
 
-      Section(header: Text(L("Memory Override")), footer: Text(L("Adjusts the amount of RAM in the emulated console. MEM1: Main system memory (24-64 MB). MEM2: Extended memory for Wii (64-128 MB).\n\n⚠️ WARNING: Enabling this will completely break many games. Only a small number of games can benefit from this. Save states with different memory sizes will not work."))) {
-        Toggle(L("Enable Emulated Memory Size Override"), isOn: $memOverride)
-          .onChange(of: memOverride) { DOLConfigBridge.setMainRamOverrideEnable($0) }
+      Section(header: Text(L("Memory Override"))) {
+        rowWithCaption(
+          Toggle(L("Enable Emulated Memory Size Override"), isOn: $memOverride)
+            .onChange(of: memOverride) { DOLConfigBridge.setMainRamOverrideEnable($0) },
+          L("Changes the emulated console's RAM. MEM1 is main memory (24–64 MB); MEM2 is Wii extended memory (64–128 MB). ⚠️ Enabling this breaks many games and invalidates save states made at a different size."))
         HStack {
           Text("MEM1")
           Spacer()
@@ -1915,9 +1992,11 @@ struct ConfigAdvancedView: View {
         .onChange(of: mem2MB) { DOLConfigBridge.setMainMem2SizeMB($0) }
       }
 
-      Section(header: Text(L("Custom RTC Options")), footer: Text(L("This setting allows you to set a custom real time clock (RTC) separate from your current system time.\n\nIf unsure, leave this unchecked."))) {
-        Toggle(L("Enable Custom RTC"), isOn: $rtcEnabled)
-          .onChange(of: rtcEnabled) { DOLConfigBridge.setMainCustomRtcEnable($0) }
+      Section(header: Text(L("Custom RTC Options"))) {
+        rowWithCaption(
+          Toggle(L("Enable Custom RTC"), isOn: $rtcEnabled)
+            .onChange(of: rtcEnabled) { DOLConfigBridge.setMainCustomRtcEnable($0) },
+          L("Sets a custom real-time clock for the emulated console, separate from your device clock. Useful for time-based game events. If unsure, leave off."))
 #if !os(tvOS)
         DatePicker("", selection: $rtcDate, displayedComponents: [.date, .hourAndMinute])
           .labelsHidden()
@@ -1940,17 +2019,11 @@ struct ConfigAdvancedView: View {
     return cpuEngine.label
   }
 
-  /// Wraps a control with an inline secondary-text description shown directly
-  /// under the row (instead of a hidden info popover).
+  /// Inline secondary-text description under a row. Forwards to the canonical
+  /// file-scope `settingsCaption` so there is one description style everywhere.
   @ViewBuilder
   private func rowWithCaption<Content: View>(_ content: Content, _ caption: String) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      content
-      Text(caption)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-    }
+    settingsCaption(content, caption)
   }
 
   private func syncAdvanced() {
@@ -1978,6 +2051,42 @@ struct ConfigAdvancedView: View {
     mem2MB = DOLConfigBridge.mainMem2SizeMB()
     rtcEnabled = DOLConfigBridge.mainCustomRtcEnable()
     rtcDate = Date(timeIntervalSince1970: TimeInterval(DOLConfigBridge.mainCustomRtcValue()))
+  }
+}
+
+/// Shared inline-description helper. Wraps any control with a `.caption` secondary
+/// line directly under it. This is the single canonical row style for the whole
+/// settings surface — every page uses it instead of section footers or tap-to-open
+/// info popovers, so descriptions are always visible inline.
+@ViewBuilder
+func settingsCaption<Content: View>(_ content: Content, _ caption: String) -> some View {
+  VStack(alignment: .leading, spacing: 4) {
+    content
+    Text(caption)
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
+  }
+}
+
+/// NavigationLink row with an inline caption *inside* the link's label, so the row
+/// keeps its disclosure chevron and full-row tap target (wrapping a NavigationLink
+/// in an external VStack would strip both). `label` is the normal row content
+/// (e.g. an HStack with title + trailing value).
+@ViewBuilder
+func settingsNavCaption<Destination: View, Label: View>(
+  destination: Destination,
+  _ caption: String,
+  @ViewBuilder label: () -> Label
+) -> some View {
+  NavigationLink(destination: destination) {
+    VStack(alignment: .leading, spacing: 4) {
+      label()
+      Text(caption)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
   }
 }
 
@@ -2063,40 +2172,51 @@ struct ConfigInterfaceView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("Game List")),
-              footer: Text(L("Controls how your games are labeled and illustrated. The built-in database replaces raw disc IDs with proper game titles. Downloading covers fetches box art from GameTDB.com over the network (one-time per game) for grid view; turn it off to stay fully offline."))) {
-        Toggle(L("Use Built-In Database of Game Names"), isOn: $useNamesDB)
-          .onChange(of: useNamesDB) { DOLConfigBridge.setMainUseBuiltInTitleDatabase($0) }
-        Toggle(L("Download Game Covers from GameTDB.com for Use in Grid Mode"), isOn: $useCovers)
-          .onChange(of: useCovers) { DOLConfigBridge.setMainUseGameCovers($0) }
+      Section(header: Text(L("Game List"))) {
+        settingsCaption(
+          Toggle(L("Use Built-In Database of Game Names"), isOn: $useNamesDB)
+            .onChange(of: useNamesDB) { DOLConfigBridge.setMainUseBuiltInTitleDatabase($0) },
+          L("Replaces raw disc IDs with proper game titles from the built-in database."))
+        settingsCaption(
+          Toggle(L("Download Game Covers from GameTDB.com for Use in Grid Mode"), isOn: $useCovers)
+            .onChange(of: useCovers) { DOLConfigBridge.setMainUseGameCovers($0) },
+          L("Fetches box art from GameTDB.com over the network (once per game) for grid view. Turn off to stay fully offline."))
       }
 
-            Section(header: Text(L("Library UI")), footer: Text("Customize the appearance and behavior of the game library interface.")) {
-        HStack {
-          Label("Background Style", systemImage: "paintbrush.fill")
-          Spacer()
-          Picker("Background Style", selection: $backgroundStyle) {
-            ForEach(LibraryBackgroundStyle.allCases, id: \.self) { style in
-              Text(style.displayName).tag(style)
+      Section(header: Text(L("Library UI"))) {
+        settingsCaption(
+          HStack {
+            Label("Background Style", systemImage: "paintbrush.fill")
+            Spacer()
+            Picker("Background Style", selection: $backgroundStyle) {
+              ForEach(LibraryBackgroundStyle.allCases, id: \.self) { style in
+                Text(style.displayName).tag(style)
+              }
             }
-          }
-          .pickerStyle(pickerStyleForPlatform)
-          .labelsHidden()
-        }
-
-        Toggle(isOn: $showSubtitles) {
-          Label("Show Game ID Subtitles", systemImage: "textformat.123")
-        }
+            .pickerStyle(pickerStyleForPlatform)
+            .labelsHidden()
+          },
+          L("Backdrop behind the game library. Animated adds full effects; Clean is the lightest."))
+        settingsCaption(
+          Toggle(isOn: $showSubtitles) {
+            Label("Show Game ID Subtitles", systemImage: "textformat.123")
+          },
+          L("Shows each game's disc ID under its title in the library."))
       }
 
-      Section(header: Text(L("General")),
-              footer: Text(L("Confirm on Stop asks before quitting a running game so you don't lose unsaved progress. Panic Handlers show a dialog when the core hits an internal error instead of failing silently. On-Screen Display Messages are the transient status overlays (save-state notices, performance toggles) drawn over the game."))) {
-        Toggle(L("Confirm on Stop"), isOn: $confirmOnStop)
-          .onChange(of: confirmOnStop) { DOLConfigBridge.setMainConfirmOnStop($0) }
-        Toggle(L("Use Panic Handlers"), isOn: $usePanicHandlers)
-          .onChange(of: usePanicHandlers) { DOLConfigBridge.setMainUsePanicHandlers($0) }
-        Toggle(L("Show On-Screen Display Messages"), isOn: $osdMessages)
-          .onChange(of: osdMessages) { DOLConfigBridge.setMainOSDMessages($0) }
+      Section(header: Text(L("General"))) {
+        settingsCaption(
+          Toggle(L("Confirm on Stop"), isOn: $confirmOnStop)
+            .onChange(of: confirmOnStop) { DOLConfigBridge.setMainConfirmOnStop($0) },
+          L("Asks before quitting a running game so you don't lose unsaved progress."))
+        settingsCaption(
+          Toggle(L("Use Panic Handlers"), isOn: $usePanicHandlers)
+            .onChange(of: usePanicHandlers) { DOLConfigBridge.setMainUsePanicHandlers($0) },
+          L("Shows a dialog when the core hits an internal error instead of failing silently."))
+        settingsCaption(
+          Toggle(L("Show On-Screen Display Messages"), isOn: $osdMessages)
+            .onChange(of: osdMessages) { DOLConfigBridge.setMainOSDMessages($0) },
+          L("Transient status overlays drawn over the game (save-state notices, performance toggles)."))
       }
     }
     .navigationTitle(L("Interface"))
@@ -2249,16 +2369,21 @@ struct ConfigGameCubeView: View {
   @State private var gcLanguage: Int = 0 // English; real value set in syncGC() from config/locale
   var body: some View {
     List {
-      Section(header: Text(L("General")),
-              footer: Text(L("When ON, GameCube games boot through the console's built-in startup menu (the IPL/BIOS animation) instead of launching straight into the game. This requires a GameCube IPL dump installed for the matching region; without one, games boot directly regardless. Turn OFF to skip the BIOS and start games faster."))) {
-        Toggle(L("Load GameCube Main Menu"), isOn: Binding(get: { !skipIPL }, set: { skipIPL = !$0 }))
-          .onChange(of: skipIPL) { DOLConfigBridge.setMainSkipIPL($0) }
+      Section(header: Text(L("General"))) {
+        settingsCaption(
+          Toggle(L("Load GameCube Main Menu"), isOn: Binding(get: { !skipIPL }, set: { skipIPL = !$0 }))
+            .onChange(of: skipIPL) { DOLConfigBridge.setMainSkipIPL($0) },
+          L("Boots through the console's startup menu (IPL/BIOS animation) instead of straight into the game. Needs a matching-region GameCube IPL dump; without one, games boot directly anyway. Turn off to start games faster."))
       }
 
-      Section(header: Text(L("System Language")),
-              footer: Text(L("The language the emulated GameCube reports to games. Many first-party titles read this to choose their in-game text and audio language. The GameCube supports English, German, French, Spanish, Italian, and Dutch only. Defaults to your device language where supported, otherwise English."))) {
-        NavigationLink(languageLabel(for: gcLanguage), destination: GCLanguagePicker(selected: $gcLanguage))
-          .onChange(of: gcLanguage) { DOLConfigBridge.setMainGCLanguage($0) }
+      Section(header: Text(L("System Language"))) {
+        settingsNavCaption(
+          destination: GCLanguagePicker(selected: $gcLanguage),
+          L("Language the emulated GameCube reports to games. The GameCube supports English, German, French, Spanish, Italian, and Dutch only. Defaults to your device language where supported, otherwise English.")
+        ) {
+          Text(languageLabel(for: gcLanguage))
+        }
+        .onChange(of: gcLanguage) { DOLConfigBridge.setMainGCLanguage($0) }
       }
     }
     .navigationTitle(L("GameCube"))
@@ -2341,77 +2466,100 @@ struct ConfigWiiView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("Video")),
-              footer: Text(L("These write to the emulated Wii's SYSCONF (the console's own saved settings), so they affect Wii titles only and persist like a real Wii would. PAL60 lets PAL games output 60 Hz (EuRGB60) when a game supports it. Aspect Ratio sets the console's 4:3 vs 16:9 flag, which many Wii games read to choose their own widescreen rendering."))) {
-        Toggle(L("Use PAL60 Mode (EuRGB60)"), isOn: $pal60).onChange(of: pal60) { DOLConfigBridge.setSysconfPAL60($0) }
+      Section(header: Text(L("Video")), footer: Text(L("These write to the emulated Wii's SYSCONF, so they affect Wii titles only and persist like a real Wii would."))) {
+        settingsCaption(
+          Toggle(L("Use PAL60 Mode (EuRGB60)"), isOn: $pal60).onChange(of: pal60) { DOLConfigBridge.setSysconfPAL60($0) },
+          L("Lets PAL games output 60 Hz (EuRGB60) when supported."))
         /// Wii System Aspect Ratio (4:3 vs 16:9)
-        HStack {
-          Text(L("Aspect Ratio"))
-          Spacer()
-          NavigationLink(widescreen ? "16:9" : "4:3", destination: WiiAspectRatioPicker(selectedWide: $widescreen))
-            .frame(maxWidth: .infinity, alignment: .trailing)
+        settingsNavCaption(
+          destination: WiiAspectRatioPicker(selectedWide: $widescreen),
+          L("Sets the console's 4:3 vs 16:9 flag, which many Wii games read to choose their own widescreen rendering.")
+        ) {
+          HStack { Text(L("Aspect Ratio")); Spacer(); Text(widescreen ? "16:9" : "4:3").foregroundStyle(.secondary) }
         }
         .onChange(of: widescreen) { DOLConfigBridge.setSysconfWidescreen($0) }
       }
 
-      Section(header: Text(L("General")),
-              footer: Text(L("System Language and Audio (Mono/Stereo/Surround) are the Wii's own menu settings; games read them to pick their in-game language and audio output. The Screen Saver toggle only controls the emulated Wii's idle dimming and has no effect on battery or performance on this device."))) {
-        Toggle(L("Enable Screen Saver"), isOn: $screensaver).onChange(of: screensaver) { DOLConfigBridge.setSysconfScreensaver($0) }
-        HStack {
-          Text(L("System Language"))
-          Spacer()
-          NavigationLink(languageLabel(language), destination: WiiLanguagePicker(selected: $language))
-            .frame(maxWidth: .infinity, alignment: .trailing)
+      Section(header: Text(L("General"))) {
+        settingsCaption(
+          Toggle(L("Enable Screen Saver"), isOn: $screensaver).onChange(of: screensaver) { DOLConfigBridge.setSysconfScreensaver($0) },
+          L("Controls the emulated Wii's idle dimming only. No effect on this device's battery or performance."))
+        settingsNavCaption(
+          destination: WiiLanguagePicker(selected: $language),
+          L("The Wii's own menu language; games read it to pick their in-game language.")
+        ) {
+          HStack { Text(L("System Language")); Spacer(); Text(languageLabel(language)).foregroundStyle(.secondary) }
         }
         .onChange(of: language) { DOLConfigBridge.setSysconfLanguage($0) }
-        HStack {
-          Text(L("Audio Settings"))
-          Spacer()
-          NavigationLink(audioModeLabel(soundMode), destination: WiiAudioModePicker(selected: $soundMode))
-            .frame(maxWidth: .infinity, alignment: .trailing)
+        settingsNavCaption(
+          destination: WiiAudioModePicker(selected: $soundMode),
+          L("The Wii's audio output mode (Mono/Stereo/Surround); games read it to choose their output.")
+        ) {
+          HStack { Text(L("Audio Settings")); Spacer(); Text(audioModeLabel(soundMode)).foregroundStyle(.secondary) }
         }
         .onChange(of: soundMode) { DOLConfigBridge.setSysconfSoundMode($0) }
       }
 
-      Section(header: Text(L("Wii Remotes")),
-              footer: Text(L("Emulated Wii Remote settings. Sensor Bar Position must match where you tell the game your sensor bar sits (Top or Bottom) or the on-screen pointer will be inverted; on iCube the pointer is driven by touch, so set this to match the game's expectation. IR Sensitivity and Speaker Volume mirror the real Wii's menu sliders. Rumble has no physical effect on this device but some games gate behavior on it being enabled."))) {
-        HStack {
-          Text(L("Sensor Bar Position")); Spacer(); NavigationLink(posLabel(sensorBarPos), destination: WiiSensorBarPosPicker(selected: $sensorBarPos)).frame(maxWidth: .infinity, alignment: .trailing)
+      Section(header: Text(L("Wii Remotes"))) {
+        settingsNavCaption(
+          destination: WiiSensorBarPosPicker(selected: $sensorBarPos),
+          L("Must match where the game thinks the sensor bar sits (Top/Bottom) or the pointer inverts. On iCube the pointer is touch-driven, so set it to the game's expectation.")
+        ) {
+          HStack { Text(L("Sensor Bar Position")); Spacer(); Text(posLabel(sensorBarPos)).foregroundStyle(.secondary) }
         }
         .onChange(of: sensorBarPos) { DOLConfigBridge.setSysconfSensorBarPosition($0) }
-        HStack {
-          Text(L("IR Sensitivity")); Spacer()
+        settingsCaption(
+          HStack {
+            Text(L("IR Sensitivity")); Spacer()
 #if os(tvOS)
-          TVIntStepper(value: $sensorBarSens, range: 1...5, step: 1)
+            TVIntStepper(value: $sensorBarSens, range: 1...5, step: 1)
 #else
-          Slider(value: Binding(get: { Double(sensorBarSens) }, set: { sensorBarSens = Int($0) }), in: 1...5)
-            .frame(width: 260)
+            Slider(value: Binding(get: { Double(sensorBarSens) }, set: { sensorBarSens = Int($0) }), in: 1...5)
+              .frame(width: 260)
 #endif
-        }
-        .onChange(of: sensorBarSens) { DOLConfigBridge.setSysconfSensorBarSensitivity($0) }
-        HStack {
-          Text(L("Speaker Volume")); Spacer()
+          }
+          .onChange(of: sensorBarSens) { DOLConfigBridge.setSysconfSensorBarSensitivity($0) },
+          L("Mirrors the real Wii's IR sensitivity slider."))
+        settingsCaption(
+          HStack {
+            Text(L("Speaker Volume")); Spacer()
 #if os(tvOS)
-          TVIntStepper(value: $speakerVol, range: 0...7, step: 1)
+            TVIntStepper(value: $speakerVol, range: 0...7, step: 1)
 #else
-          Slider(value: Binding(get: { Double(speakerVol) }, set: { speakerVol = Int($0) }), in: 0...7)
-            .frame(width: 260)
+            Slider(value: Binding(get: { Double(speakerVol) }, set: { speakerVol = Int($0) }), in: 0...7)
+              .frame(width: 260)
 #endif
-        }
-        .onChange(of: speakerVol) { DOLConfigBridge.setSysconfSpeakerVolume($0) }
-        Toggle(L("Rumble"), isOn: $wiimoteRumble).onChange(of: wiimoteRumble) { DOLConfigBridge.setSysconfWiimoteMotor($0) }
-        Toggle(L("Allow Touchpad IR Follow Without Click"), isOn: $touchpadIRFollowWithoutClick)
-          .onChange(of: touchpadIRFollowWithoutClick) { UserDefaults.standard.set($0, forKey: "touchpad_ir_follow_without_click") }
+          }
+          .onChange(of: speakerVol) { DOLConfigBridge.setSysconfSpeakerVolume($0) },
+          L("Mirrors the real Wii's Wii Remote speaker volume slider."))
+        settingsCaption(
+          Toggle(L("Rumble"), isOn: $wiimoteRumble).onChange(of: wiimoteRumble) { DOLConfigBridge.setSysconfWiimoteMotor($0) },
+          L("No physical effect on this device, but some games gate behavior on rumble being enabled."))
+        settingsCaption(
+          Toggle(L("Allow Touchpad IR Follow Without Click"), isOn: $touchpadIRFollowWithoutClick)
+            .onChange(of: touchpadIRFollowWithoutClick) { UserDefaults.standard.set($0, forKey: "touchpad_ir_follow_without_click") },
+          L("Moves the IR pointer as your finger hovers/drags without needing a tap. Helps aiming in some games."))
       }
 
-      Section(header: Text(L("USB / SD")),
-              footer: Text(L("Emulated Wii peripherals. Insert SD Card exposes a virtual SD card to games and the System Menu; Allow Writes to SD Card lets titles modify it (off keeps it read-only). Folder Sync mirrors a host folder to/from the card image on start/stop. WiiConnect24 via WiiLink enables fan-revived online channels. These are storage/peripheral options and have no effect on emulation speed."))) {
-        Toggle(L("Emulate Skylander Portal"), isOn: Binding(get: { DOLConfigBridge.mainEmulateSkylanderPortal() }, set: { DOLConfigBridge.setMainEmulateSkylanderPortal($0) }))
-        Toggle(L("Connect USB Keyboard"), isOn: $keyboard).onChange(of: keyboard) { DOLConfigBridge.setMainWiiKeyboard($0) }
-        Toggle(L("Enable WiiConnect24 via WiiLink"), isOn: $wiilink).onChange(of: wiilink) { DOLConfigBridge.setMainWiiWiiLinkEnable($0) }
-        Toggle(L("Insert SD Card"), isOn: $sdCard).onChange(of: sdCard) { DOLConfigBridge.setMainWiiSDCard($0) }
-        Toggle(L("Allow Writes to SD Card"), isOn: $sdWrites).onChange(of: sdWrites) { DOLConfigBridge.setMainAllowSDWrites($0) }
-        Toggle(L("Synchronize SD Card Folder on Start/Stop"), isOn: $sdFolderSync).onChange(of: sdFolderSync) { DOLConfigBridge.setMainWiiSDCardEnableFolderSync($0) }
+      Section(header: Text(L("USB / SD")), footer: Text(L("Emulated Wii peripherals. None of these affect emulation speed."))) {
+        settingsCaption(
+          Toggle(L("Emulate Skylander Portal"), isOn: Binding(get: { DOLConfigBridge.mainEmulateSkylanderPortal() }, set: { DOLConfigBridge.setMainEmulateSkylanderPortal($0) })),
+          L("Exposes a virtual Skylanders portal to games that support it."))
+        settingsCaption(
+          Toggle(L("Connect USB Keyboard"), isOn: $keyboard).onChange(of: keyboard) { DOLConfigBridge.setMainWiiKeyboard($0) },
+          L("Presents a USB keyboard to games and the System Menu."))
+        settingsCaption(
+          Toggle(L("Enable WiiConnect24 via WiiLink"), isOn: $wiilink).onChange(of: wiilink) { DOLConfigBridge.setMainWiiWiiLinkEnable($0) },
+          L("Enables fan-revived WiiConnect24 online channels through WiiLink."))
+        settingsCaption(
+          Toggle(L("Insert SD Card"), isOn: $sdCard).onChange(of: sdCard) { DOLConfigBridge.setMainWiiSDCard($0) },
+          L("Exposes a virtual SD card to games and the System Menu."))
+        settingsCaption(
+          Toggle(L("Allow Writes to SD Card"), isOn: $sdWrites).onChange(of: sdWrites) { DOLConfigBridge.setMainAllowSDWrites($0) },
+          L("Lets titles modify the virtual SD card. Off keeps it read-only."))
+        settingsCaption(
+          Toggle(L("Synchronize SD Card Folder on Start/Stop"), isOn: $sdFolderSync).onChange(of: sdFolderSync) { DOLConfigBridge.setMainWiiSDCardEnableFolderSync($0) },
+          L("Mirrors a host folder to/from the card image when emulation starts and stops."))
       }
     }
     .navigationTitle(L("Wii"))
@@ -2506,12 +2654,14 @@ struct ConfigAchievementsView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("RetroAchievements")), footer: Text(L("Connect to RetroAchievements.org to unlock achievements, compete with friends, and track your gaming progress across all supported games."))) {
-        HStack {
-          Label(L("Enable Integration"), systemImage: "trophy.fill")
-          Spacer()
-          Toggle("", isOn: $enabled).onChange(of: enabled) { DOLConfigBridge.setRaEnabled($0) }
-        }
+      Section(header: Text(L("RetroAchievements"))) {
+        settingsCaption(
+          HStack {
+            Label(L("Enable Integration"), systemImage: "trophy.fill")
+            Spacer()
+            Toggle("", isOn: $enabled).onChange(of: enabled) { DOLConfigBridge.setRaEnabled($0) }
+          },
+          L("Connects to RetroAchievements.org to unlock achievements and track progress across supported games."))
 
         HStack {
           Label(L("Username"), systemImage: "person.fill")
@@ -2546,63 +2696,73 @@ struct ConfigAchievementsView: View {
         .disabled(!enabled)
       }
 
-      Section(header: Text(L("Game Mode Options")), footer: Text(L("Hardcore Mode: Disables save states, cheats, and other emulator features for authentic difficulty. Encore Mode: Re-enables completed achievements. Spectator Mode: View achievements without earning them."))) {
-        HStack {
-          Label(L("Hardcore Mode"), systemImage: "flame.fill")
-            .foregroundColor(.orange)
-          Spacer()
-          Toggle("", isOn: $hardcore).onChange(of: hardcore) { DOLConfigBridge.setRaHardcoreEnabled($0) }
-        }
-
-        HStack {
-          Label(L("Enable Unofficial"), systemImage: "person.3.sequence.fill")
-            .foregroundColor(.purple)
-          Spacer()
-          Toggle("", isOn: $unofficial).onChange(of: unofficial) { DOLConfigBridge.setRaUnofficialEnabled($0) }
-        }
-
-        HStack {
-          Label(L("Encore Mode"), systemImage: "arrow.clockwise.circle.fill")
-            .foregroundColor(.green)
-          Spacer()
-          Toggle("", isOn: $encore).onChange(of: encore) { DOLConfigBridge.setRaEncoreEnabled($0) }
-        }
-
-        HStack {
-          Label(L("Spectator Mode"), systemImage: "eye.fill")
-            .foregroundColor(.blue)
-          Spacer()
-          Toggle("", isOn: $spectator).onChange(of: spectator) { DOLConfigBridge.setRaSpectatorEnabled($0) }
-        }
+      Section(header: Text(L("Game Mode Options"))) {
+        settingsCaption(
+          HStack {
+            Label(L("Hardcore Mode"), systemImage: "flame.fill")
+              .foregroundColor(.orange)
+            Spacer()
+            Toggle("", isOn: $hardcore).onChange(of: hardcore) { DOLConfigBridge.setRaHardcoreEnabled($0) }
+          },
+          L("Disables save states, cheats, and speed changes for authentic difficulty and full achievement credit."))
+        settingsCaption(
+          HStack {
+            Label(L("Enable Unofficial"), systemImage: "person.3.sequence.fill")
+              .foregroundColor(.purple)
+            Spacer()
+            Toggle("", isOn: $unofficial).onChange(of: unofficial) { DOLConfigBridge.setRaUnofficialEnabled($0) }
+          },
+          L("Includes community achievements that haven't been officially promoted yet."))
+        settingsCaption(
+          HStack {
+            Label(L("Encore Mode"), systemImage: "arrow.clockwise.circle.fill")
+              .foregroundColor(.green)
+            Spacer()
+            Toggle("", isOn: $encore).onChange(of: encore) { DOLConfigBridge.setRaEncoreEnabled($0) }
+          },
+          L("Re-enables achievements you've already earned so you can unlock them again."))
+        settingsCaption(
+          HStack {
+            Label(L("Spectator Mode"), systemImage: "eye.fill")
+              .foregroundColor(.blue)
+            Spacer()
+            Toggle("", isOn: $spectator).onChange(of: spectator) { DOLConfigBridge.setRaSpectatorEnabled($0) }
+          },
+          L("Tracks achievements without earning them — view progress without affecting your record."))
       }
 
-      Section(header: Text(L("Interface & Sharing")), footer: Text(L("Discord Presence: Shows your current achievements in Discord status. Progress Popups: Display achievement progress notifications during gameplay."))) {
-        HStack {
-          Label(L("Discord Presence"), systemImage: "bubble.left.and.bubble.right.fill")
-            .foregroundColor(.indigo)
-          Spacer()
-          Toggle("", isOn: $discordPresence).onChange(of: discordPresence) { DOLConfigBridge.setRaDiscordPresenceEnabled($0) }
-        }
-
-        HStack {
-          Label(L("Show Progress Popups"), systemImage: "bell.badge.fill")
-            .foregroundColor(.orange)
-          Spacer()
-          Toggle("", isOn: $progress).onChange(of: progress) { DOLConfigBridge.setRaProgressEnabled($0) }
-        }
+      Section(header: Text(L("Interface & Sharing"))) {
+        settingsCaption(
+          HStack {
+            Label(L("Discord Presence"), systemImage: "bubble.left.and.bubble.right.fill")
+              .foregroundColor(.indigo)
+            Spacer()
+            Toggle("", isOn: $discordPresence).onChange(of: discordPresence) { DOLConfigBridge.setRaDiscordPresenceEnabled($0) }
+          },
+          L("Shows your current game and achievements in your Discord status."))
+        settingsCaption(
+          HStack {
+            Label(L("Show Progress Popups"), systemImage: "bell.badge.fill")
+              .foregroundColor(.orange)
+            Spacer()
+            Toggle("", isOn: $progress).onChange(of: progress) { DOLConfigBridge.setRaProgressEnabled($0) }
+          },
+          L("Displays achievement-progress notifications during gameplay."))
       }
 
-      Section(header: Text(L("Advanced")), footer: Text(L("Custom server URL for RetroAchievements API. Only change this if you know what you're doing or are using a custom server."))) {
-        HStack {
-          Label(L("Server URL"), systemImage: "server.rack")
-          Spacer()
-          TextField("https://retroachievements.org", text: $hostURL)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
-            .keyboardType(.URL)
-            .multilineTextAlignment(.trailing)
-            .onChange(of: hostURL) { DOLConfigBridge.setRaHostURL($0) }
-        }
+      Section(header: Text(L("Advanced"))) {
+        settingsCaption(
+          HStack {
+            Label(L("Server URL"), systemImage: "server.rack")
+            Spacer()
+            TextField("https://retroachievements.org", text: $hostURL)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled(true)
+              .keyboardType(.URL)
+              .multilineTextAlignment(.trailing)
+              .onChange(of: hostURL) { DOLConfigBridge.setRaHostURL($0) }
+          },
+          L("Custom RetroAchievements API server. Only change this for a custom/self-hosted server."))
       }
     }
     .navigationTitle(L("Achievements"))
@@ -2644,21 +2804,28 @@ struct GraphicsGeneralView: View {
   @State private var clipSeconds: Int = 15
 #endif
 
-  // Shader compilation
-  @State private var shaderType: ShaderCompileType = .asynchronousUber
-  @State private var compileBeforeStart: Bool = false
+  // Shader compilation. Default Specialized(0) — matches the core default and the
+  // iCube reset target (DOLConfigBridge.mm resetGameplayConfigKeys).
+  @State private var shaderType: ShaderCompileType = .specialized
+  @State private var compileBeforeStart: Bool = true
 
   var body: some View {
     List {
       Section {
-        NavigationLink(destination: GraphicsBackendPickerView(selected: $backend)) {
+        settingsNavCaption(
+          destination: GraphicsBackendPickerView(selected: $backend),
+          L("Renderer used to draw frames. Metal is the native, fastest path on this device; Vulkan runs via MoltenVK; OpenGL is the slow legacy fallback. Leave on Metal.")
+        ) {
           Text("\(L("Backend")): \(backend.label)")
         }
         .onChange(of: backend) { _ in
           DOLConfigBridge.setGfxBackend(backend.backendKey)
           UserDefaults.standard.set(backend.backendKey, forKey: "ui_gfx_backend")
         }
-        NavigationLink(destination: GraphicsAspectRatioView(selected: $aspect)) {
+        settingsNavCaption(
+          destination: GraphicsAspectRatioView(selected: $aspect),
+          L("Shape of the picture. Auto matches the game's native ratio; 4:3 and 16:9 force a fixed shape; Stretch fills the screen and may distort.")
+        ) {
           Text("\(L("Aspect Ratio")): \(aspect.label)")
         }
         .onChange(of: aspect) { _ in DOLConfigBridge.setGfxAspectRatio(aspect.aspectRaw) }
@@ -2686,57 +2853,80 @@ struct GraphicsGeneralView: View {
           Toggle(L("Enable Auto Internal Resolution"), isOn: $autoIR)
             .onChange(of: autoIR) { newValue in DOLConfigBridge.setGfxAutoIREnable(newValue) },
           L("Dynamically scales internal resolution between Min and Max to hold the Target FPS. Useful when scenes are GPU-bound; has no benefit when the CPU is the limit (the usual case on iCube)."))
-        NavigationLink(destination: GraphicsTargetFPSView(selected: $targetFPS)) {
+        settingsNavCaption(
+          destination: GraphicsTargetFPSView(selected: $targetFPS),
+          L("Frame rate Auto Internal Resolution tries to hold by adjusting the render scale. Only used when Auto IR is on.")
+        ) {
           Text("\(L("Target FPS")): \(targetFPS.label)")
         }
         .onChange(of: targetFPS) { _ in DOLConfigBridge.setGfxAutoIRTargetFPS(targetFPS.fpsValue) }
-        NavigationLink(destination: GraphicsMinScaleView(selected: $minScale)) {
+        settingsNavCaption(
+          destination: GraphicsMinScaleView(selected: $minScale),
+          L("Lowest internal resolution Auto IR will drop to when struggling. 1x is native GameCube/Wii resolution.")
+        ) {
           Text("\(L("Min Scale")): \(minScale.label)")
         }
         .onChange(of: minScale) { _ in DOLConfigBridge.setGfxAutoIRMinScale(minScale.scaleValue) }
-        NavigationLink(destination: GraphicsMaxScaleView(selected: $maxScale)) {
+        settingsNavCaption(
+          destination: GraphicsMaxScaleView(selected: $maxScale),
+          L("Highest internal resolution Auto IR will raise to when there's headroom. Higher looks sharper but costs GPU.")
+        ) {
           Text("\(L("Max Scale")): \(maxScale.label)")
         }
         .onChange(of: maxScale) { _ in DOLConfigBridge.setGfxAutoIRMaxScale(maxScale.scaleValue) }
 #if os(iOS)
-        Picker(L("Frame Rate Cap"), selection: $frameCap) {
-          Text(L("System Default")).tag(0)
-          Text("30").tag(30)
-          Text("60").tag(60)
-          Text("90").tag(90)
-          Text("120").tag(120)
-        }
-        .onChange(of: frameCap) { v in
-          UserDefaults.standard.set(v, forKey: "ui_frame_cap")
-          // Application is handled by the scene delegate where supported
-        }
+        captionRow(
+          Picker(L("Frame Rate Cap"), selection: $frameCap) {
+            Text(L("System Default")).tag(0)
+            Text("30").tag(30)
+            Text("60").tag(60)
+            Text("90").tag(90)
+            Text("120").tag(120)
+          }
+          .onChange(of: frameCap) { v in
+            UserDefaults.standard.set(v, forKey: "ui_frame_cap")
+            // Application is handled by the scene delegate where supported
+          },
+          L("Caps the display refresh the app requests. System Default lets the OS decide; lower caps can save power on the CPU-bound path."))
 #endif
       }
 
 #if os(iOS)
-      Section(header: Text(L("Recording")), footer: Text(L("Instant Replay may reduce performance; keep disabled on older devices."))) {
-        Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
-          .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }
-        Toggle(L("Save Clips to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_to_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_to_photos") }))
-        Toggle(L("Save Only to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_only_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_only_photos") }))
-        Picker(L("Clip Length"), selection: $clipSeconds) {
-          Text("5s").tag(5)
-          Text("10s").tag(10)
-          Text("15s").tag(15)
-          Text("30s").tag(30)
-        }
-        .onChange(of: clipSeconds) { v in UserDefaults.standard.set(v, forKey: "replaykit_clip_seconds") }
+      Section(header: Text(L("Recording"))) {
+        captionRow(
+          Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
+            .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") },
+          L("Continuously buffers gameplay so you can save the last few seconds. May reduce performance; keep off on older devices."))
+        captionRow(
+          Toggle(L("Save Clips to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_to_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_to_photos") })),
+          L("Also copy saved replay clips into your Photos library."))
+        captionRow(
+          Toggle(L("Save Only to Photos"), isOn: Binding(get: { UserDefaults.standard.bool(forKey: "replaykit_save_only_photos") }, set: { UserDefaults.standard.set($0, forKey: "replaykit_save_only_photos") })),
+          L("Save clips to Photos only, skipping the app's own storage."))
+        captionRow(
+          Picker(L("Clip Length"), selection: $clipSeconds) {
+            Text("5s").tag(5)
+            Text("10s").tag(10)
+            Text("15s").tag(15)
+            Text("30s").tag(30)
+          }
+          .onChange(of: clipSeconds) { v in UserDefaults.standard.set(v, forKey: "replaykit_clip_seconds") },
+          L("How many seconds of gameplay each instant-replay clip captures."))
       }
 #endif
 
-      Section(header: Text(L("Shader Compilation")),
-              footer: Text(L("How shaders are built when a game needs them. Asynchronous (Uber) Shaders avoid stutter by drawing with a generic shader until the specialized one is ready — the recommended default. Synchronous modes wait for each shader, which is hitch-free once warmed but stutters on first encounter. \"Compile shaders before starting\" pre-builds the cache at launch: longer load, smoother first run. On the CPU-bound iCube path the async default is almost always best."))) {
-        NavigationLink(destination: GraphicsShaderTypeView(selected: $shaderType)) {
+      Section(header: Text(L("Shader Compilation"))) {
+        settingsNavCaption(
+          destination: GraphicsShaderTypeView(selected: $shaderType),
+          L("Specialized (default) compiles each shader on first use — low GPU cost, may briefly stutter. Ubershader modes trade GPU power for fewer hitches. On the CPU-bound iCube path Specialized is recommended.")
+        ) {
           Text("\(L("Type")): \(shaderType.label)")
         }
         .onChange(of: shaderType) { _ in DOLConfigBridge.setGfxShaderCompilationMode(shaderType.modeRaw) }
-        Toggle(L("Compile shaders before starting"), isOn: $compileBeforeStart)
-          .onChange(of: compileBeforeStart) { newValue in DOLConfigBridge.setGfxWaitForShadersBeforeStarting(newValue) }
+        captionRow(
+          Toggle(L("Compile shaders before starting"), isOn: $compileBeforeStart)
+            .onChange(of: compileBeforeStart) { newValue in DOLConfigBridge.setGfxWaitForShadersBeforeStarting(newValue) },
+          L("Pre-builds the shader cache before the game starts: longer initial load, smoother first run. Recommended ON."))
       }
     }
     .navigationTitle(L("General"))
@@ -2750,16 +2940,11 @@ struct GraphicsGeneralView: View {
 #endif
   }
 
-  /// Inline secondary-text description rendered under a control.
+  /// Inline secondary-text description under a control. Forwards to the canonical
+  /// file-scope `settingsCaption`.
   @ViewBuilder
   private func captionRow<Content: View>(_ content: Content, _ caption: String) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      content
-      Text(caption)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-    }
+    settingsCaption(content, caption)
   }
 
   private func syncFromConfig() {
@@ -2804,24 +2989,33 @@ enum TargetFPS: CaseIterable { case unlimited, fps30, fps60, fps120
   static func from(value: Int) -> TargetFPS { switch value { case 30: return .fps30; case 120: return .fps120; case 0: return .unlimited; default: return .fps60 } }
 }
 
-enum InternalScale: CaseIterable { case x0_5, x0_75, x1_0, x1_25, x1_5, x2_0, x3_0
+// Auto Internal Resolution min/max bounds. The core stores these as an integer EFB
+// multiplier and clamps to >= 1 (AutoIRController.cpp), so only whole scales are valid.
+// The old fractional options (0.5x/0.75x/1.25x/1.5x) all collapsed to 0 -> read back
+// as 1.0x, i.e. they "self-reset"; they are dropped.
+enum InternalScale: Int, CaseIterable { case x1_0 = 1, x2_0 = 2, x3_0 = 3, x4_0 = 4
   var label: String { switch self {
-  case .x0_5: return "0.5x"
-  case .x0_75: return "0.75x"
-  case .x1_0: return "1.0x"
-  case .x1_25: return "1.25x"
-  case .x1_5: return "1.5x"
-  case .x2_0: return "2.0x"
-  case .x3_0: return "3.0x"
+  case .x1_0: return "1x"
+  case .x2_0: return "2x"
+  case .x3_0: return "3x"
+  case .x4_0: return "4x"
   }}
-  var scaleValue: Int { switch self { case .x0_5: return 0; case .x0_75: return 0; case .x1_0: return 1; case .x1_25: return 0; case .x1_5: return 0; case .x2_0: return 2; case .x3_0: return 3 } }
-  static func from(value: Int) -> InternalScale { switch value { case 2: return .x2_0; case 3: return .x3_0; case 1: return .x1_0; default: return .x1_0 } }
+  var scaleValue: Int { rawValue }
+  static func from(value: Int) -> InternalScale { InternalScale(rawValue: value) ?? .x1_0 }
 }
 
-enum ShaderCompileType: CaseIterable { case synchronous, asynchronousUber, specialized
-  var label: String { switch self { case .synchronous: return L("Synchronous"); case .asynchronousUber: return L("Asynchronous (Uber)"); case .specialized: return L("Specialized") } }
-  var modeRaw: Int { switch self { case .synchronous: return 0; case .asynchronousUber: return 1; case .specialized: return 2 } }
-  static func from(raw: Int) -> ShaderCompileType { switch raw { case 2: return .specialized; case 1: return .asynchronousUber; default: return .synchronous } }
+// Mirrors Dolphin's ShaderCompilationMode (VideoConfig.h): Synchronous(0) is the
+// "Specialized" mode in Dolphin's own UI; raw values must match the core 1:1 or the
+// picker reads back a different option than it stored ("self-reset").
+enum ShaderCompileType: CaseIterable { case specialized, exclusiveUber, hybridUber, skipDrawing
+  var label: String { switch self {
+  case .specialized: return L("Specialized")
+  case .exclusiveUber: return L("Exclusive Ubershaders")
+  case .hybridUber: return L("Hybrid Ubershaders")
+  case .skipDrawing: return L("Skip Drawing")
+  } }
+  var modeRaw: Int { switch self { case .specialized: return 0; case .exclusiveUber: return 1; case .hybridUber: return 2; case .skipDrawing: return 3 } }
+  static func from(raw: Int) -> ShaderCompileType { switch raw { case 1: return .exclusiveUber; case 2: return .hybridUber; case 3: return .skipDrawing; default: return .specialized } }
 }
 
 struct GraphicsBackendPickerView: View {
@@ -2919,42 +3113,54 @@ struct GraphicsEnhancementsView: View {
   var body: some View {
     List {
       Section(content: {
-        NavigationLink(destination: EfbScalePicker(selected: $efbScale, maxScale: efbMaxScale)) {
+        settingsNavCaption(
+          destination: EfbScalePicker(selected: $efbScale, maxScale: efbMaxScale),
+          L("Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty.")
+        ) {
           Text("\(L("Internal Resolution")): \(efbScale == 0 ? L("Auto") : "\(efbScale)x")")
-            .overlay(alignment: .trailing) {
-              Button { helpMessage = helpTextInternalResolution(); showHelp = true } label: { Image(systemName: "info.circle") }
-                .buttonStyle(.plain)
-            }
         }
         .onChange(of: efbScale) { DOLConfigBridge.setGfxEfbScale($0) }
       }, header: { Text(L("Internal Resolution")) })
       Section(content: {
-        NavigationLink(destination: AnisotropyPicker(selected: $anisotropy)) {
+        settingsNavCaption(
+          destination: AnisotropyPicker(selected: $anisotropy),
+          L("Sharpens textures viewed at steep angles (floors, walls). Cheap on modern GPUs; 4x–16x is a safe quality win.")
+        ) {
           Text("\(L("Anisotropic Filtering")): \(anisotropy)x")
-            .overlay(alignment: .trailing) {
-              Button { helpMessage = helpTextAnisotropy(); showHelp = true } label: { Image(systemName: "info.circle") }
-                .buttonStyle(.plain)
-            }
         }
         .onChange(of: anisotropy) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
       }, header: { Text(L("Texture Filtering")) })
       Section(content: {
-        Toggle(isOn: $trueColor) { labelWithInfo(L("Force 24-bit Color")) { helpMessage = helpTextForceTrueColor(); showHelp = true } }
-          .onChange(of: trueColor) { DOLConfigBridge.setGfxEnhanceForceTrueColor($0) }
-        Toggle(isOn: $disableCopyFilter) { labelWithInfo(L("Disable Copy Filter")) { helpMessage = helpTextDisableCopyFilter(); showHelp = true } }
-          .onChange(of: disableCopyFilter) { DOLConfigBridge.setGfxEnhanceDisableCopyFilter($0) }
-        Toggle(isOn: $widescreenHack) { labelWithInfo(L("Widescreen Hack")) { helpMessage = helpTextWidescreenHack(); showHelp = true } }
-          .onChange(of: widescreenHack) { DOLConfigBridge.setGfxWidescreenHack($0) }
-        Toggle(isOn: $hdrOutput) { labelWithInfo(L("HDR Output")) { helpMessage = helpTextHDROutput(); showHelp = true } }
-          .onChange(of: hdrOutput) { DOLConfigBridge.setGfxEnhanceHDROutput($0) }
-        Toggle(isOn: $gpuTextureDecoding) { labelWithInfo(L("GPU Texture Decoding")) { helpMessage = L("Decodes textures on the GPU instead of the CPU.\n\nMay conflict with Arbitrary Mipmap Detection.\n\niOS note: moves work off the CPU thread — the bottleneck — so it can help CPU-bound titles that stream many textures, at some GPU cost. Worth trying. Note iCube also has a NEON CPU texture decoder (in Config ▸ Advanced) as the default fast path."); showHelp = true } }
-          .onChange(of: gpuTextureDecoding) { DOLConfigBridge.setGfxEnableGPUTextureDecoding($0) }
+        settingsCaption(
+          Toggle(L("Force 24-bit Color"), isOn: $trueColor)
+            .onChange(of: trueColor) { DOLConfigBridge.setGfxEnhanceForceTrueColor($0) },
+          L("Forces full 24-bit color instead of the GameCube/Wii's banded 16/18-bit output. Reduces gradient banding at negligible cost. Recommended ON."))
+        settingsCaption(
+          Toggle(L("Disable Copy Filter"), isOn: $disableCopyFilter)
+            .onChange(of: disableCopyFilter) { DOLConfigBridge.setGfxEnhanceDisableCopyFilter($0) },
+          L("Disables the deflicker/blur the console applied to copies. Gives a sharper image; may slightly change how a few games look."))
+        settingsCaption(
+          Toggle(L("Widescreen Hack"), isOn: $widescreenHack)
+            .onChange(of: widescreenHack) { DOLConfigBridge.setGfxWidescreenHack($0) },
+          L("Forces 16:9 in games that only render 4:3. Can stretch HUDs or break some games; leave off for natively-widescreen titles."))
+        settingsCaption(
+          Toggle(L("HDR Output"), isOn: $hdrOutput)
+            .onChange(of: hdrOutput) { DOLConfigBridge.setGfxEnhanceHDROutput($0) },
+          L("Outputs in HDR on capable displays. Most games are SDR, so the effect is subtle; harmless to leave off."))
+        settingsCaption(
+          Toggle(L("GPU Texture Decoding"), isOn: $gpuTextureDecoding)
+            .onChange(of: gpuTextureDecoding) { DOLConfigBridge.setGfxEnableGPUTextureDecoding($0) },
+          L("Decodes textures on the GPU instead of the CPU. Moves work off the bottleneck thread, so it can help CPU-bound titles that stream many textures. iCube already ships a NEON CPU decoder (Config ▸ Advanced) as the default fast path."))
       }, header: { Text(L("Enhancements")) })
       Section(content: {
-        Toggle(isOn: $disableFog) { labelWithInfo(L("Disable Fog")) { helpMessage = helpTextDisableFog(); showHelp = true } }
-          .onChange(of: disableFog) { DOLConfigBridge.setGfxDisableFog($0) }
-        Toggle(isOn: $arbitraryMipmapDetection) { labelWithInfo(L("Arbitrary Mipmap Detection")) { helpMessage = helpTextArbitraryMipmap(); showHelp = true } }
-          .onChange(of: arbitraryMipmapDetection) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetection($0) }
+        settingsCaption(
+          Toggle(L("Disable Fog"), isOn: $disableFog)
+            .onChange(of: disableFog) { DOLConfigBridge.setGfxDisableFog($0) },
+          L("Removes distance fog. Can improve visibility but breaks the intended look and a few effects. Leave off normally."))
+        settingsCaption(
+          Toggle(L("Arbitrary Mipmap Detection"), isOn: $arbitraryMipmapDetection)
+            .onChange(of: arbitraryMipmapDetection) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetection($0) },
+          L("Detects games that abuse mipmaps for special effects and renders them correctly. Leave on unless a game looks wrong."))
         if arbitraryMipmapDetection {
           VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -2976,6 +3182,8 @@ struct GraphicsEnhancementsView: View {
             Slider(value: $arbitraryMipmapThreshold, in: 0.0...1.0, step: 0.01)
               .onChange(of: arbitraryMipmapThreshold) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }
 #endif
+            Text(L("Sensitivity of arbitrary-mipmap detection. Leave at the default unless a game's textures look wrong."))
+              .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
           }
         }
       }, header: { Text(L("Compatibility")) })
@@ -3096,56 +3304,83 @@ struct GraphicsHacksView: View {
   var body: some View {
     List {
       Section(header: Text(L("General Hacks"))) {
-        Toggle(isOn: $efbAccess) { labelWithInfo(L("Enable EFB Access")) { helpMessage = helpTextEfbAccess(); showHelp = true } }
-          .onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) }
-        Toggle(isOn: $skipEfbToRam) { labelWithInfo(L("Skip EFB Copy to RAM")) { helpMessage = helpTextSkipEfbToRam(); showHelp = true } }
-          .onChange(of: skipEfbToRam) { DOLConfigBridge.setGfxHackSkipEfbCopyToRam($0) }
-        Toggle(isOn: $skipXfbToRam) { labelWithInfo(L("Skip XFB Copy to RAM")) { helpMessage = helpTextSkipXfbToRam(); showHelp = true } }
-          .onChange(of: skipXfbToRam) { DOLConfigBridge.setGfxHackSkipXfbCopyToRam($0) }
-        Toggle(isOn: $immediateXfb) { labelWithInfo(L("Immediate XFB")) { helpMessage = helpTextImmediateXfb(); showHelp = true } }
-          .onChange(of: immediateXfb) { DOLConfigBridge.setGfxHackImmediateXfb($0) }
-        Toggle(isOn: $copyEfbScaled) { labelWithInfo(L("Copy EFB Scaled")) { helpMessage = helpTextCopyEfbScaled(); showHelp = true } }
-          .onChange(of: copyEfbScaled) { DOLConfigBridge.setGfxHackCopyEfbScaled($0) }
-        Toggle(isOn: $earlyXfbOutput) { labelWithInfo(L("Early XFB Output")) { helpMessage = helpTextEarlyXfbOutput(); showHelp = true } }
-          .onChange(of: earlyXfbOutput) { DOLConfigBridge.setGfxHackEarlyXfbOutput($0) }
-        Toggle(isOn: $skipDuplicateXFBs) { labelWithInfo(L("Skip Duplicate XFBs")) { helpMessage = helpTextSkipDuplicateXFBs(); showHelp = true } }
-          .onChange(of: skipDuplicateXFBs) { DOLConfigBridge.setGfxHackSkipDuplicateXFBs($0) }
-        Toggle(isOn: $efbFormatChanges) { labelWithInfo(L("Emulate EFB Format Changes")) { helpMessage = helpTextEmulateEfbFormatChanges(); showHelp = true } }
-          .onChange(of: efbFormatChanges) { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) }
-        Toggle(isOn: $vertexRounding) { labelWithInfo(L("Vertex Rounding")) { helpMessage = helpTextVertexRounding(); showHelp = true } }
-          .onChange(of: vertexRounding) { DOLConfigBridge.setGfxHackVertexRounding($0) }
-        Toggle(isOn: $forceProgressive) { labelWithInfo(L("Force Progressive Scan")) { helpMessage = helpTextForceProgressive(); showHelp = true } }
-          .onChange(of: forceProgressive) { DOLConfigBridge.setGfxHackForceProgressive($0) }
-        Toggle(isOn: $deferEfbCopies) { labelWithInfo(L("Defer EFB Copies")) { helpMessage = helpTextDeferEfbCopies(); showHelp = true } }
-          .onChange(of: deferEfbCopies) { DOLConfigBridge.setGfxHackDeferEfbCopies($0) }
-        NavigationLink(destination: ViSkipModePicker(selected: $viSkipMode)) {
+        settingsCaption(
+          Toggle(L("Enable EFB Access"), isOn: $efbAccess)
+            .onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) },
+          L("Lets the CPU read back the framebuffer. Required by some effects but costly; many games run fine and faster with it off."))
+        settingsCaption(
+          Toggle(L("Skip EFB Copy to RAM"), isOn: $skipEfbToRam)
+            .onChange(of: skipEfbToRam) { DOLConfigBridge.setGfxHackSkipEfbCopyToRam($0) },
+          L("Keeps embedded-framebuffer copies on the GPU instead of system RAM. Faster; breaks a few effects. Recommended on."))
+        settingsCaption(
+          Toggle(L("Skip XFB Copy to RAM"), isOn: $skipXfbToRam)
+            .onChange(of: skipXfbToRam) { DOLConfigBridge.setGfxHackSkipXfbCopyToRam($0) },
+          L("Keeps the external framebuffer on the GPU. Faster; can break games that read the final image."))
+        settingsCaption(
+          Toggle(L("Immediate XFB"), isOn: $immediateXfb)
+            .onChange(of: immediateXfb) { DOLConfigBridge.setGfxHackImmediateXfb($0) },
+          L("Presents frames the moment they're drawn — lower latency, but can cause flicker or tearing in some games."))
+        settingsCaption(
+          Toggle(L("Copy EFB Scaled"), isOn: $copyEfbScaled)
+            .onChange(of: copyEfbScaled) { DOLConfigBridge.setGfxHackCopyEfbScaled($0) },
+          L("Copies the framebuffer at the higher internal resolution rather than native. Keeps upscaled detail; recommended on."))
+        settingsCaption(
+          Toggle(L("Early XFB Output"), isOn: $earlyXfbOutput)
+            .onChange(of: earlyXfbOutput) { DOLConfigBridge.setGfxHackEarlyXfbOutput($0) },
+          L("Outputs the frame earlier in the pipeline for lower latency. Recommended on; turn off if a game shows glitches."))
+        settingsCaption(
+          Toggle(L("Skip Duplicate XFBs"), isOn: $skipDuplicateXFBs)
+            .onChange(of: skipDuplicateXFBs) { DOLConfigBridge.setGfxHackSkipDuplicateXFBs($0) },
+          L("Avoids re-presenting identical frames, saving GPU work. Recommended on."))
+        settingsCaption(
+          Toggle(L("Emulate EFB Format Changes"), isOn: $efbFormatChanges)
+            .onChange(of: efbFormatChanges) { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) },
+          L("Emulates pixel-format changes some games rely on. Needed for correct colors/effects in those games; small cost."))
+        settingsCaption(
+          Toggle(L("Vertex Rounding"), isOn: $vertexRounding)
+            .onChange(of: vertexRounding) { DOLConfigBridge.setGfxHackVertexRounding($0) },
+          L("Rounds vertex positions to reduce seams between tiles at higher resolutions. Only helps above 1x; leave off at 1x."))
+        settingsCaption(
+          Toggle(L("Force Progressive Scan"), isOn: $forceProgressive)
+            .onChange(of: forceProgressive) { DOLConfigBridge.setGfxHackForceProgressive($0) },
+          L("Forces 480p output where games allow it, for a cleaner image."))
+        settingsCaption(
+          Toggle(L("Defer EFB Copies"), isOn: $deferEfbCopies)
+            .onChange(of: deferEfbCopies) { DOLConfigBridge.setGfxHackDeferEfbCopies($0) },
+          L("Batches framebuffer copies to reduce overhead. Faster in most games; recommended on."))
+        settingsNavCaption(
+          destination: ViSkipModePicker(selected: $viSkipMode),
+          L("Skips video-interrupt frames to gain speed. Auto is the safe choice; On is more aggressive but can cause flicker.")
+        ) {
           Text("\(L("VI Skip Mode")): \(viSkipLabel(viSkipMode))")
-            .overlay(alignment: .trailing) {
-              Button { helpMessage = helpTextViSkipMode(); showHelp = true } label: { Image(systemName: "info.circle") }
-                .buttonStyle(.plain)
-            }
         }
         .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
-        Toggle(isOn: $fastTextureSampling) { labelWithInfo(L("Fast Texture Sampling")) { helpMessage = helpTextFastTextureSampling(); showHelp = true } }
-          .onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) }
-        Toggle(isOn: $fastMath) { labelWithInfo(L("Fast Math (Metal Shaders)")) { helpMessage = helpTextFastMath(); showHelp = true } }
-          .onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) }
+        settingsCaption(
+          Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling)
+            .onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) },
+          L("Uses faster, less precise texture sampling. Small speed win; rarely causes minor texture artifacts. Recommended on."))
+        settingsCaption(
+          Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath)
+            .onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) },
+          L("Lets Metal shaders use fast, relaxed-precision math. Can speed up the GPU; may cause subtle rendering differences."))
         // NOTE: GFX_USE_COMPUTE_EFBXFB has no consumer in this Dolphin base
         // (declared in GraphicsSettings + the bridge, but no video backend reads
         // it). The toggle is inert, so it is disabled and labeled accordingly.
-        VStack(alignment: .leading, spacing: 4) {
-          Toggle(isOn: $useComputeEfbXfb) { labelWithInfo(L("Use Compute for EFB/XFB")) { helpMessage = helpTextUseComputeEfbXfb(); showHelp = true } }
+        settingsCaption(
+          Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb)
             .onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
-            .disabled(true)
-          Text(L("No effect on this build — this option is not wired to the renderer."))
-            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }
-        Toggle(isOn: $noMipmapping) { labelWithInfo(L("No Mipmapping (iOS)")) { helpMessage = helpTextNoMipmapping(); showHelp = true } }
-          .onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) }
+            .disabled(true),
+          L("No effect on this build — this option is not wired to the renderer."))
+        settingsCaption(
+          Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping)
+            .onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) },
+          L("Disables mipmaps. Saves a little memory/bandwidth but makes distant textures shimmer. Leave off normally."))
       }
-      Section(footer: Text(L("Skips every other interlaced field for higher FPS; may reduce temporal resolution or cause artifacts or flickering in some games."))) {
-        Toggle(L("Interlaced Field Decimation"), isOn: $viDecimateInterlace)
-          .onChange(of: viDecimateInterlace) { DOLConfigBridge.setGfxHackViDecimateInterlace($0) }
+      Section {
+        settingsCaption(
+          Toggle(L("Interlaced Field Decimation"), isOn: $viDecimateInterlace)
+            .onChange(of: viDecimateInterlace) { DOLConfigBridge.setGfxHackViDecimateInterlace($0) },
+          L("Skips every other interlaced field for higher FPS. May reduce temporal resolution or cause flicker in some games."))
       }
     }
     .navigationTitle(L("Hacks"))
@@ -3290,73 +3525,127 @@ struct GraphicsAdvancedView: View {
   @State private var manualTexSampling: Bool = false
   var body: some View {
     List {
-      Section(header: Text(L("Performance Statistics")), footer: Text(L("Performance overlays can also be toggled during gameplay using the in-game menu (pause during emulation). These overlays help monitor performance and identify bottlenecks."))) {
-        Toggle(L("Show FPS"), isOn: $showFPS).onChange(of: showFPS) { _ in DOLConfigBridge.setGfxShowFPS(showFPS) }
-        Toggle(L("Show VPS"), isOn: $showVPS).onChange(of: showVPS) { _ in DOLConfigBridge.setGfxShowVPS(showVPS) }
-        Toggle(L("Show Speed"), isOn: $showSpeed).onChange(of: showSpeed) { _ in DOLConfigBridge.setGfxShowSpeed(showSpeed) }
-        Toggle(L("Show Frame Times"), isOn: $showFrameTimes).onChange(of: showFrameTimes) { _ in DOLConfigBridge.setGfxShowFTimes(showFrameTimes) }
-        Toggle(L("Show VBlank Times"), isOn: $showVBlankTimes).onChange(of: showVBlankTimes) { _ in DOLConfigBridge.setGfxShowVTimes(showVBlankTimes) }
-        Toggle(L("Show Graphs"), isOn: $showGraphs).onChange(of: showGraphs) { _ in DOLConfigBridge.setGfxShowGraphs(showGraphs) }
-        Toggle(L("Log Render Time to File"), isOn: $logRenderTime).onChange(of: logRenderTime) { _ in DOLConfigBridge.setGfxLogRenderTimeToFile(logRenderTime) }
-        Toggle(L("Speed Colors"), isOn: $speedColors).onChange(of: speedColors) { _ in DOLConfigBridge.setGfxShowSpeedColors(speedColors) }
+      Section(header: Text(L("Performance Statistics")), footer: Text(L("These overlays can also be toggled in-game from the pause menu."))) {
+        settingsCaption(
+          Toggle(L("Show FPS"), isOn: $showFPS).onChange(of: showFPS) { _ in DOLConfigBridge.setGfxShowFPS(showFPS) },
+          L("Frames per second actually presented to the display."))
+        settingsCaption(
+          Toggle(L("Show VPS"), isOn: $showVPS).onChange(of: showVPS) { _ in DOLConfigBridge.setGfxShowVPS(showVPS) },
+          L("Emulated video interrupts per second — the game's internal frame rate."))
+        settingsCaption(
+          Toggle(L("Show Speed"), isOn: $showSpeed).onChange(of: showSpeed) { _ in DOLConfigBridge.setGfxShowSpeed(showSpeed) },
+          L("Emulation speed as a percentage of full speed."))
+        settingsCaption(
+          Toggle(L("Show Frame Times"), isOn: $showFrameTimes).onChange(of: showFrameTimes) { _ in DOLConfigBridge.setGfxShowFTimes(showFrameTimes) },
+          L("Per-frame render time in milliseconds. Useful for spotting hitches."))
+        settingsCaption(
+          Toggle(L("Show VBlank Times"), isOn: $showVBlankTimes).onChange(of: showVBlankTimes) { _ in DOLConfigBridge.setGfxShowVTimes(showVBlankTimes) },
+          L("Time between emulated vertical-blank interrupts."))
+        settingsCaption(
+          Toggle(L("Show Graphs"), isOn: $showGraphs).onChange(of: showGraphs) { _ in DOLConfigBridge.setGfxShowGraphs(showGraphs) },
+          L("Draws the timing stats as live graphs instead of numbers."))
+        settingsCaption(
+          Toggle(L("Log Render Time to File"), isOn: $logRenderTime).onChange(of: logRenderTime) { _ in DOLConfigBridge.setGfxLogRenderTimeToFile(logRenderTime) },
+          L("Writes per-frame render times to a log file for offline analysis."))
+        settingsCaption(
+          Toggle(L("Speed Colors"), isOn: $speedColors).onChange(of: speedColors) { _ in DOLConfigBridge.setGfxShowSpeedColors(speedColors) },
+          L("Color-codes the speed readout (green = full speed, red = slow)."))
       }
 
-      Section(header: Text(L("Debugging")), footer: Text(L("Developer tools for troubleshooting graphics issues. Overlay Stats shows detailed rendering information. API Validation Layer enables extra error checking (reduces performance)."))) {
-        Toggle(L("Overlay Stats"), isOn: $overlayStats).onChange(of: overlayStats) { _ in DOLConfigBridge.setGfxOverlayStats(overlayStats) }
-        Toggle(L("API Validation Layer"), isOn: $validationLayer).onChange(of: validationLayer) { _ in DOLConfigBridge.setGfxEnableValidationLayer(validationLayer) }
+      Section(header: Text(L("Debugging"))) {
+        settingsCaption(
+          Toggle(L("Overlay Stats"), isOn: $overlayStats).onChange(of: overlayStats) { _ in DOLConfigBridge.setGfxOverlayStats(overlayStats) },
+          L("Detailed rendering statistics overlay for developers."))
+        settingsCaption(
+          Toggle(L("API Validation Layer"), isOn: $validationLayer).onChange(of: validationLayer) { _ in DOLConfigBridge.setGfxEnableValidationLayer(validationLayer) },
+          L("Extra graphics-API error checking. For debugging only — reduces performance. Leave off."))
       }
 
-      Section(header: Text(L("Shader Threads")), footer: Text(L("Adjust how many CPU threads are used for compiling shaders. More threads can reduce stuttering but may increase CPU usage. Recommended: 2-4 threads on most devices."))) {
-        HStack {
-          Text(L("Compiler Threads"))
-          Spacer()
+      Section(header: Text(L("Shader Threads"))) {
+        settingsCaption(
+          HStack {
+            Text(L("Compiler Threads"))
+            Spacer()
 #if os(tvOS)
-          TVIntStepper(value: $compilerThreads, range: 1...maxThreads, step: 1)
+            TVIntStepper(value: $compilerThreads, range: 1...maxThreads, step: 1)
 #else
-          Stepper(value: $compilerThreads, in: 1...maxThreads) { Text("\(compilerThreads)") }
+            Stepper(value: $compilerThreads, in: 1...maxThreads) { Text("\(compilerThreads)") }
 #endif
-        }
-        .onChange(of: compilerThreads) { v in DOLConfigBridge.setGfxShaderCompilerThreads(v) }
-        HStack {
-          Text(L("Precompiler Threads"))
-          Spacer()
+          }
+          .onChange(of: compilerThreads) { v in DOLConfigBridge.setGfxShaderCompilerThreads(v) },
+          L("CPU threads used to compile shaders on demand. More can reduce stutter but competes with the emulated CPU. 2–4 is a good range."))
+        settingsCaption(
+          HStack {
+            Text(L("Precompiler Threads"))
+            Spacer()
 #if os(tvOS)
-          TVIntStepper(value: $precompilerThreads, range: 1...maxThreads, step: 1)
+            TVIntStepper(value: $precompilerThreads, range: 1...maxThreads, step: 1)
 #else
-          Stepper(value: $precompilerThreads, in: 1...maxThreads) { Text("\(precompilerThreads)") }
+            Stepper(value: $precompilerThreads, in: 1...maxThreads) { Text("\(precompilerThreads)") }
 #endif
-        }
-        .onChange(of: precompilerThreads) { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) }
+          }
+          .onChange(of: precompilerThreads) { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) },
+          L("Threads used to pre-build shaders before a game starts."))
       }
 
-      Section(header: Text(L("Utility")), footer: Text(L("Custom Textures: Load high-resolution texture packs for enhanced visuals. Prefetch loads them into memory for better performance. Graphics Mods enable community-created visual enhancements."))) {
-        Toggle(L("Load Custom Textures"), isOn: $hiresTextures).onChange(of: hiresTextures) { _ in DOLConfigBridge.setGfxHiresTextures(hiresTextures) }
-        Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures)
-          .disabled(!hiresTextures)
-          .onChange(of: prefetchTextures) { _ in DOLConfigBridge.setGfxCacheHiresTextures(prefetchTextures) }
-        Toggle(L("Disable EFB Copy to VRAM"), isOn: $disableEfbToVRAM).onChange(of: disableEfbToVRAM) { _ in DOLConfigBridge.setGfxHackDisableCopyToVRAM(disableEfbToVRAM) }
-        Toggle(L("Enable Graphics Mods"), isOn: $graphicsMods).onChange(of: graphicsMods) { _ in DOLConfigBridge.setGfxModsEnable(graphicsMods) }
+      Section(header: Text(L("Utility"))) {
+        settingsCaption(
+          Toggle(L("Load Custom Textures"), isOn: $hiresTextures).onChange(of: hiresTextures) { _ in DOLConfigBridge.setGfxHiresTextures(hiresTextures) },
+          L("Loads installed high-resolution texture packs in place of the originals."))
+        settingsCaption(
+          Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures)
+            .disabled(!hiresTextures)
+            .onChange(of: prefetchTextures) { _ in DOLConfigBridge.setGfxCacheHiresTextures(prefetchTextures) },
+          L("Loads all custom textures into memory up front for smoother play, at higher memory use."))
+        settingsCaption(
+          Toggle(L("Disable EFB Copy to VRAM"), isOn: $disableEfbToVRAM).onChange(of: disableEfbToVRAM) { _ in DOLConfigBridge.setGfxHackDisableCopyToVRAM(disableEfbToVRAM) },
+          L("Forces framebuffer copies through RAM instead of VRAM. Slower; only for rare compatibility cases."))
+        settingsCaption(
+          Toggle(L("Enable Graphics Mods"), isOn: $graphicsMods).onChange(of: graphicsMods) { _ in DOLConfigBridge.setGfxModsEnable(graphicsMods) },
+          L("Enables community-created graphics mods for supported games."))
       }
 
-      Section(header: Text(L("Misc")), footer: Text(L("Crop: Removes black borders from some games. Progressive Scan: Enables progressive scan mode for supported games (reduces flickering)."))) {
-        Toggle(L("Crop"), isOn: $cropPicture).onChange(of: cropPicture) { _ in DOLConfigBridge.setGfxCrop(cropPicture) }
-        Toggle(L("Progressive Scan"), isOn: $progressiveScan).onChange(of: progressiveScan) { _ in DOLConfigBridge.setSysconfProgressiveScan(progressiveScan) }
+      Section(header: Text(L("Misc"))) {
+        settingsCaption(
+          Toggle(L("Crop"), isOn: $cropPicture).onChange(of: cropPicture) { _ in DOLConfigBridge.setGfxCrop(cropPicture) },
+          L("Crops the black borders some games render around the picture."))
+        settingsCaption(
+          Toggle(L("Progressive Scan"), isOn: $progressiveScan).onChange(of: progressiveScan) { _ in DOLConfigBridge.setSysconfProgressiveScan(progressiveScan) },
+          L("Enables 480p progressive output for games that support it, reducing flicker."))
       }
 
-      Section(header: Text(L("Rendering")), footer: Text(L("Advanced rendering options that affect performance and compatibility. Fast Depth improves speed but may cause issues. Per-Pixel Lighting enhances visual quality at performance cost."))) {
-        Toggle(L("Fast Depth Calculation"), isOn: $fastDepth).onChange(of: fastDepth) { DOLConfigBridge.setGfxFastDepthCalc($0) }
-        Toggle(L("Per-Pixel Lighting"), isOn: $pixelLighting).onChange(of: pixelLighting) { DOLConfigBridge.setGfxEnablePixelLighting($0) }
-        Toggle(L("Backend Multithreading"), isOn: $backendMT).onChange(of: backendMT) { DOLConfigBridge.setGfxBackendMultithreading($0) }
-        Toggle(L("Enable Shader Cache"), isOn: $shaderCache).onChange(of: shaderCache) { DOLConfigBridge.setGfxShaderCache($0) }
-        Toggle(L("Save Texture Cache to State"), isOn: $saveTexCache).onChange(of: saveTexCache) { DOLConfigBridge.setGfxSaveTextureCacheToState($0) }
-        Toggle(L("Prefer Vertex Shader for Line/Point Expansion"), isOn: $preferVSForLines).onChange(of: preferVSForLines) { DOLConfigBridge.setGfxPreferVSForLinePointExpansion($0) }
-        Toggle(L("CPU Culling"), isOn: $cpuCull).onChange(of: cpuCull) { DOLConfigBridge.setGfxCpuCull($0) }
+      Section(header: Text(L("Rendering"))) {
+        settingsCaption(
+          Toggle(L("Fast Depth Calculation"), isOn: $fastDepth).onChange(of: fastDepth) { DOLConfigBridge.setGfxFastDepthCalc($0) },
+          L("Uses a faster, less precise depth formula. Small speed win; can cause depth glitches in a few games. Recommended on."))
+        settingsCaption(
+          Toggle(L("Per-Pixel Lighting"), isOn: $pixelLighting).onChange(of: pixelLighting) { DOLConfigBridge.setGfxEnablePixelLighting($0) },
+          L("Computes lighting per pixel for smoother shading, at a GPU cost. Off matches original hardware."))
+        settingsCaption(
+          Toggle(L("Backend Multithreading"), isOn: $backendMT).onChange(of: backendMT) { DOLConfigBridge.setGfxBackendMultithreading($0) },
+          L("Runs graphics-backend work on its own thread. Helps the CPU-bound path; recommended on."))
+        settingsCaption(
+          Toggle(L("Enable Shader Cache"), isOn: $shaderCache).onChange(of: shaderCache) { DOLConfigBridge.setGfxShaderCache($0) },
+          L("Saves compiled shaders to disk so they aren't rebuilt every launch. Recommended on."))
+        settingsCaption(
+          Toggle(L("Save Texture Cache to State"), isOn: $saveTexCache).onChange(of: saveTexCache) { DOLConfigBridge.setGfxSaveTextureCacheToState($0) },
+          L("Includes the texture cache in save states for more accurate restores, at larger state files."))
+        settingsCaption(
+          Toggle(L("Prefer Vertex Shader for Line/Point Expansion"), isOn: $preferVSForLines).onChange(of: preferVSForLines) { DOLConfigBridge.setGfxPreferVSForLinePointExpansion($0) },
+          L("Expands lines and points in a vertex shader instead of a geometry shader. Can be faster on some GPUs."))
+        settingsCaption(
+          Toggle(L("CPU Culling"), isOn: $cpuCull).onChange(of: cpuCull) { DOLConfigBridge.setGfxCpuCull($0) },
+          L("Culls off-screen geometry on the CPU. Usually a net loss on the CPU-bound path; leave off unless GPU-limited."))
       }
 
-      Section(header: Text(L("Experimental")), footer: Text(L("⚠️ These settings are experimental and may cause instability, graphical glitches, or crashes in some games. Use with caution."))) {
-        Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation).onChange(of: deferEfbInvalidation) { _ in DOLConfigBridge.setGfxHackEfbDeferInvalidation(deferEfbInvalidation) }
+      Section(header: Text(L("Experimental")), footer: Text(L("⚠️ Experimental — may cause instability or glitches in some games."))) {
+        settingsCaption(
+          Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation).onChange(of: deferEfbInvalidation) { _ in DOLConfigBridge.setGfxHackEfbDeferInvalidation(deferEfbInvalidation) },
+          L("Delays invalidating cached framebuffer copies. Can speed things up but may show stale graphics."))
         // Manual Texture Sampling is the inverse of Fast Texture Sampling
-        Toggle(L("Manual Texture Sampling"), isOn: $manualTexSampling).onChange(of: manualTexSampling) { _ in DOLConfigBridge.setGfxHackFastTextureSampling(!manualTexSampling) }
+        settingsCaption(
+          Toggle(L("Manual Texture Sampling"), isOn: $manualTexSampling).onChange(of: manualTexSampling) { _ in DOLConfigBridge.setGfxHackFastTextureSampling(!manualTexSampling) },
+          L("Uses precise, hardware-accurate texture sampling (the inverse of Fast Texture Sampling). More accurate, slightly slower."))
       }
     }
     .navigationTitle(L("Advanced"))
@@ -3823,32 +4112,50 @@ struct EnhancedMotionControlsView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("Motion IR Cursor")), footer: Text(L("Control method for Wiimote IR pointer. Gyro mode uses device motion for enhanced precision. Configure motion-specific settings when gyro is active."))) {
-        NavigationLink(L("IR Control Method"), destination: TouchIRModePicker(selected: $currentIRMode))
-          .onChange(of: currentIRMode) { mode in
-            DOLConfigBridge.setMainTouchPadIRMode(mode.rawValue)
-            notifyMotionSettingsChanged()
-          }
+      Section(header: Text(L("Motion IR Cursor"))) {
+        settingsNavCaption(
+          destination: TouchIRModePicker(selected: $currentIRMode),
+          L("How the Wii Remote IR pointer is controlled. Gyro uses device motion for added precision and unlocks the motion options below.")
+        ) {
+          Text(L("IR Control Method"))
+        }
+        .onChange(of: currentIRMode) { mode in
+          DOLConfigBridge.setMainTouchPadIRMode(mode.rawValue)
+          notifyMotionSettingsChanged()
+        }
 
         if currentIRMode == .gyro {
-          NavigationLink(L("Horizontal Movement"), destination: HorizontalMotionPicker(selected: $horizontalMotionMode))
-            .onAppear { syncHorizontalMode() }
-            .onChange(of: horizontalMotionMode) { mode in
-              useYawForHorizontal = (mode == .yaw)
-            }
+          settingsNavCaption(
+            destination: HorizontalMotionPicker(selected: $horizontalMotionMode),
+            L("Whether tilting (roll) or turning (yaw) the device moves the pointer left/right.")
+          ) {
+            Text(L("Horizontal Movement"))
+          }
+          .onAppear { syncHorizontalMode() }
+          .onChange(of: horizontalMotionMode) { mode in
+            useYawForHorizontal = (mode == .yaw)
+          }
 
-          Toggle(L("Invert Horizontal (Left/Right)"), isOn: $invertRoll)
+          settingsCaption(
+            Toggle(L("Invert Horizontal (Left/Right)"), isOn: $invertRoll),
+            L("Flips left/right pointer motion."))
 
-          Toggle(L("Invert Vertical (Up/Down)"), isOn: $invertPitch)
+          settingsCaption(
+            Toggle(L("Invert Vertical (Up/Down)"), isOn: $invertPitch),
+            L("Flips up/down pointer motion."))
         }
       }
 
-      Section(header: Text(L("Shake Detection")), footer: Text(L("Modern algorithm analyzes motion patterns to detect shake gestures more reliably than the basic shake detection. Replaces Dolphin's built-in shake detection with improved sensitivity and accuracy."))) {
-        Toggle(L("Enable Advanced Shake Detection"), isOn: $enhancedShakeEnabled)
+      Section(header: Text(L("Shake Detection"))) {
+        settingsCaption(
+          Toggle(L("Enable Advanced Shake Detection"), isOn: $enhancedShakeEnabled),
+          L("Uses a motion-pattern algorithm to detect shake gestures more reliably than Dolphin's basic detection."))
       }
 
-      Section(header: Text(L("Full Motion Mapping")), footer: Text(L("Maps device motion to all 6 degrees of freedom (3-axis rotation + 3-axis acceleration). Only active when IR control is not using gyro mode. Enables motion-controlled games like Wii Sports, Mario Kart steering, etc."))) {
-        Toggle(L("Enable 6DOF Motion Controls"), isOn: $fullMotionEnabled)
+      Section(header: Text(L("Full Motion Mapping"))) {
+        settingsCaption(
+          Toggle(L("Enable 6DOF Motion Controls"), isOn: $fullMotionEnabled),
+          L("Maps device motion to all 6 axes (rotation + acceleration) for games like Wii Sports and Mario Kart. Active only when IR control isn't using gyro mode."))
 
         if fullMotionEnabled {
           VStack(alignment: .leading, spacing: 8) {
