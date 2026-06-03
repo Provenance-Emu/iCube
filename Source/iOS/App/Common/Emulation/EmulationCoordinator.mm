@@ -4,6 +4,8 @@
 #import "EmulationCoordinator.h"
 
 #include <cmath>
+#include <mach/mach.h>
+#include <sys/sysctl.h>
 
 #import <Metal/Metal.h>
 #import <UIKit/UIKit.h>
@@ -63,7 +65,10 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
 // game EXIT. Goes to both NSLog (device console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so
 // Joe can copy-paste it straight into a bug report. Values are formatted human-readably (true/false,
 // enum names) rather than raw ints.
-static void _ICubeDumpPerfSettings(const char* phase)
+// Build the perf-relevant settings as one readable key=value block. Shared by the START/EXIT logger
+// (_ICubeDumpPerfSettings) and the "Copy State" clipboard button (+copyStateToClipboard) so both
+// emit the exact same SETTINGS content.
+static std::string _ICubeBuildPerfSettingsString(const char* phase)
 {
   auto boolStr = [](bool v) { return v ? "true" : "false"; };
   auto triStr = [](TriState v) {
@@ -112,7 +117,14 @@ static void _ICubeDumpPerfSettings(const char* phase)
   lineB("MAIN_FASTMEM(cfg)", fastmemCfg);
   lineB("fastmem_available(host)", fastmemAvail);
   b += "=== end ===";
+  return b;
+}
 
+// Dump the perf-relevant settings once at game START and once at game EXIT, to both NSLog (device
+// console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so Joe can copy-paste it into a bug report.
+static void _ICubeDumpPerfSettings(const char* phase)
+{
+  const std::string b = _ICubeBuildPerfSettingsString(phase);
   NSLog(@"%s", b.c_str());
   INFO_LOG_FMT(CORE, "{}", b);
 }
@@ -709,6 +721,71 @@ static const float ACSpeedHysteresis = 0.02f;
       }
     }, false);
   }
+}
+
+// Build a chat-ready plaintext state block and place it on the general pasteboard. Sections:
+// GAME / HARDWARE / LIVE PERF / SETTINGS (SETTINGS reuses _ICubeBuildPerfSettingsString).
++ (void)copyStateToClipboard {
+  std::string b;
+  b.reserve(2048);
+
+  // --- GAME ---
+  const std::string gid = SConfig::GetInstance().GetGameID();
+  const std::string title = SConfig::GetInstance().GetTitleName();
+  b += "=== GAME ===\n";
+  b += "  title=" + (title.empty() ? std::string("(unknown)") : title) + "\n";
+  b += "  game_id=" + (gid.empty() ? std::string("(no-gameid)") : gid) + "\n";
+
+  // --- HARDWARE ---
+  b += "=== HARDWARE ===\n";
+  {
+    char machine[256] = {0};
+    size_t len = sizeof(machine);
+    if (sysctlbyname("hw.machine", machine, &len, NULL, 0) != 0) {
+      len = sizeof(machine);
+      sysctlbyname("hw.model", machine, &len, NULL, 0);
+    }
+    b += "  device=" + std::string(machine[0] ? machine : "(unknown)") + "\n";
+  }
+  NSProcessInfo* pi = [NSProcessInfo processInfo];
+  b += "  cpu_count=" + std::to_string((long)pi.processorCount) + "\n";
+  {
+    const double ramGB = (double)pi.physicalMemory / (1024.0 * 1024.0 * 1024.0);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%.2f GB", ramGB);
+    b += "  physical_ram=" + std::string(buf) + "\n";
+  }
+  b += "  ios_version=" + std::string([[[UIDevice currentDevice] systemVersion] UTF8String]) + "\n";
+
+  // --- LIVE PERF ---
+  b += "=== LIVE PERF ===\n";
+  {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "%.2f", g_perf_metrics.GetFPS());        b += "  fps=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.2f", g_perf_metrics.GetVPS());        b += "  vps=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.1f%%", g_perf_metrics.GetSpeed() * 100.0);     b += "  speed=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.1f%%", g_perf_metrics.GetMaxSpeed() * 100.0);  b += "  max_speed=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.3f", g_perf_metrics.GetFrameDtAvgSeconds() * 1000.0); b += "  frame_dt_avg_ms=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.3f", g_perf_metrics.GetFrameDtStdSeconds() * 1000.0); b += "  frame_dt_std_ms=" + std::string(buf) + "\n";
+
+    // App resident memory: phys_footprint from TASK_VM_INFO.
+    task_vm_info_data_t vmInfo = {};
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vmInfo, &count) == KERN_SUCCESS) {
+      const double footMB = (double)vmInfo.phys_footprint / (1024.0 * 1024.0);
+      snprintf(buf, sizeof(buf), "%.1f MB", footMB);
+      b += "  app_resident_mem=" + std::string(buf) + "\n";
+    }
+  }
+
+  // --- SETTINGS ---
+  b += "=== SETTINGS ===\n";
+  b += _ICubeBuildPerfSettingsString("COPY");
+
+  NSString* text = [NSString stringWithUTF8String:b.c_str()];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [UIPasteboard generalPasteboard].string = text;
+  });
 }
 
 - (void)startInputPump {

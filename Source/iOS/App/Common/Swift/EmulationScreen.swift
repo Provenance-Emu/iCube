@@ -267,6 +267,8 @@ struct EmulationScreen: View {
   @State private var anisotropyQuick: Int = 1
   @State private var adaptiveClockQuick: Bool = false
   @State private var viSkipModeQuick: Int = 2 // TriState: 0=Off, 1=On, 2=Auto
+  @State private var showGraphsQuick: Bool = false
+  @State private var stateCopied: Bool = false
 
   #if os(iOS)
   @State private var showSkyMenu = false
@@ -373,6 +375,10 @@ struct EmulationScreen: View {
             TVIntStepperOverlay(value: $anisotropyQuick, range: 1 ... 16, step: 1)
               .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
           }
+
+          Divider().background(.white.opacity(0.2))
+          // Diagnostics: perf graph + copy full state
+          diagnosticsControls()
         }
         .padding(20)
         .frame(maxWidth: 520)
@@ -514,6 +520,7 @@ struct EmulationScreen: View {
       // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
       adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
       viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
+      showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
       // Live Activity start
       #if canImport(ActivityKit)
       GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
@@ -917,6 +924,10 @@ struct EmulationScreen: View {
                       }))
                       .tint(.blue)
                       .foregroundColor(.white)
+
+                      Divider().background(.white.opacity(0.2))
+                      // Diagnostics: perf graph + copy full state
+                      diagnosticsControls()
                     }
                     .frame(maxWidth: .infinity)
                   }
@@ -1002,6 +1013,10 @@ struct EmulationScreen: View {
                       .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
                     Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
                   }
+
+                  Divider().background(.white.opacity(0.2))
+                  // Diagnostics: perf graph + copy full state
+                  diagnosticsControls()
                 }
               }
             }
@@ -1189,6 +1204,7 @@ struct EmulationScreen: View {
       // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
       adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
       viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
+      showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
       // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
       let currentIR = DOLConfigBridge.mainTouchPadIRMode()
       if currentIR == 0 { // None
@@ -1346,6 +1362,29 @@ struct EmulationScreen: View {
       .pickerStyle(.segmented)
       .frame(maxWidth: 220)
     }
+  }
+
+  // Perf-graph toggle + Copy State button, shared across all perf-overlay layouts.
+  @ViewBuilder
+  private func diagnosticsControls() -> some View {
+    Toggle("Show Perf Graph", isOn: Binding(get: { showGraphsQuick }, set: { v in
+      showGraphsQuick = v
+      DOLConfigBridge.setGfxShowGraphs(v)
+    }))
+    .tint(.blue)
+    .foregroundColor(.white)
+    Button {
+      EmulationCoordinator.copyStateToClipboard()
+      stateCopied = true
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { stateCopied = false }
+    } label: {
+      HStack {
+        Image(systemName: stateCopied ? "checkmark.circle.fill" : "doc.on.clipboard")
+        Text(stateCopied ? "Copied" : "Copy State")
+      }
+      .foregroundColor(.white)
+    }
+    .buttonStyle(.plain)
   }
 
   private func logCurrentControllers() {

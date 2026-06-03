@@ -41,6 +41,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// overclock overrides (OFF) — takes effect without relaunching the game.
 - (void)setAdaptiveClockEnabled:(BOOL)on;
 
+/// Build a chat-ready plaintext state dump (GAME / HARDWARE / LIVE PERF / SETTINGS) and place it on
+/// the general pasteboard. Used by the "Copy State" button in the in-emulation perf overlay.
++ (void)copyStateToClipboard;
+
 @end
 
 NS_ASSUME_NONNULL_END
