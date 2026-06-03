@@ -128,6 +128,13 @@ NS_ASSUME_NONNULL_BEGIN
 // Cached Interpreter: Apple-Silicon hot-loop software-prefetch (default on; A/B toggle)
 + (BOOL)mainCachedInterpreterPrefetch;
 + (void)setMainCachedInterpreterPrefetch:(BOOL)enabled;
+// Cached Interpreter perf A/B knobs (apply on next game launch)
++ (BOOL)cirPicLoadStore;          // PIC direct-pointer load/store (default ON)
++ (void)setCirPicLoadStore:(BOOL)enabled;
++ (BOOL)cirMicroOpFusion;         // micro-op fusion (default OFF, experimental)
++ (void)setCirMicroOpFusion:(BOOL)enabled;
++ (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
++ (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;
 + (void)setMainOverclockEnable:(BOOL)enabled;
 + (NSInteger)mainOverclockPercent;

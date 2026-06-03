@@ -1835,6 +1835,10 @@ struct ConfigAdvancedView: View {
   // iCube perf A/B toggles. Both default ON; apply on next game launch.
   @State private var cachedInterpreterPrefetch: Bool = true
   @State private var neonTextureDecode: Bool = true
+  // CIR perf A/B knobs: PIC on by default; fusion + block-linking off (experimental)
+  @State private var cirPicLoadStore: Bool = true
+  @State private var cirMicroOpFusion: Bool = false
+  @State private var cirBlockLinking: Bool = false
   // CPU idle detection toggles
   @State private var relaxedIdleDetection: Bool = false
   @State private var fastForwardCtrIdle: Bool = false
@@ -1901,6 +1905,18 @@ struct ConfigAdvancedView: View {
           Toggle(L("NEON Texture Decoder"), isOn: $neonTextureDecode)
             .onChange(of: neonTextureDecode) { DOLConfigBridge.setGfxHackNeonTextureDecode($0) },
           L("ARM64 NEON SIMD texture decoder. ON by default; turning it off falls back to the slower scalar decoder. A/B knob. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("PIC Load/Store (Cached Interpreter)"), isOn: $cirPicLoadStore)
+            .onChange(of: cirPicLoadStore) { DOLConfigBridge.setCirPicLoadStore($0) },
+          L("Direct-pointer load/store fast path for the Cached Interpreter — a large CPU win on memory-heavy games. ON by default; falls back safely for MMU / non-fastmem access. Turn off to A/B. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Micro-Op Fusion (Cached Interpreter, experimental)"), isOn: $cirMicroOpFusion)
+            .onChange(of: cirMicroOpFusion) { DOLConfigBridge.setCirMicroOpFusion($0) },
+          L("⚠️ Fuses runs of integer ops into one dispatched block on the Cached Interpreter — a meaningful CPU win. Experimental/unvalidated; may cause wrong math, physics, or audio in some games. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
+            .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
+          L("⚠️ Chains hot interpreter blocks directly to cut per-block dispatcher overhead. Experimental; can affect timing-sensitive games. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
             .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) },
@@ -2037,6 +2053,9 @@ struct ConfigAdvancedView: View {
     fpFast = DOLConfigBridge.mainFpFast()
     cachedInterpreterPrefetch = DOLConfigBridge.mainCachedInterpreterPrefetch()
     neonTextureDecode = DOLConfigBridge.gfxHackNeonTextureDecode()
+    cirPicLoadStore = DOLConfigBridge.cirPicLoadStore()
+    cirMicroOpFusion = DOLConfigBridge.cirMicroOpFusion()
+    cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     // Ensure idle detection toggles persist
     relaxedIdleDetection = DOLConfigBridge.mainRelaxedIdleDetection()
     fastForwardCtrIdle = DOLConfigBridge.mainFastForwardCtrIdle()

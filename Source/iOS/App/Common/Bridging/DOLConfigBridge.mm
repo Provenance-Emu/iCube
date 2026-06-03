@@ -188,6 +188,12 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 // Cached Interpreter: Apple-Silicon hot-loop software-prefetch (default on; A/B toggle)
 + (BOOL)mainCachedInterpreterPrefetch { return Config::Get(Config::MAIN_CACHED_INTERPRETER_PREFETCH); }
 + (void)setMainCachedInterpreterPrefetch:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CACHED_INTERPRETER_PREFETCH, (bool)enabled); }
++ (BOOL)cirPicLoadStore { return Config::Get(Config::MAIN_CIR_PIC_LOADSTORE); }
++ (void)setCirPicLoadStore:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_PIC_LOADSTORE, (bool)enabled); }
++ (BOOL)cirMicroOpFusion { return Config::Get(Config::MAIN_CIR_MICROOP_FUSION); }
++ (void)setCirMicroOpFusion:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_MICROOP_FUSION, (bool)enabled); }
++ (BOOL)cirBlockLinking { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING); }
++ (void)setCirBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING, (bool)enabled); }
 + (BOOL)mainOverclockEnable { return Config::Get(Config::MAIN_OVERCLOCK_ENABLE); }
 + (void)setMainOverclockEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK_ENABLE, (bool)enabled); }
 + (NSInteger)mainOverclockPercent { float v = Config::Get(Config::MAIN_OVERCLOCK); return (NSInteger)lroundf(v * 100.0f); }
