@@ -184,8 +184,12 @@ let iCube = Target.target(
         "DolphiniOS/Assets.xcassets",
         "Common/Assets.xcassets",
         "Common/DolphinAssets.xcassets",
-        "DolphiniOS/**/*.storyboard",
-        "DolphiniOS/**/*.xib",
+        // These are iOS UIKit xibs/storyboards (touch controller, boot notices, JIT-wait) with an
+        // iPhone/iPad-only targeted device family — ibtool rejects them for tvOS ("iOS xibs do not
+        // support target device type tv"). tvOS uses the SwiftUI UI, not these, so include them on
+        // iOS/Catalyst only and keep them out of the tvOS build.
+        .glob(pattern: "DolphiniOS/**/*.storyboard", inclusionCondition: .when([.ios, .catalyst])),
+        .glob(pattern: "DolphiniOS/**/*.xib", inclusionCondition: .when([.ios, .catalyst])),
         "DolphiniOS/**/*.strings",
         "DolphiniOS/Base.lproj/**",
         "DolphiniOS/en.lproj/**",
