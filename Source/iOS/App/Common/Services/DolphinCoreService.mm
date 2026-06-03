@@ -6,6 +6,7 @@
 #import "Core/Config/UISettings.h"
 #import "Core/Config/MainSettings.h"
 #import "Core/Config/GraphicsSettings.h"
+#import "VideoCommon/VideoConfig.h" // Defines TriState enum (GraphicsSettings.h only forward-declares it)
 #import "Core/Core.h"
 #import "Core/DolphinAnalytics.h"
 #import "Core/HW/GCPad.h"
@@ -110,6 +111,13 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
     return FoundationToCppString(DOLCoreLocalizedString(CToFoundationString(text)));
   });
 
+  // Default the adaptive clock ON for never-set installs. The adaptive loop in
+  // EmulationCoordinator.mm gates on this NSUserDefault (EmulationCoordinator.mm:360) which
+  // otherwise defaults false, so the catch-up clock never engaged out of the box. registerDefaults
+  // does NOT override a user's explicit choice — only the never-set case — so this is safe for both
+  // fresh and existing installs.
+  [[NSUserDefaults standardUserDefaults] registerDefaults:@{@"adaptive_clock_enable": @YES}];
+
   SetBaseIfUnspecified(Config::MAIN_USE_GAME_COVERS, true);
 
   const bool fastmemAvailable = [FastmemManager shared].fastmemAvailable;
@@ -138,6 +146,14 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // icube-testflight branch ALSO defaults this ON, but its faster custom CIR stays within the
   // window so it never wedges — so this is a lean-CIR-speed limitation, not a wrong default per se.
   SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP, false);
+  // The legacy GFX_HACK_VI_SKIP bool above is NOT what the runtime reads. CoreTimingManager::GetVISkip
+  // (CoreTiming.cpp:502-522) consults the tri-state GFX_HACK_VI_SKIP_MODE, which "supersedes the legacy
+  // bool" (CoreTiming.cpp:507) and defaults to Auto on Apple. So VISkip was still Auto-active and kept
+  // dropping vblank IRQs whenever the lean CachedInterpreter ran chronically behind realtime — the
+  // residual full-clock stall. Force the MODE key Off: the adaptive clock (now on by default) is the
+  // catch-up mechanism instead, and VISkip-Auto's bounded IRQ-dropping still stalls the chronically
+  // behind core.
+  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP_MODE, TriState::Off);
   SetBaseIfUnspecified(Config::MAIN_ACCURATE_NANS, false);
   SetBaseIfUnspecified(Config::MAIN_SYNC_GPU, false);
 
