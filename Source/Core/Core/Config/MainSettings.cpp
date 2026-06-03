@@ -857,5 +857,15 @@ const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE{
 // not cover delegates to the exact generic interpreter handler. UNVALIDATED on-device — needs a
 // bit-exact dual-run A/B before shipping enabled.
 const Info<bool> MAIN_CIR_PIC_LOADSTORE{{System::Main, "Core", "CIRPICLoadStore"}, true};
+// iCube WIN#2: CachedInterpreter micro-op fusion + CONST32 folding. When on, DoJit recognizes runs of
+// fusable pure-register integer/immediate ops and emits ONE ExecuteMicroOps callback (a computed-goto
+// C++ dispatch over a packed MicroOp array) instead of N generic Interpret trampolines, and folds the
+// addis rt,r0,hi; ori rt,rt,lo idiom into a single CONST32 immediate write (~13% on ALU-bound titles).
+// Jitless-legal (pure C++ execution, no codegen, no W^X). Default FALSE: the entire fusion path in
+// DoJit (CONST32, CONST32_ADDRA, and the ALU packer, including the i-advancement) is gated on this
+// flag, so flag-off DoJit is byte-identical to upstream. RISKIEST of the CIR wins — the fused handlers
+// hand-roll CR0/XER side-effects, so flip true ONLY behind a bit-exact dual-run A/B (DTM determinism:
+// record an input trace, replay flag-on vs flag-off, diff GPR/mem at fixed frames). UNVALIDATED.
+const Info<bool> MAIN_CIR_MICROOP_FUSION{{System::Main, "Core", "CIRMicroOpFusion"}, false};
 
 }  // namespace Config

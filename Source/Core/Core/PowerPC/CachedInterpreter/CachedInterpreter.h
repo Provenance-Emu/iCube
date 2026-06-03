@@ -23,6 +23,73 @@ namespace CPU
 enum class State;
 }
 
+// iCube WIN#2: micro-op fusion engine (MAIN_CIR_MICROOP_FUSION). MicroOpCode is the compact op-id the
+// ExecuteMicroOps computed-goto dispatch_table is keyed on; the dispatch_table order in
+// CachedInterpreter.cpp MUST match this enum exactly (a static_assert against COUNT enforces it). Ported
+// verbatim from the feature/icube-testflight good branch. Only used when the flag is on.
+enum class MicroOpCode : u8
+{
+  CONST32,
+  CONST32_ADDRA,
+  ADDI,
+  ADDIS,
+  ORI,
+  ORIS,
+  XORI,
+  XORIS,
+  ANDI,
+  ANDIS,
+  // New ops for jitless optimization
+  RLWINM_IMM,  // RA = rotl(RS, SH) & mask(MB, ME); optional record via rc flag
+  AND_RR,      // RA = RS & RB; optional record via rc flag
+  OR_RR,       // RA = RS | RB; optional record via rc flag
+  XOR_RR,      // RA = RS ^ RB; optional record via rc flag
+  RLWIMI_IMM,  // RA = (RA & ~mask) | (rotl(RS, SH) & mask); optional record via rc flag
+  RLWNM_VAR,   // RA = rotl(RS, RB & 31) & mask(MB, ME); optional record via rc flag
+  ANDC_RR,     // RA = RS & ~RB; optional record via rc flag
+  ORC_RR,      // RA = RS | ~RB; optional record via rc flag
+  NAND_RR,     // RA = ~(RS & RB); optional record via rc flag
+  NOR_RR,      // RA = ~(RS | RB); optional record via rc flag
+  EQV_RR,      // RA = ~(RS ^ RB); optional record via rc flag
+  // New integer ops (X-form and variants)
+  CNTLZW,      // RA = count leading zeros of RS; optional record via rc flag
+  EXTSB,       // RA = sign-extend byte from RS; optional record via rc flag
+  EXTSH,       // RA = sign-extend halfword from RS; optional record via rc flag
+  SLW_VAR,     // RA = (RB & 0x20) ? 0 : (RS << (RB & 0x1f)); optional record via rc flag
+  SRW_VAR,     // RA = (RB & 0x20) ? 0 : (RS >> (RB & 0x1f)); optional record via rc flag
+  SRAW_VAR,    // RA = arithmetic right shift by RB; updates CA; optional record via rc flag
+  SRAWI_IMM,   // RA = arithmetic right shift by SH; updates CA; optional record via rc flag
+  // Integer add/sub with carry/overflow semantics
+  ADD_RR,      // RD = RA + RB; optional OV update via imm bit0; optional record via rc
+  ADDC_RR,     // RD = RA + RB; set CA; optional OV via imm bit0; optional record via rc
+  ADDE_RR,     // RD = RA + RB + CA; set CA; optional OV via imm bit0; optional record via rc
+  ADDME,       // RD = RA + 0xFFFFFFFF + CA; set CA; optional OV via imm bit0; optional record via rc
+  ADDZE,       // RD = RA + CA; set CA; optional OV via imm bit0; optional record via rc
+  SUBF_RR,     // RD = ~RA + RB + 1; optional OV via imm bit0; optional record via rc
+  SUBFC_RR,    // RD = ~RA + RB + 1; set CA; optional OV via imm bit0; optional record via rc
+  SUBFE_RR,    // RD = ~RA + RB + CA; set CA; optional OV via imm bit0; optional record via rc
+  SUBFME,      // RD = ~RA + 0xFFFFFFFF + CA; set CA; optional OV via imm bit0; optional record via rc
+  SUBFZE,      // RD = ~RA + CA; set CA; optional OV via imm bit0; optional record via rc
+  // Integer compare ops (update CR field only; rd encodes CRFD)
+  CMP_S_RR,    // CR[rd] = cmp(s32(RA), s32(RB))
+  CMPL_U_RR,   // CR[rd] = cmp(u32(RA), u32(RB))
+  CMP_S_IMM,   // CR[rd] = cmp(s32(RA), SIMM16=imm)
+  CMPL_U_IMM,  // CR[rd] = cmp(u32(RA), UIMM16=imm)
+  NOP,
+  COUNT,
+};
+
+// iCube WIN#2: one decoded fusable op in an ExecuteMicroOps run. Trivially copyable POD.
+struct MicroOp
+{
+  MicroOpCode op;
+  u8 rd;    // destination (or RA for ORI)
+  u8 ra;    // source register (0 means zero for ADDI semantics)
+  u8 rb;    // second source register for reg-reg ops (RB). Unused for immediates.
+  u8 rc;    // non-zero if this op should update CR0 (record bit)
+  u32 imm;  // immediate value (signed/unsigned depends on op)
+};
+
 class CachedInterpreter : public JitBase, public CachedInterpreterCodeBlock
 {
 public:
@@ -103,6 +170,11 @@ private:
   // (MAIN_CIR_PIC_LOADSTORE). Carries the InterpretOperands prefix (for the cold fallback) plus the
   // fastmem region base/mask pointers captured at emit time. See LoadStoreDFormPIC / LoadStoreXFormPIC.
   struct LoadStoreDFormPICOperands;
+  // iCube WIN#2: payload for the micro-op fusion engine (MAIN_CIR_MICROOP_FUSION). Carries a packed
+  // run of fusable pure-register integer/immediate MicroOps that ExecuteMicroOps dispatches over via a
+  // computed goto. SEPARATE struct, only ever written when the flag is on, so the generic (flag-off)
+  // stream layout stays byte-identical to upstream. See ExecuteMicroOps / DoJit fusion emitter.
+  struct ExecuteMicroOpsOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
@@ -169,6 +241,17 @@ private:
   // Cold fallback: runs the exact generic interpreter handler. Preserves DSI/alignment/MMIO semantics.
   static s32 Cold_LoadStoreFallback(PowerPC::PowerPCState& ppc_state,
                                     const LoadStoreDFormPICOperands& operands);
+  // iCube WIN#2: execute a fused run of pure-register integer/immediate micro-ops via a computed-goto
+  // dispatch over the packed MicroOp array (MAIN_CIR_MICROOP_FUSION). Each handler reproduces the
+  // corresponding interpreter op's GPR/CR0/XER side-effects byte-exactly (CR/XER via the same
+  // CI_UpdateCR0/CI_WriteCRField/CI_Helper_Carry/CI_HasAddOverflowed helpers the generic compare/
+  // arithmetic ops use). write_pc mirrors Interpret<write_pc>. ONLY emitted when the flag is on;
+  // dispatched through the existing generic indirect tail in ExecuteOneBlock (no hot-path branch).
+  template <bool write_pc>
+  static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
+                             const ExecuteMicroOpsOperands& operands);
+  template <bool write_pc>
+  static s32 ExecuteMicroOps(std::ostream& stream, const ExecuteMicroOpsOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,
@@ -276,6 +359,17 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
   u32 exram_mask;
   u8* fakevmem_base;
   u32 fakevmem_mask;
+};
+
+// iCube WIN#2: payload for one fused micro-op run (MAIN_CIR_MICROOP_FUSION). The embedded fixed array
+// keeps lifetime simple and avoids heap allocs in codegen; kMaxOps bounds a run. Trivially copyable;
+// only written into the callback stream when the flag is on, so the generic path never sees it.
+struct CachedInterpreter::ExecuteMicroOpsOperands
+{
+  static constexpr u32 kMaxOps = 64;
+  u32 count;
+  MicroOp ops[kMaxOps];
+  u32 current_pc;
 };
 
 struct CachedInterpreter::HLEFunctionOperands

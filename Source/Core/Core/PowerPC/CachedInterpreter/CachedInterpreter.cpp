@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstring>
 #include <span>
 #include <sstream>
@@ -103,6 +104,48 @@ static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
 {
   return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
 }
+
+// iCube WIN#2: CR0/XER side-effect helpers for the micro-op handlers. Byte-exact mirrors of the
+// rebaseline interpreter's Interpreter::Helper_UpdateCR0 / Helper_IntCompare SO behavior /
+// Helper_Carry / Helper_HasAddOverflowed — ported verbatim from the good branch so a fused op's
+// CR/XER write is indistinguishable from the generic interpreter op it replaces. CRITICAL: do not
+// paraphrase; these reproduce the exact SO/GT-on-zero and carry-chain semantics.
+static inline void CI_UpdateCR0(PowerPC::PowerPCState& ppc_state, u32 value)
+{
+  const s64 sign_extended = s64{s32(value)};
+  u64 cr_val = u64(sign_extended);
+
+  if (value == 0)
+  {
+    // Preserve GT semantics when setting SO on zero -> non-zero transition.
+    cr_val |= 1ULL << 63;
+  }
+
+  cr_val = (cr_val & ~(1ULL << PowerPC::CR_EMU_SO_BIT)) |
+           (u64{ppc_state.GetXER_SO()} << PowerPC::CR_EMU_SO_BIT);
+
+  ppc_state.cr.fields[0] = cr_val;
+}
+
+// Write a CR field (CRFD), mirroring Helper_IntCompare SO behavior.
+static inline void CI_WriteCRField(PowerPC::PowerPCState& ppc_state, u32 crfd, u32 cr_field)
+{
+  if (ppc_state.GetXER_SO())
+    cr_field |= PowerPC::CR_SO;
+  ppc_state.cr.SetField(crfd, cr_field);
+}
+
+// Carry/overflow helpers matching Interpreter semantics.
+static inline bool CI_Helper_Carry(u32 value1, u32 value2)
+{
+  return value2 > (~value1);
+}
+
+static inline bool CI_HasAddOverflowed(u32 x, u32 y, u32 result)
+{
+  // If x and y have the same sign, but the result is different then an overflow has occurred.
+  return (((x ^ result) & (y ^ result)) >> 31) != 0;
+}
 }  // anonymous namespace
 
 // iCube WIN#1: route integer D-form/X-form load/stores through the PIC direct-pointer fast path
@@ -124,6 +167,12 @@ static bool s_specialized_ops = false;
 // iCube: when true, each specialized callback re-derives and asserts the dispatch bookkeeping
 // against the generic Interpret<write_pc> contract before committing the real handler.
 static bool s_specialized_ops_validate = false;
+
+// iCube WIN#2: when true, DoJit fuses runs of pure-register integer/immediate ops into a single
+// ExecuteMicroOps callback and folds the addis/ori CONST32 idiom. Read once in Init. Default OFF: with
+// the flag off NO ExecuteMicroOps callback is ever emitted and the DoJit fusion block is skipped
+// entirely, so the callback stream is byte-identical to upstream. RISKIEST CIR win — UNVALIDATED.
+static bool s_microop_fusion = false;
 
 // iCube: when true, blocks ending at a STATIC direct branch emit a LinkBlock trampoline (instead of
 // EndBlock) and jo.enableBlocklink is turned on so the upstream JitBaseBlockCache machinery records
@@ -247,6 +296,7 @@ void CachedInterpreter::Init()
   s_pic_loadstore = Config::Get(Config::MAIN_CIR_PIC_LOADSTORE);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_specialized_ops_validate = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
+  s_microop_fusion = Config::Get(Config::MAIN_CIR_MICROOP_FUSION);
   s_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
   s_block_linking_validate = Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE);
   s_validate_instance = s_block_linking_validate ? this : nullptr;
@@ -1131,6 +1181,1078 @@ s32 CachedInterpreter::Cold_LoadStoreFallback(PowerPC::PowerPCState& /*ppc_state
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// iCube WIN#2: micro-op fusion engine (MAIN_CIR_MICROOP_FUSION). CI_SetPCForMicroOps mirrors the
+// Interpret<write_pc> pc/npc contract; ExecuteMicroOps runs the packed MicroOp array via a
+// computed-goto dispatch (one indirect branch per op, zero indirect calls). The dispatch_table
+// order MUST match enum class MicroOpCode (static_assert enforces it). Each handler reproduces its
+// interpreter op's GPR/CR0/XER side-effects byte-exactly. Ported verbatim from feature/icube-
+// testflight. Only reached when the flag emitted an ExecuteMicroOps callback (flag-off: never).
+template <bool write_pc>
+static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = pc;
+    ppc_state.npc = pc + 4;
+  }
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
+                                                       const ExecuteMicroOpsOperands& operands)
+{
+  CI_SetPCForMicroOps<write_pc>(ppc_state, operands.current_pc);
+
+  const u32 count = operands.count;
+  const MicroOp* ops = operands.ops;
+#if defined(__GNUC__) || defined(__clang__)
+  {
+    u32 i = 0;
+    if (i >= count)
+      goto micro_done;
+
+    // The order here MUST match enum class MicroOpCode in CachedInterpreter.h
+    static const void* dispatch_table[] = {
+        &&op_CONST32,       // 0 MicroOpCode::CONST32
+        &&op_CONST32_ADDRA, // 1 MicroOpCode::CONST32_ADDRA
+        &&op_ADDI,          // 2 MicroOpCode::ADDI
+        &&op_ADDIS,         // 3 MicroOpCode::ADDIS
+        &&op_ORI,           // 4 MicroOpCode::ORI
+        &&op_ORIS,          // 5 MicroOpCode::ORIS
+        &&op_XORI,          // 6 MicroOpCode::XORI
+        &&op_XORIS,         // 7 MicroOpCode::XORIS
+        &&op_ANDI,          // 8 MicroOpCode::ANDI
+        &&op_ANDIS,         // 9 MicroOpCode::ANDIS
+        &&op_RLWINM_IMM,    // 10 MicroOpCode::RLWINM_IMM
+        &&op_AND_RR,        // 11 MicroOpCode::AND_RR
+        &&op_OR_RR,         // 12 MicroOpCode::OR_RR
+        &&op_XOR_RR,        // 13 MicroOpCode::XOR_RR
+        &&op_RLWIMI_IMM,    // 14 MicroOpCode::RLWIMI_IMM
+        &&op_RLWNM_VAR,     // 15 MicroOpCode::RLWNM_VAR
+        &&op_ANDC_RR,       // 16 MicroOpCode::ANDC_RR
+        &&op_ORC_RR,        // 17 MicroOpCode::ORC_RR
+        &&op_NAND_RR,       // 18 MicroOpCode::NAND_RR
+        &&op_NOR_RR,        // 19 MicroOpCode::NOR_RR
+        &&op_EQV_RR,        // 20 MicroOpCode::EQV_RR
+        &&op_CNTLZW,        // 21 MicroOpCode::CNTLZW
+        &&op_EXTSB,         // 22 MicroOpCode::EXTSB
+        &&op_EXTSH,         // 23 MicroOpCode::EXTSH
+        &&op_SLW_VAR,       // 24 MicroOpCode::SLW_VAR
+        &&op_SRW_VAR,       // 25 MicroOpCode::SRW_VAR
+        &&op_SRAW_VAR,      // 26 MicroOpCode::SRAW_VAR
+        &&op_SRAWI_IMM,     // 27 MicroOpCode::SRAWI_IMM
+        // Integer add/sub with carry/overflow semantics
+        &&op_ADD_RR,        // 28 MicroOpCode::ADD_RR
+        &&op_ADDC_RR,       // 29 MicroOpCode::ADDC_RR
+        &&op_ADDE_RR,       // 30 MicroOpCode::ADDE_RR
+        &&op_ADDME,         // 31 MicroOpCode::ADDME
+        &&op_ADDZE,         // 32 MicroOpCode::ADDZE
+        &&op_SUBF_RR,       // 33 MicroOpCode::SUBF_RR
+        &&op_SUBFC_RR,      // 34 MicroOpCode::SUBFC_RR
+        &&op_SUBFE_RR,      // 35 MicroOpCode::SUBFE_RR
+        &&op_SUBFME,        // 36 MicroOpCode::SUBFME
+        &&op_SUBFZE,        // 37 MicroOpCode::SUBFZE
+        // Integer compare ops
+        &&op_CMP_S_RR,      // 38 MicroOpCode::CMP_S_RR
+        &&op_CMPL_U_RR,     // 39 MicroOpCode::CMPL_U_RR
+        &&op_CMP_S_IMM,     // 40 MicroOpCode::CMP_S_IMM
+        &&op_CMPL_U_IMM,    // 41 MicroOpCode::CMPL_U_IMM
+        &&op_NOP            // 42 MicroOpCode::NOP
+    };
+    static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
+                  "dispatch_table must cover all MicroOpCode entries and match enum order");
+
+  micro_dispatch:
+    {
+      const MicroOp& m = ops[i];
+      const unsigned op_index = static_cast<unsigned>(m.op);
+      if (__builtin_expect(op_index >= static_cast<unsigned>(MicroOpCode::COUNT), 0))
+        goto micro_done; // fail fast; invalid op emitted
+      goto *dispatch_table[op_index];
+    }
+
+  op_CONST32:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = m.imm;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  // Compare handlers: update CR[rd] only, no GPR writes
+  op_CMP_S_RR:
+    {
+      const MicroOp& m = ops[i];
+      const s32 a = s32(ppc_state.gpr[m.ra]);
+      const s32 b = s32(ppc_state.gpr[m.rb]);
+      u32 crf = 0;
+      crf |= (a < b) ? PowerPC::CR_LT : 0;
+      crf |= (a > b) ? PowerPC::CR_GT : 0;
+      crf |= (a == b) ? PowerPC::CR_EQ : 0;
+      CI_WriteCRField(ppc_state, m.rd, crf);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CMPL_U_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      u32 crf = 0;
+      crf |= (a < b) ? PowerPC::CR_LT : 0;
+      crf |= (a > b) ? PowerPC::CR_GT : 0;
+      crf |= (a == b) ? PowerPC::CR_EQ : 0;
+      CI_WriteCRField(ppc_state, m.rd, crf);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CMP_S_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const s32 a = s32(ppc_state.gpr[m.ra]);
+      const s32 b = s32(s16(m.imm & 0xFFFF));
+      u32 crf = 0;
+      crf |= (a < b) ? PowerPC::CR_LT : 0;
+      crf |= (a > b) ? PowerPC::CR_GT : 0;
+      crf |= (a == b) ? PowerPC::CR_EQ : 0;
+      CI_WriteCRField(ppc_state, m.rd, crf);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CMPL_U_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = m.imm & 0xFFFFu;
+      u32 crf = 0;
+      crf |= (a < b) ? PowerPC::CR_LT : 0;
+      crf |= (a > b) ? PowerPC::CR_GT : 0;
+      crf |= (a == b) ? PowerPC::CR_EQ : 0;
+      CI_WriteCRField(ppc_state, m.rd, crf);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CONST32_ADDRA:
+    {
+      const MicroOp& m = ops[i];
+      const u32 ra_val = ppc_state.gpr[m.ra];
+      const s32 hi = static_cast<s16>(static_cast<u32>(m.imm) >> 16);
+      const u32 lo = m.imm & 0xFFFFu;
+      const u32 upper_add = ra_val + (static_cast<u32>(hi) << 16);
+      ppc_state.gpr[m.rd] = upper_add | lo;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDI:
+    {
+      const MicroOp& m = ops[i];
+      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+      ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDIS:
+    {
+      const MicroOp& m = ops[i];
+      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+      ppc_state.gpr[m.rd] = ra_val + (static_cast<u32>(simm) << 16);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ORI:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val | ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ORIS:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val | ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_XORI:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val ^ ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_XORIS:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val ^ ui;
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ANDI:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val & ui;
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ANDIS:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val & ui;
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_RLWINM_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 sh = (m.imm >> 0) & 31u;
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      ppc_state.gpr[m.rd] = std::rotl(rs_val, sh) & mask;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_AND_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val & rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_OR_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val | rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_XOR_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val ^ rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_RLWIMI_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 ra_old = ppc_state.gpr[m.rd];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 sh = (m.imm >> 0) & 31u;
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      const u32 rot = std::rotl(rs_val, sh) & mask;
+      ppc_state.gpr[m.rd] = (ra_old & ~mask) | rot;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_RLWNM_VAR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb] & 31u; // shift is low 5 bits of RB
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      ppc_state.gpr[m.rd] = std::rotl(rs_val, rb_val) & mask;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ANDC_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val & ~rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ORC_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val | ~rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_NAND_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val & rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_NOR_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val | rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_EQV_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_CNTLZW:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = static_cast<u32>(std::countl_zero(ppc_state.gpr[m.ra]));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_EXTSB:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s8>(ppc_state.gpr[m.ra])));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_EXTSH:
+    {
+      const MicroOp& m = ops[i];
+      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s16>(ppc_state.gpr[m.ra])));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SLW_VAR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 amount = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] << (amount & 0x1fu));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SRW_VAR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 amount = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] >> (amount & 0x1fu));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SRAW_VAR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      if (rb_val & 0x20u)
+      {
+        if (ppc_state.gpr[m.ra] & 0x80000000u)
+        {
+          ppc_state.gpr[m.rd] = 0xFFFFFFFFu;
+          ppc_state.SetCarry(1);
+        }
+        else
+        {
+          ppc_state.gpr[m.rd] = 0x00000000u;
+          ppc_state.SetCarry(0);
+        }
+      }
+      else
+      {
+        const u32 amount = rb_val & 0x1fu;
+        const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+        ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+        ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+      }
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SRAWI_IMM:
+    {
+      const MicroOp& m = ops[i];
+      const u32 amount = m.imm & 31u;
+      const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+      ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+      ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  // Integer add/sub with carry/overflow semantics
+  op_ADD_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b;
+      ppc_state.gpr[m.rd] = result;
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDC_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDE_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b) || (carry != 0 && CI_Helper_Carry(a + b, carry)));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDME:
+    {
+      const MicroOp& m = ops[i];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = 0xFFFFFFFFu;
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_ADDZE:
+    {
+      const MicroOp& m = ops[i];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 result = a + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBF_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + 1u;
+      ppc_state.gpr[m.rd] = result;
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFC_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + 1u;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(a == 0xFFFFFFFFu || CI_Helper_Carry(b, a + 1u));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFE_RR:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b) || CI_Helper_Carry(a + b, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFME:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = 0xFFFFFFFFu;
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_SUBFZE:
+    {
+      const MicroOp& m = ops[i];
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      ++i;
+      if (i < count) goto micro_dispatch; else goto micro_done;
+    }
+
+  op_NOP:
+    {
+      ++i;
+      if (i < count) goto micro_dispatch;
+    }
+
+  micro_done:
+    ;
+  }
+#else
+  for (u32 i = 0; i < count; ++i)
+  {
+    const MicroOp& m = ops[i];
+    switch (m.op)
+    {
+    case MicroOpCode::CONST32:
+      ppc_state.gpr[m.rd] = m.imm;
+      break;
+    case MicroOpCode::CONST32_ADDRA:
+    {
+      const u32 ra_val = ppc_state.gpr[m.ra];
+      const s32 hi = static_cast<s16>(static_cast<u32>(m.imm) >> 16);
+      const u32 lo = m.imm & 0xFFFFu;
+      const u32 upper_add = ra_val + (static_cast<u32>(hi) << 16);
+      ppc_state.gpr[m.rd] = upper_add | lo;
+      break;
+    }
+    case MicroOpCode::ADDI:
+    {
+      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+      ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
+      break;
+    }
+    case MicroOpCode::ADDIS:
+    {
+      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+      ppc_state.gpr[m.rd] = ra_val + (static_cast<u32>(simm) << 16);
+      break;
+    }
+    case MicroOpCode::ORI:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val | ui;
+      break;
+    }
+    case MicroOpCode::ORIS:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val | ui;
+      break;
+    }
+    case MicroOpCode::XORI:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val ^ ui;
+      break;
+    }
+    case MicroOpCode::XORIS:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val ^ ui;
+      break;
+    }
+    case MicroOpCode::ANDI:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = m.imm & 0xFFFFu;
+      ppc_state.gpr[m.rd] = rs_val & ui;
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::ANDIS:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 ui = (m.imm & 0xFFFFu) << 16;
+      ppc_state.gpr[m.rd] = rs_val & ui;
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::RLWINM_IMM:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 sh = (m.imm >> 0) & 31u;
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      ppc_state.gpr[m.rd] = std::rotl(rs_val, sh) & mask;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::AND_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val & rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::OR_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val | rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::XOR_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val ^ rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::RLWIMI_IMM:
+    {
+      const u32 ra_old = ppc_state.gpr[m.rd];
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 sh = (m.imm >> 0) & 31u;
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      const u32 rot = std::rotl(rs_val, sh) & mask;
+      ppc_state.gpr[m.rd] = (ra_old & ~mask) | rot;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::RLWNM_VAR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb] & 31u;
+      const u32 mb = (m.imm >> 5) & 31u;
+      const u32 me = (m.imm >> 10) & 31u;
+      const u32 mask = MakeRotationMask(mb, me);
+      ppc_state.gpr[m.rd] = std::rotl(rs_val, rb_val) & mask;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::ANDC_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val & ~rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::ORC_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = rs_val | ~rb_val;
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::NAND_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val & rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::NOR_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val | rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::EQV_RR:
+    {
+      const u32 rs_val = ppc_state.gpr[m.ra];
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::CNTLZW:
+    {
+      ppc_state.gpr[m.rd] = static_cast<u32>(std::countl_zero(ppc_state.gpr[m.ra]));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::EXTSB:
+    {
+      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s8>(ppc_state.gpr[m.ra])));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::EXTSH:
+    {
+      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s16>(ppc_state.gpr[m.ra])));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::SLW_VAR:
+    {
+      const u32 amount = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] << (amount & 0x1fu));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::SRW_VAR:
+    {
+      const u32 amount = ppc_state.gpr[m.rb];
+      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] >> (amount & 0x1fu));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::SRAW_VAR:
+    {
+      const u32 rb_val = ppc_state.gpr[m.rb];
+      if (rb_val & 0x20u)
+      {
+        if (ppc_state.gpr[m.ra] & 0x80000000u)
+        {
+          ppc_state.gpr[m.rd] = 0xFFFFFFFFu;
+          ppc_state.SetCarry(1);
+        }
+        else
+        {
+          ppc_state.gpr[m.rd] = 0x00000000u;
+          ppc_state.SetCarry(0);
+        }
+      }
+      else
+      {
+        const u32 amount = rb_val & 0x1fu;
+        const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+        ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+        ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+      }
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    case MicroOpCode::SRAWI_IMM:
+    {
+      const u32 amount = m.imm & 31u;
+      const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+      ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+      ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      break;
+    }
+    // Integer add/sub with carry/overflow semantics
+    case MicroOpCode::ADD_RR:
+    {
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b;
+      ppc_state.gpr[m.rd] = result;
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::ADDC_RR:
+    {
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::ADDE_RR:
+    {
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b) || (carry != 0 && CI_Helper_Carry(a + b, carry)));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::ADDME:
+    {
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 b = 0xFFFFFFFFu;
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::ADDZE:
+    {
+      const u32 carry = ppc_state.GetCarry();
+      const u32 a = ppc_state.gpr[m.ra];
+      const u32 result = a + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBF_RR:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + 1u;
+      ppc_state.gpr[m.rd] = result;
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBFC_RR:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 result = a + b + 1u;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(a == 0xFFFFFFFFu || CI_Helper_Carry(b, a + 1u));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBFE_RR:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = ppc_state.gpr[m.rb];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, b) || CI_Helper_Carry(a + b, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBFME:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 b = 0xFFFFFFFFu;
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + b + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::SUBFZE:
+    {
+      const u32 a = ~ppc_state.gpr[m.ra];
+      const u32 carry = ppc_state.GetCarry();
+      const u32 result = a + carry;
+      ppc_state.gpr[m.rd] = result;
+      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+      if ((m.imm & 1u) != 0)
+        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+      if (m.rc)
+        CI_UpdateCR0(ppc_state, result);
+      break;
+    }
+    case MicroOpCode::NOP:
+    default:
+      break;
+    }
+  }
+#endif
+
+  // No exceptions/CR updates are modeled here; decoder must only emit safe ops.
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream,
+                                       const ExecuteMicroOpsOperands& operands)
+{
+  fmt::print(stream, "MicroOps (count={}) at PC={:#010x}\n", operands.count,
+             operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreter::HLEFunction(PowerPC::PowerPCState& ppc_state,
                                    const HLEFunctionOperands& operands)
 {
@@ -1424,6 +2546,654 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       }
       else
       {
+        // iCube WIN#2: micro-op fusion + CONST32 folding (MAIN_CIR_MICROOP_FUSION). Tried FIRST, gated
+        // entirely on the flag — when OFF this whole block is skipped and DoJit is byte-identical to
+        // upstream. Recognizes (a) the addis/ori CONST32 idiom and (b) runs of fusable pure-register
+        // integer/immediate ALU ops, emitting ONE ExecuteMicroOps callback for the run. On success it
+        // advances `i` to the LAST consumed op and `continue`s, so the outer loop's ++i lands on the
+        // next unconsumed op. CRITICAL re-graft vs the good branch: we HARD-STOP before packing any
+        // op.canEndBlock terminal (never pack-then-break), so a terminal always gets its own iteration
+        // and the WIN#4 WriteEndBlock(op.branchTo) / idle-loop handling below still fires unchanged.
+        // FL_LOADSTORE/FL_USE_FPU and op.skip ops are excluded by is_simple_mop, so numLoadStore/numFP
+        // accounting is untouched. Cycle accounting: the outer loop already charged op[i]; the fusion
+        // code charges each ADDITIONAL consumed op exactly once (guarded by `if (j != i)` / the fold
+        // loops' explicit `+=`), so the slice downcount matches the unfused path op-for-op.
+        if (s_microop_fusion && !op.canEndBlock)
+        {
+          auto is_simple_mop = [](const UGeckoInstruction& ins) -> bool {
+            switch (ins.OPCD)
+            {
+            case 10:  // cmpli
+            case 11:  // cmpi
+            case 14:  // addi
+            case 15:  // addis
+            case 20:  // rlwimix
+            case 21:  // rlwinm / rlwinm.
+            case 23:  // rlwnmx
+            case 24:  // ori
+            case 25:  // oris
+            case 26:  // xori
+            case 27:  // xoris
+            case 28:  // andi.
+            case 29:  // andis.
+              return true;
+            case 31:  // X-form logical reg-reg and/or/xor + arithmetic
+              switch (ins.SUBOP10)
+              {
+              case 0:    // cmp
+              case 32:   // cmpl
+              case 28:   // andx
+              case 444:  // orx
+              case 316:  // xorx
+              case 60:   // andcx
+              case 412:  // orcx
+              case 476:  // nandx
+              case 124:  // norx
+              case 284:  // eqvx
+              case 266:  // addx
+              case 778:  // addox
+              case 10:   // addcx
+              case 522:  // addcox
+              case 138:  // addex
+              case 650:  // addeox
+              case 234:  // addmex
+              case 746:  // addmeox
+              case 202:  // addzex
+              case 714:  // addzeox
+              case 40:   // subfx
+              case 552:  // subfox
+              case 8:    // subfcx
+              case 520:  // subfcox
+              case 136:  // subfex
+              case 648:  // subfeox
+              case 232:  // subfmex
+              case 744:  // subfmeox
+              case 200:  // subfzex
+              case 712:  // subfzeox
+              case 26:   // cntlzwx
+              case 954:  // extsbx
+              case 922:  // extshx
+              case 24:   // slwx
+              case 536:  // srwx
+              case 792:  // srawx
+              case 824:  // srawix
+                return true;
+              default:
+                return false;
+              }
+            default:
+              return false;
+            }
+          };
+
+          // (a) CONST32: addis rt,r0,hi; ori rt,rt,lo  => rt = (hi<<16)|lo. Both ops are non-terminal
+          // (ori never ends a block; addis here has RA==0). The next op (ori) must also be present and
+          // non-LS/non-FP/non-skip. We never reach here if op.canEndBlock (guarded above).
+          if (op.inst.OPCD == 15 /*addis*/ && op.inst.RA == 0 &&
+              (i + 1) < code_block.m_num_instructions)
+          {
+            PPCAnalyst::CodeOp& op2 = m_code_buffer[i + 1];
+            if (!op2.skip && (op2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) == 0 &&
+                op2.inst.OPCD == 24 /*ori*/ && op2.inst.RA == op.inst.RD &&
+                op2.inst.RS == op.inst.RD)
+            {
+              ExecuteMicroOpsOperands mop{};
+              mop.count = 1;
+              mop.current_pc = js.compilerPC;
+              MicroOp& mu = mop.ops[0];
+              mu.op = MicroOpCode::CONST32;
+              mu.rd = op.inst.RD;
+              const u32 hi = static_cast<u32>(static_cast<s16>(op.inst.SIMM_16));
+              const u32 lo = static_cast<u32>(op2.inst.UIMM & 0xFFFFu);
+              mu.imm = (hi << 16) | lo;
+
+              js.downcountAmount += op2.opinfo->num_cycles;  // op[i] (addis) charged at loop top
+              Write(CallbackCast(ExecuteMicroOps<false>), mop);  // neither op ends the block
+              i += 1;       // consume op2; outer ++i lands past it
+              continue;
+            }
+          }
+
+          // (b) CONST32_ADDRA: addis rt,ra,hi; ori rt,rt,lo  => rt = GPR[ra] + ((hi<<16)|lo).
+          if (op.inst.OPCD == 15 /*addis*/ && op.inst.RA != 0 &&
+              (i + 1) < code_block.m_num_instructions)
+          {
+            PPCAnalyst::CodeOp& op2 = m_code_buffer[i + 1];
+            if (!op2.skip && (op2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) == 0 &&
+                op2.inst.OPCD == 24 /*ori*/ && op2.inst.RA == op.inst.RD &&
+                op2.inst.RS == op.inst.RD)
+            {
+              ExecuteMicroOpsOperands mop{};
+              mop.count = 1;
+              mop.current_pc = js.compilerPC;
+              MicroOp& mu = mop.ops[0];
+              mu.op = MicroOpCode::CONST32_ADDRA;
+              mu.rd = op.inst.RD;
+              mu.ra = op.inst.RA;
+              const u32 hi = static_cast<u32>(static_cast<s16>(op.inst.SIMM_16));
+              const u32 lo = static_cast<u32>(op2.inst.UIMM & 0xFFFFu);
+              mu.imm = (hi << 16) | lo;
+
+              js.downcountAmount += op2.opinfo->num_cycles;
+              Write(CallbackCast(ExecuteMicroOps<false>), mop);
+              i += 1;
+              continue;
+            }
+          }
+
+          // (c) Pack a run of simple ALU ops into one ExecuteMicroOps. We never start a run on a
+          // terminal (guarded above) and HARD-STOP before packing any canEndBlock op, so the terminal
+          // is left for its own iteration.
+          if (is_simple_mop(op.inst))
+          {
+            ExecuteMicroOpsOperands mop{};
+            mop.count = 0;
+            mop.current_pc = js.compilerPC;
+            u32 last_consumed = i;
+
+            for (u32 j = i; j < code_block.m_num_instructions &&
+                            mop.count < ExecuteMicroOpsOperands::kMaxOps;
+                 ++j)
+            {
+              PPCAnalyst::CodeOp& next = m_code_buffer[j];
+              // Capture the primary op index BEFORE the ori/oris/xori/xoris fold loops advance j.
+              // `next` is a reference bound at j==j_start and does NOT rebind when a fold mutates j, so
+              // the post-switch cycle charge must key on j_start (not the moved j) to avoid charging
+              // op[j_start] twice. Folded ops are charged inside the fold loop; op[i] at the loop top.
+              const u32 j_start = j;
+              if (next.skip || (next.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
+                  !is_simple_mop(next.inst) || next.canEndBlock)
+              {
+                break;  // hard stop: terminal / LS / FP / skip / non-simple ends the run
+              }
+
+              MicroOp& mu = mop.ops[mop.count++];
+              switch (next.inst.OPCD)
+              {
+              case 10:  // cmpli
+              {
+                mu.op = MicroOpCode::CMPL_U_IMM;
+                mu.rd = next.inst.CRFD;
+                mu.ra = next.inst.RA;
+                mu.rb = 0;
+                mu.rc = 0;
+                mu.imm = next.inst.UIMM;
+                goto end_pack_switch;
+              }
+              case 11:  // cmpi
+              {
+                mu.op = MicroOpCode::CMP_S_IMM;
+                mu.rd = next.inst.CRFD;
+                mu.ra = next.inst.RA;
+                mu.rb = 0;
+                mu.rc = 0;
+                mu.imm = static_cast<u16>(next.inst.SIMM_16);  // keep 16-bit immediate
+                goto end_pack_switch;
+              }
+              case 14:  // addi
+                mu.op = MicroOpCode::ADDI;
+                mu.rd = next.inst.RD;  // RT
+                mu.ra = next.inst.RA;  // RA (0 allowed)
+                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                break;
+              case 15:  // addis
+                mu.op = MicroOpCode::ADDIS;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                break;
+              case 20:  // rlwimix
+                mu.op = MicroOpCode::RLWIMI_IMM;
+                mu.rd = next.inst.RA;  // destination RA
+                mu.ra = next.inst.RS;  // source RS
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
+                mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
+                         ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                break;
+              case 21:  // rlwinm/rlwinm.
+                mu.op = MicroOpCode::RLWINM_IMM;
+                mu.rd = next.inst.RA;  // destination RA
+                mu.ra = next.inst.RS;  // source RS
+                mu.rb = 0;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
+                         ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                {
+                  // NOP elimination: rlwinm rA,rA,0,0,31 with Rc==0
+                  const bool is_identity = (next.inst.SH & 31u) == 0 && (next.inst.MB & 31u) == 0 &&
+                                           (next.inst.ME & 31u) == 31 &&
+                                           next.inst.RA == next.inst.RS && next.inst.Rc == 0;
+                  if (is_identity)
+                  {
+                    --mop.count;  // drop this op from the batch
+                    goto end_pack_switch;
+                  }
+                }
+                break;
+              case 23:  // rlwnmx
+                mu.op = MicroOpCode::RLWNM_VAR;
+                mu.rd = next.inst.RA;  // destination RA
+                mu.ra = next.inst.RS;  // source RS
+                mu.rb = next.inst.RB;  // variable shift from RB
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                // Pack MB/ME into imm: [5..9]=MB, [10..14]=ME (SH is variable from RB)
+                mu.imm = ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
+                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                break;
+              case 24:  // ori
+                mu.op = MicroOpCode::ORI;
+                mu.rd = next.inst.RA;  // destination is RA
+                mu.ra = next.inst.RS;  // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                {
+                  // NOP elimination: ori rA,rA,0
+                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                  {
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
+                  // Fold consecutive ori RA, RA, uimm
+                  const u8 rt = next.inst.RA;
+                  const u8 rs = next.inst.RS;
+                  u32 combined = mu.imm & 0xFFFFu;
+                  u32 jj = j + 1;
+                  while (jj < code_block.m_num_instructions)
+                  {
+                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
+                        !is_simple_mop(n2.inst) || n2.canEndBlock)
+                      break;
+                    if (n2.inst.OPCD != 24 /*ori*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                      break;
+                    combined |= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                    js.downcountAmount += n2.opinfo->num_cycles;
+                    j = jj;  // consume
+                    ++jj;
+                  }
+                  mu.imm = combined;
+                }
+                break;
+              case 25:  // oris
+                mu.op = MicroOpCode::ORIS;
+                mu.rd = next.inst.RA;  // destination is RA
+                mu.ra = next.inst.RS;  // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                {
+                  // NOP elimination: oris rA,rA,0
+                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                  {
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
+                  // Fold consecutive oris RA, RA, uimm
+                  const u8 rt = next.inst.RA;
+                  const u8 rs = next.inst.RS;
+                  u32 combined = mu.imm & 0xFFFFu;
+                  u32 jj = j + 1;
+                  while (jj < code_block.m_num_instructions)
+                  {
+                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
+                        !is_simple_mop(n2.inst) || n2.canEndBlock)
+                      break;
+                    if (n2.inst.OPCD != 25 /*oris*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                      break;
+                    combined |= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                    js.downcountAmount += n2.opinfo->num_cycles;
+                    j = jj;
+                    ++jj;
+                  }
+                  mu.imm = combined;
+                }
+                break;
+              case 26:  // xori
+                mu.op = MicroOpCode::XORI;
+                mu.rd = next.inst.RA;  // destination is RA
+                mu.ra = next.inst.RS;  // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                {
+                  // NOP elimination: xori rA,rA,0
+                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                  {
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
+                  // Fold consecutive xori RA, RA, uimm
+                  const u8 rt = next.inst.RA;
+                  const u8 rs = next.inst.RS;
+                  u32 combined = mu.imm & 0xFFFFu;
+                  u32 jj = j + 1;
+                  while (jj < code_block.m_num_instructions)
+                  {
+                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
+                        !is_simple_mop(n2.inst) || n2.canEndBlock)
+                      break;
+                    if (n2.inst.OPCD != 26 /*xori*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                      break;
+                    combined ^= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                    js.downcountAmount += n2.opinfo->num_cycles;
+                    j = jj;
+                    ++jj;
+                  }
+                  mu.imm = combined;
+                }
+                break;
+              case 27:  // xoris
+                mu.op = MicroOpCode::XORIS;
+                mu.rd = next.inst.RA;  // destination is RA
+                mu.ra = next.inst.RS;  // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                {
+                  // NOP elimination: xoris rA,rA,0
+                  if (next.inst.RA == next.inst.RS && (next.inst.UIMM & 0xFFFFu) == 0)
+                  {
+                    --mop.count;
+                    goto end_pack_switch;
+                  }
+                  // Fold consecutive xoris RA, RA, uimm
+                  const u8 rt = next.inst.RA;
+                  const u8 rs = next.inst.RS;
+                  u32 combined = mu.imm & 0xFFFFu;
+                  u32 jj = j + 1;
+                  while (jj < code_block.m_num_instructions)
+                  {
+                    PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
+                    if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
+                        !is_simple_mop(n2.inst) || n2.canEndBlock)
+                      break;
+                    if (n2.inst.OPCD != 27 /*xoris*/ || n2.inst.RA != rt || n2.inst.RS != rs)
+                      break;
+                    combined ^= static_cast<u32>(n2.inst.UIMM & 0xFFFFu);
+                    js.downcountAmount += n2.opinfo->num_cycles;
+                    j = jj;
+                    ++jj;
+                  }
+                  mu.imm = combined;
+                }
+                break;
+              case 28:  // andi.
+                mu.op = MicroOpCode::ANDI;
+                mu.rd = next.inst.RA;  // destination is RA (recording variant)
+                mu.ra = next.inst.RS;  // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                break;
+              case 29:  // andis.
+                mu.op = MicroOpCode::ANDIS;
+                mu.rd = next.inst.RA;  // destination is RA (recording variant)
+                mu.ra = next.inst.RS;  // source is RS
+                mu.imm = static_cast<u32>(next.inst.UIMM);
+                break;
+              case 31:  // X-form logicals/shifts/misc
+              {
+                switch (next.inst.SUBOP10)
+                {
+                case 0:  // cmp
+                {
+                  mu.op = MicroOpCode::CMP_S_RR;
+                  mu.rd = next.inst.CRFD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = 0;
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                }
+                case 32:  // cmpl
+                {
+                  mu.op = MicroOpCode::CMPL_U_RR;
+                  mu.rd = next.inst.CRFD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = 0;
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                }
+                case 28:  // andx
+                  mu.op = MicroOpCode::AND_RR;
+                  break;
+                case 444:  // orx
+                  mu.op = MicroOpCode::OR_RR;
+                  break;
+                case 316:  // xorx
+                  mu.op = MicroOpCode::XOR_RR;
+                  break;
+                case 60:  // andcx
+                  mu.op = MicroOpCode::ANDC_RR;
+                  break;
+                case 412:  // orcx
+                  mu.op = MicroOpCode::ORC_RR;
+                  break;
+                case 476:  // nandx
+                  mu.op = MicroOpCode::NAND_RR;
+                  break;
+                case 124:  // norx
+                  mu.op = MicroOpCode::NOR_RR;
+                  break;
+                case 284:  // eqvx
+                  mu.op = MicroOpCode::EQV_RR;
+                  break;
+                case 266:  // addx
+                case 778:  // addox (OE)
+                {
+                  mu.op = MicroOpCode::ADD_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 778) ? 1u : 0u;  // imm bit0 -> OE
+                  goto end_pack_switch;
+                }
+                case 10:   // addcx
+                case 522:  // addcox (OE)
+                {
+                  mu.op = MicroOpCode::ADDC_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 522) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 138:  // addex
+                case 650:  // addeox (OE)
+                {
+                  mu.op = MicroOpCode::ADDE_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 650) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 234:  // addmex
+                case 746:  // addmeox (OE)
+                {
+                  mu.op = MicroOpCode::ADDME;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 746) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 202:  // addzex
+                case 714:  // addzeox (OE)
+                {
+                  mu.op = MicroOpCode::ADDZE;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 714) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 40:   // subfx
+                case 552:  // subfox (OE)
+                {
+                  mu.op = MicroOpCode::SUBF_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 552) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 8:    // subfcx
+                case 520:  // subfcox (OE)
+                {
+                  mu.op = MicroOpCode::SUBFC_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 520) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 136:  // subfex
+                case 648:  // subfeox (OE)
+                {
+                  mu.op = MicroOpCode::SUBFE_RR;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 648) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 232:  // subfmex
+                case 744:  // subfmeox (OE)
+                {
+                  mu.op = MicroOpCode::SUBFME;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 744) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 200:  // subfzex
+                case 712:  // subfzeox (OE)
+                {
+                  mu.op = MicroOpCode::SUBFZE;
+                  mu.rd = next.inst.RD;
+                  mu.ra = next.inst.RA;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = (next.inst.SUBOP10 == 712) ? 1u : 0u;
+                  goto end_pack_switch;
+                }
+                case 26:  // cntlzwx
+                  mu.op = MicroOpCode::CNTLZW;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 954:  // extsbx
+                  mu.op = MicroOpCode::EXTSB;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 922:  // extshx
+                  mu.op = MicroOpCode::EXTSH;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 24:  // slwx
+                  mu.op = MicroOpCode::SLW_VAR;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 536:  // srwx
+                  mu.op = MicroOpCode::SRW_VAR;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 792:  // srawx
+                  mu.op = MicroOpCode::SRAW_VAR;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = next.inst.RB;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = 0;
+                  goto end_pack_switch;
+                case 824:  // srawix
+                  mu.op = MicroOpCode::SRAWI_IMM;
+                  mu.rd = next.inst.RA;
+                  mu.ra = next.inst.RS;
+                  mu.rb = 0;
+                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.imm = static_cast<u32>(next.inst.SH & 31u);
+                  goto end_pack_switch;
+                default:
+                  // Not supported; undo reservation and stop packing.
+                  --mop.count;
+                  j = code_block.m_num_instructions;  // force stop
+                  goto end_pack_switch;
+                }
+                // Common reg-reg logicals fallthrough: set standard fields.
+                mu.rd = next.inst.RA;
+                mu.ra = next.inst.RS;
+                mu.rb = next.inst.RB;
+                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.imm = 0;
+                break;
+              }
+              default:
+                --mop.count;
+                j = code_block.m_num_instructions;  // force stop
+                break;
+              }
+            end_pack_switch:
+
+              // Charge cycles for every consumed op AFTER op[i] (charged at the loop top). Key on
+              // j_start, NOT the post-fold j: `next` == op[j_start], and the fold loops already charged
+              // op[j_start+1..j]. The `j < num` half suppresses the force-stop default (j set to num).
+              if (j_start != i && j < code_block.m_num_instructions)
+                js.downcountAmount += next.opinfo->num_cycles;
+
+              if (j < code_block.m_num_instructions)
+                last_consumed = j;
+            }
+
+            if (mop.count > 0)
+            {
+              // All packed ops are non-terminal (canEndBlock hard-stopped the run), so write_pc is
+              // always false here. Emit one callback and skip the per-op paths for the consumed run.
+              Write(CallbackCast(ExecuteMicroOps<false>), mop);
+              i = last_consumed;  // outer ++i advances to the next unconsumed op
+              continue;
+            }
+            // mop.count == 0: either nothing matched (last_consumed == i -> fall through to the generic
+            // paths so op[i] is still emitted exactly once) or we consumed a run of pure NOP-eliminated
+            // ops (last_consumed > i). In the latter case the ops are correctly elided AND already
+            // charged in the packer, so skip them via i = last_consumed; continue; (re-emitting them
+            // through the generic path would double-charge and re-execute them).
+            if (last_consumed > i)
+            {
+              i = last_consumed;
+              continue;
+            }
+          }
+        }
+
         const auto func = Interpreter::GetInterpreterOp(op.inst);
         const InterpretOperands operands = {interpreter, func, js.compilerPC, op.inst};
         bool emitted = false;
