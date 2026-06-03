@@ -338,7 +338,7 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
 
   // The adaptive clock manages clock within [floor, 1.0]; clamp the seed so a manual overclock
   // can't put it out of range (turn adaptive clock off to overclock above 100% manually).
-  _adaptiveCPU = MIN(1.0f, MAX(0.40f, _adaptiveCPU));
+  _adaptiveCPU = MIN(1.0f, MAX(0.30f, _adaptiveCPU));
 
   _adaptiveClockTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
   dispatch_source_set_timer(_adaptiveClockTimer, dispatch_time(DISPATCH_TIME_NOW, 0), NSEC_PER_SEC * 2, NSEC_PER_MSEC * 100);
@@ -369,8 +369,8 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
       const float pct = (float)(g_perf_metrics.GetSpeed() * 100.0);
       if (pct <= 0.f) return;  // metrics not warmed up yet
 
-      const float CPU_FLOOR = 0.40f;
-      const float TARGET_LO = 96.0f;  // below this we are dropping frames
+      const float CPU_FLOOR = 0.30f;  // aggressive: CPU-bound jitless titles run smooth this low
+      const float TARGET_LO = 92.0f;  // below this we are dropping frames -> downclock
       const float TARGET_HI = 99.0f;  // at/above this we (apparently) hold full speed
       const float HELP_EPS  = 2.5f;   // a lower must lift speed by at least this % to count as helping
                                       // (wide enough that ~1-2% frame-rate noise can't false-latch)
@@ -382,9 +382,11 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
       if (thermal == NSProcessInfoThermalStateCritical) ceiling = 0.65f;
       else if (thermal == NSProcessInfoThermalStateSerious) ceiling = 0.80f;
 
-      // 1) Grade the previous tick's change by the speed it produced (only while cool — don't
-      //    grade a change across a thermal episode, whose throttling would distort the reading).
-      if (cool && self->_acLastAction == -1) {  // we underclocked last tick
+      // 1) Grade the previous tick's change by the speed it produced. NOT cool-gated: a heavy
+      //    title leaves "Fair" within ~1 min, and cool-gating the whole loop froze all learning
+      //    (the "auto clock does nothing" bug). Thermal is handled by the applied-clock CEILING
+      //    (below) + the cool-gated PERSIST step; learning itself runs continuously.
+      if (self->_acLastAction == -1) {  // we underclocked last tick
         if (pct - self->_acSpeedBefore < HELP_EPS) {
           // Lowering didn't lift speed this tick. Undo the useless step. But do NOT latch on a
           // single ambiguous grade: the perf-sample window (GFX_PERF_SAMP_WINDOW, ~1s) lags the
@@ -400,7 +402,7 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
           // Lowering helped -> genuinely CPU-bound; clear the miss streak.
           self->_acLowerMisses = 0;
         }
-      } else if (cool && self->_acLastAction == +1) {  // we probed upward last tick
+      } else if (self->_acLastAction == +1) {  // we probed upward last tick
         if (pct < TARGET_LO) {
           // Raising it cost us full speed -> step back down and hold off probing for a while.
           self->_adaptiveCPU = MAX(CPU_FLOOR, self->_adaptiveCPU - self->_acLastStep);
@@ -413,7 +415,7 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
       // scene we tested — but the bottleneck shifts (a GPU-bound menu becomes a CPU-bound level),
       // so periodically clear the latch and re-test instead of giving up for the whole session.
       // (Without this, one early ambiguous grade used to disable auto-downclock permanently.)
-      if (cool && self->_acLowerBlocked && pct < TARGET_LO) {
+      if (self->_acLowerBlocked && pct < TARGET_LO) {
         if (++self->_acBlockedTicks >= 15) {  // ~30s at the 2s tick
           self->_acLowerBlocked = NO;
           self->_acLowerMisses = 0;
@@ -423,7 +425,7 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
 
       // 2) Choose this tick's change.
       const float applied_now = MIN(self->_adaptiveCPU, ceiling);
-      if (cool && pct < TARGET_LO && !self->_acLowerBlocked && applied_now > CPU_FLOOR) {
+      if (pct < TARGET_LO && !self->_acLowerBlocked && applied_now > CPU_FLOOR) {
         // Underspeed and lowering still plausibly helps -> step down proportional to the deficit.
         const float deficit = (TARGET_LO - pct) / 100.0f;   // 0 .. ~1
         const float step = MIN(0.20f, MAX(0.04f, deficit));
