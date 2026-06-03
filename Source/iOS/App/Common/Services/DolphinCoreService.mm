@@ -117,14 +117,12 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
   SetBaseIfUnspecified(Config::MAIN_FAST_DISC_SPEED, true);
   SetBaseIfUnspecified(Config::MAIN_DSP_THREAD, true);
-  // Dual-core (separate CPU/GPU threads): default OFF (single-core) on iOS.
-  // REVERTED from default-on (commit 35714c8c4b): on device, defaulting dual-core ON made MOST
-  // games hard-HANG a few seconds into boot — all perf-HUD counters freeze, Stop/close won't
-  // complete, and pause+continue unsticks emulation only briefly. That's the signature of a
-  // CPU<->GPU FIFO-fence/EFB-readback DEADLOCK on this lean CachedInterpreter under dual-core,
-  // not the single-core boot-stall the static analysis predicted. Single-core has no cross-thread
-  // sync to deadlock on. User-toggleable; single-vs-dual perf A/B stays open per-title.
-  SetBaseIfUnspecified(Config::MAIN_CPU_THREAD, false);
+  // Dual-core: intentionally NOT set here. iOS already defaults to single-core via upstream
+  // DEFAULT_CPU_THREAD=false (MainSettings.cpp), so no explicit default is needed. An earlier
+  // SetBaseIfUnspecified(false) was redundant AND made the dual-core toggle appear to force-reset
+  // back to off — removing it lets the user's toggle persist normally. (Dual-core ON deadlocks
+  // most games on the lean CachedInterpreter, so single-core is the right default — but that IS
+  // the upstream default; let the user opt in if they want it.)
   // Speed-first video/CPU defaults
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
