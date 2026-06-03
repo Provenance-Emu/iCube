@@ -295,6 +295,8 @@ void DVDThread::FinishRead(u64 id, s64 cycles_late)
 
 void DVDThread::ProcessReadRequest(ReadRequest&& request)
 {
+  Common::SetCurrentThreadName("DVD thread");
+
   m_file_logger.Log(*m_disc, request.partition, request.dvd_offset);
 
   std::vector<u8> buffer(request.length);
