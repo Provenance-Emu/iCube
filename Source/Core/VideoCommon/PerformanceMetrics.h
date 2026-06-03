@@ -95,6 +95,14 @@ public:
   // bound; callers publish it via SetBound. Pure function (no global state), any thread.
   static Bound ClassifyBound(double speed, double max_speed, double speed_threshold);
 
+  // Whether the iCube adaptive clock controller is currently running. Set by EmulationCoordinator
+  // when it starts/stops the controller. Consulted by CoreTiming::GetVISkip so VI-skip can be
+  // forced Off while the adaptive clock is on (step #4): VI-skip drops vblank IRQs to catch up,
+  // which corrupts the adaptive clock's GetSpeed sensor (it reads "keeping up" only because frames
+  // were dropped). The two catch-up mechanisms must not overlap. Any thread.
+  static bool GetAdaptiveClockActive();
+  static void SetAdaptiveClockActive(bool active);
+
   // ImGui Functions
   void DrawImGuiStats(const float backbuffer_scale);
 

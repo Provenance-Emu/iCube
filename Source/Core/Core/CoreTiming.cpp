@@ -504,6 +504,14 @@ bool CoreTimingManager::GetVISkip() const
   if (!m_throttle_disable_vi_int || Core::WantsDeterminism())
     return false;
 
+  // VISkip-Off-when-adaptive-clock-On as a RULE (step #4), not a default coincidence. VI-skip drops
+  // vblank IRQ presentation to catch up when behind, which corrupts the adaptive clock's GetSpeed
+  // sensor (it reads "keeping up" only because fields were dropped) and double-counts with the
+  // clock's own proactive catch-up. While the adaptive clock owns speed regulation, force VISkip Off
+  // regardless of the user's tri-state mode.
+  if (PerformanceMetrics::GetAdaptiveClockActive())
+    return false;
+
   // Respect tri-state VISkip mode; supersedes the legacy GFX_HACK_VI_SKIP bool.
   const TriState mode = Config::Get(Config::GFX_HACK_VI_SKIP_MODE);
 

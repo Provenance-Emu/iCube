@@ -702,6 +702,10 @@ static const float ACSpeedHysteresis = 0.02f;
       }
     }, false);
   });
+  // Mark the adaptive clock active so CoreTiming::GetVISkip forces VI-skip Off while it runs
+  // (step #4): the two catch-up mechanisms must not overlap or VI-skip's dropped IRQs corrupt the
+  // clock's speed sensor.
+  PerformanceMetrics::SetAdaptiveClockActive(true);
   dispatch_resume(_adaptiveClockTimer);
 }
 
@@ -720,6 +724,9 @@ static const float ACSpeedHysteresis = 0.02f;
       dispatch_source_cancel(_adaptiveClockTimer);
       _adaptiveClockTimer = nil;
     }
+    // Adaptive clock no longer owns speed regulation: let VISkip honor the user's tri-state mode
+    // again (step #4).
+    PerformanceMetrics::SetAdaptiveClockActive(false);
     // Clear the four CurrentRun keys the controller sets (CPU + VI clock + their enables). The
     // controller writes only the CurrentRun layer (never Base/Dolphin.ini), so deleting these keys
     // restores whatever the user set manually (Base) or the 1.0 default — no override left stuck.
@@ -1282,6 +1289,14 @@ after_set:
   });
 
   [self stopInputPump];
+  // Tear down the adaptive clock timer + flag on game exit so it doesn't leak into the next launch
+  // (the timer's state guard would otherwise keep a stale source around, and the VISkip rule must
+  // not stay forced Off once emulation stops). Mirrors the OFF branch of setAdaptiveClockEnabled.
+  if (_adaptiveClockTimer) {
+    dispatch_source_cancel(_adaptiveClockTimer);
+    _adaptiveClockTimer = nil;
+  }
+  PerformanceMetrics::SetAdaptiveClockActive(false);
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification object:self userInfo:nil];
 
   _mainDisplayView = nil;

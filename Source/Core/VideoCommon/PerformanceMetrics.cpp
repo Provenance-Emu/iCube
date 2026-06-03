@@ -22,6 +22,7 @@ std::atomic<u64> s_dup_present_count{0};
 std::atomic<u64> s_total_present_count{0};
 std::atomic<u64> s_audio_underrun_count{0};
 std::atomic<int> s_bound{static_cast<int>(PerformanceMetrics::Bound::Unknown)};
+std::atomic<bool> s_adaptive_clock_active{false};
 }  // namespace
 
 void PerformanceMetrics::Reset()
@@ -172,6 +173,16 @@ PerformanceMetrics::Bound PerformanceMetrics::GetBound()
 void PerformanceMetrics::SetBound(Bound b)
 {
   s_bound.store(static_cast<int>(b), std::memory_order_relaxed);
+}
+
+bool PerformanceMetrics::GetAdaptiveClockActive()
+{
+  return s_adaptive_clock_active.load(std::memory_order_relaxed);
+}
+
+void PerformanceMetrics::SetAdaptiveClockActive(bool active)
+{
+  s_adaptive_clock_active.store(active, std::memory_order_relaxed);
 }
 
 PerformanceMetrics::Bound PerformanceMetrics::ClassifyBound(double speed, double max_speed,
