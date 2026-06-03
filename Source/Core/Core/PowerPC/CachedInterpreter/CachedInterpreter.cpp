@@ -168,6 +168,15 @@ static bool s_specialized_ops = false;
 // against the generic Interpret<write_pc> contract before committing the real handler.
 static bool s_specialized_ops_validate = false;
 
+// iCube: software-prefetch hints (MAIN_CACHED_INTERPRETER_PREFETCH). When OFF (the default on this
+// Apple-only fork) NO __builtin_prefetch is ever emitted, so the CIR hot loop and the PIC load/store
+// path are byte-for-byte identical to the current no-hints state. INVERTED DEFAULT vs the upstream
+// fork: the iFly fork measured "remove prefetch on Apple Silicon = +33%" — the manual hints fight the
+// Apple Silicon hardware prefetcher, so the fast state is NO hints. This flag exists only so the hints
+// can be re-added on-device for A/B confirmation (flip ON => hints emitted => expected SLOWER on Apple).
+// Read once in Init.
+static bool s_prefetch_enabled = false;
+
 // iCube WIN#2: when true, DoJit fuses runs of pure-register integer/immediate ops into a single
 // ExecuteMicroOps callback and folds the addis/ori CONST32 idiom. Read once in Init. Default OFF: with
 // the flag off NO ExecuteMicroOps callback is ever emitted and the DoJit fusion block is skipped
@@ -310,6 +319,8 @@ void CachedInterpreter::Init()
   s_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
   s_block_linking_validate = Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE);
   s_validate_instance = s_block_linking_validate ? this : nullptr;
+  // iCube: default false (no hints; the fast state). Flip ON only to A/B the +33%-by-removal finding.
+  s_prefetch_enabled = Config::Get(Config::MAIN_CACHED_INTERPRETER_PREFETCH);
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
@@ -367,6 +378,16 @@ void CachedInterpreter::ExecuteOneBlock()
   }
 
   auto& ppc_state = m_ppc_state;
+  // iCube: optional register-file prefetch hints (MAIN_CACHED_INTERPRETER_PREFETCH, default OFF). When
+  // the flag is off NOTHING is emitted here and the loop is byte-identical to the current fast state.
+  // ON re-adds the hints to A/B the "remove-prefetch = +33% on Apple Silicon" finding (expected slower).
+#if defined(__GNUC__) || defined(__clang__)
+  if (s_prefetch_enabled)
+  {
+    __builtin_prefetch(&ppc_state.gpr[0], 0, 3);
+    __builtin_prefetch(&ppc_state.ps[0], 0, 3);
+  }
+#endif
   while (true)
   {
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
@@ -798,6 +819,16 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
 
   if (base_ptr) [[likely]]
   {
+    // iCube: optional PIC-data prefetch (MAIN_CACHED_INTERPRETER_PREFETCH, default OFF). Off => no
+    // hint emitted (byte-identical to the current fast state); ON re-adds it to A/B the +33%-by-
+    // removal finding. Read hints (locality 1) over the target line; safe for both loads and stores.
+#if defined(__GNUC__) || defined(__clang__)
+    if (s_prefetch_enabled)
+    {
+      __builtin_prefetch(base_ptr + offset, 0, 1);
+      __builtin_prefetch(base_ptr + offset + 32, 0, 1);
+    }
+#endif
     switch (inst.OPCD)
     {
     case 32:  // lwz
@@ -1050,6 +1081,16 @@ s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
 
   if (base_ptr) [[likely]]
   {
+    // iCube: optional PIC-data prefetch (MAIN_CACHED_INTERPRETER_PREFETCH, default OFF). Off => no
+    // hint emitted (byte-identical to the current fast state); ON re-adds it to A/B the +33%-by-
+    // removal finding. Read hints (locality 1) over the target line; safe for both loads and stores.
+#if defined(__GNUC__) || defined(__clang__)
+    if (s_prefetch_enabled)
+    {
+      __builtin_prefetch(base_ptr + offset, 0, 1);
+      __builtin_prefetch(base_ptr + offset + 32, 0, 1);
+    }
+#endif
     switch (inst.SUBOP10)
     {
     case 23:   // lwzx

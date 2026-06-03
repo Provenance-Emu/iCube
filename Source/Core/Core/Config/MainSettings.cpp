@@ -803,7 +803,12 @@ bool IsDebuggingEnabled()
 }
 
 // --- iCube re-baseline: carried custom Config keys ---
-const Info<bool> MAIN_CACHED_INTERPRETER_PREFETCH{{System::Main, "Core", "CachedInterpreterPrefetch"}, true};
+// INVERTED DEFAULT (false) on this Apple-only fork: the iFly fork measured "remove prefetch on Apple
+// Silicon = +33%" — the manual __builtin_prefetch hints fight Apple's hardware prefetcher, so the FAST
+// state is NO hints. The CIR consumer (CachedInterpreter.cpp) emits hints ONLY when this is true, so
+// the default-off path is byte-identical to the current no-hints HEAD. Flip ON to A/B on-device
+// (expected SLOWER on Apple). Bare false (no platform guard) like the other inlined Apple-fork toggles.
+const Info<bool> MAIN_CACHED_INTERPRETER_PREFETCH{{System::Main, "Core", "CachedInterpreterPrefetch"}, false};
 
 // iOS/tvOS-only fork: these idle-detection toggles default ON (the value of Joe's
 // kDefault* constexprs on Apple mobile); inlined to avoid carrying the platform-guard block.
