@@ -3136,9 +3136,18 @@ struct GraphicsEnhancementsView: View {
           destination: EfbScalePicker(selected: $efbScale, maxScale: efbMaxScale),
           L("Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty.")
         ) {
-          Text("\(L("Internal Resolution")): \(efbScale == 0 ? L("Auto") : "\(efbScale)x")")
+          Text("\(L("Internal Resolution")): \(efbScale == 0 ? L("Auto (fit window)") : "\(efbScale)x")")
         }
-        .onChange(of: efbScale) { DOLConfigBridge.setGfxEfbScale($0) }
+        .onChange(of: efbScale) { newScale in
+          DOLConfigBridge.setGfxEfbScale(newScale)
+          // Picking an explicit (non-fit-window) scale means the user wants that exact IR. The Auto-IR
+          // controller also drives GFX_EFB_SCALE, so leave it on and the two fight. Turn Auto-IR off so
+          // the manual choice sticks. (The Auto-IR toggle lives on the Graphics > General screen and
+          // re-reads its state from the bridge when it next appears.)
+          if newScale != 0 {
+            DOLConfigBridge.setGfxAutoIREnable(false)
+          }
+        }
       }, header: { Text(L("Internal Resolution")) })
       Section(content: {
         settingsNavCaption(
