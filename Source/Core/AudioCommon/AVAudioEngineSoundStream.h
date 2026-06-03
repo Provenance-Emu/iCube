@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -80,6 +81,9 @@ private:
 
   std::atomic<bool> m_running{false};
   std::thread m_audio_thread;
+  // Serializes engine/node graph teardown+rebuild (route/interruption handlers,
+  // main queue) against the audio thread that schedules buffers on those nodes.
+  std::mutex m_engine_mutex;
 
   int m_volume_percent = 100;
   const uint32_t kSampleRate = 48000;
