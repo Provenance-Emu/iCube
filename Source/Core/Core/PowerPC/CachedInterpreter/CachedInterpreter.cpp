@@ -37,11 +37,11 @@ CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_
 
 CachedInterpreter::~CachedInterpreter() = default;
 
-// iCube: skip the per-block PowerPC performance-monitor (PMC) update on the CIR hot path.
-// Most titles never configure the PMC (MMCRn SELECT = 0 -> the update is pure overhead), so
-// skipping it saves ~4% on CPU-bound games. Default OFF (PMC emulated for correctness); the
-// MAIN_CIR_SKIP_PERF_MONITOR setting opts in. Read once in Init (cheap per-block bool check).
-static bool s_skip_perf_monitor = false;
+// iCube WIN#3: the per-block PowerPC performance-monitor (PMC) update is now gated at the call
+// sites on PowerPC::PerformanceMonitorActive(ppc_state) (MMCR0/MMCR1 non-zero). This replaces the
+// old default-off MAIN_CIR_SKIP_PERF_MONITOR skip flag: it skips the update for the common case
+// (game never configured the PMC) while staying bit-accurate for titles that do, so no opt-in flag
+// is needed. The MAIN_CIR_SKIP_PERF_MONITOR config entry is left defined (harmless, now unread).
 
 // iCube: when true, the emission site routes whitelisted hot integer-ALU ops to a specialized,
 // directly-dispatched callback (see InterpretSpecialized) instead of the generic Interpret
@@ -170,7 +170,6 @@ static CirSpecOp SpecOpId(Interpreter::Instruction func)
 void CachedInterpreter::Init()
 {
   RefreshConfig();
-  s_skip_perf_monitor = Config::Get(Config::MAIN_CIR_SKIP_PERF_MONITOR);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_specialized_ops_validate = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
   s_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
@@ -320,7 +319,10 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
 {
   ppc_state.pc = ppc_state.npc;
   ppc_state.downcount -= operands.downcount;
-  if (!s_skip_perf_monitor)
+  // iCube WIN#3: only touch the PMC when the game actually configured it (MMCR0/MMCR1 non-zero).
+  // Most titles never enable the performance monitor, so this skips the update entirely while
+  // staying bit-accurate for the titles that do — strictly better than the old default-off skip flag.
+  if (PowerPC::PerformanceMonitorActive(ppc_state))
     PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
                                       operands.num_fp_inst, ppc_state);
   if constexpr (profiled)
@@ -338,7 +340,8 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const LinkBlo
   // not) so pc/downcount/PMC bookkeeping is exactly what the unlinked path would have produced.
   ppc_state.pc = ppc_state.npc;
   ppc_state.downcount -= operands.downcount;
-  if (!s_skip_perf_monitor)
+  // iCube WIN#3: PMC update gated on the game having configured the performance monitor (see EndBlock).
+  if (PowerPC::PerformanceMonitorActive(ppc_state))
     PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
                                       operands.num_fp_inst, ppc_state);
 

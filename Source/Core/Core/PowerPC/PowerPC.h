@@ -331,6 +331,17 @@ private:
 void UpdatePerformanceMonitor(u32 cycles, u32 num_load_stores, u32 num_fp_inst,
                               PowerPCState& ppc_state);
 
+// Fast query for hot paths to determine if UpdatePerformanceMonitor may do work.
+// Returns true if any PMCs are configured to increment or if performance monitor
+// interrupts are enabled (so the overflow check must run).
+inline bool PerformanceMonitorActive(const PowerPCState& ppc_state)
+{
+  // Fast, conservative check: if either MMCR0 or MMCR1 is non-zero, the
+  // performance monitor may need work (counters configured and/or interrupts).
+  // This avoids depending on MMCR0/MMCR1 macros before their definitions.
+  return ppc_state.spr[SPR_MMCR0] != 0 || ppc_state.spr[SPR_MMCR1] != 0;
+}
+
 void CheckExceptionsFromJIT(PowerPCManager& power_pc);
 void CheckExternalExceptionsFromJIT(PowerPCManager& power_pc);
 void CheckAndHandleBreakPointsFromJIT(PowerPCManager& power_pc);
