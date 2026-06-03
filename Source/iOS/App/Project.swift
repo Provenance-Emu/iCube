@@ -163,6 +163,39 @@ let preScripts: [TargetScript] = [
     ),
 ]
 
+// MARK: - Sentry dSYM upload (post-compile)
+//
+// Replicates the "Upload Debug Symbols to Sentry" run-script phase the Sentry installer added to
+// the gitignored iCube.xcodeproj. sentry-cli auto-discovers the gitignored Source/iOS/App/.sentryclirc
+// (which holds the auth token) from the working dir at build time — the token never lives here.
+// SENTRY_ORG/SENTRY_PROJECT are inline as the installer wrote them. The `if which sentry-cli` guard
+// makes it a no-op (warning only) when sentry-cli isn't installed or upload fails, so it never
+// breaks a build (e.g. CI without sentry-cli or network).
+let uploadDsymScript: TargetScript = .post(
+    script: """
+    # This script is responsible for uploading debug symbols and source context for Sentry.
+    if [[ "$(uname -m)" == arm64 ]]; then
+      export PATH="/opt/homebrew/bin:$PATH"
+    fi
+
+    if which sentry-cli >/dev/null; then
+      export SENTRY_ORG=provenance-emu
+      export SENTRY_PROJECT=icube
+      ERROR=$(sentry-cli debug-files upload --include-sources "$DWARF_DSYM_FOLDER_PATH" 2>&1 >/dev/null)
+      if [ ! $? -eq 0 ]; then
+        echo "warning: sentry-cli - $ERROR"
+      fi
+    else
+      echo "warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases"
+    fi
+    """,
+    name: "Upload Debug Symbols to Sentry",
+    inputPaths: [
+        "${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
+    ],
+    basedOnDependencyAnalysis: false
+)
+
 // MARK: - iCube app target
 
 let iCube = Target.target(
@@ -227,7 +260,7 @@ let iCube = Target.target(
         .folderReference(path: "Project/Assets/compiled_shaders"),
     ],
     entitlements: nil, // per-config via CODE_SIGN_ENTITLEMENTS in appConfigs
-    scripts: preScripts,
+    scripts: preScripts + [uploadDsymScript],
     dependencies: [
         .xcframework(path: "../../../build/xcframework/PVlibDolphin.xcframework"),
         // MoltenVK (Vulkan-on-Metal ICD) is iOS-only: the prebuilt xcframework has only
@@ -244,6 +277,7 @@ let iCube = Target.target(
         .package(product: "AltKit"),
         .package(product: "FirebaseAnalytics"),
         .package(product: "FirebaseCrashlytics"),
+        .package(product: "Sentry"),
         .sdk(name: "ReplayKit", type: .framework),
         .sdk(name: "AVFoundation", type: .framework),
         .sdk(name: "UniformTypeIdentifiers", type: .framework),
@@ -453,6 +487,10 @@ let project = Project(
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
+        // Sentry crash/error reporting (added via the Sentry installer; replicated here so it
+        // survives `tuist generate`, which regenerates the gitignored iCube.xcodeproj). Pinned to
+        // the resolved major; Package.resolved had 8.58.3 (installer floor was 8.0.0).
+        .remote(url: "https://github.com/getsentry/sentry-cocoa", requirement: .upToNextMajor(from: "8.58.3")),
     ],
     settings: .settings(
         base: projectBase,

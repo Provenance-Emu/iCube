@@ -98,3 +98,4 @@ iCube.xcworkspace/
 Derived/
 .tuist-version
 Tuist/.build/
+.sentryclirc
