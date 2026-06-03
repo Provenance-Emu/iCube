@@ -301,6 +301,9 @@ struct EmulationScreen: View {
           Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
             ocEnabled = v
             DOLConfigBridge.setMainOverclockEnable(v)
+            // Re-apply the current percent on enable: with MAIN_OVERCLOCK at 100% the factor is
+            // unchanged until the stepper moves, so the toggle alone appeared to do nothing.
+            if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
           }))
           .tint(.blue)
           .foregroundColor(.white)
@@ -316,6 +319,7 @@ struct EmulationScreen: View {
           Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
             vbiEnabledQuick = v
             DOLConfigBridge.setMainViOverclockEnable(v)
+            if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
           }))
           .tint(.blue)
           .foregroundColor(.white)
@@ -831,6 +835,8 @@ struct EmulationScreen: View {
                       Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
                         ocEnabled = v
                         DOLConfigBridge.setMainOverclockEnable(v)
+                        // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
+                        if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
                       }))
                       .tint(.blue)
                       .foregroundColor(.white)
@@ -844,6 +850,7 @@ struct EmulationScreen: View {
                       Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
                         vbiEnabledQuick = v
                         DOLConfigBridge.setMainViOverclockEnable(v)
+                        if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
                       }))
                       .tint(.blue)
                       .foregroundColor(.white)
@@ -916,6 +923,8 @@ struct EmulationScreen: View {
                   Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
                     ocEnabled = v
                     DOLConfigBridge.setMainOverclockEnable(v)
+                    // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
+                    if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
                   }))
                   .tint(.blue)
                   .foregroundColor(.white)
@@ -928,6 +937,7 @@ struct EmulationScreen: View {
                   Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
                     vbiEnabledQuick = v
                     DOLConfigBridge.setMainViOverclockEnable(v)
+                    if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
                   }))
                   .tint(.blue)
                   .foregroundColor(.white)
