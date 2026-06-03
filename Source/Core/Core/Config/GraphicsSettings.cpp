@@ -168,7 +168,7 @@ const Info<VertexLoaderType> GFX_VERTEX_LOADER_TYPE{{System::GFX, "Settings", "V
 const Info<TextureFilteringMode> GFX_ENHANCE_FORCE_TEXTURE_FILTERING{
     {System::GFX, "Enhancements", "ForceTextureFiltering"}, TextureFilteringMode::Default};
 const Info<AnisotropicFilteringMode> GFX_ENHANCE_MAX_ANISOTROPY{
-    {System::GFX, "Enhancements", "MaxAnisotropy"}, AnisotropicFilteringMode::Default};
+    {System::GFX, "Enhancements", "MaxAnisotropy"}, AnisotropicFilteringMode::Force4x};
 const Info<OutputResamplingMode> GFX_ENHANCE_OUTPUT_RESAMPLING{
     {System::GFX, "Enhancements", "OutputResampling"}, OutputResamplingMode::Default};
 const Info<std::string> GFX_ENHANCE_POST_SHADER{
@@ -178,7 +178,7 @@ const Info<bool> GFX_ENHANCE_FORCE_TRUE_COLOR{{System::GFX, "Enhancements", "For
 const Info<bool> GFX_ENHANCE_DISABLE_COPY_FILTER{{System::GFX, "Enhancements", "DisableCopyFilter"},
                                                  true};
 const Info<bool> GFX_ENHANCE_ARBITRARY_MIPMAP_DETECTION{
-    {System::GFX, "Enhancements", "ArbitraryMipmapDetection"}, false};
+    {System::GFX, "Enhancements", "ArbitraryMipmapDetection"}, true};
 const Info<float> GFX_ENHANCE_ARBITRARY_MIPMAP_DETECTION_THRESHOLD{
     {System::GFX, "Enhancements", "ArbitraryMipmapDetectionThreshold"}, 14.0f};
 const Info<bool> GFX_ENHANCE_HDR_OUTPUT{{System::GFX, "Enhancements", "HDROutput"}, false};

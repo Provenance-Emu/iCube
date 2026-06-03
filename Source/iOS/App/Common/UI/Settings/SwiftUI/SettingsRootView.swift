@@ -1559,7 +1559,7 @@ struct ConfigGeneralView: View {
         settingsCaption(
           Toggle(L("Enable Dual Core (speedup)"), isOn: $dualCore)
             .onChange(of: dualCore) { DOLConfigBridge.setMainCpuThread($0) },
-          L("Runs the CPU and GPU on separate threads — a large speedup. Recommended ON; turn off only to debug rare timing-sensitive games."))
+          L("Runs the emulated GPU on a separate thread from the emulated CPU (can deadlock some games on this interpreter)."))
         settingsCaption(
           Toggle(L("DSP Thread (speedup)"), isOn: $dspThread)
             .onChange(of: dspThread) { DOLConfigBridge.setMainDSPThread($0) },
@@ -1831,7 +1831,6 @@ struct ConfigAdvancedView: View {
   @State private var writeBackCache: Bool = false
   @State private var disableICache: Bool = false
   @State private var lowDCBZ: Bool = false
-  @State private var fpFast: Bool = false
   // iCube perf A/B toggles. Both default ON; apply on next game launch.
   @State private var cachedInterpreterPrefetch: Bool = true
   @State private var neonTextureDecode: Bool = true
@@ -1893,10 +1892,9 @@ struct ConfigAdvancedView: View {
           Toggle(L("Bypass Instruction Cache"), isOn: $disableICache)
             .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) },
           L("Skips emulation of the PowerPC instruction cache. Can give a small CPU speedup but may cause bugs in games that rely on I-cache behavior. Usually keep OFF."))
-        rowWithCaption(
-          Toggle(L("Fast FP (Cached Interpreter, experimental)"), isOn: $fpFast)
-            .onChange(of: fpFast) { DOLConfigBridge.setMainFpFast($0) },
-          L("⚠️ Uses faster, less-accurate floating-point paths in the Cached Interpreter. May speed up CPU-bound games but can cause wrong physics, audio, or graphics. Experimental — OFF by default."))
+        // "Fast FP" (MAIN_FP_FAST) toggle removed: it's vestigial — the config key gates nothing
+        // in this interpreter build and can't be wired without a large architecture port. Config key
+        // stays defined so the bridge/config layer doesn't break; only the dead UI row is dropped.
         rowWithCaption(
           Toggle(L("CachedInterpreter Prefetch (Apple Silicon)"), isOn: $cachedInterpreterPrefetch)
             .onChange(of: cachedInterpreterPrefetch) { DOLConfigBridge.setMainCachedInterpreterPrefetch($0) },
@@ -2050,7 +2048,6 @@ struct ConfigAdvancedView: View {
     writeBackCache = DOLConfigBridge.mainAccurateCpuCache()
     disableICache = DOLConfigBridge.mainDisableICache()
     lowDCBZ = DOLConfigBridge.mainLowDCBZHack()
-    fpFast = DOLConfigBridge.mainFpFast()
     cachedInterpreterPrefetch = DOLConfigBridge.mainCachedInterpreterPrefetch()
     neonTextureDecode = DOLConfigBridge.gfxHackNeonTextureDecode()
     cirPicLoadStore = DOLConfigBridge.cirPicLoadStore()
@@ -3196,18 +3193,21 @@ struct GraphicsEnhancementsView: View {
               Spacer()
               Text(String(format: "%.2f", arbitraryMipmapThreshold))
             }
+            // Threshold is the average per-pixel/per-channel percent diff between an expected
+            // blurred mipmap and the received one (default 14.0; ~4.5 is just below clearly-arbitrary).
+            // Old 0...1 range couldn't represent the 14 default at all. Span the meaningful 0...30 scale.
 #if os(tvOS)
             TVIntStepper(
               value: Binding(
-                get: { Int(arbitraryMipmapThreshold * 100) },
-                set: { arbitraryMipmapThreshold = Double($0) / 100.0 }
+                get: { Int(arbitraryMipmapThreshold * 10) },
+                set: { arbitraryMipmapThreshold = Double($0) / 10.0 }
               ),
-              range: 0...100,
+              range: 0...300,
               step: 1
             )
             .onChange(of: arbitraryMipmapThreshold) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }
 #else
-            Slider(value: $arbitraryMipmapThreshold, in: 0.0...1.0, step: 0.01)
+            Slider(value: $arbitraryMipmapThreshold, in: 0.0...30.0, step: 0.1)
               .onChange(of: arbitraryMipmapThreshold) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }
 #endif
             Text(L("Sensitivity of arbitrary-mipmap detection. Leave at the default unless a game's textures look wrong."))
@@ -3656,7 +3656,7 @@ struct GraphicsAdvancedView: View {
           L("Computes lighting per pixel for smoother shading, at a GPU cost. Off matches original hardware."))
         settingsCaption(
           Toggle(L("Backend Multithreading"), isOn: $backendMT).onChange(of: backendMT) { DOLConfigBridge.setGfxBackendMultithreading($0) },
-          L("Runs graphics-backend work on its own thread. Helps the CPU-bound path; recommended on."))
+          L("Lets the Metal video backend record/submit draw commands on a worker thread (host-side rendering optimization; unrelated to emulation threading)."))
         settingsCaption(
           Toggle(L("Enable Shader Cache"), isOn: $shaderCache).onChange(of: shaderCache) { DOLConfigBridge.setGfxShaderCache($0) },
           L("Saves compiled shaders to disk so they aren't rebuilt every launch. Recommended on."))
