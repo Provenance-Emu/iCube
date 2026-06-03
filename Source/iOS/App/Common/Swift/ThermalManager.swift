@@ -46,7 +46,11 @@ final class ThermalManager {
   }
 
   private func restoreBaseline() {
-    DOLConfigBridge.setGfxEfbScale(baselineEfbScale)
+    // EFB scale is an AUTO behavior here, so it lives on the CurrentRun layer (resolver step #3).
+    // Clear the CurrentRun override rather than writing the baseline back into CurrentRun: that
+    // re-exposes the user's manual Base value and avoids pinning the key (which would leave the
+    // "Auto" badge stuck on / the manual IR control disabled after the device cools).
+    DOLConfigBridge.clearGfxEfbScaleAuto()
     DOLConfigBridge.setGfxEnhanceAnisotropySamples(baselineAnisotropy)
     UserDefaults.standard.set(baselineShaderEnabled, forKey: "shader_enabled")
     NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
@@ -81,14 +85,16 @@ final class ThermalManager {
       captureBaselineIfNeeded()
       let efb = max(1, min(baselineEfbScale, DOLConfigBridge.gfxEfbScale()) - 1)
       let aniso = max(1, baselineAnisotropy / 2)
-      DOLConfigBridge.setGfxEfbScale(efb)
+      // AUTO throttle → CurrentRun layer (resolver step #3): shadows the user's manual Base value.
+      DOLConfigBridge.setGfxEfbScaleAuto(efb)
       DOLConfigBridge.setGfxEnhanceAnisotropySamples(aniso)
       UserDefaults.standard.set(false, forKey: "gfx_edr_enabled")
       TVEmulationBridge.resizeSurfaceNow()
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Thermal: Reduced resolution/AF")])
     case .serious, .critical:
       captureBaselineIfNeeded()
-      DOLConfigBridge.setGfxEfbScale(1)
+      // AUTO throttle → CurrentRun layer (resolver step #3): shadows the user's manual Base value.
+      DOLConfigBridge.setGfxEfbScaleAuto(1)
       DOLConfigBridge.setGfxEnhanceAnisotropySamples(1)
       UserDefaults.standard.set(false, forKey: "gfx_edr_enabled")
       if UserDefaults.standard.bool(forKey: "shader_enabled") {

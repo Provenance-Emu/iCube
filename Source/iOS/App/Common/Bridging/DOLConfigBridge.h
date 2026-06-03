@@ -26,7 +26,16 @@ NS_ASSUME_NONNULL_BEGIN
 // Caller is responsible for mapping to display labels.
 // Also see Config::GFX_MAX_EFB_SCALE for bounds if needed.
 + (NSInteger)gfxEfbScale;
+// MANUAL setter — writes Base (resolver step #3 layer discipline).
 + (void)setGfxEfbScale:(NSInteger)scale;
+// AUTO setter — writes CurrentRun (for thermal/auto throttling; shadows but preserves manual Base).
++ (void)setGfxEfbScaleAuto:(NSInteger)scale;
+// Clear the auto (CurrentRun) EFB override, re-exposing the manual Base value.
++ (void)clearGfxEfbScaleAuto;
+// "Auto" badge helpers — YES iff an auto controller is currently overriding the key on CurrentRun.
++ (BOOL)isEfbScaleAutoOverridden;
++ (BOOL)isOverclockAutoOverridden;
++ (BOOL)isViOverclockAutoOverridden;
 // Maximum Internal Resolution supported by backend/device
 + (NSInteger)gfxEfbMaxScale;
 // GPU Texture Decoding

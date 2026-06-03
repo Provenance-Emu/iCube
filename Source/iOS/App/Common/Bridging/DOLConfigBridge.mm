@@ -55,7 +55,39 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 // Graphics > Settings
 // Internal Resolution (EFB Scale)
 + (NSInteger)gfxEfbScale { return (NSInteger)Config::Get(Config::GFX_EFB_SCALE); }
-+ (void)setGfxEfbScale:(NSInteger)scale { Config::SetBaseOrCurrent(Config::GFX_EFB_SCALE, (int)scale); }
+// MANUAL setter: writes the Base layer unconditionally. Perf-knob resolver step #3 layer discipline:
+// manual UI authors Base; auto controllers (AutoIRController, ThermalManager) author CurrentRun.
+// Reads (Config::Get) prefer CurrentRun, so an active auto override is automatically "effective"
+// while the user's Base value is preserved underneath and re-exposed when the override clears.
++ (void)setGfxEfbScale:(NSInteger)scale { Config::SetBase(Config::GFX_EFB_SCALE, (int)scale); }
+// AUTO setter: writes the CurrentRun layer (like AutoIRController). Used by thermal auto-tuning so
+// its throttle shadows — never overwrites — the user's manual Base value. Guard against a missing
+// CurrentRun layer: thermal notifications can fire outside emulation, and Config::Set dereferences
+// GetLayer(layer) with no null check (Config.h:106). CurrentRun is created at Config::Init and on
+// every boot (ClearCurrentRunLayer), so it normally exists; the guard is belt-and-suspenders.
++ (void)setGfxEfbScaleAuto:(NSInteger)scale {
+  if (Config::GetLayer(Config::LayerType::CurrentRun))
+    Config::Set(Config::LayerType::CurrentRun, Config::GFX_EFB_SCALE, (int)scale);
+}
+// Clear the auto (CurrentRun) EFB override, re-exposing the user's manual Base value. Used by the
+// thermal "restore quality" path: deleting the CurrentRun entry (rather than writing the captured
+// baseline back into CurrentRun) avoids pinning the key on CurrentRun, which would otherwise leave
+// the "Auto" badge stuck on and the manual control disabled after the device cools.
++ (void)clearGfxEfbScaleAuto {
+  if (Config::GetLayer(Config::LayerType::CurrentRun))
+    Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_EFB_SCALE);
+}
+// Resolver step #3 "Auto" badge: is a perf key currently overridden by an auto controller? True iff
+// the effective (active) layer for the key is CurrentRun — i.e. an auto write is shadowing Base.
++ (BOOL)isEfbScaleAutoOverridden {
+  return Config::GetActiveLayerForConfig(Config::GFX_EFB_SCALE) == Config::LayerType::CurrentRun;
+}
++ (BOOL)isOverclockAutoOverridden {
+  return Config::GetActiveLayerForConfig(Config::MAIN_OVERCLOCK) == Config::LayerType::CurrentRun;
+}
++ (BOOL)isViOverclockAutoOverridden {
+  return Config::GetActiveLayerForConfig(Config::MAIN_VI_OVERCLOCK) == Config::LayerType::CurrentRun;
+}
 // Maximum Internal Resolution supported by backend/device
 + (NSInteger)gfxEfbMaxScale { return (NSInteger)Config::Get(Config::GFX_MAX_EFB_SCALE); }
 // Widescreen Hack
@@ -207,14 +239,19 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setCirMicroOpFusion:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_MICROOP_FUSION, (bool)enabled); }
 + (BOOL)cirBlockLinking { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING); }
 + (void)setCirBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING, (bool)enabled); }
+// MANUAL CPU/VI clock setters: write the Base layer (resolver step #3 layer discipline). The
+// adaptive clock controller writes these same keys on the CurrentRun layer directly via
+// Config::SetCurrent (EmulationCoordinator.mm:484-489,584-593), NOT through these bridges, so
+// flipping these to SetBase cannot disturb the auto path. With no auto controller active there is
+// no CurrentRun entry, so reads return Base = identical to the prior SetBaseOrCurrent behavior.
 + (BOOL)mainOverclockEnable { return Config::Get(Config::MAIN_OVERCLOCK_ENABLE); }
-+ (void)setMainOverclockEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK_ENABLE, (bool)enabled); }
++ (void)setMainOverclockEnable:(BOOL)enabled { Config::SetBase(Config::MAIN_OVERCLOCK_ENABLE, (bool)enabled); }
 + (NSInteger)mainOverclockPercent { float v = Config::Get(Config::MAIN_OVERCLOCK); return (NSInteger)lroundf(v * 100.0f); }
-+ (void)setMainOverclockPercent:(NSInteger)percent { float v = ((float)percent) / 100.0f; Config::SetBaseOrCurrent(Config::MAIN_OVERCLOCK, v); }
++ (void)setMainOverclockPercent:(NSInteger)percent { float v = ((float)percent) / 100.0f; Config::SetBase(Config::MAIN_OVERCLOCK, v); }
 + (BOOL)mainViOverclockEnable { return Config::Get(Config::MAIN_VI_OVERCLOCK_ENABLE); }
-+ (void)setMainViOverclockEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, (bool)enabled); }
++ (void)setMainViOverclockEnable:(BOOL)enabled { Config::SetBase(Config::MAIN_VI_OVERCLOCK_ENABLE, (bool)enabled); }
 + (NSInteger)mainViOverclockPercent { float v = Config::Get(Config::MAIN_VI_OVERCLOCK); return (NSInteger)lroundf(v * 100.0f); }
-+ (void)setMainViOverclockPercent:(NSInteger)percent { float v = ((float)percent) / 100.0f; Config::SetBaseOrCurrent(Config::MAIN_VI_OVERCLOCK, v); }
++ (void)setMainViOverclockPercent:(NSInteger)percent { float v = ((float)percent) / 100.0f; Config::SetBase(Config::MAIN_VI_OVERCLOCK, v); }
 + (BOOL)mainRamOverrideEnable { return Config::Get(Config::MAIN_RAM_OVERRIDE_ENABLE); }
 + (void)setMainRamOverrideEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_RAM_OVERRIDE_ENABLE, (bool)enabled); }
 + (NSInteger)mainMem1SizeMB { int bytes = Config::Get(Config::MAIN_MEM1_SIZE); return (NSInteger)(bytes / 0x100000); }
