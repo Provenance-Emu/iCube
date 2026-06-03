@@ -367,7 +367,12 @@ struct EmulationScreen: View {
             Text("Internal Resolution: \(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x")").foregroundColor(.white.opacity(0.8))
             Spacer()
             TVIntStepperOverlay(value: $efbScaleQuick, range: 0 ... efbMaxScaleQuick, step: 1)
-              .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
+              .onChange(of: efbScaleQuick) { newScale in
+                DOLConfigBridge.setGfxEfbScale(newScale)
+                // A manual IR pick fights Auto-IR (both drive GFX_EFB_SCALE). Disable Auto-IR so
+                // the manual choice sticks -- same rule as the Settings picker (step #6).
+                if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
+              }
           }
           HStack {
             Text("Anisotropic: \(anisotropyQuick)x").foregroundColor(.white.opacity(0.8))
@@ -883,7 +888,11 @@ struct EmulationScreen: View {
                           .font(.caption)
                         Spacer()
                         Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
-                          .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
+                          .onChange(of: efbScaleQuick) { newScale in
+                            DOLConfigBridge.setGfxEfbScale(newScale)
+                            // Manual IR pick disables Auto-IR so the choice sticks (step #6).
+                            if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
+                          }
                         Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
                       }
                       HStack {
@@ -1002,7 +1011,11 @@ struct EmulationScreen: View {
                       .foregroundColor(.white.opacity(0.8))
                     Spacer()
                     Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
-                      .onChange(of: efbScaleQuick) { DOLConfigBridge.setGfxEfbScale($0) }
+                      .onChange(of: efbScaleQuick) { newScale in
+                        DOLConfigBridge.setGfxEfbScale(newScale)
+                        // Manual IR pick disables Auto-IR so the choice sticks (step #6).
+                        if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
+                      }
                     Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
                   }
                   HStack {
