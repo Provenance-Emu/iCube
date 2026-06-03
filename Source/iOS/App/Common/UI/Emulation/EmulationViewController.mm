@@ -4,6 +4,7 @@
 #import "EmulationViewController.h"
 #import <UIKit/UIKit.h>
 #include <TargetConditionals.h>
+#include <cmath>
 
 #if !TARGET_OS_TV && !TARGET_OS_MACCATALYST
 #import <FirebaseAnalytics/FirebaseAnalytics.h>
@@ -28,6 +29,7 @@
 #import "Core/Host.h"
 #import "Core/PowerPC/PowerPC.h"
 #import "Core/System.h"
+#import "VideoCommon/OnScreenDisplay.h"
 
 #import "EmulationBootParameter.h"
 #import "EmulationCoordinator.h"
@@ -260,15 +262,27 @@
 
   // Adjust the safe area insets.
   UIEdgeInsets insets = self.additionalSafeAreaInsets;
+  CGFloat navBarHeightPoints = self.navigationController.navigationBar.bounds.size.height;
   if (hidden) {
     insets.top = 0;
   } else {
     // The safe area should extend behind the navigation bar.
     // This makes the bar "float" on top of the content.
-    insets.top = -(self.navigationController.navigationBar.bounds.size.height);
+    insets.top = -navBarHeightPoints;
   }
 
   self.additionalSafeAreaInsets = insets;
+
+  // Plumb the floating toolbar height into VideoCommon (in backbuffer pixels) so the Dolphin ImGui
+  // overlays (Overlay Stats, perf windows) anchor BELOW the bar instead of clipping under it. The
+  // render surface extends behind the bar (negative top inset above), so VideoCommon otherwise has
+  // no knowledge of it. Use currentRenderSurfaceScale (the scale that feeds backbuffer_scale), NOT
+  // UIScreen.scale, since the force-scale-1 preference can diverge. 0 when the bar is hidden.
+#if !TARGET_OS_TV
+  const CGFloat surfaceScale = [[EmulationCoordinator shared] currentRenderSurfaceScale];
+  const int obscuredTopPx = hidden ? 0 : static_cast<int>(std::lround(navBarHeightPoints * surfaceScale));
+  OSD::SetObscuredPixelsTop(obscuredTopPx);
+#endif
 }
 
 #if !TARGET_OS_TV

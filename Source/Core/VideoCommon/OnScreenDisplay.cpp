@@ -205,4 +205,9 @@ void SetObscuredPixelsTop(int height)
 {
   s_obscured_pixels_top = height;
 }
+
+int GetObscuredPixelsTop()
+{
+  return s_obscured_pixels_top;
+}
 }  // namespace OSD

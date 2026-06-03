@@ -26,6 +26,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// Expose the current main display view used for rendering
 - (nullable UIView*)mainDisplayView;
 
+/// The scale that feeds the render surface's drawableSize and `wsi.render_surface_scale`
+/// (i.e. the backbuffer_scale the video backend uses). Accounts for the force-scale-1 preference,
+/// so it is NOT always UIScreen.scale. Use this to convert UIKit points to backbuffer pixels.
+- (CGFloat)currentRenderSurfaceScale;
+
 /// Ensures GameCube Pad 1 is bound to the iOS Touchscreen when no default device is connected.
 /// Also provides auto-assignment for newly connected external controllers.
 + (void)ensurePad1DefaultsToTouchscreen;

@@ -9,6 +9,7 @@
 #include <implot.h>
 
 #include "Core/Config/GraphicsSettings.h"
+#include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/VideoConfig.h"
 
 PerformanceMetrics g_perf_metrics;
@@ -248,7 +249,11 @@ void PerformanceMetrics::DrawImGuiStats(const float backbuffer_scale)
   const ImGuiCond set_next_position_condition =
       (display_size_changed || !movable_overlays) ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
 
-  float window_y = window_padding;
+  // Offset the top anchor below any host toolbar the render surface extends behind (iOS floating
+  // toolbar). 0 on desktop/other, so this is byte-neutral when no inset is set.
+  const float top_inset = static_cast<float>(OSD::GetObscuredPixelsTop());
+
+  float window_y = window_padding + top_inset;
   float window_x = display_size.x - window_padding;
 
   const auto clamp_window_position = [&] {
@@ -256,7 +261,7 @@ void PerformanceMetrics::DrawImGuiStats(const float backbuffer_scale)
     const ImVec2 size = ImGui::GetWindowSize();
     const float window_min_x = window_padding;
     const float window_max_x = display_size.x - window_padding - size.x;
-    const float window_min_y = window_padding;
+    const float window_min_y = window_padding + top_inset;
     const float window_max_y = display_size.y - window_padding - size.y;
 
     if (window_min_x > window_max_x || window_min_y > window_max_y)

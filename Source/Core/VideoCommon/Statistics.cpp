@@ -13,6 +13,7 @@
 #include "Core/System.h"
 
 #include "VideoCommon/BPFunctions.h"
+#include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VideoEvents.h"
@@ -55,7 +56,10 @@ void Statistics::SwapDL()
 void Statistics::Display() const
 {
   const float scale = ImGui::GetIO().DisplayFramebufferScale.x;
-  ImGui::SetNextWindowPos(ImVec2(10.0f * scale, 10.0f * scale), ImGuiCond_FirstUseEver);
+  // Offset below any host toolbar the render surface extends behind (iOS floating toolbar);
+  // 0 on desktop/other, so byte-neutral when no inset is set.
+  const float top_inset = static_cast<float>(OSD::GetObscuredPixelsTop());
+  ImGui::SetNextWindowPos(ImVec2(10.0f * scale, 10.0f * scale + top_inset), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSizeConstraints(ImVec2(275.0f * scale, 400.0f * scale),
                                       ImGui::GetIO().DisplaySize);
   if (!ImGui::Begin("Statistics", nullptr, ImGuiWindowFlags_NoNavInputs))
@@ -189,7 +193,10 @@ void Statistics::DisplayScissor()
 {
   // TODO: This is the same position as the regular statistics text
   const float scale = ImGui::GetIO().DisplayFramebufferScale.x;
-  ImGui::SetNextWindowPos(ImVec2(10.0f * scale, 10.0f * scale), ImGuiCond_FirstUseEver);
+  // Offset below any host toolbar the render surface extends behind (iOS floating toolbar);
+  // 0 on desktop/other, so byte-neutral when no inset is set.
+  const float top_inset = static_cast<float>(OSD::GetObscuredPixelsTop());
+  ImGui::SetNextWindowPos(ImVec2(10.0f * scale, 10.0f * scale + top_inset), ImGuiCond_FirstUseEver);
 
   if (!ImGui::Begin("Scissor Rectangles", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
   {

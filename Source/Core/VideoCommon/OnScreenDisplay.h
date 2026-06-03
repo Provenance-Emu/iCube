@@ -52,4 +52,9 @@ void ClearMessages();
 
 void SetObscuredPixelsLeft(int width);
 void SetObscuredPixelsTop(int height);
+
+// Backbuffer-px height obscured at the top of the screen (e.g. a floating host toolbar that the
+// render surface extends behind). 0 on desktop/other. Read by the ImGui perf/stats overlays so
+// they anchor below the toolbar instead of clipping under it.
+int GetObscuredPixelsTop();
 }  // namespace OSD
