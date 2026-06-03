@@ -185,6 +185,32 @@ T MMU::ReadFromHardware(u32 em_address)
     wi = translated_addr.wi;
   }
 
+  // Ultra-fast hot path: aligned 32-bit RAM reads with dcache enabled and not write-inhibited.
+  // This mirrors the semantics of the later RAM path but avoids MMIO and other region checks.
+  if constexpr (sizeof(T) == 4)
+  {
+    if (flag == XCheckTLBFlag::Read && (em_address & 0x3) == 0 && m_ppc_state.m_enable_dcache && !wi &&
+        m_memory.GetRAM() && (em_address & 0xF8000000) == 0x00000000)
+    {
+      T value;
+      const u32 masked_em = em_address & m_memory.GetRamMask();
+      m_ppc_state.dCache.Read(m_memory, masked_em, &value, sizeof(T),
+                              HID0(m_ppc_state).DLOCK || flag != XCheckTLBFlag::Read);
+      return bswap(value);
+    }
+//    // Ultra-fast hot path: aligned 32-bit EXRAM reads with dcache enabled and not write-inhibited.
+//    if (flag == XCheckTLBFlag::Read && (em_address & 0x3) == 0 && m_ppc_state.m_enable_dcache && !wi &&
+//        m_memory.GetEXRAM() && (em_address >> 28) == 0x1 &&
+//        ((em_address & 0x0FFFFFFF) < m_memory.GetExRamSizeReal()))
+//    {
+//      T value;
+//      const u32 ex_ofs = (em_address & 0x0FFFFFFF) + 0x10000000;
+//      m_ppc_state.dCache.Read(m_memory, ex_ofs, &value, sizeof(T),
+//                              HID0(m_ppc_state).DLOCK || flag != XCheckTLBFlag::Read);
+//      return bswap(value);
+//    }
+  }
+
   if (flag == XCheckTLBFlag::Read && (em_address & 0xF8000000) == 0x08000000)
   {
     if (em_address < 0x0c000000)
