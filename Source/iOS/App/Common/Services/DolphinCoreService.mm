@@ -148,12 +148,12 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP, false);
   // The legacy GFX_HACK_VI_SKIP bool above is NOT what the runtime reads. CoreTimingManager::GetVISkip
   // (CoreTiming.cpp:502-522) consults the tri-state GFX_HACK_VI_SKIP_MODE, which "supersedes the legacy
-  // bool" (CoreTiming.cpp:507) and defaults to Auto on Apple. So VISkip was still Auto-active and kept
-  // dropping vblank IRQs whenever the lean CachedInterpreter ran chronically behind realtime — the
-  // residual full-clock stall. Force the MODE key Off: the adaptive clock (now on by default) is the
-  // catch-up mechanism instead, and VISkip-Auto's bounded IRQ-dropping still stalls the chronically
-  // behind core.
-  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP_MODE, TriState::Off);
+  // bool" (CoreTiming.cpp:507). Default it to Auto: Auto is the FALLBACK catch-up for when the adaptive
+  // clock is OFF (it really helps on some games). When the adaptive clock is ON (the default), the
+  // resolver forces VISkip Off at runtime anyway (CoreTiming GetVISkip), so this default only takes
+  // effect in the adaptive-off case. The bounded-Auto (4-skip cap) prevents hard-pinning, so it no
+  // longer permanently starves vblank IRQs even on the lean CachedInterpreter.
+  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP_MODE, TriState::Auto);
   SetBaseIfUnspecified(Config::MAIN_ACCURATE_NANS, false);
   SetBaseIfUnspecified(Config::MAIN_SYNC_GPU, false);
 

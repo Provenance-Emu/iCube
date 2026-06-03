@@ -10,7 +10,7 @@
 #include "Core/Config/MainSettings.h"
 #include "Core/Config/GraphicsSettings.h"
 // Full definition of `enum class TriState` (GraphicsSettings.h only forward-declares it). Needed for
-// the TriState::Off enumerator used in resetGameplayConfigKeys's forced-defaults block.
+// the (TriState)mode cast in the VISkipMode setter (setVISkipMode:).
 #include "VideoCommon/VideoConfig.h"
 #include "Core/Config/iOSSettings.h"
 #include "AudioCommon/AudioCommon.h"
@@ -648,11 +648,11 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   Config::SetBase(Config::MAIN_DSP_THREAD, true);
   Config::SetBase(Config::GFX_HACK_IMMEDIATE_XFB, true);
 
-  // GFX_HACK_VI_SKIP_MODE compiles to TriState::Auto upstream. A plain delete-to-default (the del()
-  // above) therefore lands reset on Auto, which re-introduces the VISkip stall this build
-  // deliberately defaults to Off. Force Off so a settings reset keeps the intended VI-skip-off
-  // behavior (and stays coherent with the adaptive-clock VISkip rule, step #4).
-  Config::SetBase(Config::GFX_HACK_VI_SKIP_MODE, TriState::Off);
+  // GFX_HACK_VI_SKIP_MODE compiles to TriState::Auto on Apple (GraphicsSettings.cpp). Reset should
+  // land on Auto too — Auto is the bounded (4-skip cap) FALLBACK catch-up for the adaptive-clock-OFF
+  // case, and when the adaptive clock is ON (the default) the runtime resolver forces VISkip Off
+  // anyway. So the plain del(GFX_HACK_VI_SKIP_MODE) above is the correct reset; no forced override
+  // here. (Matches the DolphinCoreService launch default, which also SetBaseIfUnspecified's Auto.)
 
   // NOTE: intentionally NOT reset (identity/custom/non-gameplay):
   //   - DSU servers/enable (ciface DualShockUDPClient::SERVERS / SERVERS_ENABLED)
