@@ -9,6 +9,7 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 
+#import "Common/Logging/Log.h"
 #import "Common/MemoryUtil.h"
 #import "Common/WindowSystemInfo.h"
 
@@ -41,6 +42,7 @@
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 
 #import "EmulationBootParameter.h"
+#import "FastmemManager.h"
 #import "HostNotifications.h"
 #import "HostQueue.h"
 #import "JitManager.h"
@@ -55,6 +57,64 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
   const size_t slen = s.size();
   const size_t tlen = strlen(suf);
   return slen >= tlen && 0 == s.compare(slen - tlen, tlen, suf);
+}
+
+// Dump the perf-relevant settings as one readable key=value block, once at game START and once at
+// game EXIT. Goes to both NSLog (device console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so
+// Joe can copy-paste it straight into a bug report. Values are formatted human-readably (true/false,
+// enum names) rather than raw ints.
+static void _ICubeDumpPerfSettings(const char* phase)
+{
+  auto boolStr = [](bool v) { return v ? "true" : "false"; };
+  auto triStr = [](TriState v) {
+    switch (v) { case TriState::Off: return "Off"; case TriState::On: return "On"; default: return "Auto"; }
+  };
+
+  const std::string gid = SConfig::GetInstance().GetGameID();
+  const std::string title = SConfig::GetInstance().GetTitleName();
+  const bool adaptiveClock = [[NSUserDefaults standardUserDefaults] boolForKey:@"adaptive_clock_enable"];
+  const bool fastmemCfg = Config::Get(Config::MAIN_FASTMEM);
+  const bool fastmemAvail = [FastmemManager shared].fastmemAvailable;
+
+  std::string b;
+  b.reserve(1400);
+  auto line = [&](const char* k, const std::string& v) { b += "  "; b += k; b += "="; b += v; b += "\n"; };
+  auto lineB = [&](const char* k, bool v) { line(k, boolStr(v)); };
+  auto lineI = [&](const char* k, long v) { line(k, std::to_string(v)); };
+  auto lineF = [&](const char* k, float v) { char buf[32]; snprintf(buf, sizeof(buf), "%.3f", v); line(k, buf); };
+
+  b += "=== iCube settings @ ";
+  b += phase;
+  b += " ";
+  b += gid.empty() ? "(no-gameid)" : gid;
+  b += " ===\n";
+  line("title", title.empty() ? "(unknown)" : title);
+  line("MAIN_CPU_CORE", std::to_string((int)Config::Get(Config::MAIN_CPU_CORE)));
+  lineB("MAIN_CPU_THREAD(dual-core)", Config::Get(Config::MAIN_CPU_THREAD));
+  lineB("MAIN_OVERCLOCK_ENABLE", Config::Get(Config::MAIN_OVERCLOCK_ENABLE));
+  lineF("MAIN_OVERCLOCK", (float)Config::Get(Config::MAIN_OVERCLOCK));
+  lineB("MAIN_VI_OVERCLOCK_ENABLE", Config::Get(Config::MAIN_VI_OVERCLOCK_ENABLE));
+  lineF("MAIN_VI_OVERCLOCK", (float)Config::Get(Config::MAIN_VI_OVERCLOCK));
+  lineB("adaptive_clock_enable(NSUserDefault)", adaptiveClock);
+  lineI("GFX_EFB_SCALE", Config::Get(Config::GFX_EFB_SCALE));
+  lineB("GFX_AUTO_IR_ENABLE", Config::Get(Config::GFX_AUTO_IR_ENABLE));
+  line("GFX_HACK_VI_SKIP_MODE", triStr(Config::Get(Config::GFX_HACK_VI_SKIP_MODE)));
+  lineB("MAIN_CIR_PIC_LOADSTORE", Config::Get(Config::MAIN_CIR_PIC_LOADSTORE));
+  lineB("MAIN_CIR_MICROOP_FUSION", Config::Get(Config::MAIN_CIR_MICROOP_FUSION));
+  lineB("MAIN_CIR_BLOCK_LINKING", Config::Get(Config::MAIN_CIR_BLOCK_LINKING));
+  lineB("MAIN_CIR_SPECIALIZED_OPS", Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS));
+  lineB("GFX_USE_COMPUTE_EFBXFB", Config::Get(Config::GFX_USE_COMPUTE_EFBXFB));
+  lineB("GFX_USE_COMPUTE_VERTEX_DECODE", Config::Get(Config::GFX_USE_COMPUTE_VERTEX_DECODE));
+  lineB("MAIN_DSP_HLE", Config::Get(Config::MAIN_DSP_HLE));
+  lineB("MAIN_FAST_DISC_SPEED", Config::Get(Config::MAIN_FAST_DISC_SPEED));
+  lineB("MAIN_SYNC_ON_SKIP_IDLE", Config::Get(Config::MAIN_SYNC_ON_SKIP_IDLE));
+  line("MAIN_GFX_BACKEND", Config::Get(Config::MAIN_GFX_BACKEND));
+  lineB("MAIN_FASTMEM(cfg)", fastmemCfg);
+  lineB("fastmem_available(host)", fastmemAvail);
+  b += "=== end ===";
+
+  NSLog(@"%s", b.c_str());
+  INFO_LOG_FMT(CORE, "{}", b);
 }
 
 // A lightweight host view that notifies us when its bounds change so we can
@@ -1090,9 +1150,13 @@ after_set:
   [self startAdaptiveClockIfEnabled];
   [self startInputPump];
 
+  _ICubeDumpPerfSettings("START");
+
   while (Core::IsRunning(Core::System::GetInstance())) {
     dispatch_semaphore_wait(stateSemaphore, DISPATCH_TIME_FOREVER);
   }
+
+  _ICubeDumpPerfSettings("EXIT");
 
   Core::RemoveOnStateChangedCallback(&callbackHandle);
 
