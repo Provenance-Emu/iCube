@@ -527,6 +527,11 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   del(Config::MAIN_RELAXED_IDLE_DETECTION);
   del(Config::MAIN_FAST_FORWARD_CTR_IDLE);
   del(Config::MAIN_CACHED_INTERPRETER_PREFETCH);   // default true -> optimized
+  // CIR optimization toggles: compiled defaults already match iCube intent, so del-to-default is correct.
+  del(Config::MAIN_CIR_PIC_LOADSTORE);
+  del(Config::MAIN_CIR_MICROOP_FUSION);
+  del(Config::MAIN_CIR_BLOCK_LINKING);
+  del(Config::MAIN_CIR_SPECIALIZED_OPS);
   del(Config::MAIN_OVERCLOCK_ENABLE);
   del(Config::MAIN_OVERCLOCK);
   del(Config::MAIN_VI_OVERCLOCK_ENABLE);
@@ -592,6 +597,7 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   del(Config::GFX_HACK_FAST_TEXTURE_SAMPLING);
   del(Config::GFX_HACK_FAST_MATH);
   del(Config::GFX_USE_COMPUTE_EFBXFB);
+  del(Config::GFX_USE_COMPUTE_VERTEX_DECODE);
   del(Config::GFX_HACK_NO_MIPMAPPING);
   del(Config::GFX_HACK_EARLY_XFB_OUTPUT);
   del(Config::GFX_HACK_SKIP_DUPLICATE_XFBS);
@@ -655,6 +661,9 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   // ICubeJitlessVertexLoaderType), and triple-buffering defaults to true.
   NSArray<NSString*>* gameplayKeys = @[
     @"adaptive_clock_enable",
+    @"adaptive_clock_schema_v",
+    @"adaptive_clock_speed_threshold",
+    @"adaptive_clock_sweep_step",
     @"icube_vertex_loader_mode",
     @"gfx_triple_buffering",
     @"gfx_force_scale_one_non_promo",
