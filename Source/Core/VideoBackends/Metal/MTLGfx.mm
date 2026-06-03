@@ -570,3 +570,268 @@ SurfaceInfo Metal::Gfx::GetSurfaceInfo() const
   return {static_cast<u32>(size.width * scale), static_cast<u32>(size.height * scale), scale,
           Util::ToAbstract([m_layer pixelFormat])};
 }
+
+// -----------------------------------------------------------------------------
+// Compute-shader EFB/XFB acceleration (iCube native-Metal moat).
+//
+// These run EFB color/depth resolve, RGBA8 blit/scale/gamma, and mipmap generation on a
+// MTLComputeCommandEncoder instead of the stock raster utility-draw path. They are reached only
+// when Config::GFX_USE_COMPUTE_EFBXFB is enabled at the VideoCommon call sites; each returns false
+// for any case it doesn't handle so the caller falls through to the stock path. The MSL kernels are
+// inline string literals (no external .metal file dependency).
+// -----------------------------------------------------------------------------
+
+bool Metal::Gfx::TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                     const AbstractTexture* src,
+                                     const MathUtil::Rectangle<int>& src_rc)
+{
+  if (!dst || !src)
+    return false;
+  if (dst_rc.GetWidth() != src_rc.GetWidth() || dst_rc.GetHeight() != src_rc.GetHeight())
+    return false;
+  @autoreleasepool
+  {
+    // Detect MSAA source
+    id<MTLTexture> src_tex = static_cast<const Texture*>(src)->GetMTLTexture();
+    id<MTLTexture> dst_tex = static_cast<Texture*>(dst)->GetMTLTexture();
+    if (!src_tex || !dst_tex)
+      return false;
+
+    // MSAA resolve path
+    if (src_tex.sampleCount > 1)
+    {
+      static std::unique_ptr<AbstractShader> s_resolve_ms_cs;
+      if (!s_resolve_ms_cs)
+      {
+        static const char* msl_ms = R"(
+          #include <metal_stdlib>
+          using namespace metal;
+          kernel void main0(texture2d_ms<float, access::read>  src  [[texture(0)]],
+                            texture2d<float,    access::write> dst  [[texture(1)]],
+                            uint2 gid [[thread_position_in_grid]])
+          {
+            if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+            const ushort samples = src.get_num_samples();
+            float4 acc = float4(0.0);
+            for (ushort s = 0; s < samples; ++s)
+              acc += src.read(gid, s);
+            dst.write(acc / float(samples), gid);
+          }
+        )";
+        auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl_ms, "", "resolve_rgba8_ms");
+        if (!cs)
+          return false;
+        s_resolve_ms_cs = std::move(cs);
+      }
+      SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+      SetComputeImageTexture(1, dst, false, true);
+      const u32 w = static_cast<u32>(dst_rc.GetWidth());
+      const u32 h = static_cast<u32>(dst_rc.GetHeight());
+      const u32 tgx = 16, tgy = 16;
+      const u32 gx = (w + tgx - 1) / tgx;
+      const u32 gy = (h + tgy - 1) / tgy;
+      DispatchComputeShader(s_resolve_ms_cs.get(), tgx, tgy, 1, gx, gy, 1);
+      return true;
+    }
+
+    // Non-MSAA copy path
+    if (!m_rgba8_blit_cs)
+    {
+      static const char* msl = R"(
+        #include <metal_stdlib>
+        using namespace metal;
+        kernel void main0(texture2d<float, access::read>  src  [[texture(0)]],
+                          texture2d<float, access::write> dst  [[texture(1)]],
+                          uint2 gid [[thread_position_in_grid]])
+        {
+          if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+          float4 c = src.read(gid);
+          dst.write(c, gid);
+        }
+      )";
+      auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl, "", "blit_rgba8");
+      if (!cs)
+        return false;
+      m_rgba8_blit_cs = std::move(cs);
+    }
+    SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+    SetComputeImageTexture(1, dst, false, true);
+    const u32 w = static_cast<u32>(dst_rc.GetWidth());
+    const u32 h = static_cast<u32>(dst_rc.GetHeight());
+    const u32 tgx = 16;
+    const u32 tgy = 16;
+    const u32 gx = (w + tgx - 1) / tgx;
+    const u32 gy = (h + tgy - 1) / tgy;
+    DispatchComputeShader(m_rgba8_blit_cs.get(), tgx, tgy, 1, gx, gy, 1);
+    return true;
+  }
+}
+
+bool Metal::Gfx::TryComputeResolveDepth(AbstractTexture* dst,
+                                        const MathUtil::Rectangle<int>& dst_rc,
+                                        const AbstractTexture* src,
+                                        const MathUtil::Rectangle<int>& src_rc)
+{
+  if (!dst || !src)
+    return false;
+  if (dst_rc.GetWidth() != src_rc.GetWidth() || dst_rc.GetHeight() != src_rc.GetHeight())
+    return false;
+  @autoreleasepool
+  {
+    id<MTLTexture> src_tex = static_cast<const Texture*>(src)->GetMTLTexture();
+    id<MTLTexture> dst_tex = static_cast<Texture*>(dst)->GetMTLTexture();
+    if (!src_tex || !dst_tex)
+      return false;
+    if (src_tex.sampleCount <= 1)
+      return false;
+
+    static std::unique_ptr<AbstractShader> s_depth_resolve_ms_cs;
+    if (!s_depth_resolve_ms_cs)
+    {
+      static const char* msl = R"(
+        #include <metal_stdlib>
+        using namespace metal;
+        kernel void main0(texture2d_ms<float, access::read>  src  [[texture(0)]],
+                          texture2d<float,    access::write> dst  [[texture(1)]],
+                          uint2 gid [[thread_position_in_grid]])
+        {
+          if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+          const ushort samples = src.get_num_samples();
+          float acc = 0.0;
+          for (ushort s = 0; s < samples; ++s)
+            acc += src.read(gid, s);
+          dst.write(acc / float(samples), gid);
+        }
+      )";
+      auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl, "", "resolve_depth_ms");
+      if (!cs)
+        return false;
+      s_depth_resolve_ms_cs = std::move(cs);
+    }
+    SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+    SetComputeImageTexture(1, dst, false, true);
+    const u32 w = static_cast<u32>(dst_rc.GetWidth());
+    const u32 h = static_cast<u32>(dst_rc.GetHeight());
+    const u32 tgx = 16, tgy = 16;
+    const u32 gx = (w + tgx - 1) / tgx;
+    const u32 gy = (h + tgy - 1) / tgy;
+    DispatchComputeShader(s_depth_resolve_ms_cs.get(), tgx, tgy, 1, gx, gy, 1);
+    return true;
+  }
+}
+
+bool Metal::Gfx::TryComputeScaleRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                      const AbstractTexture* src,
+                                      const MathUtil::Rectangle<int>& src_rc, u32 scale_x,
+                                      u32 scale_y)
+{
+  if (!dst || !src)
+    return false;
+  if (scale_x != 2 || scale_y != 2)
+    return false;
+  if (dst_rc.GetWidth() * 2 != src_rc.GetWidth() || dst_rc.GetHeight() * 2 != src_rc.GetHeight())
+    return false;
+  @autoreleasepool
+  {
+    if (!m_rgba8_down2x_cs)
+    {
+      static const char* msl = R"(
+        #include <metal_stdlib>
+        using namespace metal;
+        kernel void main0(texture2d<float, access::read>  src [[texture(0)]],
+                          texture2d<float, access::write> dst [[texture(1)]],
+                          uint2 gid [[thread_position_in_grid]])
+        {
+          if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+          uint2 s0 = uint2(gid.x*2,   gid.y*2);
+          uint2 s1 = uint2(gid.x*2+1, gid.y*2);
+          uint2 s2 = uint2(gid.x*2,   gid.y*2+1);
+          uint2 s3 = uint2(gid.x*2+1, gid.y*2+1);
+          float4 acc = src.read(s0) + src.read(s1) + src.read(s2) + src.read(s3);
+          dst.write(acc * 0.25, gid);
+        }
+      )";
+      auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl, "", "downscale_rgba8_2x");
+      if (!cs)
+        return false;
+      m_rgba8_down2x_cs = std::move(cs);
+    }
+    SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+    SetComputeImageTexture(1, dst, false, true);
+    const u32 w = static_cast<u32>(dst_rc.GetWidth());
+    const u32 h = static_cast<u32>(dst_rc.GetHeight());
+    const u32 tgx = 16, tgy = 16;
+    const u32 gx = (w + tgx - 1) / tgx;
+    const u32 gy = (h + tgy - 1) / tgy;
+    DispatchComputeShader(m_rgba8_down2x_cs.get(), tgx, tgy, 1, gx, gy, 1);
+    return true;
+  }
+}
+
+bool Metal::Gfx::TryComputeGammaRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                      const AbstractTexture* src,
+                                      const MathUtil::Rectangle<int>& src_rc, float gamma_rcp)
+{
+  if (!dst || !src)
+    return false;
+  if (dst_rc.GetWidth() != src_rc.GetWidth() || dst_rc.GetHeight() != src_rc.GetHeight())
+    return false;
+  @autoreleasepool
+  {
+    if (!m_rgba8_gamma_cs)
+    {
+      static const char* msl = R"(
+        #include <metal_stdlib>
+        using namespace metal;
+        struct Params { float gamma_rcp; };
+        kernel void main0(texture2d<float, access::read>  src [[texture(0)]],
+                          texture2d<float, access::write> dst [[texture(1)]],
+                          constant Params& p [[buffer(0)]],
+                          uint2 gid [[thread_position_in_grid]])
+        {
+          if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
+          float4 c = src.read(gid);
+          c.rgb = pow(c.rgb, p.gamma_rcp);
+          dst.write(c, gid);
+        }
+      )";
+      auto cs = CreateShaderFromMSL(ShaderStage::Compute, msl, "", "gamma_rgba8");
+      if (!cs)
+        return false;
+      m_rgba8_gamma_cs = std::move(cs);
+    }
+    SetComputeImageTexture(0, const_cast<AbstractTexture*>(src), true, false);
+    SetComputeImageTexture(1, dst, false, true);
+    struct
+    {
+      float gamma_rcp;
+    } params{gamma_rcp};
+    g_state_tracker->SetUtilityUniform(&params, sizeof(params));
+    const u32 w = static_cast<u32>(dst_rc.GetWidth());
+    const u32 h = static_cast<u32>(dst_rc.GetHeight());
+    const u32 tgx = 16, tgy = 16;
+    const u32 gx = (w + tgx - 1) / tgx;
+    const u32 gy = (h + tgy - 1) / tgy;
+    DispatchComputeShader(m_rgba8_gamma_cs.get(), tgx, tgy, 1, gx, gy, 1);
+    return true;
+  }
+}
+
+void Metal::Gfx::GenerateMipmaps(AbstractTexture* texture)
+{
+  if (!texture)
+    return;
+  @autoreleasepool
+  {
+    g_state_tracker->EndRenderPass();
+    id<MTLTexture> tex = static_cast<Texture*>(texture)->GetMTLTexture();
+    if (!tex || tex.mipmapLevelCount <= 1)
+      return;
+    id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
+    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+    if (!blit)
+      return;
+    [blit generateMipmapsForTexture:tex];
+    [blit endEncoding];
+  }
+}

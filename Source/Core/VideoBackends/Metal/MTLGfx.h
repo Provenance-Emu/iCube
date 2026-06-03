@@ -72,6 +72,22 @@ public:
 
   SurfaceInfo GetSurfaceInfo() const override;
 
+  // Compute-shader EFB/XFB acceleration (iCube native-Metal moat).
+  // Gated behind Config::GFX_USE_COMPUTE_EFBXFB at the VideoCommon call sites.
+  bool TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                           const AbstractTexture* src,
+                           const MathUtil::Rectangle<int>& src_rc) override;
+  void GenerateMipmaps(AbstractTexture* texture) override;
+  bool TryComputeResolveDepth(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                              const AbstractTexture* src,
+                              const MathUtil::Rectangle<int>& src_rc) override;
+  bool TryComputeScaleRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                            const AbstractTexture* src, const MathUtil::Rectangle<int>& src_rc,
+                            u32 scale_x, u32 scale_y) override;
+  bool TryComputeGammaRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                            const AbstractTexture* src, const MathUtil::Rectangle<int>& src_rc,
+                            float gamma_rcp) override;
+
 private:
   MRCOwned<CAMetalLayer*> m_layer;
   MRCOwned<id<CAMetalDrawable>> m_drawable;
@@ -80,6 +96,12 @@ private:
   u32 m_texture_counter = 0;
   u32 m_staging_texture_counter = 0;
   std::array<u32, 4> m_shader_counter = {};
+
+  // Cached compute pipelines for the EFB/XFB acceleration path (lazily created on first use).
+  std::unique_ptr<AbstractShader> m_rgba8_blit_cs;
+  std::unique_ptr<AbstractShader> m_rgba8_scale_cs;
+  std::unique_ptr<AbstractShader> m_rgba8_down2x_cs;
+  std::unique_ptr<AbstractShader> m_rgba8_gamma_cs;
 
   void CheckForSurfaceChange();
   void CheckForSurfaceResize();

@@ -326,6 +326,21 @@ AbstractTexture* FramebufferManager::ResolveEFBColorTexture(const MathUtil::Rect
   MathUtil::Rectangle<int> clamped_region = region;
   clamped_region.ClampUL(0, 0, GetEFBWidth(), GetEFBHeight());
 
+  // Try compute fast-path resolve for RGBA8 when enabled (iCube native-Metal moat).
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) &&
+      m_efb_color_texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      m_efb_resolve_color_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    m_efb_color_texture->FinishedRendering();
+    if (g_gfx->TryComputeBlitRGBA8(m_efb_resolve_color_texture.get(), clamped_region,
+                                   m_efb_color_texture.get(), clamped_region))
+    {
+      m_efb_resolve_color_texture->FinishedRendering();
+      g_gfx->GenerateMipmaps(m_efb_resolve_color_texture.get());
+      return m_efb_resolve_color_texture.get();
+    }
+  }
+
   // Resolve to our already-created texture.
   if (g_backend_info.bSupportsPartialMultisampleResolve)
   {
@@ -365,6 +380,22 @@ AbstractTexture* FramebufferManager::ResolveEFBDepthTexture(const MathUtil::Rect
   MathUtil::Rectangle<int> clamped_region = region;
   clamped_region.ClampUL(0, 0, GetEFBWidth(), GetEFBHeight());
 
+  // Try compute fast-path depth resolve for D32F when enabled (iCube native-Metal moat).
+  // TryComputeResolveDepth self-guards on a multisampled source and returns false otherwise.
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) &&
+      m_efb_depth_texture->GetFormat() == AbstractTextureFormat::D32F &&
+      m_efb_depth_resolve_texture->GetFormat() == AbstractTextureFormat::D32F)
+  {
+    m_efb_depth_texture->FinishedRendering();
+    if (g_gfx->TryComputeResolveDepth(m_efb_depth_resolve_texture.get(), clamped_region,
+                                      m_efb_depth_texture.get(), clamped_region))
+    {
+      m_efb_depth_resolve_texture->FinishedRendering();
+      g_gfx->GenerateMipmaps(m_efb_depth_resolve_texture.get());
+      return m_efb_depth_resolve_texture.get();
+    }
+  }
+
   m_efb_depth_texture->FinishedRendering();
   g_gfx->BeginUtilityDrawing();
   g_gfx->SetAndDiscardFramebuffer(m_efb_depth_resolve_framebuffer.get());
@@ -384,6 +415,24 @@ bool FramebufferManager::ReinterpretPixelData(EFBReinterpretType convtype)
 {
   if (!m_format_conversion_pipelines[static_cast<u32>(convtype)])
     return false;
+
+  // Compute fast-path for simple RGBA8 blit (no scaling) when enabled (iCube native-Metal moat).
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) &&
+      m_efb_color_texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      m_efb_convert_color_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    m_efb_color_texture->FinishedRendering();
+    const MathUtil::Rectangle<int> rect = m_efb_framebuffer->GetRect();
+    if (g_gfx->TryComputeBlitRGBA8(m_efb_convert_color_texture.get(), rect,
+                                   m_efb_color_texture.get(), rect))
+    {
+      std::swap(m_efb_color_texture, m_efb_convert_color_texture);
+      std::swap(m_efb_framebuffer, m_efb_convert_framebuffer);
+      InvalidatePeekCache(true);
+      g_gfx->GenerateMipmaps(m_efb_color_texture.get());
+      return true;
+    }
+  }
 
   // Draw to the secondary framebuffer.
   // We don't discard here because discarding the framebuffer also throws away the depth

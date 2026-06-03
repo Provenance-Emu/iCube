@@ -2836,7 +2836,100 @@ void TextureCacheBase::CopyEFBToCacheEntry(RcTcacheEntry& entry, bool is_depth_c
                       g_framebuffer_manager->ResolveEFBColorTexture(framebuffer_rect);
 
   src_texture->FinishedRendering();
+
+  // Compute fast-path for XFB RGBA8 copies without scaling/gamma/clamp (iCube native-Metal moat).
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) && !is_depth_copy && !is_intensity &&
+      dst_format == EFBCopyFormat::XFB && !scale_by_half && !linear_filter && gamma == 1.0f &&
+      !clamp_top && !clamp_bottom &&
+      entry->texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      src_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    MathUtil::Rectangle<int> dst_rect(0, 0, static_cast<int>(entry->texture->GetWidth()),
+                                      static_cast<int>(entry->texture->GetHeight()));
+    MathUtil::Rectangle<int> src_rect_fb = framebuffer_rect;
+    if (g_gfx->TryComputeBlitRGBA8(entry->texture.get(), dst_rect, src_texture, src_rect_fb))
+    {
+      entry->texture->FinishedRendering();
+      g_gfx->GenerateMipmaps(entry->texture.get());
+      return;
+    }
+  }
+  // Compute fast-path for gamma correction on RGBA8 when no scaling/clamp/filter.
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) && !is_depth_copy && !is_intensity &&
+      dst_format != EFBCopyFormat::XFB && !scale_by_half && !linear_filter && gamma != 1.0f &&
+      !clamp_top && !clamp_bottom &&
+      entry->texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      src_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    MathUtil::Rectangle<int> dst_rect(0, 0, static_cast<int>(entry->texture->GetWidth()),
+                                      static_cast<int>(entry->texture->GetHeight()));
+    MathUtil::Rectangle<int> src_rect_fb = framebuffer_rect;
+    if (g_gfx->TryComputeGammaRGBA8(entry->texture.get(), dst_rect, src_texture, src_rect_fb,
+                                    1.0f / gamma))
+    {
+      entry->texture->FinishedRendering();
+      g_gfx->GenerateMipmaps(entry->texture.get());
+      return;
+    }
+  }
+
+  // Compute fast-path for copy filter + optional gamma on RGBA8 (no scaling).
+  // TryComputeEFBFilterRGBA8 is declared but not implemented on the Metal backend (matches the
+  // icube-testflight source); it returns false and falls through to the stock path below.
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) && !is_depth_copy && !is_intensity &&
+      dst_format != EFBCopyFormat::XFB && !scale_by_half &&
+      entry->texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      src_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    const bool apply_gamma = gamma != 1.0f;
+    const bool need_filter =
+        AllCopyFilterCoefsNeeded(filter_coefficients) || CopyFilterCanOverflow(filter_coefficients);
+    if (need_filter || apply_gamma || clamp_top || clamp_bottom)
+    {
+      MathUtil::Rectangle<int> dst_rect(0, 0, static_cast<int>(entry->texture->GetWidth()),
+                                        static_cast<int>(entry->texture->GetHeight()));
+      MathUtil::Rectangle<int> src_rect_fb = framebuffer_rect;
+      const bool efb_has_alpha = bpmem.zcontrol.pixel_format == PixelFormat::RGBA6_Z24;
+      const u32 efb_height_local = g_framebuffer_manager->GetEFBHeight();
+      const u32 top_coord_local = clamp_top ? framebuffer_rect.top : 0;
+      const u32 bottom_coord_local = (clamp_bottom ? framebuffer_rect.bottom : efb_height_local) - 1;
+      const u32 relative_top = (top_coord_local > static_cast<u32>(framebuffer_rect.top)) ?
+                                   (top_coord_local - framebuffer_rect.top) :
+                                   0u;
+      const u32 relative_bottom = (bottom_coord_local > static_cast<u32>(framebuffer_rect.top)) ?
+                                      (bottom_coord_local - framebuffer_rect.top) :
+                                      0u;
+      if (g_gfx->TryComputeEFBFilterRGBA8(entry->texture.get(), dst_rect, src_texture, src_rect_fb,
+                                          filter_coefficients, efb_has_alpha, 1.0f / gamma,
+                                          static_cast<float>(relative_top),
+                                          static_cast<float>(relative_bottom),
+                                          CopyFilterCanOverflow(filter_coefficients)))
+      {
+        entry->texture->FinishedRendering();
+        g_gfx->GenerateMipmaps(entry->texture.get());
+        return;
+      }
+    }
+  }
   g_gfx->BeginUtilityDrawing();
+
+  // Compute fast-path for RGBA8 2x downscale when requested via scale_by_half and simple settings.
+  if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) && !is_depth_copy && !is_intensity &&
+      dst_format != EFBCopyFormat::XFB && scale_by_half && !linear_filter && gamma == 1.0f &&
+      !clamp_top && !clamp_bottom &&
+      entry->texture->GetFormat() == AbstractTextureFormat::RGBA8 &&
+      src_texture->GetFormat() == AbstractTextureFormat::RGBA8)
+  {
+    MathUtil::Rectangle<int> dst_rect(0, 0, static_cast<int>(entry->texture->GetWidth()),
+                                      static_cast<int>(entry->texture->GetHeight()));
+    MathUtil::Rectangle<int> src_rect_fb = framebuffer_rect;
+    if (g_gfx->TryComputeScaleRGBA8(entry->texture.get(), dst_rect, src_texture, src_rect_fb, 2, 2))
+    {
+      entry->texture->FinishedRendering();
+      g_gfx->GenerateMipmaps(entry->texture.get());
+      return;
+    }
+  }
 
   // Fill uniform buffer.
   struct Uniforms

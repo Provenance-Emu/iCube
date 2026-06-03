@@ -162,6 +162,58 @@ public:
   // Called when the configuration changes, and backend structures need to be updated.
   virtual void OnConfigChanged(u32 changed_bits);
 
+  // Optional compute-based blit/convert path for backends that support it.
+  // Gated behind Config::GFX_USE_COMPUTE_EFBXFB at the call sites; returns false to fall through
+  // to the stock raster path. Implemented on the Metal backend (iCube native-Metal moat).
+  virtual bool TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                   const AbstractTexture* src,
+                                   const MathUtil::Rectangle<int>& src_rc)
+  {
+    return false;
+  }
+
+  // Optional backend hook to generate mipmaps for a texture on the GPU.
+  virtual void GenerateMipmaps(AbstractTexture* /*texture*/) {}
+
+  // Optional compute-based depth resolve (e.g., D32F) for MSAA EFB.
+  virtual bool TryComputeResolveDepth(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                      const AbstractTexture* src,
+                                      const MathUtil::Rectangle<int>& src_rc)
+  {
+    return false;
+  }
+
+  // Optional compute-based scale (e.g., 2x2 -> 1x1) for RGBA8.
+  virtual bool TryComputeScaleRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                    const AbstractTexture* src,
+                                    const MathUtil::Rectangle<int>& src_rc, u32 scale_x,
+                                    u32 scale_y)
+  {
+    return false;
+  }
+
+  // Optional compute-based gamma correction for RGBA8 copies.
+  virtual bool TryComputeGammaRGBA8(AbstractTexture* dst, const MathUtil::Rectangle<int>& dst_rc,
+                                    const AbstractTexture* src,
+                                    const MathUtil::Rectangle<int>& src_rc, float gamma_rcp)
+  {
+    return false;
+  }
+
+  // Optional compute-based EFB copy filter for RGBA8 (with optional gamma and clamping).
+  // Declared for the compute call site; the Metal backend currently falls through to the stock
+  // raster path (no override), matching the icube-testflight source branch.
+  virtual bool TryComputeEFBFilterRGBA8(AbstractTexture* dst,
+                                        const MathUtil::Rectangle<int>& dst_rc,
+                                        const AbstractTexture* src,
+                                        const MathUtil::Rectangle<int>& src_rc,
+                                        const std::array<u32, 3>& filter_coefficients,
+                                        bool efb_has_alpha, float gamma_rcp, float clamp_top,
+                                        float clamp_bottom, bool allow_overflow)
+  {
+    return false;
+  }
+
   // Returns true if a layer-expanding geometry shader should be used when rendering
   // the user interface on the output buffer.
   bool UseGeometryShaderForUI() const;
