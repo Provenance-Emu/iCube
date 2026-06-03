@@ -233,9 +233,15 @@ static const float ACSpeedHysteresis = 0.02f;
   float _acVI;             // current applied VI overclock (the second lever, used only when CPU is
                            // already floored and still short). Adapted since v2 (v1 never touched it).
   float _acLastApplied;    // last MAIN_OVERCLOCK we wrote; if it changes underneath us, user did it
+  float _acLastAppliedVI;  // last MAIN_VI_OVERCLOCK we wrote; for per-knob manual-move detection
   float _acStableCPU;      // f* — highest CPU clock confirmed at-full-speed this session (converged)
   float _acLastPersisted;  // last value written to NSUserDefaults, to avoid redundant writes
-  BOOL  _acYielded;        // user took manual clock control this session -> stop adjusting
+  // Per-knob, re-armable arbitration (step #2), replacing the global session-sticky _acYielded:
+  // a manual move of ONE clock yields only THAT lever for the session; the auto controller keeps
+  // regulating the other. Re-arm = toggle the adaptive clock off then on (startAdaptiveClockIfEnabled
+  // re-inits both flags). A manual CPU touch must NOT freeze the VI lever and vice versa.
+  BOOL  _acCpuYielded;     // user took manual CPU-clock control -> stop auto-adjusting CPU-oc
+  BOOL  _acViYielded;      // user took manual VI-clock control  -> stop auto-adjusting VI-oc
   BOOL  _acVerifyProbedUp; // in the seeded re-find: have we already tried the +1 step above f*?
 
   int   _acPhase;          // ACPhase_* below
@@ -445,8 +451,10 @@ static const float ACSpeedHysteresis = 0.02f;
   _acCPU = 1.0f;
   _acStableCPU = 1.0f;
   _acLastApplied = -1.f;
+  _acLastAppliedVI = -1.f;
   _acLastPersisted = -1.f;
-  _acYielded = NO;
+  _acCpuYielded = NO;
+  _acViYielded = NO;
   _acVerifyProbedUp = NO;
   _acPhase = ACPhase_Search;  // default: full descending sweep from 1.0
   _acPhaseTicks = 0;
@@ -479,6 +487,7 @@ static const float ACSpeedHysteresis = 0.02f;
   // Restore the seeded VI overclock too (otherwise the per-game VI seed is read but never applied).
   Config::SetCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, _acVI < 1.0f);
   Config::SetCurrent(Config::MAIN_VI_OVERCLOCK, _acVI);
+  _acLastAppliedVI = _acVI;
 
   _adaptiveClockTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
   dispatch_source_set_timer(_adaptiveClockTimer, dispatch_time(DISPATCH_TIME_NOW, 0),
@@ -490,14 +499,31 @@ static const float ACSpeedHysteresis = 0.02f;
     // Capture by value (self, thermal, tunables): the host job can run after this handler returns.
     Core::QueueHostJob([self, thermal, speedThreshold, sweepStep](Core::System& s) {
       if (Core::GetState(s) != Core::State::Running) return;
-      if (self->_acYielded) return;
 
-      // Manual control wins: if the CPU clock moved underneath us (user slider), yield this session.
+      // --- Per-knob manual-override detection (step #2). ---
+      // Manual control wins, but PER KNOB: a user CPU-clock slider yields only the CPU lever; a
+      // user VI-clock slider yields only the VI lever. The other lever keeps auto-regulating, and
+      // both re-arm when the adaptive clock is toggled off/on (full re-init in start...IfEnabled).
       const float curOC = (float)Config::Get(Config::MAIN_OVERCLOCK);
-      if (self->_acLastApplied >= 0.f && fabsf(curOC - self->_acLastApplied) > 0.005f) {
-        self->_acYielded = YES;
-        return;
+      if (!self->_acCpuYielded && self->_acLastApplied >= 0.f &&
+          fabsf(curOC - self->_acLastApplied) > 0.005f) {
+        self->_acCpuYielded = YES;
       }
+      const float curVI = (float)Config::Get(Config::MAIN_VI_OVERCLOCK);
+      if (!self->_acViYielded && self->_acLastAppliedVI >= 0.f &&
+          fabsf(curVI - self->_acLastAppliedVI) > 0.005f) {
+        // EXCLUDE the RA-hardcore VI stomp (VideoInterface.cpp:321 forces VI->1.0 on CurrentRun when
+        // hardcore mode is active): a move TO ~1.0 is either that stomp or a user no-op (1.0 is the
+        // default), so resync our tracking instead of yielding the lever. A genuine user VI move to
+        // any value other than 1.0 still yields VI.
+        if (fabsf(curVI - 1.0f) <= 0.005f) {
+          self->_acLastAppliedVI = curVI;
+        } else {
+          self->_acViYielded = YES;
+        }
+      }
+      // Both levers under manual control: nothing left to auto-adjust (matches the old global yield).
+      if (self->_acCpuYielded && self->_acViYielded) return;
 
       // --- Sample the sensors. ---
       const double vps = g_perf_metrics.GetVPS();   // emulated field rate
@@ -551,6 +577,8 @@ static const float ACSpeedHysteresis = 0.02f;
         self->_acPhaseTicks = 0;
       };
       const auto applyCPU = ^(float v) {
+        // CPU lever yielded to manual control: don't fight the user's slider (step #2).
+        if (self->_acCpuYielded) return;
         self->_acCPU = MIN(1.0f, MAX(ACCpuFloor, v));
         const float applied = MIN(self->_acCPU, ceiling);
         Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, applied < 1.0f);
@@ -558,9 +586,12 @@ static const float ACSpeedHysteresis = 0.02f;
         self->_acLastApplied = applied;
       };
       const auto applyVI = ^(float v) {
+        // VI lever yielded to manual control: leave it to the user (step #2).
+        if (self->_acViYielded) return;
         self->_acVI = MAX(ACViFloor, MIN(1.0f, v));
         Config::SetCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, self->_acVI < 1.0f);
         Config::SetCurrent(Config::MAIN_VI_OVERCLOCK, self->_acVI);
+        self->_acLastAppliedVI = self->_acVI;
       };
       const auto persistConverged = ^{
         if (!cool || !self->_adaptiveGameID) return;
