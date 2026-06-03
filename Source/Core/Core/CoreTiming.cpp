@@ -18,9 +18,11 @@
 
 #include "Core/AchievementManager.h"
 #include "Core/CPUThreadConfigCallback.h"
+#include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
 #include "Core/HW/SystemTimers.h"
+#include "Core/HW/VideoInterface.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
 
@@ -499,7 +501,24 @@ void CoreTimingManager::UpdateVISkip(TimePoint current_time, TimePoint target_ti
 
 bool CoreTimingManager::GetVISkip() const
 {
-  return m_throttle_disable_vi_int && g_ActiveConfig.bVISkip && !Core::WantsDeterminism();
+  if (!m_throttle_disable_vi_int || Core::WantsDeterminism())
+    return false;
+
+  // Respect tri-state VISkip mode; supersedes the legacy GFX_HACK_VI_SKIP bool.
+  const TriState mode = Config::Get(Config::GFX_HACK_VI_SKIP_MODE);
+
+  switch (mode)
+  {
+  case TriState::Off:
+    return false;
+  case TriState::On:
+    // Unconditional skip when behind (legacy bool behavior).
+    return true;
+  case TriState::Auto:
+  default:
+    // In Auto, consult the VideoInterface bounded-skip gating decision for the current field.
+    return m_system.GetVideoInterface().IsVISkipAllowedForCurrentField();
+  }
 }
 
 float CoreTimingManager::GetOverclock() const

@@ -37,10 +37,117 @@
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VideoEvents.h"
 
+// Bounded Auto VISkip gating limits, in an anonymous namespace to guarantee visibility
+// before all definitions. NOTE: these caps were tuned against a faster custom CIR; on a
+// leaner CIR the core may sit pinned at the cap. Tune on-device for the stutter tradeoff.
+namespace
+{
+constexpr u32 VISKIP_MAX_CONSECUTIVE_SKIPS = 4;
+constexpr u32 VISKIP_MAX_FIELDS_WITHOUT_PRESENT = 8;
+}  // namespace
+
 namespace VideoInterface
 {
 VideoInterfaceManager::VideoInterfaceManager(Core::System& system) : m_system(system)
 {
+}
+
+bool VideoInterfaceManager::IsInterlacedVideoMode() const
+{
+  // Interlaced if there are an odd number of half-lines per field.
+  return (GetHalfLinesPerEvenField() & 1) == 1;
+}
+
+bool VideoInterfaceManager::IsRealXFBOrEFBActive() const
+{
+  // If the backend isn't using REAL XFB, treat XFB as inactive for VI-skip gating.
+  // In current config, real XFB is effectively disabled when Immediate XFB is enabled
+  // or when XFB copies to RAM are skipped. Both cases mean we shouldn't conservatively
+  // block VI skipping.
+  if (g_ActiveConfig.bImmediateXFB || g_ActiveConfig.bSkipXFBCopyToRam)
+    return false;
+
+  // Heuristic (real XFB only): if either top or bottom XFB is enabled and has a base address,
+  // consider XFB active. This errs on the conservative side to prevent unsafe VI skipping when
+  // scanout is in use.
+  const bool top_enabled = (m_xfb_info_top.POFF == 0) && (m_xfb_info_top.FBB != 0);
+  const bool bottom_enabled = (m_xfb_info_bottom.POFF == 0) && (m_xfb_info_bottom.FBB != 0);
+  return top_enabled || bottom_enabled;
+}
+
+void VideoInterfaceManager::UpdateVISkipDecisionAtFieldBoundary()
+{
+  // Decide whether it's safe to skip the VI interrupt for the upcoming field.
+  // Rules (conservative):
+  // - Never skip in interlaced video modes.
+  // - Never skip when a real XFB appears to be active.
+  // - Limit the number of consecutive skips and maximum fields without a present.
+  const bool interlaced = IsInterlacedVideoMode();
+  const bool xfb_active = IsRealXFBOrEFBActive();
+
+  // Step B: stable-XFB heuristic. If the XFB base address hasn't changed since last field,
+  // we can relax interlaced/XFB gates for this field. This often happens when a game
+  // doesn't update scanout each VI, enabling safe VI-skip.
+  const bool top_valid = (m_xfb_info_top.POFF == 0) && (m_xfb_info_top.FBB != 0);
+  const bool bottom_valid = (m_xfb_info_bottom.POFF == 0) && (m_xfb_info_bottom.FBB != 0);
+  const bool stable_top =
+      top_valid && (m_prev_xfb_top_fbb != 0) && (m_xfb_info_top.FBB == m_prev_xfb_top_fbb);
+  const bool stable_bottom = bottom_valid && (m_prev_xfb_bottom_fbb != 0) &&
+                             (m_xfb_info_bottom.FBB == m_prev_xfb_bottom_fbb);
+  const bool stable_xfb = stable_top || stable_bottom;
+  // Step B.2: only relax if there were no EFB->XFB copies during the last field period.
+  const bool no_copy_this_field = !m_viskip_efb_to_xfb_copied_this_field;
+
+  bool allow_skip = false;
+  // Relax gates when XFB base is stable AND there were no in-place XFB updates.
+  const bool interlaced_ok = !interlaced || (stable_xfb && no_copy_this_field);
+  const bool xfb_ok = !xfb_active || (stable_xfb && no_copy_this_field);
+
+  if (interlaced_ok && xfb_ok && m_viskip_consecutive_skips < VISKIP_MAX_CONSECUTIVE_SKIPS &&
+      m_viskip_fields_since_present < VISKIP_MAX_FIELDS_WITHOUT_PRESENT)
+  {
+    allow_skip = true;
+  }
+
+  // Step C: interlaced field decimation (aggressive). If enabled, skip every other field
+  // in interlaced modes regardless of XFB stability, but still respect global counters.
+  const bool decimation_enabled = Config::Get(Config::GFX_HACK_VI_DECIMATE_INTERLACE);
+  if (decimation_enabled && interlaced && !allow_skip)
+  {
+    const bool decimate_this_field = m_viskip_decimate_next;
+    if (decimate_this_field && m_viskip_consecutive_skips < VISKIP_MAX_CONSECUTIVE_SKIPS &&
+        m_viskip_fields_since_present < VISKIP_MAX_FIELDS_WITHOUT_PRESENT)
+    {
+      allow_skip = true;
+    }
+  }
+
+  m_viskip_skip_current_field = allow_skip;
+
+  if (allow_skip)
+  {
+    // We intend to skip this field's VI interrupt.
+    m_viskip_consecutive_skips++;
+    m_viskip_fields_since_present++;
+  }
+  else
+  {
+    // Delivering VI interrupt (or disallowed). Reset gating counters.
+    m_viskip_consecutive_skips = 0;
+    m_viskip_fields_since_present = 0;
+  }
+
+  // Update previous XFB base state for next field's stability check.
+  m_prev_xfb_top_fbb = m_xfb_info_top.FBB;
+  m_prev_xfb_bottom_fbb = m_xfb_info_bottom.FBB;
+  // Reset copy tracking for the next field period.
+  m_viskip_efb_to_xfb_copied_this_field = false;
+
+  // Toggle decimation for next field if enabled and interlaced.
+  if (decimation_enabled && interlaced)
+    m_viskip_decimate_next = !m_viskip_decimate_next;
+  else
+    m_viskip_decimate_next = false;
 }
 
 VideoInterfaceManager::~VideoInterfaceManager()
@@ -90,6 +197,14 @@ void VideoInterfaceManager::DoState(PointerWrap& p)
   p.Do(m_odd_field_first_hl);
   p.Do(m_even_field_last_hl);
   p.Do(m_odd_field_last_hl);
+  // Bounded Auto VISkip gating state (STATE_VERSION bumped to 176 for these fields).
+  p.Do(m_prev_xfb_top_fbb);
+  p.Do(m_prev_xfb_bottom_fbb);
+  p.Do(m_viskip_efb_to_xfb_copied_this_field);
+  p.Do(m_viskip_decimate_next);
+  p.Do(m_viskip_skip_current_field);
+  p.Do(m_viskip_consecutive_skips);
+  p.Do(m_viskip_fields_since_present);
 }
 
 // Executed after Init, before game boot
@@ -172,6 +287,15 @@ void VideoInterfaceManager::Preset(bool _bNTSC)
   m_half_line_count = 0;
   m_half_line_of_next_si_poll = NUM_HALF_LINES_FOR_SI_POLL;  // first sampling starts at vsync
 
+  // Reset bounded Auto VISkip gating state.
+  m_prev_xfb_top_fbb = 0;
+  m_prev_xfb_bottom_fbb = 0;
+  m_viskip_efb_to_xfb_copied_this_field = false;
+  m_viskip_skip_current_field = false;
+  m_viskip_consecutive_skips = 0;
+  m_viskip_fields_since_present = 0;
+  m_viskip_decimate_next = false;
+
   UpdateParameters();
 }
 
@@ -181,6 +305,11 @@ void VideoInterfaceManager::Init()
 
   m_config_changed_callback_id = Config::AddConfigChangedCallback([this] { RefreshConfig(); });
   RefreshConfig();
+
+  // Detect when an EFB->XFB copy occurs (host starts processing the XFB copy). We use this as a
+  // guard so the bounded Auto VISkip gating won't skip VI on fields with in-place XFB updates.
+  m_after_frame_hook = AfterFrameEvent::Register(
+      [this](Core::System&) { m_viskip_efb_to_xfb_copied_this_field = true; }, "VI-NoCopyGuard");
 }
 
 void VideoInterfaceManager::RefreshConfig()
@@ -913,7 +1042,11 @@ void VideoInterfaceManager::Update(u64 ticks)
   // in case frame counter display is enabled
 
   if (is_at_field_boundary)
+  {
     m_system.GetMovie().FrameUpdate();
+    // Evaluate the bounded Auto VISkip decision for the upcoming field.
+    UpdateVISkipDecisionAtFieldBoundary();
+  }
 
   // If this half-line is at some boundary of the "active video lines" in either field, we either
   // need to (a) send a request to the GPU thread to actually render the XFB, or (b) increment

@@ -8,6 +8,7 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/Config/Config.h"
+#include "Common/HookableEvent.h"
 
 enum class FieldType;
 class PointerWrap;
@@ -381,6 +382,13 @@ public:
   // Change values pertaining to video mode
   void UpdateParameters();
 
+  // Bounded Auto VISkip helpers/state. UpdateVISkipDecisionAtFieldBoundary() is evaluated
+  // once per field boundary; IsVISkipAllowedForCurrentField() is queried by CoreTiming.
+  bool IsInterlacedVideoMode() const;
+  bool IsRealXFBOrEFBActive() const;
+  void UpdateVISkipDecisionAtFieldBoundary();
+  bool IsVISkipAllowedForCurrentField() const { return m_viskip_skip_current_field; }
+
   double GetTargetRefreshRate() const;
   u32 GetTargetRefreshRateNumerator() const;
   u32 GetTargetRefreshRateDenominator() const;
@@ -427,6 +435,19 @@ private:
   UVIFBInfoRegister m_xfb_info_bottom;
   UVIFBInfoRegister m_xfb_3d_info_top;  // Start making your stereoscopic demos! :p
   UVIFBInfoRegister m_xfb_3d_info_bottom;
+  // Bounded Auto VISkip gating state.
+  // Previous XFB base addresses for the stable-XFB heuristic.
+  u32 m_prev_xfb_top_fbb = 0;
+  u32 m_prev_xfb_bottom_fbb = 0;
+  // Per-field EFB->XFB copy detection (Step B.2).
+  bool m_viskip_efb_to_xfb_copied_this_field = false;
+  Common::EventHook m_after_frame_hook;
+  // Step C: interlaced decimation toggle (skip every other field).
+  bool m_viskip_decimate_next = false;
+  // Core gating counters / decision.
+  bool m_viskip_skip_current_field = false;
+  u32 m_viskip_consecutive_skips = 0;
+  u32 m_viskip_fields_since_present = 0;
   std::array<UVIInterruptRegister, 4> m_interrupt_register{};
   std::array<UVILatchRegister, 2> m_latch_register{};
   PictureConfigurationRegister m_picture_configuration;
