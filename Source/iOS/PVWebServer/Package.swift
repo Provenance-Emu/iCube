@@ -35,22 +35,17 @@ let package = Package(
 
     // MARK: - Targets
     targets: [
+        // Pure-Swift target: the NWListener-based ROMUploadServer + the
+        // PVWebServer @objc facade. The vendored 2015 GCDWebServer /
+        // GCDWebUploader / GCDWebDAVServer ObjC sources (and their bundle +
+        // C header search paths) were removed — the server now has zero
+        // third-party deps and rides on Network.framework.
         .target(
             name: "PVWebServer",
             dependencies: [
 			],
-            resources: [
-                .copy("Resources/GCDWebUploader.bundle")
-            ],
-            cSettings: [
-                .headerSearchPath("GCDWebServer/Core/"),
-                .headerSearchPath("GCDWebServer/Requests/"),
-                .headerSearchPath("GCDWebServer/Responses/"),
-                .headerSearchPath("GCDWebDAVServer/"),
-                .headerSearchPath("GCDWebUploader/")
-
-            ],
             linkerSettings: [
+                .linkedFramework("Network"),
                 .linkedFramework("UIKit", .when(platforms: [.iOS, .tvOS, .macCatalyst, .visionOS])),
                 .linkedFramework("AppKit", .when(platforms: [.macOS]))
             ]
