@@ -131,13 +131,12 @@ static const float ACViFloor       = 0.50f;  // VI underclock floor
 // At and above f* on a CPU-bound title the interpreter can't keep up -> speed drops below this ->
 // keep descending. This is the PRIMARY discriminator (it is the only sensor that moves AT f*).
 static const float ACSpeedThreshold = 0.99f;
-// VPS-vs-FPS honesty guard: VPS (emulated field rate) must track FPS (presented frame rate) within
-// this fraction of the title's native refresh, else FPS is inflated by duplicate presents (the host
-// re-presenting old fields) and the "speed" is not honest. |VPS - FPS| / targetVPS < tol.
-static const float ACVpsFpsTolerance = 0.05f;  // 5%
-// dup-present ratio above this means the core is repeatedly missing fields (slow-motion). Honesty
-// guard only (NOT a descend signal): reject this clock and step back up.
-static const float ACDupRatioMax   = 0.10f;  // 10% of presents are duplicates
+// Hysteresis below ACSpeedThreshold for the settle decision: keeps a marginal windowed-speed dip
+// right at the cliff (e.g. 98.5%) from descending one step PAST f*. Speed is the ONLY GO/NO-GO
+// sensor. The former VPS≈FPS and dup-ratio guards were REMOVED: a 30fps-by-design title (common on
+// GC/Wii) presents ~50% duplicate fields at FULL speed, so those guards vetoed legit 30fps games and
+// walked the sweep to the floor (slow-motion). Audio underrun is the one remaining honesty guard.
+static const float ACSpeedHysteresis = 0.02f;
 
 @implementation EmulationCoordinator {
   UIView* _renderHost;
@@ -430,16 +429,13 @@ static const float ACDupRatioMax   = 0.10f;  // 10% of presents are duplicates
 
       // --- Sample the sensors. ---
       const double vps = g_perf_metrics.GetVPS();   // emulated field rate
-      if (vps <= 0.0) return;  // metrics not warmed up
-      const double fps = g_perf_metrics.GetFPS();   // presented frame rate
+      if (vps <= 0.0) return;  // metrics not warmed up (warmup guard only)
       const double speed = g_perf_metrics.GetSpeed();  // achieved emulation speed vs realtime
       const unsigned long long underruns = PerformanceMetrics::GetAudioUnderrunCount();
       const unsigned long long dups = PerformanceMetrics::GetDuplicatePresentCount();
       const unsigned long long total = PerformanceMetrics::GetTotalPresentCount();
 
       // Target = the title's native field rate (NOT a fixed 60: a 30/50Hz title is fine below 60).
-      double targetVPS = s.GetVideoInterface().GetTargetRefreshRate();
-      if (!(targetVPS > 1.0) || !std::isfinite(targetVPS)) targetVPS = 60.0;
 
       // Thermal caps the APPLIED clock; we only PERSIST a baseline while cool.
       const bool cool = (thermal <= NSProcessInfoThermalStateFair);
@@ -447,27 +443,21 @@ static const float ACDupRatioMax   = 0.10f;  // 10% of presents are duplicates
       if (thermal == NSProcessInfoThermalStateCritical) ceiling = 0.65f;
       else if (thermal == NSProcessInfoThermalStateSerious) ceiling = 0.80f;
 
-      // Health of the window since it began (deltas off the captured baselines).
+      // Health of the window since it began.
       const bool newUnderrun = (underruns > self->_acUnderrunBase);
-      const unsigned long long dDup = dups - self->_acDupBase;
-      const unsigned long long dTot = total - self->_acTotalBase;
-      const double dupRatio = (dTot > 0) ? (double)dDup / (double)dTot : 0.0;
-      const bool dupOk = (dupRatio <= ACDupRatioMax);
 
-      // --- The f* GO/NO-GO criterion. ---
-      // f* = the HIGHEST clock at which the host keeps up (speed ~100%) AND frame delivery is honest
-      //   (VPS tracks FPS — not inflated by the host re-presenting old fields).
-      //   speed >= ACSpeedThreshold        : the interpreter emulated this clock in (near-)realtime.
-      //   |VPS - FPS| / targetVPS < tol     : VPS≈FPS, so the speed reading isn't masked by dup-
-      //                                       present inflation (rejects the "looks 60fps but it's
-      //                                       the same field shown twice" failure).
-      //   dupOk && !newUnderrun             : honesty guards (no field-miss pileup / no audio starve).
-      // varStable (dtStd/dtAvg) is intentionally NOT part of GO/NO-GO: it was the v2 MINIMIZE-era
-      // lower-cliff probe. Frame-time variance can read high right AT f* (the host is working its
-      // hardest there); folding it in would fail the criterion at f* and push the sweep one step
-      // LOWER — reintroducing the inversion. Keep variance out; dup/underrun are the honesty guards.
-      const bool vpsTracksFps = (fabs(vps - fps) / targetVPS) < ACVpsFpsTolerance;
-      const bool meetsFStar = (speed >= speedThreshold) && vpsTracksFps && dupOk && !newUnderrun;
+      // --- The f* GO/NO-GO criterion: SPEED ONLY (+ underrun honesty guard). ---
+      // f* = the HIGHEST clock at which the host keeps up. The throttle caps emulated speed at 100%,
+      // so speed >= threshold is true for EVERY clock <= f* and false above it; descending top-down,
+      // the FIRST clock that meets it is f* by construction. No second term is needed to FIND the
+      // cliff — and any extra gate that can be false AT f* can only push the settle point one step
+      // LOW. That is why the VPS≈FPS and dup-ratio guards were REMOVED: a 30fps-by-design title
+      // (common on GC/Wii) presents ~50% duplicate fields at FULL speed, so those guards vetoed
+      // legit 30fps games and walked the sweep to the floor (slow-motion) — the exact inversion this
+      // controller exists to kill. Audio underrun stays as the one honesty guard (a starved buffer
+      // is genuinely too-slow regardless of the speed% average). The small hysteresis keeps a
+      // marginal windowed-speed dip right at the cliff from descending one step past f*.
+      const bool meetsFStar = (speed >= speedThreshold - ACSpeedHysteresis) && !newUnderrun;
 
       const PerformanceMetrics::Bound bound = PerformanceMetrics::GetBound();
 
