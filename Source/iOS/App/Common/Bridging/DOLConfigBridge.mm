@@ -97,20 +97,30 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setConnectWiimotesForControllerInterface:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CONNECT_WIIMOTES_FOR_CONTROLLER_INTERFACE, (bool)enabled); }
 
 // Controllers > Types
+// NOTE: these accessors take a ONE-based port/index from the UI, but Config::GetInfoForSIDevice /
+// GetInfoForWiimoteSource index a ZERO-based static array with NO bounds check. Passing the 1-based
+// value straight through read SIDevice[1..4]/Wiimote[1..4] — off by one (e.g. "Wiimote 4" hit the
+// Balance Board at index 4) — and for SI (array size 4) port 4 was an OUT-OF-BOUNDS read that
+// returned a garbage Info& whose cache mutex was junk → `lock_shared` EINVAL → crash in
+// Settings > Controllers. Convert to 0-based + bounds-guard.
 + (NSInteger)gcPortDeviceForPort:(NSInteger)portOneBased {
-  int port = (int)portOneBased;
-  return (NSInteger)Config::Get(Config::GetInfoForSIDevice(port));
+  const int ch = (int)portOneBased - 1;  // SIDevice channels are 0..3
+  if (ch < 0 || ch > 3) return (NSInteger)SerialInterface::SIDEVICE_NONE;
+  return (NSInteger)Config::Get(Config::GetInfoForSIDevice(ch));
 }
 + (void)setGCPortDeviceForPort:(NSInteger)portOneBased device:(NSInteger)device {
-  int port = (int)portOneBased;
-  Config::SetBaseOrCurrent(Config::GetInfoForSIDevice(port), (SerialInterface::SIDevices)device);
+  const int ch = (int)portOneBased - 1;
+  if (ch < 0 || ch > 3) return;
+  Config::SetBaseOrCurrent(Config::GetInfoForSIDevice(ch), (SerialInterface::SIDevices)device);
 }
 + (NSInteger)wiimoteSourceForIndex:(NSInteger)indexOneBased {
-  int idx = (int)indexOneBased;
+  const int idx = (int)indexOneBased - 1;  // wiimote sources are 0..3 (index 4 = Balance Board)
+  if (idx < 0 || idx > 3) return 0;  // 0 = WiimoteSource::None
   return (NSInteger)Config::Get(Config::GetInfoForWiimoteSource(idx));
 }
 + (void)setWiimoteSourceForIndex:(NSInteger)indexOneBased source:(NSInteger)source {
-  int idx = (int)indexOneBased;
+  const int idx = (int)indexOneBased - 1;
+  if (idx < 0 || idx > 3) return;
   Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(idx), (WiimoteSource)source);
 }
 
