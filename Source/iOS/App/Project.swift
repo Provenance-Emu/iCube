@@ -173,12 +173,37 @@ let iCube = Target.target(
     deploymentTargets: .multiplatform(iOS: "17.0", tvOS: "17.0"),
     infoPlist: .file(path: "DolphiniOS/Info.plist"),
     sources: [
-        .glob("DolphiniOS/**/*.{swift,m,mm,h}"),
+        // The legacy ObjC/UIKit settings view controllers under Common/UI/Settings/ and
+        // DolphiniOS/UI/Settings/ are the iOS-only settings UI. They use UIKit APIs that are
+        // unavailable on tvOS (UISlider, UISwitch, UIStepper, UITableViewStyleInsetGrouped, touch
+        // APIs). The live tvOS settings UI is SwiftUI (SettingsRootView.swift / TVRootView). These
+        // ObjC sources are not used on tvOS, so exclude the ObjC sources (*.m/*.mm) from the tvOS
+        // build and re-add them iOS/Catalyst-only. We keep the *.swift and *.h files unconditional:
+        // the SwiftUI settings views live under these dirs, and the headers (e.g.
+        // MappingRootViewController.h, which declares DOLMappingType used by the programmatic Swift
+        // MappingRootViewController in ButtonMappingView.swift) must stay on the bridging header path.
+        .glob("DolphiniOS/**/*.{swift,h}"),
+        .glob(
+            "DolphiniOS/**/*.{m,mm}",
+            excluding: ["DolphiniOS/UI/Settings/**/*.{m,mm}"]
+        ),
+        .glob(
+            "DolphiniOS/UI/Settings/**/*.{m,mm}",
+            compilationCondition: .when([.ios, .catalyst])
+        ),
         // NOTE: GameActivity.swift (Common/Swift/Activity) defines GameActivityManager, used by
         // the app (ControllerExtensions, EmulationScreen, PauseMenuView, PauseGestureTracker).
         // In the original pbxproj it is a membershipEXCEPTION on the appex's "Activity" synchronized
         // folder — i.e. EXCLUDED from the appex, kept in the app. So it stays in the app glob.
-        .glob("Common/**/*.{swift,m,mm,h}"),
+        .glob("Common/**/*.{swift,h}"),
+        .glob(
+            "Common/**/*.{m,mm}",
+            excluding: ["Common/UI/Settings/**/*.{m,mm}"]
+        ),
+        .glob(
+            "Common/UI/Settings/**/*.{m,mm}",
+            compilationCondition: .when([.ios, .catalyst])
+        ),
     ],
     resources: [
         "DolphiniOS/Assets.xcassets",
@@ -224,7 +249,11 @@ let iCube = Target.target(
         .sdk(name: "UniformTypeIdentifiers", type: .framework),
         .sdk(name: "MetalKit", type: .framework),
         .sdk(name: "GameController", type: .framework),
-        .sdk(name: "CoreMotion", type: .framework),
+        // CoreMotion is iOS-only: the framework does not exist in the tvOS SDK (ld fails with
+        // "framework 'CoreMotion' not found"). All source uses are already #if canImport(CoreMotion)
+        // gated, so nothing references it on tvOS — only this link line pulls it in. Gate to
+        // iOS/Catalyst to match the MoltenVK pattern above and keep iOS linking unchanged.
+        .sdk(name: "CoreMotion", type: .framework, condition: .when([.ios, .catalyst])),
         // appex embed intentionally OFF (faithful to original; see APP_EMBEDS_APPEX note above).
     ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension")] : []),
     settings: .settings(
