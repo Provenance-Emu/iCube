@@ -174,6 +174,29 @@ void PerformanceMetrics::SetBound(Bound b)
   s_bound.store(static_cast<int>(b), std::memory_order_relaxed);
 }
 
+PerformanceMetrics::Bound PerformanceMetrics::ClassifyBound(double speed, double max_speed,
+                                                            double speed_threshold)
+{
+  // Need warmed-up sensors. Both come from the same sample window, so guard on both.
+  if (!(speed > 0.0) || !(max_speed > 0.0))
+    return Bound::Unknown;
+
+  // Host can't keep up even with throttle sleep removed -> the CPU is the wall.
+  if (max_speed < speed_threshold)
+    return Bound::CpuBound;
+
+  // Real host headroom (maxSpeed comfortably above realtime) but the presented stream is still
+  // short of keeping up -> the CPU is NOT the bottleneck; resolution/GPU is. The margin keeps a
+  // host that's merely tracking realtime (maxSpeed ~= speed ~= 1.0, nothing to give) from being
+  // misread as GPU-bound.
+  constexpr double kHeadroomMargin = 0.10;  // require maxSpeed >= 1.10x realtime to call GPU-bound
+  if (max_speed >= 1.0 + kHeadroomMargin && speed < speed_threshold)
+    return Bound::GpuBound;
+
+  // Keeping up, or inconclusive: don't claim a bound.
+  return Bound::Unknown;
+}
+
 void PerformanceMetrics::DrawImGuiStats(const float backbuffer_scale)
 {
   m_vps_counter.UpdateStats();

@@ -75,6 +75,9 @@ void AutoIRController::Disable()
   if (!m_enabled)
     return;
   m_enabled = false;
+  // Hand the bottleneck classification back to the adaptive clock loop's own probe (step #1): clear
+  // the bound we owned so a stale GPU/CPU verdict from our last probe doesn't linger after we stop.
+  PerformanceMetrics::SetBound(PerformanceMetrics::Bound::Unknown);
 }
 
 void AutoIRController::RefreshSettings()

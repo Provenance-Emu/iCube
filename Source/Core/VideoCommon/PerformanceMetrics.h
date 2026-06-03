@@ -80,6 +80,21 @@ public:
   static Bound GetBound();
   static void SetBound(Bound b);
 
+  // Shared CPU-vs-GPU-bound probe, decoupled from Auto-IR so the adaptive clock can classify the
+  // bottleneck even when Auto-IR is OFF (the default). Inputs are the two speed sensors already
+  // published every performance marker:
+  //   speed    = achieved emulation speed vs realtime (throttle-capped at ~1.0)
+  //   maxSpeed = speed with throttle sleep removed (the host's true headroom at the current clock)
+  // Logic (delta probe, no EFB-scale nudge — the IR lever stays Auto-IR's alone):
+  //   - maxSpeed below the keep-up threshold => the host genuinely can't keep up even with zero
+  //     throttle sleep at this clock => CPU-bound (lowering CPU clock is the lever).
+  //   - maxSpeed comfortably >= 1.0 (real headroom) while the presented speed is still short of
+  //     target => the CPU is NOT the wall; the GPU/resolution is => GPU-bound (drop EFB scale).
+  //   - otherwise inconclusive => Unknown (don't act; let the next window probe).
+  // `speed_threshold` is the same f* GO/NO-GO threshold the clock loop uses. Returns the classified
+  // bound; callers publish it via SetBound. Pure function (no global state), any thread.
+  static Bound ClassifyBound(double speed, double max_speed, double speed_threshold);
+
   // ImGui Functions
   void DrawImGuiStats(const float backbuffer_scale);
 

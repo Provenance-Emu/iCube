@@ -503,6 +503,7 @@ static const float ACSpeedHysteresis = 0.02f;
       const double vps = g_perf_metrics.GetVPS();   // emulated field rate
       if (vps <= 0.0) return;  // metrics not warmed up (warmup guard only)
       const double speed = g_perf_metrics.GetSpeed();  // achieved emulation speed vs realtime
+      const double maxSpeed = g_perf_metrics.GetMaxSpeed();  // speed with throttle sleep removed
       const unsigned long long underruns = PerformanceMetrics::GetAudioUnderrunCount();
       const unsigned long long dups = PerformanceMetrics::GetDuplicatePresentCount();
       const unsigned long long total = PerformanceMetrics::GetTotalPresentCount();
@@ -531,6 +532,16 @@ static const float ACSpeedHysteresis = 0.02f;
       // marginal windowed-speed dip right at the cliff from descending one step past f*.
       const bool meetsFStar = (speed >= speedThreshold - ACSpeedHysteresis) && !newUnderrun;
 
+      // --- Bottleneck classification, decoupled from Auto-IR (step #1). ---
+      // The CPU-vs-GPU `bound` flag used to be written ONLY by AutoIRController, so with Auto-IR
+      // off (the default) it stayed Unknown forever and this loop ran blind. When Auto-IR is OFF,
+      // publish the classification from our own speed-delta probe every tick so the routing here
+      // (and the auto-VI gate, step #5) sees a real bound. When Auto-IR is ON it owns the EFB-scale
+      // probe and the classification, so we don't stomp it — exactly one writer at a time.
+      if (!Config::Get(Config::GFX_AUTO_IR_ENABLE)) {
+        PerformanceMetrics::SetBound(
+            PerformanceMetrics::ClassifyBound(speed, maxSpeed, speedThreshold));
+      }
       const PerformanceMetrics::Bound bound = PerformanceMetrics::GetBound();
 
       const auto resetWindow = ^{
