@@ -201,7 +201,14 @@ let iCube = Target.target(
     scripts: preScripts,
     dependencies: [
         .xcframework(path: "../../../build/xcframework/PVlibDolphin.xcframework"),
-        .xcframework(path: "../../../Externals/MoltenVK-iOS/MoltenVK.xcframework"),
+        // MoltenVK (Vulkan-on-Metal ICD) is iOS-only: the prebuilt xcframework has only
+        // ios device/simulator slices (no tvOS slice), and the core never builds/links it
+        // (CMake gates MoltenVK to APPLE AND NOT IOS, and tvOS is IOS=TRUE in the toolchain).
+        // The Vulkan backend dlopen's MoltenVK.framework at runtime — no direct link — so
+        // excluding it from tvOS just makes the (unused) Vulkan backend unavailable there;
+        // tvOS renders via native Metal. Linking it on tvOS makes Xcode look for a nonexistent
+        // tvOS slice and fail. Condition keeps iOS linking byte-for-byte unchanged.
+        .xcframework(path: "../../../Externals/MoltenVK-iOS/MoltenVK.xcframework", condition: .when([.ios])),
         .package(product: "PVWebServer"),
         .package(product: "Zip"),
         .package(product: "NavigationStackBackport"),
