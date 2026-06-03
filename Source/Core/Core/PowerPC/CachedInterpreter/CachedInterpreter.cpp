@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <span>
 #include <sstream>
 #include <utility>
@@ -17,12 +18,14 @@
 #include "Common/GekkoDisassembler.h"
 #include "Common/Config/Config.h"
 #include "Common/Logging/Log.h"
+#include "Common/Swap.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HW/CPU.h"
+#include "Core/HW/Memmap.h"
 #include "Core/Host.h"
 #include "Core/PowerPC/Gekko.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
@@ -36,6 +39,77 @@ CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_
 }
 
 CachedInterpreter::~CachedInterpreter() = default;
+
+// iCube WIN#1: PIC (position-independent-code) direct-pointer load/store region resolution. Resolves
+// an effective address to a host RAM base pointer + offset, bypassing the per-access MMU/region
+// lookup. Integer single-access D-form/X-form only; FP and anything not resolvable here falls back to
+// the generic interpreter handler (see Cold_LoadStoreFallback). Ported verbatim from the
+// feature/icube-testflight good branch.
+namespace
+{
+struct CI_RegionInfo
+{
+  u8* base;
+  u32 mask;
+  u32 sub;
+  bool is_fake;
+};
+
+static inline CI_RegionInfo CI_GetRegionInfo(u32 ea, bool dr, u8* mem1_base, u32 mem1_mask,
+                                             u8* exram_base, u32 exram_mask, u8* fakevmem_base,
+                                             u32 fakevmem_mask)
+{
+  CI_RegionInfo info{nullptr, 0, 0, false};
+  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  {
+    info.base = mem1_base;
+    info.mask = mem1_mask;
+    info.sub = Memory::MEM1_BASE_ADDR;
+    return info;
+  }
+  if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
+  {
+    info.base = exram_base;
+    info.mask = exram_mask;
+    info.sub = Memory::MEM2_BASE_ADDR;
+    return info;
+  }
+  if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
+  {
+    info.base = fakevmem_base;
+    info.mask = fakevmem_mask;
+    info.sub = 0;
+    info.is_fake = true;
+    return info;
+  }
+  if (!dr && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
+  {
+    info.base = mem1_base;
+    info.mask = mem1_mask;
+    info.sub = 0xC0000000u;
+    return info;
+  }
+  if (!dr && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
+  {
+    info.base = exram_base;
+    info.mask = exram_mask;
+    info.sub = 0xD0000000u;
+    return info;
+  }
+  return info;
+}
+
+static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
+{
+  return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
+}
+}  // anonymous namespace
+
+// iCube WIN#1: route integer D-form/X-form load/stores through the PIC direct-pointer fast path
+// (MAIN_CIR_PIC_LOADSTORE). Read once in Init. The !jo.memcheck and !FL_USE_FPU gates are ALWAYS
+// enforced at the emission site regardless of this flag; the flag only opts the fast path in/out for
+// on-device A/B. Default ON (see MainSettings.cpp). UNVALIDATED on-device — needs bit-exact dual-run.
+static bool s_pic_loadstore = false;
 
 // iCube WIN#3: the per-block PowerPC performance-monitor (PMC) update is now gated at the call
 // sites on PowerPC::PerformanceMonitorActive(ppc_state) (MMCR0/MMCR1 non-zero). This replaces the
@@ -170,6 +244,7 @@ static CirSpecOp SpecOpId(Interpreter::Instruction func)
 void CachedInterpreter::Init()
 {
   RefreshConfig();
+  s_pic_loadstore = Config::Get(Config::MAIN_CIR_PIC_LOADSTORE);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_specialized_ops_validate = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
   s_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
@@ -628,6 +703,434 @@ s32 CachedInterpreter::InterpretAndCheckExceptions(
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// iCube WIN#1: PIC direct-pointer D-form integer load/store. INTEGER ONLY (FP opcodes are excluded at
+// the emission site via FL_USE_FPU and never reach here). Any opcode/alignment/region this switch does
+// not handle delegates to Cold_LoadStoreFallback, which runs the exact generic interpreter handler, so
+// DSI/alignment/MMIO semantics are preserved for everything PIC does not specialize. write_pc mirrors
+// Interpret<write_pc>. Ported (integer subset, scalar lmw/stmw) from feature/icube-testflight.
+template <bool write_pc>
+s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
+                                         const LoadStoreDFormPICOperands& operands)
+{
+  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
+               exram_mask, fakevmem_base, fakevmem_mask] = operands;
+
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = current_pc;
+    ppc_state.npc = current_pc + 4;
+  }
+
+  // D-form EA: ea = (RA ? GPR[RA] : 0) + SIMM_16
+  const u32 ra = inst.RA;
+  const u32 ea = ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16))
+                    : static_cast<u32>(inst.SIMM_16);
+
+  u8* base_ptr = nullptr;
+  u32 offset = 0;
+  const auto region = CI_GetRegionInfo(ea, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                       exram_mask, fakevmem_base, fakevmem_mask);
+  if (region.base)
+  {
+    base_ptr = region.base;
+    offset = CI_RegionOffset(region, ea);
+  }
+
+  if (base_ptr) [[likely]]
+  {
+    switch (inst.OPCD)
+    {
+    case 32:  // lwz
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break;
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 33:  // lwzu (update)
+    {
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
+        break;
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 34:  // lbz
+    {
+      ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 35:  // lbzu (update)
+    {
+      if (ra == 0)
+        break;
+      ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 40:  // lhz
+    {
+      if ((ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 41:  // lhzu (update)
+    {
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 42:  // lha
+    {
+      if ((ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 43:  // lhau (update)
+    {
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 36:  // stw
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break;
+      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 37:  // stwu (update)
+    {
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
+        break;
+      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 38:  // stb
+    {
+      *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 39:  // stbu (update)
+    {
+      if (ra == 0)
+        break;
+      *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 44:  // sth
+    {
+      if ((ea & 0b1) != 0) [[unlikely]]
+        break;
+      *reinterpret_cast<u16*>(base_ptr + offset) =
+          Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 45:  // sthu (update)
+    {
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
+        break;
+      *reinterpret_cast<u16*>(base_ptr + offset) =
+          Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 46:  // lmw
+    {
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break;
+      const u32 count = 32u - static_cast<u32>(inst.RD);
+      // Pre-scan: the entire range must lie in a single fast region, else fall back.
+      u8* region_base = nullptr;
+      u32 region_mask = 0;
+      u32 region_sub = 0;
+      bool region_is_fake = false;
+      bool ok = true;
+      u32 addr = ea;
+      for (u32 k = 0; k < count; ++k, addr += 4)
+      {
+        const auto r = CI_GetRegionInfo(addr, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                        exram_mask, fakevmem_base, fakevmem_mask);
+        if (!r.base)
+        {
+          ok = false;
+          break;
+        }
+        if (!region_base)
+        {
+          region_base = r.base;
+          region_mask = r.mask;
+          region_sub = r.sub;
+          region_is_fake = r.is_fake;
+        }
+        else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
+                 region_is_fake != r.is_fake)
+        {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok || !region_base)
+        break;
+      addr = ea;
+      for (u32 r = static_cast<u32>(inst.RD); r <= 31u; ++r, addr += 4)
+      {
+        const u32 roff =
+            region_is_fake ? (addr & region_mask) : ((addr - region_sub) & region_mask);
+        const u32 raw = *reinterpret_cast<const u32*>(region_base + roff);
+        ppc_state.gpr[r] = Common::FromBigEndian(raw);
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 47:  // stmw
+    {
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break;
+      const u32 count = 32u - static_cast<u32>(inst.RS);
+      u8* region_base = nullptr;
+      u32 region_mask = 0;
+      u32 region_sub = 0;
+      bool region_is_fake = false;
+      bool ok = true;
+      u32 addr = ea;
+      for (u32 k = 0; k < count; ++k, addr += 4)
+      {
+        const auto r = CI_GetRegionInfo(addr, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                        exram_mask, fakevmem_base, fakevmem_mask);
+        if (!r.base)
+        {
+          ok = false;
+          break;
+        }
+        if (!region_base)
+        {
+          region_base = r.base;
+          region_mask = r.mask;
+          region_sub = r.sub;
+          region_is_fake = r.is_fake;
+        }
+        else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
+                 region_is_fake != r.is_fake)
+        {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok || !region_base)
+        break;
+      addr = ea;
+      for (u32 r = static_cast<u32>(inst.RS); r <= 31u; ++r, addr += 4)
+      {
+        const u32 roff =
+            region_is_fake ? (addr & region_mask) : ((addr - region_sub) & region_mask);
+        *reinterpret_cast<u32*>(region_base + roff) = Common::swap32(ppc_state.gpr[r]);
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    default:
+      break;  // FP or unsupported D-form -> fallback
+    }
+  }
+  return Cold_LoadStoreFallback(ppc_state, operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::LoadStoreDFormPIC(std::ostream& stream,
+                                         const LoadStoreDFormPICOperands& operands)
+{
+  fmt::print(stream, "LoadStoreDFormPIC(pc={:#010x}, OPCD={})\n", operands.current_pc,
+             operands.inst.OPCD);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube WIN#1: PIC direct-pointer X-form integer load/store (OPCD == 31). INTEGER ONLY. Byte-reverse
+// variants (lwbrx/lhbrx/stwbrx/sthbrx) are integer and included; FP-indexed and paired-single forms
+// are excluded at the emission site (FL_USE_FPU) and any unhandled SUBOP10 falls back generically.
+template <bool write_pc>
+s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
+                                         const LoadStoreDFormPICOperands& operands)
+{
+  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
+               exram_mask, fakevmem_base, fakevmem_mask] = operands;
+
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = current_pc;
+    ppc_state.npc = current_pc + 4;
+  }
+
+  // X-form EA: ea = (RA ? GPR[RA] : 0) + GPR[RB]
+  const u32 ra = inst.RA;
+  const u32 rb = inst.RB;
+  const u32 ea = (ra ? ppc_state.gpr[ra] : 0) + ppc_state.gpr[rb];
+
+  u8* base_ptr = nullptr;
+  u32 offset = 0;
+  const auto region = CI_GetRegionInfo(ea, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                       exram_mask, fakevmem_base, fakevmem_mask);
+  if (region.base)
+  {
+    base_ptr = region.base;
+    offset = CI_RegionOffset(region, ea);
+  }
+
+  if (base_ptr) [[likely]]
+  {
+    switch (inst.SUBOP10)
+    {
+    case 23:   // lwzx
+    case 55:   // lwzux (update)
+    {
+      const bool update = (inst.SUBOP10 == 55);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 87:   // lbzx
+    case 119:  // lbzux (update)
+    {
+      const bool update = (inst.SUBOP10 == 119);
+      if (update && ra == 0)
+        break;
+      ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 279:  // lhzx
+    case 311:  // lhzux (update)
+    {
+      const bool update = (inst.SUBOP10 == 311);
+      if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 343:  // lhax
+    case 375:  // lhaux (update)
+    {
+      const bool update = (inst.SUBOP10 == 375);
+      if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 151:  // stwx
+    case 183:  // stwux (update)
+    {
+      const bool update = (inst.SUBOP10 == 183);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 215:  // stbx
+    case 247:  // stbux (update)
+    {
+      const bool update = (inst.SUBOP10 == 247);
+      if (update && ra == 0)
+        break;
+      *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 407:  // sthx
+    case 439:  // sthux (update)
+    {
+      const bool update = (inst.SUBOP10 == 439);
+      if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      *reinterpret_cast<u16*>(base_ptr + offset) =
+          Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 534:  // lwbrx
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break;
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = Common::swap32(Common::FromBigEndian(raw));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 790:  // lhbrx
+    {
+      if ((ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::swap16(Common::FromBigEndian(raw)));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 662:  // stwbrx
+    {
+      if ((ea & 0b11) != 0)
+        break;
+      const u32 raw = ppc_state.gpr[inst.RS];
+      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 918:  // sthbrx
+    {
+      if ((ea & 0b1) != 0)
+        break;
+      const u16 raw = static_cast<u16>(ppc_state.gpr[inst.RS]);
+      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    default:
+      break;  // FP-indexed / paired-single / unsupported X-form -> fallback
+    }
+  }
+  return Cold_LoadStoreFallback(ppc_state, operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::LoadStoreXFormPIC(std::ostream& stream,
+                                         const LoadStoreDFormPICOperands& operands)
+{
+  fmt::print(stream, "LoadStoreXFormPIC(pc={:#010x}, SUBOP10={})\n", operands.current_pc,
+             operands.inst.SUBOP10);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube WIN#1: cold fallback. Runs the exact generic interpreter handler captured at emit time, so
+// DSI/alignment/MMIO semantics are identical to the non-PIC generic path. pc/npc were already written
+// by the PIC body (write_pc) before any fallback, matching Interpret<write_pc>.
+s32 CachedInterpreter::Cold_LoadStoreFallback(PowerPC::PowerPCState& /*ppc_state*/,
+                                              const LoadStoreDFormPICOperands& operands)
+{
+  operands.func(operands.interpreter, operands.inst);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreter::HLEFunction(PowerPC::PowerPCState& ppc_state,
                                    const HLEFunctionOperands& operands)
 {
@@ -923,6 +1426,49 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       {
         const auto func = Interpreter::GetInterpreterOp(op.inst);
         const InterpretOperands operands = {interpreter, func, js.compilerPC, op.inst};
+        bool emitted = false;
+        // iCube WIN#1: PIC direct-pointer load/store fast path (MAIN_CIR_PIC_LOADSTORE). Emitted FIRST
+        // and supersedes the specialized path for the ops it covers (integer load/stores). HARD GATES,
+        // all required and independent of the flag's intent:
+        //   - !jo.memcheck: already implied here (the exception-path branch above diverts every
+        //     FL_LOADSTORE op when jo.memcheck is set), but reasserted for defense in depth — MMU-mode
+        //     Wii titles and any debugger watchpoint MUST take the generic exception path.
+        //   - jo.fastmem: the fastmem arena/region pointers are valid (the "fastmem is valid" gate).
+        //   - FL_LOADSTORE && !FL_USE_FPU: INTEGER load/stores only. The PIC bodies are integer-only;
+        //     emitting them for FP load/stores would force EA-compute + region-lookup + switch-miss +
+        //     cold fallback on every FP access (a regression), so FP stays on the generic path.
+        // The PIC body still null-checks the resolved region at runtime and delegates anything it does
+        // not handle to Cold_LoadStoreFallback (exact generic handler), so correctness holds regardless.
+        const u32 ls_flags = op.opinfo->flags;
+        if (!emitted && s_pic_loadstore && !jo.memcheck && jo.fastmem &&
+            (ls_flags & FL_LOADSTORE) != 0 && (ls_flags & FL_USE_FPU) == 0)
+        {
+          auto& memory = m_system.GetMemory();
+          const LoadStoreDFormPICOperands pic_operands = {interpreter,
+                                                          func,
+                                                          js.compilerPC,
+                                                          op.inst,
+                                                          power_pc,
+                                                          memory.GetRAM(),
+                                                          memory.GetRamMask(),
+                                                          memory.GetEXRAM(),
+                                                          memory.GetExRamMask(),
+                                                          memory.GetFakeVMEM(),
+                                                          memory.GetFakeVMemMask()};
+          if (op.inst.OPCD == 31)
+          {
+            Write(op.canEndBlock ? CallbackCast(LoadStoreXFormPIC<true>) :
+                                   CallbackCast(LoadStoreXFormPIC<false>),
+                  pic_operands);
+          }
+          else
+          {
+            Write(op.canEndBlock ? CallbackCast(LoadStoreDFormPIC<true>) :
+                                   CallbackCast(LoadStoreDFormPIC<false>),
+                  pic_operands);
+          }
+          emitted = true;
+        }
         // iCube: route whitelisted hot ops to the specialized dispatch when MAIN_CIR_SPECIALIZED_OPS
         // is on. We emit ONE of two marker callbacks (write_pc false/true) plus a
         // SpecializedInterpretOperands payload that carries the InterpretOperands prefix verbatim and
@@ -930,8 +1476,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // generic Interpret selection. Cold/non-whitelisted ops fall through to the unchanged generic
         // emission below — and when the flag is OFF, no marker callback is ever written, so the
         // dispatch never takes the specialized branch (flag-off stream is byte-identical to stock).
-        bool emitted = false;
-        if (s_specialized_ops && IsSpecializedOp(func))
+        if (!emitted && s_specialized_ops && IsSpecializedOp(func))
         {
           const SpecializedInterpretOperands spec_operands = {operands,
                                                               static_cast<u16>(SpecOpId(func))};

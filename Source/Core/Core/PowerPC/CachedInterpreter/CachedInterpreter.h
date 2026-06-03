@@ -99,6 +99,10 @@ private:
   // its stream layout/advancement stays byte-identical to stock 2509.
   struct SpecializedInterpretOperands;
   struct InterpretAndCheckExceptionsOperands;
+  // iCube WIN#1: payload for the PIC (position-independent-code) direct-pointer load/store fast path
+  // (MAIN_CIR_PIC_LOADSTORE). Carries the InterpretOperands prefix (for the cold fallback) plus the
+  // fastmem region base/mask pointers captured at emit time. See LoadStoreDFormPIC / LoadStoreXFormPIC.
+  struct LoadStoreDFormPICOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
@@ -145,6 +149,26 @@ private:
   template <bool write_pc>
   static s32 InterpretAndCheckExceptions(std::ostream& stream,
                                          const InterpretAndCheckExceptionsOperands& operands);
+  // iCube WIN#1: PIC direct-pointer load/store (MAIN_CIR_PIC_LOADSTORE). Computes the effective
+  // address, resolves the host RAM region directly (bypassing the per-access MMU/region lookup), and
+  // does the load/store with the correct endian swap. INTEGER D-form / X-form only (FP excluded at
+  // emission via FL_USE_FPU); any opcode/alignment/region the fast path does not handle delegates to
+  // Cold_LoadStoreFallback, which runs the exact generic interpreter handler (operands.func), so
+  // semantics are identical to the generic path for everything PIC does not specialize. ALWAYS
+  // memcheck-gated at the emission site (MMU-mode / watchpoints take the generic exception path).
+  template <bool write_pc>
+  static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
+                               const LoadStoreDFormPICOperands& operands);
+  template <bool write_pc>
+  static s32 LoadStoreDFormPIC(std::ostream& stream, const LoadStoreDFormPICOperands& operands);
+  template <bool write_pc>
+  static s32 LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
+                               const LoadStoreDFormPICOperands& operands);
+  template <bool write_pc>
+  static s32 LoadStoreXFormPIC(std::ostream& stream, const LoadStoreDFormPICOperands& operands);
+  // Cold fallback: runs the exact generic interpreter handler. Preserves DSI/alignment/MMIO semantics.
+  static s32 Cold_LoadStoreFallback(PowerPC::PowerPCState& ppc_state,
+                                    const LoadStoreDFormPICOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,
@@ -230,6 +254,28 @@ struct CachedInterpreter::InterpretAndCheckExceptionsOperands : InterpretOperand
 {
   PowerPC::PowerPCManager& power_pc;
   u32 downcount;
+};
+
+// iCube WIN#1: PIC load/store payload. Mirrors the InterpretOperands prefix (so Cold_LoadStoreFallback
+// can run the exact generic handler), carries the PowerPCManager (parity with the good branch; unused
+// on the fast path), and the six fastmem region base/mask pointers captured at emit time. Trivially
+// copyable; alignof == alignof(AnyCallback) (8 on arm64) and sizeof is a multiple of 8, satisfying
+// CachedInterpreterEmitter::Write's static_assert.
+struct CachedInterpreter::LoadStoreDFormPICOperands
+{
+  Interpreter& interpreter;
+  void (*func)(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction
+  u32 current_pc;
+  UGeckoInstruction inst;
+
+  PowerPC::PowerPCManager& power_pc;
+
+  u8* mem1_base;
+  u32 mem1_mask;
+  u8* exram_base;
+  u32 exram_mask;
+  u8* fakevmem_base;
+  u32 fakevmem_mask;
 };
 
 struct CachedInterpreter::HLEFunctionOperands

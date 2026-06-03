@@ -841,5 +841,14 @@ const Info<bool> MAIN_CIR_BLOCK_LINKING{{System::Main, "Core", "CIRBlockLinking"
 // device correctness passes only. Default false.
 const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE{
     {System::Main, "Core", "CIRBlockLinkingValidate"}, false};
+// iCube WIN#1: PIC (position-independent-code) direct-pointer load/store on the CachedInterpreter.
+// Integer D-form/X-form load/stores resolve the host RAM pointer directly and do the access with the
+// correct endian swap, bypassing the per-access MMU/region lookup (~15% on memory-bound titles).
+// Default TRUE so on-device A/B starts enabled. The fast path is ALWAYS additionally gated at the
+// emission site on !jo.memcheck (MMU-mode/watchpoints take the generic exception path), jo.fastmem,
+// and integer-only (FL_LOADSTORE && !FL_USE_FPU) regardless of this flag; anything the fast path does
+// not cover delegates to the exact generic interpreter handler. UNVALIDATED on-device — needs a
+// bit-exact dual-run A/B before shipping enabled.
+const Info<bool> MAIN_CIR_PIC_LOADSTORE{{System::Main, "Core", "CIRPICLoadStore"}, true};
 
 }  // namespace Config
