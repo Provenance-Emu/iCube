@@ -1,28 +1,25 @@
 // Copyright 2022 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import Sentry
 import UIKit
 
 class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
 
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-    // TODO(sentry): Sentry SPM dependency + dSYM upload are wired in Project.swift, but the SDK is
-    // NOT started — no DSN was found anywhere in the repo (the installer left only the auth token in
-    // .sentryclirc, which is for dSYM upload, not the runtime DSN). To enable runtime crash/error
-    // reporting, retrieve the DSN (Sentry org `provenance-emu`, project `icube`) and uncomment:
-    //
-    //   import Sentry  // add at top of file
-    //   SentrySDK.start { options in
-    //     options.dsn = "https://<public-key>@<org-id>.ingest.sentry.io/<project-id>"
-    //     options.debug = false
-    //   }
-    //
-    // Open decision before enabling: Firebase init (FirebaseService.mm) is gated
-    // `#if !TARGET_OS_TV && !TARGET_OS_MACCATALYST` — decide whether Sentry should mirror that gating.
-    // NOTE: iCube already ships Firebase Crashlytics; running two crash SDKs is a deliberate choice
-    // (and has privacy-policy implications).
-    ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // Start Sentry as early as possible so it captures crashes during app launch. The DSN is a
+    // client-side/public identifier (safe to embed in source, unlike the dSYM-upload auth token in
+    // .sentryclirc). Sentry is the sole crash/error reporter — Firebase Crashlytics was removed.
+    SentrySDK.start { options in
+      options.dsn = "https://aa3e806dc811b751d7c2ce91290f1fd6@o199354.ingest.us.sentry.io/4511503509815296"
+      options.enableCrashHandler = true
+      options.debug = false
+      // Modest tracing sample rate; crash/error reporting is the priority here.
+      options.tracesSampleRate = 0.1
+    }
+
+    return ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   func applicationWillTerminate(_ application: UIApplication) {
