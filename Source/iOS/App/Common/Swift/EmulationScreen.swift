@@ -447,6 +447,7 @@ struct EmulationScreen: View {
             .focusable(true)
             .padding([.top, .trailing], 8)
             Button {
+              refreshPerfOverlayState()
               showPerfOverlay = true
             } label: {
               Image(systemName: "speedometer")
@@ -704,6 +705,7 @@ struct EmulationScreen: View {
               // Quick performance overlay button
               Button {
                 hasTopBarInteraction = true
+                refreshPerfOverlayState()
                 showPerfOverlay = true
               } label: {
                 Image(systemName: "speedometer").font(.title2)
@@ -1335,6 +1337,23 @@ struct EmulationScreen: View {
   }
 
   // Adaptive-clock (auto) live toggle + VI-skip mode picker, shared across all perf-overlay layouts.
+  // Resolver step #3: refresh the perf-overlay state from the live config whenever the overlay is
+  // opened. The auto controllers (adaptive clock / Auto-IR / thermal) only write CurrentRun once
+  // gameplay is underway — AFTER the one-time onAppear load — so re-reading here is what makes the
+  // "Auto" badge appear and the manual controls disable when the user opens the overlay mid-game.
+  private func refreshPerfOverlayState() {
+    ocEnabled = DOLConfigBridge.mainOverclockEnable()
+    ocPercent = DOLConfigBridge.mainOverclockPercent()
+    vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
+    vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+    ocAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
+    vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
+    efbAutoOverridden = DOLConfigBridge.isEfbScaleAutoOverridden()
+    efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
+    efbScaleQuick = DOLConfigBridge.gfxEfbScale()
+    anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
+  }
+
   // Resolver step #3: small "Auto" pill shown next to a perf control whose key is currently being
   // driven by an auto controller (CurrentRun override shadowing the user's manual Base value). When
   // shown, the corresponding manual control is also disabled so the displayed effective value can't
