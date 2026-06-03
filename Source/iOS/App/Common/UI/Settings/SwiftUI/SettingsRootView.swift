@@ -3382,14 +3382,13 @@ struct GraphicsHacksView: View {
           Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath)
             .onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) },
           L("Lets Metal shaders use fast, relaxed-precision math. Can speed up the GPU; may cause subtle rendering differences."))
-        // NOTE: GFX_USE_COMPUTE_EFBXFB has no consumer in this Dolphin base
-        // (declared in GraphicsSettings + the bridge, but no video backend reads
-        // it). The toggle is inert, so it is disabled and labeled accordingly.
+        // iCube native-Metal moat: routes EFB/XFB color/depth resolve, blit, scale and
+        // gamma through Metal compute kernels instead of the stock raster path. Wired into
+        // the Metal backend (TryCompute* overrides) and gated on GFX_USE_COMPUTE_EFBXFB.
         settingsCaption(
           Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb)
-            .onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }
-            .disabled(true),
-          L("No effect on this build — this option is not wired to the renderer."))
+            .onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) },
+          L("Native-Metal compute acceleration for EFB/XFB. Experimental GPU perf knob; OFF by default. Applies on next launch."))
         settingsCaption(
           Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping)
             .onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) },
@@ -3488,7 +3487,7 @@ struct GraphicsHacksView: View {
     L("Enables fast-math optimizations in iCube's Metal shaders.\n\nRelaxes IEEE precision for speed; can cause subtle lighting differences or rare shader bugs.\n\niOS note: GPU-side optimization; helps only when GPU-bound and won't move the CPU bottleneck. Default OFF.\n\nIf unsure, leave this unchecked.")
   }
   private func helpTextUseComputeEfbXfb() -> String {
-    L("DISABLED — no effect on this build.\n\nThis setting (Hacks/UseComputeEfbXfb) exists in the config but is not read by any video backend in iCube's current Dolphin base, so toggling it does nothing. It is left visible (disabled) for transparency and may be wired up or removed in a future update.")
+    L("Native-Metal compute acceleration for EFB/XFB.\n\nRoutes EFB color/depth resolve, RGBA8 blit/scale/gamma, and mipmap generation through Metal compute kernels instead of the stock raster path. This is an experimental GPU performance knob and is OFF by default.\n\nFalls back to the stock path automatically for any case it doesn't handle, so it is safe to leave on, but on untested hardware it can produce visual glitches (shimmer, wrong depth) — benchmark and visually verify GPU-bound titles before relying on it.\n\nApplies on next launch.")
   }
   private func helpTextNoMipmapping() -> String {
     L("Disables texture mipmapping.\n\nA workaround for rare driver bugs; normally increases shimmering/aliasing and can hurt performance via texture-cache inefficiency.\n\niOS note: GPU-side; leave OFF — it usually makes things both uglier and slightly slower.\n\nIf unsure, leave this unchecked.")
