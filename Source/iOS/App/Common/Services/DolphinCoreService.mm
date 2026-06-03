@@ -127,7 +127,17 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
   SetBaseIfUnspecified(Config::GFX_HACK_IMMEDIATE_XFB, true);
-  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP, true);
+  // GFX_HACK_VI_SKIP: do NOT default ON on this rebaseline. VISkip lets the throttle DROP VI
+  // interrupts (VideoInterface.cpp:987 early-returns before asserting IR_INT) whenever the core
+  // lags >~20ms, as a catch-up. On HEAD's lean CachedInterpreter, CPU-heavy titles run
+  // CHRONICALLY >20ms behind realtime, so VISkip pins PERMANENTLY on and starves the game of
+  // vblank IRQs -> the main loop stalls. That is the "boot lockup": HUD freezes; pause/continue
+  // fires ResetThrottle (CoreTiming.cpp:113) which clears the lag flag and unsticks it for a few
+  // seconds until it drifts back past the 20ms threshold and re-wedges. Manual downclocking
+  // (or the adaptive clock) fixes it by keeping the core inside the 20ms window. NOTE: the good
+  // icube-testflight branch ALSO defaults this ON, but its faster custom CIR stays within the
+  // window so it never wedges — so this is a lean-CIR-speed limitation, not a wrong default per se.
+  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP, false);
   SetBaseIfUnspecified(Config::MAIN_ACCURATE_NANS, false);
   SetBaseIfUnspecified(Config::MAIN_SYNC_GPU, false);
 
