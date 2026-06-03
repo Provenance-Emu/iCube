@@ -292,6 +292,16 @@ static CirSpecOp SpecOpId(Interpreter::Instruction func)
 
 void CachedInterpreter::Init()
 {
+  // Wire the fastmem arena BEFORE RefreshConfig() — RefreshConfig computes jo.fastmem from
+  // jo.fastmem_arena, and Jit64/JitArm64::Init both call InitFastmemArena() first for exactly this
+  // reason. Without it, jo.fastmem_arena stays false -> jo.fastmem is always false -> the PIC
+  // direct-pointer load/store fast path (gated on jo.fastmem at the DoJit emission site) NEVER
+  // emits, silently leaving the CIR as the bare stock interpreter (the PIC win was inert). The
+  // ~16GiB arena is covered by the app's extended-virtual-addressing + increased-memory-limit
+  // entitlements; if reservation fails on a device, jo.fastmem_arena stays false and PIC gracefully
+  // no-ops. PIC region-checks every access and falls back to the generic handler, so it never
+  // faults — the CIR needs no backpatch fault handler (unlike the JITs).
+  InitFastmemArena();
   RefreshConfig();
   s_pic_loadstore = Config::Get(Config::MAIN_CIR_PIC_LOADSTORE);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
