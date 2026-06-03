@@ -867,5 +867,27 @@ const Info<bool> MAIN_CIR_PIC_LOADSTORE{{System::Main, "Core", "CIRPICLoadStore"
 // hand-roll CR0/XER side-effects, so flip true ONLY behind a bit-exact dual-run A/B (DTM determinism:
 // record an input trace, replay flag-on vs flag-off, diff GPR/mem at fixed frames). UNVALIDATED.
 const Info<bool> MAIN_CIR_MICROOP_FUSION{{System::Main, "Core", "CIRMicroOpFusion"}, false};
+// iCube: Dive-2 Rank-1 cross-block TAIL-LINK. INTENDED behavior: when a block is linked and all the
+// existing MAIN_CIR_BLOCK_LINKING guards pass (downcount>0, npc==expected_pc, non-stale rel, matching
+// feature_flags, not single-stepping/breakpointing), [[clang::musttail]]-branch straight into the next
+// block's first handler instead of returning the relative distance through ExecuteOneBlock's dispatch
+// loop — eliminating the per-hop callback reload + marker-compare overhead that survives even after
+// MAIN_CIR_BLOCK_LINKING already removed the Dispatch() table-lookup round-trip.
+//
+// STATUS: RESERVED / NOT IMPLEMENTED. The CIR dispatch ABI is distance-return: every handler has the
+// shape `s32 cb(PowerPCState&, const void* operands)` and returns the BYTE DISTANCE to the next
+// callback, which ExecuteOneBlock adds to the CURRENT cursor (`normal_entry += distance`). A musttail
+// from LinkBlock into the destination block's first handler would make that handler's return value —
+// a distance relative to the DESTINATION callback site — propagate back as LinkBlock's return, where
+// the loop adds it to the LINKBLOCK cursor. That corrupts the cursor (a silent wrong-stream / stale-
+// link execution = decrementer/interrupt starvation = hang, NOT a compile error). A correct musttail
+// requires converting EVERY handler to a uniform cursor-threaded `(PowerPCState&, cursor)` shape that
+// ends the chain with `return 0` — i.e. a second, parallel dispatch model. That cannot be flag-off
+// byte-identical without compiling two dispatchers, and is the CPython "1-5%" threaded-interp trap the
+// synthesis doc explicitly ranks against. The reference good branch (feature/icube-testflight) confirms
+// the same distance-return shape (LinkToBlockEndDistance returns the distance); no threaded handler
+// model exists to port. The flag is reserved here (default false, currently UNREAD by the CIR) so the
+// parent can wire a UI toggle without a follow-up MainSettings edit; flipping it has NO effect today.
+const Info<bool> MAIN_CIR_TAIL_LINK{{System::Main, "Core", "CIRTailLink"}, false};
 
 }  // namespace Config
