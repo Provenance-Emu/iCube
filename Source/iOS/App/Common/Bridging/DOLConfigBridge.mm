@@ -9,6 +9,9 @@
 #include "Common/Config/Config.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Config/GraphicsSettings.h"
+// Full definition of `enum class TriState` (GraphicsSettings.h only forward-declares it). Needed for
+// the TriState::Off enumerator used in resetGameplayConfigKeys's forced-defaults block.
+#include "VideoCommon/VideoConfig.h"
 #include "Core/Config/iOSSettings.h"
 #include "AudioCommon/AudioCommon.h"
 #include "Core/Config/SYSCONFSettings.h"
