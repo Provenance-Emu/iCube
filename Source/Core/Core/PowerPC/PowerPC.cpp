@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cstdlib>
 #include <cstring>
 #include <type_traits>
 #include <vector>
@@ -196,6 +197,26 @@ void PowerPCManager::InitializeCPUCore(CPUCore cpu_core)
   // it is used on boot and code window independently.
   auto& interpreter = m_system.GetInterpreter();
   interpreter.Init();
+
+  // Allow forcing Cached Interpreter via environment for debugging/testing:
+  // Set DOLPHIN_FORCE_CI=1 in the app environment to bypass JIT detection.
+  if (const char* env = std::getenv("DOLPHIN_FORCE_CI"); env && env[0] == '1')
+    cpu_core = CPUCore::CachedInterpreter;
+
+  INFO_LOG_FMT(POWERPC, "InitializeCPUCore: requested core {}", static_cast<int>(cpu_core));
+
+  // Normalize invalid stored values (e.g., from older/incorrect UI mappings)
+  const bool valid_core = (cpu_core == CPUCore::Interpreter) || (cpu_core == CPUCore::JIT64) ||
+                          (cpu_core == CPUCore::JITARM64) || (cpu_core == CPUCore::CachedInterpreter);
+  if (!valid_core)
+  {
+    const CPUCore def = DefaultCPUCore();
+    WARN_LOG_FMT(POWERPC,
+                 "InitializeCPUCore: invalid CPU core {} in config. Normalizing to default {}.",
+                 static_cast<int>(cpu_core), static_cast<int>(def));
+    Config::SetBaseOrCurrent(Config::MAIN_CPU_CORE, def);
+    cpu_core = def;
+  }
 
   switch (cpu_core)
   {
