@@ -53,6 +53,10 @@ static std::mutex s_vertex_loader_map_lock;
 static VertexLoaderMap s_vertex_loader_map;
 // TODO - change into array of pointers. Keep a map of all seen so far.
 
+// iCube (jitless): scratch buffer for re-running the CPU loader over the trailing three vertices
+// to populate the position cache after a GPU-compute decode. Single-threaded (video thread) use.
+static std::vector<u8> s_cpu_cache_scratch;
+
 Common::EnumMap<u8*, CPArray::TexCoord7> cached_arraybases;
 
 BitSet8 g_main_vat_dirty;
@@ -463,6 +467,16 @@ int RunVertices(int vtx_attr_group, OpcodeDecoder::Primitive primitive, int coun
       if (try_gpu_decode &&
           g_vertex_manager->TryComputeDecodeVertices(loader, src, dst.GetPointer(), run))
       {
+        // The GPU decoded the bulk vertices into the streaming buffer, but the per-vertex CPU side
+        // effects (the trailing-three position cache used by zfreeze CalculateZSlope and lighting)
+        // were skipped. Re-run the CPU loader for just the last min(3, run) vertices into a scratch
+        // buffer: the software loader populates position_cache[m_remaining] for m_remaining < 3, so
+        // decoding the final three vertices reproduces exactly the cache state a full CPU run would
+        // leave. The scratch native output is discarded (the GPU already wrote the real buffer).
+        const int tail = std::min(run, 3);
+        const u8* tail_src = src + static_cast<size_t>(loader->m_vertex_size) * (run - tail);
+        s_cpu_cache_scratch.resize(static_cast<size_t>(tail) * stride + 4);
+        loader->RunVertices(tail_src, s_cpu_cache_scratch.data(), tail);
         num_loaded = run;
       }
       else

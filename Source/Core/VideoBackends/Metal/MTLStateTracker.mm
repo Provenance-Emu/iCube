@@ -962,6 +962,49 @@ void Metal::StateTracker::DispatchComputeShader(u32 groupsize_x, u32 groupsize_y
       threadsPerThreadgroup:MTLSizeMake(groupsize_x, groupsize_y, groupsize_z)];
 }
 
+id<MTLBuffer> Metal::StateTracker::GetVertexUploadBuffer()
+{
+  return m_upload_buffers[static_cast<int>(UploadBuffer::Vertex)].cpubuffer;
+}
+
+void* Metal::StateTracker::GetVertexUploadBufferContents()
+{
+  return m_upload_buffers[static_cast<int>(UploadBuffer::Vertex)].buffer;
+}
+
+void Metal::StateTracker::DispatchVertexDecode(const ComputePipeline* pipeline, id<MTLBuffer> src,
+                                               u32 src_offset, u32 out_offset, const void* constants,
+                                               size_t constants_size, u32 vertex_count,
+                                               u32 threadgroup_size)
+{
+  // Self-contained compute pass: we bind the three buffers directly rather than going through
+  // PrepareCompute (which only knows about the utility-uniform/texel slots). This keeps the
+  // generic compute bookkeeping untouched. The output is the streaming Vertex cpubuffer; on iOS
+  // (m_manual_buffer_upload == false) the following gx draw reads that same buffer, and because
+  // it is hazard-tracked Metal serialises the compute write before the render read inside the
+  // command buffer.
+  id<MTLBuffer> out = m_upload_buffers[static_cast<int>(UploadBuffer::Vertex)].cpubuffer;
+  if (!pipeline || !src || !out)
+    return;
+
+  // BeginComputePass ends any open render pass and starts a compute encoder on the render cmdbuf.
+  BeginComputePass();
+  id<MTLComputeCommandEncoder> enc = m_current_compute_encoder;
+  [enc setComputePipelineState:pipeline->GetComputePipeline()];
+  if (constants && constants_size)
+    [enc setBytes:constants length:constants_size atIndex:0];
+  [enc setBuffer:src offset:src_offset atIndex:1];
+  [enc setBuffer:out offset:out_offset atIndex:2];
+  // Mark the generic flags dirty so the next real compute/draw rebinds everything it needs.
+  m_flags.has_pipeline = false;
+
+  const u32 groups = (vertex_count + threadgroup_size - 1) / threadgroup_size;
+  [enc dispatchThreadgroups:MTLSizeMake(groups, 1, 1)
+      threadsPerThreadgroup:MTLSizeMake(threadgroup_size, 1, 1)];
+  // Close the compute pass so the subsequent render pass observes the writes.
+  EndRenderPass();
+}
+
 void Metal::StateTracker::ResolveTexture(id<MTLTexture> src, id<MTLTexture> dst, u32 layer,
                                          u32 level)
 {

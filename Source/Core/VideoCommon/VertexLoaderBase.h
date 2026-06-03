@@ -62,6 +62,20 @@ public:
   virtual ~VertexLoaderBase() {}
   virtual int RunVertices(const u8* src, u8* dst, int count) = 0;
 
+  // iCube (jitless) GPU-compute vertex decode support.
+  // Describes whether this loader's vertex format is one the Metal compute kernel can reproduce
+  // byte-for-byte. Conservative on purpose: only the simplest fully-direct configuration is
+  // currently accepted, everything else falls back to the CPU loader. A descriptor with
+  // supported == false means "the backend must use the CPU loader".
+  struct ComputeDecodeInfo
+  {
+    bool supported = false;   // false => caller must use the CPU loader
+    u32 src_stride = 0;       // bytes per raw GC vertex (== m_vertex_size)
+    u32 dst_stride = 0;       // bytes per native vertex (== m_native_vtx_decl.stride)
+    u32 position_offset = 0;  // byte offset of the float3 position in the native vertex
+  };
+  ComputeDecodeInfo GetComputeDecodeInfo() const;
+
   // per loader public state
   PortableVertexDeclaration m_native_vtx_decl{};
   const u32 m_vertex_size;  // number of bytes of a raw GC vertex

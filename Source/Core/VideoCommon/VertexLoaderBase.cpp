@@ -238,6 +238,53 @@ u32 VertexLoaderBase::GetVertexComponents(const TVtxDesc& vtx_desc, const VAT& v
   return components;
 }
 
+VertexLoaderBase::ComputeDecodeInfo VertexLoaderBase::GetComputeDecodeInfo() const
+{
+  ComputeDecodeInfo info;
+
+  // Only the simplest fully-direct configuration is currently GPU-decodable byte-for-byte:
+  //   - position present, Direct, Float, XYZ (3 components)
+  //   - NO normal / colors / texcoords
+  //   - NO position-matrix-index, NO texture-matrix-index
+  // For Float positions the dequant scale is a no-op (Pos_ReadDirect<float> ignores m_posScale),
+  // so the kernel is a pure big-endian -> little-endian float3 copy. Everything else falls back.
+  if (m_VtxDesc.low.PosMatIdx)
+    return info;
+  for (u32 i = 0; i < m_VtxDesc.low.TexMatIdx.Size(); i++)
+  {
+    if (m_VtxDesc.low.TexMatIdx[i])
+      return info;
+  }
+  if (m_VtxDesc.low.Position != VertexComponentFormat::Direct)
+    return info;
+  if (m_VtxAttr.g0.PosFormat != ComponentFormat::Float)
+    return info;
+  if (m_VtxAttr.g0.PosElements != CoordComponentCount::XYZ)
+    return info;
+  if (m_VtxDesc.low.Normal != VertexComponentFormat::NotPresent)
+    return info;
+  for (u32 i = 0; i < m_VtxDesc.low.Color.Size(); i++)
+  {
+    if (m_VtxDesc.low.Color[i] != VertexComponentFormat::NotPresent)
+      return info;
+  }
+  for (u32 i = 0; i < m_VtxDesc.high.TexCoord.Size(); i++)
+  {
+    if (m_VtxDesc.high.TexCoord[i] != VertexComponentFormat::NotPresent)
+      return info;
+  }
+
+  // The native declaration must actually carry the position where we expect it.
+  if (!m_native_vtx_decl.position.enable || m_native_vtx_decl.position.components != 3)
+    return info;
+
+  info.supported = true;
+  info.src_stride = m_vertex_size;
+  info.dst_stride = static_cast<u32>(m_native_vtx_decl.stride);
+  info.position_offset = static_cast<u32>(m_native_vtx_decl.position.offset);
+  return info;
+}
+
 std::unique_ptr<VertexLoaderBase> VertexLoaderBase::CreateVertexLoader(const TVtxDesc& vtx_desc,
                                                                        const VAT& vtx_attr)
 {

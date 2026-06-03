@@ -107,6 +107,23 @@ public:
   void DrawIndexed(u32 base_index, u32 num_indices, u32 base_vertex);
   void DispatchComputeShader(u32 groupsize_x, u32 groupsize_y, u32 groupsize_z, u32 groups_x,
                              u32 groups_y, u32 groups_z);
+
+  // iCube (jitless) GPU-compute vertex decode. Runs a self-contained compute pass that reads raw GC
+  // vertex bytes from `src`/`src_offset`, decodes them with `pipeline`, and writes the native
+  // vertices into the streaming Vertex upload buffer at `out_offset`. Only valid when
+  // m_manual_buffer_upload is false (iOS unified memory: the following draw reads the same buffer
+  // the kernel wrote; Metal hazard-tracks the ordering within the command buffer). `constants` is a
+  // small uniform blob bound at buffer index 0. Returns the Vertex upload MTLBuffer the caller's
+  // DataReader pointer lives in (so it can validate the offset), or nil if unavailable.
+  void DispatchVertexDecode(const ComputePipeline* pipeline, id<MTLBuffer> src, u32 src_offset,
+                            u32 out_offset, const void* constants, size_t constants_size,
+                            u32 vertex_count, u32 threadgroup_size);
+  // The MTLBuffer currently backing the streaming Vertex upload buffer (cpubuffer on iOS), and the
+  // CPU base pointer into it, so VideoCommon-side code can map a DataReader pointer to a buffer
+  // offset. Only meaningful while !m_manual_buffer_upload.
+  id<MTLBuffer> GetVertexUploadBuffer();
+  void* GetVertexUploadBufferContents();
+  bool IsManualBufferUpload() const { return m_manual_buffer_upload; }
   void ResolveTexture(id<MTLTexture> src, id<MTLTexture> dst, u32 layer, u32 level);
 
   size_t Align(size_t amt, AlignMask align)
