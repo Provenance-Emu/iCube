@@ -609,9 +609,9 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   // "~2x perf" default, but on device dual-core HARD-HANGS most games a few seconds into boot
   // (CPU<->GPU FIFO-fence deadlock on the lean CachedInterpreter — see DolphinCoreService revert
   // 6af4263ec3). Reset-to-defaults must land on the safe single-core config, matching the startup
-  // default. (Other perf keys above already compile to their optimal default: fastmem/dsp-thread/
-  // fast-disc on, EFB-to-texture/XFB-to-texture/defer-EFB on, 1x IR, MMU/accurate-cache off — so
-  // deleting them is correct.)
+  // default. (fastmem, EFB-to-texture/XFB-to-texture on, 1x IR, MMU/accurate-cache off all DO
+  // compile to the optimal default, so deleting those is correct — but fast-disc, DSP-thread, and
+  // immediate-XFB do NOT compile to iCube's value; they're forced just below.)
   Config::SetBase(Config::MAIN_CPU_THREAD, false);
 
   // GFX_WAIT_FOR_SHADERS_BEFORE_STARTING defaults FALSE upstream, which gives the awful combo of
@@ -620,6 +620,16 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   // delete-to-default would silently land back on the stuttery upstream default. Mode stays
   // Synchronous/Specialized (the upstream default reset lands on = the intended iCube mode).
   Config::SetBase(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING, true);
+
+  // fast-disc, DSP-on-thread, and immediate-XFB all compile to the CONSERVATIVE upstream default
+  // (false) — the OPPOSITE of what DolphinCoreService applies at launch via SetBaseIfUnspecified.
+  // A plain delete-to-default silently lands them on the slow upstream value (the user-visible bug:
+  // "reset flips some Generals to the opposite of recommended"), so force iCube's value here too,
+  // matching the startup defaults. (GFX_ASYNC_PRESENT already compiles to true on Apple ARM64, so
+  // it's correctly covered by the delete above.)
+  Config::SetBase(Config::MAIN_FAST_DISC_SPEED, true);
+  Config::SetBase(Config::MAIN_DSP_THREAD, true);
+  Config::SetBase(Config::GFX_HACK_IMMEDIATE_XFB, true);
 
   // NOTE: intentionally NOT reset (identity/custom/non-gameplay):
   //   - DSU servers/enable (ciface DualShockUDPClient::SERVERS / SERVERS_ENABLED)
