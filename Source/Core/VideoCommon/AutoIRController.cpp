@@ -91,10 +91,23 @@ void AutoIRController::RefreshSettings()
 void AutoIRController::OnAfterPresent(PresentInfo& info)
 {
   (void)info;
-  // Ensure singleton constructed and settings loaded
-  // If disabled, do nothing
-  if (!m_enabled)
+  // Read the enable flag LIVE every frame instead of trusting the cached m_enabled. The cache is
+  // only re-synced via ConfigChangedEvent, which is triggered solely from VideoConfig::Refresh()
+  // and NOT on a plain settings write — so toggling Auto-IR off mid-game previously left m_enabled
+  // stuck true and the controller kept adjusting resolution + spamming OSD toasts. Live-reading the
+  // config makes the toggle take effect immediately, regardless of the event plumbing.
+  const bool enabled = Config::Get(Config::GFX_AUTO_IR_ENABLE);
+  if (!enabled)
+  {
+    m_enabled = false;
     return;
+  }
+  if (!m_enabled)
+  {
+    // Just (re)enabled this frame — reset the cooldown so we don't jump immediately.
+    m_enabled = true;
+    m_frames_since_change = 0;
+  }
 
   // Use global performance metrics FPS (smoothed)
   const double fps = g_perf_metrics.GetFPS();
