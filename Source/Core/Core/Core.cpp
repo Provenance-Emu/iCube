@@ -854,8 +854,16 @@ void Callback_FramePresented(const PresentInfo& present_info)
 {
   g_perf_metrics.CountFrame();
 
+  // iCube adaptive-controller sensor: track total vs duplicate presents so the clock loop can
+  // watch the duplicate-present ratio (the lower-bound / slow-motion signal). Counted before the
+  // early-return so duplicates are included in the total.
+  PerformanceMetrics::CountAnyPresent();
+
   if (present_info.reason == PresentInfo::PresentReason::VideoInterfaceDuplicate)
+  {
+    PerformanceMetrics::CountDuplicatePresent();
     return;
+  }
 
   s_stop_frame_step.store(true);
 }

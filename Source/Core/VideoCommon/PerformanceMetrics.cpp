@@ -13,6 +13,17 @@
 
 PerformanceMetrics g_perf_metrics;
 
+// --- iCube adaptive-controller global sensors ---
+// File-scope atomics so they can be incremented from threads/TUs that don't hold a
+// PerformanceMetrics reference (the GPU present callback in Core.cpp, the audio mixer thread).
+namespace
+{
+std::atomic<u64> s_dup_present_count{0};
+std::atomic<u64> s_total_present_count{0};
+std::atomic<u64> s_audio_underrun_count{0};
+std::atomic<int> s_bound{static_cast<int>(PerformanceMetrics::Bound::Unknown)};
+}  // namespace
+
 void PerformanceMetrics::Reset()
 {
   m_fps_counter.Reset();
@@ -101,6 +112,66 @@ double PerformanceMetrics::GetMaxSpeed() const
 double PerformanceMetrics::GetLastRawFrameTimeMs() const
 {
   return DT_ms(m_fps_counter.GetLastRawDt()).count();
+}
+
+double PerformanceMetrics::GetFrameDtAvgSeconds() const
+{
+  return DT_s(m_fps_counter.GetDtAvg()).count();
+}
+
+double PerformanceMetrics::GetFrameDtStdSeconds() const
+{
+  return DT_s(m_fps_counter.GetDtStd()).count();
+}
+
+double PerformanceMetrics::GetVBlankDtAvgSeconds() const
+{
+  return DT_s(m_vps_counter.GetDtAvg()).count();
+}
+
+double PerformanceMetrics::GetVBlankDtStdSeconds() const
+{
+  return DT_s(m_vps_counter.GetDtStd()).count();
+}
+
+u64 PerformanceMetrics::GetDuplicatePresentCount()
+{
+  return s_dup_present_count.load(std::memory_order_relaxed);
+}
+
+u64 PerformanceMetrics::GetTotalPresentCount()
+{
+  return s_total_present_count.load(std::memory_order_relaxed);
+}
+
+void PerformanceMetrics::CountDuplicatePresent()
+{
+  s_dup_present_count.fetch_add(1, std::memory_order_relaxed);
+}
+
+void PerformanceMetrics::CountAnyPresent()
+{
+  s_total_present_count.fetch_add(1, std::memory_order_relaxed);
+}
+
+u64 PerformanceMetrics::GetAudioUnderrunCount()
+{
+  return s_audio_underrun_count.load(std::memory_order_relaxed);
+}
+
+void PerformanceMetrics::CountAudioUnderrun()
+{
+  s_audio_underrun_count.fetch_add(1, std::memory_order_relaxed);
+}
+
+PerformanceMetrics::Bound PerformanceMetrics::GetBound()
+{
+  return static_cast<Bound>(s_bound.load(std::memory_order_relaxed));
+}
+
+void PerformanceMetrics::SetBound(Bound b)
+{
+  s_bound.store(static_cast<int>(b), std::memory_order_relaxed);
 }
 
 void PerformanceMetrics::DrawImGuiStats(const float backbuffer_scale)

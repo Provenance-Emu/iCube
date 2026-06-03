@@ -16,6 +16,7 @@
 #include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
 #include "Core/System.h"
+#include "VideoCommon/PerformanceMetrics.h"
 
 static u32 DPL2QualityToFrameBlockSize(AudioCommon::DPL2Quality quality)
 {
@@ -559,6 +560,13 @@ bool Mixer::MixerFifo::Dequeue(Granule* granule)
   {
     // Only fill gaps when running to prevent stutter on pause.
     const bool is_running = Core::GetState(Core::System::GetInstance()) == Core::State::Running;
+    // iCube adaptive-controller sensor: a starved DMA fifo while running is a true audio underrun
+    // — the core couldn't produce samples fast enough. Counted here (not at the `return false`
+    // below) because with fill_audio_gaps ON the queue loops instead of returning false, so the
+    // silence branch never fires. Only the primary (DMA) fifo counts, to avoid false positives
+    // from routinely-empty streaming/wiimote/gba fifos.
+    if (m_is_primary && is_running)
+      PerformanceMetrics::CountAudioUnderrun();
     if (m_mixer->m_config_fill_audio_gaps && is_running)
     {
       // Jump the playhead to half the queue size behind the head.

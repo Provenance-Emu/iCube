@@ -46,6 +46,40 @@ public:
   // Last raw frame time in ms (per-frame, atomic, any thread). For 1%-low capture.
   double GetLastRawFrameTimeMs() const;
 
+  // --- iCube adaptive-controller sensors ---
+  // Frame-time stability of the *presented* stream (host-thread frame counter), in seconds.
+  // Both are flushed every present by DrawImGuiStats() -> UpdateStats(), which runs
+  // unconditionally regardless of overlay visibility, so these are safe to poll from the
+  // adaptive clock loop even when no on-screen stats are shown. May be called from any thread.
+  double GetFrameDtAvgSeconds() const;
+  double GetFrameDtStdSeconds() const;
+  // Same, for the emulated v-blank (VPS) stream.
+  double GetVBlankDtAvgSeconds() const;
+  double GetVBlankDtStdSeconds() const;
+
+  // Duplicate-present counter: incremented from the GPU thread (Callback_FramePresented) each
+  // time VideoInterface presents a duplicate (repeated) frame. A high dup-present rate relative
+  // to total presents means the emulated core is producing fields slower than the host refresh
+  // (slow-motion game logic) — the lower-bound signal the clock loop watches. Monotonic counter;
+  // callers diff successive reads. Any thread.
+  static u64 GetDuplicatePresentCount();
+  // Total presents (unique + duplicate) since boot. Any thread.
+  static u64 GetTotalPresentCount();
+  static void CountDuplicatePresent();
+  static void CountAnyPresent();
+
+  // Audio underrun counter: incremented from the audio (mixer) thread whenever the DMA mixer
+  // FIFO starves (queue empty at dequeue). Monotonic; callers diff successive reads. Any thread.
+  static u64 GetAudioUnderrunCount();
+  static void CountAudioUnderrun();
+
+  // Shared CPU-vs-GPU-bound classification, published by the resolution controller (which owns
+  // the EFB-scale probe) and consumed by the clock loop so the two controllers never fight over
+  // the same lever. Any thread.
+  enum class Bound : int { Unknown = 0, CpuBound = 1, GpuBound = 2 };
+  static Bound GetBound();
+  static void SetBound(Bound b);
+
   // ImGui Functions
   void DrawImGuiStats(const float backbuffer_scale);
 

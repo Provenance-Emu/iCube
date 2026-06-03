@@ -100,9 +100,9 @@ private:
     using Granule = std::array<StereoPair, GRANULE_SIZE>;
 
   public:
-    MixerFifo(Mixer* mixer, u32 sample_rate_divisor, bool little_endian)
+    MixerFifo(Mixer* mixer, u32 sample_rate_divisor, bool little_endian, bool is_primary = false)
         : m_mixer(mixer), m_input_sample_rate_divisor(sample_rate_divisor),
-          m_little_endian(little_endian)
+          m_little_endian(little_endian), m_is_primary(is_primary)
     {
     }
     void DoState(PointerWrap& p);
@@ -117,6 +117,10 @@ private:
     Mixer* m_mixer;
     u32 m_input_sample_rate_divisor;
     bool m_little_endian;
+    // iCube: true only for the DMA (primary game-audio) fifo. Underrun on the always-present DMA
+    // path is a real starvation signal for the adaptive clock loop; the streaming/wiimote/gba
+    // fifos are routinely empty (no music / no peripheral) so counting them would false-positive.
+    bool m_is_primary = false;
 
     Granule m_next_buffer{};
     std::size_t m_next_buffer_index = 0;
@@ -144,7 +148,7 @@ private:
 
   void RefreshConfig();
 
-  MixerFifo m_dma_mixer{this, FIXED_SAMPLE_RATE_DIVIDEND / 32000, false};
+  MixerFifo m_dma_mixer{this, FIXED_SAMPLE_RATE_DIVIDEND / 32000, false, /*is_primary=*/true};
   MixerFifo m_streaming_mixer{this, FIXED_SAMPLE_RATE_DIVIDEND / 48000, false};
   MixerFifo m_wiimote_speaker_mixer{this, FIXED_SAMPLE_RATE_DIVIDEND / 3000, true};
   MixerFifo m_skylander_portal_mixer{this, FIXED_SAMPLE_RATE_DIVIDEND / 8000, true};
