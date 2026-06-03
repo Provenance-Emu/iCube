@@ -3,6 +3,8 @@
 
 #import "EmulationCoordinator.h"
 
+#include <cmath>
+
 #import <Metal/Metal.h>
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -32,6 +34,7 @@
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerInterface/CoreDevice.h"
 #import "Core/PowerPC/PowerPC.h"
+#include "Core/HW/VideoInterface.h"
 #include "Common/IniFile.h"
 #include "Common/FileUtil.h"
 #include "Core/HW/Wiimote.h"
@@ -103,6 +106,35 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
   }
 }
 
+// Adaptive clock v2 phases.
+enum {
+  ACPhase_Verify = 0,  // seeded from a per-game converged clock; confirm it's still stable (short)
+  ACPhase_Search,      // descending sweep: step down until the variance/VPS cliff
+  ACPhase_Settle,      // stepped one above the cliff; observe a longer window before committing
+  ACPhase_Hold         // converged; light monitoring, re-enter Search on degradation
+};
+
+// Tunables. ALL of these need on-device tuning against real CPU-bound titles — the constants below
+// are reasoned starting points, not measured optima. (See research synthesis §#1: validate with a
+// manual underclock sweep + PerfSnapshot log first.)
+static const int   ACTickMs        = 500;    // timer cadence (ms)
+static const int   ACSearchStepTicks = 3;    // ~1.5s between sweep steps (3 * 500ms)
+static const int   ACSettleTicks   = 14;     // ~7s settle/observation window
+static const int   ACVerifyTicks   = 5;      // ~2.5s verify of a seeded per-game clock
+static const int   ACHoldTicks     = 6;      // ~3s between hold-phase health checks
+static const float ACSweepStep     = 0.10f;  // CPU-clock decrement per search step
+static const float ACVIStep        = 0.10f;  // VI-clock decrement when CPU-bound at the ceiling
+static const float ACCpuFloor      = 0.30f;  // never sweep below this (game logic goes slow-mo)
+static const float ACViFloor       = 0.50f;  // VI underclock floor
+// k: frame time is "stable" while dtStd < k * dtAvg. A low optimum has tight, regular frame times;
+// underclocking past the cliff makes the core miss field deadlines -> dtStd spikes. k=0.35 is a
+// guess; on-device tuning required (too low = never converges, too high = converges into judder).
+static const float ACVarK          = 0.35f;
+// VPS must stay within this fraction of the title's native refresh to count as "at target".
+static const float ACVpsTolerance  = 0.04f;  // 4%
+// dup-present ratio above this means the core is repeatedly missing fields (slow-motion) -> back off.
+static const float ACDupRatioMax   = 0.10f;  // 10% of presents are duplicates
+
 @implementation EmulationCoordinator {
   UIView* _renderHost;
   SafeMainThreadMetalLayer* _metalLayer;
@@ -110,20 +142,30 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
   UIView* _mainDisplayView;
   dispatch_source_t _adaptiveClockTimer;
   dispatch_source_t _inputPumpTimer;
-  float _adaptiveVI;
-  float _adaptiveCPU;          // learned CPU-clock baseline (persisted). Applied value is min(this, thermal cap).
-  float _acSpeedBefore;        // achieved speed % captured just before the last clock change, for grading it
-  float _acLastStep;           // magnitude of the last CPU-clock change, so an ineffective one can be reverted
-  float _acLastPersisted;      // last value written to NSUserDefaults, to avoid redundant writes
-  float _acLastApplied;        // last MAIN_OVERCLOCK we wrote; if it changes underneath us the user did it
-  int   _acLastAction;         // -1 = lowered, 0 = none, +1 = probed upward, on the previous tick
-  int   _acProbeCooldown;      // ticks to wait before probing upward again (after a probe lost speed)
-  BOOL  _acLowerBlocked;       // underclocking observed not to help (GPU/host-bound) -> stop underclocking
-  int   _acLowerMisses;        // consecutive ineffective underclock grades; latch only after 2 (a single
-                               // noisy reading must not disable auto-downclock for the whole session)
-  int   _acBlockedTicks;       // ticks spent latched while still underspeeding; re-arm after a while so a
-                               // scene change (menu GPU-bound -> gameplay CPU-bound) gets re-tested
-  BOOL  _acYielded;            // user took manual clock control this session -> stop adjusting entirely
+
+  // --- Adaptive clock v2 (descending-sweep, frame-time-stability objective) ---
+  // OBJECTIVE (matches what Joe does by hand): find the LOWEST emulated CPU clock that still holds
+  // a stable frame time + VPS-at-target + no audio underruns. The old loop sought the HIGHEST clock
+  // holding speed% >= 92 (setpoint inversion): speed% reads ~100 across the whole feasible region
+  // (the throttle target is the FIXED cpu clock, SystemTimers.cpp), so it was blind to the low
+  // optimum and its probe-up logic kept walking back toward the can't-keep-up cliff. v2 watches
+  // frame-time variance (dtStd/dtAvg), VPS vs the title's native refresh, the duplicate-present
+  // ratio, and audio underruns — the only signals that actually move at the low optimum.
+  float _acCPU;            // current applied CPU overclock (the lever we sweep). [floor .. 1.0]
+  float _acVI;             // current applied VI overclock (the second lever, used when CPU-bound
+                           // and still short at clock ceiling). Adapted in v2 (v1 never touched it).
+  float _acLastApplied;    // last MAIN_OVERCLOCK we wrote; if it changes underneath us, user did it
+  float _acStableCPU;      // lowest CPU clock confirmed stable this session (the converged value)
+  float _acLastPersisted;  // last value written to NSUserDefaults, to avoid redundant writes
+  BOOL  _acYielded;        // user took manual clock control this session -> stop adjusting
+
+  int   _acPhase;          // ACPhase_* below
+  int   _acPhaseTicks;     // ticks elapsed in the current phase (timer fires every ACTickMs)
+  // Underrun baseline captured at the start of an observation window, to detect NEW underruns.
+  unsigned long long _acUnderrunBase;
+  unsigned long long _acDupBase;     // duplicate-present count at window start
+  unsigned long long _acTotalBase;   // total-present count at window start
+
   NSString* _adaptiveGameID;  // current game id, for persisting learned clocks per game
   CGSize _lastDrawableSize;
 }
@@ -273,21 +315,22 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
   if (_adaptiveClockTimer) return;
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
 
-  // One-time cleanup of damage from the old open-loop ratchet. Runs regardless of whether
-  // adaptive clock is currently enabled — the old loop may already have poisoned saved config,
-  // and merely disabling adaptive clock must not leave that poison in place.
-  if ([defaults integerForKey:@"adaptive_clock_schema_v"] < 2) {
-    // (a) Discard per-game clocks it "learned": it drove every underspeeding title to the 0.40
-    // floor and persisted that, so the data is worthless and the new loop must relearn.
+  // One-time cleanup of damage from older loops. Runs regardless of whether adaptive clock is
+  // currently enabled — an older loop may already have poisoned saved config, and merely disabling
+  // adaptive clock must not leave that poison in place.
+  //
+  // schema_v < 2: the original open-loop ratchet.
+  // schema_v < 3: the hill-climb loop (sought the HIGHEST clock holding speed>=92 — setpoint
+  //   inversion). Its persisted per-game clocks are the WRONG setpoint and would seed v2's
+  //   descending sweep from the wrong place, so purge them and relearn.
+  if ([defaults integerForKey:@"adaptive_clock_schema_v"] < 3) {
     for (NSString* key in [[defaults dictionaryRepresentation] allKeys]) {
       if ([key hasPrefix:@"adaptive_clock_cpu_"] || [key hasPrefix:@"adaptive_clock_vi_"])
         [defaults removeObjectForKey:key];
     }
-    // (b) The old loop wrote overclock via SetBaseOrCurrent, which lands in the Base layer that
-    // serializes to Dolphin.ini — so a stale underclock can be baked into the saved config,
-    // invisible to the NSUserDefaults purge and to disabling adaptive clock. The ratchet only
-    // ever lowered, so reset artifact underclocks (< 1.0) to default and persist that. A
-    // deliberate overclock (> 1.0) is left untouched.
+    // Older loops wrote overclock via the Base layer (serializes to Dolphin.ini), so a stale
+    // underclock can be baked into saved config, invisible to the NSUserDefaults purge. Reset
+    // artifact underclocks (< 1.0) to default; a deliberate overclock (> 1.0) is left untouched.
     bool repaired = false;
     if (Config::Get(Config::MAIN_OVERCLOCK) < 1.0f) {
       Config::SetBase(Config::MAIN_OVERCLOCK, 1.0f);
@@ -300,172 +343,257 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
       repaired = true;
     }
     if (repaired) Config::Save();
-    [defaults setInteger:2 forKey:@"adaptive_clock_schema_v"];
+    [defaults setInteger:3 forKey:@"adaptive_clock_schema_v"];
   }
 
-  // The adaptive loop itself only runs when the user has enabled it.
+  // The adaptive loop itself only runs when the user has enabled it (existing toggle — no new one).
   if (![defaults boolForKey:@"adaptive_clock_enable"]) return;
 
-  _adaptiveVI = Config::Get(Config::MAIN_VI_OVERCLOCK);
-  _adaptiveCPU = Config::Get(Config::MAIN_OVERCLOCK);
-  _acSpeedBefore = 0.f;
-  _acLastStep = 0.f;
-  _acLastPersisted = -1.f;
-  _acLastApplied = -1.f;
-  _acLastAction = 0;
-  _acProbeCooldown = 0;
-  _acLowerBlocked = NO;
-  _acLowerMisses = 0;
-  _acBlockedTicks = 0;
-  _acYielded = NO;
+  // Optional NSUserDefaults override tunables (no Config/bridge entries; read here only). Any of
+  // these absent -> the compiled defaults above are used.
+  const float varK = [defaults objectForKey:@"adaptive_clock_var_k"]
+                         ? [defaults floatForKey:@"adaptive_clock_var_k"] : ACVarK;
+  const float sweepStep = [defaults objectForKey:@"adaptive_clock_sweep_step"]
+                         ? [defaults floatForKey:@"adaptive_clock_sweep_step"] : ACSweepStep;
 
-  // Per-game learned clock: seed from the value the loop converged on (and verified) last time
-  // this title ran, so it starts near the right clock instead of re-converging from scratch.
+  _acVI = Config::Get(Config::MAIN_VI_OVERCLOCK);
+  _acCPU = MIN(1.0f, MAX(ACCpuFloor, (float)Config::Get(Config::MAIN_OVERCLOCK)));
+  _acStableCPU = 1.0f;
+  _acLastApplied = -1.f;
+  _acLastPersisted = -1.f;
+  _acYielded = NO;
+  _acPhase = ACPhase_Search;  // default: full descending sweep from the current clock
+  _acPhaseTicks = 0;
+  _acUnderrunBase = PerformanceMetrics::GetAudioUnderrunCount();
+  _acDupBase = PerformanceMetrics::GetDuplicatePresentCount();
+  _acTotalBase = PerformanceMetrics::GetTotalPresentCount();
+  PerformanceMetrics::SetBound(PerformanceMetrics::Bound::Unknown);
+
+  // Per-game seed: if we converged + verified a lowest-stable clock for this title before, start
+  // there and run a SHORT verify instead of a full sweep.
   const std::string gid = SConfig::GetInstance().GetGameID();
   _adaptiveGameID = gid.empty() ? nil : [NSString stringWithUTF8String:gid.c_str()];
   if (_adaptiveGameID) {
     NSString* cpuKey = [@"adaptive_clock_cpu_" stringByAppendingString:_adaptiveGameID];
     if ([defaults objectForKey:cpuKey]) {
-      _adaptiveCPU = [defaults floatForKey:cpuKey];
-      _acLastPersisted = _adaptiveCPU;
-      // CurrentRun layer only: the adaptive clock is a runtime override persisted separately in
-      // NSUserDefaults — it must never write the Base layer (Dolphin.ini), or it would poison the
-      // user's saved config the way the old loop did.
-      Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, _adaptiveCPU < 1.0f);
-      Config::SetCurrent(Config::MAIN_OVERCLOCK, _adaptiveCPU);
+      _acCPU = MIN(1.0f, MAX(ACCpuFloor, [defaults floatForKey:cpuKey]));
+      _acStableCPU = _acCPU;
+      _acLastPersisted = _acCPU;
+      _acPhase = ACPhase_Verify;
     }
+    NSString* viKey = [@"adaptive_clock_vi_" stringByAppendingString:_adaptiveGameID];
+    if ([defaults objectForKey:viKey])
+      _acVI = MAX(ACViFloor, [defaults floatForKey:viKey]);
   }
 
-  // The adaptive clock manages clock within [floor, 1.0]; clamp the seed so a manual overclock
-  // can't put it out of range (turn adaptive clock off to overclock above 100% manually).
-  _adaptiveCPU = MIN(1.0f, MAX(0.30f, _adaptiveCPU));
+  // Apply the starting clocks on the CurrentRun layer only (never Base/Dolphin.ini).
+  Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, _acCPU < 1.0f);
+  Config::SetCurrent(Config::MAIN_OVERCLOCK, _acCPU);
+  _acLastApplied = _acCPU;
+  // Restore the seeded VI overclock too (otherwise the per-game VI seed is read but never applied).
+  Config::SetCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, _acVI < 1.0f);
+  Config::SetCurrent(Config::MAIN_VI_OVERCLOCK, _acVI);
 
   _adaptiveClockTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
-  dispatch_source_set_timer(_adaptiveClockTimer, dispatch_time(DISPATCH_TIME_NOW, 0), NSEC_PER_SEC * 2, NSEC_PER_MSEC * 100);
+  dispatch_source_set_timer(_adaptiveClockTimer, dispatch_time(DISPATCH_TIME_NOW, 0),
+                            (uint64_t)NSEC_PER_MSEC * ACTickMs, NSEC_PER_MSEC * 50);
   dispatch_source_set_event_handler(_adaptiveClockTimer, ^{
     auto& sys = Core::System::GetInstance();
     if (Core::GetState(sys) != Core::State::Running) return;
-    // Read device thermal pressure here on the timer queue (NSProcessInfo is thread-safe);
-    // apply clock changes on the host/CPU thread, where mutating timing config is safe.
     const NSProcessInfoThermalState thermal = NSProcessInfo.processInfo.thermalState;
-    // Capture by value (self, thermal), never [&]: the host job can run after this handler
-    // returns, so a reference capture of locals would dangle.
-    Core::QueueHostJob([self, thermal](Core::System& s) {
+    // Capture by value (self, thermal, tunables): the host job can run after this handler returns.
+    Core::QueueHostJob([self, thermal, varK, sweepStep](Core::System& s) {
       if (Core::GetState(s) != Core::State::Running) return;
-      if (self->_acYielded) return;  // user took manual clock control this session
+      if (self->_acYielded) return;
 
-      // Manual control wins: if the CPU clock changed underneath us since our last write — i.e.
-      // the user moved a slider in either settings UI — yield for the rest of the session so the
-      // autoclock never fights or silently overwrites a hand-tuned value.
+      // Manual control wins: if the CPU clock moved underneath us (user slider), yield this session.
       const float curOC = (float)Config::Get(Config::MAIN_OVERCLOCK);
       if (self->_acLastApplied >= 0.f && fabsf(curOC - self->_acLastApplied) > 0.005f) {
         self->_acYielded = YES;
         return;
       }
 
-      // Achieved emulation speed (100 == realtime). The emulator throttles to ~100, so this
-      // tops out near 100 even with spare headroom — which is why we PROBE upward to find
-      // headroom rather than wait for >100 readings that throttling never produces.
-      const float pct = (float)(g_perf_metrics.GetSpeed() * 100.0);
-      if (pct <= 0.f) return;  // metrics not warmed up yet
+      // --- Sample the sensors. ---
+      const double vps = g_perf_metrics.GetVPS();
+      if (vps <= 0.0) return;  // metrics not warmed up
+      const double dtAvg = g_perf_metrics.GetFrameDtAvgSeconds();
+      const double dtStd = g_perf_metrics.GetFrameDtStdSeconds();
+      const unsigned long long underruns = PerformanceMetrics::GetAudioUnderrunCount();
+      const unsigned long long dups = PerformanceMetrics::GetDuplicatePresentCount();
+      const unsigned long long total = PerformanceMetrics::GetTotalPresentCount();
 
-      const float CPU_FLOOR = 0.30f;  // aggressive: CPU-bound jitless titles run smooth this low
-      const float TARGET_LO = 92.0f;  // below this we are dropping frames -> downclock
-      const float TARGET_HI = 99.0f;  // at/above this we (apparently) hold full speed
-      const float HELP_EPS  = 2.5f;   // a lower must lift speed by at least this % to count as helping
-                                      // (wide enough that ~1-2% frame-rate noise can't false-latch)
+      // Target = the title's native field rate (NOT a fixed 60: a 30/50Hz title is fine below 60).
+      double targetVPS = s.GetVideoInterface().GetTargetRefreshRate();
+      if (!(targetVPS > 1.0) || !std::isfinite(targetVPS)) targetVPS = 60.0;
 
-      // Thermal pressure caps the APPLIED clock transiently. We only LEARN (adjust/persist the
-      // baseline) while cool, so transient throttling can never corrupt the per-game baseline.
+      // Thermal caps the APPLIED clock; we only PERSIST a baseline while cool.
       const bool cool = (thermal <= NSProcessInfoThermalStateFair);
       float ceiling = 1.0f;
       if (thermal == NSProcessInfoThermalStateCritical) ceiling = 0.65f;
       else if (thermal == NSProcessInfoThermalStateSerious) ceiling = 0.80f;
 
-      // 1) Grade the previous tick's change by the speed it produced. NOT cool-gated: a heavy
-      //    title leaves "Fair" within ~1 min, and cool-gating the whole loop froze all learning
-      //    (the "auto clock does nothing" bug). Thermal is handled by the applied-clock CEILING
-      //    (below) + the cool-gated PERSIST step; learning itself runs continuously.
-      if (self->_acLastAction == -1) {  // we underclocked last tick
-        if (pct - self->_acSpeedBefore < HELP_EPS) {
-          // Lowering didn't lift speed this tick. Undo the useless step. But do NOT latch on a
-          // single ambiguous grade: the perf-sample window (GFX_PERF_SAMP_WINDOW, ~1s) lags the
-          // 2s tick, so the first reading after a change is partly contaminated by pre-change
-          // (slower) samples and can read below HELP_EPS even on a genuinely CPU-bound title.
-          // Only conclude GPU/host-bound (and stop underclocking) after TWO consecutive misses.
-          self->_adaptiveCPU = MIN(1.0f, self->_adaptiveCPU + self->_acLastStep);
-          if (++self->_acLowerMisses >= 2) {
-            self->_acLowerBlocked = YES;
-            self->_acBlockedTicks = 0;
-          }
-        } else {
-          // Lowering helped -> genuinely CPU-bound; clear the miss streak.
-          self->_acLowerMisses = 0;
-        }
-      } else if (self->_acLastAction == +1) {  // we probed upward last tick
-        if (pct < TARGET_LO) {
-          // Raising it cost us full speed -> step back down and hold off probing for a while.
-          self->_adaptiveCPU = MAX(CPU_FLOOR, self->_adaptiveCPU - self->_acLastStep);
-          self->_acProbeCooldown = 30;  // ~60s at the 2s tick
-        }
-      }
-      self->_acLastAction = 0;
+      // Health of the window since it began (deltas off the captured baselines).
+      const bool newUnderrun = (underruns > self->_acUnderrunBase);
+      const unsigned long long dDup = dups - self->_acDupBase;
+      const unsigned long long dTot = total - self->_acTotalBase;
+      const double dupRatio = (dTot > 0) ? (double)dDup / (double)dTot : 0.0;
+      const bool varStable = (dtAvg > 0.0) && (dtStd < varK * dtAvg);
+      const bool vpsAtTarget = (vps >= targetVPS * (1.0 - ACVpsTolerance));
+      const bool dupOk = (dupRatio <= ACDupRatioMax);
+      // "Stable at this clock" == the manual objective: smooth frame time + VPS held + no underrun.
+      const bool stableHere = varStable && vpsAtTarget && dupOk && !newUnderrun;
 
-      // Re-arm a blocked title after a while. A latch means "underclocking didn't help" for the
-      // scene we tested — but the bottleneck shifts (a GPU-bound menu becomes a CPU-bound level),
-      // so periodically clear the latch and re-test instead of giving up for the whole session.
-      // (Without this, one early ambiguous grade used to disable auto-downclock permanently.)
-      if (self->_acLowerBlocked && pct < TARGET_LO) {
-        if (++self->_acBlockedTicks >= 15) {  // ~30s at the 2s tick
-          self->_acLowerBlocked = NO;
-          self->_acLowerMisses = 0;
-          self->_acBlockedTicks = 0;
-        }
-      }
+      // LOWER-CLIFF signal: the emulated field cadence can't be met (slow-motion game logic) —
+      // duplicate presents pile up and/or audio starves. Unlike VPS (which the throttle pins to
+      // ~target whenever the host keeps up), these signals fire at the BOTTOM of the feasible
+      // region and persist regardless of how low the CPU clock already is. This is the condition
+      // where the VI overclock — the second lever — is worth shedding: fewer emulated VI events
+      // per frame reclaims host headroom for the actual per-field work.
+      const bool lowerCliff = !dupOk || newUnderrun;
 
-      // 2) Choose this tick's change.
-      const float applied_now = MIN(self->_adaptiveCPU, ceiling);
-      if (pct < TARGET_LO && !self->_acLowerBlocked && applied_now > CPU_FLOOR) {
-        // Underspeed and lowering still plausibly helps -> step down proportional to the deficit.
-        const float deficit = (TARGET_LO - pct) / 100.0f;   // 0 .. ~1
-        const float step = MIN(0.20f, MAX(0.04f, deficit));
-        const float next = MAX(CPU_FLOOR, applied_now - step);
-        if (next < self->_adaptiveCPU) {
-          self->_acLastStep = self->_adaptiveCPU - next;
-          self->_adaptiveCPU = next;
-          self->_acSpeedBefore = pct;
-          self->_acLastAction = -1;
-        }
-      } else if (cool && pct >= TARGET_HI &&
-                 self->_acProbeCooldown == 0 && self->_adaptiveCPU < ceiling) {
-        // Holding full speed with thermal headroom -> probe upward to recover game-logic fidelity
-        // (and to climb back out of any earlier over-underclock). If it costs speed, step (1) reverts.
-        const float next = MIN(ceiling, self->_adaptiveCPU + 0.04f);
-        if (next > self->_adaptiveCPU) {
-          self->_acLastStep = next - self->_adaptiveCPU;
-          self->_adaptiveCPU = next;
-          self->_acSpeedBefore = pct;
-          self->_acLastAction = +1;
-          self->_acLowerBlocked = NO;  // re-evaluate the bottleneck after changing the clock
-        }
-      } else if (self->_acProbeCooldown > 0) {
-        self->_acProbeCooldown--;
-      }
+      const PerformanceMetrics::Bound bound = PerformanceMetrics::GetBound();
 
-      // 3) Apply the thermal-clamped clock, and persist ONLY a verified-good resting baseline:
-      // one that actually delivers full speed while the device is cool. A value that fails to
-      // hit target (e.g. a GPU-bound title) is never saved at a needless underclock, and a
-      // throttled reading never becomes the per-game default.
-      const float applied = MIN(self->_adaptiveCPU, ceiling);
-      Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, applied < 1.0f);
-      Config::SetCurrent(Config::MAIN_OVERCLOCK, applied);
-      self->_acLastApplied = applied;  // remember our own write so we can detect a manual change
-      if (pct >= TARGET_LO && thermal <= NSProcessInfoThermalStateFair &&
-          self->_adaptiveGameID && self->_adaptiveCPU != self->_acLastPersisted) {
+      const auto resetWindow = ^{
+        self->_acUnderrunBase = underruns;
+        self->_acDupBase = dups;
+        self->_acTotalBase = total;
+        self->_acPhaseTicks = 0;
+      };
+      const auto applyCPU = ^(float v) {
+        self->_acCPU = MIN(1.0f, MAX(ACCpuFloor, v));
+        const float applied = MIN(self->_acCPU, ceiling);
+        Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, applied < 1.0f);
+        Config::SetCurrent(Config::MAIN_OVERCLOCK, applied);
+        self->_acLastApplied = applied;
+      };
+      const auto applyVI = ^(float v) {
+        self->_acVI = MAX(ACViFloor, MIN(1.0f, v));
+        Config::SetCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, self->_acVI < 1.0f);
+        Config::SetCurrent(Config::MAIN_VI_OVERCLOCK, self->_acVI);
+      };
+      const auto persistConverged = ^{
+        if (!cool || !self->_adaptiveGameID) return;
+        if (self->_acCPU != self->_acLastPersisted) {
+          [NSUserDefaults.standardUserDefaults
+              setFloat:self->_acCPU
+                forKey:[@"adaptive_clock_cpu_" stringByAppendingString:self->_adaptiveGameID]];
+          self->_acLastPersisted = self->_acCPU;
+        }
         [NSUserDefaults.standardUserDefaults
-            setFloat:self->_adaptiveCPU
-              forKey:[@"adaptive_clock_cpu_" stringByAppendingString:self->_adaptiveGameID]];
-        self->_acLastPersisted = self->_adaptiveCPU;
+            setFloat:self->_acVI
+              forKey:[@"adaptive_clock_vi_" stringByAppendingString:self->_adaptiveGameID]];
+      };
+
+      self->_acPhaseTicks++;
+
+      switch (self->_acPhase) {
+        case ACPhase_Verify: {
+          // Seeded from a per-game clock; confirm it still holds for a short window.
+          if (self->_acPhaseTicks < ACVerifyTicks) break;
+          if (stableHere) {
+            self->_acStableCPU = self->_acCPU;
+            self->_acPhase = ACPhase_Hold;
+            persistConverged();
+          } else {
+            // Seed no longer good (different scene / thermal). Fall into a sweep from here.
+            self->_acPhase = ACPhase_Search;
+          }
+          resetWindow();
+          break;
+        }
+
+        case ACPhase_Search: {
+          // Descending sweep: step down every ~1.5s until the stability cliff, then settle one up.
+          if (self->_acPhaseTicks < ACSearchStepTicks) break;
+
+          const float applied_now = MIN(self->_acCPU, ceiling);
+          if (!stableHere) {
+            // Unstable. Use ABSOLUTE speed (vs realtime) as the DIRECTION signal — this is NOT the
+            // old objective (the old loop maximized speed>=92, blind across the flat feasible
+            // plateau). Here we only use it to decide which way the instability lies:
+            //   speed < ~0.95  -> host can't emulate this clock in realtime; we're ABOVE the
+            //                     feasible region (e.g. underspeed at OC=1.0, the canonical
+            //                     iCube title) -> keep descending INTO the region.
+            //   speed ~= 1.0   -> throttled but VPS short / variance high -> we fell off the
+            //                     BOTTOM (game logic running slow-motion) -> step back up & settle.
+            const double speed = g_perf_metrics.GetSpeed();
+            const bool hostBound = (speed < 0.95);
+            if (hostBound && applied_now - sweepStep >= ACCpuFloor &&
+                bound != PerformanceMetrics::Bound::GpuBound) {
+              applyCPU(self->_acCPU - sweepStep);
+              resetWindow();
+              break;
+            }
+            // Fell off the bottom (or GPU-bound / at floor): step back up one and observe (settle).
+            applyCPU(self->_acCPU + sweepStep);
+            self->_acStableCPU = self->_acCPU;
+            self->_acPhase = ACPhase_Settle;
+            resetWindow();
+            break;
+          }
+
+          // Stable here. If there's still room to go lower AND lowering would plausibly help
+          // (we're CPU-bound, or unclassified), take another step down.
+          if (applied_now - sweepStep >= ACCpuFloor &&
+              bound != PerformanceMetrics::Bound::GpuBound) {
+            applyCPU(self->_acCPU - sweepStep);
+            resetWindow();
+          } else {
+            // At the floor, or the resolution controller says GPU-bound (clock isn't the limit).
+            self->_acStableCPU = self->_acCPU;
+            self->_acPhase = ACPhase_Settle;
+            resetWindow();
+          }
+          break;
+        }
+
+        case ACPhase_Settle: {
+          // Observe the settle clock over a longer window before committing to HOLD.
+          if (self->_acPhaseTicks < ACSettleTicks) break;
+          if (stableHere) {
+            self->_acPhase = ACPhase_Hold;
+            persistConverged();
+          } else if (lowerCliff && bound != PerformanceMetrics::Bound::GpuBound &&
+                     self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
+                     self->_acVI - ACVIStep >= ACViFloor) {
+            // Hit the LOWER cliff with the CPU clock already near its floor: dropping CPU more
+            // won't help (game logic is the limit). Shed VI overclock — the second lever — to
+            // reclaim host headroom, then re-observe. (v1 never adapted VI at all.)
+            applyVI(self->_acVI - ACVIStep);
+          } else if (self->_acCPU < ceiling) {
+            // Variance/VPS unstable but not the lower cliff -> we're a touch too low; nudge CPU up.
+            applyCPU(self->_acCPU + sweepStep);
+            self->_acStableCPU = self->_acCPU;
+          }
+          resetWindow();
+          break;
+        }
+
+        case ACPhase_Hold:
+        default: {
+          // Converged. Light monitoring: if stability degrades (scene change, thermal, a GPU-bound
+          // section ending) re-enter the sweep. If we're comfortably stable with headroom below the
+          // converged clock, a fresh sweep can find an even lower optimum for the new scene.
+          if (self->_acPhaseTicks < ACHoldTicks) break;
+          if (!stableHere) {
+            // Degraded. Recover toward stability then re-sweep. If we hit the LOWER cliff with the
+            // CPU clock already near its floor, shed VI (the second lever) instead of raising CPU
+            // (which wouldn't help — game logic is the limit). Otherwise nudge CPU up.
+            if (lowerCliff && bound != PerformanceMetrics::Bound::GpuBound &&
+                self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
+                self->_acVI - ACVIStep >= ACViFloor) {
+              applyVI(self->_acVI - ACVIStep);
+            } else {
+              applyCPU(self->_acCPU + sweepStep);
+            }
+            self->_acPhase = ACPhase_Search;
+          } else {
+            // Still healthy. Persist the converged baseline (idempotent) and keep holding.
+            persistConverged();
+          }
+          resetWindow();
+          break;
+        }
       }
     }, false);
   });
