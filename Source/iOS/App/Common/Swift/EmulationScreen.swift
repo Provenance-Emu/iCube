@@ -268,6 +268,7 @@ struct EmulationScreen: View {
   @State private var adaptiveClockQuick: Bool = false
   @State private var viSkipModeQuick: Int = 2 // TriState: 0=Off, 1=On, 2=Auto
   @State private var showGraphsQuick: Bool = false
+  @State private var overlayStatsQuick: Bool = false
   @State private var stateCopied: Bool = false
 
   #if os(iOS)
@@ -340,27 +341,8 @@ struct EmulationScreen: View {
 
           Divider().background(.white.opacity(0.2))
 
-          // Overlays (FPS/VPS/Speed/VBlank)
-          Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v
-            DOLConfigBridge.setGfxShowFPS(v)
-          }))
-          .tint(.blue)
-          .foregroundColor(.white)
-          Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v
-            DOLConfigBridge.setGfxShowVPS(v)
-          }))
-          .tint(.blue)
-          .foregroundColor(.white)
-          Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v
-            DOLConfigBridge.setGfxShowSpeed(v)
-          }))
-          .tint(.blue)
-          .foregroundColor(.white)
-          Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v
-            DOLConfigBridge.setGfxShowVTimes(v)
-          }))
-          .tint(.blue)
-          .foregroundColor(.white)
+          // Overlays + diagnostics, as a scannable icon grid.
+          overlayToggleGrid()
 
           // Graphics quick controls
           HStack {
@@ -380,10 +362,6 @@ struct EmulationScreen: View {
             TVIntStepperOverlay(value: $anisotropyQuick, range: 1 ... 16, step: 1)
               .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
           }
-
-          Divider().background(.white.opacity(0.2))
-          // Diagnostics: perf graph + copy full state
-          diagnosticsControls()
         }
         .padding(20)
         .frame(maxWidth: 520)
@@ -526,6 +504,7 @@ struct EmulationScreen: View {
       adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
       viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
       showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
+      overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
       // Live Activity start
       #if canImport(ActivityKit)
       GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
@@ -910,33 +889,10 @@ struct EmulationScreen: View {
                     }
                     .frame(maxWidth: .infinity)
 
-                    // Right column - Overlay toggles
+                    // Right column - Overlay toggles + diagnostics grid
                     VStack(alignment: .leading, spacing: 12) {
                       Text("Display Overlays").font(.subheadline).foregroundColor(.white.opacity(0.8))
-                      Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v
-                        DOLConfigBridge.setGfxShowFPS(v)
-                      }))
-                      .tint(.blue)
-                      .foregroundColor(.white)
-                      Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v
-                        DOLConfigBridge.setGfxShowVPS(v)
-                      }))
-                      .tint(.blue)
-                      .foregroundColor(.white)
-                      Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v
-                        DOLConfigBridge.setGfxShowSpeed(v)
-                      }))
-                      .tint(.blue)
-                      .foregroundColor(.white)
-                      Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v
-                        DOLConfigBridge.setGfxShowVTimes(v)
-                      }))
-                      .tint(.blue)
-                      .foregroundColor(.white)
-
-                      Divider().background(.white.opacity(0.2))
-                      // Diagnostics: perf graph + copy full state
-                      diagnosticsControls()
+                      overlayToggleGrid()
                     }
                     .frame(maxWidth: .infinity)
                   }
@@ -983,27 +939,8 @@ struct EmulationScreen: View {
                   adaptiveControls()
 
                   Divider().background(.white.opacity(0.2))
-                  // Overlay toggles
-                  Toggle("Show FPS", isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v
-                    DOLConfigBridge.setGfxShowFPS(v)
-                  }))
-                  .tint(.blue)
-                  .foregroundColor(.white)
-                  Toggle("Show VPS", isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v
-                    DOLConfigBridge.setGfxShowVPS(v)
-                  }))
-                  .tint(.blue)
-                  .foregroundColor(.white)
-                  Toggle("Show Speed", isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v
-                    DOLConfigBridge.setGfxShowSpeed(v)
-                  }))
-                  .tint(.blue)
-                  .foregroundColor(.white)
-                  Toggle("Show VBlank Times", isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v
-                    DOLConfigBridge.setGfxShowVTimes(v)
-                  }))
-                  .tint(.blue)
-                  .foregroundColor(.white)
+                  // Overlays + diagnostics, as a scannable icon grid.
+                  overlayToggleGrid()
 
                   // Quick graphics controls
                   HStack {
@@ -1026,10 +963,6 @@ struct EmulationScreen: View {
                       .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
                     Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
                   }
-
-                  Divider().background(.white.opacity(0.2))
-                  // Diagnostics: perf graph + copy full state
-                  diagnosticsControls()
                 }
               }
             }
@@ -1218,6 +1151,7 @@ struct EmulationScreen: View {
       adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
       viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
       showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
+      overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
       // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
       let currentIR = DOLConfigBridge.mainTouchPadIRMode()
       if currentIR == 0 { // None
@@ -1377,15 +1311,56 @@ struct EmulationScreen: View {
     }
   }
 
-  // Perf-graph toggle + Copy State button, shared across all perf-overlay layouts.
+  // MARK: - HUD overlay/diagnostics toggle grid
+  //
+  // Replaces the stacked pile of overlay toggles (FPS/VPS/Speed/VBlank + perf graph
+  // + overlay stats) with a scannable icon-over-label grid. Pure layout reorg —
+  // every cell drives the same bindings/bridge calls the old stacked toggles used.
+
+  // One square HUD cell: SF Symbol on top, short label under it; tap toggles `isOn`.
   @ViewBuilder
-  private func diagnosticsControls() -> some View {
-    Toggle("Show Perf Graph", isOn: Binding(get: { showGraphsQuick }, set: { v in
-      showGraphsQuick = v
-      DOLConfigBridge.setGfxShowGraphs(v)
-    }))
-    .tint(.blue)
-    .foregroundColor(.white)
+  private func hudToggleCell(_ label: String, systemImage: String, isOn: Binding<Bool>) -> some View {
+    Button {
+      isOn.wrappedValue.toggle()
+    } label: {
+      VStack(spacing: 4) {
+        Image(systemName: systemImage)
+          .font(.system(size: 20))
+          .frame(height: 24)
+        Text(label)
+          .font(.caption2)
+          .lineLimit(1)
+          .minimumScaleFactor(0.7)
+      }
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 8)
+      .foregroundColor(isOn.wrappedValue ? .white : .white.opacity(0.55))
+      .background((isOn.wrappedValue ? Color.blue.opacity(0.45) : Color.white.opacity(0.08)))
+      .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+    .buttonStyle(.plain)
+  }
+
+  // The full overlay/diagnostics toggle grid, shared across all perf-overlay layouts.
+  @ViewBuilder
+  private func overlayToggleGrid() -> some View {
+    let columns = [GridItem(.adaptive(minimum: 84), spacing: 8)]
+    LazyVGrid(columns: columns, spacing: 8) {
+      hudToggleCell("FPS", systemImage: "speedometer",
+                    isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
+      hudToggleCell("VPS", systemImage: "gauge.with.dots.needle.67percent",
+                    isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
+      hudToggleCell("Speed", systemImage: "hare",
+                    isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
+      hudToggleCell("VBlank", systemImage: "clock",
+                    isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
+      hudToggleCell("Perf Graph", systemImage: "chart.xyaxis.line",
+                    isOn: Binding(get: { showGraphsQuick }, set: { v in showGraphsQuick = v; DOLConfigBridge.setGfxShowGraphs(v) }))
+      // Dolphin's deep engine HUD (GFX_OVERLAY_STATS / g_ActiveConfig.bOverlayStats).
+      hudToggleCell("Overlay Stats", systemImage: "list.bullet.rectangle",
+                    isOn: Binding(get: { overlayStatsQuick }, set: { v in overlayStatsQuick = v; DOLConfigBridge.setGfxOverlayStats(v) }))
+    }
+    // Copy State stays a one-shot action button under the grid.
     Button {
       EmulationCoordinator.copyStateToClipboard()
       stateCopied = true
