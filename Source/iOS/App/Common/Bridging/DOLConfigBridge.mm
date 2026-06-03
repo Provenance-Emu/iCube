@@ -645,6 +645,12 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   Config::SetBase(Config::MAIN_DSP_THREAD, true);
   Config::SetBase(Config::GFX_HACK_IMMEDIATE_XFB, true);
 
+  // GFX_HACK_VI_SKIP_MODE compiles to TriState::Auto upstream. A plain delete-to-default (the del()
+  // above) therefore lands reset on Auto, which re-introduces the VISkip stall this build
+  // deliberately defaults to Off. Force Off so a settings reset keeps the intended VI-skip-off
+  // behavior (and stays coherent with the adaptive-clock VISkip rule, step #4).
+  Config::SetBase(Config::GFX_HACK_VI_SKIP_MODE, TriState::Off);
+
   // NOTE: intentionally NOT reset (identity/custom/non-gameplay):
   //   - DSU servers/enable (ciface DualShockUDPClient::SERVERS / SERVERS_ENABLED)
   //   - RA_USERNAME / RA_HOST_URL / RA_* (RetroAchievements login)
