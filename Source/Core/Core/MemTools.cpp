@@ -329,6 +329,10 @@ static void sigsegv_handler(int sig, siginfo_t* info, void* raw_context)
 
 void InstallExceptionHandler()
 {
+  // tvOS forbids sigaltstack. The alternate signal stack is only needed to handle
+  // stack-overflow faults; fastmem/access faults are delivered fine on the normal
+  // stack, so skip the alt-stack on tvOS and just install the sigaction handler.
+#if !TARGET_OS_TV
   stack_t signal_stack;
 #ifdef __FreeBSD__
   signal_stack.ss_sp = (char*)malloc(SIGSTKSZ);
@@ -339,6 +343,7 @@ void InstallExceptionHandler()
   signal_stack.ss_flags = 0;
   if (sigaltstack(&signal_stack, nullptr))
     PanicAlertFmt("sigaltstack failed");
+#endif  // !TARGET_OS_TV
   struct sigaction sa;
   sa.sa_handler = nullptr;
   sa.sa_sigaction = &sigsegv_handler;
@@ -352,12 +357,14 @@ void InstallExceptionHandler()
 
 void UninstallExceptionHandler()
 {
+#if !TARGET_OS_TV
   stack_t signal_stack, old_stack;
   signal_stack.ss_flags = SS_DISABLE;
   if (!sigaltstack(&signal_stack, &old_stack) && !(old_stack.ss_flags & SS_DISABLE))
   {
     free(old_stack.ss_sp);
   }
+#endif  // !TARGET_OS_TV
   sigaction(SIGSEGV, &old_sa_segv, nullptr);
 #ifdef __APPLE__
   sigaction(SIGBUS, &old_sa_bus, nullptr);

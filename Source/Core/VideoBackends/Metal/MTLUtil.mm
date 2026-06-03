@@ -577,7 +577,8 @@ std::optional<std::string> Metal::Util::TranslateShaderToMSL(ShaderStage stage,
   spirv_cross::CompilerMSL::Options options;
 #if TARGET_OS_OSX
   options.platform = spirv_cross::CompilerMSL::Options::macOS;
-#elif TARGET_OS_IOS
+#elif TARGET_OS_IOS || TARGET_OS_TV
+  // tvOS shares iOS's Metal feature set; SPIRV-Cross has no separate tvOS platform.
   options.platform = spirv_cross::CompilerMSL::Options::iOS;
   // Otherwise SPIRV-Cross will try to compile subgroup ops to quad ops instead
   // (And crash because there's no quad_min or quad_max)

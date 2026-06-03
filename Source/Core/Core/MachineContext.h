@@ -5,6 +5,19 @@
 
 #include "Common/CommonTypes.h"
 
+// tvOS forbids the Mach exception-port APIs (mach_msg_overwrite /
+// thread_set_exception_ports are SDK-marked unavailable on tvOS). Force the POSIX
+// sigaction fault-handler path (which has Apple ucontext support) on tvOS, the same
+// way USE_SIGACTION_ON_APPLE selects it elsewhere. Must be defined before the
+// __APPLE__ && !USE_SIGACTION_ON_APPLE checks below (and in MemTools.cpp, which
+// includes this header).
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if TARGET_OS_TV && !defined(USE_SIGACTION_ON_APPLE)
+#define USE_SIGACTION_ON_APPLE 1
+#endif
+#endif
+
 // meh.
 #if defined(_M_GENERIC)
 // JitBase uses SContext; it should have no concrete implementations in a
