@@ -141,6 +141,13 @@ elseif(IOS)
     ControllerInterface/iOS/StateManager.cpp
     ControllerInterface/iOS/Touchscreen.h
     ControllerInterface/iOS/Touchscreen.mm
+    # GameCube input-override. Used by the tvOS input bridge (InputOverriderBridge.mm, gated
+    # #if TARGET_OS_TV) to inject MFi-controller input as GameCube input — tvOS has no touch UI,
+    # so this is its input path. Was Android-only upstream; Apple/tvOS needs it too or the tvOS
+    # app fails to link (ciface::Touch::{Set/ClearControlState,Register/UnregisterGameCubeInputOverrider}
+    # undefined). Harmless on iOS (the bridge no-ops there, so the symbols are just unused).
+    ControllerInterface/Touch/InputOverrider.cpp
+    ControllerInterface/Touch/InputOverrider.h
   )
   target_link_libraries(inputcommon PRIVATE
     ${COREHAPTICS_LIBRARY}
