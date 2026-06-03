@@ -36,6 +36,11 @@ NS_ASSUME_NONNULL_BEGIN
 // Ensure a given Wiimote port (1-based) is set to Emulated and uses the iOS Touchscreen profile
 + (void)ensureWiimoteDefaultsToTouchscreenForPort:(NSInteger)portOneBased;
 
+/// Live adaptive-clock (auto) toggle. Writes the `adaptive_clock_enable` NSUserDefault and either
+/// starts the controller immediately (ON) or stops/invalidates its timer and clears the CurrentRun
+/// overclock overrides (OFF) — takes effect without relaunching the game.
+- (void)setAdaptiveClockEnabled:(BOOL)on;
+
 @end
 
 NS_ASSUME_NONNULL_END

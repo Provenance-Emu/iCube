@@ -265,6 +265,8 @@ struct EmulationScreen: View {
   @State private var efbScaleQuick: Int = 1
   @State private var efbMaxScaleQuick: Int = 6
   @State private var anisotropyQuick: Int = 1
+  @State private var adaptiveClockQuick: Bool = false
+  @State private var viSkipModeQuick: Int = 2 // TriState: 0=Off, 1=On, 2=Auto
 
   #if os(iOS)
   @State private var showSkyMenu = false
@@ -330,6 +332,9 @@ struct EmulationScreen: View {
               .disabled(!vbiEnabledQuick)
               .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
           }
+
+          // Adaptive clock (auto) + VI-skip mode
+          adaptiveControls()
 
           Divider().background(.white.opacity(0.2))
 
@@ -506,6 +511,9 @@ struct EmulationScreen: View {
       efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
       efbScaleQuick = DOLConfigBridge.gfxEfbScale()
       anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
+      // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
+      adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
+      viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
       // Live Activity start
       #if canImport(ActivityKit)
       GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
@@ -880,6 +888,9 @@ struct EmulationScreen: View {
                           .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
                         Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
                       }
+
+                      // Adaptive clock (auto) + VI-skip mode
+                      adaptiveControls()
                     }
                     .frame(maxWidth: .infinity)
 
@@ -947,6 +958,9 @@ struct EmulationScreen: View {
                       .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
                     Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                   }
+
+                  // Adaptive clock (auto) + VI-skip mode
+                  adaptiveControls()
 
                   Divider().background(.white.opacity(0.2))
                   // Overlay toggles
@@ -1172,6 +1186,9 @@ struct EmulationScreen: View {
       efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
       efbScaleQuick = DOLConfigBridge.gfxEfbScale()
       anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
+      // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
+      adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
+      viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
       // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
       let currentIR = DOLConfigBridge.mainTouchPadIRMode()
       if currentIR == 0 { // None
@@ -1303,6 +1320,32 @@ struct EmulationScreen: View {
       Text("Do you want to stop the current game and return to the library?")
     }
     #endif
+  }
+
+  // Adaptive-clock (auto) live toggle + VI-skip mode picker, shared across all perf-overlay layouts.
+  @ViewBuilder
+  private func adaptiveControls() -> some View {
+    Toggle("Adaptive Clock (Auto)", isOn: Binding(get: { adaptiveClockQuick }, set: { v in
+      adaptiveClockQuick = v
+      // Live: writes the adaptive_clock_enable default AND starts/stops the controller now.
+      EmulationCoordinator.shared().setAdaptiveClockEnabled(v)
+    }))
+    .tint(.blue)
+    .foregroundColor(.white)
+    HStack {
+      Text("VI-Skip Mode").foregroundColor(.white.opacity(0.8))
+      Spacer()
+      Picker("VI-Skip Mode", selection: Binding(get: { viSkipModeQuick }, set: { v in
+        viSkipModeQuick = v
+        DOLConfigBridge.setGfxHackViSkipMode(v) // TriState: 0=Off, 1=On, 2=Auto
+      })) {
+        Text("Off").tag(0)
+        Text("On").tag(1)
+        Text("Auto").tag(2)
+      }
+      .pickerStyle(.segmented)
+      .frame(maxWidth: 220)
+    }
   }
 
   private func logCurrentControllers() {

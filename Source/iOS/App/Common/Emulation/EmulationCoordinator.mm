@@ -682,6 +682,35 @@ static const float ACSpeedHysteresis = 0.02f;
   dispatch_resume(_adaptiveClockTimer);
 }
 
+// Live adaptive-clock toggle. ON: persist the default, then start the controller now (the start
+// method early-returns unless the default is true, so order matters). OFF: cancel + nil the timer
+// (mirror the inputPump stop pattern; start() guards on a non-nil source, so a cancelled-but-not-nil
+// source would block re-enable) and clear the CurrentRun overclock overrides the controller wrote so
+// the manual/Base values underneath are revealed again.
+- (void)setAdaptiveClockEnabled:(BOOL)on {
+  NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+  [defaults setBool:on forKey:@"adaptive_clock_enable"];
+  if (on) {
+    [self startAdaptiveClockIfEnabled];
+  } else {
+    if (_adaptiveClockTimer) {
+      dispatch_source_cancel(_adaptiveClockTimer);
+      _adaptiveClockTimer = nil;
+    }
+    // Clear the four CurrentRun keys the controller sets (CPU + VI clock + their enables). The
+    // controller writes only the CurrentRun layer (never Base/Dolphin.ini), so deleting these keys
+    // restores whatever the user set manually (Base) or the 1.0 default — no override left stuck.
+    Core::QueueHostJob([](Core::System&) {
+      if (Config::GetLayer(Config::LayerType::CurrentRun)) {
+        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_OVERCLOCK);
+        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_OVERCLOCK_ENABLE);
+        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_VI_OVERCLOCK);
+        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_VI_OVERCLOCK_ENABLE);
+      }
+    }, false);
+  }
+}
+
 - (void)startInputPump {
   if (_inputPumpTimer) return;
   _inputPumpTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0));
