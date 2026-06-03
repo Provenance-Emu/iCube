@@ -32,7 +32,6 @@ class ServiceManager {
     JitAcquisitionService(),
     URLRouterService(),
     SpotlightIndexService(),
-    FirebaseService(),
     AudioSessionCategoryService(),
 //    UpdateCheckService()
   ]

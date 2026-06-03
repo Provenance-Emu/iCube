@@ -6,10 +6,6 @@
 #include <TargetConditionals.h>
 #include <cmath>
 
-#if !TARGET_OS_TV && !TARGET_OS_MACCATALYST
-#import <FirebaseAnalytics/FirebaseAnalytics.h>
-#endif
-
 #if TARGET_OS_MACCATALYST
 #import <GameController/GCController.h>
 #import <GameController/GCExtendedGamepad.h>
@@ -379,42 +375,9 @@
 }
 
 - (void)receiveTitleChangedNotification {
-  if (Config::Get(Config::MAIN_ANALYTICS_ENABLED)) {
-    NSMutableArray<NSString*>* controllerList = [[NSMutableArray alloc] init];
-
-    for (GCController* controller in [GCController controllers]) {
-      NSString* controllerType = @"Unknown";
-
-      if (controller.extendedGamepad != nil) {
-        controllerType = @"Extended";
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-      } else if (controller.gamepad != nil) {
-#pragma clang diagnostic pop
-        controllerType = @"Normal";
-      } else if (controller.microGamepad != nil) {
-        controllerType = @"Micro";
-      } else {
-        controllerType = @"Unknown";
-      }
-
-      [controllerList addObject:[NSString stringWithFormat:@"%@ (%@)", [controller vendorName], controllerType]];
-    }
-
-    NSString* title = CppToFoundationString(SConfig::GetInstance().GetTitleDescription());
-
-    if ([title isEqualToString:@""]) {
-      title = @"Unknown";
-    }
-
-#if !TARGET_OS_TV && !TARGET_OS_MACCATALYST
-    [FIRAnalytics logEventWithName:@"game_start" parameters:@{
-      @"game_uid" : title,
-      @"is_returning" : @"false", // TODO
-      @"connected_controllers" : [controllerList count] != 0 ? [controllerList componentsJoinedByString:@", "] : @"none"
-    }];
-#endif
-  }
+  // Firebase Analytics was removed (Sentry is now the sole reporting SDK and does not collect
+  // gameplay analytics events), so the former game_start event emitted here is gone. No-op kept
+  // because the title-changed notification is still observed elsewhere in the boot path.
 }
 
 - (void)receiveEmulationEndNotification {

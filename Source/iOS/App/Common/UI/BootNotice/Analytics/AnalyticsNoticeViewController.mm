@@ -4,9 +4,6 @@
 #import "AnalyticsNoticeViewController.h"
 
 #if !TARGET_OS_TV && !TARGET_OS_MACCATALYST
-#import <FirebaseAnalytics/FirebaseAnalytics.h>
-#import <FirebaseCrashlytics/FirebaseCrashlytics.h>
-
 #import "Core/Config/MainSettings.h"
 
 @interface AnalyticsNoticeViewController ()
@@ -22,10 +19,10 @@
 - (void)HandleResponse:(bool)response {
   Config::SetBaseOrCurrent(Config::MAIN_ANALYTICS_PERMISSION_ASKED, true);
   Config::SetBaseOrCurrent(Config::MAIN_ANALYTICS_ENABLED, response);
-  
-  [FIRAnalytics setAnalyticsCollectionEnabled:response];
-  [[FIRCrashlytics crashlytics] setCrashlyticsCollectionEnabled:response];
-  
+
+  // Firebase Analytics/Crashlytics removed — the prior FIRAnalytics/FIRCrashlytics collection
+  // toggles are gone. The MAIN_ANALYTICS_* config keys are still recorded for any future reporting.
+
   [self.navigationController popViewControllerAnimated:true];
   
   [self.delegate didFinishAnalyticsNoticeWithResult:response sender:self];

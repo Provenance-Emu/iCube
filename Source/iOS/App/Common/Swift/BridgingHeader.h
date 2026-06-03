@@ -5,9 +5,6 @@
 #import "BootNoticeManager.h"
 #import "DolphinCoreService.h"
 #import "EmulationCoordinator.h"
-#if !TARGET_OS_TV
-#import "FirebaseService.h"
-#endif
 #import "FirstRunInitializationService.h"
 #import "GameFileCacheManager.h"
 #import "JitManager.h"
