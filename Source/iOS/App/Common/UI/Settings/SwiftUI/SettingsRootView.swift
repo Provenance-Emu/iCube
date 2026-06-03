@@ -3314,6 +3314,7 @@ struct GraphicsHacksView: View {
   @State private var fastTextureSampling: Bool = true
   @State private var fastMath: Bool = false
   @State private var useComputeEfbXfb: Bool = false
+  @State private var useComputeVertexDecode: Bool = false
   @State private var noMipmapping: Bool = false
   @State private var earlyXfbOutput: Bool = true
   @State private var skipDuplicateXFBs: Bool = true
@@ -3390,6 +3391,10 @@ struct GraphicsHacksView: View {
             .onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) },
           L("Native-Metal compute acceleration for EFB/XFB. Experimental GPU perf knob; OFF by default. Applies on next launch."))
         settingsCaption(
+          Toggle(L("Use Compute for Vertex Decode"), isOn: $useComputeVertexDecode)
+            .onChange(of: useComputeVertexDecode) { DOLConfigBridge.setGfxUseComputeVertexDecode($0) },
+          L("Offload vertex decoding to a Metal compute shader (CPU→GPU). Experimental — currently only position-only-float formats use the GPU path (others fall back to CPU), so most games see little change yet. OFF by default. Applies on next launch."))
+        settingsCaption(
           Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping)
             .onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) },
           L("Disables mipmaps. Saves a little memory/bandwidth but makes distant textures shimmer. Leave off normally."))
@@ -3430,6 +3435,7 @@ struct GraphicsHacksView: View {
     fastTextureSampling = DOLConfigBridge.gfxHackFastTextureSampling()
     fastMath = DOLConfigBridge.gfxHackFastMath()
     useComputeEfbXfb = DOLConfigBridge.gfxUseComputeEfbXfb()
+    useComputeVertexDecode = DOLConfigBridge.gfxUseComputeVertexDecode()
     noMipmapping = DOLConfigBridge.gfxHackNoMipmapping()
     viDecimateInterlace = DOLConfigBridge.gfxHackViDecimateInterlace()
   }

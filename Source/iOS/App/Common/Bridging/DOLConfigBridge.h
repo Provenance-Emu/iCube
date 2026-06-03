@@ -303,6 +303,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxHackFastMath:(BOOL)enabled;
 + (BOOL)gfxUseComputeEfbXfb;
 + (void)setGfxUseComputeEfbXfb:(BOOL)enabled;
++ (BOOL)gfxUseComputeVertexDecode;
++ (void)setGfxUseComputeVertexDecode:(BOOL)enabled;
 + (BOOL)gfxHackNoMipmapping;
 + (void)setGfxHackNoMipmapping:(BOOL)enabled;
 + (BOOL)gfxHackEarlyXfbOutput;
