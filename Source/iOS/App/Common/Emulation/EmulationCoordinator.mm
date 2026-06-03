@@ -87,10 +87,14 @@ static inline bool _EndsWith(const std::string& s, const char* suf)
 static VertexLoaderType ICubeJitlessVertexLoaderType()
 {
   NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
-  // TEMP (testing "best possible"): default to NEON when the user hasn't picked yet.
-  // Revert to `return VertexLoaderType::Software;` for the default once measured.
+  // Default to the SOFTWARE (reference) vertex loader when the user hasn't picked.
+  // The NEON loader has a decode bug (texcoord tail over-read / scalar-passthrough color
+  // paths) that corrupts vertices on some titles — blown-up/mispositioned polygons,
+  // identical across Metal/Vulkan/GLES because it's a CPU-side decode bug, not a renderer
+  // issue. Software is correct and the safe default; NEON stays opt-in (mode 1) and
+  // Compare (mode 2) bit-validates it. Was TEMP-defaulted to NEON for perf testing.
   if ([d objectForKey:@"icube_vertex_loader_mode"] == nil)
-    return VertexLoaderType::NEON;
+    return VertexLoaderType::Software;
   switch ([d integerForKey:@"icube_vertex_loader_mode"])
   {
     case 0:  return VertexLoaderType::Software;
