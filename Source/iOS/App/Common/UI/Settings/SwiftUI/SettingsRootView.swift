@@ -1845,9 +1845,14 @@ struct ConfigAdvancedView: View {
 
   @State private var cpuClockEnabled: Bool = false
   @State private var cpuClockPercent: Int = 100
+  // Resolver step #3 "Auto" badge: true when an auto controller (adaptive clock) is overriding the
+  // clock key on the CurrentRun layer, shadowing the user's manual Base value. While true the manual
+  // control is disabled and the displayed % is the live effective value (not a stale Base value).
+  @State private var cpuClockAutoOverridden: Bool = false
 
   @State private var vbiEnabled: Bool = false
   @State private var vbiPercent: Int = 100
+  @State private var vbiAutoOverridden: Bool = false
 
   @State private var memOverride: Bool = false
   @State private var mem1MB: Int = 24
@@ -1937,6 +1942,7 @@ struct ConfigAdvancedView: View {
       Section(header: Text(L("Clock Override"))) {
         rowWithCaption(
           Toggle(L("Enable Emulated CPU Clock Override"), isOn: $cpuClockEnabled)
+            .disabled(cpuClockAutoOverridden)
             .onChange(of: cpuClockEnabled) { DOLConfigBridge.setMainOverclockEnable($0) },
           L("Adjusts the emulated CPU's clock rate. Higher values can raise the framerate of variable-rate games at a performance cost; lower values may trigger a game's internal frameskip. ⚠️ Changing this from 100% can and will break games — use at your own risk."))
         HStack {
@@ -1947,16 +1953,27 @@ struct ConfigAdvancedView: View {
             .frame(width: 260)
 #endif
           Spacer()
+          // Resolver step #3: "Auto" badge when the adaptive clock is overriding this key.
+          if cpuClockAutoOverridden {
+            Text(L("Auto"))
+              .font(.caption).bold()
+              .foregroundStyle(.secondary)
+              .padding(.horizontal, 8).padding(.vertical, 4)
+              .background(Color.blue.opacity(0.1), in: Capsule())
+          }
           Text("\(cpuClockPercent)%")
             .foregroundStyle(.secondary)
         }
-        .disabled(!cpuClockEnabled)
+        // While the adaptive clock drives this key (CurrentRun), disable the manual control so the
+        // displayed effective % can't be silently shadowed by a stale Base value authored here.
+        .disabled(!cpuClockEnabled || cpuClockAutoOverridden)
         .onChange(of: cpuClockPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
       }
 
       Section(header: Text(L("Override VBI Frequency"))) {
         rowWithCaption(
           Toggle(L("Enable VBI Frequency Override"), isOn: $vbiEnabled)
+            .disabled(vbiAutoOverridden)
             .onChange(of: vbiEnabled) { DOLConfigBridge.setMainViOverclockEnable($0) },
           L("Makes games run at a different frame rate. Lowering it makes emulation less demanding; raising it can improve smoothness. May change gameplay speed, since speed is often tied to frame rate."))
         HStack {
@@ -1967,10 +1984,18 @@ struct ConfigAdvancedView: View {
             .frame(width: 260)
 #endif
           Spacer()
+          // Resolver step #3: "Auto" badge when the adaptive clock is overriding this key.
+          if vbiAutoOverridden {
+            Text(L("Auto"))
+              .font(.caption).bold()
+              .foregroundStyle(.secondary)
+              .padding(.horizontal, 8).padding(.vertical, 4)
+              .background(Color.blue.opacity(0.1), in: Capsule())
+          }
           Text("\(vbiPercent)%")
             .foregroundStyle(.secondary)
         }
-        .disabled(!vbiEnabled)
+        .disabled(!vbiEnabled || vbiAutoOverridden)
         .onChange(of: vbiPercent) { DOLConfigBridge.setMainViOverclockPercent($0) }
       }
 
@@ -2062,6 +2087,9 @@ struct ConfigAdvancedView: View {
     cpuClockPercent = DOLConfigBridge.mainOverclockPercent()
     vbiEnabled = DOLConfigBridge.mainViOverclockEnable()
     vbiPercent = DOLConfigBridge.mainViOverclockPercent()
+    // Resolver step #3: is an auto controller currently overriding these clock keys (CurrentRun)?
+    cpuClockAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
+    vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
     memOverride = DOLConfigBridge.mainRamOverrideEnable()
     mem1MB = DOLConfigBridge.mainMem1SizeMB()
     mem2MB = DOLConfigBridge.mainMem2SizeMB()
@@ -3118,6 +3146,9 @@ struct GraphicsEnhancementsView: View {
   @State private var disableCopyFilter: Bool = true
   @State private var efbScale: Int = 1
   @State private var efbMaxScale: Int = 6
+  // Resolver step #3 "Auto" badge: true when Auto-IR / thermal is overriding GFX_EFB_SCALE on the
+  // CurrentRun layer. While true the manual picker is disabled and the value shown is effective.
+  @State private var efbAutoOverridden: Bool = false
   @State private var widescreenHack: Bool = false
   @State private var disableFog: Bool = false
   @State private var arbitraryMipmapDetection: Bool = false
@@ -3133,8 +3164,21 @@ struct GraphicsEnhancementsView: View {
           destination: EfbScalePicker(selected: $efbScale, maxScale: efbMaxScale),
           L("Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty.")
         ) {
-          Text("\(L("Internal Resolution")): \(efbScale == 0 ? L("Auto (fit window)") : "\(efbScale)x")")
+          HStack {
+            Text("\(L("Internal Resolution")): \(efbScale == 0 ? L("Auto (fit window)") : "\(efbScale)x")")
+            // Resolver step #3: "Auto" badge when Auto-IR / thermal is overriding GFX_EFB_SCALE.
+            if efbAutoOverridden {
+              Text(L("Auto"))
+                .font(.caption).bold()
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Color.blue.opacity(0.1), in: Capsule())
+            }
+          }
         }
+        // While an auto controller drives this key (CurrentRun), disable the manual picker so the
+        // displayed effective value can't be silently shadowed by a stale Base value authored here.
+        .disabled(efbAutoOverridden)
         .onChange(of: efbScale) { newScale in
           DOLConfigBridge.setGfxEfbScale(newScale)
           // Picking an explicit (non-fit-window) scale means the user wants that exact IR. The Auto-IR
@@ -3229,6 +3273,7 @@ struct GraphicsEnhancementsView: View {
   private func sync() {
     efbMaxScale = max(1, DOLConfigBridge.gfxEfbMaxScale())
     efbScale = DOLConfigBridge.gfxEfbScale()
+    efbAutoOverridden = DOLConfigBridge.isEfbScaleAutoOverridden()
     anisotropy = DOLConfigBridge.gfxEnhanceAnisotropySamples()
     trueColor = DOLConfigBridge.gfxEnhanceForceTrueColor()
     disableCopyFilter = DOLConfigBridge.gfxEnhanceDisableCopyFilter()

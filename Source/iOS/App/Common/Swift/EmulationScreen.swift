@@ -270,6 +270,13 @@ struct EmulationScreen: View {
   @State private var showGraphsQuick: Bool = false
   @State private var overlayStatsQuick: Bool = false
   @State private var stateCopied: Bool = false
+  // Resolver step #3 "Auto" badge: true when an auto controller (adaptive clock / Auto-IR / thermal)
+  // is currently overriding the key on the CurrentRun layer, shadowing the user's manual Base value.
+  // Loaded alongside the other perf state at overlay-open; the manual control is disabled and an
+  // "Auto" badge shown while true, so the slider can't author a silently-shadowed Base value.
+  @State private var ocAutoOverridden: Bool = false
+  @State private var vbiAutoOverridden: Bool = false
+  @State private var efbAutoOverridden: Bool = false
 
   #if os(iOS)
   @State private var showSkyMenu = false
@@ -303,36 +310,46 @@ struct EmulationScreen: View {
           Divider().background(.white.opacity(0.2))
 
           // CPU Clock
-          Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-            ocEnabled = v
-            DOLConfigBridge.setMainOverclockEnable(v)
-            // Re-apply the current percent on enable: with MAIN_OVERCLOCK at 100% the factor is
-            // unchanged until the stepper moves, so the toggle alone appeared to do nothing.
-            if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
-          }))
-          .tint(.blue)
-          .foregroundColor(.white)
+          HStack {
+            Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+              ocEnabled = v
+              DOLConfigBridge.setMainOverclockEnable(v)
+              // Re-apply the current percent on enable: with MAIN_OVERCLOCK at 100% the factor is
+              // unchanged until the stepper moves, so the toggle alone appeared to do nothing.
+              if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+            }))
+            .tint(.blue)
+            .foregroundColor(.white)
+            // Resolver step #3: while the adaptive clock drives this key (CurrentRun), the manual
+            // control is disabled and the displayed % is the live effective value.
+            .disabled(ocAutoOverridden)
+            autoBadge(ocAutoOverridden)
+          }
           HStack {
             Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8))
             Spacer()
             TVIntStepperOverlay(value: $ocPercent, range: 1 ... 400, step: 1)
-              .disabled(!ocEnabled)
+              .disabled(!ocEnabled || ocAutoOverridden)
               .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
           }
 
           // VBI
-          Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-            vbiEnabledQuick = v
-            DOLConfigBridge.setMainViOverclockEnable(v)
-            if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
-          }))
-          .tint(.blue)
-          .foregroundColor(.white)
+          HStack {
+            Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+              vbiEnabledQuick = v
+              DOLConfigBridge.setMainViOverclockEnable(v)
+              if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+            }))
+            .tint(.blue)
+            .foregroundColor(.white)
+            .disabled(vbiAutoOverridden)
+            autoBadge(vbiAutoOverridden)
+          }
           HStack {
             Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8))
             Spacer()
             TVIntStepperOverlay(value: $vbiPercentQuick, range: 1 ... 400, step: 1)
-              .disabled(!vbiEnabledQuick)
+              .disabled(!vbiEnabledQuick || vbiAutoOverridden)
               .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
           }
 
@@ -347,8 +364,12 @@ struct EmulationScreen: View {
           // Graphics quick controls
           HStack {
             Text("Internal Resolution: \(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x")").foregroundColor(.white.opacity(0.8))
+            autoBadge(efbAutoOverridden)
             Spacer()
             TVIntStepperOverlay(value: $efbScaleQuick, range: 0 ... efbMaxScaleQuick, step: 1)
+              // Resolver step #3: while Auto-IR / thermal drives GFX_EFB_SCALE (CurrentRun), the
+              // manual stepper is disabled and the value shown is the live effective scale.
+              .disabled(efbAutoOverridden)
               .onChange(of: efbScaleQuick) { newScale in
                 DOLConfigBridge.setGfxEfbScale(newScale)
                 // A manual IR pick fights Auto-IR (both drive GFX_EFB_SCALE). Disable Auto-IR so
@@ -492,6 +513,10 @@ struct EmulationScreen: View {
       ocPercent = DOLConfigBridge.mainOverclockPercent()
       vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
       vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+      // Resolver step #3: is an auto controller currently overriding these keys (CurrentRun)?
+      ocAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
+      vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
+      efbAutoOverridden = DOLConfigBridge.isEfbScaleAutoOverridden()
       // Overlay toggles and quick graphics
       showFPSQuick = DOLConfigBridge.gfxShowFPS()
       showVPSQuick = DOLConfigBridge.gfxShowVPS()
@@ -831,31 +856,39 @@ struct EmulationScreen: View {
                   HStack(alignment: .top, spacing: 20) {
                     // Left column
                     VStack(alignment: .leading, spacing: 12) {
-                      Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-                        ocEnabled = v
-                        DOLConfigBridge.setMainOverclockEnable(v)
-                        // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
-                        if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
-                      }))
-                      .tint(.blue)
-                      .foregroundColor(.white)
+                      HStack {
+                        Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+                          ocEnabled = v
+                          DOLConfigBridge.setMainOverclockEnable(v)
+                          // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
+                          if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+                        }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                        .disabled(ocAutoOverridden)
+                        autoBadge(ocAutoOverridden)
+                      }
                       HStack {
                         Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
-                          .disabled(!ocEnabled)
+                          .disabled(!ocEnabled || ocAutoOverridden)
                           .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
                         Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                       }
 
-                      Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-                        vbiEnabledQuick = v
-                        DOLConfigBridge.setMainViOverclockEnable(v)
-                        if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
-                      }))
-                      .tint(.blue)
-                      .foregroundColor(.white)
+                      HStack {
+                        Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+                          vbiEnabledQuick = v
+                          DOLConfigBridge.setMainViOverclockEnable(v)
+                          if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+                        }))
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                        .disabled(vbiAutoOverridden)
+                        autoBadge(vbiAutoOverridden)
+                      }
                       HStack {
                         Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
-                          .disabled(!vbiEnabledQuick)
+                          .disabled(!vbiEnabledQuick || vbiAutoOverridden)
                           .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
                         Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                       }
@@ -865,8 +898,10 @@ struct EmulationScreen: View {
                         Text(L("Internal Resolution"))
                           .foregroundColor(.white.opacity(0.8))
                           .font(.caption)
+                        autoBadge(efbAutoOverridden)
                         Spacer()
                         Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
+                          .disabled(efbAutoOverridden)
                           .onChange(of: efbScaleQuick) { newScale in
                             DOLConfigBridge.setGfxEfbScale(newScale)
                             // Manual IR pick disables Auto-IR so the choice sticks (step #6).
@@ -907,30 +942,38 @@ struct EmulationScreen: View {
                       .buttonStyle(.plain)
                   }
                   Divider().background(.white.opacity(0.2))
-                  Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-                    ocEnabled = v
-                    DOLConfigBridge.setMainOverclockEnable(v)
-                    // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
-                    if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
-                  }))
-                  .tint(.blue)
-                  .foregroundColor(.white)
+                  HStack {
+                    Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+                      ocEnabled = v
+                      DOLConfigBridge.setMainOverclockEnable(v)
+                      // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
+                      if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+                    }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
+                    .disabled(ocAutoOverridden)
+                    autoBadge(ocAutoOverridden)
+                  }
                   HStack {
                     Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
-                      .disabled(!ocEnabled)
+                      .disabled(!ocEnabled || ocAutoOverridden)
                       .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
                     Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                   }
-                  Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-                    vbiEnabledQuick = v
-                    DOLConfigBridge.setMainViOverclockEnable(v)
-                    if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
-                  }))
-                  .tint(.blue)
-                  .foregroundColor(.white)
+                  HStack {
+                    Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+                      vbiEnabledQuick = v
+                      DOLConfigBridge.setMainViOverclockEnable(v)
+                      if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+                    }))
+                    .tint(.blue)
+                    .foregroundColor(.white)
+                    .disabled(vbiAutoOverridden)
+                    autoBadge(vbiAutoOverridden)
+                  }
                   HStack {
                     Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
-                      .disabled(!vbiEnabledQuick)
+                      .disabled(!vbiEnabledQuick || vbiAutoOverridden)
                       .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
                     Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                   }
@@ -946,8 +989,10 @@ struct EmulationScreen: View {
                   HStack {
                     Text(L("Internal Resolution"))
                       .foregroundColor(.white.opacity(0.8))
+                    autoBadge(efbAutoOverridden)
                     Spacer()
                     Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
+                      .disabled(efbAutoOverridden)
                       .onChange(of: efbScaleQuick) { newScale in
                         DOLConfigBridge.setGfxEfbScale(newScale)
                         // Manual IR pick disables Auto-IR so the choice sticks (step #6).
@@ -1139,6 +1184,10 @@ struct EmulationScreen: View {
       ocPercent = DOLConfigBridge.mainOverclockPercent()
       vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
       vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+      // Resolver step #3: is an auto controller currently overriding these keys (CurrentRun)?
+      ocAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
+      vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
+      efbAutoOverridden = DOLConfigBridge.isEfbScaleAutoOverridden()
       // Overlay toggles and quick graphics
       showFPSQuick = DOLConfigBridge.gfxShowFPS()
       showVPSQuick = DOLConfigBridge.gfxShowVPS()
@@ -1286,6 +1335,23 @@ struct EmulationScreen: View {
   }
 
   // Adaptive-clock (auto) live toggle + VI-skip mode picker, shared across all perf-overlay layouts.
+  // Resolver step #3: small "Auto" pill shown next to a perf control whose key is currently being
+  // driven by an auto controller (CurrentRun override shadowing the user's manual Base value). When
+  // shown, the corresponding manual control is also disabled so the displayed effective value can't
+  // be silently shadowed by a stale Base authored underneath.
+  @ViewBuilder
+  private func autoBadge(_ active: Bool) -> some View {
+    if active {
+      Text("Auto")
+        .font(.caption2).bold()
+        .foregroundColor(.white)
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Color.blue.opacity(0.85))
+        .clipShape(Capsule())
+        .accessibilityLabel(Text("Auto override active"))
+    }
+  }
+
   @ViewBuilder
   private func adaptiveControls() -> some View {
     Toggle("Adaptive Clock (Auto)", isOn: Binding(get: { adaptiveClockQuick }, set: { v in
