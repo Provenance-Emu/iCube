@@ -66,6 +66,12 @@ const Info<AudioCommon::DPL2Quality> MAIN_DPL2_QUALITY{{System::Main, "Core", "D
 const Info<int> MAIN_AUDIO_LATENCY{{System::Main, "Core", "AudioLatency"}, 20};
 const Info<int> MAIN_AUDIO_BUFFER_SIZE{{System::Main, "Core", "AudioBufferSize"}, 80};
 const Info<bool> MAIN_AUDIO_FILL_GAPS{{System::Main, "Core", "AudioFillGaps"}, true};
+#if defined(__APPLE__)
+const Info<bool> MAIN_AUDIO_STRETCH{{System::Main, "Core", "AudioStretch"}, true};
+#else
+const Info<bool> MAIN_AUDIO_STRETCH{{System::Main, "Core", "AudioStretch"}, false};
+#endif
+const Info<int> MAIN_AUDIO_STRETCH_LATENCY{{System::Main, "Core", "AudioStretchMaxLatency"}, 80};
 const Info<std::string> MAIN_MEMCARD_A_PATH{{System::Main, "Core", "MemcardAPath"}, ""};
 const Info<std::string> MAIN_MEMCARD_B_PATH{{System::Main, "Core", "MemcardBPath"}, ""};
 const Info<std::string>& GetInfoForMemcardPath(ExpansionInterface::Slot slot)
@@ -306,6 +312,7 @@ const Info<int> MAIN_AUDIO_VOLUME{{System::Main, "DSP", "Volume"}, 100};
 const Info<bool> MAIN_AUDIO_MUTED{{System::Main, "DSP", "Muted"}, false};
 const Info<bool> MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT{
     {System::Main, "DSP", "MuteOnDisabledSpeedLimit"}, false};
+const Info<bool> MAIN_AUDIO_USE_COMPUTE_MIXER{{System::Main, "Audio", "UseComputeMixer"}, true};
 #ifdef _WIN32
 const Info<std::string> MAIN_WASAPI_DEVICE{{System::Main, "DSP", "WASAPIDevice"}, "Default"};
 #endif
