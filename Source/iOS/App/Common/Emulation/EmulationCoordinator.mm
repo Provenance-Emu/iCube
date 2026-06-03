@@ -689,10 +689,13 @@ static const float ACSpeedHysteresis = 0.02f;
             persistConverged();
           } else if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
                      self->_acVI - ACVIStep >= ACViFloor &&
-                     bound != PerformanceMetrics::Bound::GpuBound) {
-            // CPU clock already at/near the floor and still short of f*: dropping CPU more won't
-            // help (game logic is the limit). Shed VI overclock — the secondary lever — to reclaim
-            // host headroom, then re-observe. (Per spec: drop VI only as a last resort at the floor.)
+                     bound == PerformanceMetrics::Bound::CpuBound) {
+            // CPU clock already at/near the floor AND positively CPU-bound (step #5): dropping CPU
+            // more won't help (game logic is the limit). Shed VI overclock for its DISTINCT
+            // refresh-rate effect (lowering the emulated field rate cuts CPU work per real second),
+            // not to chase the throttle — that double-counts with the CPU lever. Require CpuBound
+            // (not merely "not GpuBound"): on Unknown we must not act, or auto-VI fires on
+            // unclassified data. Depends on #1's now-live classification.
             applyVI(self->_acVI - ACVIStep);
           } else if (self->_acCPU - sweepStep >= ACCpuFloor - 0.001f) {
             // f* fell (the scene got heavier than when we picked it). Direction is DOWN, not up:
@@ -714,8 +717,9 @@ static const float ACSpeedHysteresis = 0.02f;
           if (!meetsFStar) {
             if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
                 self->_acVI - ACVIStep >= ACViFloor &&
-                bound != PerformanceMetrics::Bound::GpuBound) {
-              // CPU already floored and still short: shed VI (the secondary lever) instead.
+                bound == PerformanceMetrics::Bound::CpuBound) {
+              // CPU already floored AND positively CPU-bound: shed VI for its distinct refresh-rate
+              // effect (step #5). Require CpuBound, not "!= GpuBound", so Unknown never triggers it.
               applyVI(self->_acVI - ACVIStep);
             } else if (self->_acCPU - sweepStep >= ACCpuFloor - 0.001f) {
               // f* dropped: descend one step and re-find by sweeping down from here.
