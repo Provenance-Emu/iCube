@@ -1293,7 +1293,6 @@ private struct TouchIRModePicker: View {
 
 struct DebugRootView: View {
   @State private var fastmem: Bool = false
-  @State private var syncOnSkipIdle: Bool = false
   @State private var mfiConnect: Bool = false
   @State private var userFolder: String = ""
   @State private var jitAcquired: Bool = false
@@ -1315,10 +1314,6 @@ struct DebugRootView: View {
             .onChange(of: fastmem) { DOLConfigBridge.setMainFastmem($0) }
             .disabled(!fastmemAvailable),
           L("Fast memory-access path for the CPU emulator. A large speedup where supported; disabled if the device can't provide it."))
-        settingsCaption(
-          Toggle(L("Sync on Skip Idle"), isOn: $syncOnSkipIdle)
-            .onChange(of: syncOnSkipIdle) { DOLConfigBridge.setMainSyncOnSkipIdle($0) },
-          L("Synchronizes the GPU when the CPU skips idle loops. More accurate; slightly slower."))
       }
 
       Section(header: Text(L("Controllers"))) {
@@ -1405,7 +1400,6 @@ struct DebugRootView: View {
   private func syncDebugChunk1() async {
     await MainActor.run {
       fastmem = DOLConfigBridge.mainFastmem()
-      syncOnSkipIdle = DOLConfigBridge.mainSyncOnSkipIdle()
       mfiConnect = UserDefaults.standard.bool(forKey: "virtual_mfi_connect")
       fastmemAvailable = (FastmemManager.shared().fastmemAvailable)
       launchTimes = UserDefaults.standard.integer(forKey: "launch_times")
@@ -1844,6 +1838,7 @@ struct ConfigAdvancedView: View {
   // CPU idle detection toggles
   @State private var relaxedIdleDetection: Bool = false
   @State private var fastForwardCtrIdle: Bool = false
+  @State private var syncOnSkipIdle: Bool = true
 
   @State private var cpuClockEnabled: Bool = false
   @State private var cpuClockPercent: Int = 100
@@ -1919,6 +1914,10 @@ struct ConfigAdvancedView: View {
           Toggle(L("Fast-Forward CTR Idle Loops"), isOn: $fastForwardCtrIdle)
             .onChange(of: fastForwardCtrIdle) { DOLConfigBridge.setMainFastForwardCtrIdle($0) },
           L("Fast-forwards counter-based idle loops instead of emulating every iteration. Can recover CPU headroom; may slightly affect timing-sensitive games. iCube tuning knob."))
+        rowWithCaption(
+          Toggle(L("Sync on Skip Idle"), isOn: $syncOnSkipIdle)
+            .onChange(of: syncOnSkipIdle) { DOLConfigBridge.setMainSyncOnSkipIdle($0) },
+          L("When the CPU fast-forwards through an idle loop, flush the GPU so it stays in sync. ON by default for correctness; turning it off skips the flush for a small CPU win but can cause graphical glitches in some games. A/B knob."))
       }
 
       Section(header: Text(L("Clock Override"))) {
@@ -2041,6 +2040,7 @@ struct ConfigAdvancedView: View {
     // Ensure idle detection toggles persist
     relaxedIdleDetection = DOLConfigBridge.mainRelaxedIdleDetection()
     fastForwardCtrIdle = DOLConfigBridge.mainFastForwardCtrIdle()
+    syncOnSkipIdle = DOLConfigBridge.mainSyncOnSkipIdle()
     // CI block linking toggle does not need local state; bound directly
     cpuClockEnabled = DOLConfigBridge.mainOverclockEnable()
     cpuClockPercent = DOLConfigBridge.mainOverclockPercent()
