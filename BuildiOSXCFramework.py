@@ -432,6 +432,10 @@ class DolphinBuilder:
             "-DARCHS=arm64",  # Force ARM64 architecture for all builds
             f"-DCMAKE_BUILD_TYPE={CONFIG['build_target']}",
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",  # Fix pugixml compatibility
+            # iCube: LTO — cross-TU inlining of the jitless interpreter dispatch + op handlers. The
+            # interpreter is dispatch-bound, so this is the one build lever with real upside. Was
+            # OFF (CMakeCache ENABLE_LTO=OFF). Higher build cost; revert if it breaks the link.
+            "-DENABLE_LTO=ON",
         ])
 
         # Override deployment target at CMake level to ensure it's respected
