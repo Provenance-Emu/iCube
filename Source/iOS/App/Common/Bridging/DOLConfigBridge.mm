@@ -605,14 +605,14 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   // Force performant values whose compiled default is CONSERVATIVE on iOS, so "reset to optimal"
   // actually lands on the fast configuration instead of the slow upstream default.
   //
-  // MAIN_CPU_THREAD (dual-core) defaults to FALSE on iOS upstream — only Android flips it on
-  // ("the performance boost is really needed", MainSettings.cpp DEFAULT_CPU_THREAD). On Apple
-  // silicon it's a ~2x win and the expected "best" setting, so a plain delete-to-default would
-  // silently leave the emulator single-threaded. Set it explicitly. (All other perf-critical
-  // keys above already compile to their optimal default: fastmem/dsp-thread/fast-disc on,
-  // EFB-to-texture/XFB-to-texture/defer-EFB on, internal resolution 1x, MMU/accurate-cache off,
-  // backend multithreading on — so deleting them is correct.)
-  Config::SetBase(Config::MAIN_CPU_THREAD, true);
+  // MAIN_CPU_THREAD (dual-core): force OFF (single-core). It was previously forced ON here as a
+  // "~2x perf" default, but on device dual-core HARD-HANGS most games a few seconds into boot
+  // (CPU<->GPU FIFO-fence deadlock on the lean CachedInterpreter — see DolphinCoreService revert
+  // 6af4263ec3). Reset-to-defaults must land on the safe single-core config, matching the startup
+  // default. (Other perf keys above already compile to their optimal default: fastmem/dsp-thread/
+  // fast-disc on, EFB-to-texture/XFB-to-texture/defer-EFB on, 1x IR, MMU/accurate-cache off — so
+  // deleting them is correct.)
+  Config::SetBase(Config::MAIN_CPU_THREAD, false);
 
   // GFX_WAIT_FOR_SHADERS_BEFORE_STARTING defaults FALSE upstream, which gives the awful combo of
   // Synchronous shader compilation WITHOUT precompiling = mid-gameplay stutter. iCube precompiles
