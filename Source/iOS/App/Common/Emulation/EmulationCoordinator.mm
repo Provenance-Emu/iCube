@@ -836,9 +836,14 @@ static const float ACSpeedHysteresis = 0.02f;
   b += _ICubeBuildPerfSettingsString("COPY");
 
   NSString* text = [NSString stringWithUTF8String:b.c_str()];
+#if TARGET_OS_TV
+  // tvOS has no UIPasteboard; the perf-state dump still goes to the log/OSD.
+  NSLog(@"[iCube perf-state]\n%@", text);
+#else
   dispatch_async(dispatch_get_main_queue(), ^{
     [UIPasteboard generalPasteboard].string = text;
   });
+#endif
 }
 
 - (void)startInputPump {
