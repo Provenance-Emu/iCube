@@ -43,6 +43,9 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
       // Sidecar metadata (title / savedAt / version), when present.
       let meta = SaveStateMetadataStore.read(forStateFile: url)
 
+      // The dedicated resume auto-state ({GameID}.auto) is surfaced as "Continue".
+      let isAuto = (ext == "auto")
+
       // Parse save state info; the filename is the fallback label.
       let name = url.deletingPathExtension().lastPathComponent
       let gameID = meta?.gameID ?? Self.extractGameID(from: name)
@@ -58,7 +61,7 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
 
       let info = SaveStateInfo(
         gameID: gameID,
-        displayName: meta?.title ?? name,
+        displayName: meta?.title ?? (isAuto ? "Continue" : name),
         slot: slot,
         createdAt: created,
         modifiedAt: modified,
@@ -66,7 +69,8 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
         versionHash: meta?.scmRevision,
         isCompatible: true,
         path: url,
-        thumbnailURL: hasThumb ? thumbURL : nil
+        thumbnailURL: hasThumb ? thumbURL : nil,
+        isAuto: isAuto
       )
       result[gameID, default: []].append(info)
     }

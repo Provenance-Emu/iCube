@@ -1552,6 +1552,8 @@ struct ConfigGeneralView: View {
   @State private var speedLimitPercent: Int = 0
   @State private var fastForwardSpeedPercent: Int = 300
   @State private var fallbackRegion: Region = .ntscU
+  // Resume where I left off — frontend-only NSUserDefault (see SaveStateService).
+  @AppStorage("resume_where_left_off") private var resumeWhereLeftOff: Bool = false
 
   var body: some View {
     List {
@@ -1580,6 +1582,9 @@ struct ConfigGeneralView: View {
           Toggle(L("Fast Disc Speed (speedup)"), isOn: $fastDiscSpeed)
             .onChange(of: fastDiscSpeed) { DOLConfigBridge.setMainFastDiscSpeed($0) },
           L("Removes emulated disc-read delays. Speeds up loading in most games but breaks a few that depend on real timing."))
+        settingsCaption(
+          Toggle(L("Resume Where I Left Off"), isOn: $resumeWhereLeftOff),
+          L("When you quit a game, your spot is auto-saved to a dedicated slot and reloaded the next time you launch that game. Never touches your numbered save slots."))
       }
 
       Section(header: Text(L("Speed"))) {

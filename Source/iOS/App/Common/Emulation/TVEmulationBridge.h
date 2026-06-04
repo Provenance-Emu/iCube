@@ -38,6 +38,14 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString*)currentGameID;
 + (nullable NSString*)stateFilePathForSlot:(NSInteger)slot;
 
+// Resume / auto-state. A dedicated "{StateSavesDir}{GameID}.auto" file, separate
+// from the numbered slots, used by "resume where I left off". Uses State::SaveAs/
+// LoadAs directly so it never collides with the slot scheme. autoStateFilePath
+// returns nil when no game is running.
++ (nullable NSString*)autoStateFilePath;
++ (void)saveStateToPath:(NSString*)path wait:(BOOL)wait;
++ (void)loadStateFromPath:(NSString*)path;
+
 // Speed / Fast-forward
 // Toggle temporary throttler disable (turbo). Returns the new state.
 // Display / Orientation

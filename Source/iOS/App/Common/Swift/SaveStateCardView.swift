@@ -48,6 +48,9 @@ struct SaveStateCardView: View {
           .foregroundColor(.white)
           .lineLimit(1)
         HStack(spacing: 8) {
+          if state.isAuto {
+            Badge(text: "Continue", color: .green)
+          }
           if let slot = state.slot {
             Badge(text: "Slot \(slot)")
           }
@@ -97,7 +100,8 @@ struct SaveStateCardView_Previews: PreviewProvider {
       versionHash: nil,
       isCompatible: true,
       path: URL(fileURLWithPath: "/tmp/dummy"),
-      thumbnailURL: nil
+      thumbnailURL: nil,
+      isAuto: false
     )
     SaveStateCardView(state: sample, thumbnail: nil)
       .preferredColorScheme(.dark)

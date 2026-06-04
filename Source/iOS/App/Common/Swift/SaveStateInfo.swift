@@ -12,6 +12,9 @@ public struct SaveStateInfo: Identifiable, Hashable {
   public let isCompatible: Bool
   public let path: URL
   public let thumbnailURL: URL?
+  /// True for the dedicated "resume where I left off" auto-state ({GameID}.auto),
+  /// surfaced as a "Continue" entry rather than a numbered slot.
+  public let isAuto: Bool
 }
 
 public struct SaveStateGroup: Identifiable, Hashable {

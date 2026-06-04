@@ -49,4 +49,38 @@ public enum SaveStateService {
     formatter.timeStyle = .short
     return "Slot \(slot) — \(formatter.string(from: date))"
   }
+
+  // MARK: - Resume where I left off
+
+  /// NSUserDefault key for the "resume where I left off" toggle. Kept as a default
+  /// (not a Dolphin Config key) because it is pure frontend behavior — the core
+  /// never reads it, so a Config key would be flagged dangling by icube_config_lint.
+  public static let resumeDefaultsKey = "resume_where_left_off"
+
+  public static var resumeEnabled: Bool {
+    UserDefaults.standard.bool(forKey: resumeDefaultsKey)
+  }
+
+  /// Path to the running title's dedicated auto-state, or nil if nothing is running.
+  public static var autoStateURL: URL? {
+    guard let path = TVEmulationBridge.autoStateFilePath() else { return nil }
+    return URL(fileURLWithPath: path)
+  }
+
+  /// True when a resume auto-state exists on disk for the running title.
+  public static var hasAutoState: Bool {
+    guard let url = autoStateURL else { return false }
+    return FileManager.default.fileExists(atPath: url.path)
+  }
+
+  /// If resume is enabled and an auto-state exists for the running title, load it.
+  /// Returns true if a load was issued. Safe to call right after the game boots.
+  /// (The save side runs in TVEmulationBridge.stop so every quit path is covered.)
+  @discardableResult
+  public static func resumeIfAvailable() -> Bool {
+    guard resumeEnabled, let url = autoStateURL,
+          FileManager.default.fileExists(atPath: url.path) else { return false }
+    TVEmulationBridge.loadState(fromPath: url.path)
+    return true
+  }
 }

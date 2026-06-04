@@ -36,6 +36,16 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 }
 
 + (void)stop {
+  // Resume-where-left-off: persist the dedicated auto-state (blocking) BEFORE the
+  // CPU thread is torn down, so the next launch can continue from here. Gated on
+  // the user toggle; default off means this is a no-op. The auto-state lives in its
+  // own "{GameID}.auto" file and never touches numbered save slots.
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:@"resume_where_left_off"]) {
+    NSString* autoPath = [self autoStateFilePath];
+    if (autoPath.length > 0) {
+      State::SaveAs(Core::System::GetInstance(), std::string(autoPath.UTF8String), /*wait=*/true);
+    }
+  }
   Host_Message(HostMessageID::WMUserStop);
 }
 
@@ -94,6 +104,30 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   NSString* dir = [NSString stringWithUTF8String:File::GetUserPath(D_STATESAVES_IDX).c_str()];
   NSString* gid = [NSString stringWithUTF8String:game_id.c_str()];
   return [NSString stringWithFormat:@"%@%@.s%02ld", dir, gid, (long)slot];
+}
+
++ (nullable NSString*)autoStateFilePath {
+  const std::string game_id = SConfig::GetInstance().GetGameID();
+  if (game_id.empty())
+    return nil;
+  NSString* dir = [NSString stringWithUTF8String:File::GetUserPath(D_STATESAVES_IDX).c_str()];
+  NSString* gid = [NSString stringWithUTF8String:game_id.c_str()];
+  return [NSString stringWithFormat:@"%@%@.auto", dir, gid];
+}
+
++ (void)saveStateToPath:(NSString*)path wait:(BOOL)wait {
+  if (path.length == 0)
+    return;
+  State::SaveAs(Core::System::GetInstance(), std::string(path.UTF8String), wait);
+}
+
++ (void)loadStateFromPath:(NSString*)path {
+  if (path.length == 0)
+    return;
+  std::string p(path.UTF8String);
+  Core::QueueHostJob([p](Core::System& system) {
+    State::LoadAs(system, p);
+  });
 }
 
 // Display / Orientation helpers

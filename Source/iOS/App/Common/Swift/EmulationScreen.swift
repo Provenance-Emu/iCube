@@ -499,6 +499,8 @@ struct EmulationScreen: View {
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
         ControllerManager.shared.registerGCOverride(forController: 0)
         configureAllControllers()
+        // Resume where I left off: if enabled and an auto-state exists, load it.
+        SaveStateService.resumeIfAvailable()
       }
       // Auto-pause when app goes to background on tvOS
       NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
