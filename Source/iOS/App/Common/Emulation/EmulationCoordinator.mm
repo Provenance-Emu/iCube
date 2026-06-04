@@ -4,6 +4,7 @@
 #import "EmulationCoordinator.h"
 
 #include <cmath>
+#include <variant>
 #include <mach/mach.h>
 #include <sys/sysctl.h>
 
@@ -17,6 +18,9 @@
 
 #import "Core/Boot/Boot.h"
 #import "Core/BootManager.h"
+#import "Core/HW/EXI/EXI_DeviceIPL.h"
+#import "DiscIO/Enums.h"
+#import "DiscIO/Volume.h"
 #import "Core/Config/GraphicsSettings.h"
 #import "Core/Core.h"
 #import "Core/System.h"
@@ -55,6 +59,8 @@ void Reset();
 #import "FastmemManager.h"
 #import "HostNotifications.h"
 #import "HostQueue.h"
+#import "MainSceneCoordinator.h"
+#import "DOLConfigBridge.h"
 #import "JitManager.h"
 #import "TVControllerMappingBridge.h"
 #import "LocalizationUtil.h"
@@ -452,8 +458,99 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 }
 
 - (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter {
+  // iCube: pre-detect the "boot to GameCube menu but no BIOS/IPL installed" dead launch.
+  // A GameCube disc boot is silently re-routed through the GC IPL by BootManager::BootCore exactly
+  // when (!Wii && !MAIN_SKIP_IPL && Disc); if no IPL dump is present that boot fails with a generic
+  // "Cannot find the GC IPL" panic and the game just never starts. Catch it here at the single launch
+  // chokepoint (covers iOS EmulationViewController AND the tvOS TVLibrary/TVEmulation bridges) and
+  // offer a one-tap "Boot Game Directly" (enable skip-IPL) + a Learn More link instead.
+  //
+  // Cheap guards first so a normal launch pays nothing: only when skip-IPL is OFF and there is no IPL
+  // dump do we generate the (disc-reading) boot parameters to confirm this is actually a GC disc boot.
+  if (!Config::Get(Config::MAIN_SKIP_IPL) && !ExpansionInterface::CEXIIPL::HasIPLDump()) {
+    std::unique_ptr<BootParameters> boot = [bootParameter generateDolphinBootParameter];
+    bool wouldBootGCIPL = false;
+    if (boot) {
+      if (std::holds_alternative<BootParameters::Disc>(boot->parameters)) {
+        // Only GameCube discs route through the GC IPL; Wii discs ignore it. Mirror the IsWii() guard
+        // in BootManager::BootCore using the volume platform (the system isn't booted yet).
+        const auto& disc = std::get<BootParameters::Disc>(boot->parameters);
+        if (disc.volume && disc.volume->GetVolumeType() == DiscIO::Platform::GameCubeDisc) {
+          wouldBootGCIPL = true;
+        }
+      } else if (std::holds_alternative<BootParameters::IPL>(boot->parameters)) {
+        // Direct "Load GameCube Menu" action (EmulationBootTypeGCIPL) — always an IPL boot.
+        wouldBootGCIPL = true;
+      }
+    }
+    if (wouldBootGCIPL) {
+      [self presentMissingGCIPLAlertForBootParameter:bootParameter];
+      return;
+    }
+  }
+
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     [self emulationLoopWithBootParameter:bootParameter];
+  });
+}
+
+// iCube: alert shown when a launch would boot through the GameCube menu/IPL but no IPL/BIOS dump is
+// installed. "Boot Game Directly" flips skip-IPL on and retries the launch (so the game boots without
+// the menu); "Learn More" opens the GameCube BIOS help page; "Cancel" abandons the launch. Presented
+// via the MainSceneCoordinator scene so it works on both iOS and tvOS (same pattern as MsgAlertManager).
+- (void)presentMissingGCIPLAlertForBootParameter:(EmulationBootParameter*)bootParameter {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    UIWindowScene* mainScene = [MainSceneCoordinator shared].mainScene;
+    if (mainScene == nil) {
+      // No scene to present on: fall back to booting directly so the user isn't left with a dead
+      // launch (skip-IPL on, retry). This mirrors the "Boot Game Directly" action.
+      [DOLConfigBridge setMainSkipIPL:YES];
+      dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self emulationLoopWithBootParameter:bootParameter];
+      });
+      return;
+    }
+
+    UIWindow* window = [[UIWindow alloc] initWithWindowScene:mainScene];
+    window.frame = UIScreen.mainScreen.bounds;
+    window.rootViewController = [[UIViewController alloc] init];
+    UIWindow* topWindow = mainScene.windows.lastObject;
+    window.windowLevel = topWindow.windowLevel + 1;
+
+    UIAlertController* alert = [UIAlertController
+        alertControllerWithTitle:DOLCoreLocalizedString(@"GameCube BIOS not found")
+                         message:DOLCoreLocalizedString(@"This game is set to boot to the GameCube menu, but the GameCube BIOS (IPL) isn't installed, so it can't start. You can boot the game directly without the menu, or install a GameCube BIOS dump. Learn More explains how.")
+                  preferredStyle:UIAlertControllerStyleAlert];
+
+    void (^finish)(void) = ^{ [window setHidden:YES]; };
+
+    [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Boot Game Directly")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction* action) {
+      // Enable skip-IPL (boot straight into the game, no menu) and retry the launch.
+      [DOLConfigBridge setMainSkipIPL:YES];
+      finish();
+      dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self emulationLoopWithBootParameter:bootParameter];
+      });
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Learn More")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction* action) {
+      finish();
+      NSURL* url = [NSURL URLWithString:@"https://icube-emu.com/help/gamecube-bios"];
+      [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Cancel")
+                                              style:UIAlertActionStyleCancel
+                                            handler:^(UIAlertAction* action) {
+      finish();
+    }]];
+
+    [window makeKeyAndVisible];
+    [window.rootViewController presentViewController:alert animated:YES completion:nil];
   });
 }
 

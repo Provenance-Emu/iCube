@@ -54,6 +54,26 @@ struct SettingsRootView<Background: View>: View {
   @State private var webURLDisplay: String = ""
   @State private var webDavDisplay: String = ""
 
+  /// Footer under the Network section: explains web importing and links to the help page. On iOS the
+  /// "Learn more" is a tappable link; on tvOS (no browser / no openURL) it's plain text so the row
+  /// stays focus-clean and the build doesn't reference an unavailable API.
+  @ViewBuilder
+  private var webImportFooter: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi: open the Web UI address in a browser, or connect to the WebDAV address from a file manager."))
+#if os(iOS)
+      Button(L("Learn more")) {
+        if let url = URL(string: "https://icube-emu.com/help/web-import") { openURL(url) }
+      }
+      .font(.footnote)
+#else
+      Text(verbatim: "https://icube-emu.com/help/web-import")
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+#endif
+    }
+  }
+
   var body: some View {
     ZStack {
       // Optional background
@@ -238,6 +258,7 @@ struct SettingsRootView<Background: View>: View {
                       .truncationMode(.middle)
                   }
                   .buttonStyle(.plain)
+                  .networkURLContextMenu(webURLDisplay, openURL: openURL)
                 } else {
                   Text(L("Not Running"))
                     .font(.system(size: 16, weight: .medium))
@@ -256,12 +277,45 @@ struct SettingsRootView<Background: View>: View {
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.8))
                 Spacer()
+#if os(iOS)
+                if !webDavDisplay.isEmpty {
+                  Text(webDavDisplay)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .networkURLContextMenu(webDavDisplay, openURL: openURL)
+                } else {
+                  Text(L("Not Running"))
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                }
+#else
                 Text(webDavDisplay.isEmpty ? L("Not Running") : webDavDisplay)
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.6))
                   .lineLimit(1)
                   .truncationMode(.middle)
+#endif
               }
+              // Web-import help: short description + link (plain text on tvOS — no browser).
+              VStack(alignment: .leading, spacing: 4) {
+                Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi: open the Web UI address in a browser, or connect to the WebDAV address from a file manager."))
+                  .font(.system(size: 12))
+                  .foregroundColor(.white.opacity(0.5))
+#if os(iOS)
+                Button(L("Learn more")) {
+                  if let url = URL(string: "https://icube-emu.com/help/web-import") { openURL(url) }
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.blue)
+#else
+                Text(verbatim: "https://icube-emu.com/help/web-import")
+                  .font(.system(size: 12))
+                  .foregroundColor(.white.opacity(0.5))
+#endif
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -366,7 +420,7 @@ struct SettingsRootView<Background: View>: View {
         }
 
         // Network
-        Section(header: Text(L("Network"))) {
+        Section(header: Text(L("Network")), footer: webImportFooter) {
           HStack {
             Text(L("Web UI"))
             Spacer()
@@ -385,6 +439,7 @@ struct SettingsRootView<Background: View>: View {
                   .truncationMode(.middle)
               }
               .buttonStyle(.plain)
+              .networkURLContextMenu(s, openURL: openURL)
             } else {
               Text(L("Not Running"))
                 .foregroundStyle(.secondary)
@@ -400,10 +455,23 @@ struct SettingsRootView<Background: View>: View {
             Text(L("WebDAV"))
             Spacer()
             let s = webDavDisplay
+#if os(iOS)
+            if !s.isEmpty {
+              Text(s)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .networkURLContextMenu(s, openURL: openURL)
+            } else {
+              Text(L("Not Running"))
+                .foregroundStyle(.secondary)
+            }
+#else
             Text(s.isEmpty ? L("Not Running") : s)
               .foregroundStyle(.secondary)
               .lineLimit(1)
               .truncationMode(.middle)
+#endif
           }
         }
       }
@@ -4223,6 +4291,29 @@ struct SafariView: UIViewControllerRepresentable {
   let url: URL
   func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
   func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) { }
+}
+
+extension View {
+  /// iOS long-press context menu for a LAN server URL: Copy (UIPasteboard) and Open (system browser
+  /// via the SwiftUI openURL action). tvOS has no long-press and no usable openURL/browser, so this
+  /// is iOS-only and the tvOS call sites simply render the URL as plain text.
+  @ViewBuilder
+  func networkURLContextMenu(_ urlString: String, openURL: OpenURLAction) -> some View {
+    self.contextMenu {
+      Button {
+        UIPasteboard.general.string = urlString
+      } label: {
+        Label(L("Copy"), systemImage: "doc.on.doc")
+      }
+      if let u = URL(string: urlString) {
+        Button {
+          openURL(u)
+        } label: {
+          Label(L("Open"), systemImage: "safari")
+        }
+      }
+    }
+  }
 }
 #endif
 
