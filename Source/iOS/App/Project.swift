@@ -331,6 +331,13 @@ let iCube = Target.target(
             "ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS": "YES",
             "ASSETCATALOG_COMPILER_APPICON_NAME": "$(DOL_APP_ICON_ASSET_NAME)",
             "ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*]": "$(DOL_APP_ICON_ASSET_NAME_TV)",
+            // Tuist's .recommended defaults inject the MORE-SPECIFIC appletvos*/appletvsimulator* keys
+            // pointing at the stock "App Icon & Top Shelf Image" name, which outranks the appletv*
+            // override above and makes actool look for an asset that doesn't exist (ours is
+            // "tvOS Icons") — App Store then rejects with missing CFBundlePrimaryIcon + Top Shelf Image
+            // Wide. Pin the specific keys to our real brandassets so every tvOS SDK variant agrees.
+            "ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvos*]": "$(DOL_APP_ICON_ASSET_NAME_TV)",
+            "ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvsimulator*]": "$(DOL_APP_ICON_ASSET_NAME_TV)",
             // Tuist's .recommended defaults inject ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME=LaunchImage,
             // but the app uses a LaunchScreen storyboard (no LaunchImage set) — clear it or actool fails.
             "ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME": "",
