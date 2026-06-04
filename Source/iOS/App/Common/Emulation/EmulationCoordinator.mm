@@ -222,7 +222,14 @@ static const float ACSpeedHysteresis = 0.02f;
 // clock sitting one step below f* (max_speed ≈ 1.10 with a 0.10 step) does NOT re-probe — that
 // dead-band is what keeps steady-state at the cliff from oscillating (the reason up-probing was
 // originally removed). Bias high: under-recovery is invisible, oscillation is visible stutter.
-static const float ACUpProbeHeadroom    = 1.15f;  // climb only with >1+step of measured headroom
+// Up-probe gate is STEP-RELATIVE, not a fixed headroom number. One step below the cliff, max_speed =
+// f*/(f*-step), which ranges ~1.11 (f*->1.0) to >1.25 (low f*) — so a fixed 1.15 oscillates on
+// low-f* titles (e.g. F-Zero f*~0.47: settles 0.40, up-probes 0.50, fails, reverts, repeats) and
+// under-recovers on high-f* ones. Instead estimate the cliff f_hat = clock * max_speed (CPU-bound,
+// ~linear work-vs-clock) and only probe a lever UP if f_hat sits this margin ABOVE where the probe
+// would LAND. If the only upward neighbor is the clock Search already rejected, f_hat won't clear it
+// and we stay put (converged) instead of oscillating.
+static const float ACUpMargin           = 0.04f;  // estimated cliff must exceed the post-probe clock by this
 static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an up-probe overshoot
 
 @implementation EmulationCoordinator {
@@ -246,7 +253,7 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
   // exactly why the prior loop (which kept descending while "stable") sailed past f* to the floor.
   // v3 stops at first match. v3.1 adds the missing recovery direction: max_speed (throttle-sleep
   // removed) DOES distinguish them — ≈1.0 at f*, >1 below it — so Hold uses it to climb back up when
-  // the scene lightens (the prior strict one-way descent could never recover; see ACUpProbeHeadroom).
+  // the scene lightens (the prior strict one-way descent could never recover; see ACUpMargin).
   float _acCPU;            // current applied CPU overclock (the lever we sweep). [floor .. 1.0]
   float _acVI;             // current applied VI overclock (the second lever, used only when CPU is
                            // already floored and still short). Adapted since v2 (v1 never touched it).
@@ -261,7 +268,7 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
   BOOL  _acCpuYielded;     // user took manual CPU-clock control -> stop auto-adjusting CPU-oc
   BOOL  _acViYielded;      // user took manual VI-clock control  -> stop auto-adjusting VI-oc
   BOOL  _acVerifyProbedUp; // in the seeded re-find: have we already tried the +1 step above f*?
-  // Headroom up-recovery (Hold phase) — see ACUpProbeHeadroom. Fixes the one-way ratchet.
+  // Headroom up-recovery (Hold phase) — see ACUpMargin. Fixes the one-way ratchet.
   int   _acUpProbeLever;       // lever raised by the in-flight up-probe (AC_LEVER_*), for revert
   int   _acUpCooldown;         // Hold evals remaining before another up-probe is allowed
   BOOL  _acViRecoveryStalled;  // a VI up-probe overshot -> stop retrying VI, let CPU climb instead
@@ -741,7 +748,7 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
           //  - Lost f* (scene heavier / thermal): the cliff moved DOWN -> descend to re-find it.
           //  - Still at f* but max_speed shows real headroom: the cliff moved UP (scene lightened /
           //    cooled) -> climb back. This recovery direction is the fix for the one-way ratchet;
-          //    without it a transient walked the clock down for good (see ACUpProbeHeadroom).
+          //    without it a transient walked the clock down for good (see ACUpMargin).
           if (self->_acPhaseTicks < ACHoldTicks) break;
           if (!meetsFStar) {
             if (self->_acUpProbeLever != AC_LEVER_NONE) {
@@ -779,21 +786,32 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
             }
             if (self->_acUpCooldown > 0) {
               self->_acUpCooldown--;
+              // Re-arm VI recovery once the cooldown elapses so VI gets periodic retries like CPU,
+              // instead of staying stalled until f* next drops (the latch-asymmetry fix). The
+              // step-relative gate below stops this from re-oscillating.
+              if (self->_acUpCooldown == 0) self->_acViRecoveryStalled = NO;
               persistConverged();
-            } else if (cool && !newUnderrun && maxSpeed >= ACUpProbeHeadroom) {
-              // Real headroom -> climb back toward f*. Restore LIFO: the VI lever is shed last (only
-              // at CPU floor) and its underclock is the visible slow-motion, so raise it first; once
-              // VI is back at native (or recovery stalled), climb the CPU clock. One lever per step.
+            } else if (cool && !newUnderrun) {
+              // Headroom recovery toward f*, gated by the step-relative cliff estimate (see ACUpMargin)
+              // so we never probe into the clock Search already rejected. Restore LIFO: the VI lever is
+              // shed last (only at CPU floor) and its underclock is the visible slow-motion, so raise
+              // it first; once VI is back at native (or stalled) climb CPU. One lever per step.
+              const double fhatCPU = (double)self->_acCPU * maxSpeed;  // estimated CPU cliff (VI fixed)
+              const double fhatVI  = (double)self->_acVI * maxSpeed;   // proportional headroom for VI work
               self->_acPreProbeCPU = self->_acCPU;
               self->_acPreProbeVI = self->_acVI;
-              if (self->_acVI < 1.0f - 0.001f && !self->_acViYielded && !self->_acViRecoveryStalled) {
+              if (self->_acVI < 1.0f - 0.001f && !self->_acViYielded && !self->_acViRecoveryStalled &&
+                  fhatVI >= (double)(self->_acVI + ACVIStep) * (1.0 + ACUpMargin)) {
                 applyVI(self->_acVI + ACVIStep);
                 self->_acUpProbeLever = AC_LEVER_VI;
-              } else if (self->_acCPU < 1.0f - 0.001f && !self->_acCpuYielded) {
+                self->_acUpCooldown = 1;  // observe one eval before the next climb
+              } else if (self->_acCPU < 1.0f - 0.001f && !self->_acCpuYielded &&
+                         fhatCPU >= (double)(self->_acCPU + sweepStep) * (1.0 + ACUpMargin)) {
                 applyCPU(self->_acCPU + sweepStep);
                 self->_acUpProbeLever = AC_LEVER_CPU;
+                self->_acUpCooldown = 1;
               } else {
-                persistConverged();  // already at native (or levers yielded): nothing to recover.
+                persistConverged();  // at the cliff (no estimated room beyond a step) or yielded.
               }
             } else {
               // At/just below f* with no spare headroom (dead-band): the converged steady state.
