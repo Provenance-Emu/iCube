@@ -182,6 +182,48 @@ static void Helper_Quantize(PowerPC::MMU& mmu, const PowerPC::PowerPCState* ppcs
   const double ps0 = ppcs->ps[instRS].PS0AsDouble();
   const double ps1 = ppcs->ps[instRS].PS1AsDouble();
 
+  // iCube: psq FLOAT fast-path. Read the LIVE GQR (decoded above — never baked). For the common
+  // {type FLOAT, scale 0} case, run the generic QUANTIZE_FLOAT branch's exact leaf ops (ConvertToSingleFTZ
+  // + WriteUnpaired<u32>/WritePair<u32>) with no type-switch. Bit-identical to the generic branch by
+  // construction: same conversion, same accessors -> same memory bytes, same fault behavior, same W
+  // handling.
+  if (PowerPC::GetPsqFastpathEnabled() && st_type == QUANTIZE_FLOAT && st_scale == 0) [[unlikely]]
+  {
+    // Fast path: derive the converted u32(s) and the write shape (single vs paired) straight from instW.
+    const bool fast_pair = instW == 0;
+    const u32 fast_ps0 = ConvertToSingleFTZ(std::bit_cast<u64>(ps0));
+    const u32 fast_ps1 = fast_pair ? ConvertToSingleFTZ(std::bit_cast<u64>(ps1)) : 0;
+
+    if (!PowerPC::GetPsqFastpathValidate()) [[likely]]
+    {
+      // Shipping fast path: a single physical write, EXACTLY the generic FLOAT branch's accessor choice.
+      if (fast_pair)
+        WritePair<u32>(mmu, fast_ps0, fast_ps1, addr);
+      else
+        WriteUnpaired<u32>(mmu, fast_ps0, addr);
+      return;
+    }
+
+    // VALIDATE: independently re-derive the write the way the generic FLOAT branch (below) does — its OWN
+    // conversion and its OWN instW-driven single-vs-paired decision — then ASSERT the fast path's converted
+    // value(s) AND write shape match before a SINGLE physical write (a double store to MMIO has side
+    // effects, so memory is never written twice — we diff the values + shape, then write once from the
+    // reference). A wrong conversion, a swapped lane, or a wrong single-vs-paired (W) decision in the fast
+    // path diverges from this independent reference here.
+    const bool ref_pair = instW == 0;
+    const u32 ref_ps0 = ConvertToSingleFTZ(std::bit_cast<u64>(ps0));
+    const u32 ref_ps1 = ref_pair ? ConvertToSingleFTZ(std::bit_cast<u64>(ps1)) : 0;
+    const bool ok = fast_pair == ref_pair && fast_ps0 == ref_ps0 && (!ref_pair || fast_ps1 == ref_ps1);
+    ASSERT_MSG(POWERPC, ok, "psq fast-path store diverged from generic FLOAT: addr={:08x} W={}", addr,
+               instW);
+
+    if (ref_pair)
+      WritePair<u32>(mmu, ref_ps0, ref_ps1, addr);
+    else
+      WriteUnpaired<u32>(mmu, ref_ps0, addr);
+    return;
+  }
+
   switch (st_type)
   {
   case QUANTIZE_FLOAT:
@@ -249,12 +291,83 @@ std::pair<double, double> LoadAndDequantize(PowerPC::MMU& mmu, u32 addr, u32 ins
   return {static_cast<double>(ps0), static_cast<double>(ps1)};
 }
 
+// iCube: psq FLOAT fast-path (load). Performs EXACTLY the generic QUANTIZE_FLOAT branch's leaf ops
+// (ReadUnpaired<u32>/ReadPair<u32> + ConvertToDouble), with no type-switch and no scale. The only thing it
+// does NOT do is commit to ppcs->ps — the caller checks EXCEPTION_DSI first and then sets the lanes,
+// matching the generic path's ordering.
+static std::pair<double, double> Helper_Dequantize_Float(PowerPC::MMU& mmu, u32 addr, u32 instW)
+{
+  if (instW != 0)
+  {
+    const u32 value = ReadUnpaired<u32>(mmu, addr);
+    return {std::bit_cast<double>(ConvertToDouble(value)), 1.0};
+  }
+  const auto [first, second] = ReadPair<u32>(mmu, addr);
+  return {std::bit_cast<double>(ConvertToDouble(first)), std::bit_cast<double>(ConvertToDouble(second))};
+}
+
 static void Helper_Dequantize(PowerPC::MMU& mmu, PowerPC::PowerPCState* ppcs, u32 addr, u32 instI,
                               u32 instRD, u32 instW)
 {
   const UGQR gqr(ppcs->spr[SPR_GQR0 + instI]);
   const EQuantizeType ld_type = gqr.ld_type;
   const u32 ld_scale = gqr.ld_scale;
+
+  // iCube: psq FLOAT fast-path. Read the LIVE GQR (decoded just above — GQRs change at runtime, never
+  // baked). For the overwhelmingly common {type FLOAT, scale 0} case (what the profiled hot block uses)
+  // skip the type-switch entirely and run the float leaf ops directly, then commit. Bit-identical to the
+  // generic QUANTIZE_FLOAT branch below by construction: same accessors -> same bytes, same fault, same
+  // lanes, same W handling.
+  if (PowerPC::GetPsqFastpathEnabled() && ld_type == QUANTIZE_FLOAT && ld_scale == 0) [[unlikely]]
+  {
+    const auto [fp0, fp1] = Helper_Dequantize_Float(mmu, addr, instW);
+
+    // VALIDATE: when the validate flag is OFF this is the shipping fast path — commit and return. When ON,
+    // do NOT return: fall through to the generic switch below, which serves as the INDEPENDENT reference
+    // (its own FLOAT case, not the fast helper), then ASSERT the fast lanes match the generic lanes before
+    // the single generic SetBoth commits. A swapped first/second, a wrong ps1-for-W=1, or a wrong W
+    // decision in the fast path diverges from the generic reference here. The generic FLOAT case re-reads
+    // memory; on a clean access ReadPair/ReadUnpaired are side-effect free and return the same bytes, and
+    // on a faulting access both reads see the identical EXCEPTION_DSI state, so the comparison is exact.
+    if (!PowerPC::GetPsqFastpathValidate()) [[likely]]
+    {
+      if ((ppcs->Exceptions & EXCEPTION_DSI) != 0)
+        return;
+
+      ppcs->ps[instRD].SetBoth(fp0, fp1);
+      return;
+    }
+
+    // Validate mode: stash the fast result and fall through to the generic reference + assert below.
+    const double fast0 = fp0;
+    const double fast1 = fp1;
+
+    double ps0 = 0.0;
+    double ps1 = 0.0;
+    if (instW != 0)
+    {
+      const u32 value = ReadUnpaired<u32>(mmu, addr);
+      ps0 = std::bit_cast<double>(ConvertToDouble(value));
+      ps1 = 1.0;
+    }
+    else
+    {
+      const auto [first, second] = ReadPair<u32>(mmu, addr);
+      ps0 = std::bit_cast<double>(ConvertToDouble(first));
+      ps1 = std::bit_cast<double>(ConvertToDouble(second));
+    }
+
+    ASSERT_MSG(POWERPC,
+               std::bit_cast<u64>(fast0) == std::bit_cast<u64>(ps0) &&
+                   std::bit_cast<u64>(fast1) == std::bit_cast<u64>(ps1),
+               "psq fast-path load diverged from generic FLOAT: addr={:08x} W={}", addr, instW);
+
+    if ((ppcs->Exceptions & EXCEPTION_DSI) != 0)
+      return;
+
+    ppcs->ps[instRD].SetBoth(ps0, ps1);
+    return;
+  }
 
   double ps0 = 0.0;
   double ps1 = 0.0;

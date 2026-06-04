@@ -707,6 +707,33 @@ void SetDeadFPRFElimHint(bool value)
   s_dead_fprf_elim_hint = value;
 }
 
+// iCube: psq FLOAT fast-path enable + validate. See PowerPC.h. Plain file-statics (not thread_local): they
+// are written once on the CPU thread at CachedInterpreter::Init before emulation runs and only read
+// thereafter, so no per-op synchronization is needed. Default false; when the enable is false the psq
+// handlers never branch into the fast path and the generic switch runs byte-for-byte as upstream.
+static bool s_psq_fastpath_enabled = false;
+static bool s_psq_fastpath_validate = false;
+
+bool GetPsqFastpathEnabled()
+{
+  return s_psq_fastpath_enabled;
+}
+
+void SetPsqFastpathEnabled(bool value)
+{
+  s_psq_fastpath_enabled = value;
+}
+
+bool GetPsqFastpathValidate()
+{
+  return s_psq_fastpath_validate;
+}
+
+void SetPsqFastpathValidate(bool value)
+{
+  s_psq_fastpath_validate = value;
+}
+
 void PowerPCState::UpdateFPRFDouble(double dvalue)
 {
   // iCube: skip the FPRF classify+store when the CIR proved this op's FPRF is dead. This writes ONLY the

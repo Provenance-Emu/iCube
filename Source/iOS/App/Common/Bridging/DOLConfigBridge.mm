@@ -251,6 +251,10 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setCirDeadFprfElim:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_DEAD_FPRF_ELIM, (bool)enabled); }
 + (BOOL)cirDeadFprfElimValidate { return Config::Get(Config::MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE); }
 + (void)setCirDeadFprfElimValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE, (bool)enabled); }
++ (BOOL)cirPsqFastPath { return Config::Get(Config::MAIN_CIR_PSQ_FASTPATH); }
++ (void)setCirPsqFastPath:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_PSQ_FASTPATH, (bool)enabled); }
++ (BOOL)cirPsqFastPathValidate { return Config::Get(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE); }
++ (void)setCirPsqFastPathValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE, (bool)enabled); }
 + (BOOL)cirBlockLinking { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING); }
 + (void)setCirBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING, (bool)enabled); }
 + (BOOL)cirBlockLinkingValidate { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE); }

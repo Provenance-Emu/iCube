@@ -980,6 +980,40 @@ const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM{{System::Main, "Core", "CIRDeadFprfElim
 // reference run per eliminated op); on-device correctness passes only. Default false.
 const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE{
     {System::Main, "Core", "CIRDeadFprfElimValidate"}, false};
+// iCube: CachedInterpreter quantized paired-single (psq) FLOAT fast-path. psq_l/psq_st (and the indexed
+// psq_lx/psq_stx + update forms) load/store TWO values with an optional per-element type conversion
+// (float/u8/s8/u16/s16) and a scale, both selected at RUNTIME from the graphics-quantization register the
+// instruction's I field picks (GQR0-7). The generic interpreter handler runs the full GQR decode +
+// type-switch + scale machinery on EVERY execution. But the overwhelmingly common case — and the one the
+// profiled hot block uses (Chibi-Robo's hottest block is psq_l qr0-heavy) — is GQR == {type FLOAT,
+// scale 0}, i.e. "just move two big-endian 32-bit floats, no convert, no scale". When ON, the handler
+// reads the LIVE GQR each execution (GQRs change at runtime — never baked) and, only for that exact case,
+// takes a fast path that performs the SAME leaf ops the generic FLOAT branch already uses (ReadPair<u32>/
+// ReadUnpaired<u32> + ConvertToDouble on load; ConvertToSingleFTZ + WritePair<u32>/WriteUnpaired<u32> on
+// store), skipping the type-switch. Because it reuses the identical accessors, the resulting FPR lanes /
+// memory bytes / fault (EXCEPTION_DSI) behavior are bit-identical to the generic FLOAT case by
+// construction; this is the per-op runtime equivalent of JitArm64's per-block assumeNoPairedQuantize
+// specialization (which proves the GQR is in its default float state for the whole block). The W field
+// (single-value vs paired) is preserved exactly as the generic path handles it. Default FALSE: when off
+// the predicate (one type==FLOAT && scale==0 compare on the already-decoded GQR) is a single
+// predicted-not-taken branch and the handler falls straight into the unchanged generic switch, so behavior
+// is byte-identical to the flag-off baseline. Opt-in A/B + profiler-measured before defaulting on.
+const Info<bool> MAIN_CIR_PSQ_FASTPATH{{System::Main, "Core", "CIRPsqFastPath"}, false};
+// iCube: self-validation for CIRPsqFastPath. EXACT analogue of the dead-flag / FPRF / fusion double-run
+// validate harnesses: the fast path runs alongside an INDEPENDENT reference (the generic FLOAT path, NOT a
+// re-run of the fast helper) and their results are ASSERT'd byte-identical. Because the leaf conversion ops
+// are shared, what this actually exercises is the fast path's ORCHESTRATION — the W (single vs paired)
+// decision, that BOTH FPR lanes are set on a load, the load's DSI-checked-before-write ordering, and the
+// store's single-vs-paired accessor + lane choice. When ON, for every psq op that takes the fast path: on a
+// LOAD the fast path does NOT early-return — it falls through to the generic switch's own FLOAT case (the
+// independent reference), then ASSERT_MSG's the fast (ps0, ps1) against the generic (ps0, ps1) before the
+// single SetBoth commit; on a STORE the fast path independently re-derives the generic FLOAT branch's
+// converted u32 value(s) AND write shape (single vs paired) and ASSERT_MSG's them equal before a SINGLE
+// physical write (memory is never written twice — a double store to MMIO has side effects). A swapped lane,
+// a wrong ps1-for-W=1, or a wrong single-vs-paired decision diverges from the reference and trips the
+// assert. Slow (an extra reference run per fast-path op); on-device correctness passes only. Default false.
+const Info<bool> MAIN_CIR_PSQ_FASTPATH_VALIDATE{
+    {System::Main, "Core", "CIRPsqFastPathValidate"}, false};
 // iCube: CachedInterpreter cache-management loop fast-forward. Reserved key for the dcbf/dcbi CTR-loop
 // fast-forward investigation (Task 2). Default FALSE. See CachedInterpreter for whether the transform
 // shipped or was deferred.

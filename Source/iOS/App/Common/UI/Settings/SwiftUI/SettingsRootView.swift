@@ -879,8 +879,12 @@ struct ControllersRootView: View {
   @State private var touchOpacity: Float = 0.5
 #endif
   @State private var touchIRMode: TouchIRMode = .drag
-  @State private var gcPortDevices: [Int] = [0, 0, 0, 0]   // 0 None, 1 Standard Controller, etc.
-  @State private var wiiSources: [Int] = [0, 0, 0, 0]      // 0 None, 1 Emulated, 2 Real
+  // Raw SerialInterface::SIDevices values (SI_Device.h): 0 = SIDEVICE_NONE,
+  // 6 = SIDEVICE_GC_CONTROLLER. The enum is NOT sequential (1-5 are N64/GBA
+  // devices), so the GC Controller value is 6, not 1.
+  @State private var gcPortDevices: [Int] = [0, 0, 0, 0]
+  // Raw WiimoteSource values (Wiimote.h): 0 None, 1 Emulated, 2 Real.
+  @State private var wiiSources: [Int] = [0, 0, 0, 0]
 
   var body: some View {
     List {
@@ -1231,18 +1235,19 @@ struct ControllersRootView: View {
     }
   }
 
-  // If all GC ports are None, default Player 1 to Standard Controller
+  // If all GC ports are None, default Player 1 to a GameCube Controller
+  // (SIDEVICE_GC_CONTROLLER == 6).
   private func ensureDefaultGCPlayer1() {
     if gcPortDevices.allSatisfy({ $0 == 0 }) {
-      DOLConfigBridge.setGCPortDeviceForPort(1, device: 1)
-      gcPortDevices[0] = 1
+      DOLConfigBridge.setGCPortDeviceForPort(1, device: 6)
+      gcPortDevices[0] = 6
     }
   }
 
   private func localizedSIDevice(_ device: Int) -> String {
     switch device {
     case 0: return L("<Nothing>")
-    case 1: return L("GameCube Controller")
+    case 6: return L("GameCube Controller") // SIDEVICE_GC_CONTROLLER
     default: return L("Unknown")
     }
   }
@@ -1949,6 +1954,8 @@ struct ConfigAdvancedView: View {
   @State private var cirDeadFlagElimValidate: Bool = false
   @State private var cirDeadFprfElim: Bool = false
   @State private var cirDeadFprfElimValidate: Bool = false
+  @State private var cirPsqFastPath: Bool = false
+  @State private var cirPsqFastPathValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -2057,6 +2064,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ Dead FPRF Elimination: Validate (slow, correctness pass)"), isOn: $cirDeadFprfElimValidate)
             .onChange(of: cirDeadFprfElimValidate) { DOLConfigBridge.setCirDeadFprfElimValidate($0) },
           L("Self-check for Dead FPRF Elimination: double-runs every eliminated FP op (FPRF computed vs skipped) and flags any divergence in a result register or any FPSCR bit other than FPRF. Use this to A/B-verify FP accuracy on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead FPRF Elimination to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Paired-Single Float Fast-Path (Cached Interpreter, experimental)"), isOn: $cirPsqFastPath)
+            .onChange(of: cirPsqFastPath) { DOLConfigBridge.setCirPsqFastPath($0) },
+          L("⚠️ Speeds up the quantized paired-single load/store ops (psq_l/psq_st) for the common case where the graphics-quantization register is plain 32-bit float with no scaling — skips the per-op type-decode and conversion machinery and moves the two floats directly. This is the hot path in several GameCube titles (e.g. Chibi-Robo). The live quantization register is checked each execution, so non-float cases fall back unchanged. Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Paired-Single Float Fast-Path: Validate (slow, correctness pass)"), isOn: $cirPsqFastPathValidate)
+            .onChange(of: cirPsqFastPathValidate) { DOLConfigBridge.setCirPsqFastPathValidate($0) },
+          L("Self-check for the Paired-Single Float Fast-Path: for every op that takes the fast path, double-derives the loaded FPR lanes / stored memory values both ways and flags any divergence (a mis-handled type, scale, or single-vs-paired case). Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Paired-Single Float Fast-Path to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2234,6 +2249,8 @@ struct ConfigAdvancedView: View {
     cirDeadFlagElimValidate = DOLConfigBridge.cirDeadFlagElimValidate()
     cirDeadFprfElim = DOLConfigBridge.cirDeadFprfElim()
     cirDeadFprfElimValidate = DOLConfigBridge.cirDeadFprfElimValidate()
+    cirPsqFastPath = DOLConfigBridge.cirPsqFastPath()
+    cirPsqFastPathValidate = DOLConfigBridge.cirPsqFastPathValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist
@@ -2292,11 +2309,17 @@ func settingsNavCaption<Destination: View, Label: View>(
   }
 }
 
+// Raw values MUST match PowerPC::CPUCore (PowerPC.h): Interpreter=0, JIT64=1,
+// JITARM64=4, CachedInterpreter=5. The enum is gapped (2 and 3 are retired cores),
+// so naive sequential raw values would write/read the wrong core — e.g. a stored
+// Cached Interpreter (5) would read back as JIT, and selecting Cached Interpreter
+// would actually store JIT64. Declaration order (not raw value) drives the picker
+// display order, so the user-facing list is unchanged.
 private enum CpuEngine: Int, CaseIterable {
   case interpreter = 0
-  case cachedInterpreter = 1
-  case jit64 = 2
-  case jitARM64 = 3
+  case cachedInterpreter = 5
+  case jit64 = 1
+  case jitARM64 = 4
   var label: String {
     switch self {
     case .interpreter: return L("Interpreter (slowest)")
@@ -3961,11 +3984,11 @@ private struct ControllersTypePicker: View {
   var body: some View {
     List {
       if isGC {
-        // 0: None, 1: GC Controller
+        // SIDevices: 0 = SIDEVICE_NONE, 6 = SIDEVICE_GC_CONTROLLER (NOT sequential)
         SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 0) }
-        SelectRow(label: L("GameCube Controller"), checked: selected == 1) {
-          selected = 1
-          DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 1)
+        SelectRow(label: L("GameCube Controller"), checked: selected == 6) {
+          selected = 6
+          DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 6)
           EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
           ControllerManager.shared.reconcile()
         }

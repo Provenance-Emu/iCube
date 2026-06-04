@@ -642,6 +642,11 @@ void CachedInterpreter::Init()
   // FP op, so the emitted stream is byte-identical to the flag-off baseline and the hint is never set.
   s_dead_fprf_elim = Config::Get(Config::MAIN_CIR_DEAD_FPRF_ELIM);
   s_dead_fprf_elim_validate = Config::Get(Config::MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE);
+  // iCube: psq FLOAT fast-path (default OFF). Read once here and stashed via the PowerPC accessors so the
+  // generic psq Helper_Dequantize/Helper_Quantize handlers can consult them per-execution without a
+  // Config::Get on the hot path. When off the handlers run only the unchanged generic switch.
+  PowerPC::SetPsqFastpathEnabled(Config::Get(Config::MAIN_CIR_PSQ_FASTPATH));
+  PowerPC::SetPsqFastpathValidate(Config::Get(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE));
   s_block_profile.Clear();
   if (s_cir_profile)
     s_block_profile.EnsureAllocated();

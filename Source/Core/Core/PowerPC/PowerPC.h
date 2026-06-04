@@ -384,4 +384,15 @@ void RecalculateAllFeatureFlags(PowerPCState& ppc_state);
 bool GetDeadFPRFElimHint();
 void SetDeadFPRFElimHint(bool value);
 
+// iCube: quantized paired-single FLOAT fast-path enable (MAIN_CIR_PSQ_FASTPATH) and its self-validation
+// (MAIN_CIR_PSQ_FASTPATH_VALIDATE). Read once at CachedInterpreter::Init and stashed in a file-static so
+// the generic psq Helper_Dequantize/Helper_Quantize handlers can consult them per-execution without a
+// Config::Get on the hot path. A free function (not a PowerPCState member) keeps the JIT/JitArm64
+// hardcoded struct offsets unaffected, exactly like the dead-FPRF hint above. Both default FALSE; when the
+// enable is off the handlers take only the unchanged generic switch (one predicted-not-taken branch).
+bool GetPsqFastpathEnabled();
+void SetPsqFastpathEnabled(bool value);
+bool GetPsqFastpathValidate();
+void SetPsqFastpathValidate(bool value);
+
 }  // namespace PowerPC

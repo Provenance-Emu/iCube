@@ -156,6 +156,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirDeadFprfElim:(BOOL)enabled;
 + (BOOL)cirDeadFprfElimValidate;  // dead-FPRF-elim self-validation (default OFF, correctness pass)
 + (void)setCirDeadFprfElimValidate:(BOOL)enabled;
++ (BOOL)cirPsqFastPath;           // psq FLOAT fast-path (default OFF, experimental)
++ (void)setCirPsqFastPath:(BOOL)enabled;
++ (BOOL)cirPsqFastPathValidate;   // psq-fast-path self-validation (default OFF, correctness pass)
++ (void)setCirPsqFastPathValidate:(BOOL)enabled;
 + (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)
