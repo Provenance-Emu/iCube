@@ -1947,6 +1947,11 @@ struct ConfigAdvancedView: View {
             .onChange(of: cirBlockLinkingValidate) { DOLConfigBridge.setCirBlockLinkingValidate($0) },
           L("Self-check for Block Linking: re-resolves each linked block through the dispatcher and flags stale or wrong-target links. Much slower — turn ON for a correctness pass, then back OFF. Requires Block Linking to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
+          Toggle(L("CIR Hot-Block Profiler (diagnostic)"), isOn: Binding(
+            get: { UserDefaults.standard.bool(forKey: "icube.cirProfile") },
+            set: { UserDefaults.standard.set($0, forKey: "icube.cirProfile") })),
+          L("Records the hottest interpreter blocks for the running game. Turn ON, relaunch the game, play the slow scene, then tap Copy State in the perf HUD — the dump ends with a CIR HOT BLOCKS section showing where CPU time goes. Diagnostic only (no perf cost when OFF). OFF by default; applies on next game launch."))
+        rowWithCaption(
           Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
             .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) },
           L("Skips part of the dcbz (data-cache-block-zero) instruction. Can speed up a few games but breaks others (notably some Wii titles). Leave OFF unless you know a game needs it."))
