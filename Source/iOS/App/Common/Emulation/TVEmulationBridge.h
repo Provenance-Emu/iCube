@@ -46,6 +46,12 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)saveStateToPath:(NSString*)path wait:(BOOL)wait;
 + (void)loadStateFromPath:(NSString*)path;
 
+// Returns YES if the state file at path was written by a build whose save format
+// matches the running build (header SCM revision == current). Conservative: a
+// genuinely-loadable cross-revision state may report NO. NO if the file is missing
+// or its header can't be read.
++ (BOOL)stateFileIsCompatibleAtPath:(NSString*)path;
+
 // Speed / Fast-forward
 // Toggle temporary throttler disable (turbo). Returns the new state.
 // Display / Orientation

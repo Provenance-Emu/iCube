@@ -16,6 +16,7 @@
 #include "Core/State.h"
 #include "Core/ConfigManager.h"
 #include "Common/FileUtil.h"
+#include "Common/Version.h"
 #include "Core/Config/MainSettings.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/FramebufferManager.h"
@@ -128,6 +129,17 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   Core::QueueHostJob([p](Core::System& system) {
     State::LoadAs(system, p);
   });
+}
+
++ (BOOL)stateFileIsCompatibleAtPath:(NSString*)path {
+  if (path.length == 0)
+    return NO;
+  State::StateHeader header;
+  if (!State::ReadHeader(std::string(path.UTF8String), header))
+    return NO;
+  // A state written by THIS build carries this build's SCM revision in its header;
+  // the loader only accepts the current state version, so same-revision == loadable.
+  return header.version_string == Common::GetScmRevStr() ? YES : NO;
 }
 
 // Display / Orientation helpers

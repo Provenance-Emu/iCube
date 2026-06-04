@@ -59,15 +59,30 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
       let thumbURL = url.appendingPathExtension("png")
       let hasThumb = fm.fileExists(atPath: thumbURL.path)
 
+      // Label fallback when there is no sidecar title (e.g. saves made before
+      // metadata existed): "Continue" for the auto-state, "Slot N" for a numbered
+      // slot, else the raw filename.
+      let fallbackLabel: String
+      if isAuto {
+        fallbackLabel = "Continue"
+      } else if let slot {
+        fallbackLabel = "Slot \(slot)"
+      } else {
+        fallbackLabel = name
+      }
+
+      // Real compatibility: a state from a different build's save format reports false.
+      let isCompatible = TVEmulationBridge.stateFileIsCompatible(atPath: url.path)
+
       let info = SaveStateInfo(
         gameID: gameID,
-        displayName: meta?.title ?? (isAuto ? "Continue" : name),
+        displayName: meta?.title ?? fallbackLabel,
         slot: slot,
         createdAt: created,
         modifiedAt: modified,
         sizeBytes: size,
         versionHash: meta?.scmRevision,
-        isCompatible: true,
+        isCompatible: isCompatible,
         path: url,
         thumbnailURL: hasThumb ? thumbURL : nil,
         isAuto: isAuto
