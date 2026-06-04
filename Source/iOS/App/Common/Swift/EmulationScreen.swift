@@ -196,6 +196,7 @@ struct EmulationScreen: View {
   let game: TVGameItem
   @Environment(\.dismiss) private var dismiss
   @State private var endObserver: NSObjectProtocol?
+  @State private var resumeObserver: NSObjectProtocol?
   #if os(tvOS)
   @State private var exitObserver: NSObjectProtocol?
   @State private var showMotionDebug = false
@@ -628,6 +629,17 @@ struct EmulationScreen: View {
         .onChange(of: UIDevice.current.orientation) { _ in
           TVEmulationBridge.resizeSurfaceNow()
           scheduleARPoll()
+        }
+        .onAppear {
+          // Resume where I left off (iOS): the tvOS branch wires this via its
+          // start observer; iOS had none, so .auto auto-saved on quit but never
+          // reloaded. Register once (guarded) so it loads on emulation start.
+          guard resumeObserver == nil else { return }
+          resumeObserver = NotificationCenter.default.addObserver(
+            forName: Notification.Name("DOLEmulationDidStartNotification"),
+            object: nil, queue: .main) { _ in
+            SaveStateService.resumeIfAvailable()
+          }
         }
 
         // Top hit area: tap near status bar to reveal overlay (active only when hidden)
