@@ -85,17 +85,21 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
 
     // MARK: Upload root directory
 
-    /// The directory the upload server serves / writes into. Matches the old
-    /// GCDWebServer root (the documents directory) so the WebDAV/HTTP layout —
-    /// and the navigation into the `Software` subfolder the library scanner
-    /// reads — is byte-for-byte the same as before.
+    /// The directory the upload server serves / writes into. Rooted at the
+    /// `Software` subfolder — the EXACT directory the library scanner reads
+    /// (`UserFolderUtil.getSoftwareFolder` = `<user folder>/Software`, where the
+    /// user folder is Documents on iOS / Caches on tvOS, same as computed here).
+    /// Previously this returned the user-folder ROOT, so a default drag-and-drop
+    /// upload landed one level ABOVE where the scanner looks and never appeared
+    /// in the library unless the user manually navigated into `Software` first.
+    /// `ROMUploadServer.init` creates this directory if it doesn't exist yet.
     private static func uploadRootDirectory() -> URL {
         #if os(tvOS)
-        let dir = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true)[0]
+        let base = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true)[0]
         #else
-        let dir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
+        let base = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
         #endif
-        return URL(fileURLWithPath: dir)
+        return URL(fileURLWithPath: base).appendingPathComponent("Software")
     }
 
     // MARK: - Public ObjC API (legacy surface)
