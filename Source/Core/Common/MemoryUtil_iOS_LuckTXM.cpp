@@ -3,6 +3,10 @@
 
 #include "Common/MemoryUtil.h"
 
+#include <csetjmp>
+#include <csignal>
+#include <cstdlib>
+
 #include <lwmem/lwmem.h>
 #include <mach/mach.h>
 #include <stdio.h>
@@ -23,13 +27,62 @@ static u8* g_rx_region = nullptr;
 static ptrdiff_t g_rw_region_diff = 0;
 
 // Xcode/StikDebug detection flag.
-// Set to 1 (true) just before `brk #0x69`.  Under StikDebug the breakpoint is
-// handled by StikDebug's TXM authorization path and this flag is never cleared.
-// Under Xcode, dolphin_jit_lldb.py skips the brk AND writes 0 here so that
-// AllocateExecutableMemoryRegion_LuckTXM can detect the Xcode case and bail out
-// before attempting vm_remap (which would succeed but TXM would block execution).
+// Set to 1 (true) just before the broker handshake brk.  Under StikDebug the
+// breakpoint is handled by StikDebug's TXM authorization script and this flag is
+// never cleared.  Under Xcode, dolphin_jit_lldb.py skips the brk(s) AND writes 0
+// here so that AllocateExecutableMemoryRegion_LuckTXM can detect the Xcode case
+// and bail out before attempting vm_remap (which would succeed, but TXM would
+// block execution from the region with KERN_CODESIGN_ERROR).
 extern "C" {
   volatile int dolphin_txm_auth_status = 0;
+}
+
+static sigjmp_buf g_txm_jmp;
+static volatile sig_atomic_t g_txm_trapped = 0;
+
+static void TxmSigtrapHandler(int)
+{
+  g_txm_trapped = 1;
+  siglongjmp(g_txm_jmp, 1);
+}
+
+// External JIT-broker "prepare region" handshake.
+//
+// StikDebug authorizes the RX region for execution under iOS 26 TXM by
+// intercepting a sentinel breakpoint, reading x0 (address) / x1 (length), and
+// calling prepare_memory_region. Two script conventions exist:
+//   * Legacy   : brk #0x69            (StikDebug's UTM-Dolphin.js)
+//   * Universal: brk #0xf00d, x16=1   (StikDebug's default universal.js)
+// Universal additionally supports x16=0 = detach, so the broker stops looping
+// once the region is prepared.
+//
+// We lead with the legacy 0x69 (see AllocateExecutableMemoryRegion_LuckTXM):
+// UTM-Dolphin.js handles 0x69 but HANGS on an unrecognized 0xf00d (it never
+// advances PC), whereas universal.js cleanly REJECTS 0x69 by writing the
+// sentinel 0xE0000069 into x0 without preparing the region. So 0x69-first works
+// with both scripts; on the 0xE0000069 rejection we migrate to 0xf00d.
+static constexpr u32 TXM_LEGACY_REJECTED = 0xE0000069u;
+
+static u64 TxmLegacyPrepare(void* addr, size_t len)
+{
+  register u64 x0 asm("x0") = reinterpret_cast<u64>(addr);
+  register u64 x1 asm("x1") = static_cast<u64>(len);
+  asm volatile("brk #0x69" : "+r"(x0), "+r"(x1) : : "memory");
+  return x0;
+}
+
+static void TxmUniversalPrepare(void* addr, size_t len)
+{
+  register u64 x0 asm("x0") = reinterpret_cast<u64>(addr);
+  register u64 x1 asm("x1") = static_cast<u64>(len);
+  register u64 x16 asm("x16") = 1;  // CMD_PREPARE_REGION
+  asm volatile("brk #0xf00d" : "+r"(x0), "+r"(x1), "+r"(x16) : : "memory");
+}
+
+static void TxmUniversalDetach()
+{
+  register u64 x16 asm("x16") = 0;  // CMD_DETACH
+  asm volatile("brk #0xf00d" : "+r"(x16) : : "memory");
 }
 
 namespace Common
@@ -50,20 +103,55 @@ void AllocateExecutableMemoryRegion_LuckTXM()
     return;
   }
 
-  // Signal intent to authorize TXM.  dolphin_jit_lldb.py writes 0 here when it
-  // skips the brk under Xcode so the post-brk check can detect Xcode mode.
-  dolphin_txm_auth_status = 1;
+  // Install a SIGTRAP net so an unhandled handshake brk (no broker attached)
+  // longjmps us out to the interpreter fallback instead of crashing. When a
+  // broker IS attached it intercepts EXC_BREAKPOINT before it becomes SIGTRAP,
+  // so this handler never fires in the success path.
+  struct sigaction old_action{};
+  struct sigaction new_action{};
+  new_action.sa_handler = TxmSigtrapHandler;
+  sigemptyset(&new_action.sa_mask);
+  new_action.sa_flags = 0;
+  sigaction(SIGTRAP, &new_action, &old_action);
 
-  asm ("mov x0, %0\n"
-       "mov x1, %1\n"
-       "brk #0x69" :: "r" (rx_ptr), "r" (size) : "x0", "x1");
+  g_txm_trapped = 0;
+  if (sigsetjmp(g_txm_jmp, 1) == 0)
+  {
+    // dolphin_jit_lldb.py writes 0 here when it skips the brk under Xcode so the
+    // post-brk check can detect Xcode mode (where TXM is never authorized).
+    dolphin_txm_auth_status = 1;
+
+    // DOL_JIT_TXM_UNIVERSAL=1 skips the legacy probe and issues brk #0xf00d
+    // directly (for setups known to use universal.js, avoiding the benign
+    // "legacy 0x69 rejected" log line that script prints).
+    const char* force_universal = getenv("DOL_JIT_TXM_UNIVERSAL");
+    if (force_universal && force_universal[0] == '1')
+    {
+      TxmUniversalPrepare(rx_ptr, size);
+      TxmUniversalDetach();
+    }
+    else
+    {
+      const u64 legacy_result = TxmLegacyPrepare(rx_ptr, size);
+      if (static_cast<u32>(legacy_result) == TXM_LEGACY_REJECTED)
+      {
+        // universal.js rejected the legacy sentinel without preparing the
+        // region; migrate to the universal command it understands.
+        TxmUniversalPrepare(rx_ptr, size);
+        TxmUniversalDetach();
+      }
+    }
+  }
+
+  sigaction(SIGTRAP, &old_action, nullptr);
 
   // Under Xcode, dolphin_jit_lldb.py sets dolphin_txm_auth_status = 0 when it
-  // skips the brk.  In that case TXM has NOT been authorized: vm_remap would
-  // succeed (CS_DEBUGGED) but execution from the rx region would be blocked by
-  // TXM with KERN_CODESIGN_ERROR.  Bail out early so IsTXMAvailable() returns
-  // false and EmulationCoordinator falls back to interpreter.
-  if (!dolphin_txm_auth_status)
+  // skips the brk.  Without a broker the brk raises SIGTRAP and g_txm_trapped
+  // is set.  In either case TXM has NOT been authorized: vm_remap would succeed
+  // (CS_DEBUGGED) but execution from the rx region would be blocked by TXM with
+  // KERN_CODESIGN_ERROR.  Bail out early so IsTXMAvailable() returns false and
+  // EmulationCoordinator falls back to interpreter.
+  if (g_txm_trapped || !dolphin_txm_auth_status)
   {
     munmap(rx_ptr, size);
     return;

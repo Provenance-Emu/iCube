@@ -1411,6 +1411,15 @@ struct DebugRootView: View {
         HStack { Text(L("User Folder")); Spacer(); Text(userFolder).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
         HStack { Text(L("JIT")); Spacer(); Text(jitAcquired ? L("Acquired") : L("Not Acquired")).foregroundStyle(.secondary) }
         HStack { Text(L("JIT Error")); Spacer(); Text(jitError.isEmpty ? "(none)" : jitError).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
+        #if os(iOS)
+        /// iOS 26 TXM hand-off: ship iCube's own broker script to StikDebug inline so JIT can be
+        /// authorized without the user pre-assigning a script. Shown only when actionable.
+        if !jitAcquired, JitManager.shared().jitSupported, JitManager.shared().deviceHasTxm, StikDebugLauncher.isStikDebugInstalled {
+          settingsCaption(
+            Button(L("Enable JIT via StikDebug")) { StikDebugLauncher.enableJIT() },
+            L("Hands iCube's bundled JIT script to StikDebug and enables JIT for this app. StikDebug will relaunch iCube; reopen a game afterward to run with JIT."))
+        }
+        #endif
         HStack { Text(L("Fastmem")); Spacer(); Text(fastmemAvailable ? L("Available") : L("Not Available")).foregroundStyle(.secondary) }
       }
 

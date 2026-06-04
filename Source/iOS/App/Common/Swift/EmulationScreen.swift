@@ -80,12 +80,29 @@ private final class EmuContainerViewController: UIViewController {
       }
     }
 
-    // JIT warning dialog when JIT is unavailable and a JIT core is selected
+    // JIT warning dialog only when JIT is genuinely actionable: the build can
+    // acquire JIT (not App Store / TestFlight), it is not yet acquired, and the
+    // user has the JITARM64 core selected (PowerPC::CPUCore.JITARM64 == 4). The
+    // legacy 3 is accepted for backward compat with builds that wrote the old
+    // (buggy) CpuEngine raw value. Any interpreter core suppresses the prompt;
+    // when JIT is unavailable the core silently falls back to Cached Interpreter.
     let manager = JitManager.shared()
     let currentCore = DOLConfigBridge.mainCpuCore()
-    let isJitCoreSelected = (currentCore == 3) // JITARM64
-    if !manager.acquiredJit, isJitCoreSelected {
+    let isJitCoreSelected = (currentCore == 4 || currentCore == 3) // JITARM64 (4) + legacy 3
+    if manager.jitSupported, !manager.acquiredJit, isJitCoreSelected {
       let alert = UIAlertController(title: "Waiting for JIT", message: "iCube may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode.", preferredStyle: .alert)
+      #if os(iOS)
+      // iOS 26 TXM devices: offer a one-tap hand-off to StikDebug. iCube ships its own broker
+      // script (icube.js) and passes it inline via the stikdebug:// URL scheme, so the user need
+      // not pre-assign a script. StikDebug attaches, authorizes the JIT region, then relaunches
+      // iCube — so returning to the library lets the fresh launch boot with JIT.
+      if manager.jitSupported, manager.deviceHasTxm, StikDebugLauncher.isStikDebugInstalled {
+        alert.addAction(UIAlertAction(title: "Enable JIT via StikDebug", style: .default, handler: { _ in
+          StikDebugLauncher.enableJIT()
+          NotificationCenter.default.post(name: Notification.Name("DOLEmulationDidEndNotification"), object: nil)
+        }))
+      }
+      #endif
       alert.addAction(UIAlertAction(title: "Help", style: .default, handler: { _ in
         if let url = URL(string: "https://dolphinios.oatmealdome.me/jit-help") {
           UIApplication.shared.open(url, options: [:], completionHandler: nil)

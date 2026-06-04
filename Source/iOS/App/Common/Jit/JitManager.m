@@ -14,6 +14,7 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 
 @property (readwrite, assign) bool acquiredJit;
 @property (readwrite, assign) bool deviceHasTxm;
+@property (readwrite, assign) bool jitSupported;
 
 @end
 
@@ -41,8 +42,16 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 #endif
     
     self.acquiredJit = false;
+
+    // JIT is supported iff the process is debuggable (carries get-task-allow): that
+    // is the universal precondition for enabling JIT on iOS. Determined at runtime
+    // rather than from the APPSTORE macro so it adapts to how a build is actually
+    // run — App Store / TestFlight installs are jitless (flag stripped → false),
+    // while sideload / jailbreak / TrollStore / dev builds, AND the App Store scheme
+    // launched from Xcode or StikDebug, are debuggable (flag present → true).
+    self.jitSupported = [self checkIfProcessIsJitCapable];
     
-    if (@available(iOS 26, *)) {
+    if (@available(iOS 26, tvOS 26, *)) {
       self.deviceHasTxm = [self checkIfDeviceUsesTXM];
     } else {
       // This is technically untrue on some devices, but it only matters on iOS 26 or above.
@@ -84,7 +93,7 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
     self.acquiredJit = [self checkIfProcessIsDebugged];
     
     if (self.deviceHasTxm && self.acquiredJit) {
-      self.acquisitionError = @"A debugger is attached. However, if the debugger is not StikDebug, DolphiniOS will crash when emulation starts.";
+      self.acquisitionError = @"A debugger is attached. On iOS 26 TXM devices, StikDebug 2.3.0+ is required for full JIT. Other enablers fall back to Cached Interpreter.";
     }
   } else if (_jitType == DOLJitTypeUnrestricted) {
     self.acquiredJit = true;

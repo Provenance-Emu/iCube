@@ -1511,33 +1511,31 @@ after_set:
         {
           // TXM device + CS_DEBUGGED.
           //
-          // Default: safe path — LuckNoTXM + CachedInterpreter + Software VertexLoader.
-          // LuckNoTXM writes through an RW alias (no pthread_jit_write_protect_np needed),
-          // and since no JIT code is generated TXM never blocks execution.
-          // This works under both Xcode and StikDebug without any brk #0x69.
-          //
-          // Opt-in: StikDebug users who want full LuckTXM JIT set DOL_JIT_TXM=1
-          // in their Xcode scheme environment variables. StikDebug intercepts brk #0x69,
-          // authorizes TXM, and vm_remap succeeds for the full JIT path.
+          // Default ON: attempt LuckTXM + full JIT. MemoryUtil_iOS_LuckTXM issues the
+          // StikDebug broker handshake (brk #0x69 -> #0xf00d) to authorize TXM, then
+          // vm_remap. Reaching here already implies a broker is attached and we are
+          // NOT under Xcode (JitManager leaves acquiredJit false in the Xcode case),
+          // i.e. StikDebug is attached — so the handshake is expected to be answered.
+          // If the attached broker has no compatible script, the brk falls through the
+          // SIGTRAP net / auth flag, IsTXMAvailable() is false, and we drop to
+          // CachedInterpreter. DOL_JIT_TXM=0 forces that interpreter fallback (e.g. for
+          // debugging the no-JIT path without detaching StikDebug).
           NSDictionary* env = [[NSProcessInfo processInfo] environment];
-          BOOL forceTXM = [env[@"DOL_JIT_TXM"] isEqualToString:@"1"];
+          BOOL enableTXM = ![env[@"DOL_JIT_TXM"] isEqualToString:@"0"];
 
-          if (forceTXM)
+          if (enableTXM)
           {
-            // StikDebug opt-in: use LuckTXM + full JIT.
             Common::SetJitType(Common::JitType::LuckTXM);
             Common::AllocateExecutableMemoryRegion();
 
-            // If AllocateExecutableMemoryRegion bailed out (e.g. LLDB skipped the brk
-            // and cleared dolphin_txm_auth_status), fall back to interpreter anyway.
             if (!Common::IsTXMAvailable())
             {
+              Common::SetJitType(Common::JitType::LuckNoTXM);
               txmInterpreterFallback = true;
             }
           }
           else
           {
-            // Default safe path: interpreter fallback, no brk needed.
             Common::SetJitType(Common::JitType::LuckNoTXM);
             txmInterpreterFallback = true;
           }

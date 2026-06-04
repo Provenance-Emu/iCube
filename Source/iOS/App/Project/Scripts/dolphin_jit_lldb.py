@@ -1,20 +1,21 @@
 """
 dolphin_jit_lldb.py — LLDB helper for Dolphin iOS JIT debugging on iOS 26 TXM devices.
 
-The LuckTXM path in AllocateExecutableMemoryRegion_LuckTXM issues a `brk #0x69`
-that StikDebug intercepts to authorize TXM.  Under Xcode's LLDB that same brk
-causes EXC_BREAKPOINT instead.
+The LuckTXM path in AllocateExecutableMemoryRegion_LuckTXM issues sentinel
+breakpoints (`brk #0x69` legacy and/or `brk #0xf00d` universal) that StikDebug
+intercepts to authorize TXM.  Under Xcode's LLDB those same brks cause
+EXC_BREAKPOINT instead.
 
-This script installs a breakpoint on the brk instruction that:
+This script installs a breakpoint on each sentinel brk that:
   1. Skips the brk by advancing PC by 4 bytes.
   2. Writes 0 to `dolphin_txm_auth_status` to signal "Xcode mode, TXM not authorized".
      AllocateExecutableMemoryRegion_LuckTXM checks this flag and returns early
      (skipping vm_remap) so IsTXMAvailable() returns false and EmulationCoordinator
      falls back to CachedInterpreter + Software VertexLoader.
 
-Under StikDebug the brk is intercepted by StikDebug before LLDB sees it, so this
-script's callback never fires — dolphin_txm_auth_status stays 1 and the full LuckTXM
-JIT path proceeds normally.
+Under StikDebug the brks are intercepted by StikDebug before LLDB sees them, so
+this script's callback never fires — dolphin_txm_auth_status stays 1 and the full
+LuckTXM JIT path proceeds normally.
 
 Usage (in Xcode scheme → Run → "LLDB Init File", or in ~/.lldbinit):
     command script import /path/to/dolphin_jit_lldb.py
@@ -26,35 +27,41 @@ Or add this to the Xcode scheme's "LLDB Init File":
 import lldb
 import struct
 
-# ARM64 encoding of `brk #0x69`:  0xD4200000 | (0x69 << 5) = 0xD4200D20
-_BRK_69 = struct.pack("<I", 0xD4200D20)
+# ARM64 brk encodings:  0xD4200000 | (imm16 << 5)
+#   brk #0x69   -> 0xD4200D20  (legacy sentinel)
+#   brk #0xf00d -> 0xD43E01A0  (universal sentinel: prepare x16=1 / detach x16=0)
+_BRK_SENTINELS = (
+    struct.pack("<I", 0xD4200D20),
+    struct.pack("<I", 0xD43E01A0),
+)
 
 _FUNC_NAME = "Common::AllocateExecutableMemoryRegion_LuckTXM"
 _AUTH_FLAG = "dolphin_txm_auth_status"
-_MAX_SCAN_BYTES = 512  # scan at most this many bytes looking for the brk
+_MAX_SCAN_BYTES = 512  # scan at most this many bytes looking for the brks
 
 
-def _find_brk_in_function(target: lldb.SBTarget, process: lldb.SBProcess) -> int:
-    """Return the load address of `brk #0x69` inside the LuckTXM function, or -1."""
+def _find_brks_in_function(target: lldb.SBTarget, process: lldb.SBProcess) -> list:
+    """Return load addresses of every sentinel brk inside the LuckTXM function."""
     sym_ctxs = target.FindSymbols(_FUNC_NAME)
     if sym_ctxs.GetSize() == 0:
-        return -1
+        return []
 
     sym = sym_ctxs.GetContextAtIndex(0).GetSymbol()
     start = sym.GetStartAddress().GetLoadAddress(target)
     if start == lldb.LLDB_INVALID_ADDRESS:
-        return -1
+        return []
 
     err = lldb.SBError()
     data = process.ReadMemory(start, _MAX_SCAN_BYTES, err)
     if err.Fail() or not data:
-        return -1
+        return []
 
+    addrs = []
     for offset in range(0, len(data) - 3, 4):
-        if data[offset : offset + 4] == _BRK_69:
-            return start + offset
+        if data[offset : offset + 4] in _BRK_SENTINELS:
+            addrs.append(start + offset)
 
-    return -1
+    return addrs
 
 
 def _write_auth_flag_zero(target: lldb.SBTarget, process: lldb.SBProcess):
@@ -80,7 +87,7 @@ def _write_auth_flag_zero(target: lldb.SBTarget, process: lldb.SBProcess):
 
 
 def _skip_brk_handler(frame: lldb.SBFrame, bp_loc, extra_args, internal_dict) -> bool:
-    """Breakpoint callback: advance PC past the brk #0x69 and signal Xcode mode."""
+    """Breakpoint callback: advance PC past the sentinel brk and signal Xcode mode."""
     thread = frame.GetThread()
     process = thread.GetProcess()
     target = process.GetTarget()
@@ -96,7 +103,7 @@ def _skip_brk_handler(frame: lldb.SBFrame, bp_loc, extra_args, internal_dict) ->
     if err.Fail():
         print(f"[DolphinJIT] WARNING: failed to advance PC: {err.GetCString()}")
     else:
-        print(f"[DolphinJIT] Skipped brk #0x69 at {hex(pc)}, resuming at {hex(pc + 4)}")
+        print(f"[DolphinJIT] Skipped sentinel brk at {hex(pc)}, resuming at {hex(pc + 4)}")
 
     # Signal Xcode mode so AllocateExecutableMemoryRegion_LuckTXM bails out early
     # and EmulationCoordinator falls back to interpreter + software vertex loader.
@@ -107,14 +114,15 @@ def _skip_brk_handler(frame: lldb.SBFrame, bp_loc, extra_args, internal_dict) ->
 
 
 def _install(target: lldb.SBTarget, process: lldb.SBProcess) -> bool:
-    brk_addr = _find_brk_in_function(target, process)
-    if brk_addr == -1:
+    brk_addrs = _find_brks_in_function(target, process)
+    if not brk_addrs:
         return False
 
-    bp = target.BreakpointCreateByAddress(brk_addr)
-    bp.SetAutoContinue(True)
-    bp.SetScriptCallbackFunction("dolphin_jit_lldb._skip_brk_handler")
-    print(f"[DolphinJIT] Installed brk #0x69 skip-handler at {hex(brk_addr)}")
+    for brk_addr in brk_addrs:
+        bp = target.BreakpointCreateByAddress(brk_addr)
+        bp.SetAutoContinue(True)
+        bp.SetScriptCallbackFunction("dolphin_jit_lldb._skip_brk_handler")
+        print(f"[DolphinJIT] Installed sentinel-brk skip-handler at {hex(brk_addr)}")
     return True
 
 
@@ -158,6 +166,6 @@ def __lldb_init_module(debugger: lldb.SBDebugger, internal_dict: dict):
     if target and target.IsValid():
         target.SetStopHookScriptCode("dolphin_jit_lldb._hook_instance.handle_stop")
 
-    print("[DolphinJIT] Loaded. brk #0x69 in AllocateExecutableMemoryRegion_LuckTXM "
-          "will be skipped automatically under Xcode's LLDB; "
-          "interpreter fallback activates when TXM is not authorized by StikDebug.")
+    print("[DolphinJIT] Loaded. Sentinel brks (0x69 / 0xf00d) in "
+          "AllocateExecutableMemoryRegion_LuckTXM will be skipped automatically under "
+          "Xcode's LLDB; interpreter fallback activates when TXM is not authorized by StikDebug.")

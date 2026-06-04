@@ -8,3 +8,10 @@ SWIFT_OBJC_BRIDGING_HEADER = Common/Swift/BridgingHeader.h
 
 DOL_APP_ICON_ASSET_NAME_TV = tvOS Icons
 ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*] = $(DOL_APP_ICON_ASSET_NAME_TV)
+
+// Per-scheme branding fallbacks. Each preset xcconfig overrides these at its tail
+// (leaf wins) to set the home-screen name + icon for its channel. Wired into the app
+// via CFBundleDisplayName = $(DOL_APP_DISPLAY_NAME) in Info.plist / Info-TV.plist and
+// ASSETCATALOG_COMPILER_APPICON_NAME = $(DOL_APP_ICON_ASSET_NAME) in Project.swift.
+DOL_APP_DISPLAY_NAME = iCube
+DOL_APP_ICON_ASSET_NAME = AppIcon
