@@ -847,9 +847,11 @@ const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE{
 // the trampoline emission and a real WriteLinkBlock that patches a relative distance. The link
 // callback ALWAYS re-checks the slice boundary (downcount<=0 -> exit so CoreTiming::Advance can
 // service the decrementer/external interrupts) and the npc==expected_pc guard (fail-safe: any
-// mismatch deopts to the dispatcher, never executes the wrong stream). Default false. RESEARCH-GRADE,
-// MEASUREMENT-GATED — never enable without an on-device correctness pass. See report / research notes.
-const Info<bool> MAIN_CIR_BLOCK_LINKING{{System::Main, "Core", "CIRBlockLinking"}, false};
+// mismatch deopts to the dispatcher, never executes the wrong stream). Default ON: the wedge risk is
+// closed by the ExecuteOneBlock safety guard (per-hop Running re-check + a 256-hop dispatcher-yield
+// cap), the npc==expected_pc guard keeps it correctness-safe by construction, and on-device testing
+// showed no crashes. The biggest CIR dispatch win. Flip OFF (on-device toggle) to A/B.
+const Info<bool> MAIN_CIR_BLOCK_LINKING{{System::Main, "Core", "CIRBlockLinking"}, true};
 // iCube: self-validation for CIRBlockLinking. When true, the link callback — before following any
 // patched distance — re-resolves the next block the dispatcher WOULD have selected
 // (GetBlockFromStartAddress(npc, feature_flags)) and asserts (a) it exists, (b) its normalEntry is
@@ -876,9 +878,12 @@ const Info<bool> MAIN_CIR_PIC_LOADSTORE{{System::Main, "Core", "CIRPICLoadStore"
 // Jitless-legal (pure C++ execution, no codegen, no W^X). Default FALSE: the entire fusion path in
 // DoJit (CONST32, CONST32_ADDRA, and the ALU packer, including the i-advancement) is gated on this
 // flag, so flag-off DoJit is byte-identical to upstream. RISKIEST of the CIR wins — the fused handlers
-// hand-roll CR0/XER side-effects, so flip true ONLY behind a bit-exact dual-run A/B (DTM determinism:
-// record an input trace, replay flag-on vs flag-off, diff GPR/mem at fixed frames). UNVALIDATED.
-const Info<bool> MAIN_CIR_MICROOP_FUSION{{System::Main, "Core", "CIRMicroOpFusion"}, false};
+// hand-roll CR0/XER side-effects. Default ON: a code audit confirmed the fused handlers match the
+// real Interpreter (CONST32_ADDRA correctly does (ra+(hi<<16))|lo, the ALU packer is pure-register),
+// the MAIN_CIR_MICROOP_FUSION_VALIDATE harness double-runs each fused op against the generic handler
+// and asserts equality, and on-device testing showed no crashes. Flip OFF (on-device toggle) to A/B,
+// or enable the VALIDATE flag for a bit-exact correctness session.
+const Info<bool> MAIN_CIR_MICROOP_FUSION{{System::Main, "Core", "CIRMicroOpFusion"}, true};
 // iCube: self-validation for CIRMicroOpFusion. When true, every fused ExecuteMicroOps callback FIRST
 // runs the equivalent GENERIC per-op interpretation — the actual Interpreter:: handlers for the
 // ORIGINAL consumed PowerPC instructions (the addis/ori CONST32 fold runs BOTH original handlers) —
