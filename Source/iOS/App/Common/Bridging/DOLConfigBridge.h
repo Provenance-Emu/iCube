@@ -152,6 +152,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirDeadFlagElim:(BOOL)enabled;
 + (BOOL)cirDeadFlagElimValidate;  // dead-flag-elim self-validation (default OFF, correctness pass)
 + (void)setCirDeadFlagElimValidate:(BOOL)enabled;
++ (BOOL)cirDeadFprfElim;          // dead FP-result-flags (FPRF) elimination (default OFF, experimental)
++ (void)setCirDeadFprfElim:(BOOL)enabled;
++ (BOOL)cirDeadFprfElimValidate;  // dead-FPRF-elim self-validation (default OFF, correctness pass)
++ (void)setCirDeadFprfElimValidate:(BOOL)enabled;
 + (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)

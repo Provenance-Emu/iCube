@@ -956,5 +956,33 @@ const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM{{System::Main, "Core", "CIRDeadFlagElim
 // eliminated op); on-device correctness passes only. Default false.
 const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE{
     {System::Main, "Core", "CIRDeadFlagElimValidate"}, false};
+// iCube: CachedInterpreter dead FP-Result-Flags (FPRF) elimination. The paired-single / floating-point
+// handlers call UpdateFPRFSingle/UpdateFPRFDouble on essentially every arithmetic FP op to classify the
+// result into the FPSCR.FPRF field — but PPCAnalyst's back-to-front pass already computes op.wantsFPRF,
+// the FP analogue of the CR/CA liveness used by dead-flag elim, and (like CA) forces FPRF LIVE across
+// every exception/block-exit boundary (may_exit_block). When ON, DoJit emits an arithmetic FP op whose
+// FPRF is proven dead (op.outputFPRF && !op.wantsFPRF, excluding compares which carry FL_READ_FPRF and
+// write FPCC directly) via a thin InterpretFPRFElim wrapper that sets a thread-local hint for the
+// handler's duration, so UpdateFPRF* early-returns and the dead classify is skipped. This is the JIT's
+// own wantsFPRF optimization, ported to the jitless path; profiling (Chibi-Robo) shows the FP/PS hot
+// path dominates, so the FPRF compute is a real per-op cost dead far more often than not. Default FALSE:
+// when off NO FP op is wrapped and the emitted callback stream is byte-identical to the flag-off
+// baseline. FP correctness is sensitive (physics/netplay), so flip the VALIDATE flag for a bit-exact
+// correctness session before trusting it.
+const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM{{System::Main, "Core", "CIRDeadFprfElim"}, false};
+// iCube: self-validation for CIRDeadFprfElim. Analogue of CIRDeadFlagElimValidate, widened for FP. When
+// ON, every FPRF-eliminated op runs BOTH ways at execution time: first the REFERENCE (no hint -> FPRF
+// computed) on the live state, snapshotting the resulting FPRs + full FPSCR; then it restores and runs
+// the ELIMINATED form (hint set -> FPRF skipped), the SHIPPING path committed last. It then ASSERTs that
+// the FPRs and every FPSCR bit OUTSIDE the FPRF field are byte-identical between the two runs — i.e. the
+// elimination perturbed nothing but the dead FPRF field. A divergence in a result register, an exception
+// bit, a rounding bit, or any non-FPRF FPSCR state is a bug (mis-applied elimination). Slow (an extra
+// reference run per eliminated op); on-device correctness passes only. Default false.
+const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE{
+    {System::Main, "Core", "CIRDeadFprfElimValidate"}, false};
+// iCube: CachedInterpreter cache-management loop fast-forward. Reserved key for the dcbf/dcbi CTR-loop
+// fast-forward investigation (Task 2). Default FALSE. See CachedInterpreter for whether the transform
+// shipped or was deferred.
+const Info<bool> MAIN_CIR_CACHE_LOOP_FF{{System::Main, "Core", "CIRCacheLoopFF"}, false};
 
 }  // namespace Config

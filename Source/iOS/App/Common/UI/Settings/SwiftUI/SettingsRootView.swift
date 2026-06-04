@@ -1947,6 +1947,8 @@ struct ConfigAdvancedView: View {
   @State private var cirMicroOpFusionValidate: Bool = false
   @State private var cirDeadFlagElim: Bool = false
   @State private var cirDeadFlagElimValidate: Bool = false
+  @State private var cirDeadFprfElim: Bool = false
+  @State private var cirDeadFprfElimValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -2047,6 +2049,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ Dead Flag Elimination: Validate (slow, correctness pass)"), isOn: $cirDeadFlagElimValidate)
             .onChange(of: cirDeadFlagElimValidate) { DOLConfigBridge.setCirDeadFlagElimValidate($0) },
           L("Self-check for Dead Flag Elimination: double-runs every eliminated op (flag computed vs flag skipped) and flags any divergence in a condition field that is actually live. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead Flag Elimination to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Dead FPRF Elimination (Cached Interpreter, experimental)"), isOn: $cirDeadFprfElim)
+            .onChange(of: cirDeadFprfElim) { DOLConfigBridge.setCirDeadFprfElim($0) },
+          L("⚠️ Skips computing the floating-point result flags (FPRF) for FP/paired-single ops when the analyzer proves they are overwritten before any read — a meaningful CPU win on the FP-heavy hot path (the JIT-like, no-codegen technique). FP accuracy is sensitive; experimental/unvalidated, OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Dead FPRF Elimination: Validate (slow, correctness pass)"), isOn: $cirDeadFprfElimValidate)
+            .onChange(of: cirDeadFprfElimValidate) { DOLConfigBridge.setCirDeadFprfElimValidate($0) },
+          L("Self-check for Dead FPRF Elimination: double-runs every eliminated FP op (FPRF computed vs skipped) and flags any divergence in a result register or any FPSCR bit other than FPRF. Use this to A/B-verify FP accuracy on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead FPRF Elimination to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2222,6 +2232,8 @@ struct ConfigAdvancedView: View {
     cirMicroOpFusionValidate = DOLConfigBridge.cirMicroOpFusionValidate()
     cirDeadFlagElim = DOLConfigBridge.cirDeadFlagElim()
     cirDeadFlagElimValidate = DOLConfigBridge.cirDeadFlagElimValidate()
+    cirDeadFprfElim = DOLConfigBridge.cirDeadFprfElim()
+    cirDeadFprfElimValidate = DOLConfigBridge.cirDeadFprfElimValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist

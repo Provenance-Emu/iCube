@@ -333,6 +333,26 @@ static bool DeadFlagElimApplies(const PPCAnalyst::CodeOp& op)
   return (flags & (FL_RC_BIT | FL_RC_BIT_F)) != 0;
 }
 
+// iCube: dead-FPRF elimination predicate. True IFF this op PRODUCES an FPRF (op.outputFPRF, from
+// FL_SET_FPRF) that PPCAnalyst's back-to-front pass proved DEAD (op.wantsFPRF == false — overwritten
+// before any read, and the analyzer forces it LIVE across every exception/block-exit boundary via
+// may_exit_block, so a dead FPRF can never be observed). This is the exact FP analogue of the JIT's own
+// wantsFPRF optimization. Compares (fcmpo/fcmpu, ps_cmp*) are EXCLUDED via FL_READ_FPRF: they (a) write
+// the FPCC subfield DIRECTLY (bypassing UpdateFPRF*, so the hint could not skip them anyway) and (b)
+// also write CR — excluding them keeps every wrapped op pure-arithmetic (touches only FPRs + FPSCR),
+// which keeps the validate harness's "everything except FPRF matches" scope clean. The FL_READ_FPRF
+// gate is also what makes the partial-FPCC-overwrite hazard safe: a compare carries FL_READ_FPRF, so it
+// never kills upstream FPRF liveness in the analyzer — only a full-FPRF-overwriting helper op does — so
+// outputFPRF && !wantsFPRF is never true for an op whose FPRF partially survives.
+static bool FPRFElimApplies(const PPCAnalyst::CodeOp& op)
+{
+  if (!op.outputFPRF)
+    return false;  // op produces no FPRF; nothing to eliminate
+  if (op.wantsFPRF)
+    return false;  // the FPRF this op produces is LIVE downstream — must keep computing it
+  return (op.opinfo->flags & FL_READ_FPRF) == 0;  // exclude compares (write FPCC directly + write CR)
+}
+
 // iCube: hot-block profiler (MAIN_CIR_PROFILE, default OFF). Read once in Init. When false the
 // once-per-block hook in EndBlock/LinkBlock is a single predicted-not-taken bool test and the
 // per-INSTRUCTION dispatch in ExecuteOneBlock is byte-for-byte untouched.
@@ -354,6 +374,14 @@ static bool s_dead_flag_elim = false;
 // iCube: when true, every eliminated op double-runs (reference Rc-set vs eliminated Rc-cleared) and asserts
 // every LIVE (non-crOut) CR field matches. Default OFF; correctness passes only. See InterpretDeadFlagValidate.
 static bool s_dead_flag_elim_validate = false;
+// iCube: dead-FPRF elimination (MAIN_CIR_DEAD_FPRF_ELIM). Read once in Init. When true, DoJit wraps an
+// arithmetic FP/PS op whose FPRF is proven dead (FPRFElimApplies) in InterpretFPRFElim, which suppresses
+// the UpdateFPRF* classify for that one handler call. Default OFF: when false NO op is wrapped and the
+// emitted callback stream is byte-identical to the flag-off baseline (the hint is never set true).
+static bool s_dead_fprf_elim = false;
+// iCube: when true, every FPRF-eliminated op double-runs (FPRF computed vs skipped) and asserts the FPRs
+// and all non-FPRF FPSCR bits match. Default OFF; correctness passes only. See InterpretFPRFElimValidate.
+static bool s_dead_fprf_elim_validate = false;
 
 namespace
 {
@@ -610,6 +638,10 @@ void CachedInterpreter::Init()
   // an Rc bit, so the emitted stream is byte-identical to the flag-off baseline.
   s_dead_flag_elim = Config::Get(Config::MAIN_CIR_DEAD_FLAG_ELIM);
   s_dead_flag_elim_validate = Config::Get(Config::MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE);
+  // iCube: dead-FPRF elimination (default OFF). Read once at codegen time. When off DoJit never wraps an
+  // FP op, so the emitted stream is byte-identical to the flag-off baseline and the hint is never set.
+  s_dead_fprf_elim = Config::Get(Config::MAIN_CIR_DEAD_FPRF_ELIM);
+  s_dead_fprf_elim_validate = Config::Get(Config::MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE);
   s_block_profile.Clear();
   if (s_cir_profile)
     s_block_profile.EnsureAllocated();
@@ -2841,6 +2873,134 @@ s32 CachedInterpreter::InterpretDeadFlagValidate(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// iCube: RAII guard for the dead-FPRF elimination hint. Sets PowerPC::SetDeadFPRFElimHint(true) on entry
+// and unconditionally restores it to false on scope exit, so even if the handler throws/early-returns
+// through a CheckExceptions path the hint can never be stranded true into the next op. Single CPU thread,
+// so no re-entrancy; this is cheap insurance against a stuck-true corrupting every subsequent FP op.
+namespace
+{
+struct DeadFPRFHintGuard
+{
+  DeadFPRFHintGuard() { PowerPC::SetDeadFPRFElimHint(true); }
+  ~DeadFPRFHintGuard() { PowerPC::SetDeadFPRFElimHint(false); }
+  DeadFPRFHintGuard(const DeadFPRFHintGuard&) = delete;
+  DeadFPRFHintGuard& operator=(const DeadFPRFHintGuard&) = delete;
+};
+}  // namespace
+
+// iCube: dead-FPRF elimination (MAIN_CIR_DEAD_FPRF_ELIM). Identical to Interpret<write_pc> except the
+// handler runs inside the DeadFPRFHintGuard window, so UpdateFPRFSingle/Double early-return and the dead
+// FPRF classify is skipped. func is the SAME opcode-keyed handler the generic path would call; the only
+// difference is the FPRF write is suppressed. Numeric result / rounding / exceptions / all other FPSCR
+// bits are untouched (the helpers do nothing but write FPRF). Off-path never emits this callback.
+template <bool write_pc>
+s32 CachedInterpreter::InterpretFPRFElim(PowerPC::PowerPCState& ppc_state,
+                                         const InterpretOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  {
+    const DeadFPRFHintGuard guard;
+    operands.func(operands.interpreter, operands.inst);
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::InterpretFPRFElim(std::ostream& stream, const InterpretOperands& operands)
+{
+  fmt::print(stream, "InterpretFPRFElim at PC={:#010x}\n", operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube: dead-FPRF elimination VALIDATE harness (MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE). Double-runs the SAME
+// op: first the REFERENCE (hint OFF -> FPRF computed) on the live state, snapshotting the FPRs + full
+// FPSCR; then it restores the inputs and runs the ELIMINATED form (hint ON -> FPRF skipped), the SHIPPING
+// path committed LAST. It then asserts the FPRs and every FPSCR bit OUTSIDE the FPRF field are byte-
+// identical between the two runs — the FPRF field is the ONLY thing the elimination is allowed to perturb.
+// A divergence in a result register, an exception/rounding bit, or any non-FPRF FPSCR state means a
+// mis-applied elimination (eliminating a live FPRF would NOT be caught here directly — that is caught by
+// the analyzer's wantsFPRF liveness — but a transform that wrongly touches non-FPRF state IS caught). The
+// op writes only FPRs + FPSCR (compares, which also write CR, are excluded at emit via FL_READ_FPRF), so
+// snapshotting GPR/CR/etc. is unnecessary; we still snapshot/restore the few input-affecting scalars the
+// reference run could mutate so the eliminated run sees identical inputs. write_pc mirrors Interpret.
+template <bool write_pc>
+s32 CachedInterpreter::InterpretFPRFElimValidate(PowerPC::PowerPCState& ppc_state,
+                                                 const InterpretOperands& operands)
+{
+  const s32 validate_distance = sizeof(AnyCallback) + sizeof(operands);
+
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+
+  // Snapshot all state the op (or the reference run) can perturb, so the eliminated run starts from
+  // byte-identical inputs. FPRs and FPSCR are the op's outputs; pc/npc/Exceptions guard the exception
+  // accounting some FP handlers touch.
+  std::array<PowerPC::PairedSingle, 32> saved_ps;
+  std::copy(std::begin(ppc_state.ps), std::end(ppc_state.ps), saved_ps.begin());
+  const u32 saved_fpscr = ppc_state.fpscr.Hex;
+  const u32 saved_pc = ppc_state.pc;
+  const u32 saved_npc = ppc_state.npc;
+  const u32 saved_exceptions = ppc_state.Exceptions;
+
+  // REFERENCE RUN: hint OFF -> the genuine FPRF is computed. Capture the resulting FPRs + FPSCR.
+  {
+    PowerPC::SetDeadFPRFElimHint(false);
+    operands.func(operands.interpreter, operands.inst);
+  }
+  std::array<PowerPC::PairedSingle, 32> ref_ps;
+  std::copy(std::begin(ppc_state.ps), std::end(ppc_state.ps), ref_ps.begin());
+  const u32 ref_fpscr = ppc_state.fpscr.Hex;
+
+  // Restore to the pre-run state so the eliminated run sees identical inputs.
+  std::copy(saved_ps.begin(), saved_ps.end(), std::begin(ppc_state.ps));
+  ppc_state.fpscr.Hex = saved_fpscr;
+  ppc_state.pc = saved_pc;
+  ppc_state.npc = saved_npc;
+  ppc_state.Exceptions = saved_exceptions;
+
+  // ELIMINATED RUN — the SHIPPING path, run LAST so its result stays committed. Hint ON -> FPRF skipped.
+  {
+    const DeadFPRFHintGuard guard;
+    operands.func(operands.interpreter, operands.inst);
+  }
+
+  // Assert every FPR matches the reference: the eliminated form must NOT perturb any numeric result.
+  for (u32 k = 0; k < 32; ++k)
+  {
+    ASSERT_MSG(DYNA_REC,
+               ppc_state.ps[k].ps0 == ref_ps[k].ps0 && ppc_state.ps[k].ps1 == ref_ps[k].ps1,
+               "CIR dead-FPRF-elim FPR{} divergence at pc {:#010x} (elim ps0={:#018x} ps1={:#018x} "
+               "vs ref ps0={:#018x} ps1={:#018x})",
+               k, operands.current_pc, ppc_state.ps[k].ps0, ppc_state.ps[k].ps1, ref_ps[k].ps0,
+               ref_ps[k].ps1);
+  }
+  // Assert every FPSCR bit OUTSIDE the FPRF field matches the reference. FPRF (bits 12-16) is the ONLY
+  // field the elimination is allowed to differ on; a divergence in any other bit (exception/rounding/
+  // summary) is a mis-applied transform.
+  const u32 elim_fpscr = ppc_state.fpscr.Hex;
+  ASSERT_MSG(DYNA_REC, (elim_fpscr & ~FPRF_MASK) == (ref_fpscr & ~FPRF_MASK),
+             "CIR dead-FPRF-elim non-FPRF FPSCR divergence at pc {:#010x} (elim={:#010x} vs "
+             "ref={:#010x}, FPRF_MASK={:#010x})",
+             operands.current_pc, elim_fpscr, ref_fpscr, FPRF_MASK);
+
+  return validate_distance;
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::InterpretFPRFElimValidate(std::ostream& stream,
+                                                 const InterpretOperands& operands)
+{
+  fmt::print(stream, "InterpretFPRFElimValidate at PC={:#010x}\n", operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreter::HLEFunction(PowerPC::PowerPCState& ppc_state,
                                    const HLEFunctionOperands& operands)
 {
@@ -3964,6 +4124,32 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           Write(op.canEndBlock ? CallbackCast(InterpretDeadFlagValidate<true>) :
                                  CallbackCast(InterpretDeadFlagValidate<false>),
                 vop);
+          emitted = true;
+        }
+        // iCube: dead-FPRF elimination (MAIN_CIR_DEAD_FPRF_ELIM). For an arithmetic FP/PS op whose FPRF is
+        // proven dead (FPRFElimApplies), emit InterpretFPRFElim — identical to the generic Interpret but
+        // the handler runs inside the dead-FPRF hint window so UpdateFPRF*'s classify is skipped. `operands`
+        // already carries elim_inst (with the Rc bit cleared if dead-CR elim also applied), so the two
+        // eliminations COMPOSE: a `.`-form FP op with both CR1 and FPRF dead skips both. FP arithmetic ops
+        // are never on the specialized whitelist or the integer-only PIC path, so this would otherwise fall
+        // through to the generic Interpret below; emitting here supersedes that. When the validate flag is
+        // on, route to the double-run harness instead (committed-last shipping run = the eliminated form).
+        // Default OFF: when s_dead_fprf_elim is false no FP op is ever wrapped, so the stream is byte-
+        // identical to the flag-off baseline AND the hint is never set true (the helpers never early-return).
+        if (!emitted && s_dead_fprf_elim && FPRFElimApplies(op))
+        {
+          if (s_dead_fprf_elim_validate)
+          {
+            Write(op.canEndBlock ? CallbackCast(InterpretFPRFElimValidate<true>) :
+                                   CallbackCast(InterpretFPRFElimValidate<false>),
+                  operands);
+          }
+          else
+          {
+            Write(op.canEndBlock ? CallbackCast(InterpretFPRFElim<true>) :
+                                   CallbackCast(InterpretFPRFElim<false>),
+                  operands);
+          }
           emitted = true;
         }
         // iCube: route whitelisted hot ops to the specialized dispatch when MAIN_CIR_SPECIALIZED_OPS

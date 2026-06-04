@@ -419,5 +419,8 @@ extern const Info<bool> MAIN_CIR_TAIL_LINK;
 extern const Info<bool> MAIN_CIR_PROFILE;
 extern const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM;
 extern const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE;
+extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM;
+extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE;
+extern const Info<bool> MAIN_CIR_CACHE_LOOP_FF;
 
 }  // namespace Config

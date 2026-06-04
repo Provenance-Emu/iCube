@@ -309,6 +309,24 @@ private:
   template <bool write_pc>
   static s32 InterpretDeadFlagValidate(std::ostream& stream,
                                        const InterpretDeadFlagValidateOperands& operands);
+  // iCube: dead-FPRF elimination (MAIN_CIR_DEAD_FPRF_ELIM). Sets the thread-local dead-FPRF hint for the
+  // duration of the single handler call (RAII), so UpdateFPRF*'s classify is skipped for an op whose FPRF
+  // PPCAnalyst proved dead. Reuses InterpretOperands unchanged (no widened payload). write_pc mirrors
+  // Interpret<write_pc>. Only emitted when the flag is on; off-path never writes this callback.
+  template <bool write_pc>
+  static s32 InterpretFPRFElim(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  template <bool write_pc>
+  static s32 InterpretFPRFElim(std::ostream& stream, const InterpretOperands& operands);
+  // iCube: dead-FPRF elimination VALIDATE harness (MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE). Double-runs the
+  // SAME op (the reference with the hint OFF -> FPRF computed; then, committed last, the eliminated form
+  // with the hint ON -> FPRF skipped) and asserts the FPRs and every FPSCR bit OUTSIDE the FPRF field
+  // match — a divergence in a result register or any non-FPRF FPSCR state is a mis-applied elimination.
+  // Reuses InterpretOperands (both runs share the same inst/func; only the hint differs).
+  template <bool write_pc>
+  static s32 InterpretFPRFElimValidate(PowerPC::PowerPCState& ppc_state,
+                                       const InterpretOperands& operands);
+  template <bool write_pc>
+  static s32 InterpretFPRFElimValidate(std::ostream& stream, const InterpretOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,

@@ -371,4 +371,17 @@ void MSRUpdated(PowerPCState& ppc_state);
 void MMCRUpdated(PowerPCState& ppc_state);
 void RecalculateAllFeatureFlags(PowerPCState& ppc_state);
 
+// iCube: dead-FPRF elimination hint (MAIN_CIR_DEAD_FPRF_ELIM). UpdateFPRFSingle/Double write ONLY the
+// FPSCR.FPRF field. When the CachedInterpreter knows (from PPCAnalyst's wantsFPRF liveness) that the
+// FPRF an arithmetic FP/PS op is about to produce is dead — overwritten before any read, and treated
+// LIVE across every exception/block-exit boundary by the analyzer's may_exit_block guard — it sets this
+// thread-local hint TRUE for exactly the duration of that one handler call (via an RAII guard) so the
+// UpdateFPRF* helpers early-return without computing/storing FPRF. The numeric result, rounding,
+// exceptions and every other FPSCR bit are untouched (the helpers do nothing else). A file-static
+// thread_local is used instead of a PowerPCState member so the JIT/JitArm64 hardcoded struct offsets
+// are unaffected. Default state is FALSE; when the CIR flag is off it is never set true, so the regular
+// interpreter and the JITs see one predicted-not-taken branch and otherwise byte-identical behavior.
+bool GetDeadFPRFElimHint();
+void SetDeadFPRFElimHint(bool value);
+
 }  // namespace PowerPC
