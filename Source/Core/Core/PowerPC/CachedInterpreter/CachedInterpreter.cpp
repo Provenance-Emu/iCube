@@ -337,6 +337,13 @@ static bool DeadFlagElimApplies(const PPCAnalyst::CodeOp& op)
 // once-per-block hook in EndBlock/LinkBlock is a single predicted-not-taken bool test and the
 // per-INSTRUCTION dispatch in ExecuteOneBlock is byte-for-byte untouched.
 static bool s_cir_profile = false;
+// iCube: MemoryManager handle used ONLY at report-build time (BuildHotBlocksReport, which runs when
+// the user taps Copy State — never on the hot path) to read guest instruction words for disassembling
+// the top hot blocks. Captured in Init from m_system.GetMemory() (the manager OBJECT is stable for the
+// session; we re-check GetRamSizeReal() each read rather than caching the raw m_ram pointer, which can
+// go null). Mirrors the s_validate_instance pattern: a static free function has no `this`, so it needs
+// a file-static handle to reach emulator state. NEVER touched on the per-block accumulation path.
+static Memory::MemoryManager* s_profile_memory = nullptr;
 
 // iCube: dead CR-flag elimination (MAIN_CIR_DEAD_FLAG_ELIM). Read once in Init. When true, DoJit skips
 // the CR computation for an Rc-form op whose ENTIRE crOut is discardable (proven dead by PPCAnalyst) by
@@ -421,6 +428,84 @@ struct CIRBlockProfile
 
 // File-static instance. Default-constructed empty; only allocated when profiling actually records.
 CIRBlockProfile s_block_profile;
+
+// iCube: report-time guest-code reader. Bounds-checks `addr` against the live MEM1/EXRAM sizes BEFORE
+// reading so we never trip a PanicAlert (GetSpanForAddress/GetPointerForRange/Read_U32 all panic on a
+// bad address). Returns false (and leaves *out untouched) when the address is unreadable — game not
+// running (GetRamSizeReal()==0), unmapped, or a partial word at a region's tail. On success *out holds
+// the instruction word in NATIVE order (Read_U32 does the big-endian swap32), exactly what
+// GekkoDisassembler::Disassemble expects. Read-only; called only from BuildHotBlocksReport.
+static bool CIR_TryReadGuestU32(u32 addr, u32* out)
+{
+  Memory::MemoryManager* mem = s_profile_memory;
+  if (!mem)
+    return false;
+  // Mirror GetSpanForAddress's region math (MEM1 then EXRAM) but WITHOUT its panic-on-miss, and
+  // require a full 4-byte word inside one region (no straddle past the tail).
+  const u32 masked = addr & 0x3FFFFFFFu;
+  const u32 ram_real = mem->GetRamSizeReal();
+  if (ram_real >= 4 && masked <= ram_real - 4)
+  {
+    *out = mem->Read_U32(addr);  // panic path unreachable: range pre-validated above
+    return true;
+  }
+  if ((masked >> 28) == 0x1u)
+  {
+    const u32 exram_real = mem->GetExRamSizeReal();
+    const u32 exoff = masked & mem->GetExRamMask();
+    if (exram_real >= 4 && exoff <= exram_real - 4)
+    {
+      *out = mem->Read_U32(addr);  // panic path unreachable: range pre-validated above
+      return true;
+    }
+  }
+  return false;
+}
+
+// iCube: true if `op`'s primary opcode is a control-flow instruction that terminates a CIR block, so
+// the disassembler can stop right after emitting it (a block is a straight run ending at its first
+// taken/considered branch). Primary 16 = bc/bcx, 18 = b/bx, 19 = bclr/bcctr (and other CR-logical/
+// branch-to-register forms). Over-continuing past a rare primary-19 CR op would just print one extra
+// line; under-stopping never happens for the real branch encodings, which is what we care about.
+static bool CIR_IsBlockTerminator(u32 op)
+{
+  const u32 primary = (op >> 26) & 0x3Fu;
+  return primary == 16 || primary == 18 || primary == 19;
+}
+
+// iCube: append the PPC disassembly of a block to the report. Report-time ONLY (Copy State); never on
+// the accumulation hot path. Walks up to kMaxInsts words from entry_pc, stopping after the first
+// block-terminating branch. Each readable word is rendered "    0xADDR: 0xOPCODE  mnemonic operands";
+// an unreadable word prints "    0xADDR: <unreadable>" and ends the walk (the rest of the block lives in
+// the same region, so one miss means the block is gone/invalid). The short lwz/cmpw/bne-to-self shape of
+// an idle poll the idle-detector missed is meant to be obvious at a glance here.
+static void CIR_AppendBlockDisasm(std::ostringstream& out, u32 entry_pc)
+{
+  constexpr u32 kMaxInsts = 12;
+  if (!s_profile_memory)
+  {
+    out << "        <disasm unavailable: profiler memory handle not set>\n";
+    return;
+  }
+  u32 addr = entry_pc;
+  for (u32 i = 0; i < kMaxInsts; ++i, addr += 4)
+  {
+    u32 op = 0;
+    if (!CIR_TryReadGuestU32(addr, &op))
+    {
+      char miss[64];
+      snprintf(miss, sizeof(miss), "        0x%08x: <unreadable>\n", addr);
+      out << miss;
+      break;
+    }
+    const std::string text = Common::GekkoDisassembler::Disassemble(op, addr);
+    char line[160];
+    snprintf(line, sizeof(line), "        0x%08x: 0x%08x  %s\n", addr, op, text.c_str());
+    out << line;
+    if (CIR_IsBlockTerminator(op))
+      break;
+  }
+}
 }  // namespace
 
 namespace CIRProfiler
@@ -474,12 +559,20 @@ std::string BuildHotBlocksReport(u32 top_n)
     // Spin/idle-loop hint the idle detector may have missed: a block that runs a huge number of
     // times for a tiny per-run cycle cost is almost certainly a wait/poll loop. Thresholds are
     // heuristic (Flycast-style): >=50k runs AND <=8 cycles/run.
-    const char* hint = (e.runs >= 50000 && cyc_per_run <= 8.0) ? "SPIN?" : "";
+    const bool is_spin = (e.runs >= 50000 && cyc_per_run <= 8.0);
+    const char* hint = is_spin ? "SPIN?" : "";
     char line[160];
     snprintf(line, sizeof(line), "  %4u  0x%08x  %10llu  %12llu  %8.2f  %5.1f  %s\n", i + 1, e.pc,
              static_cast<unsigned long long>(e.runs),
              static_cast<unsigned long long>(e.cycles), cyc_per_run, pct, hint);
     out << line;
+    // iCube: for the top 10 ranked blocks (and any flagged SPIN?), append the PPC disassembly of the
+    // block so we can classify what the hot/spin code actually does (idle-wait vs memory-heavy vs
+    // compute vs dispatch-bound). Report-time only — runs when the user taps Copy State, NOT on the
+    // per-block accumulation hot path (which is byte-identical to before this change). Read-only guest
+    // memory with full bounds-checking; unreadable words print <unreadable> and never crash the report.
+    if (i < 10 || is_spin)
+      CIR_AppendBlockDisasm(out, e.pc);
   }
   return std::move(out).str();
 }
@@ -520,6 +613,10 @@ void CachedInterpreter::Init()
   s_block_profile.Clear();
   if (s_cir_profile)
     s_block_profile.EnsureAllocated();
+  // iCube: capture the MemoryManager handle for the report-time block disassembler (see
+  // s_profile_memory). Set only when profiling is on, so the profiler-disabled path leaves it null and
+  // the report builder's disasm append is fully inert. Boot-time one-shot write; never on the hot path.
+  s_profile_memory = s_cir_profile ? &m_system.GetMemory() : nullptr;
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
