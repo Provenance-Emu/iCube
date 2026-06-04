@@ -183,6 +183,13 @@ static bool s_prefetch_enabled = false;
 // entirely, so the callback stream is byte-identical to upstream. RISKIEST CIR win — UNVALIDATED.
 static bool s_microop_fusion = false;
 
+// iCube WIN#2 validate: when true, the fusion packer emits an ExecuteMicroOpsValidate callback (which
+// carries the ORIGINAL consumed instructions too) instead of the lean ExecuteMicroOps. At run time the
+// validate callback first runs the real generic Interpreter:: handlers on the live state, snapshots the
+// architectural result, restores, runs the fused MicroOp dispatch, and asserts the two match. Read once
+// in Init at codegen time. Default OFF. See ExecuteMicroOpsValidate / MAIN_CIR_MICROOP_FUSION_VALIDATE.
+static bool s_microop_fusion_validate = false;
+
 // iCube: when true, blocks ending at a STATIC direct branch emit a LinkBlock trampoline (instead of
 // EndBlock) and jo.enableBlocklink is turned on so the upstream JitBaseBlockCache machinery records
 // links and patches/unpatches them through CachedInterpreterBlockCache::WriteLinkBlock. Read once in
@@ -316,6 +323,7 @@ void CachedInterpreter::Init()
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_specialized_ops_validate = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
   s_microop_fusion = Config::Get(Config::MAIN_CIR_MICROOP_FUSION);
+  s_microop_fusion_validate = Config::Get(Config::MAIN_CIR_MICROOP_FUSION_VALIDATE);
   s_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
   s_block_linking_validate = Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE);
   s_validate_instance = s_block_linking_validate ? this : nullptr;
@@ -2304,6 +2312,100 @@ s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// iCube WIN#2 validate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Direct analogue of InterpretSpecialized's
+// double-run ALU validate (see ~line 680): the reference here is the REAL generic Interpreter:: handlers
+// for the ORIGINAL consumed instructions — NOT the MicroOps — so it catches the case where the fused
+// handler's hand-rolled CR0/XER/GPR math diverges from the true interpreter (the Luigi's-Mansion class).
+// All packed ops are pure-register (is_simple_mop excludes FL_LOADSTORE/FL_USE_FPU), so double-running
+// is side-effect-safe. Run order mirrors specialized: snapshot -> generic reference on live -> capture
+// -> restore -> fused dispatch (the SHIPPING path, committed last) -> capture -> assert-compare.
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteMicroOpsValidate(PowerPC::PowerPCState& ppc_state,
+                                               const ExecuteMicroOpsValidateOperands& operands)
+{
+  const s32 validate_distance = sizeof(AnyCallback) + sizeof(operands);
+
+  // Snapshot the full validated state set (same set the specialized ALU validate uses).
+  std::array<u32, 32> saved_gpr;
+  std::array<u64, 8> saved_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), saved_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), saved_cr.begin());
+  const u8 saved_xer_ca = ppc_state.xer_ca;
+  const u8 saved_xer_so_ov = ppc_state.xer_so_ov;
+  const u32 saved_pc = ppc_state.pc;
+  const u32 saved_npc = ppc_state.npc;
+  const u32 saved_exceptions = ppc_state.Exceptions;
+
+  // GENERIC REFERENCE RUN on the live state: the actual Interpreter:: handlers for the original
+  // consumed instructions, in program order. write_pc mirrors Interpret<write_pc> (pc/npc set ONCE at
+  // the block-start contract, exactly as the fused CI_SetPCForMicroOps does — not per sub-op).
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  for (u32 k = 0; k < operands.generic_count; ++k)
+    operands.generic_func[k](*operands.interpreter, operands.generic_inst[k]);
+
+  std::array<u32, 32> generic_gpr;
+  std::array<u64, 8> generic_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), generic_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), generic_cr.begin());
+  const u8 generic_xer_ca = ppc_state.xer_ca;
+  const u8 generic_xer_so_ov = ppc_state.xer_so_ov;
+  const u32 generic_pc = ppc_state.pc;
+  const u32 generic_npc = ppc_state.npc;
+  const u32 generic_exceptions = ppc_state.Exceptions;
+
+  // Restore the pre-run state (including Exceptions) so the fused run starts from identical inputs.
+  std::copy(saved_gpr.begin(), saved_gpr.end(), std::begin(ppc_state.gpr));
+  std::copy(saved_cr.begin(), saved_cr.end(), std::begin(ppc_state.cr.fields));
+  ppc_state.xer_ca = saved_xer_ca;
+  ppc_state.xer_so_ov = saved_xer_so_ov;
+  ppc_state.pc = saved_pc;
+  ppc_state.npc = saved_npc;
+  ppc_state.Exceptions = saved_exceptions;
+
+  // FUSED RUN — the SHIPPING path, run LAST so its result is what stays committed (exactly as the
+  // specialized validate leaves the specialized result committed). Reuse the real ExecuteMicroOps by
+  // forwarding the fused half of the payload, so the dispatch under test is byte-identical to ship.
+  ExecuteMicroOpsOperands fused{};
+  fused.count = operands.count;
+  fused.current_pc = operands.current_pc;
+  std::copy(std::begin(operands.ops), std::begin(operands.ops) + operands.count, std::begin(fused.ops));
+  ExecuteMicroOps<write_pc>(ppc_state, fused);
+
+  std::array<u32, 32> fused_gpr;
+  std::array<u64, 8> fused_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), fused_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), fused_cr.begin());
+
+  ASSERT_MSG(DYNA_REC, fused_gpr == generic_gpr,
+             "CIR micro-op fusion GPR mismatch at pc {:#x} (count={}, generic_count={})",
+             operands.current_pc, operands.count, operands.generic_count);
+  ASSERT_MSG(DYNA_REC, fused_cr == generic_cr,
+             "CIR micro-op fusion CR mismatch at pc {:#x}", operands.current_pc);
+  ASSERT_MSG(DYNA_REC,
+             ppc_state.xer_ca == generic_xer_ca && ppc_state.xer_so_ov == generic_xer_so_ov,
+             "CIR micro-op fusion XER mismatch at pc {:#x}", operands.current_pc);
+  ASSERT_MSG(DYNA_REC, ppc_state.pc == generic_pc && ppc_state.npc == generic_npc,
+             "CIR micro-op fusion PC/NPC mismatch at pc {:#x}", operands.current_pc);
+  ASSERT_MSG(DYNA_REC, ppc_state.Exceptions == generic_exceptions,
+             "CIR micro-op fusion Exceptions mismatch at pc {:#x} ({:#x} vs generic {:#x})",
+             operands.current_pc, ppc_state.Exceptions, generic_exceptions);
+
+  return validate_distance;
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteMicroOpsValidate(std::ostream& stream,
+                                               const ExecuteMicroOpsValidateOperands& operands)
+{
+  fmt::print(stream, "MicroOpsValidate (count={}, generic_count={}) at PC={:#010x}\n", operands.count,
+             operands.generic_count, operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreter::HLEFunction(PowerPC::PowerPCState& ppc_state,
                                    const HLEFunctionOperands& operands)
 {
@@ -2677,6 +2779,40 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             }
           };
 
+          // iCube WIN#2 validate: single emit point for a fused run, so the lean-vs-validate choice
+          // can't drift across the three packer sites (CONST32 / CONST32_ADDRA / ALU run). [first_idx,
+          // last_idx] is the CONTIGUOUS, COMPLETE range of ORIGINAL consumed instructions (the packer
+          // never skips-and-continues; every stop ends the run and the force-stop default backs the op
+          // out of last_consumed). When validate is OFF this emits the byte-identical lean
+          // ExecuteMicroOps; when ON it additionally captures each non-skip original (func, inst) as the
+          // generic-interpreter reference and emits ExecuteMicroOpsValidate. All packed ops are
+          // non-terminal (canEndBlock hard-stops the run), so write_pc is always false here.
+          auto emit_fused = [&](const ExecuteMicroOpsOperands& mop, u32 first_idx, u32 last_idx) {
+            if (!s_microop_fusion_validate)
+            {
+              Write(CallbackCast(ExecuteMicroOps<false>), mop);
+              return;
+            }
+            ExecuteMicroOpsValidateOperands vop{};
+            vop.count = mop.count;
+            std::copy(std::begin(mop.ops), std::begin(mop.ops) + mop.count, std::begin(vop.ops));
+            vop.current_pc = mop.current_pc;
+            vop.interpreter = &interpreter;
+            vop.generic_count = 0;
+            for (u32 g = first_idx; g <= last_idx &&
+                                    vop.generic_count < ExecuteMicroOpsValidateOperands::kMaxOps;
+                 ++g)
+            {
+              const PPCAnalyst::CodeOp& orig = m_code_buffer[g];
+              if (orig.skip)
+                continue;
+              vop.generic_func[vop.generic_count] = Interpreter::GetInterpreterOp(orig.inst);
+              vop.generic_inst[vop.generic_count] = orig.inst;
+              ++vop.generic_count;
+            }
+            Write(CallbackCast(ExecuteMicroOpsValidate<false>), vop);
+          };
+
           // (a) CONST32: addis rt,r0,hi; ori rt,rt,lo  => rt = (hi<<16)|lo. Both ops are non-terminal
           // (ori never ends a block; addis here has RA==0). The next op (ori) must also be present and
           // non-LS/non-FP/non-skip. We never reach here if op.canEndBlock (guarded above).
@@ -2699,7 +2835,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               mu.imm = (hi << 16) | lo;
 
               js.downcountAmount += op2.opinfo->num_cycles;  // op[i] (addis) charged at loop top
-              Write(CallbackCast(ExecuteMicroOps<false>), mop);  // neither op ends the block
+              emit_fused(mop, i, i + 1);  // consumes addis (op[i]) + ori (op[i+1]); neither ends block
               i += 1;       // consume op2; outer ++i lands past it
               continue;
             }
@@ -2726,7 +2862,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               mu.imm = (hi << 16) | lo;
 
               js.downcountAmount += op2.opinfo->num_cycles;
-              Write(CallbackCast(ExecuteMicroOps<false>), mop);
+              emit_fused(mop, i, i + 1);  // consumes addis (op[i]) + ori (op[i+1])
               i += 1;
               continue;
             }
@@ -2752,6 +2888,14 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               // the post-switch cycle charge must key on j_start (not the moved j) to avoid charging
               // op[j_start] twice. Folded ops are charged inside the fold loop; op[i] at the loop top.
               const u32 j_start = j;
+              // iCube WIN#2 validate cap: the validate operands carry ONE (func,inst) reference slot per
+              // ORIGINAL consumed instruction, and folds (ori/oris/xori/xoris) consume MANY originals per
+              // MicroOp — so the consumed-original span (j - i + 1), NOT mop.count, is what can overflow
+              // generic_func[kMaxOps]. GATED on the validate flag so the lean (fusion-on/validate-off)
+              // shipping path is byte-identical to before — only a validate session pays the run-split.
+              // The fold loops below carry the same (jj - i) bound, identically gated.
+              if (s_microop_fusion_validate && (j - i) >= ExecuteMicroOpsValidateOperands::kMaxOps)
+                break;  // consumed-original span is full; leave the rest for the next iteration
               if (next.skip || (next.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
                   !is_simple_mop(next.inst) || next.canEndBlock)
               {
@@ -2852,7 +2996,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   const u8 rs = next.inst.RS;
                   u32 combined = mu.imm & 0xFFFFu;
                   u32 jj = j + 1;
-                  while (jj < code_block.m_num_instructions)
+                  // (jj - i) bound: keep the consumed-original span within the validate reference array.
+                  // GATED on the validate flag so the lean shipping fold is byte-identical to before.
+                  while (jj < code_block.m_num_instructions &&
+                         (!s_microop_fusion_validate ||
+                          (jj - i) < ExecuteMicroOpsValidateOperands::kMaxOps))
                   {
                     PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
                     if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
@@ -2885,7 +3033,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   const u8 rs = next.inst.RS;
                   u32 combined = mu.imm & 0xFFFFu;
                   u32 jj = j + 1;
-                  while (jj < code_block.m_num_instructions)
+                  // (jj - i) bound: keep the consumed-original span within the validate reference array.
+                  // GATED on the validate flag so the lean shipping fold is byte-identical to before.
+                  while (jj < code_block.m_num_instructions &&
+                         (!s_microop_fusion_validate ||
+                          (jj - i) < ExecuteMicroOpsValidateOperands::kMaxOps))
                   {
                     PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
                     if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
@@ -2918,7 +3070,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   const u8 rs = next.inst.RS;
                   u32 combined = mu.imm & 0xFFFFu;
                   u32 jj = j + 1;
-                  while (jj < code_block.m_num_instructions)
+                  // (jj - i) bound: keep the consumed-original span within the validate reference array.
+                  // GATED on the validate flag so the lean shipping fold is byte-identical to before.
+                  while (jj < code_block.m_num_instructions &&
+                         (!s_microop_fusion_validate ||
+                          (jj - i) < ExecuteMicroOpsValidateOperands::kMaxOps))
                   {
                     PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
                     if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
@@ -2951,7 +3107,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   const u8 rs = next.inst.RS;
                   u32 combined = mu.imm & 0xFFFFu;
                   u32 jj = j + 1;
-                  while (jj < code_block.m_num_instructions)
+                  // (jj - i) bound: keep the consumed-original span within the validate reference array.
+                  // GATED on the validate flag so the lean shipping fold is byte-identical to before.
+                  while (jj < code_block.m_num_instructions &&
+                         (!s_microop_fusion_validate ||
+                          (jj - i) < ExecuteMicroOpsValidateOperands::kMaxOps))
                   {
                     PPCAnalyst::CodeOp& n2 = m_code_buffer[jj];
                     if (n2.skip || (n2.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
@@ -3227,8 +3387,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             if (mop.count > 0)
             {
               // All packed ops are non-terminal (canEndBlock hard-stopped the run), so write_pc is
-              // always false here. Emit one callback and skip the per-op paths for the consumed run.
-              Write(CallbackCast(ExecuteMicroOps<false>), mop);
+              // always false here. Emit one callback for the consumed run [i..last_consumed].
+              emit_fused(mop, i, last_consumed);
               i = last_consumed;  // outer ++i advances to the next unconsumed op
               continue;
             }
@@ -3239,6 +3399,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             // through the generic path would double-charge and re-execute them).
             if (last_consumed > i)
             {
+              // With validate ON, still emit a (count==0) validate callback so the generic reference
+              // runs the original NOP-eliminated ops and asserts they truly produce no state change —
+              // i.e. the elision was sound. With validate OFF this elides silently (lean path).
+              if (s_microop_fusion_validate)
+                emit_fused(mop, i, last_consumed);  // mop.count == 0; generic-only reference
               i = last_consumed;
               continue;
             }

@@ -175,6 +175,11 @@ private:
   // computed goto. SEPARATE struct, only ever written when the flag is on, so the generic (flag-off)
   // stream layout stays byte-identical to upstream. See ExecuteMicroOps / DoJit fusion emitter.
   struct ExecuteMicroOpsOperands;
+  // iCube WIN#2 validate: a fused micro-op run PLUS the original consumed (func, inst) pairs, so the
+  // validate callback can run the real generic interpreter as a reference and diff it against the fused
+  // dispatch. Only ever written when MAIN_CIR_MICROOP_FUSION_VALIDATE is on, so the shipping
+  // ExecuteMicroOps stream stays lean. See ExecuteMicroOpsValidate.
+  struct ExecuteMicroOpsValidateOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
@@ -252,6 +257,17 @@ private:
                              const ExecuteMicroOpsOperands& operands);
   template <bool write_pc>
   static s32 ExecuteMicroOps(std::ostream& stream, const ExecuteMicroOpsOperands& operands);
+  // iCube WIN#2 validate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Self-validating analogue of
+  // InterpretSpecialized's double-run: run the real generic Interpreter:: handlers for the original
+  // consumed instructions on the live state, snapshot GPR/CR/XER(ca,so_ov)/pc/npc/Exceptions, restore,
+  // run the fused MicroOp dispatch (the SHIPPING path — committed last), and ASSERT the two match.
+  // Catches the hand-rolled-CR0/XER divergence the fused handlers can have vs the true interpreter.
+  template <bool write_pc>
+  static s32 ExecuteMicroOpsValidate(PowerPC::PowerPCState& ppc_state,
+                                     const ExecuteMicroOpsValidateOperands& operands);
+  template <bool write_pc>
+  static s32 ExecuteMicroOpsValidate(std::ostream& stream,
+                                     const ExecuteMicroOpsValidateOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,
@@ -369,6 +385,25 @@ struct CachedInterpreter::ExecuteMicroOpsOperands
   static constexpr u32 kMaxOps = 64;
   u32 count;
   MicroOp ops[kMaxOps];
+  u32 current_pc;
+};
+
+// iCube WIN#2 validate: payload for ExecuteMicroOpsValidate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Carries
+// the SAME fused MicroOp run as ExecuteMicroOpsOperands PLUS the ORIGINAL consumed PowerPC instructions
+// (the generic-interpreter reference). The two counts differ: a CONST32 fold packs TWO original
+// instructions (addis + ori) into ONE MicroOp, so generic_count >= count. Trivially copyable; only
+// written when the validate flag is on, so the shipping ExecuteMicroOps stream never sees this payload.
+struct CachedInterpreter::ExecuteMicroOpsValidateOperands
+{
+  static constexpr u32 kMaxOps = ExecuteMicroOpsOperands::kMaxOps;
+  // Fused side (identical to what ExecuteMicroOps would run).
+  u32 count;
+  MicroOp ops[kMaxOps];
+  // Generic-reference side: the original consumed instructions, in program order.
+  Interpreter* interpreter;
+  u32 generic_count;
+  void (*generic_func[kMaxOps])(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction
+  UGeckoInstruction generic_inst[kMaxOps];
   u32 current_pc;
 };
 

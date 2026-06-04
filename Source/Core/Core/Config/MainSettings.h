@@ -414,6 +414,7 @@ extern const Info<bool> MAIN_CIR_BLOCK_LINKING;
 extern const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE;
 extern const Info<bool> MAIN_CIR_PIC_LOADSTORE;
 extern const Info<bool> MAIN_CIR_MICROOP_FUSION;
+extern const Info<bool> MAIN_CIR_MICROOP_FUSION_VALIDATE;
 extern const Info<bool> MAIN_CIR_TAIL_LINK;
 
 }  // namespace Config

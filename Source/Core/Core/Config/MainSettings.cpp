@@ -824,7 +824,13 @@ const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR{{System::Main, "Core", "CIRSkipPerfM
 // PowerPC ops on the CachedInterpreter. Collapses the two indirect calls (dispatch + per-op handler
 // trampoline) into a direct, inlinable call (full body inline under ThinLTO). Default false (generic
 // path, identical to upstream); flip true to A/B the speedup. RESEARCH-GRADE, MEASUREMENT-GATED.
-const Info<bool> MAIN_CIR_SPECIALIZED_OPS{{System::Main, "Core", "CIRSpecializedOps"}, false};
+// iCube 2509 re-baseline: defaulted ON — the lowest-risk unenabled CIR win. The path is
+// self-validating (MAIN_CIR_SPECIALIZED_OPS_VALIDATE double-runs every ALU op against the generic
+// Interpreter handler and single-run-checks the load/store bookkeeping), and the dispatched handler
+// is the SAME Interpreter::name function the generic path would call, just by a direct/inlinable
+// compile-time-constant pointer — so it can only differ in dispatch bookkeeping, which the validate
+// harness already proves. Flip OFF to A/B back to the stock pointer-compare chain.
+const Info<bool> MAIN_CIR_SPECIALIZED_OPS{{System::Main, "Core", "CIRSpecializedOps"}, true};
 // iCube: self-validation for CIRSpecializedOps. When true, every specialized callback re-derives the
 // dispatch bookkeeping (pc/npc/return-distance) on a scratch copy and asserts it matches the generic
 // Interpret<write_pc> trampoline contract before committing the real handler. Catches integration
@@ -872,6 +878,19 @@ const Info<bool> MAIN_CIR_PIC_LOADSTORE{{System::Main, "Core", "CIRPICLoadStore"
 // hand-roll CR0/XER side-effects, so flip true ONLY behind a bit-exact dual-run A/B (DTM determinism:
 // record an input trace, replay flag-on vs flag-off, diff GPR/mem at fixed frames). UNVALIDATED.
 const Info<bool> MAIN_CIR_MICROOP_FUSION{{System::Main, "Core", "CIRMicroOpFusion"}, false};
+// iCube: self-validation for CIRMicroOpFusion. When true, every fused ExecuteMicroOps callback FIRST
+// runs the equivalent GENERIC per-op interpretation — the actual Interpreter:: handlers for the
+// ORIGINAL consumed PowerPC instructions (the addis/ori CONST32 fold runs BOTH original handlers) —
+// on the live state, snapshots the resulting GPR/CR/XER(ca,so_ov)/pc/npc/Exceptions, restores, then
+// runs the fused MicroOp dispatch and asserts the same architectural state matches. This is the
+// EXACT analogue of MAIN_CIR_SPECIALIZED_OPS_VALIDATE's double-run, but here the reference is the
+// real interpreter (the fused handlers hand-roll CR0/XER, so this is the check that catches the
+// Luigi's-Mansion-class semantic divergence — unlike specialized ops, the fused math is NOT the same
+// function by construction). The packed ops are pure-register (no LS/FP/MMIO — is_simple_mop excludes
+// them), so double-running is side-effect-safe. Slow (an extra full reference run per fused block);
+// on-device correctness passes only. Default false. Flip ON to A/B-verify fusion before shipping it.
+const Info<bool> MAIN_CIR_MICROOP_FUSION_VALIDATE{
+    {System::Main, "Core", "CIRMicroOpFusionValidate"}, false};
 // iCube: Dive-2 Rank-1 cross-block TAIL-LINK. INTENDED behavior: when a block is linked and all the
 // existing MAIN_CIR_BLOCK_LINKING guards pass (downcount>0, npc==expected_pc, non-stale rel, matching
 // feature_flags, not single-stepping/breakpointing), [[clang::musttail]]-branch straight into the next
