@@ -824,13 +824,13 @@ const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR{{System::Main, "Core", "CIRSkipPerfM
 // PowerPC ops on the CachedInterpreter. Collapses the two indirect calls (dispatch + per-op handler
 // trampoline) into a direct, inlinable call (full body inline under ThinLTO). Default false (generic
 // path, identical to upstream); flip true to A/B the speedup. RESEARCH-GRADE, MEASUREMENT-GATED.
-// iCube 2509 re-baseline: defaulted ON — the lowest-risk unenabled CIR win. The path is
-// self-validating (MAIN_CIR_SPECIALIZED_OPS_VALIDATE double-runs every ALU op against the generic
-// Interpreter handler and single-run-checks the load/store bookkeeping), and the dispatched handler
-// is the SAME Interpreter::name function the generic path would call, just by a direct/inlinable
-// compile-time-constant pointer — so it can only differ in dispatch bookkeeping, which the validate
-// harness already proves. Flip OFF to A/B back to the stock pointer-compare chain.
-const Info<bool> MAIN_CIR_SPECIALIZED_OPS{{System::Main, "Core", "CIRSpecializedOps"}, true};
+// iCube 2509 re-baseline: defaulted OFF again. It was briefly defaulted ON as "the lowest-risk
+// unenabled CIR win," but that flip correlated with a sudden total audio-loss regression on device
+// (video unaffected) — consistent with a specialized load/store handler mis-routing an MMIO store to
+// the DSP/AI audio registers (the FIFO/GX path is separate, so video survives). Keep it OFF by
+// default and gate any re-enable behind a clean MAIN_CIR_SPECIALIZED_OPS_VALIDATE session that
+// exercises audio. The on-device toggle remains for A/B testing.
+const Info<bool> MAIN_CIR_SPECIALIZED_OPS{{System::Main, "Core", "CIRSpecializedOps"}, false};
 // iCube: self-validation for CIRSpecializedOps. When true, every specialized callback re-derives the
 // dispatch bookkeeping (pc/npc/return-distance) on a scratch copy and asserts it matches the generic
 // Interpret<write_pc> trampoline contract before committing the real handler. Catches integration
