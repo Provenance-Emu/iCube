@@ -181,7 +181,8 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
 // Adaptive clock v3 phases.
 enum {
   ACPhase_Verify = 0,  // seeded from a per-game f* clock; confirm it still holds, then ±1 re-find
-  ACPhase_Search,      // descending sweep from 1.0: STOP at the first (=highest) clock meeting f*
+  ACPhase_Search,      // find the cliff: predictive jump (max_speed estimate) or coarse descent
+  ACPhase_FineTune,    // refine onto the cliff via the max_speed predictor (post predictive-jump)
   ACPhase_Settle,      // observe the settle clock over a longer window before committing
   ACPhase_Hold         // converged at f*; light monitoring, re-enter Search on degradation
 };
@@ -198,8 +199,24 @@ static const int   ACSearchStepTicks = 3;    // ~1.5s between sweep steps (3 * 5
 static const int   ACSettleTicks   = 14;     // ~7s settle/observation window
 static const int   ACVerifyTicks   = 5;      // ~2.5s verify of a seeded per-game clock
 static const int   ACHoldTicks     = 6;      // ~3s between hold-phase health checks
-static const float ACSweepStep     = 0.10f;  // CPU-clock decrement per search step
+static const float ACSweepStep     = 0.10f;  // CPU-clock decrement per coarse search step
 static const float ACVIStep        = 0.10f;  // VI-clock decrement (secondary lever, CPU floored)
+// Predictive-seed convergence: max_speed (=emulated/work) estimates the cliff directly — at clock c
+// with measured max_speed m, the CPU-bound cliff f* ≈ c·m. So instead of stepping down 0.10 at a time
+// from 1.0 (~7.5s of degraded play, landing on a coarse grid that can't hit e.g. 0.47), JUMP to the
+// estimate (gated on bound==CpuBound; meaningless when GPU-bound/Unknown -> coarse fallback) and then
+// REFINE by re-estimating from the new clock (Newton-style; converges in ~2-3 windows and lands on
+// the fine grid). Idle loops make c·m UNDER-estimate (host work is sublinear in clock) — the safe
+// direction: land below, refine up. ACFineStep is the landing grid; ACFineTicks the per-refine window.
+static const float ACFineStep      = 0.025f; // fine grid the predictor rounds onto
+static const int   ACFineTicks     = 8;      // ~4s window per fine-refine evaluation
+// GPU-bound guard. On single-core iOS (CPUThread forced off — dual-core deadlocks the lean CIR),
+// GPU work runs INLINE on the CPU timeline, so a GPU-bound title depresses max_speed and ClassifyBound
+// mislabels it CpuBound. The predictive jump would then ratchet the CPU clock to the floor for ZERO
+// fps gain (slow-motion). Guard like AutoIRController's probe but on the CPU lever: if lowering the
+// clock from the pre-jump baseline does NOT raise achieved speed by at least this much, the CPU lever
+// isn't the bottleneck (it's a GPU/video wall) — restore the baseline clock and PARK the lever.
+static const float ACProbeMinGain  = 0.05f;  // min speed gain from underclocking to call it CPU-bound
 static const float ACCpuFloor      = 0.30f;  // never sweep below this (game logic goes slow-mo)
 static const float ACViFloor       = 0.50f;  // VI underclock floor
 // f* GO/NO-GO: the emulated speed (vs realtime) must hold at/above this to count as "keeps up".
@@ -274,6 +291,11 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
   BOOL  _acViRecoveryStalled;  // a VI up-probe overshot -> stop retrying VI, let CPU climb instead
   float _acPreProbeCPU;        // CPU clock before the in-flight up-probe (revert target)
   float _acPreProbeVI;         // VI clock before the in-flight up-probe (revert target)
+  // Predictive-seed (FineTune) state + GPU-bound guard.
+  BOOL  _acFineConfirmed;      // FineTune has confirmed at least one keeps-up clock this cycle
+  float _acProbeBaseCPU;       // clock just before the predictive jump (restore target if not CPU-bound)
+  double _acProbeBaseSpeed;    // achieved speed just before the jump (CPU-bound = lowering raised it)
+  BOOL  _acCpuLeverParked;     // GPU/video wall: CPU lever gives no gain -> stop fighting it with clock
 
   int   _acPhase;          // ACPhase_* below
   int   _acPhaseTicks;     // ticks elapsed in the current phase (timer fires every ACTickMs)
@@ -490,6 +512,8 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
   _acUpProbeLever = AC_LEVER_NONE;
   _acUpCooldown = 0;
   _acViRecoveryStalled = NO;
+  _acFineConfirmed = NO;
+  _acCpuLeverParked = NO;
   _acPhase = ACPhase_Search;  // default: full descending sweep from 1.0
   _acPhaseTicks = 0;
   _acUnderrunBase = PerformanceMetrics::GetAudioUnderrunCount();
@@ -682,35 +706,119 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
         }
 
         case ACPhase_Search: {
-          // CLIFF-FIND. Descend from 1.0 in steps and STOP at the FIRST clock meeting f*. Because we
-          // approach from the top, the first match IS the highest match — that is f*. We never take
-          // another step down once the criterion is met (doing so was the v2 MINIMIZE bug: every
-          // clock at/below f* meets it, so "keep descending while it meets" walks to the floor).
+          // CLIFF-FIND. If 1.0 already keeps up, settle there (easy/GPU-bound case). Otherwise, when
+          // we have a valid CPU-bound classification, PREDICTIVELY JUMP to the max_speed cliff estimate
+          // (f* ≈ clock·max_speed) and hand off to FineTune — far faster and finer than the coarse
+          // descent. Fall back to one-coarse-step descent when the estimate isn't usable (GPU-bound /
+          // Unknown / no headroom signal). The coarse descent still STOPS at the first match (that
+          // first match is the highest = f*); we never keep descending while meeting (the MINIMIZE bug).
           if (self->_acPhaseTicks < ACSearchStepTicks) break;
 
           const float applied_now = MIN(self->_acCPU, ceiling);
           if (meetsFStar) {
             // First (=highest) clock that keeps up with honest delivery. This is f*. Settle here.
-            // (Includes the easy/GPU-bound case: if 1.0 already meets f*, we stay at 1.0.)
             self->_acStableCPU = self->_acCPU;
             self->_acPhase = ACPhase_Settle;
             resetWindow();
             break;
           }
 
-          // Does not meet f* yet (host can't keep up at this clock, or delivery isn't honest).
-          // Keep descending toward the feasible region — unless we're already at the floor.
+          // Doesn't keep up here. Prefer a predictive jump (one window vs many coarse steps, lands on
+          // the fine grid). Only when positively CpuBound: c·max_speed is meaningful only then.
+          if (bound == PerformanceMetrics::Bound::CpuBound && !self->_acCpuYielded &&
+              maxSpeed > 0.05 && maxSpeed < 0.999) {
+            const float fhat = applied_now * (float)maxSpeed;            // estimated cliff
+            float target = floorf(fhat / ACFineStep) * ACFineStep;       // fine grid, biased down
+            target = MAX(ACCpuFloor, MIN(1.0f, target));
+            if (target < applied_now - 0.001f) {
+              // Record the pre-jump baseline so FineTune can tell CPU-bound (lowering raised speed)
+              // from a GPU wall misclassified as CpuBound on single-core (lowering changed nothing).
+              self->_acProbeBaseCPU = applied_now;
+              self->_acProbeBaseSpeed = speed;
+              self->_acFineConfirmed = NO;
+              applyCPU(target);
+              self->_acStableCPU = self->_acCPU;  // best estimate so far (refined in FineTune)
+              self->_acPhase = ACPhase_FineTune;
+              resetWindow();
+              break;
+            }
+          }
+
+          // Coarse fallback: descend one step toward the feasible region (or floor + best-effort).
           if (applied_now - sweepStep >= ACCpuFloor - 0.001f) {
             applyCPU(self->_acCPU - sweepStep);
             resetWindow();
           } else {
-            // Floor reached and still not at full speed: best-effort. Settle at the floor; the
-            // Settle phase may shed the VI overclock (the secondary lever) to reclaim headroom.
             applyCPU(ACCpuFloor);
             self->_acStableCPU = self->_acCPU;
             self->_acPhase = ACPhase_Settle;
             resetWindow();
           }
+          break;
+        }
+
+        case ACPhase_FineTune: {
+          // We jumped to the max_speed cliff estimate. Refine onto the cliff by RE-estimating from the
+          // new clock (Newton-style): keep up here -> confirmed-good, re-predict and jump UP if there's
+          // room, else settle. Climbing-up-stop-at-first-failure finds the ceiling correctly (unlike
+          // descending, where every lower clock also "meets" — the MINIMIZE trap). Converges in ~2-3
+          // windows. Two guards: a GPU wall (lowering didn't help -> not CPU-bound) and overshoot
+          // recovery by RE-PREDICTING from the overshot clock (there max_speed≈speed, so c·m≈cliff).
+          const float applied_ft = MIN(self->_acCPU, ceiling);  // capped, consistent with Search
+          if (self->_acPhaseTicks < ACFineTicks) break;
+          if (meetsFStar) {
+            self->_acFineConfirmed = YES;
+            self->_acStableCPU = self->_acCPU;  // confirmed good
+            const float fhat = applied_ft * (float)maxSpeed;
+            float target = floorf(fhat / ACFineStep) * ACFineStep;
+            target = MAX(ACCpuFloor, MIN(1.0f, target));
+            if (target > self->_acCPU + 0.001f && !self->_acCpuYielded) {
+              applyCPU(target);                 // estimate says room above: jump up and re-verify
+              resetWindow();
+              break;
+            }
+            // Estimate puts the cliff at (or below) the current clock: we're on it. Settle.
+            self->_acStableCPU = self->_acCPU;
+            self->_acPhase = ACPhase_Hold;
+            persistConverged();
+            resetWindow();
+            break;
+          }
+          // Not keeping up at this clock.
+          if (self->_acFineConfirmed && self->_acStableCPU < self->_acCPU - 0.001f) {
+            // We had climbed up and just overshot the cliff: settle at the last confirmed-good.
+            applyCPU(self->_acStableCPU);
+            self->_acPhase = ACPhase_Hold;
+            persistConverged();
+            resetWindow();
+            break;
+          }
+          // Never confirmed a keeps-up clock. GPU GUARD: if dropping from the baseline didn't raise
+          // achieved speed, the CPU lever isn't the bottleneck (GPU/video wall misread as CpuBound on
+          // single-core) — restore the baseline clock and PARK the lever so we don't ratchet to slow-mo.
+          if ((speed - self->_acProbeBaseSpeed) < ACProbeMinGain) {
+            applyCPU(self->_acProbeBaseCPU);
+            self->_acCpuLeverParked = YES;
+            self->_acPhase = ACPhase_Hold;
+            persistConverged();
+            resetWindow();
+            break;
+          }
+          // CPU-bound but the seed was still a touch high: RE-PREDICT downward from here (fast — one
+          // window — vs slow fine-stepping). At an overshoot max_speed≈speed, so c·max_speed≈cliff.
+          float target = floorf(applied_ft * (float)maxSpeed / ACFineStep) * ACFineStep;
+          target = MAX(ACCpuFloor, MIN(1.0f, target));
+          if (target < applied_ft - 0.001f) {
+            applyCPU(target);
+            resetWindow();
+            break;
+          }
+          // Can't predict lower (estimate not below current): floor it and settle, best-effort.
+          applyCPU(ACCpuFloor);
+          self->_acStableCPU = self->_acCPU;
+          self->_acPhase = ACPhase_Hold;
+          persistConverged();
+          resetWindow();
           break;
         }
 
@@ -763,6 +871,11 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
               }
               self->_acUpProbeLever = AC_LEVER_NONE;
               self->_acUpCooldown = ACUpFailCooldownEvals;
+            } else if (self->_acCpuLeverParked) {
+              // GPU/video wall (FineTune's guard parked the CPU lever): underclocking won't help, so
+              // do NOT re-descend / re-Search — that would just ratchet to slow-mo. Hold at the
+              // baseline clock and keep monitoring; the meetsFStar branch re-arms if the scene lifts.
+              persistConverged();
             } else if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
                        self->_acVI - ACVIStep >= ACViFloor &&
                        bound == PerformanceMetrics::Bound::CpuBound) {
@@ -784,6 +897,8 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
               self->_acStableCPU = self->_acCPU;
               self->_acUpProbeLever = AC_LEVER_NONE;
             }
+            // Scene is keeping up again: re-arm the CPU lever if a GPU wall had parked it.
+            self->_acCpuLeverParked = NO;
             if (self->_acUpCooldown > 0) {
               self->_acUpCooldown--;
               // Re-arm VI recovery once the cooldown elapses so VI gets periodic retries like CPU,
