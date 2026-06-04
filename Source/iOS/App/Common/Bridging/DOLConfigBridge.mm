@@ -235,10 +235,18 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setMainCachedInterpreterPrefetch:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CACHED_INTERPRETER_PREFETCH, (bool)enabled); }
 + (BOOL)cirPicLoadStore { return Config::Get(Config::MAIN_CIR_PIC_LOADSTORE); }
 + (void)setCirPicLoadStore:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_PIC_LOADSTORE, (bool)enabled); }
++ (BOOL)cirSpecializedOps { return Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS); }
++ (void)setCirSpecializedOps:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_OPS, (bool)enabled); }
++ (BOOL)cirSpecializedOpsValidate { return Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE); }
++ (void)setCirSpecializedOpsValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE, (bool)enabled); }
 + (BOOL)cirMicroOpFusion { return Config::Get(Config::MAIN_CIR_MICROOP_FUSION); }
 + (void)setCirMicroOpFusion:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_MICROOP_FUSION, (bool)enabled); }
++ (BOOL)cirMicroOpFusionValidate { return Config::Get(Config::MAIN_CIR_MICROOP_FUSION_VALIDATE); }
++ (void)setCirMicroOpFusionValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_MICROOP_FUSION_VALIDATE, (bool)enabled); }
 + (BOOL)cirBlockLinking { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING); }
 + (void)setCirBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING, (bool)enabled); }
++ (BOOL)cirBlockLinkingValidate { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE); }
++ (void)setCirBlockLinkingValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE, (bool)enabled); }
 // MANUAL CPU/VI clock setters: write the Base layer (resolver step #3 layer discipline). The
 // adaptive clock controller writes these same keys on the CurrentRun layer directly via
 // Config::SetCurrent (EmulationCoordinator.mm:484-489,584-593), NOT through these bridges, so
@@ -580,8 +588,11 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   // CIR optimization toggles: compiled defaults already match iCube intent, so del-to-default is correct.
   del(Config::MAIN_CIR_PIC_LOADSTORE);
   del(Config::MAIN_CIR_MICROOP_FUSION);
+  del(Config::MAIN_CIR_MICROOP_FUSION_VALIDATE);
   del(Config::MAIN_CIR_BLOCK_LINKING);
+  del(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE);
   del(Config::MAIN_CIR_SPECIALIZED_OPS);
+  del(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
   del(Config::MAIN_OVERCLOCK_ENABLE);
   del(Config::MAIN_OVERCLOCK);
   del(Config::MAIN_VI_OVERCLOCK_ENABLE);

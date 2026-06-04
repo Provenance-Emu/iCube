@@ -140,10 +140,18 @@ NS_ASSUME_NONNULL_BEGIN
 // Cached Interpreter perf A/B knobs (apply on next game launch)
 + (BOOL)cirPicLoadStore;          // PIC direct-pointer load/store (default ON)
 + (void)setCirPicLoadStore:(BOOL)enabled;
++ (BOOL)cirSpecializedOps;        // specialized hot-op dispatch (default ON, self-validating)
++ (void)setCirSpecializedOps:(BOOL)enabled;
++ (BOOL)cirSpecializedOpsValidate; // specialized-ops self-validation (default OFF, correctness pass)
++ (void)setCirSpecializedOpsValidate:(BOOL)enabled;
 + (BOOL)cirMicroOpFusion;         // micro-op fusion (default OFF, experimental)
 + (void)setCirMicroOpFusion:(BOOL)enabled;
++ (BOOL)cirMicroOpFusionValidate; // micro-op-fusion self-validation (default OFF, correctness pass)
++ (void)setCirMicroOpFusionValidate:(BOOL)enabled;
 + (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
++ (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)
++ (void)setCirBlockLinkingValidate:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;
 + (void)setMainOverclockEnable:(BOOL)enabled;
 + (NSInteger)mainOverclockPercent;

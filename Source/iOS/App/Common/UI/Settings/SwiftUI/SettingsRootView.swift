@@ -1834,10 +1834,15 @@ struct ConfigAdvancedView: View {
   // iCube perf A/B toggles. Both default ON; apply on next game launch.
   @State private var cachedInterpreterPrefetch: Bool = true
   @State private var neonTextureDecode: Bool = true
-  // CIR perf A/B knobs: PIC on by default; fusion + block-linking off (experimental)
+  // CIR perf A/B knobs: PIC + specialized-ops on by default; fusion + block-linking off (experimental).
+  // Each experimental knob has a paired self-validation toggle (default off) for on-device A/B correctness.
   @State private var cirPicLoadStore: Bool = true
+  @State private var cirSpecializedOps: Bool = true
+  @State private var cirSpecializedOpsValidate: Bool = false
   @State private var cirMicroOpFusion: Bool = false
+  @State private var cirMicroOpFusionValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
+  @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
   @State private var relaxedIdleDetection: Bool = false
   @State private var fastForwardCtrIdle: Bool = false
@@ -1913,13 +1918,29 @@ struct ConfigAdvancedView: View {
             .onChange(of: cirPicLoadStore) { DOLConfigBridge.setCirPicLoadStore($0) },
           L("Direct-pointer load/store fast path for the Cached Interpreter — a large CPU win on memory-heavy games. ON by default; falls back safely for MMU / non-fastmem access. Turn off to A/B. Applies on next game launch."))
         rowWithCaption(
+          Toggle(L("Specialized Ops (Cached Interpreter)"), isOn: $cirSpecializedOps)
+            .onChange(of: cirSpecializedOps) { DOLConfigBridge.setCirSpecializedOps($0) },
+          L("Routes hot integer ops through a direct, inlinable dispatch instead of the pointer-compare chain — a CPU win on the interpreter path. ON by default; the dispatched handler is the same interpreter function, so it's the safest of these knobs. Turn off to A/B. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Specialized Ops: Validate (slow, correctness pass)"), isOn: $cirSpecializedOpsValidate)
+            .onChange(of: cirSpecializedOpsValidate) { DOLConfigBridge.setCirSpecializedOpsValidate($0) },
+          L("Self-check for Specialized Ops: double-runs every specialized op against the generic interpreter and flags any divergence. Much slower — turn ON only for a correctness pass, then back OFF. OFF by default. Applies on next game launch."))
+        rowWithCaption(
           Toggle(L("Micro-Op Fusion (Cached Interpreter, experimental)"), isOn: $cirMicroOpFusion)
             .onChange(of: cirMicroOpFusion) { DOLConfigBridge.setCirMicroOpFusion($0) },
           L("⚠️ Fuses runs of integer ops into one dispatched block on the Cached Interpreter — a meaningful CPU win. Experimental/unvalidated; may cause wrong math, physics, or audio in some games. OFF by default. Applies on next game launch."))
         rowWithCaption(
+          Toggle(L("↳ Micro-Op Fusion: Validate (slow, correctness pass)"), isOn: $cirMicroOpFusionValidate)
+            .onChange(of: cirMicroOpFusionValidate) { DOLConfigBridge.setCirMicroOpFusionValidate($0) },
+          L("Self-check for Micro-Op Fusion: runs the real interpreter alongside each fused block and flags any divergence in registers, flags, or condition codes. Use this to A/B-verify fusion on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Micro-Op Fusion to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
           L("⚠️ Chains hot interpreter blocks directly to cut per-block dispatcher overhead. Experimental; can affect timing-sensitive games. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Block Linking: Validate (slow, correctness pass)"), isOn: $cirBlockLinkingValidate)
+            .onChange(of: cirBlockLinkingValidate) { DOLConfigBridge.setCirBlockLinkingValidate($0) },
+          L("Self-check for Block Linking: re-resolves each linked block through the dispatcher and flags stale or wrong-target links. Much slower — turn ON for a correctness pass, then back OFF. Requires Block Linking to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
             .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) },
@@ -2076,8 +2097,12 @@ struct ConfigAdvancedView: View {
     cachedInterpreterPrefetch = DOLConfigBridge.mainCachedInterpreterPrefetch()
     neonTextureDecode = DOLConfigBridge.gfxHackNeonTextureDecode()
     cirPicLoadStore = DOLConfigBridge.cirPicLoadStore()
+    cirSpecializedOps = DOLConfigBridge.cirSpecializedOps()
+    cirSpecializedOpsValidate = DOLConfigBridge.cirSpecializedOpsValidate()
     cirMicroOpFusion = DOLConfigBridge.cirMicroOpFusion()
+    cirMicroOpFusionValidate = DOLConfigBridge.cirMicroOpFusionValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
+    cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist
     relaxedIdleDetection = DOLConfigBridge.mainRelaxedIdleDetection()
     fastForwardCtrIdle = DOLConfigBridge.mainFastForwardCtrIdle()
