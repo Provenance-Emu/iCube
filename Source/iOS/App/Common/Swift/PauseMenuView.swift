@@ -211,7 +211,7 @@ internal struct PauseMenuView: View {
         NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
       }
       Button(L("Save & Quit")) {
-        TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
+        SaveStateService.saveSlot(selectedSlot)
         TVEmulationBridge.stop()
         NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
       }
@@ -574,7 +574,7 @@ internal struct PauseMenuView: View {
           NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
         }
         Button(L("Save & Quit")) {
-          TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
+          SaveStateService.saveSlot(selectedSlot)
           TVEmulationBridge.stop()
           NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
         }
@@ -604,7 +604,7 @@ internal struct PauseMenuView: View {
               }
             }
             Section(header: Text(L("Actions"))) {
-              Button { TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
+              Button { SaveStateService.saveSlot(selectedSlot)
                 NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved to Slot %d"), selectedSlot)])
               } label: {
                 HStack { Image(systemName: ControllerGlyphs.glyphName(for: "confirm", set: ControllerStyleManager.shared.current()))
@@ -743,7 +743,7 @@ internal struct PauseMenuView: View {
 
             // Action buttons
             HStack(spacing: 24) {
-              Button(action: { TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true) }) {
+              Button(action: { SaveStateService.saveSlot(selectedSlot) }) {
                 HStack(spacing: 12) {
                   Image(systemName: "square.and.arrow.down")
                     .font(.system(size: 16, weight: .semibold))

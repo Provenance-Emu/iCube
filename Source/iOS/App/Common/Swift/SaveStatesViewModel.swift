@@ -57,6 +57,22 @@ final class SaveStatesViewModel: ObservableObject {
     }
   }
 
+  func rename(state: SaveStateInfo, to title: String, inGameID gameID: String?) async {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    do {
+      try provider.rename(state: state, to: trimmed)
+    } catch {
+      return
+    }
+    // Reload so the new label is reflected (SaveStateInfo fields are immutable).
+    if let gameID {
+      await load(gameID: gameID)
+    } else {
+      await loadAll()
+    }
+  }
+
   private func preloadThumbnails(for items: [SaveStateInfo]) async {
     for item in items {
       if let image = await provider.thumbnail(for: item) {

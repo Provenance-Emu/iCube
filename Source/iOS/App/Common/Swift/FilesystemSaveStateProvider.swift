@@ -5,8 +5,9 @@ public protocol SaveStateProviding {
   func states(for gameID: String) async -> [SaveStateInfo]
   func statesGroupedByGame() async -> [String: [SaveStateInfo]]
   func thumbnail(for state: SaveStateInfo) async -> UIImage?
-  // Actions (stubs for now)
+  // Actions
   func delete(state: SaveStateInfo) throws
+  func rename(state: SaveStateInfo, to title: String) throws
 }
 
 public final class FilesystemSaveStateProvider: SaveStateProviding {
@@ -34,31 +35,35 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
     let entries = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey, .fileSizeKey, .isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
 
     for url in entries {
-      // Skip directories and PNG thumbnails
+      // Skip directories, thumbnail PNGs, and metadata JSON sidecars.
       if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { continue }
-      if url.pathExtension.lowercased() == "png" { continue }
+      let ext = url.pathExtension.lowercased()
+      if ext == "png" || ext == "json" { continue }
 
-      // Parse save state info
+      // Sidecar metadata (title / savedAt / version), when present.
+      let meta = SaveStateMetadataStore.read(forStateFile: url)
+
+      // Parse save state info; the filename is the fallback label.
       let name = url.deletingPathExtension().lastPathComponent
-      let gameID = Self.extractGameID(from: name)
+      let gameID = meta?.gameID ?? Self.extractGameID(from: name)
       let slot = Self.extractSlot(from: name)
       let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey, .fileSizeKey])
       let created = values?.creationDate
-      let modified = values?.contentModificationDate
+      let modified = meta?.savedAt ?? values?.contentModificationDate
       let size = (values?.fileSize).map { Int64($0) }
 
-      // Thumbnail next to file with same basename + .png
-      let thumbURL = url.deletingPathExtension().appendingPathExtension("png")
+      // Thumbnail is a per-slot sibling: GALE01.s01 -> GALE01.s01.png
+      let thumbURL = url.appendingPathExtension("png")
       let hasThumb = fm.fileExists(atPath: thumbURL.path)
 
       let info = SaveStateInfo(
         gameID: gameID,
-        displayName: name,
+        displayName: meta?.title ?? name,
         slot: slot,
         createdAt: created,
         modifiedAt: modified,
         sizeBytes: size,
-        versionHash: nil,
+        versionHash: meta?.scmRevision,
         isCompatible: true,
         path: url,
         thumbnailURL: hasThumb ? thumbURL : nil
@@ -89,6 +94,23 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
     try fm.removeItem(at: state.path)
     if let thumb = state.thumbnailURL, fm.fileExists(atPath: thumb.path) {
       try? fm.removeItem(at: thumb)
+    }
+    SaveStateMetadataStore.delete(forStateFile: state.path)
+  }
+
+  public func rename(state: SaveStateInfo, to title: String) throws {
+    // Update the existing sidecar, or synthesize one for a legacy slot that
+    // predates metadata (so any save becomes labelable).
+    var meta = SaveStateMetadataStore.read(forStateFile: state.path)
+      ?? SaveStateMetadata(
+        title: title,
+        gameID: state.gameID,
+        savedAt: state.modifiedAt ?? state.createdAt ?? Date(),
+        scmRevision: state.versionHash
+      )
+    meta.title = title
+    if !SaveStateMetadataStore.write(meta, forStateFile: state.path) {
+      throw CocoaError(.fileWriteUnknown)
     }
   }
 

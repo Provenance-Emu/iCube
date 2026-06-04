@@ -761,7 +761,7 @@ struct EmulationScreen: View {
                     Button("Slot \(slot)") {
                       hasTopBarInteraction = true
                       selectedSlot = slot
-                      TVEmulationBridge.saveState(toSlot: slot, wait: true)
+                      SaveStateService.saveSlot(slot)
                     }
                   }
                 } label: {
@@ -1309,7 +1309,7 @@ struct EmulationScreen: View {
     }
     .alert("Exit Game?", isPresented: $showExitConfirm) {
       Button("Save & Quit") {
-        TVEmulationBridge.saveState(toSlot: selectedSlot, wait: true)
+        SaveStateService.saveSlot(selectedSlot)
         TVEmulationBridge.stop()
         #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
         GameActivityManager.end()
