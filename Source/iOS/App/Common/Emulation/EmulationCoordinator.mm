@@ -901,10 +901,11 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
             self->_acCpuLeverParked = NO;
             if (self->_acUpCooldown > 0) {
               self->_acUpCooldown--;
-              // Re-arm VI recovery once the cooldown elapses so VI gets periodic retries like CPU,
-              // instead of staying stalled until f* next drops (the latch-asymmetry fix). The
-              // step-relative gate below stops this from re-oscillating.
-              if (self->_acUpCooldown == 0) self->_acViRecoveryStalled = NO;
+              // NOTE: do NOT clear _acViRecoveryStalled here. Clearing it the instant the cooldown
+              // expired (one eval before the probe branch below could ever observe it) made the
+              // "VI overshot -> stop retrying VI, let CPU climb instead" hand-off dead code — VI would
+              // jitter forever instead of yielding to CPU. The stall is re-armed only on a genuine
+              // re-search (the descend path), which is the correct LIFO behavior.
               persistConverged();
             } else if (cool && !newUnderrun) {
               // Headroom recovery toward f*, gated by the step-relative cliff estimate (see ACUpMargin)
