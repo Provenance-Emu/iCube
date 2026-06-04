@@ -931,5 +931,30 @@ const Info<bool> MAIN_CIR_TAIL_LINK{{System::Main, "Core", "CIRTailLink"}, false
 // ExecuteOneBlock is byte-for-byte untouched and the flag-off build pays nothing measurable. Flip ON
 // (config key or the icube.cirProfile NSUserDefault) for a profiling session, then Copy State.
 const Info<bool> MAIN_CIR_PROFILE{{System::Main, "Core", "CIRProfile"}, false};
+// iCube: CachedInterpreter dead CR-flag elimination. PowerPC `.`(Rc) integer ops set CR0 and FP Rc ops
+// set CR1; the analyzer (PPCAnalyst) already proves which of those CR results are OVERWRITTEN before any
+// branch/mfcr reads them (op.crDiscardable) and resets that set to empty at every exception/block-exit/
+// interrupt boundary, so a field marked discardable can never be observed. When ON, DoJit skips the CR
+// computation for an Rc-form op whose ENTIRE crOut is discardable, by emitting the op with the Rc bit
+// cleared in a LOCAL copy of its instruction word (the same battle-tested handler then computes the
+// identical GPR result minus the dead flag — no hand-rolled flag math, no new handlers). This is the
+// interpreter equivalent of JitArm64's gpr.DiscardCRRegisters(op.crDiscardable) (skip, never reconstruct),
+// which ships the SAME analyzer data across all titles. The big jitless win: a `.`-op's CR0 update is a
+// large slice of its per-op cost and is dead far more often than not in real code. Default FALSE: when off
+// NO instruction word is ever rewritten and the emitted stream is byte-identical to the flag-off baseline,
+// so this is opt-in A/B + profiler-measured before defaulting on. Flip the VALIDATE flag for a bit-exact
+// correctness session. XER (CA/OV) elimination is intentionally OUT of this first pass (CR0 is the win).
+const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM{{System::Main, "Core", "CIRDeadFlagElim"}, false};
+// iCube: self-validation for CIRDeadFlagElim. EXACT analogue of the Micro-Op Fusion / Specialized-Ops
+// double-run validate harnesses. When ON, every dead-flag-eliminated op runs BOTH ways at execution time:
+// first the REFERENCE (original instruction, Rc set -> CR computed) on the live state, snapshotting the
+// resulting CR fields; then it restores and runs the ELIMINATED form (Rc cleared -> dead CR skipped), the
+// SHIPPING path committed last. It then ASSERTs that every CR field EXCEPT the ones this op was allowed to
+// eliminate (its crOut, all proven discardable) is byte-identical between the two runs — i.e. the
+// elimination touched nothing LIVE. This catches the only real risk (eliminating a field that is actually
+// read downstream), since the analyzer liveness itself is JIT-proven. Slow (an extra reference run per
+// eliminated op); on-device correctness passes only. Default false.
+const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE{
+    {System::Main, "Core", "CIRDeadFlagElimValidate"}, false};
 
 }  // namespace Config

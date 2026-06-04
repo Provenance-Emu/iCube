@@ -201,6 +201,13 @@ private:
   // dispatch. Only ever written when MAIN_CIR_MICROOP_FUSION_VALIDATE is on, so the shipping
   // ExecuteMicroOps stream stays lean. See ExecuteMicroOpsValidate.
   struct ExecuteMicroOpsValidateOperands;
+  // iCube: payload for the dead CR-flag elimination validate harness (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE).
+  // Carries the original (Rc-set) reference instruction, the eliminated (Rc-cleared) shipping instruction,
+  // the shared opcode-keyed handler, and the crOut mask of fields this op was permitted to eliminate, so
+  // the callback can double-run and assert every NON-eliminated (live) CR field matches. Only ever written
+  // when the validate flag is on, so the shipping (validate-off) stream stays byte-identical. See
+  // InterpretDeadFlagValidate.
+  struct InterpretDeadFlagValidateOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
@@ -289,6 +296,19 @@ private:
   template <bool write_pc>
   static s32 ExecuteMicroOpsValidate(std::ostream& stream,
                                      const ExecuteMicroOpsValidateOperands& operands);
+  // iCube: dead CR-flag elimination validate (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE). Self-validating analogue
+  // of ExecuteMicroOpsValidate / InterpretSpecialized's double-run, specialized to the single-op flag-skip
+  // transform: run the REFERENCE (original Rc-set inst, CR computed), snapshot CR, restore, run the
+  // ELIMINATED (Rc-cleared inst, dead CR skipped — the SHIPPING path, committed last), then ASSERT every CR
+  // field outside the eliminated crOut mask (all the LIVE / continuation-read fields) is identical between
+  // the two runs. Catches a mis-applied elimination (a field marked dead that is actually live) — the only
+  // real risk, since the analyzer liveness is JIT-proven. write_pc mirrors Interpret<write_pc>.
+  template <bool write_pc>
+  static s32 InterpretDeadFlagValidate(PowerPC::PowerPCState& ppc_state,
+                                       const InterpretDeadFlagValidateOperands& operands);
+  template <bool write_pc>
+  static s32 InterpretDeadFlagValidate(std::ostream& stream,
+                                       const InterpretDeadFlagValidateOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,
@@ -436,6 +456,25 @@ struct CachedInterpreter::ExecuteMicroOpsValidateOperands
   void (*generic_func[kMaxOps])(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction
   UGeckoInstruction generic_inst[kMaxOps];
   u32 current_pc;
+  // iCube: union of CR fields the packer dead-flag-eliminated across this run (MAIN_CIR_DEAD_FLAG_ELIM).
+  // The generic reference runs the ORIGINAL (Rc-set) instructions and so COMPUTES these fields, while the
+  // fused run skips them; without this mask the all-8-field CR compare would false-fire on the (proven
+  // dead) eliminated fields whenever both validate flags are on. Excluded from the CR diff. Zero when
+  // dead-flag-elim is off, so the compare is unchanged. u32 keeps the struct alignment a multiple of 8.
+  u32 elim_cr_mask;
+};
+
+// iCube: payload for the dead CR-flag elimination validate harness (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE).
+// inst is the ELIMINATED (Rc-cleared) instruction that the SHIPPING path would run; ref_inst is the
+// ORIGINAL (Rc-set) instruction used as the CR reference. func is the SAME opcode-keyed handler for both
+// (Rc 0/1 select the same GetInterpreterOp entry). elim_cr_mask is the op's crOut — the CR fields proven
+// discardable and therefore allowed to differ; every OTHER field must match. Trivially copyable; only ever
+// written when the validate flag is on, so the shipping stream never sees this widened payload.
+struct CachedInterpreter::InterpretDeadFlagValidateOperands : InterpretOperands
+{
+  UGeckoInstruction ref_inst;  // original (Rc set) — computes the reference CR
+  u32 elim_cr_mask;            // op.crOut: the fields allowed to differ (all discardable). u32 keeps the
+                               // struct sizeof a multiple of alignof(AnyCallback) for the emitter assert.
 };
 
 struct CachedInterpreter::HLEFunctionOperands

@@ -308,10 +308,45 @@ static CirSpecOp SpecOpId(Interpreter::Instruction func)
   return CirSpecOp::CIR_SPEC_OP_COUNT;  // unreachable: callers gate on IsSpecializedOp first
 }
 
+// iCube: dead CR-flag elimination predicate. True IFF this op writes CR fields that are ALL discardable
+// AND the Rc bit is the genuine mechanism that controls that CR write — so clearing the Rc bit in a copy
+// of the instruction word skips the dead CR computation while leaving the GPR/XER result identical.
+//
+// The FL_RC_BIT/FL_RC_BIT_F guard is LOAD-BEARING, not cosmetic (PPCAnalyst.cpp:616-619): only ops
+// carrying one of those flags have their CR0/CR1 gated on inst.Rc, and only for those ops is instruction
+// bit 0 actually the Rc bit. The always-record ops (andi./andis. -> FL_SET_CR0, compares -> FL_SET_CRn)
+// would (a) still compute CR0/CRn regardless of bit 0 AND (b) have their immediate's LSB silently
+// corrupted if we cleared "Rc". For those, crOut can be fully discardable, so deadCR alone would
+// wrongly fire — the flag check is what excludes them. We also require inst.Rc == 1 (clearing an already-
+// 0 bit is a no-op the validate harness would needlessly double-run) and a non-empty crOut.
+static bool DeadFlagElimApplies(const PPCAnalyst::CodeOp& op)
+{
+  const auto cr_out = op.crOut;
+  if (cr_out.Count() == 0)
+    return false;  // op writes no CR field; nothing to eliminate
+  if ((cr_out & ~op.crDiscardable) != BitSet8{})
+    return false;  // some written CR field is LIVE downstream — must keep computing it
+  if (op.inst.Rc == 0)
+    return false;  // record bit already clear: CR not being written via Rc anyway
+  // Only ops whose CR write is gated on the Rc bit (and whose bit 0 IS the Rc bit) are safe to rewrite.
+  const u64 flags = op.opinfo->flags;
+  return (flags & (FL_RC_BIT | FL_RC_BIT_F)) != 0;
+}
+
 // iCube: hot-block profiler (MAIN_CIR_PROFILE, default OFF). Read once in Init. When false the
 // once-per-block hook in EndBlock/LinkBlock is a single predicted-not-taken bool test and the
 // per-INSTRUCTION dispatch in ExecuteOneBlock is byte-for-byte untouched.
 static bool s_cir_profile = false;
+
+// iCube: dead CR-flag elimination (MAIN_CIR_DEAD_FLAG_ELIM). Read once in Init. When true, DoJit skips
+// the CR computation for an Rc-form op whose ENTIRE crOut is discardable (proven dead by PPCAnalyst) by
+// emitting the op with the Rc bit cleared in a LOCAL copy of its instruction word — the same handler then
+// computes the identical GPR result minus the dead flag. Default OFF: when false NO instruction word is
+// ever rewritten and the emitted callback stream is byte-identical to the flag-off baseline.
+static bool s_dead_flag_elim = false;
+// iCube: when true, every eliminated op double-runs (reference Rc-set vs eliminated Rc-cleared) and asserts
+// every LIVE (non-crOut) CR field matches. Default OFF; correctness passes only. See InterpretDeadFlagValidate.
+static bool s_dead_flag_elim_validate = false;
 
 namespace
 {
@@ -478,6 +513,10 @@ void CachedInterpreter::Init()
   // read can fire) rather than lazily on the first Record() on the CPU thread — closes the (tiny)
   // race window between the first-block allocation and a Copy-State reader.
   s_cir_profile = Config::Get(Config::MAIN_CIR_PROFILE);
+  // iCube: dead CR-flag elimination (default OFF). Read once at codegen time. When off DoJit never clears
+  // an Rc bit, so the emitted stream is byte-identical to the flag-off baseline.
+  s_dead_flag_elim = Config::Get(Config::MAIN_CIR_DEAD_FLAG_ELIM);
+  s_dead_flag_elim_validate = Config::Get(Config::MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE);
   s_block_profile.Clear();
   if (s_cir_profile)
     s_block_profile.EnsureAllocated();
@@ -2592,8 +2631,21 @@ s32 CachedInterpreter::ExecuteMicroOpsValidate(PowerPC::PowerPCState& ppc_state,
   ASSERT_MSG(DYNA_REC, fused_gpr == generic_gpr,
              "CIR micro-op fusion GPR mismatch at pc {:#x} (count={}, generic_count={})",
              operands.current_pc, operands.count, operands.generic_count);
-  ASSERT_MSG(DYNA_REC, fused_cr == generic_cr,
-             "CIR micro-op fusion CR mismatch at pc {:#x}", operands.current_pc);
+  // iCube: compare CR field-by-field, EXCLUDING any fields the packer dead-flag-eliminated
+  // (MAIN_CIR_DEAD_FLAG_ELIM). Those fields are computed by the generic reference (original Rc-set
+  // instructions) but deliberately skipped by the fused run, and PPCAnalyst proved them dead — so a
+  // difference there is expected. elim_cr_mask is zero when dead-flag-elim is off, making this the
+  // identical all-8-field compare as before. A divergence in any NON-eliminated (live) field still fires.
+  const u8 elim_cr_mask = static_cast<u8>(operands.elim_cr_mask);
+  for (u32 k = 0; k < 8; ++k)
+  {
+    if ((elim_cr_mask >> k) & 1u)
+      continue;
+    ASSERT_MSG(DYNA_REC, fused_cr[k] == generic_cr[k],
+               "CIR micro-op fusion CR{} mismatch at pc {:#x} (fused={:#x} vs generic={:#x}, "
+               "elim_mask={:#04x})",
+               k, operands.current_pc, fused_cr[k], generic_cr[k], elim_cr_mask);
+  }
   ASSERT_MSG(DYNA_REC,
              ppc_state.xer_ca == generic_xer_ca && ppc_state.xer_so_ov == generic_xer_so_ov,
              "CIR micro-op fusion XER mismatch at pc {:#x}", operands.current_pc);
@@ -2612,6 +2664,83 @@ s32 CachedInterpreter::ExecuteMicroOpsValidate(std::ostream& stream,
 {
   fmt::print(stream, "MicroOpsValidate (count={}, generic_count={}) at PC={:#010x}\n", operands.count,
              operands.generic_count, operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube: dead CR-flag elimination validate (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE). Direct analogue of the
+// micro-op fusion / specialized-ops double-run, specialized to the single-op flag-skip transform. The
+// transform only ever clears the Rc bit on an op whose ENTIRE crOut PPCAnalyst proved discardable; this
+// harness double-runs the op (reference Rc-set CR vs eliminated Rc-cleared) and asserts every CR field
+// OUTSIDE that crOut mask — i.e. every LIVE field read by the block continuation — is byte-identical.
+// Run order mirrors the other validates: snapshot -> reference on live -> capture -> restore -> eliminated
+// (the SHIPPING path, committed last) -> capture -> assert. GPR/XER/pc/npc/Exceptions are identical by
+// construction (Rc 0/1 select the same opcode-keyed handler and the same GPR/XER math), so the diff is
+// scoped to CR — the only field the transform touches. write_pc mirrors Interpret<write_pc>.
+template <bool write_pc>
+s32 CachedInterpreter::InterpretDeadFlagValidate(PowerPC::PowerPCState& ppc_state,
+                                                 const InterpretDeadFlagValidateOperands& operands)
+{
+  const s32 validate_distance = sizeof(AnyCallback) + sizeof(operands);
+
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+
+  // Snapshot the CR (the only field the transform can perturb) plus the bookkeeping the reference run
+  // mutates, so the eliminated run starts from byte-identical inputs.
+  std::array<u64, 8> saved_cr;
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), saved_cr.begin());
+  std::array<u32, 32> saved_gpr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), saved_gpr.begin());
+  const u8 saved_xer_ca = ppc_state.xer_ca;
+  const u8 saved_xer_so_ov = ppc_state.xer_so_ov;
+  const u32 saved_pc = ppc_state.pc;
+  const u32 saved_npc = ppc_state.npc;
+  const u32 saved_exceptions = ppc_state.Exceptions;
+
+  // REFERENCE RUN: the ORIGINAL (Rc-set) instruction, so the genuine CR result is computed.
+  operands.func(operands.interpreter, operands.ref_inst);
+  std::array<u64, 8> ref_cr;
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), ref_cr.begin());
+
+  // Restore to the pre-run state so the eliminated run sees identical inputs.
+  std::copy(saved_cr.begin(), saved_cr.end(), std::begin(ppc_state.cr.fields));
+  std::copy(saved_gpr.begin(), saved_gpr.end(), std::begin(ppc_state.gpr));
+  ppc_state.xer_ca = saved_xer_ca;
+  ppc_state.xer_so_ov = saved_xer_so_ov;
+  ppc_state.pc = saved_pc;
+  ppc_state.npc = saved_npc;
+  ppc_state.Exceptions = saved_exceptions;
+
+  // ELIMINATED RUN — the SHIPPING path, run LAST so its result stays committed. operands.inst already has
+  // the Rc bit cleared, so the dead CR field(s) are NOT computed.
+  operands.func(operands.interpreter, operands.inst);
+
+  // Assert every CR field OUTSIDE the eliminated mask (the live/continuation-read fields) matches the
+  // reference. The masked fields are exactly op.crOut, all proven discardable, so a divergence there is
+  // expected and ignored; a divergence ANYWHERE else means a live flag was wrongly eliminated.
+  const u8 elim_mask = operands.elim_cr_mask;
+  for (u32 k = 0; k < 8; ++k)
+  {
+    if ((elim_mask >> k) & 1u)
+      continue;  // this field was eliminated on purpose (proven dead) — allowed to differ
+    ASSERT_MSG(DYNA_REC, ppc_state.cr.fields[k] == ref_cr[k],
+               "CIR dead-flag-elim LIVE CR{} divergence at pc {:#010x} (elim={:#x} vs ref={:#x}, "
+               "elim_mask={:#04x})",
+               k, operands.current_pc, ppc_state.cr.fields[k], ref_cr[k], elim_mask);
+  }
+
+  return validate_distance;
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::InterpretDeadFlagValidate(std::ostream& stream,
+                                                 const InterpretDeadFlagValidateOperands& operands)
+{
+  fmt::print(stream, "InterpretDeadFlagValidate(elim_mask={:#04x}) at PC={:#010x}\n",
+             operands.elim_cr_mask, operands.current_pc);
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -2993,6 +3122,26 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             }
           };
 
+          // iCube: dead CR-flag elimination inside the fusion packer. The fused path bakes the
+          // record-bit decision into MicroOp.rc at EMIT time (the runtime ExecuteMicroOps reads mu.rc, not
+          // inst.Rc), so the "clear Rc in the instruction word" mechanism the generic/specialized paths use
+          // does NOT reach it — we instead clear mu.rc here. When the flag is on AND this specific packed
+          // op's ENTIRE crOut is discardable AND its CR write is Rc-gated (DeadFlagElimApplies), the fused
+          // handler skips the dead CR0 exactly as the generic path would. Keyed on the per-op CodeOp (each
+          // packed original has its own liveness), NOT the outer op. When the flag is off this is byte-
+          // identical to `static_cast<u8>(c.inst.Rc)`. NOTE: the fusion validate harness masks these out of
+          // its CR compare (see emit_fused) so the two stay compatible. The packer carries no validate of
+          // its own for the elimination — the fusion validate already double-runs the real interpreter for
+          // the ORIGINAL (Rc-set) ops, which catches a wrongly-skipped live flag as a CR mismatch.
+          auto rc_of = [&](const PPCAnalyst::CodeOp& c) -> u8 {
+            if (s_dead_flag_elim && DeadFlagElimApplies(c))
+              return 0;
+            return static_cast<u8>(c.inst.Rc);
+          };
+          // Union of crOut fields the packer eliminated across this run; fed to the fusion validate so its
+          // all-8-field CR compare excludes the (proven-dead) eliminated fields and does not false-fire.
+          BitSet8 packed_elim_cr{};
+
           // iCube WIN#2 validate: single emit point for a fused run, so the lean-vs-validate choice
           // can't drift across the three packer sites (CONST32 / CONST32_ADDRA / ALU run). [first_idx,
           // last_idx] is the CONTIGUOUS, COMPLETE range of ORIGINAL consumed instructions (the packer
@@ -3024,6 +3173,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               vop.generic_inst[vop.generic_count] = orig.inst;
               ++vop.generic_count;
             }
+            // iCube: exclude the dead-flag-eliminated CR fields from the validate CR compare (the fused
+            // run skipped them; the generic reference computed them). Empty when dead-flag-elim is off.
+            vop.elim_cr_mask = static_cast<u32>(static_cast<u8>(packed_elim_cr.m_val));
             Write(CallbackCast(ExecuteMicroOpsValidate<false>), vop);
           };
 
@@ -3156,7 +3308,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA;  // destination RA
                 mu.ra = next.inst.RS;  // source RS
                 mu.rb = 0;
-                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.rc = rc_of(next);
                 // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
                 mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
                          ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
@@ -3167,7 +3319,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA;  // destination RA
                 mu.ra = next.inst.RS;  // source RS
                 mu.rb = 0;
-                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.rc = rc_of(next);
                 mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
                          ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
                          ((static_cast<u32>(next.inst.ME) & 31u) << 10);
@@ -3188,7 +3340,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA;  // destination RA
                 mu.ra = next.inst.RS;  // source RS
                 mu.rb = next.inst.RB;  // variable shift from RB
-                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.rc = rc_of(next);
                 // Pack MB/ME into imm: [5..9]=MB, [10..14]=ME (SH is variable from RB)
                 mu.imm = ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
                          ((static_cast<u32>(next.inst.ME) & 31u) << 10);
@@ -3408,7 +3560,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 778) ? 1u : 0u;  // imm bit0 -> OE
                   goto end_pack_switch;
                 }
@@ -3419,7 +3571,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 522) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3430,7 +3582,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 650) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3441,7 +3593,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 746) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3452,7 +3604,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 714) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3463,7 +3615,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 552) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3474,7 +3626,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 520) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3485,7 +3637,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 648) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3496,7 +3648,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 744) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3507,7 +3659,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RD;
                   mu.ra = next.inst.RA;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = (next.inst.SUBOP10 == 712) ? 1u : 0u;
                   goto end_pack_switch;
                 }
@@ -3516,7 +3668,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = 0;
                   goto end_pack_switch;
                 case 954:  // extsbx
@@ -3524,7 +3676,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = 0;
                   goto end_pack_switch;
                 case 922:  // extshx
@@ -3532,7 +3684,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = 0;
                   goto end_pack_switch;
                 case 24:  // slwx
@@ -3540,7 +3692,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = 0;
                   goto end_pack_switch;
                 case 536:  // srwx
@@ -3548,7 +3700,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = 0;
                   goto end_pack_switch;
                 case 792:  // srawx
@@ -3556,7 +3708,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = next.inst.RB;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = 0;
                   goto end_pack_switch;
                 case 824:  // srawix
@@ -3564,7 +3716,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                   mu.rd = next.inst.RA;
                   mu.ra = next.inst.RS;
                   mu.rb = 0;
-                  mu.rc = static_cast<u8>(next.inst.Rc);
+                  mu.rc = rc_of(next);
                   mu.imm = static_cast<u32>(next.inst.SH & 31u);
                   goto end_pack_switch;
                 default:
@@ -3577,7 +3729,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.rd = next.inst.RA;
                 mu.ra = next.inst.RS;
                 mu.rb = next.inst.RB;
-                mu.rc = static_cast<u8>(next.inst.Rc);
+                mu.rc = rc_of(next);
                 mu.imm = 0;
                 break;
               }
@@ -3587,6 +3739,14 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 break;
               }
             end_pack_switch:
+
+              // iCube: record the CR fields this packed op had its record bit eliminated on (rc_of cleared
+              // mu.rc), so the fusion validate can exclude them from its all-8-field CR compare. Keyed on
+              // the per-op CodeOp (`next` == op[j_start]); only when the op was actually committed
+              // (j < num: the force-stop default sets j = num and backed the op out). When the flag is off
+              // DeadFlagElimApplies is bypassed and this stays empty — byte-identical to before.
+              if (s_dead_flag_elim && j < code_block.m_num_instructions && DeadFlagElimApplies(next))
+                packed_elim_cr |= next.crOut;
 
               // Charge cycles for every consumed op AFTER op[i] (charged at the loop top). Key on
               // j_start, NOT the post-fold j: `next` == op[j_start], and the fold loops already charged
@@ -3624,8 +3784,26 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           }
         }
 
+        // iCube: dead CR-flag elimination (MAIN_CIR_DEAD_FLAG_ELIM). The generic Interpret and the
+        // specialized dispatch both decide "set CR0/CR1" by reading inst.Rc at RUNTIME (the specialized
+        // switch calls the SAME opcode-keyed Interpreter::name handler the generic path would), so clearing
+        // the Rc bit in the LOCAL operand instruction word makes BOTH skip the dead CR with the identical
+        // battle-tested handler — no new handlers, no flag math. We NEVER mutate op.inst / m_code_buffer
+        // (that would corrupt analysis/fusion/disasm); only this local copy is touched. func is keyed on
+        // the ORIGINAL op.inst (opcode-identical for Rc 0/1). DeadFlagElimApplies enforces the FL_RC_BIT/
+        // FL_RC_BIT_F guard, so always-record ops (andi./compares, whose bit 0 is immediate data, not Rc)
+        // are excluded — clearing their "Rc" would corrupt the immediate AND not skip the CR. The PIC path
+        // below is load/store-only (DeadFlagElimApplies is false for it), so it is unaffected. This op is
+        // NOT on the InterpretAndCheckExceptions path (that branch is taken earlier, above the fusion
+        // block) — and crDiscardable is reset at every canCauseException op anyway, so deadCR is false
+        // there by construction. When the flag is off, dead is always false and inst == op.inst -> the
+        // emitted stream is byte-identical to the flag-off baseline.
+        const bool dead = s_dead_flag_elim && DeadFlagElimApplies(op);
+        UGeckoInstruction elim_inst = op.inst;
+        if (dead)
+          elim_inst.Rc = 0;
         const auto func = Interpreter::GetInterpreterOp(op.inst);
-        const InterpretOperands operands = {interpreter, func, js.compilerPC, op.inst};
+        const InterpretOperands operands = {interpreter, func, js.compilerPC, elim_inst};
         bool emitted = false;
         // iCube WIN#1: PIC direct-pointer load/store fast path (MAIN_CIR_PIC_LOADSTORE). Emitted FIRST
         // and supersedes the specialized path for the ops it covers (integer load/stores). HARD GATES,
@@ -3667,6 +3845,28 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                                    CallbackCast(LoadStoreDFormPIC<false>),
                   pic_operands);
           }
+          emitted = true;
+        }
+        // iCube: dead CR-flag elimination VALIDATE harness (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE). When BOTH
+        // the elim flag and its validate flag are on, every eliminated op is emitted as a
+        // InterpretDeadFlagValidate callback that double-runs (reference Rc-set inst vs the eliminated
+        // Rc-cleared inst, the latter committed last = shipping behavior) and asserts every LIVE (non-
+        // crOut) CR field matches — catching a wrongly-eliminated live flag. This supersedes the
+        // specialized/generic emission for the op so the validation actually runs. Gated on `dead`, so
+        // only the ops the shipping path would have eliminated pay the double-run; everything else takes
+        // the unchanged paths below. Default OFF: when the validate flag is off this branch is never taken
+        // and the eliminated op flows through the specialized/generic Interpret path with elim_inst.
+        if (!emitted && dead && s_dead_flag_elim_validate)
+        {
+          // Aggregate-init the InterpretOperands base (copy-constructs its reference member) plus the two
+          // added fields, mirroring SpecializedInterpretOperands' {operands, op_id} pattern. operands
+          // carries the ELIMINATED (Rc-cleared) inst (the shipping run); ref_inst is the original Rc-set
+          // inst (the CR reference); elim_cr_mask = op.crOut, the fields allowed to differ (all dead).
+          const InterpretDeadFlagValidateOperands vop = {operands, op.inst,
+                                                         static_cast<u32>(op.crOut.m_val)};
+          Write(op.canEndBlock ? CallbackCast(InterpretDeadFlagValidate<true>) :
+                                 CallbackCast(InterpretDeadFlagValidate<false>),
+                vop);
           emitted = true;
         }
         // iCube: route whitelisted hot ops to the specialized dispatch when MAIN_CIR_SPECIALIZED_OPS

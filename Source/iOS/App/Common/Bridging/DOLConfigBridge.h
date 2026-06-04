@@ -148,6 +148,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirMicroOpFusion:(BOOL)enabled;
 + (BOOL)cirMicroOpFusionValidate; // micro-op-fusion self-validation (default OFF, correctness pass)
 + (void)setCirMicroOpFusionValidate:(BOOL)enabled;
++ (BOOL)cirDeadFlagElim;          // dead CR-flag elimination (default OFF, experimental)
++ (void)setCirDeadFlagElim:(BOOL)enabled;
++ (BOOL)cirDeadFlagElimValidate;  // dead-flag-elim self-validation (default OFF, correctness pass)
++ (void)setCirDeadFlagElimValidate:(BOOL)enabled;
 + (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)

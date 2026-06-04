@@ -417,5 +417,7 @@ extern const Info<bool> MAIN_CIR_MICROOP_FUSION;
 extern const Info<bool> MAIN_CIR_MICROOP_FUSION_VALIDATE;
 extern const Info<bool> MAIN_CIR_TAIL_LINK;
 extern const Info<bool> MAIN_CIR_PROFILE;
+extern const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM;
+extern const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE;
 
 }  // namespace Config

@@ -1846,6 +1846,8 @@ struct ConfigAdvancedView: View {
   @State private var cirSpecializedOpsValidate: Bool = false
   @State private var cirMicroOpFusion: Bool = false
   @State private var cirMicroOpFusionValidate: Bool = false
+  @State private var cirDeadFlagElim: Bool = false
+  @State private var cirDeadFlagElimValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -1938,6 +1940,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ Micro-Op Fusion: Validate (slow, correctness pass)"), isOn: $cirMicroOpFusionValidate)
             .onChange(of: cirMicroOpFusionValidate) { DOLConfigBridge.setCirMicroOpFusionValidate($0) },
           L("Self-check for Micro-Op Fusion: runs the real interpreter alongside each fused block and flags any divergence in registers, flags, or condition codes. Use this to A/B-verify fusion on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Micro-Op Fusion to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Dead Flag Elimination (Cached Interpreter, experimental)"), isOn: $cirDeadFlagElim)
+            .onChange(of: cirDeadFlagElim) { DOLConfigBridge.setCirDeadFlagElim($0) },
+          L("⚠️ Skips computing condition-flag (CR0/CR1) results that the analyzer proves are overwritten before any branch reads them — a meaningful CPU win on the Cached Interpreter (the JIT-like, no-codegen technique). Experimental/unvalidated; OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Dead Flag Elimination: Validate (slow, correctness pass)"), isOn: $cirDeadFlagElimValidate)
+            .onChange(of: cirDeadFlagElimValidate) { DOLConfigBridge.setCirDeadFlagElimValidate($0) },
+          L("Self-check for Dead Flag Elimination: double-runs every eliminated op (flag computed vs flag skipped) and flags any divergence in a condition field that is actually live. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead Flag Elimination to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2111,6 +2121,8 @@ struct ConfigAdvancedView: View {
     cirSpecializedOpsValidate = DOLConfigBridge.cirSpecializedOpsValidate()
     cirMicroOpFusion = DOLConfigBridge.cirMicroOpFusion()
     cirMicroOpFusionValidate = DOLConfigBridge.cirMicroOpFusionValidate()
+    cirDeadFlagElim = DOLConfigBridge.cirDeadFlagElim()
+    cirDeadFlagElimValidate = DOLConfigBridge.cirDeadFlagElimValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist
