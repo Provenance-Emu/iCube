@@ -497,11 +497,14 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
   const float sweepStep = [defaults objectForKey:@"adaptive_clock_sweep_step"]
                          ? [defaults floatForKey:@"adaptive_clock_sweep_step"] : ACSweepStep;
 
-  _acVI = Config::Get(Config::MAIN_VI_OVERCLOCK);
-  // A fresh sweep finds f* by descending FROM 1.0 and stopping at the first match. Start at 1.0
-  // (not the current Config value): f* is the highest clock holding full speed, so the sweep has
-  // to begin at the top, not wherever a prior run left the clock.
+  // Start BOTH levers at native (1.0), NOT the current Config value. Two reasons: (1) a fresh sweep
+  // finds f* by descending from the top, so it must begin at 1.0; (2) when Auto engages it must take
+  // OWNERSHIP of CPU *and* VI, not inherit wherever the manual sliders were left — otherwise a stale
+  // manual VI overclock bleeds through (Auto looked like it only moved the CPU). VI used to init from
+  // Config::Get here while CPU started at 1.0; that asymmetry was the bug. The per-game seed below
+  // overrides these if we've already converged for this title.
   _acCPU = 1.0f;
+  _acVI = 1.0f;
   _acStableCPU = 1.0f;
   _acLastApplied = -1.f;
   _acLastAppliedVI = -1.f;

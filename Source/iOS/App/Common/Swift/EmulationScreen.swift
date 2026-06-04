@@ -1391,6 +1391,14 @@ struct EmulationScreen: View {
       adaptiveClockQuick = v
       // Live: writes the adaptive_clock_enable default AND starts/stops the controller now.
       EmulationCoordinator.shared().setAdaptiveClockEnabled(v)
+      // Live-lock the manual CPU + VI controls: Adaptive Clock owns BOTH levers when on. The actual
+      // CurrentRun override write/clear happens async on the emu thread, so reflect the badge/disabled
+      // state immediately, then reconcile the effective values once that write lands. (Fixes: toggling
+      // Auto didn't lock/unlock the sliders, and a stale manual VI bled through because the UI never
+      // re-read the override layer on toggle.)
+      ocAutoOverridden = v
+      vbiAutoOverridden = v
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { refreshPerfOverlayState() }
     }))
     .tint(.blue)
     .foregroundColor(.white)
