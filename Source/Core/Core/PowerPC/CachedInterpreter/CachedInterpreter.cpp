@@ -6,10 +6,12 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cstdio>
 #include <cstring>
 #include <span>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -306,6 +308,148 @@ static CirSpecOp SpecOpId(Interpreter::Instruction func)
   return CirSpecOp::CIR_SPEC_OP_COUNT;  // unreachable: callers gate on IsSpecializedOp first
 }
 
+// iCube: hot-block profiler (MAIN_CIR_PROFILE, default OFF). Read once in Init. When false the
+// once-per-block hook in EndBlock/LinkBlock is a single predicted-not-taken bool test and the
+// per-INSTRUCTION dispatch in ExecuteOneBlock is byte-for-byte untouched.
+static bool s_cir_profile = false;
+
+namespace
+{
+// Flycast/PPSSPP-style fixed open-addressing hot-block table. Sized once at first use for a game's
+// working set (a few thousand blocks; we reserve 16384 slots, a power of two for mask-indexing).
+// NEVER rehashes/reallocates, so the CPU thread writing and the report thread reading can coexist
+// lock-free without UB (a torn read of a u64 counter is harmless for a perf report). Keyed by block
+// ENTRY guest PC. O(1) amortized insert: a linear probe in a slot array that is never resized.
+struct CIRBlockProfile
+{
+  static constexpr u32 kSlots = 1u << 14;  // 16384
+  static constexpr u32 kMask = kSlots - 1;
+  static constexpr u32 kEmpty = 0xFFFFFFFFu;  // sentinel; guest PC 0xFFFFFFFF is not a real entry
+
+  struct Slot
+  {
+    u32 pc;            // entry guest PC, or kEmpty
+    u32 _pad;
+    u64 run_count;
+    u64 total_cycles;
+  };
+
+  std::vector<Slot> slots;
+  u64 grand_total_cycles = 0;
+  u64 grand_total_runs = 0;
+
+  void EnsureAllocated()
+  {
+    if (slots.empty())
+      slots.assign(kSlots, Slot{kEmpty, 0, 0, 0});
+  }
+
+  // Per-block O(1) record. Called at most once per block execution from the terminal callback,
+  // guarded by s_cir_profile, on the CPU emulation thread only.
+  void Record(u32 entry_pc, u32 cycles)
+  {
+    EnsureAllocated();
+    u32 idx = (entry_pc * 2654435761u) & kMask;  // Knuth multiplicative hash
+    // Linear probe. The table is pre-sized far above a typical working set, so probes stay short;
+    // if the table is pathologically full we just charge the grand totals and skip the per-block
+    // slot (the report degrades gracefully rather than spinning or reallocating).
+    for (u32 i = 0; i <= kMask; ++i)
+    {
+      Slot& s = slots[idx];
+      if (s.pc == entry_pc)
+      {
+        s.run_count += 1;
+        s.total_cycles += cycles;
+        break;
+      }
+      if (s.pc == kEmpty)
+      {
+        s.pc = entry_pc;
+        s.run_count = 1;
+        s.total_cycles = cycles;
+        break;
+      }
+      idx = (idx + 1) & kMask;
+    }
+    grand_total_cycles += cycles;
+    grand_total_runs += 1;
+  }
+
+  void Clear()
+  {
+    if (!slots.empty())
+      std::fill(slots.begin(), slots.end(), Slot{kEmpty, 0, 0, 0});
+    grand_total_cycles = 0;
+    grand_total_runs = 0;
+  }
+};
+
+// File-static instance. Default-constructed empty; only allocated when profiling actually records.
+CIRBlockProfile s_block_profile;
+}  // namespace
+
+namespace CIRProfiler
+{
+void Reset()
+{
+  s_block_profile.Clear();
+}
+
+std::string BuildHotBlocksReport(u32 top_n)
+{
+  if (!s_cir_profile)
+    return "(CIR profiler off — set Main.Core.CIRProfile=true / icube.cirProfile and reboot game)\n";
+
+  // Snapshot non-empty slots. The table never reallocates, so this read is safe even while the CPU
+  // thread keeps writing; we tolerate a slightly inconsistent instant (a perf report, not ledger).
+  struct Entry
+  {
+    u32 pc;
+    u64 runs;
+    u64 cycles;
+  };
+  std::vector<Entry> entries;
+  const u64 grand_cycles = s_block_profile.grand_total_cycles;
+  if (s_block_profile.slots.empty() || grand_cycles == 0)
+    return "(CIR profiler on, no blocks recorded yet)\n";
+
+  entries.reserve(1024);
+  for (const auto& s : s_block_profile.slots)
+  {
+    if (s.pc != CIRBlockProfile::kEmpty && s.run_count != 0)
+      entries.push_back({s.pc, s.run_count, s.total_cycles});
+  }
+  if (entries.empty())
+    return "(CIR profiler on, no blocks recorded yet)\n";
+
+  std::sort(entries.begin(), entries.end(),
+            [](const Entry& a, const Entry& b) { return a.cycles > b.cycles; });
+
+  const u32 n = std::min<u32>(top_n, static_cast<u32>(entries.size()));
+  std::ostringstream out;
+  out << "  unique_blocks=" << entries.size() << " total_block_runs="
+      << s_block_profile.grand_total_runs << " total_cycles=" << grand_cycles << "\n";
+  out << "  rank  entry_pc    runs         cycles        cyc/run   %cyc  hint\n";
+  for (u32 i = 0; i < n; ++i)
+  {
+    const Entry& e = entries[i];
+    const double pct = 100.0 * static_cast<double>(e.cycles) / static_cast<double>(grand_cycles);
+    const double cyc_per_run =
+        e.runs ? static_cast<double>(e.cycles) / static_cast<double>(e.runs) : 0.0;
+    // Spin/idle-loop hint the idle detector may have missed: a block that runs a huge number of
+    // times for a tiny per-run cycle cost is almost certainly a wait/poll loop. Thresholds are
+    // heuristic (Flycast-style): >=50k runs AND <=8 cycles/run.
+    const char* hint = (e.runs >= 50000 && cyc_per_run <= 8.0) ? "SPIN?" : "";
+    char line[160];
+    snprintf(line, sizeof(line), "  %4u  0x%08x  %10llu  %12llu  %8.2f  %5.1f  %s\n", i + 1, e.pc,
+             static_cast<unsigned long long>(e.runs),
+             static_cast<unsigned long long>(e.cycles), cyc_per_run, pct, hint);
+    out << line;
+  }
+  return std::move(out).str();
+}
+}  // namespace CIRProfiler
+
 void CachedInterpreter::Init()
 {
   // Wire the fastmem arena BEFORE RefreshConfig() — RefreshConfig computes jo.fastmem from
@@ -329,6 +473,14 @@ void CachedInterpreter::Init()
   s_validate_instance = s_block_linking_validate ? this : nullptr;
   // iCube: default false (no hints; the fast state). Flip ON only to A/B the +33%-by-removal finding.
   s_prefetch_enabled = Config::Get(Config::MAIN_CACHED_INTERPRETER_PREFETCH);
+  // iCube: hot-block profiler (default OFF). Read once; clear counters so each game boot starts fresh.
+  // When ON, allocate the slot table HERE (before emulation starts, before any cross-thread report
+  // read can fire) rather than lazily on the first Record() on the CPU thread — closes the (tiny)
+  // race window between the first-block allocation and a Copy-State reader.
+  s_cir_profile = Config::Get(Config::MAIN_CIR_PROFILE);
+  s_block_profile.Clear();
+  if (s_cir_profile)
+    s_block_profile.EnsureAllocated();
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
@@ -535,6 +687,11 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
   if (PowerPC::PerformanceMonitorActive(ppc_state))
     PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
                                       operands.num_fp_inst, ppc_state);
+  // iCube: hot-block profiler (MAIN_CIR_PROFILE, default OFF). Once-per-block, gated on a single
+  // predicted-not-taken bool — the per-instruction Interpret<> path is untouched. operands.downcount
+  // is the SAME emulated-cycle count already charged to ppc_state.downcount; no new timing.
+  if (s_cir_profile) [[unlikely]]
+    s_block_profile.Record(operands.entry_pc, operands.downcount);
   if constexpr (profiled)
     JitBlock::ProfileData::EndProfiling(operands.profile_data, operands.downcount);
   return 0;
@@ -554,6 +711,12 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const LinkBlo
   if (PowerPC::PerformanceMonitorActive(ppc_state))
     PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
                                       operands.num_fp_inst, ppc_state);
+
+  // iCube: hot-block profiler (MAIN_CIR_PROFILE, default OFF). This block executed regardless of
+  // whether the link is followed below, so record here — once per block exit, mirroring EndBlock.
+  // Gated on a single predicted-not-taken bool; never touches the per-instruction fast path.
+  if (s_cir_profile) [[unlikely]]
+    s_block_profile.Record(operands.entry_pc, operands.downcount);
 
   // (2) Slice-boundary guard. If the timing slice is exhausted we MUST return to the dispatcher / Run
   // loop so CoreTiming::Advance() runs and services the decrementer + external interrupts (delivered
@@ -2554,14 +2717,18 @@ void CachedInterpreter::WriteEndBlock(u32 link_target)
 
   if (!linkable)
   {
+    // iCube: 4th field is the block ENTRY PC (js.blockStart) for the hot-block profiler. Written
+    // unconditionally (the slot was formerly anonymous padding); zero layout/size delta.
     if (IsProfilingEnabled())
     {
-      Write(EndBlock<true>, {{js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst},
-                             js.curBlock->profile_data.get()});
+      Write(EndBlock<true>,
+            {{js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst, js.blockStart},
+             js.curBlock->profile_data.get()});
     }
     else
     {
-      Write(EndBlock<false>, {js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst});
+      Write(EndBlock<false>,
+            {js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst, js.blockStart});
     }
     return;
   }
@@ -2575,7 +2742,8 @@ void CachedInterpreter::WriteEndBlock(u32 link_target)
                                       js.numFloatingPointInst,
                                       link_target,
                                       static_cast<u32>(js.curBlock->feature_flags),
-                                      0};
+                                      0,
+                                      js.blockStart};  // iCube: entry PC for the hot-block profiler
   // exitPtrs must point at the AnyCallback slot (start of this callback), so WriteLinkBlock can
   // compute rel = dest->normalEntry - exitPtrs and LinkBlock recovers the same callback_site.
   u8* const callback_site = GetWritableCodePtr();

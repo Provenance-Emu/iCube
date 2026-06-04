@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 
 #include <rangeset/rangesizeset.h>
 
@@ -89,6 +90,22 @@ struct MicroOp
   u8 rc;    // non-zero if this op should update CR0 (record bit)
   u32 imm;  // immediate value (signed/unsigned depends on op)
 };
+
+// iCube: CachedInterpreter hot-block profiler (MAIN_CIR_PROFILE, default OFF). Flycast/PPSSPP-style
+// sampler: accumulates a per-block run-count + total emulated cycles keyed by the block ENTRY guest
+// PC into a pre-sized fixed table (no rehash), so the cross-thread report read is lock-free and
+// crash-safe. The accumulation is gated once per block on the flag; the per-instruction hot path is
+// untouched, so the flag-off build is byte-identical. These free functions let the iOS app surface
+// (EmulationCoordinator "Copy State") fetch the report without reaching into the class.
+namespace CIRProfiler
+{
+// Top-N hot blocks as a human-readable report, ranked by total emulated cycles. Returns a short
+// "(CIR profiler off)"/"(no blocks)" string when nothing was collected. Safe to call any-thread.
+std::string BuildHotBlocksReport(u32 top_n = 40);
+// Clear all counters. Called on game boot via CachedInterpreter::Init (each run starts fresh).
+// Also exported as a public entry point so a surface can offer on-demand reset if wired later.
+void Reset();
+}  // namespace CIRProfiler
 
 class CachedInterpreter : public JitBase, public CachedInterpreterCodeBlock
 {
@@ -302,7 +319,11 @@ struct CachedInterpreter::EndBlockOperands<false>
   u32 downcount;
   u32 num_load_stores;
   u32 num_fp_inst;
-  u32 : 32;
+  // iCube: block ENTRY guest PC, populated unconditionally in WriteEndBlock. Reuses the formerly
+  // anonymous 4th padding slot, so sizeof/layout/advancement are byte-identical to stock 2509 — the
+  // only delta is the emitted immediate changes from 0 to js.blockStart. Read by the hot-block
+  // profiler (MAIN_CIR_PROFILE, default OFF) at the once-per-block terminal; ignored when off.
+  u32 entry_pc;
 };
 
 template <>
@@ -330,6 +351,12 @@ struct CachedInterpreter::LinkBlockOperands
   // ppc_state.feature_flags against the resolved target block, which is the authoritative check.
   u32 feature_flags;
   s32 rel;
+  // iCube: block ENTRY guest PC for the hot-block profiler (MAIN_CIR_PROFILE, default OFF). Populated
+  // in WriteEndBlock; read only by the once-per-block profiler hook in LinkBlock, never on the linked
+  // fast path. Grows the trampoline 24->32B (still alignof-multiple; passes the emitter static_assert)
+  // only on the default-ON block-linking path; harmless when profiling is off.
+  u32 entry_pc;
+  u32 : 32;
 };
 
 struct CachedInterpreter::InterpretOperands

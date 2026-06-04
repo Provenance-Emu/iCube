@@ -919,5 +919,17 @@ const Info<bool> MAIN_CIR_MICROOP_FUSION_VALIDATE{
 // model exists to port. The flag is reserved here (default false, currently UNREAD by the CIR) so the
 // parent can wire a UI toggle without a follow-up MainSettings edit; flipping it has NO effect today.
 const Info<bool> MAIN_CIR_TAIL_LINK{{System::Main, "Core", "CIRTailLink"}, false};
+// iCube: CachedInterpreter hot-block profiler (Flycast/PPSSPP-style sampler). When ON, the CIR
+// accumulates a per-block run-count + total emulated cycles keyed by the block ENTRY guest PC, into
+// a pre-sized fixed open-addressing table (no rehash, lock-free for the cross-thread report read).
+// The block's existing per-block cycle count (the SAME value charged to downcount) is reused — NO
+// per-instruction timing is added. A top-N dump (NSLog + the in-emulation "Copy State" clipboard
+// dump) reports the hottest blocks so we can tell whether time concentrates in a few specializable
+// blocks or spreads evenly (a true throughput wall), and flag any spin/idle loop the idle detector
+// missed (high run-count + tiny cycles/run). Default FALSE: the accumulation is gated once per block
+// on this flag (read once in Init alongside the other CIR flags), so the per-INSTRUCTION hot path in
+// ExecuteOneBlock is byte-for-byte untouched and the flag-off build pays nothing measurable. Flip ON
+// (config key or the icube.cirProfile NSUserDefault) for a profiling session, then Copy State.
+const Info<bool> MAIN_CIR_PROFILE{{System::Main, "Core", "CIRProfile"}, false};
 
 }  // namespace Config

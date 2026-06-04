@@ -43,6 +43,14 @@
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 
+// iCube: CIR hot-block profiler report (defined in CachedInterpreter.cpp). Declared locally instead
+// of including CachedInterpreter.h, which pulls rangeset/* not on this target's include path.
+namespace CIRProfiler
+{
+std::string BuildHotBlocksReport(u32 top_n);
+void Reset();
+}  // namespace CIRProfiler
+
 #import "EmulationBootParameter.h"
 #import "FastmemManager.h"
 #import "HostNotifications.h"
@@ -1041,6 +1049,16 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
   b += "=== SETTINGS ===\n";
   b += _ICubeBuildPerfSettingsString("COPY");
 
+  // --- CIR HOT BLOCKS --- (iCube hot-block profiler; only populated when MAIN_CIR_PROFILE is on)
+  {
+    const std::string cir = CIRProfiler::BuildHotBlocksReport(40);
+    b += "=== CIR HOT BLOCKS ===\n";
+    b += cir;
+    // Also emit the hot-block report to the log on BOTH platforms (Copy State on iOS only puts the
+    // full dump on the clipboard; this guarantees the profiler output is grep-able in the device log).
+    NSLog(@"[iCube CIR hotblocks]\n%s", cir.c_str());
+  }
+
   NSString* text = [NSString stringWithUTF8String:b.c_str()];
 #if TARGET_OS_TV
   // tvOS has no UIPasteboard; the perf-state dump still goes to the log/OSD.
@@ -1486,6 +1504,15 @@ after_set:
       // Ensure GameCube Port 1 is plugged with an emulated controller and default to Touchscreen if needed
       Config::SetBaseOrCurrent(Config::GetInfoForSIDevice(0), SerialInterface::SIDEVICE_GC_CONTROLLER);
       EnsurePad1DefaultsToTouchscreen();
+      // iCube: bridge the hot-block profiler toggle from an NSUserDefault into the Dolphin config
+      // BEFORE boot, so CachedInterpreter::Init() reads MAIN_CIR_PROFILE for this run. Default OFF
+      // (absent key => false). Set `defaults write <bundleid> icube.cirProfile -bool YES` (or via the
+      // debug API) and reboot the game to profile; grab the report from Copy State.
+      {
+        const bool cirProfile =
+            [[NSUserDefaults standardUserDefaults] boolForKey:@"icube.cirProfile"];
+        Config::SetCurrent(Config::MAIN_CIR_PROFILE, cirProfile);
+      }
       if (!BootManager::BootCore(system, std::move(local_boot), wsi)) {
         PanicAlertFmt("Failed to init core!");
       }
