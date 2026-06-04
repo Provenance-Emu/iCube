@@ -29,6 +29,15 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait;
 + (void)loadStateFromSlot:(NSInteger)slot;
 
+// Save-state identity / paths.
+// Authoritative values from the core, used by the Swift save-manager to name
+// metadata/thumbnail sidecars consistently with the files Core/State.cpp writes.
+// currentGameID is the running title's ID ("" if nothing is running).
+// stateFilePathForSlot mirrors Core/State.cpp MakeStateFilename ("{dir}{GameID}.s{NN}");
+// returns nil when no game is running.
++ (NSString*)currentGameID;
++ (nullable NSString*)stateFilePathForSlot:(NSInteger)slot;
+
 // Speed / Fast-forward
 // Toggle temporary throttler disable (turbo). Returns the new state.
 // Display / Orientation

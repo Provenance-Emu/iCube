@@ -14,6 +14,8 @@
 #include "Core/Core.h"
 #include "Core/System.h"
 #include "Core/State.h"
+#include "Core/ConfigManager.h"
+#include "Common/FileUtil.h"
 #include "Core/Config/MainSettings.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/FramebufferManager.h"
@@ -77,6 +79,21 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   Core::QueueHostJob([s](Core::System& system) {
     State::Load(system, s);
   });
+}
+
++ (NSString*)currentGameID {
+  const std::string game_id = SConfig::GetInstance().GetGameID();
+  return [NSString stringWithUTF8String:game_id.c_str()];
+}
+
++ (nullable NSString*)stateFilePathForSlot:(NSInteger)slot {
+  const std::string game_id = SConfig::GetInstance().GetGameID();
+  if (game_id.empty())
+    return nil;
+  // Mirror Core/State.cpp MakeStateFilename: "{StateSavesDir}{GameID}.s{NN}".
+  NSString* dir = [NSString stringWithUTF8String:File::GetUserPath(D_STATESAVES_IDX).c_str()];
+  NSString* gid = [NSString stringWithUTF8String:game_id.c_str()];
+  return [NSString stringWithFormat:@"%@%@.s%02ld", dir, gid, (long)slot];
 }
 
 // Display / Orientation helpers
