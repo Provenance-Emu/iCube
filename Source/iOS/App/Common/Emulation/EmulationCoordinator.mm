@@ -186,6 +186,9 @@ enum {
   ACPhase_Hold         // converged at f*; light monitoring, re-enter Search on degradation
 };
 
+// Which lever an in-flight Hold-phase headroom up-probe raised (for revert/attribution).
+enum { AC_LEVER_NONE = 0, AC_LEVER_CPU, AC_LEVER_VI };
+
 // Tunables. The CONTROL LAW (cliff-find: stop descending at the first/highest clock that meets the
 // f* criterion) is the thing under test; these constants are reasoned starting points and still
 // need on-device tuning against real CPU-bound titles. (See research synthesis §#1: validate with a
@@ -209,6 +212,18 @@ static const float ACSpeedThreshold = 0.99f;
 // GC/Wii) presents ~50% duplicate fields at FULL speed, so those guards vetoed legit 30fps games and
 // walked the sweep to the floor (slow-motion). Audio underrun is the one remaining honesty guard.
 static const float ACSpeedHysteresis = 0.02f;
+// --- Headroom recovery (fix for the one-way-ratchet convergence bug). ---
+// The controller used to only ever DESCEND, so a transient-heavy moment (boot, scene transition,
+// thermal) walked the clock down and it could NEVER climb back when the scene lightened — leaving
+// the game underclocked (slow-motion / half field-rate) with huge idle headroom (observed: Max 198%
+// on a static Colosseum scene). max_speed (= emulated/work_time, throttle-sleep removed) is the
+// direct cliff sensor: ~1.0 at f*, >1 below it. In Hold we probe UP one step when max_speed shows
+// real headroom, reverting if the step overshoots f*. The threshold MUST exceed 1 + sweepStep so a
+// clock sitting one step below f* (max_speed ≈ 1.10 with a 0.10 step) does NOT re-probe — that
+// dead-band is what keeps steady-state at the cliff from oscillating (the reason up-probing was
+// originally removed). Bias high: under-recovery is invisible, oscillation is visible stutter.
+static const float ACUpProbeHeadroom    = 1.15f;  // climb only with >1+step of measured headroom
+static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an up-probe overshoot
 
 @implementation EmulationCoordinator {
   UIView* _renderHost;
@@ -226,9 +241,12 @@ static const float ACSpeedHysteresis = 0.02f;
   //   - below f*     speed is still ~100% but the game gets LESS virtual CPU than the host can
   //                  afford -> internal logic runs slow-motion. Wasteful.
   // The cliff is found ONLY by direction of approach: descend from 1.0 and STOP at the FIRST clock
-  // meeting the criterion — that first match is, by construction, the highest match. No point test
-  // can tell f* from a lower clock (both read speed≈100%), which is exactly why the prior loop
-  // (which kept descending while "stable") sailed past f* to the floor. v3 stops at first match.
+  // meeting the criterion — that first match is, by construction, the highest match. SPEED alone
+  // can't tell f* from a lower clock (both read ≈100% because the throttle caps speed), which is
+  // exactly why the prior loop (which kept descending while "stable") sailed past f* to the floor.
+  // v3 stops at first match. v3.1 adds the missing recovery direction: max_speed (throttle-sleep
+  // removed) DOES distinguish them — ≈1.0 at f*, >1 below it — so Hold uses it to climb back up when
+  // the scene lightens (the prior strict one-way descent could never recover; see ACUpProbeHeadroom).
   float _acCPU;            // current applied CPU overclock (the lever we sweep). [floor .. 1.0]
   float _acVI;             // current applied VI overclock (the second lever, used only when CPU is
                            // already floored and still short). Adapted since v2 (v1 never touched it).
@@ -243,6 +261,12 @@ static const float ACSpeedHysteresis = 0.02f;
   BOOL  _acCpuYielded;     // user took manual CPU-clock control -> stop auto-adjusting CPU-oc
   BOOL  _acViYielded;      // user took manual VI-clock control  -> stop auto-adjusting VI-oc
   BOOL  _acVerifyProbedUp; // in the seeded re-find: have we already tried the +1 step above f*?
+  // Headroom up-recovery (Hold phase) — see ACUpProbeHeadroom. Fixes the one-way ratchet.
+  int   _acUpProbeLever;       // lever raised by the in-flight up-probe (AC_LEVER_*), for revert
+  int   _acUpCooldown;         // Hold evals remaining before another up-probe is allowed
+  BOOL  _acViRecoveryStalled;  // a VI up-probe overshot -> stop retrying VI, let CPU climb instead
+  float _acPreProbeCPU;        // CPU clock before the in-flight up-probe (revert target)
+  float _acPreProbeVI;         // VI clock before the in-flight up-probe (revert target)
 
   int   _acPhase;          // ACPhase_* below
   int   _acPhaseTicks;     // ticks elapsed in the current phase (timer fires every ACTickMs)
@@ -456,6 +480,9 @@ static const float ACSpeedHysteresis = 0.02f;
   _acCpuYielded = NO;
   _acViYielded = NO;
   _acVerifyProbedUp = NO;
+  _acUpProbeLever = AC_LEVER_NONE;
+  _acUpCooldown = 0;
+  _acViRecoveryStalled = NO;
   _acPhase = ACPhase_Search;  // default: full descending sweep from 1.0
   _acPhaseTicks = 0;
   _acUnderrunBase = PerformanceMetrics::GetAudioUnderrunCount();
@@ -710,26 +737,68 @@ static const float ACSpeedHysteresis = 0.02f;
 
         case ACPhase_Hold:
         default: {
-          // Converged at f*. Light monitoring. If we stop meeting f* (scene got heavier, thermal
-          // throttle) the cliff moved DOWN -> descend to re-find it. We do NOT probe lower while
-          // still meeting f* (that was the MINIMIZE bug — every clock below f* also meets it).
+          // Converged at f*. Light monitoring in BOTH directions.
+          //  - Lost f* (scene heavier / thermal): the cliff moved DOWN -> descend to re-find it.
+          //  - Still at f* but max_speed shows real headroom: the cliff moved UP (scene lightened /
+          //    cooled) -> climb back. This recovery direction is the fix for the one-way ratchet;
+          //    without it a transient walked the clock down for good (see ACUpProbeHeadroom).
           if (self->_acPhaseTicks < ACHoldTicks) break;
           if (!meetsFStar) {
-            if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
-                self->_acVI - ACVIStep >= ACViFloor &&
-                bound == PerformanceMetrics::Bound::CpuBound) {
+            if (self->_acUpProbeLever != AC_LEVER_NONE) {
+              // Our headroom up-probe overshot f* (host can't keep up at the raised clock). Revert
+              // the probed lever and back off with a cooldown before retrying — a transient could
+              // also cause this. Stay in HOLD: this was our own probe, not a real scene change.
+              if (self->_acUpProbeLever == AC_LEVER_VI) {
+                applyVI(self->_acPreProbeVI);
+                self->_acViRecoveryStalled = YES;  // stop retrying VI; let CPU climb instead.
+              } else {
+                applyCPU(self->_acPreProbeCPU);
+              }
+              self->_acUpProbeLever = AC_LEVER_NONE;
+              self->_acUpCooldown = ACUpFailCooldownEvals;
+            } else if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
+                       self->_acVI - ACVIStep >= ACViFloor &&
+                       bound == PerformanceMetrics::Bound::CpuBound) {
               // CPU already floored AND positively CPU-bound: shed VI for its distinct refresh-rate
               // effect (step #5). Require CpuBound, not "!= GpuBound", so Unknown never triggers it.
               applyVI(self->_acVI - ACVIStep);
+              self->_acVerifyProbedUp = NO;
+              self->_acPhase = ACPhase_Search;
             } else if (self->_acCPU - sweepStep >= ACCpuFloor - 0.001f) {
               // f* dropped: descend one step and re-find by sweeping down from here.
               applyCPU(self->_acCPU - sweepStep);
+              self->_acViRecoveryStalled = NO;   // fresh conditions: re-arm VI recovery.
+              self->_acVerifyProbedUp = NO;
+              self->_acPhase = ACPhase_Search;
             }
-            self->_acVerifyProbedUp = NO;
-            self->_acPhase = ACPhase_Search;
           } else {
-            // Still at full speed. Persist f* (idempotent) and keep holding.
-            persistConverged();
+            // At full speed. First: if a prior up-probe is in flight, it HELD -> keep the climb.
+            if (self->_acUpProbeLever != AC_LEVER_NONE) {
+              self->_acStableCPU = self->_acCPU;
+              self->_acUpProbeLever = AC_LEVER_NONE;
+            }
+            if (self->_acUpCooldown > 0) {
+              self->_acUpCooldown--;
+              persistConverged();
+            } else if (cool && !newUnderrun && maxSpeed >= ACUpProbeHeadroom) {
+              // Real headroom -> climb back toward f*. Restore LIFO: the VI lever is shed last (only
+              // at CPU floor) and its underclock is the visible slow-motion, so raise it first; once
+              // VI is back at native (or recovery stalled), climb the CPU clock. One lever per step.
+              self->_acPreProbeCPU = self->_acCPU;
+              self->_acPreProbeVI = self->_acVI;
+              if (self->_acVI < 1.0f - 0.001f && !self->_acViYielded && !self->_acViRecoveryStalled) {
+                applyVI(self->_acVI + ACVIStep);
+                self->_acUpProbeLever = AC_LEVER_VI;
+              } else if (self->_acCPU < 1.0f - 0.001f && !self->_acCpuYielded) {
+                applyCPU(self->_acCPU + sweepStep);
+                self->_acUpProbeLever = AC_LEVER_CPU;
+              } else {
+                persistConverged();  // already at native (or levers yielded): nothing to recover.
+              }
+            } else {
+              // At/just below f* with no spare headroom (dead-band): the converged steady state.
+              persistConverged();
+            }
           }
           resetWindow();
           break;
