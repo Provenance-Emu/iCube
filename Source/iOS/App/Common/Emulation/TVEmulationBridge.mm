@@ -138,9 +138,14 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   State::StateHeader header;
   if (!State::ReadHeader(std::string(path.UTF8String), header))
     return NO;
-  // A state written by THIS build carries this build's SCM revision in its header;
-  // the loader only accepts the current state version, so same-revision == loadable.
-  return header.version_string == Common::GetScmRevStr() ? YES : NO;
+  // Match the loader's ACTUAL acceptance test (State.cpp ValidateHeaders): a state loads iff its
+  // version cookie decodes to the current STATE_VERSION. The old SCM-revision-string compare was far
+  // stricter than the loader — the rev string churns on every rebaseline build, so every prior save
+  // read as "Incompatible" even though it loads fine. COOKIE_BASE (0xBAADBABE) is the loader's fixed
+  // magic base (State.cpp, file-local), mirrored here since the bridge can't see the constant.
+  static constexpr uint32_t kCookieBase = 0xBAADBABEu;
+  const uint32_t loadedVersion = header.version_header.version_cookie - kCookieBase;
+  return loadedVersion == State::GetVersion() ? YES : NO;
 }
 
 + (void)captureScreenshotToPath:(NSString*)path {
