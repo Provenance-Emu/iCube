@@ -49,7 +49,9 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
       // Parse save state info; the filename is the fallback label.
       let name = url.deletingPathExtension().lastPathComponent
       let gameID = meta?.gameID ?? Self.extractGameID(from: name)
-      let slot = Self.extractSlot(from: name)
+      // Dolphin slot states put the slot in the EXTENSION (GALE01.s01), not the
+      // base name — so parse `ext`, falling back to the legacy name patterns.
+      let slot = isAuto ? nil : (Self.extractSlot(fromExtension: ext) ?? Self.extractSlot(from: name))
       let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey, .fileSizeKey])
       let created = values?.creationDate
       let modified = meta?.savedAt ?? values?.contentModificationDate
@@ -146,6 +148,15 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
       }
     }
     return "UNKNOWN"
+  }
+
+  private static func extractSlot(fromExtension ext: String) -> Int? {
+    // Dolphin slot states use the extension ".s{NN}" (State.cpp MakeStateFilename).
+    guard let r = try? NSRegularExpression(pattern: "^s(\\d+)$", options: [.caseInsensitive]),
+          let m = r.firstMatch(in: ext, range: NSRange(location: 0, length: ext.utf16.count)),
+          m.numberOfRanges >= 2,
+          let range = Range(m.range(at: 1), in: ext) else { return nil }
+    return Int(ext[range])
   }
 
   private static func extractSlot(from baseName: String) -> Int? {
