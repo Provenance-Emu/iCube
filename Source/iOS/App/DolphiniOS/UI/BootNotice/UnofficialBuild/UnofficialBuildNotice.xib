@@ -45,6 +45,8 @@
                                     <rect key="frame" x="0.0" y="0.0" width="335" height="223.33333333333334"/>
                                     <string key="text">iCube is NOT an official version of Dolphin. It is a separate version based on the original Dolphin's code.
 
+iCube is a fork of OatmealDome's DolphiniOS (dolphinios.oatmealdome.me), which is itself based on the Dolphin emulator (dolphin-emu.org).
+
 DO NOT ask for help on the official Dolphin forums or report bugs on the official Dolphin bug tracker. They will not be able to assist you.
 
 If you need help, go to the Settings tab and tap "Help".</string>

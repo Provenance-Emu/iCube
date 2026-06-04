@@ -1755,7 +1755,7 @@ struct TVLibraryView: View {
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(.white)
             }
-            Text(L("Welcome to DolphiniOS"))
+            Text(L("Welcome to iCube"))
               .font(.title2).fontWeight(.bold)
               .foregroundStyle(.white)
           }
@@ -1807,6 +1807,27 @@ struct TVLibraryView: View {
           }
           .buttonStyle(.bordered)
           .tint(.white)
+
+          // Lineage / credits — iCube is a downstream fork; credit the projects it builds on.
+          VStack(spacing: 4) {
+            Text(L("iCube is a fork of DolphiniOS, based on the Dolphin emulator."))
+              .font(.caption2)
+              .foregroundStyle(.white.opacity(0.6))
+              .multilineTextAlignment(.center)
+#if os(iOS) || targetEnvironment(macCatalyst)
+            HStack(spacing: 16) {
+              if let u = URL(string: "https://dolphinios.oatmealdome.me") {
+                Link("DolphiniOS", destination: u)
+              }
+              if let u = URL(string: "https://dolphin-emu.org") {
+                Link("Dolphin", destination: u)
+              }
+            }
+            .font(.caption2.weight(.semibold))
+            .tint(Color("DolphinTint"))
+#endif
+          }
+          .padding(.top, 6)
         }
         .padding(22)
         .background(
