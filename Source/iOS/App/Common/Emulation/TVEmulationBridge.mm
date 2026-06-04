@@ -20,6 +20,7 @@
 #include "Core/Config/MainSettings.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/FramebufferManager.h"
+#include "VideoCommon/FrameDumper.h"
 #include "VideoCommon/PostProcessing.h"
 #include "WiimoteEmu/WiimoteEmu.h"
 #import "Core/Config/WiimoteSettings.h"
@@ -140,6 +141,14 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   // A state written by THIS build carries this build's SCM revision in its header;
   // the loader only accepts the current state version, so same-revision == loadable.
   return header.version_string == Common::GetScmRevStr() ? YES : NO;
+}
+
++ (void)captureScreenshotToPath:(NSString*)path {
+  if (path.length == 0)
+    return;
+  // Non-blocking request; FrameDumper writes the PNG on the next presented frame.
+  if (g_frame_dumper)
+    g_frame_dumper->SaveScreenshot(std::string(path.UTF8String));
 }
 
 // Display / Orientation helpers

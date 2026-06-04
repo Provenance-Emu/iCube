@@ -51,6 +51,9 @@ internal struct PauseMenuView: View {
       #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
       GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
       #endif
+      // Grab the last live frame for a save thumbnail BEFORE pausing, so a save made
+      // from this menu still gets a screenshot even though presenting is about to stop.
+      SaveStateService.capturePausePreview()
       TVEmulationBridge.pause()
     }
     .onDisappear {

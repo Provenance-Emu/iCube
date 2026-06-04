@@ -39,7 +39,43 @@ public enum SaveStateService {
       savedAt: now,
       isAuto: false
     )
-    return SaveStateMetadataStore.write(metadata, forStateFile: stateURL)
+    let ok = SaveStateMetadataStore.write(metadata, forStateFile: stateURL)
+    captureThumbnail(forStateFile: stateURL)
+    return ok
+  }
+
+  // MARK: - Thumbnails
+
+  /// Stable scratch path for the "last frame before the pause menu opened" preview.
+  public static var pausePreviewURL: URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent("icube_pause_preview.png")
+  }
+
+  /// Grab the current frame into the pause preview. Call this as the pause menu
+  /// opens, while frames are still in flight — so a save made while paused still
+  /// has a thumbnail (the live capture below can't fire once presenting stops).
+  public static func capturePausePreview() {
+    TVEmulationBridge.captureScreenshot(toPath: pausePreviewURL.path)
+  }
+
+  /// Produce a thumbnail next to the state file. Adopts the fresh pause preview
+  /// (covers saves made while paused), then requests a live capture that overwrites
+  /// it with the current frame when emulation is still running. Both are best-effort;
+  /// a missing thumbnail degrades to a placeholder in the UI.
+  private static func captureThumbnail(forStateFile stateURL: URL) {
+    let thumbURL = stateURL.appendingPathExtension("png")
+    adoptPausePreviewIfFresh(into: thumbURL)
+    TVEmulationBridge.captureScreenshot(toPath: thumbURL.path)
+  }
+
+  private static func adoptPausePreviewIfFresh(into thumbURL: URL) {
+    let fm = FileManager.default
+    let preview = pausePreviewURL
+    guard let attrs = try? fm.attributesOfItem(atPath: preview.path),
+          let modified = attrs[.modificationDate] as? Date,
+          Date().timeIntervalSince(modified) < 60 else { return }
+    try? fm.removeItem(at: thumbURL)
+    try? fm.copyItem(at: preview, to: thumbURL)
   }
 
   /// A reasonable default label for an unlabeled save, e.g. "Slot 1 — Jun 3, 2026 at 4:12 PM".

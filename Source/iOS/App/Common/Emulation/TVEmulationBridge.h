@@ -52,6 +52,13 @@ NS_ASSUME_NONNULL_BEGIN
 // or its header can't be read.
 + (BOOL)stateFileIsCompatibleAtPath:(NSString*)path;
 
+// Request a screenshot PNG be written to path. Backend-agnostic (goes through
+// Dolphin's FrameDumper, not the Metal layer). ASYNCHRONOUS and non-blocking:
+// the capture lands on the next presented frame, so if emulation is paused or
+// stopping there may be no frame and no file is written (callers must tolerate a
+// missing thumbnail). Used to capture save-state thumbnails at save time.
++ (void)captureScreenshotToPath:(NSString*)path;
+
 // Speed / Fast-forward
 // Toggle temporary throttler disable (turbo). Returns the new state.
 // Display / Orientation
