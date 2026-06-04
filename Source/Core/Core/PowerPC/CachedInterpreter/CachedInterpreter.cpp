@@ -376,7 +376,14 @@ void CachedInterpreter::Shutdown()
     }                                                                                              \
   } while (0)
 
-void CachedInterpreter::ExecuteOneBlock()
+// iCube: block-linking safety guard. Caps consecutive linked hops per dispatcher entry so an opt-in
+// linked chain can never spin unbounded between CoreTiming::Advance() round-trips (the wake-race at a
+// high emulated clock). 256 is well above any real static-branch chain length, so the common case
+// never trips it; it only bounds the pathological case. Reset point is implicit: linked_hops is a
+// local in ExecuteOneBlock, which IS the dispatcher entry, so it is zeroed on every (re-)entry.
+static constexpr u32 CIR_MAX_LINKED_HOPS = 256;
+
+void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
 {
   const u8* normal_entry = m_block_cache.Dispatch();
   if (!normal_entry)
@@ -386,6 +393,10 @@ void CachedInterpreter::ExecuteOneBlock()
   }
 
   auto& ppc_state = m_ppc_state;
+  // iCube: block-linking safety guard — consecutive-linked-hop counter, reset on each dispatcher entry
+  // (this function). Only ever touched on the LinkBlock-followed branch below, so it is a no-op when
+  // block linking is off (no LinkBlock callbacks are emitted, so that branch never executes).
+  u32 linked_hops = 0;
   // iCube: optional register-file prefetch hints (MAIN_CACHED_INTERPRETER_PREFETCH, default OFF). When
   // the flag is off NOTHING is emitted here and the loop is byte-identical to the current fast state.
   // ON re-adds the hints to A/B the "remove-prefetch = +33% on Apple Silicon" finding (expected slower).
@@ -435,6 +446,39 @@ void CachedInterpreter::ExecuteOneBlock()
       CIR_SPEC_SWITCH(id, ops);
       normal_entry = payload + sizeof(SpecializedInterpretOperands);
     }
+    // iCube: block-linking safety guard. LinkBlock is the ONLY callback whose nonzero return jumps to
+    // ANOTHER block's entry (every other positive distance just advances within the current block), so
+    // a linked hop is exactly "the followed callback was LinkBlock". We give it a dedicated branch (this
+    // is the same callback-identity discrimination the hot branches above already use) so the guard's
+    // cost — one state load + compare + one counter increment + compare — is paid ONLY per real linked
+    // hop, never per instruction and never per intra-block callback. The stored value comes from
+    // Write(LinkBlock, ...) -> AnyCallbackCast(reinterpret_cast<AnyCallback>) of the runtime overload;
+    // we reconstruct the identical value here. The LinkBlock name is overloaded (runtime + ostream
+    // debug), so we disambiguate to the runtime overload via the Callback<LinkBlockOperands> cast.
+    // When block linking is OFF no LinkBlock callback is ever emitted, so this branch never matches and
+    // the guard is dead — the only off-path delta is one extra failed pointer-compare at block-terminal
+    // callbacks (once per block), never on the per-instruction Interpret<> fast path.
+    else if (callback ==
+             reinterpret_cast<AnyCallback>(CallbackCast<LinkBlockOperands>(LinkBlock))) [[unlikely]]
+    {
+      const auto distance = callback(ppc_state, payload);
+      if (distance == 0)
+        break;  // LinkBlock's own guards (downcount<=0 / npc!=expected_pc / rel==0) -> dispatcher.
+      normal_entry += distance;
+      // (1) Per-iteration running check: a stop/pause/state-change request would otherwise not be
+      // observed until the slice ends (the linked loop has no downcount<=0 exit of its own). Mirror
+      // Run()'s `*state_ptr == CPU::State::Running` test — a single non-atomic load + compare, no new
+      // atomics. Bails to the dispatcher (Run's inner do/while re-checks the same condition).
+      if (*state_ptr != CPU::State::Running) [[unlikely]]
+        break;
+      // (2) Bounded hop cap: force a dispatcher round-trip after CIR_MAX_LINKED_HOPS consecutive links
+      // regardless of downcount, bounding the worst-case wake-race spin. Reset is implicit (linked_hops
+      // is a fresh local on the next ExecuteOneBlock entry). This does NOT touch downcount or call
+      // CoreTiming::Advance(), so interrupt/decrementer cadence is byte-for-byte unchanged — a cap-hit
+      // only costs one extra Dispatch() of the same target on the opt-in linked path.
+      if (++linked_hops >= CIR_MAX_LINKED_HOPS) [[unlikely]]
+        break;
+    }
     else
     {
       if (const auto distance = callback(ppc_state, payload))
@@ -458,7 +502,7 @@ void CachedInterpreter::Run()
 
     do
     {
-      ExecuteOneBlock();
+      ExecuteOneBlock(state_ptr);
     } while (m_ppc_state.downcount > 0 && *state_ptr == CPU::State::Running);
   }
 }
@@ -467,7 +511,9 @@ void CachedInterpreter::SingleStep()
 {
   // Enter new timing slice
   m_system.GetCoreTiming().Advance();
-  ExecuteOneBlock();
+  // iCube: thread the run-state pointer through for the block-linking safety guard (same source Run()
+  // uses). On a single step a linked chain cannot form across the one block, so the guard is inert here.
+  ExecuteOneBlock(m_system.GetCPU().GetStatePtr());
 }
 
 s32 CachedInterpreter::StartProfiledBlock(PowerPC::PowerPCState& ppc_state,

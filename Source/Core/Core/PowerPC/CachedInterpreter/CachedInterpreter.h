@@ -134,7 +134,11 @@ public:
   static void PatchLinkBlockRel(u8* exit_ptrs, s32 rel);
 
 private:
-  void ExecuteOneBlock();
+  // iCube: state_ptr is the CPU run-state pointer (CPU::State*, from CPUManager::GetStatePtr). It is
+  // threaded in so the block-linking safety guard can re-check Running on every linked hop without a
+  // round-trip to Run() — see the linked-hop branch in ExecuteOneBlock. Run() passes its existing
+  // pointer; SingleStep() fetches one. Only dereferenced on the (opt-in) linked path.
+  void ExecuteOneBlock(const CPU::State* state_ptr);
 
   bool HandleFunctionHooking(u32 address);
   // iCube: link_target is the STATIC direct-branch destination (op.branchTo) of the terminal, or
