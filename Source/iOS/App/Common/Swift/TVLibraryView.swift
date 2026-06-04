@@ -240,6 +240,116 @@ struct TVLibraryView: View {
   @AppStorage("library_background_style") private var backgroundStyle: BackgroundStyle = .gradient
   @AppStorage("library_show_subtitles") private var showSubtitles: Bool = true
 
+  // MARK: - Sort settings (persisted)
+
+  /// Field to sort the library by. Persisted via AppStorage.
+  @AppStorage("library_sort_field") private var sortField: SortField = .name
+  /// Sort direction. true == ascending. Persisted via AppStorage.
+  @AppStorage("library_sort_ascending") private var sortAscending: Bool = true
+
+  enum SortField: String, CaseIterable {
+    case name = "name"
+    /// File creation date for local items (a.k.a. "Added" / import date).
+    case added = "added"
+    /// Disc apploader/build date (offset 0x2440, "YYYY/MM/DD"). The on-disc
+    /// dates GameCube/Wii volumes carry — the closest thing iCube has to a
+    /// release date. There is no GameTDB release-date field on TVGameItem.
+    case discDate = "discDate"
+
+    var displayName: String {
+      switch self {
+      case .name: return L("Name")
+      case .added: return L("Date Added")
+      case .discDate: return L("Disc Date")
+      }
+    }
+
+    var systemImage: String {
+      switch self {
+      case .name: return "textformat"
+      case .added: return "clock"
+      case .discDate: return "calendar"
+      }
+    }
+  }
+
+  /// Display title used for sorting/searching, falling back to filename when title is empty.
+  private static func sortTitle(for item: TVGameItem) -> String {
+    if !item.title.isEmpty { return item.title }
+    if let url = URL(string: item.filePath) {
+      return url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+    }
+    return item.filePath
+  }
+
+  /// Resolve a local filesystem path from a TVGameItem.filePath (handles both
+  /// bare `/path` and `file://` URLs). Returns nil for remote (webdav/http) items.
+  private static func localPath(for item: TVGameItem) -> String? {
+    if item.filePath.hasPrefix("/") { return item.filePath }
+    if let url = URL(string: item.filePath), url.isFileURL { return url.path }
+    return nil
+  }
+
+  /// Precompute file creation dates once per sort pass (never call FileManager
+  /// inside a comparator). Remote items have no local date and are omitted.
+  private func creationDates(for items: [TVGameItem]) -> [String: Date] {
+    var map: [String: Date] = [:]
+    let fm = FileManager.default
+    for item in items {
+      guard let path = Self.localPath(for: item) else { continue }
+      if let attrs = try? fm.attributesOfItem(atPath: path),
+         let date = attrs[.creationDate] as? Date {
+        map[item.filePath] = date
+      }
+    }
+    return map
+  }
+
+  /// Apply the persisted sort to an already-filtered list of games.
+  private func applySort(_ games: [TVGameItem]) -> [TVGameItem] {
+    let asc = sortAscending
+    switch sortField {
+    case .name:
+      return games.sorted { a, b in
+        let r = Self.sortTitle(for: a).localizedCaseInsensitiveCompare(Self.sortTitle(for: b))
+        if r == .orderedSame { return Self.sortTitle(for: a) < Self.sortTitle(for: b) }
+        return asc ? (r == .orderedAscending) : (r == .orderedDescending)
+      }
+    case .added:
+      let dates = creationDates(for: games)
+      return games.sorted { a, b in
+        let da = dates[a.filePath]
+        let db = dates[b.filePath]
+        // Items with no local date (remote) sort last regardless of direction.
+        switch (da, db) {
+        case let (x?, y?):
+          if x == y { return Self.sortTitle(for: a).localizedCaseInsensitiveCompare(Self.sortTitle(for: b)) == .orderedAscending }
+          return asc ? (x < y) : (x > y)
+        case (nil, nil):
+          return Self.sortTitle(for: a).localizedCaseInsensitiveCompare(Self.sortTitle(for: b)) == .orderedAscending
+        case (_?, nil): return true   // a has a date, sorts before b
+        case (nil, _?): return false  // b has a date, sorts before a
+        }
+      }
+    case .discDate:
+      // apploaderDateString is "YYYY/MM/DD" (disc offset 0x2440); lexicographic
+      // order matches chronological order. Missing dates sort last.
+      return games.sorted { a, b in
+        let da = a.apploaderDateString
+        let db = b.apploaderDateString
+        switch (da, db) {
+        case let (x?, y?):
+          if x == y { return Self.sortTitle(for: a).localizedCaseInsensitiveCompare(Self.sortTitle(for: b)) == .orderedAscending }
+          return asc ? (x < y) : (x > y)
+        case (nil, nil):
+          return Self.sortTitle(for: a).localizedCaseInsensitiveCompare(Self.sortTitle(for: b)) == .orderedAscending
+        case (_?, nil): return true
+        case (nil, _?): return false
+        }
+      }
+    }
+  }
+
   enum BackgroundStyle: String, CaseIterable {
     case clean = "clean"
     case gradient = "gradient"
@@ -285,6 +395,8 @@ struct TVLibraryView: View {
   @State private var showMoreMenu = false
   @State private var showUpdateRegions = false
   @State private var showDSUSession = false
+  /// Presents the About iCube sheet (tapped via the toolbar Dolphin logo on iOS).
+  @State private var showAbout = false
 
   // MARK: - Computed Bindings (extracted to prevent compiler timeout)
 
@@ -336,7 +448,7 @@ struct TVLibraryView: View {
           .navigationBarTitleDisplayMode(.inline)
       }
       .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
-      .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+      .modifier(LibrarySearchableModifier(searchText: $searchText))
 #endif
       .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FavoritesChanged"))) { _ in
         favoritesVersion &+= 1
@@ -719,25 +831,30 @@ struct TVLibraryView: View {
     // Shared filtered view of games for both platforms
     let displayGames: [TVGameItem] = {
       let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !q.isEmpty else { return model.games }
-      let needle = q.lowercased()
-      func filenameLower(_ path: String) -> String {
-        if let url = URL(string: path) {
-          return (url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
+      let filtered: [TVGameItem]
+      if q.isEmpty {
+        filtered = model.games
+      } else {
+        let needle = q.lowercased()
+        func filenameLower(_ path: String) -> String {
+          if let url = URL(string: path) {
+            return (url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
+          }
+          return path.lowercased()
         }
-        return path.lowercased()
+        filtered = model.games.filter { item in
+          let title = item.title.lowercased()
+          if title.contains(needle) { return true }
+          if filenameLower(item.filePath).contains(needle) { return true }
+          if item.gameID.lowercased().contains(needle) { return true }
+          if item.makerLong.lowercased().contains(needle) { return true }
+          if item.countryName.lowercased().contains(needle) { return true }
+          if item.gametdbID.lowercased().contains(needle) { return true }
+          if item.filePath.lowercased().contains(needle) { return true }
+          return false
+        }
       }
-      return model.games.filter { item in
-        let title = item.title.lowercased()
-        if title.contains(needle) { return true }
-        if filenameLower(item.filePath).contains(needle) { return true }
-        if item.gameID.lowercased().contains(needle) { return true }
-        if item.makerLong.lowercased().contains(needle) { return true }
-        if item.countryName.lowercased().contains(needle) { return true }
-        if item.gametdbID.lowercased().contains(needle) { return true }
-        if item.filePath.lowercased().contains(needle) { return true }
-        return false
-      }
+      return applySort(filtered)
     }()
 #if os(iOS) || targetEnvironment(macCatalyst)
     libraryView_iOS(displayGames)
@@ -1160,6 +1277,9 @@ struct TVLibraryView: View {
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
+      sortMenu
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { showSearchSheet = true }) { Image(systemName: "magnifyingglass") }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
@@ -1182,42 +1302,74 @@ struct TVLibraryView: View {
           direction: .leftToRight
         )
       } else {
-        // Show static dolphin logo when not scanning
-        Image("DolphinLogo")
-          .resizable()
-          .scaledToFit()
+        // Show static dolphin logo when not scanning — tappable to open About.
+        // On iOS 26 adopt the Liquid Glass button treatment; older OSes keep
+        // the plain logo button.
+        if #available(iOS 26.0, *) {
+          Button(action: { showAbout = true }) {
+            Image("DolphinLogo")
+              .resizable()
+              .scaledToFit()
+          }
+          .buttonStyle(.glass)
+          .accessibilityLabel(L("About iCube"))
+        } else {
+          Button(action: { showAbout = true }) {
+            Image("DolphinLogo")
+              .resizable()
+              .scaledToFit()
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel(L("About iCube"))
+        }
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       if #available(tvOS 17.0, iOS 14.0, *) {
         Menu {
-          Button(action: { model.loadGameCubeMainMenu() }) {
-            Label(L("Load GameCube Main Menu"), systemImage: "gamecontroller")
-          }
-          Button(action: { model.performOnlineSystemUpdate() }) {
-            Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
-          }
-#if os(iOS)
-          Button(action: {
-            let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
-            if role == "receiver" {
-              NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Switch role to Sender to start DSU Controller")])
-            } else {
-              showDSUSession = true
+          // System / Boot
+          Section(L("System")) {
+            Button(action: { model.loadGameCubeMainMenu() }) {
+              Label(L("Load GameCube Main Menu"), systemImage: "gamecontroller")
             }
-          }) {
-            Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
-          }
+            Button(action: { model.performOnlineSystemUpdate() }) {
+              Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
+            }
+#if os(iOS)
+            Button(action: {
+              let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
+              if role == "receiver" {
+                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Switch role to Sender to start DSU Controller")])
+              } else {
+                showDSUSession = true
+              }
+            }) {
+              Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
+            }
 #endif
-          Button(action: {
+          }
+          // Import
+          Section(L("Import")) {
+            Button(action: {
 #if os(iOS) || targetEnvironment(macCatalyst)
-            showImportNANDPicker = true
+              showImportSoftwarePicker = true
 #endif
-          }) {
-            Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
+            }) {
+              Label(L("Import Game"), systemImage: "square.and.arrow.down")
+            }
+            Button(action: {
+#if os(iOS) || targetEnvironment(macCatalyst)
+              showImportNANDPicker = true
+#endif
+            }) {
+              Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
+            }
           }
-          Button(action: { showSources = true }) {
-            Label(L("Sources"), systemImage: "externaldrive.badge.plus")
+          // Sources / Other
+          Section(L("Sources")) {
+            Button(action: { showSources = true }) {
+              Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
+            }
           }
         } label: {
           Image(systemName: "ellipsis.circle")
@@ -1230,6 +1382,9 @@ struct TVLibraryView: View {
         }
         .tipAttachCompat(.importGame)
       }
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      sortMenu
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { model.rescan() }) {
@@ -1271,6 +1426,43 @@ struct TVLibraryView: View {
     #endif
   }
 
+  /// Sort control shared by both platforms. Lets the user pick a field
+  /// (Name / Date Added / Disc Date) and toggle ascending/descending. The
+  /// selection is persisted via AppStorage and applied in `displayGames`.
+  @ViewBuilder
+  private var sortMenu: some View {
+    Menu {
+      Section(L("Sort By")) {
+        ForEach(SortField.allCases, id: \.self) { field in
+          Button(action: {
+            if sortField == field {
+              sortAscending.toggle()
+            } else {
+              sortField = field
+              sortAscending = true
+            }
+          }) {
+            if sortField == field {
+              Label(field.displayName, systemImage: sortAscending ? "arrow.up" : "arrow.down")
+            } else {
+              Label(field.displayName, systemImage: field.systemImage)
+            }
+          }
+        }
+      }
+      Section(L("Direction")) {
+        Button(action: { sortAscending = true }) {
+          Label(L("Ascending"), systemImage: sortAscending ? "checkmark" : "arrow.up")
+        }
+        Button(action: { sortAscending = false }) {
+          Label(L("Descending"), systemImage: !sortAscending ? "checkmark" : "arrow.down")
+        }
+      }
+    } label: {
+      Image(systemName: sortAscending ? "arrow.up.arrow.down.circle" : "arrow.up.arrow.down.circle.fill")
+    }
+  }
+
   var body: some View {
     NavigationStack {
       navigationConfiguration
@@ -1279,6 +1471,19 @@ struct TVLibraryView: View {
     .sheet(isPresented: $showSaveStatesBrowser) {
       NavigationStack { SaveStatesBrowserView() }
     }
+    // About iCube sheet (presented from the tappable toolbar Dolphin logo on iOS)
+#if os(iOS) || targetEnvironment(macCatalyst)
+    .sheet(isPresented: $showAbout) {
+      NavigationStack {
+        AboutView()
+          .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+              Button(L("Done")) { showAbout = false }
+            }
+          }
+      }
+    }
+#endif
     // DSU controller session (iOS only)
 #if os(iOS)
     .sheet(isPresented: $showDSUSession) {
@@ -2450,3 +2655,30 @@ struct iOS16NavigationStyleModifier: ViewModifier {
 #endif
   }
 }
+
+#if os(iOS) || targetEnvironment(macCatalyst)
+/// Searchable modifier that adopts the iOS 26 "Liquid Glass" floating search
+/// field where available, and otherwise falls back to the iOS 17–25 static
+/// navigation-bar-drawer search. The iOS 26 path uses the system floating
+/// search placement plus `.searchToolbarBehavior(.minimize)`, which collapses
+/// the search field into the toolbar on scroll — reclaiming the header space
+/// the old always-visible drawer wasted. The large title also collapses
+/// natively on scroll under iOS 26, freeing more vertical room for games.
+struct LibrarySearchableModifier: ViewModifier {
+  @Binding var searchText: String
+
+  func body(content: Content) -> some View {
+    if #available(iOS 26.0, *) {
+      // Floating/minimizing search: default placement floats the field and
+      // `.minimize` tucks it into the toolbar on scroll.
+      content
+        .searchable(text: $searchText)
+        .searchToolbarBehavior(.minimize)
+    } else {
+      // iOS 17–25: keep the existing always-visible search drawer unchanged.
+      content
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
+    }
+  }
+}
+#endif

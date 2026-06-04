@@ -1489,6 +1489,16 @@ struct AboutView: View {
           .font(.system(size: 28, weight: .semibold))
           .foregroundColor(.blue)
 
+        // App version / build + Dolphin core version.
+        VStack(spacing: 2) {
+          Text(verbatim: "\(L("Version")) \(VersionManager.shared().appVersion.userFacing)")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+          Text(verbatim: "\(L("Core")) \(VersionManager.shared().coreVersion)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+
         Text("© 2003-2015+ Dolphin Team.\n© 2025+ iCube Project.")
           .multilineTextAlignment(.center)
 
@@ -1503,6 +1513,27 @@ struct AboutView: View {
 
         Text("iCube is an unofficial and separately maintained port of Dolphin to iOS. The iCube Project has no relation to Dolphin Team.")
           .multilineTextAlignment(.center)
+
+        // Fork lineage with tappable source links.
+        VStack(spacing: 8) {
+          Text(L("iCube is a fork of OatmealDome's DolphiniOS, based on the Dolphin emulator."))
+            .multilineTextAlignment(.center)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+          VStack(spacing: 6) {
+            Button("dolphinios.oatmealdome.me") {
+              if let url = URL(string: "https://dolphinios.oatmealdome.me") { openURL(url) }
+            }
+            Button("dolphin-emu.org") {
+              if let url = URL(string: "https://dolphin-emu.org") { openURL(url) }
+            }
+            Button("icube-emu.com") {
+              if let url = URL(string: "https://icube-emu.com") { openURL(url) }
+            }
+          }
+          .font(.callout)
+        }
+        .padding(.vertical, 4)
 
         Text("\"GameCube\" and \"Wii\" are trademarks of Nintendo. iCube is not affiliated with Nintendo in any way.")
           .multilineTextAlignment(.center)
@@ -1521,7 +1552,7 @@ struct AboutView: View {
       .padding(.horizontal, 20)
       .frame(maxWidth: .infinity)
     }
-    .navigationTitle(L("About Dolphin"))
+    .navigationTitle(L("About iCube"))
   }
 
   private func startAboutAnimation() {
