@@ -2021,6 +2021,8 @@ struct ConfigAdvancedView: View {
 
   @State private var rtcEnabled: Bool = false
   @State private var rtcDate: Date = Date(timeIntervalSince1970: 946684800) // 2000-01-01 UTC
+  // Correctness Validation disclosure (manual; DisclosureGroup is tvOS-unavailable). Collapsed by default.
+  @State private var showValidation: Bool = false
 
   var body: some View {
     List {
@@ -2149,7 +2151,19 @@ struct ConfigAdvancedView: View {
         // results (much slower). Each row is disabled until its parent optimization
         // is ON, so the "requires X" relationship is enforced, not just documented.
         Section {
-          DisclosureGroup(L("Correctness Validation (developer, slow)")) {
+          // Manual collapsible (DisclosureGroup is unavailable on tvOS): a header button
+          // toggles a @State flag that gates the validator rows.
+          Button {
+            withAnimation { showValidation.toggle() }
+          } label: {
+            HStack {
+              Text(L("Correctness Validation (developer, slow)"))
+              Spacer()
+              Image(systemName: showValidation ? "chevron.down" : "chevron.right")
+                .font(.caption).foregroundStyle(.secondary)
+            }
+          }
+          if showValidation {
             // Shared
             validateRow("NEON Paired-Single Math: Validate", isOn: $cirPsNeonValidate,
                         set: { DOLConfigBridge.setCirPsNeonValidate($0) }, parentOn: cirPsNeon,
