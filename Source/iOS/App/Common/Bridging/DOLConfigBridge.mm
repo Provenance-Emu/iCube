@@ -214,9 +214,9 @@ static bool ICubeEmulationActive() {
 
 // Idle loop detection / fast-forward toggles
 + (BOOL)mainRelaxedIdleDetection { return Config::Get(Config::MAIN_RELAXED_IDLE_DETECTION); }
-+ (void)setMainRelaxedIdleDetection:(BOOL)enabled { Config::SetBase(Config::MAIN_RELAXED_IDLE_DETECTION, (bool)enabled); }
++ (void)setMainRelaxedIdleDetection:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_RELAXED_IDLE_DETECTION, (bool)enabled); }
 + (BOOL)mainFastForwardCtrIdle { return Config::Get(Config::MAIN_FAST_FORWARD_CTR_IDLE); }
-+ (void)setMainFastForwardCtrIdle:(BOOL)enabled { Config::SetBase(Config::MAIN_FAST_FORWARD_CTR_IDLE, (bool)enabled); }
++ (void)setMainFastForwardCtrIdle:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_FAST_FORWARD_CTR_IDLE, (bool)enabled); }
 
 // Config > General
 + (BOOL)mainCpuThread { return Config::Get(Config::MAIN_CPU_THREAD); }
