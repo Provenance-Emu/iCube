@@ -1993,6 +1993,8 @@ struct ConfigAdvancedView: View {
   @State private var cirPsNeonValidate: Bool = false
   @State private var cirIrMicroOpFusion: Bool = false
   @State private var cirIrMicroOpFusionValidate: Bool = false
+  @State private var cirIrDeadFlagElim: Bool = false
+  @State private var cirIrDeadFlagElimValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -2141,6 +2143,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ Micro-Op Fusion: Validate (slow, correctness pass)"), isOn: $cirIrMicroOpFusionValidate)
             .onChange(of: cirIrMicroOpFusionValidate) { DOLConfigBridge.setCirIrMicroOpFusionValidate($0) },
           L("Self-check for Micro-Op Fusion: for every fused run, also runs the ops un-fused and asserts the resulting registers match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Micro-Op Fusion (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Dead CR-Flag Elimination (IR engine only, experimental)"), isOn: $cirIrDeadFlagElim)
+            .onChange(of: cirIrDeadFlagElim) { DOLConfigBridge.setCirIrDeadFlagElim($0) },
+          L("⚠️ Only affects the Cached Interpreter (IR) engine. Skips computing condition-flag (CR) results the block-analyzer proves are overwritten before any read — the same elimination the default Cached Interpreter offers, as an IR pass. No effect on the default Cached Interpreter. Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Dead CR-Flag Elimination: Validate (slow, correctness pass)"), isOn: $cirIrDeadFlagElimValidate)
+            .onChange(of: cirIrDeadFlagElimValidate) { DOLConfigBridge.setCirIrDeadFlagElimValidate($0) },
+          L("Self-check for IR Dead CR-Flag Elimination: double-runs every eliminated op (CR computed vs skipped) and asserts the live CR fields match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead CR-Flag Elimination (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2328,6 +2338,8 @@ struct ConfigAdvancedView: View {
     cirPsNeonValidate = DOLConfigBridge.cirPsNeonValidate()
     cirIrMicroOpFusion = DOLConfigBridge.cirIrMicroOpFusion()
     cirIrMicroOpFusionValidate = DOLConfigBridge.cirIrMicroOpFusionValidate()
+    cirIrDeadFlagElim = DOLConfigBridge.cirIrDeadFlagElim()
+    cirIrDeadFlagElimValidate = DOLConfigBridge.cirIrDeadFlagElimValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist
