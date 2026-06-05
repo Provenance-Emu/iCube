@@ -201,6 +201,10 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
 + (void)setMainCpuCore:(NSInteger)core {
   INFO_LOG_FMT(POWERPC, "DOLConfigBridge.setMainCpuCore({})", (int)core);
   Config::SetBaseOrCurrent(Config::MAIN_CPU_CORE, (PowerPC::CPUCore)core);
+  // CPU core is a structural, low-frequency setting and the user A/Bs it often (e.g. the
+  // experimental IR core). Persist immediately so the choice survives a relaunch even
+  // without a background flush. (See flushSettingsToDisk for the general save-on-background.)
+  Config::Save();
 }
 + (BOOL)mainMMU { return Config::Get(Config::MAIN_MMU); }
 + (void)setMainMMU:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_MMU, (bool)enabled); }

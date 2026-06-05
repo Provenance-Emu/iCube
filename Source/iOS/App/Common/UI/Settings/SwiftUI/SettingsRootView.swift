@@ -2353,13 +2353,23 @@ private struct CpuEnginePicker: View {
     // appear in the jitless list too — not just when JIT is available.
     jitAvailable ? CpuEngine.allCases : [.interpreter, .cachedInterpreter, .cachedInterpreterIR]
   }
+  /// The row to check. On a jitless build a stored JIT core (the arm64 default) actually
+  /// runs as Cached Interpreter and isn't in `choices`, so checking `value == selected`
+  /// would leave NO row checked. Map a JIT core to Cached Interpreter so the checkmark
+  /// lands on the engine that actually runs (mirrors the parent's effectiveCpuEngineLabel).
+  private var effectiveSelected: CpuEngine {
+    if !jitAvailable && (selected == .jit64 || selected == .jitARM64) {
+      return .cachedInterpreter
+    }
+    return selected
+  }
   var body: some View {
     List {
       Section(footer: Text(jitAvailable
                            ? L("Cached Interpreter and the JIT recompilers are faster; the plain Interpreter is the most accurate but far too slow for full-speed play.")
                            : L("This build runs without a JIT entitlement, so only interpreter engines are available. Cached Interpreter is the recommended (and default) choice. Selecting a JIT engine on other builds would silently fall back to Cached Interpreter here."))) {
         ForEach(Array(choices.enumerated()), id: \.offset) { _, value in
-          SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setMainCpuCore(value.rawValue) }
+          SelectRow(label: value.label, checked: value == effectiveSelected) { selected = value; DOLConfigBridge.setMainCpuCore(value.rawValue) }
         }
       }
     }
