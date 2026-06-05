@@ -977,6 +977,25 @@ const Info<bool> MAIN_CIR_IR_DEAD_FLAG_ELIM{{System::Main, "Core", "CIRIRDeadFla
 // passes only. Default false.
 const Info<bool> MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE{
     {System::Main, "Core", "CIRIRDeadFlagElimValidate"}, false};
+// iCube IR engine (CPUCore 6) Milestone 4: constant-address fusion. The FIRST optimizer pass that the
+// shipping data-interpreted CachedInterpreter cannot easily do — it requires the explicit IRInst layer.
+// Every hot block builds 32-bit base addresses with an `lis rX,hi` (addis rX,r0,hi) immediately followed by
+// an `addi/addis/subi/ori rX,rX,lo`: two interpreter dispatches to materialize one constant into rX. This
+// pass walks the lowered IR vector and, whenever it sees that exact adjacent pair (both plain
+// Interpret<false> ops, same rX written-and-read, rX!=0), folds it into ONE SetRegConst op that just writes
+// the precomputed u32 — halving the dispatch on the single most common pattern in the profiles. Safe by
+// construction: addi/addis/ori (OPCD 14/15/24) have no record form, set no CR/CA, touch no memory, and raise
+// no exception, so matching the exact opcode IS the flag/exception exclusion. Default FALSE: when off the
+// pass never runs and the lowered vector is byte-identical to the M3 lowering.
+const Info<bool> MAIN_CIR_IR_CONST_FUSION{{System::Main, "Core", "CIRIRConstFusion"}, false};
+// iCube IR engine M4: self-validation twin for MAIN_CIR_IR_CONST_FUSION. When ON, every fused SetRegConst
+// op double-runs at execution time: first the REFERENCE (the original two ops, run via the interpreter on a
+// snapshot of rX), capturing the resulting rX, then RESTORES rX and commits the SHIPPING form
+// (gpr[rX]=precomputed value, run last), and ASSERTs the two rX results are byte-identical. The two ops write
+// only gpr[rX] (no CR/CA/mem/pc), so the diff is scoped to that one register. Catches a mis-folded constant.
+// Slow; correctness only. Default false.
+const Info<bool> MAIN_CIR_IR_CONST_FUSION_VALIDATE{
+    {System::Main, "Core", "CIRIRConstFusionValidate"}, false};
 // iCube: CachedInterpreter dead FP-Result-Flags (FPRF) elimination. The paired-single / floating-point
 // handlers call UpdateFPRFSingle/UpdateFPRFDouble on essentially every arithmetic FP op to classify the
 // result into the FPSCR.FPRF field — but PPCAnalyst's back-to-front pass already computes op.wantsFPRF,

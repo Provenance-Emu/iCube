@@ -92,6 +92,16 @@ enum class IROp : u8
   // the vector by the dead-flag pass when BOTH M2 flags are on; double-runs ref-vs-eliminated and asserts
   // the live CR fields match. Never present in a shipping (validate-off) block.
   InterpretDeadFlagValidate,
+  // iCube IR M4: constant-address fusion result (MAIN_CIR_IR_CONST_FUSION). Replaces an adjacent
+  // `lis rX,hi` + `addi/addis/subi/ori rX,rX,lo` pair (two interpreter dispatches) with ONE op that writes a
+  // precomputed u32 constant into rX. No flags, no CR/CA, no memory, no exception, no pc write — just
+  // `gpr[reg] = value`. Only ever lowered when MAIN_CIR_IR_CONST_FUSION is on. The shipping (validate-off)
+  // form of M4; the validate-on form is SetRegConstValidate below.
+  SetRegConst,
+  // iCube IR M4: const-fusion validate op (MAIN_CIR_IR_CONST_FUSION_VALIDATE). Only ever lowered by the
+  // fusion pass when BOTH M4 flags are on; double-runs original-pair-vs-precomputed-constant and asserts the
+  // resulting rX matches. Never present in a shipping (validate-off) block.
+  SetRegConstValidate,
 };
 
 // Self-contained block cache for the IR engine. Mirrors CachedInterpreterBlockCache's free-range
@@ -206,6 +216,11 @@ private:
   // shipping inst (the InterpretOperands base), the original (Rc-set) reference inst, and the crOut mask of
   // fields allowed to differ. Only ever lowered when MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE is on.
   struct InterpretDeadFlagValidateOperands;
+  // iCube IR M4: payload for the fused constant-set op (target GPR index + precomputed u32 value) and its
+  // validate twin (additionally carries the interpreter ref + both original (func,inst) pairs to re-derive
+  // the reference rX at execution time).
+  struct SetRegConstOperands;
+  struct SetRegConstValidateOperands;
 
 public:
   // The explicit typed IR node. A 1:1 lowering does not need compactness, so this is a plain tagged
@@ -264,6 +279,24 @@ private:
   // The dead-flag-elim predicate, byte-identical to the CIR's DeadFlagElimApplies but reading the per-inst
   // metadata the lowering copied from PPCAnalyst's CodeOp (crOut/crDiscardable/opinfo flags/Rc).
   static bool DeadFlagElimApplies(const IRInst& inst);
+
+  // iCube IR M4: constant-address fusion pass. Walks the lowered IR vector and folds each adjacent
+  // `lis rX,hi` (addis rX,r0,hi) + `addi/addis/subi/ori rX,rX,lo` pair of plain Interpret<false> ops into one
+  // SetRegConst op writing the precomputed u32 into rX. Rebuilds a fresh vector (IRInst is not move-
+  // assignable — the operand union holds reference members — so no in-place erase/insert is possible) and
+  // swaps it in. Interior arithmetic pairs only: any terminal (EndBlock/EndBlockLink/its expected_pc),
+  // control op, or check is copied through untouched, so the M3 linking invariants are preserved. With the
+  // flag off this pass never runs and the vector stays byte-identical to the M3 lowering.
+  void PassConstAddrFusion(std::vector<IRInst>& ir) const;
+
+  // iCube IR M4: the const-fusion recognizer. Given two adjacent insts, returns true and fills out_reg /
+  // out_value with the folded GPR index + precomputed constant IFF first is `lis rX,hi` (addis, OPCD 15,
+  // RA==0) and second is `addi/addis (OPCD 14/15) rX,rX,lo` or `ori (OPCD 24) rX,rX,lo` with rX!=0 (so the
+  // interpreter's RA-based source path is taken, not the RA==0 li-style constant path). Both must be plain
+  // Interpret (write_pc=false). No record/CR/CA/exception forms exist for these opcodes, so opcode-match IS
+  // the flag/exception exclusion. Conservative: any mismatch returns false (don't fuse).
+  static bool ConstAddrFusionApplies(const IRInst& first, const IRInst& second, u32& out_reg,
+                                     u32& out_value);
 
   // DOLPHIN_IR_VALIDATE=1 opt-in self-check: re-emits the M0 callback tape into a scratch buffer and
   // asserts the lowered IR vector is 1:1 with it (same count, op<->callback, operands). Default off.
@@ -342,6 +375,17 @@ private:
                                        const InterpretDeadFlagValidateOperands& operands);
   static s32 InterpretDeadFlagValidate(std::ostream& stream,
                                        const InterpretDeadFlagValidateOperands& operands);
+  // iCube IR M4: fused constant-set handler. `ppc_state.gpr[reg] = value;` — no flags, no CR/CA, no memory,
+  // no pc write. Returns its own size (nonzero => the dispatch loop continues). The folded pair is always
+  // mid-block (lis/addi/ori never canEndBlock and aren't FP/loadstore, so both source ops are plain
+  // Interpret<false>), so there is no write_pc variant.
+  static s32 SetRegConst(PowerPC::PowerPCState& ppc_state, const SetRegConstOperands& operands);
+  static s32 SetRegConst(std::ostream& stream, const SetRegConstOperands& operands);
+  // iCube IR M4: const-fusion validate handler. Double-runs the original two ops (reference rX) vs the
+  // precomputed constant (the SHIPPING form, committed last) and asserts the resulting rX matches.
+  static s32 SetRegConstValidate(PowerPC::PowerPCState& ppc_state,
+                                 const SetRegConstValidateOperands& operands);
+  static s32 SetRegConstValidate(std::ostream& stream, const SetRegConstValidateOperands& operands);
 
   HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges;
   CachedInterpreterIRBlockCache m_block_cache;
@@ -410,6 +454,29 @@ struct CachedInterpreterIR::InterpretDeadFlagValidateOperands : InterpretOperand
   u32 elim_cr_mask;            // op.crOut: the fields allowed to differ (all discardable)
 };
 
+// iCube IR M4: payload for the fused constant-set op (MAIN_CIR_IR_CONST_FUSION). reg is the target GPR
+// index, value the precomputed u32. POD — no reference members — so it constructs/copies trivially.
+struct CachedInterpreterIR::SetRegConstOperands
+{
+  u32 reg;
+  u32 value;
+};
+
+// iCube IR M4: payload for the const-fusion validate op (MAIN_CIR_IR_CONST_FUSION_VALIDATE). Carries the
+// folded result (reg/value) PLUS the interpreter reference and BOTH original (func,inst) pairs so the handler
+// can recompute the reference rX by re-running the original two ops, then assert it equals the precomputed
+// value. Only ever lowered when MAIN_CIR_IR_CONST_FUSION_VALIDATE is on.
+struct CachedInterpreterIR::SetRegConstValidateOperands
+{
+  Interpreter& interpreter;
+  u32 reg;
+  u32 value;
+  void (*func1)(Interpreter&, UGeckoInstruction);  // lis rX,hi
+  UGeckoInstruction inst1;
+  void (*func2)(Interpreter&, UGeckoInstruction);  // addi/addis/ori rX,rX,lo
+  UGeckoInstruction inst2;
+};
+
 struct CachedInterpreterIR::HLEFunctionOperands
 {
   Core::System& system;
@@ -463,6 +530,8 @@ struct CachedInterpreterIR::IRInst
     CheckIdleOperands check_idle;
     CheckCtrIdleOperands ctr_idle;
     InterpretDeadFlagValidateOperands dead_flag_validate;  // M2 validate op
+    SetRegConstOperands set_reg_const;                     // iCube IR M4: fused constant-set
+    SetRegConstValidateOperands set_reg_const_validate;    // iCube IR M4: const-fusion validate op
   } u;
 
   // iCube M2: per-inst PPCAnalyst liveness metadata, copied from the source CodeOp at lower time (only

@@ -422,6 +422,9 @@ extern const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE;
 // iCube IR engine (CPUCore 6) Milestone 2: dead CR-flag elimination as the first IR optimizer pass.
 extern const Info<bool> MAIN_CIR_IR_DEAD_FLAG_ELIM;
 extern const Info<bool> MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE;
+// iCube IR engine (CPUCore 6) Milestone 4: constant-address fusion (lis+addi/addis/ori -> SetRegConst).
+extern const Info<bool> MAIN_CIR_IR_CONST_FUSION;
+extern const Info<bool> MAIN_CIR_IR_CONST_FUSION_VALIDATE;
 extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM;
 extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE;
 extern const Info<bool> MAIN_CIR_PSQ_FASTPATH;

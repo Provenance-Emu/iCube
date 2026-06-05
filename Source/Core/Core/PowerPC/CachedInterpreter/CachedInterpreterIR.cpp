@@ -41,6 +41,11 @@
 static bool s_ir_dead_flag_elim = false;
 static bool s_ir_dead_flag_elim_validate = false;
 
+// iCube IR M4: constant-address fusion flags, read once at Init (mirroring the M2 reads). When both are false
+// the pass makes ZERO edits to the lowered vector, so the engine's behavior is byte-identical to M3.
+static bool s_ir_const_fusion = false;
+static bool s_ir_const_fusion_validate = false;
+
 // iCube IR M3: block linking (reuses MAIN_CIR_BLOCK_LINKING, default true => ON for the IR core, since it
 // is correctness-preserving by construction). Read once in Init, mirroring the CIR's read-once discipline.
 // When false, EndBlockLink ops are never lowered (plain EndBlock instead) and jo.enableBlocklink stays off,
@@ -118,6 +123,10 @@ void CachedInterpreterIR::Init()
   // iCube M2: read the optimizer-pass flags once at codegen time. Default OFF => no IR edits.
   s_ir_dead_flag_elim = Config::Get(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM);
   s_ir_dead_flag_elim_validate = Config::Get(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE);
+
+  // iCube IR M4: read the constant-address fusion flags once. Default OFF => no IR edits.
+  s_ir_const_fusion = Config::Get(Config::MAIN_CIR_IR_CONST_FUSION);
+  s_ir_const_fusion_validate = Config::Get(Config::MAIN_CIR_IR_CONST_FUSION_VALIDATE);
 
   // iCube IR M3: read block linking once (reuses MAIN_CIR_BLOCK_LINKING; default true).
   s_ir_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
@@ -355,6 +364,12 @@ s32 CachedInterpreterIR::DispatchIRInst(PowerPC::PowerPCState& ppc_state, const 
     return FastForwardCtrIdle(ppc_state, inst.u.ctr_idle);
   case IROp::InterpretDeadFlagValidate:
     return InterpretDeadFlagValidate(ppc_state, inst.u.dead_flag_validate);
+  case IROp::SetRegConst:
+    // iCube IR M4: fast-pathed inline in ExecuteOneBlock; handled here too as the switch fallback and to
+    // satisfy -Wswitch on the new enumerator.
+    return SetRegConst(ppc_state, inst.u.set_reg_const);
+  case IROp::SetRegConstValidate:
+    return SetRegConstValidate(ppc_state, inst.u.set_reg_const_validate);
   }
   return 0;
 }
@@ -437,6 +452,9 @@ void CachedInterpreterIR::RunIROptimizationPasses(std::vector<IRInst>& ir) const
 {
   if (s_ir_dead_flag_elim)
     PassDeadFlagElim(ir);
+  // iCube IR M4: constant-address fusion (lis+addi/addis/ori -> SetRegConst). Default OFF.
+  if (s_ir_const_fusion)
+    PassConstAddrFusion(ir);
   // Future passes register here, one line each:
   //   if (s_ir_const_fold) PassConstFold(ir);
   //   if (s_ir_fusion)     PassFusion(ir);
@@ -507,6 +525,170 @@ void CachedInterpreterIR::PassDeadFlagElim(std::vector<IRInst>& ir) const
       inst.u.interpret.inst.Rc = 0;
     }
   }
+}
+
+// ============================================================================
+// iCube IR M4: constant-address fusion pass + handlers.
+//
+// This is the FIRST optimization that the shipping data-interpreted CachedInterpreter cannot easily do: it
+// folds two adjacent interpreter dispatches into one, which needs the explicit IRInst layer to rewrite a
+// pair in place. The shipping CIR emits a fixed callback per CodeOp at decode time with no second-pass
+// rewrite stage, so it can't collapse the pair without restructuring its emitter.
+// ============================================================================
+
+// PowerPC primary opcodes for the fused forms (D-form integer/logical immediate ops). None of these have a
+// record/Rc form, set no CR/CA, touch no memory, and raise no exception — so matching the exact OPCD is the
+// flag/exception exclusion. (subi is a simplified mnemonic for `addi rX,rX,-imm`, i.e. OPCD 14 with a
+// negative SIMM_16 — no separate opcode to handle.)
+static constexpr u32 PPC_OPCD_ADDI = 14;   // addi / li / subi
+static constexpr u32 PPC_OPCD_ADDIS = 15;  // addis / lis
+static constexpr u32 PPC_OPCD_ORI = 24;    // ori
+
+// iCube IR M4: const-fusion recognizer. See header. Mirrors the interpreter's own arithmetic EXACTLY so the
+// folded constant equals running both ops (see Interpreter::addi/addis/ori).
+bool CachedInterpreterIR::ConstAddrFusionApplies(const IRInst& first, const IRInst& second,
+                                                 u32& out_reg, u32& out_value)
+{
+  // Both must be plain Interpret<false> (write_pc=false). lis/addi/ori never canEndBlock and aren't
+  // FP/loadstore, so they are always lowered as IROp::Interpret (never InterpretPC/InterpretChk). Matching
+  // only Interpret also means the folded op never needs a pc/npc write.
+  if (first.op != IROp::Interpret || second.op != IROp::Interpret)
+    return false;
+
+  const UGeckoInstruction i1 = first.u.interpret.inst;
+  const UGeckoInstruction i2 = second.u.interpret.inst;
+
+  // FIRST op must be `lis rX,hi` == `addis rX, r0, hi`: OPCD 15, RA == 0 (so the result is the pure constant
+  // hi<<16, not gpr[RA]+hi<<16). The destination rX is i1.RD.
+  if (i1.OPCD != PPC_OPCD_ADDIS || i1.RA != 0)
+    return false;
+  const u32 rX = i1.RD;
+  if (rX == 0)
+    return false;  // rX != 0 is load-bearing (see the addi RA==0 path below); also nothing builds into r0
+
+  const u32 hi = u32(i1.SIMM_16 << 16);  // mirror Interpreter::addis RA==0 branch exactly
+
+  // SECOND op must read+write exactly rX and be one of the recognized forms. The interpreter's source field
+  // differs by opcode: addi/addis use RA as the source GPR and RD as the destination; ori uses RS as the
+  // source and RA as the destination. Require dest == source == rX.
+  u32 value;
+  switch (i2.OPCD)
+  {
+  case PPC_OPCD_ADDI:
+    // addi rX,rX,lo. Require RD == RA == rX. RA != 0 is guaranteed by rX != 0 above, so the interpreter
+    // takes the `gpr[RA] + SIMM_16` path (NOT the RA==0 `gpr[RD]=SIMM` constant path).
+    if (i2.RD != rX || i2.RA != rX)
+      return false;
+    value = hi + u32(i2.SIMM_16);  // mirror Interpreter::addi RA!=0 branch (signed SIMM)
+    break;
+  case PPC_OPCD_ADDIS:
+    // addis rX,rX,lo. Require RD == RA == rX.
+    if (i2.RD != rX || i2.RA != rX)
+      return false;
+    value = hi + u32(i2.SIMM_16 << 16);  // mirror Interpreter::addis RA!=0 branch
+    break;
+  case PPC_OPCD_ORI:
+    // ori rX,rX,lo. Logical D-form: dest is RA, source is RS. Require RA == RS == rX.
+    if (i2.RA != rX || i2.RS != rX)
+      return false;
+    value = hi | i2.UIMM;  // mirror Interpreter::ori exactly
+    break;
+  default:
+    return false;
+  }
+
+  out_reg = rX;
+  out_value = value;
+  return true;
+}
+
+// iCube IR M4: constant-address fusion pass. IRInst is NOT move-assignable (the operand union holds
+// reference members, so copy/move assignment is deleted — this is why M2's PassDeadFlagElim mutates in place
+// rather than erasing/inserting). Collapsing two elements into one therefore cannot use vector erase/insert;
+// instead we build a FRESH vector by construction (push_back is fine) and swap it in. Walk by index: a
+// matched [i, i+1] pair becomes one SetRegConst (or SetRegConstValidate) and skips both; anything else is
+// copied through untouched. Terminals (EndBlock/EndBlockLink and its expected_pc), control ops, and checks
+// are never the FIRST op of a recognized pair (the recognizer requires IROp::Interpret addis), so they are
+// copied verbatim — the M3 linking invariants are preserved by construction, and PatchBlockLink still finds
+// the terminal by its expected_pc scan after fusion.
+void CachedInterpreterIR::PassConstAddrFusion(std::vector<IRInst>& ir) const
+{
+  if (ir.size() < 2)
+    return;
+
+  std::vector<IRInst> out;
+  out.reserve(ir.size());
+
+  std::size_t i = 0;
+  const std::size_t n = ir.size();
+  while (i < n)
+  {
+    u32 reg = 0;
+    u32 value = 0;
+    if (i + 1 < n && ConstAddrFusionApplies(ir[i], ir[i + 1], reg, value))
+    {
+      if (s_ir_const_fusion_validate)
+      {
+        // Validate form: carry the folded result PLUS the original two (func,inst) pairs so the handler can
+        // recompute the reference rX. The interpreter ref is shared by both source ops (same engine).
+        out.push_back(IRInst{IROp::SetRegConstValidate,
+                             {.set_reg_const_validate = {ir[i].u.interpret.interpreter, reg, value,
+                                                         ir[i].u.interpret.func, ir[i].u.interpret.inst,
+                                                         ir[i + 1].u.interpret.func,
+                                                         ir[i + 1].u.interpret.inst}}});
+      }
+      else
+      {
+        out.push_back(IRInst{IROp::SetRegConst, {.set_reg_const = {reg, value}}});
+      }
+      i += 2;  // consumed the pair
+    }
+    else
+    {
+      out.push_back(ir[i]);  // copy through untouched (construction-copy is fine; assignment is not)
+      i += 1;
+    }
+  }
+
+  ir.swap(out);
+}
+
+// iCube IR M4: fused constant-set handler. The whole point of the pass: one dispatch, one store, instead of
+// two interpreter dispatches. No flags, no CR/CA, no memory, no pc write.
+s32 CachedInterpreterIR::SetRegConst(PowerPC::PowerPCState& ppc_state,
+                                     const SetRegConstOperands& operands)
+{
+  ppc_state.gpr[operands.reg] = operands.value;
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube IR M4: const-fusion validate handler. Mirrors the M2 validate discipline: run the REFERENCE (the
+// original two ops, via the interpreter) on a snapshot of rX, capture the result, RESTORE rX, then commit the
+// SHIPPING form (gpr[rX] = precomputed value, run LAST), and ASSERT the two rX results match. The folded ops
+// write ONLY gpr[rX] (addi/addis/ori with RA==dest==source: no CR/CA, no memory, no pc), so the diff is
+// scoped to that one register and no other state needs snapshot/restore. (Worth noting: re-running func1, an
+// `lis rX,hi` with RA==0, overwrites rX from the immediate alone — it doesn't read the prior rX — so the
+// reference run is self-contained regardless of rX's incoming value.)
+s32 CachedInterpreterIR::SetRegConstValidate(PowerPC::PowerPCState& ppc_state,
+                                             const SetRegConstValidateOperands& operands)
+{
+  const u32 saved = ppc_state.gpr[operands.reg];
+
+  // REFERENCE RUN: the original two ops, in order, exactly as the unfused block would have executed them.
+  operands.func1(operands.interpreter, operands.inst1);
+  operands.func2(operands.interpreter, operands.inst2);
+  const u32 ref = ppc_state.gpr[operands.reg];
+
+  // Restore rX, then commit the SHIPPING form last so its result stays committed.
+  ppc_state.gpr[operands.reg] = saved;
+  ppc_state.gpr[operands.reg] = operands.value;
+
+  ASSERT_MSG(DYNA_REC, ref == operands.value,
+             "CIR IR const-fusion divergence: rX={} fused={:#010x} vs ref={:#010x} "
+             "(inst1={:#010x}, inst2={:#010x})",
+             operands.reg, operands.value, ref, operands.inst1.hex, operands.inst2.hex);
+
+  return sizeof(AnyCallback) + sizeof(operands);
 }
 
 // iCube M2: dead CR-flag elimination validate handler. Direct analogue of the CIR's InterpretDeadFlagValidate,
@@ -646,6 +828,14 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
       if (inst.op == IROp::InterpretPC)
       {
         Interpret<true>(ppc_state, inst.u.interpret);
+        continue;
+      }
+      // iCube IR M4: fused constant-set on the inlined fast path — this IS the perf win (one store, no
+      // interpreter dispatch, no switch). Only present when MAIN_CIR_IR_CONST_FUSION is on; with the flag off
+      // the pass never lowers it, so this branch is never taken and the path is byte-identical to M3.
+      if (inst.op == IROp::SetRegConst)
+      {
+        ppc_state.gpr[inst.u.set_reg_const.reg] = inst.u.set_reg_const.value;
         continue;
       }
       // iCube IR M3: linkable terminal. EndBlockLink does the EndBlock accounting and returns whether the
@@ -1425,6 +1615,20 @@ s32 CachedInterpreterIR::InterpretDeadFlagValidate(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+s32 CachedInterpreterIR::SetRegConst(std::ostream& stream, const SetRegConstOperands& operands)
+{
+  fmt::println(stream, "SetRegConst(r{} = 0x{:08x})", operands.reg, operands.value);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreterIR::SetRegConstValidate(std::ostream& stream,
+                                             const SetRegConstValidateOperands& operands)
+{
+  fmt::println(stream, "SetRegConstValidate(r{} = 0x{:08x}, inst1=0x{:08x}, inst2=0x{:08x})",
+               operands.reg, operands.value, operands.inst1.hex, operands.inst2.hex);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreterIR::IRBlockAnchor(std::ostream& stream, const IRBlockAnchorOperands& operands)
 {
   const std::vector<IRInst>& ir = *operands.ir;
@@ -1465,6 +1669,10 @@ std::size_t CachedInterpreterIR::Disassemble(const JitBlock& block, std::ostream
       // iCube M2: validate op. Lives only in the IR vector (never written to the emitter buffer this table
       // walks), so it is never matched here — listed for lookup completeness / future IR-vector disassembly.
       LOOKUP_KV(CachedInterpreterIR::InterpretDeadFlagValidate),
+      // iCube IR M4: const-fusion ops. Live only in the IR vector (never written to the emitter buffer this
+      // table walks), so never matched here — listed for lookup completeness / future IR-vector disassembly.
+      LOOKUP_KV(CachedInterpreterIR::SetRegConst),
+      LOOKUP_KV(CachedInterpreterIR::SetRegConstValidate),
   });
 
 #undef LOOKUP_KV
