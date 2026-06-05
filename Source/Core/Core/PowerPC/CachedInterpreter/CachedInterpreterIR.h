@@ -102,6 +102,30 @@ enum class IROp : u8
   // fusion pass when BOTH M4 flags are on; double-runs original-pair-vs-precomputed-constant and asserts the
   // resulting rX matches. Never present in a shipping (validate-off) block.
   SetRegConstValidate,
+  // iCube IR M5: micro-op fusion result (MAIN_CIR_IR_MICROOP_FUSION). Coalesces a maximal run of N
+  // consecutive plain Interpret<false> integer-ALU ops — the ones the shipping CIR's micro-op fusion deems
+  // fusible (no flags-controlled-by-Rc that aren't dead, no exception, no PC write, no load/store, the exact
+  // is_simple_mop opcode allowlist) — into ONE dispatched IRInst whose handler runs the run in a tight inner
+  // loop, calling each op's interpreter func in order. Collapses N per-op IRInst dispatches (switch + branch)
+  // to one. The run's (func,inst) pairs live in a per-block side pool (m_block_fused) that shares the IR
+  // vector's exact lifetime + deferred-free path; the operand carries a stable pointer into that pool plus an
+  // offset/count. Only ever lowered when MAIN_CIR_IR_MICROOP_FUSION is on. The shipping (validate-off) form;
+  // the validate-on form is FusedAluRunValidate below.
+  FusedAluRun,
+  // iCube IR M5: micro-op fusion validate op (MAIN_CIR_IR_MICROOP_FUSION_VALIDATE). Only ever lowered by the
+  // fusion pass when BOTH M5 flags are on; double-runs the same run un-fused (per-op) vs fused on a PPC-state
+  // snapshot and asserts bit-identical GPR/CR/XER/PC. Never present in a shipping (validate-off) block.
+  FusedAluRunValidate,
+};
+
+// iCube IR M5: one entry of a fused ALU run — the (interpreter func, decoded instruction) pair the fused
+// handler calls. Trivially copyable POD. These live in a per-block pool (CachedInterpreterIR::m_block_fused),
+// NOT inline in the IRInst union, so fusion adds ZERO bytes to IRInst (the union stays sized by the existing
+// SetRegConstValidate operand).
+struct CachedInterpreterIRFusedOp
+{
+  void (*func)(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction (plain Interpret<false>)
+  UGeckoInstruction inst;
 };
 
 // Self-contained block cache for the IR engine. Mirrors CachedInterpreterBlockCache's free-range
@@ -221,6 +245,10 @@ private:
   // the reference rX at execution time).
   struct SetRegConstOperands;
   struct SetRegConstValidateOperands;
+  // iCube IR M5: payload for the fused ALU run (interpreter ref + a stable pointer into the per-block pool +
+  // offset/count) and its validate twin (additionally the count of run ops for the snapshot double-run).
+  struct FusedAluRunOperands;
+  struct FusedAluRunValidateOperands;
 
 public:
   // The explicit typed IR node. A 1:1 lowering does not need compactness, so this is a plain tagged
@@ -241,6 +269,17 @@ private:
   // would dangle the in-flight `for (inst : ir)` -> use-after-free). Released at the next dispatch
   // boundary (top of ExecuteOneBlock) and in ClearCache, when no loop is iterating them.
   std::vector<std::unique_ptr<std::vector<IRInst>>> m_ir_pending_free;
+
+  // iCube IR M5: per-block fused-run pool, keyed by normalEntry — a parallel ownership holder that mirrors
+  // m_block_ir EXACTLY (same key, same insert/release/clear sites, same deferred-free discipline). Each block
+  // that the micro-op fusion pass touched owns one std::vector<FusedOp> here; a FusedAluRun/Validate op's
+  // operand carries a raw pointer to that vector (stable across the unique_ptr move — the identical guarantee
+  // m_block_ir relies on) plus an offset/count into it. Nothing LOOKS THIS UP at execution time (the operand
+  // points straight at the pool), so it is a pure lifetime owner. Freed in lockstep with the IR vector:
+  // ReleaseBlockIR retires it to m_fused_pending_free, ExecuteOneBlock/ClearCache free that list at a
+  // dispatch boundary. When the M5 flag is off the pass never runs, so no entry is ever inserted here.
+  std::unordered_map<const u8*, std::unique_ptr<std::vector<CachedInterpreterIRFusedOp>>> m_block_fused;
+  std::vector<std::unique_ptr<std::vector<CachedInterpreterIRFusedOp>>> m_fused_pending_free;
 
   // Anchor record placed in the emitter buffer (one per block) so the normal JitBlock plumbing
   // (near_begin/near_end ranges, reclamation, Dispatch-by-normalEntry) keeps working unchanged.
@@ -266,7 +305,11 @@ private:
   // time) and rewrite inst fields; no loop-pattern recognition. With every M2 flag OFF this stage makes ZERO
   // edits, so the vector stays byte-identical to the M1 lowering and behavior is unchanged.
   // ==========================================================================
-  void RunIROptimizationPasses(std::vector<IRInst>& ir) const;
+  // iCube IR M5: `fused_pool` is the per-block side pool the micro-op fusion pass appends run (func,inst)
+  // pairs into; DoJit owns it and, if non-empty after the passes, inserts it into m_block_fused. When the M5
+  // flag is off the pass never touches it, so it stays empty and no pool entry is created.
+  void RunIROptimizationPasses(std::vector<IRInst>& ir,
+                               std::vector<CachedInterpreterIRFusedOp>& fused_pool) const;
 
   // First pass: dead CR-flag elimination. Mirrors the shipping CIR's MAIN_CIR_DEAD_FLAG_ELIM exactly:
   // for an Rc-form plain Interpret op whose ENTIRE crOut is discardable (proven dead by PPCAnalyst), clear
@@ -297,6 +340,27 @@ private:
   // the flag/exception exclusion. Conservative: any mismatch returns false (don't fuse).
   static bool ConstAddrFusionApplies(const IRInst& first, const IRInst& second, u32& out_reg,
                                      u32& out_value);
+
+  // iCube IR M5: micro-op fusion pass. Scans the lowered IR vector and coalesces maximal runs of consecutive
+  // plain Interpret<false> ops whose instruction the CIR's fusible predicate (IsFusibleAluOp, copied verbatim
+  // from CachedInterpreter::is_simple_mop) admits into ONE FusedAluRun op. The run's (func,inst) pairs are
+  // appended to `pool` (the per-block side pool, owned in m_block_fused); the FusedAluRun operand carries a
+  // stable pointer to `pool` plus the run's offset/count. Rebuilds a fresh vector (IRInst is not move-
+  // assignable) and swaps it in, exactly like M4. A run breaks at the FIRST non-fusible op, so any terminal
+  // (EndBlock/EndBlockLink and its expected_pc), control op, check, HLE, idle, InterpretChk, InterpretPC, or
+  // non-allowlisted Interpret is copied through untouched — the M3 linking invariants are preserved by
+  // construction (a terminal is never inside a run, and PatchBlockLink still finds it by its expected_pc
+  // scan). With the flag off the pass never runs and the vector stays byte-identical to the M4 lowering.
+  void PassMicroOpFusion(std::vector<IRInst>& ir,
+                         std::vector<CachedInterpreterIRFusedOp>& pool) const;
+
+  // iCube IR M5: the fusible-op predicate, COPIED VERBATIM from the shipping CIR's is_simple_mop (see
+  // CachedInterpreter::DoJit). Returns true IFF the instruction is one of the no-flag(-unless-dead) /
+  // no-exception / no-PC-write / no-load-store integer ALU opcodes the CIR fuses. The caller additionally
+  // requires the op be a plain IROp::Interpret (which already encodes write_pc=false, non-terminal,
+  // non-exception, non-memcheck-loadstore, non-skip) and re-checks FL_LOADSTORE/FL_USE_FPU for an exact
+  // mirror of the CIR's run-build guard. Conservative: any opcode not on the allowlist returns false.
+  static bool IsFusibleAluOp(UGeckoInstruction inst);
 
   // DOLPHIN_IR_VALIDATE=1 opt-in self-check: re-emits the M0 callback tape into a scratch buffer and
   // asserts the lowered IR vector is 1:1 with it (same count, op<->callback, operands). Default off.
@@ -386,6 +450,21 @@ private:
   static s32 SetRegConstValidate(PowerPC::PowerPCState& ppc_state,
                                  const SetRegConstValidateOperands& operands);
   static s32 SetRegConstValidate(std::ostream& stream, const SetRegConstValidateOperands& operands);
+  // iCube IR M5: fused-ALU-run handler. Runs the run's N (func,inst) pairs in a tight inner loop, calling each
+  // op's interpreter func in order — one IRInst dispatch instead of N. Each op is a plain Interpret<false>
+  // (no pc/npc, no exception check), so the loop is byte-identical to running those N IROp::Interpret ops back
+  // to back. The run is always mid-block (fusible ops never canEndBlock and aren't FP/loadstore), so there is
+  // no write_pc variant. Returns its own size (nonzero => the dispatch loop continues).
+  static s32 FusedAluRun(PowerPC::PowerPCState& ppc_state, const FusedAluRunOperands& operands);
+  static s32 FusedAluRun(std::ostream& stream, const FusedAluRunOperands& operands);
+  // iCube IR M5: fused-run validate handler. Snapshots the full PPC state set (GPR/CR/XER/PC/NPC/Exceptions),
+  // runs the run un-fused (per-op), captures the result, restores, runs the fused form (the SHIPPING path,
+  // committed last), and asserts bit-identical state. Since the fused path calls the SAME funcs in the SAME
+  // order, the two are structurally equal — this catches pass-CONSTRUCTION bugs (miscopied func/inst, wrong
+  // run boundary), not arithmetic divergence (there is none to catch). Mirrors the M2/M4 validate discipline.
+  static s32 FusedAluRunValidate(PowerPC::PowerPCState& ppc_state,
+                                 const FusedAluRunValidateOperands& operands);
+  static s32 FusedAluRunValidate(std::ostream& stream, const FusedAluRunValidateOperands& operands);
 
   HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges;
   CachedInterpreterIRBlockCache m_block_cache;
@@ -477,6 +556,26 @@ struct CachedInterpreterIR::SetRegConstValidateOperands
   UGeckoInstruction inst2;
 };
 
+// iCube IR M5: payload for the fused ALU run (MAIN_CIR_IR_MICROOP_FUSION). interpreter is the engine passed
+// to each run op's func; pool points at the per-block side pool (m_block_fused entry, stable across its
+// owning unique_ptr's moves); offset/count select this run's contiguous (func,inst) span within the pool.
+// 24 bytes (ref 8 + ptr 8 + 2*u32) — smaller than the existing SetRegConstValidateOperands, so it adds ZERO
+// bytes to the IRInst union. The fused ops are all plain Interpret<false>, so no pc/current_pc is needed.
+struct CachedInterpreterIR::FusedAluRunOperands
+{
+  Interpreter& interpreter;
+  const std::vector<CachedInterpreterIRFusedOp>* pool;
+  u32 offset;
+  u32 count;
+};
+
+// iCube IR M5: payload for the fused-run validate op (MAIN_CIR_IR_MICROOP_FUSION_VALIDATE). Same fields as the
+// shipping op — the validate handler re-runs the very same pool span both un-fused and fused on a state
+// snapshot and asserts equality, so it needs nothing extra.
+struct CachedInterpreterIR::FusedAluRunValidateOperands : CachedInterpreterIR::FusedAluRunOperands
+{
+};
+
 struct CachedInterpreterIR::HLEFunctionOperands
 {
   Core::System& system;
@@ -532,6 +631,8 @@ struct CachedInterpreterIR::IRInst
     InterpretDeadFlagValidateOperands dead_flag_validate;  // M2 validate op
     SetRegConstOperands set_reg_const;                     // iCube IR M4: fused constant-set
     SetRegConstValidateOperands set_reg_const_validate;    // iCube IR M4: const-fusion validate op
+    FusedAluRunOperands fused_alu_run;                      // iCube IR M5: fused ALU run
+    FusedAluRunValidateOperands fused_alu_run_validate;     // iCube IR M5: fused-run validate op
   } u;
 
   // iCube M2: per-inst PPCAnalyst liveness metadata, copied from the source CodeOp at lower time (only

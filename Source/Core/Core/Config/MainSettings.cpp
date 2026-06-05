@@ -996,6 +996,24 @@ const Info<bool> MAIN_CIR_IR_CONST_FUSION{{System::Main, "Core", "CIRIRConstFusi
 // Slow; correctness only. Default false.
 const Info<bool> MAIN_CIR_IR_CONST_FUSION_VALIDATE{
     {System::Main, "Core", "CIRIRConstFusionValidate"}, false};
+// iCube IR engine (CPUCore 6) Milestone 5: micro-op fusion. Ports the shipping CachedInterpreter's proven
+// micro-op fusion (MAIN_CIR_MICROOP_FUSION) to the IR engine as an optimizer pass. Straight-line integer code
+// — the bulk of every block — is a run of plain Interpret<false> ALU ops, each costing one IRInst dispatch
+// (switch + branch + call). This pass coalesces maximal runs of consecutive fusible integer-ALU ops (the
+// exact is_simple_mop opcode allowlist the CIR uses: no Rc-controlled-live CR, no exception, no PC write, no
+// load/store) into ONE FusedAluRun op whose handler runs the run in a tight inner loop, calling each op's
+// interpreter func in order — collapsing N dispatches to one. Block-linking-safe: a run breaks at any
+// terminal/control/check, so the M3 EndBlockLink invariants are untouched. Default FALSE: when off the pass
+// never runs and the lowered vector is byte-identical to the M4 lowering.
+const Info<bool> MAIN_CIR_IR_MICROOP_FUSION{{System::Main, "Core", "CIRIRMicroOpFusion"}, false};
+// iCube IR engine M5: self-validation twin for MAIN_CIR_IR_MICROOP_FUSION. When ON, every FusedAluRun op
+// double-runs at execution time: snapshot the PPC state, run the run un-fused (one interpreter call per op),
+// capture the result, restore, then run the fused form (the SHIPPING path, committed last), and assert the
+// full GPR/CR/XER/PC state is byte-identical. The fused path calls the SAME funcs in the SAME order, so this
+// proves the PASS built the run correctly (right funcs/insts, right boundary), not that two arithmetic
+// implementations agree (there is only one). Slow; correctness only. Default false.
+const Info<bool> MAIN_CIR_IR_MICROOP_FUSION_VALIDATE{
+    {System::Main, "Core", "CIRIRMicroOpFusionValidate"}, false};
 // iCube: CachedInterpreter dead FP-Result-Flags (FPRF) elimination. The paired-single / floating-point
 // handlers call UpdateFPRFSingle/UpdateFPRFDouble on essentially every arithmetic FP op to classify the
 // result into the FPSCR.FPRF field — but PPCAnalyst's back-to-front pass already computes op.wantsFPRF,

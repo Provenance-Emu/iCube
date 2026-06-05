@@ -425,6 +425,10 @@ extern const Info<bool> MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE;
 // iCube IR engine (CPUCore 6) Milestone 4: constant-address fusion (lis+addi/addis/ori -> SetRegConst).
 extern const Info<bool> MAIN_CIR_IR_CONST_FUSION;
 extern const Info<bool> MAIN_CIR_IR_CONST_FUSION_VALIDATE;
+// iCube IR engine (CPUCore 6) Milestone 5: micro-op fusion (coalesce runs of plain Interpret<false> integer
+// ALU ops -> one FusedAluRun dispatch).
+extern const Info<bool> MAIN_CIR_IR_MICROOP_FUSION;
+extern const Info<bool> MAIN_CIR_IR_MICROOP_FUSION_VALIDATE;
 extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM;
 extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE;
 extern const Info<bool> MAIN_CIR_PSQ_FASTPATH;

@@ -46,6 +46,11 @@ static bool s_ir_dead_flag_elim_validate = false;
 static bool s_ir_const_fusion = false;
 static bool s_ir_const_fusion_validate = false;
 
+// iCube IR M5: micro-op fusion flags, read once at Init (mirroring the M2/M4 reads). When both are false the
+// pass makes ZERO edits to the lowered vector, so the engine's behavior is byte-identical to M4.
+static bool s_ir_microop_fusion = false;
+static bool s_ir_microop_fusion_validate = false;
+
 // iCube IR M3: block linking (reuses MAIN_CIR_BLOCK_LINKING, default true => ON for the IR core, since it
 // is correctness-preserving by construction). Read once in Init, mirroring the CIR's read-once discipline.
 // When false, EndBlockLink ops are never lowered (plain EndBlock instead) and jo.enableBlocklink stays off,
@@ -127,6 +132,10 @@ void CachedInterpreterIR::Init()
   // iCube IR M4: read the constant-address fusion flags once. Default OFF => no IR edits.
   s_ir_const_fusion = Config::Get(Config::MAIN_CIR_IR_CONST_FUSION);
   s_ir_const_fusion_validate = Config::Get(Config::MAIN_CIR_IR_CONST_FUSION_VALIDATE);
+
+  // iCube IR M5: read the micro-op fusion flags once. Default OFF => no IR edits.
+  s_ir_microop_fusion = Config::Get(Config::MAIN_CIR_IR_MICROOP_FUSION);
+  s_ir_microop_fusion_validate = Config::Get(Config::MAIN_CIR_IR_MICROOP_FUSION_VALIDATE);
 
   // iCube IR M3: read block linking once (reuses MAIN_CIR_BLOCK_LINKING; default true).
   s_ir_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
@@ -370,6 +379,12 @@ s32 CachedInterpreterIR::DispatchIRInst(PowerPC::PowerPCState& ppc_state, const 
     return SetRegConst(ppc_state, inst.u.set_reg_const);
   case IROp::SetRegConstValidate:
     return SetRegConstValidate(ppc_state, inst.u.set_reg_const_validate);
+  case IROp::FusedAluRun:
+    // iCube IR M5: fast-pathed inline in ExecuteOneBlock; handled here too as the switch fallback and to
+    // satisfy -Wswitch on the new enumerator.
+    return FusedAluRun(ppc_state, inst.u.fused_alu_run);
+  case IROp::FusedAluRunValidate:
+    return FusedAluRunValidate(ppc_state, inst.u.fused_alu_run_validate);
   }
   return 0;
 }
@@ -386,6 +401,17 @@ void CachedInterpreterIR::ReleaseBlockIR(const JitBlock& block)
   {
     m_ir_pending_free.push_back(std::move(it->second));
     m_block_ir.erase(it);
+  }
+
+  // iCube IR M5: retire this block's fused-run pool the same way (parallel map keyed by the same normalEntry).
+  // The pool's heap address is stable across the unique_ptr move, so any in-flight FusedAluRun operand
+  // pointing at it stays valid until the next dispatch boundary frees the pending list. Absent unless the M5
+  // pass produced a fused run for this block.
+  auto fit = m_block_fused.find(block.normalEntry);
+  if (fit != m_block_fused.end())
+  {
+    m_fused_pending_free.push_back(std::move(fit->second));
+    m_block_fused.erase(fit);
   }
 }
 
@@ -448,16 +474,24 @@ void CachedInterpreterIR::PatchBlockLink(const JitBlock::LinkData& source, const
 // generalized fusion, dead-FPRF) is one line here plus its own config flag. Passes walk/rewrite the linear
 // IRInst vector in place. With every M2 flag off this loop does nothing and the vector is byte-identical to
 // the M1 lowering — so behavior with all M2 flags off is unchanged.
-void CachedInterpreterIR::RunIROptimizationPasses(std::vector<IRInst>& ir) const
+void CachedInterpreterIR::RunIROptimizationPasses(std::vector<IRInst>& ir,
+                                                  std::vector<CachedInterpreterIRFusedOp>& fused_pool) const
 {
   if (s_ir_dead_flag_elim)
     PassDeadFlagElim(ir);
   // iCube IR M4: constant-address fusion (lis+addi/addis/ori -> SetRegConst). Default OFF.
   if (s_ir_const_fusion)
     PassConstAddrFusion(ir);
+  // iCube IR M5: micro-op fusion (coalesce runs of plain Interpret<false> integer ALU ops -> FusedAluRun).
+  // Registered LAST on purpose: addi/addis (OPCD 14/15) are in the fusible allowlist, so running this before
+  // const-fusion would swallow lis+addi pairs into runs and starve M4 (2 ops -> 1 store is strictly better
+  // than 2 ops -> 1 fused dispatch for that pair). DeadFlagElim's Rc-cleared ops stay IROp::Interpret and so
+  // remain fusible; its validate-mode rewrites (InterpretDeadFlagValidate) are non-Interpret and simply break
+  // a run, which is correct. Default OFF.
+  if (s_ir_microop_fusion)
+    PassMicroOpFusion(ir, fused_pool);
   // Future passes register here, one line each:
   //   if (s_ir_const_fold) PassConstFold(ir);
-  //   if (s_ir_fusion)     PassFusion(ir);
 }
 
 // iCube M2 dead-flag-elim predicate. Byte-identical logic to the shipping CIR's DeadFlagElimApplies, but
@@ -691,6 +725,266 @@ s32 CachedInterpreterIR::SetRegConstValidate(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// ============================================================================
+// iCube IR M5: micro-op fusion pass + handlers.
+//
+// Ports the shipping CachedInterpreter's proven micro-op fusion (MAIN_CIR_MICROOP_FUSION) to the IR engine as
+// an optimizer pass. The CIR re-implements each fused ALU op as a hand-rolled MicroOp (CONST32/ADDI/...) run
+// by ExecuteMicroOps; the IR engine does NOT need to — its plain Interpret<false> handler is exactly
+// `func(interpreter, inst)` with no pc/npc/exception touch (see Interpret<false> above), so a fused run is
+// simply a loop that calls each op's interpreter func in order. We therefore mirror only the CIR's FUSIBLE
+// PREDICATE (is_simple_mop) and its run-build break conditions; the arithmetic is the interpreter's own.
+// ============================================================================
+
+// iCube IR M5: COPIED VERBATIM from CachedInterpreter::DoJit's is_simple_mop lambda — the exact opcode
+// allowlist the shipping CIR's micro-op fusion deems fusible. Every opcode here has no record/Rc-controlled
+// CR write that the IR path can't already handle, no exception, no PC write, and no load/store, so a run of
+// them can be dispatched in one inner loop with no per-op pc/exception bookkeeping. cmp/cmpl/cmpi/cmpli write
+// CR unconditionally — that is fine: the fused loop runs the REAL interpreter handler, which computes that CR
+// exactly as the unfused path would. Conservative: anything not on this list is not fusible.
+bool CachedInterpreterIR::IsFusibleAluOp(UGeckoInstruction inst)
+{
+  switch (inst.OPCD)
+  {
+  case 10:  // cmpli
+  case 11:  // cmpi
+  case 14:  // addi
+  case 15:  // addis
+  case 20:  // rlwimix
+  case 21:  // rlwinm / rlwinm.
+  case 23:  // rlwnmx
+  case 24:  // ori
+  case 25:  // oris
+  case 26:  // xori
+  case 27:  // xoris
+  case 28:  // andi.
+  case 29:  // andis.
+    return true;
+  case 31:  // X-form logical reg-reg and/or/xor + arithmetic
+    switch (inst.SUBOP10)
+    {
+    case 0:    // cmp
+    case 32:   // cmpl
+    case 28:   // andx
+    case 444:  // orx
+    case 316:  // xorx
+    case 60:   // andcx
+    case 412:  // orcx
+    case 476:  // nandx
+    case 124:  // norx
+    case 284:  // eqvx
+    case 266:  // addx
+    case 778:  // addox
+    case 10:   // addcx
+    case 522:  // addcox
+    case 138:  // addex
+    case 650:  // addeox
+    case 234:  // addmex
+    case 746:  // addmeox
+    case 202:  // addzex
+    case 714:  // addzeox
+    case 40:   // subfx
+    case 552:  // subfox
+    case 8:    // subfcx
+    case 520:  // subfcox
+    case 136:  // subfex
+    case 648:  // subfeox
+    case 232:  // subfmex
+    case 744:  // subfmeox
+    case 200:  // subfzex
+    case 712:  // subfzeox
+    case 26:   // cntlzwx
+    case 954:  // extsbx
+    case 922:  // extshx
+    case 24:   // slwx
+    case 536:  // srwx
+    case 792:  // srawx
+    case 824:  // srawix
+      return true;
+    default:
+      return false;
+    }
+  default:
+    return false;
+  }
+}
+
+// iCube IR M5: micro-op fusion pass. IRInst is NOT move-assignable (operand union holds reference members),
+// so — exactly like M4's PassConstAddrFusion — we build a FRESH vector by construction and swap it in rather
+// than erasing in place. Walk by index; a maximal run of >= 2 consecutive run-members collapses to one
+// FusedAluRun (the run's (func,inst) pairs appended to `pool`, the op carrying pool+offset+count). A lone
+// run-member (run length 1) is copied through unchanged — fusing one op would only add overhead. Everything
+// non-fusible is copied verbatim, so terminals (EndBlock/EndBlockLink + expected_pc), control ops, and checks
+// pass through and the M3 linking invariants hold by construction (PatchBlockLink still finds the terminal by
+// its expected_pc scan after fusion). When validating, the run is emitted as FusedAluRunValidate instead.
+//
+// DEFERRED-FREE / LIFETIME: the pool pointer stored in each op refers to `pool`, which DoJit owns and (when
+// non-empty) inserts into m_block_fused keyed by the block's normalEntry — the SAME key and SAME deferred-
+// free path as m_block_ir. Appending to `pool` here may reallocate its element buffer, but the op stores the
+// POOL OBJECT pointer (whose address is stable once DoJit moves the unique_ptr into m_block_fused) plus an
+// OFFSET — never an element pointer — so the run span is resolved at execution time against the final buffer.
+void CachedInterpreterIR::PassMicroOpFusion(std::vector<IRInst>& ir,
+                                            std::vector<CachedInterpreterIRFusedOp>& pool) const
+{
+  if (ir.size() < 2)
+    return;
+
+  // A lowered inst is a RUN MEMBER iff it is a plain IROp::Interpret (which already encodes write_pc=false,
+  // non-terminal, non-exception, non-memcheck-loadstore, non-skip — the CIR's canEndBlock / skip /
+  // InterpretChk exclusions, structurally), its instruction passes IsFusibleAluOp, AND it carries no
+  // FL_LOADSTORE/FL_USE_FPU (an EXACT mirror of the CIR run-build guard `(flags & (FL_LOADSTORE|FL_USE_FPU))`;
+  // the allowlist is all-integer so this is belt-and-suspenders, kept for a verbatim mirror). Any op failing
+  // this breaks the run, so terminals/checks/HLE/idle/InterpretPC/InterpretChk and non-allowlisted Interpret
+  // ops are never inside a run.
+  const auto is_run_member = [](const IRInst& inst) -> bool {
+    if (inst.op != IROp::Interpret)
+      return false;
+    if ((inst.opinfo_flags & (FL_LOADSTORE | FL_USE_FPU)) != 0)
+      return false;
+    return IsFusibleAluOp(inst.u.interpret.inst);
+  };
+
+  std::vector<IRInst> out;
+  out.reserve(ir.size());
+
+  // The pool's heap buffer is referenced by the emitted ops via &pool (the OBJECT, stable once moved into
+  // m_block_fused) + offset, so reallocation during these appends is harmless. We never store &pool[k].
+  const std::vector<CachedInterpreterIRFusedOp>* const pool_ptr = &pool;
+
+  std::size_t i = 0;
+  const std::size_t n = ir.size();
+  while (i < n)
+  {
+    if (is_run_member(ir[i]))
+    {
+      // Extend the run maximally.
+      std::size_t j = i;
+      while (j < n && is_run_member(ir[j]))
+        ++j;
+      const std::size_t run_len = j - i;
+      if (run_len >= 2)
+      {
+        const u32 offset = static_cast<u32>(pool.size());
+        Interpreter& interpreter = ir[i].u.interpret.interpreter;
+        for (std::size_t k = i; k < j; ++k)
+          pool.push_back({ir[k].u.interpret.func, ir[k].u.interpret.inst});
+        const u32 count = static_cast<u32>(run_len);
+        if (s_ir_microop_fusion_validate)
+        {
+          out.push_back(IRInst{IROp::FusedAluRunValidate,
+                               {.fused_alu_run_validate = {{interpreter, pool_ptr, offset, count}}}});
+        }
+        else
+        {
+          out.push_back(
+              IRInst{IROp::FusedAluRun, {.fused_alu_run = {interpreter, pool_ptr, offset, count}}});
+        }
+        i = j;
+        continue;
+      }
+      // run_len == 1: not worth fusing; fall through to copy the single op verbatim.
+    }
+    out.push_back(ir[i]);  // copy through untouched (construction-copy is fine; assignment is not)
+    i += 1;
+  }
+
+  ir.swap(out);
+}
+
+// iCube IR M5: fused-ALU-run handler. The perf win: one IRInst dispatch instead of N. Each op is a plain
+// Interpret<false> (func only — no pc/npc, no exception check), so this loop is byte-identical to running
+// those N IROp::Interpret ops back to back in ExecuteOneBlock.
+s32 CachedInterpreterIR::FusedAluRun(PowerPC::PowerPCState& ppc_state,
+                                     const FusedAluRunOperands& operands)
+{
+  const CachedInterpreterIRFusedOp* const ops = operands.pool->data() + operands.offset;
+  for (u32 k = 0; k < operands.count; ++k)
+    ops[k].func(operands.interpreter, ops[k].inst);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube IR M5: fused-run validate handler. Snapshot -> un-fused per-op REFERENCE run -> capture -> restore ->
+// fused run (the SHIPPING path, committed last) -> capture -> assert bit-identical.
+//
+// SCOPE OF WHAT THIS PROVES — be precise: unlike M2 (Rc-set vs Rc-cleared) and M4 (interpreter-run vs
+// precomputed constant), the fused path has NO second implementation; it just calls the interpreter funcs the
+// pass stored. So the reference must NOT reuse the stored ops[k].func — that would be a tautology (a mispaired
+// func/inst corrupts both sides equally and the assert could never fire). Instead the reference RE-DERIVES the
+// canonical handler from the instruction word via GetInterpreterOp(ops[k].inst), exactly as DoJit's lowering
+// does; the fused run uses the STORED func. The two diverge iff the pass mispaired a func with the wrong inst
+// (a real pass-construction bug class). What this STILL cannot catch is a wrong run SELECTION/BOUNDARY (both
+// sides iterate the same pool span) — that is covered STRUCTURALLY instead: a run member is only ever a plain
+// IROp::Interpret whose inst passes IsFusibleAluOp, so the fused loop is byte-identical to running those same
+// N IROp::Interpret ops back to back. All run ops are pure-register integer ALU (IsFusibleAluOp +
+// !FL_LOADSTORE/!FL_USE_FPU), so double-running is side-effect-safe and the diff is scoped to GPR/CR/XER.
+// Mirrors the M2/M4 snapshot/restore/commit-last discipline.
+s32 CachedInterpreterIR::FusedAluRunValidate(PowerPC::PowerPCState& ppc_state,
+                                             const FusedAluRunValidateOperands& operands)
+{
+  const CachedInterpreterIRFusedOp* const ops = operands.pool->data() + operands.offset;
+
+  // Snapshot the full validated state set (mirrors the M2/M4 + CIR ExecuteMicroOpsValidate snapshot set).
+  std::array<u32, 32> saved_gpr;
+  std::array<u64, 8> saved_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), saved_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), saved_cr.begin());
+  const u8 saved_xer_ca = ppc_state.xer_ca;
+  const u8 saved_xer_so_ov = ppc_state.xer_so_ov;
+  const u32 saved_pc = ppc_state.pc;
+  const u32 saved_npc = ppc_state.npc;
+  const u32 saved_exceptions = ppc_state.Exceptions;
+
+  // REFERENCE RUN: the run ops un-fused, one interpreter call each, in program order. The handler is
+  // RE-DERIVED from the inst word (NOT the stored func) so a func/inst mispairing by the pass shows up as a
+  // divergence vs the fused run (which uses the stored func). See the header comment for why reusing the
+  // stored func would make this a tautology.
+  for (u32 k = 0; k < operands.count; ++k)
+    Interpreter::GetInterpreterOp(ops[k].inst)(operands.interpreter, ops[k].inst);
+
+  std::array<u32, 32> ref_gpr;
+  std::array<u64, 8> ref_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), ref_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), ref_cr.begin());
+  const u8 ref_xer_ca = ppc_state.xer_ca;
+  const u8 ref_xer_so_ov = ppc_state.xer_so_ov;
+  const u32 ref_pc = ppc_state.pc;
+  const u32 ref_npc = ppc_state.npc;
+  const u32 ref_exceptions = ppc_state.Exceptions;
+
+  // Restore the pre-run state so the fused run starts from byte-identical inputs.
+  std::copy(saved_gpr.begin(), saved_gpr.end(), std::begin(ppc_state.gpr));
+  std::copy(saved_cr.begin(), saved_cr.end(), std::begin(ppc_state.cr.fields));
+  ppc_state.xer_ca = saved_xer_ca;
+  ppc_state.xer_so_ov = saved_xer_so_ov;
+  ppc_state.pc = saved_pc;
+  ppc_state.npc = saved_npc;
+  ppc_state.Exceptions = saved_exceptions;
+
+  // FUSED RUN — the SHIPPING path, run LAST so its result stays committed (mirrors the M2/M4 validate order).
+  FusedAluRun(ppc_state, operands);
+
+  std::array<u32, 32> fused_gpr;
+  std::array<u64, 8> fused_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), fused_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), fused_cr.begin());
+
+  ASSERT_MSG(DYNA_REC, fused_gpr == ref_gpr,
+             "CIR IR micro-op fusion GPR mismatch (count={}, offset={})", operands.count,
+             operands.offset);
+  ASSERT_MSG(DYNA_REC, fused_cr == ref_cr,
+             "CIR IR micro-op fusion CR mismatch (count={}, offset={})", operands.count,
+             operands.offset);
+  ASSERT_MSG(DYNA_REC,
+             ppc_state.xer_ca == ref_xer_ca && ppc_state.xer_so_ov == ref_xer_so_ov,
+             "CIR IR micro-op fusion XER mismatch (count={})", operands.count);
+  ASSERT_MSG(DYNA_REC, ppc_state.pc == ref_pc && ppc_state.npc == ref_npc,
+             "CIR IR micro-op fusion PC/NPC mismatch (count={})", operands.count);
+  ASSERT_MSG(DYNA_REC, ppc_state.Exceptions == ref_exceptions,
+             "CIR IR micro-op fusion Exceptions mismatch (count={})", operands.count);
+
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 // iCube M2: dead CR-flag elimination validate handler. Direct analogue of the CIR's InterpretDeadFlagValidate,
 // adapted to the IR dispatch model (returns nonzero => ExecuteOneBlock continues). The transform only ever
 // clears Rc on an op whose ENTIRE crOut PPCAnalyst proved discardable; this double-runs the op (reference
@@ -774,6 +1068,12 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
   // following a link into a vector that is about to be freed at the next outer entry.
   if (!m_ir_pending_free.empty()) [[unlikely]]
     m_ir_pending_free.clear();
+  // iCube IR M5: free the fused-run pools retired alongside their IR vectors. Same deferred-free reasoning:
+  // a block destroyed mid-chain moves its pool to m_fused_pending_free (heap address stable across the move,
+  // so an in-flight FusedAluRun's pool pointer stays valid for the chain), freed here at the dispatch
+  // boundary with no ExecuteOneBlock on the stack iterating it. Empty unless the M5 pass ran on some block.
+  if (!m_fused_pending_free.empty()) [[unlikely]]
+    m_fused_pending_free.clear();
 
   const u8* normal_entry = m_block_cache.Dispatch();
   if (!normal_entry)
@@ -836,6 +1136,18 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
       if (inst.op == IROp::SetRegConst)
       {
         ppc_state.gpr[inst.u.set_reg_const.reg] = inst.u.set_reg_const.value;
+        continue;
+      }
+      // iCube IR M5: fused ALU run on the inlined fast path — THIS is the M5 dispatch-count win. One IRInst
+      // dispatch + one tight inner loop over the run's interpreter funcs, instead of N IROp::Interpret
+      // dispatches through this switch. Only present when MAIN_CIR_IR_MICROOP_FUSION is on; with the flag off
+      // the pass never lowers it, so this branch is never taken and the path is byte-identical to M4.
+      if (inst.op == IROp::FusedAluRun)
+      {
+        const auto& run = inst.u.fused_alu_run;
+        const CachedInterpreterIRFusedOp* const ops = run.pool->data() + run.offset;
+        for (u32 k = 0; k < run.count; ++k)
+          ops[k].func(run.interpreter, ops[k].inst);
         continue;
       }
       // iCube IR M3: linkable terminal. EndBlockLink does the EndBlock accounting and returns whether the
@@ -1423,7 +1735,17 @@ bool CachedInterpreterIR::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
   // iCube M2: run the IR optimizer passes over the lowered vector (in place), after the M1 1:1 check and
   // before the anchor is written. With every M2 flag off this is a no-op and the vector is unchanged.
-  RunIROptimizationPasses(*ir);
+  // iCube IR M5: the micro-op fusion pass appends fused-run (func,inst) pairs into this per-block pool and
+  // makes its FusedAluRun ops point at it. DoJit owns the pool; if the pass produced any runs, it is inserted
+  // into m_block_fused below (keyed by normalEntry, freed via the same deferred-free path as the IR vector).
+  // With the M5 flag off the micro-op fusion pass never runs, so it never reads/writes the pool; we therefore
+  // only heap-allocate the owning pool when the flag is on (avoiding a per-block alloc on the shipping
+  // default) and pass a throwaway stack vector otherwise — which the (skipped) pass never touches.
+  std::unique_ptr<std::vector<CachedInterpreterIRFusedOp>> fused_pool;
+  std::vector<CachedInterpreterIRFusedOp> unused_pool;
+  if (s_ir_microop_fusion)
+    fused_pool = std::make_unique<std::vector<CachedInterpreterIRFusedOp>>();
+  RunIROptimizationPasses(*ir, fused_pool ? *fused_pool : unused_pool);
 
   // Write the single anchor record. This sets b->normalEntry/near_begin..near_end and is the key
   // the side table is indexed by. If the emitter is out of space, fail exactly like M0.
@@ -1448,6 +1770,18 @@ bool CachedInterpreterIR::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   }
 
   m_block_ir.insert_or_assign(b->normalEntry, std::move(ir));
+
+  // iCube IR M5: if the micro-op fusion pass produced any fused runs, take ownership of the pool keyed by the
+  // same normalEntry. The FusedAluRun operands point at this exact vector object; moving the unique_ptr here
+  // does NOT change the vector's heap address, so those pointers stay valid. When there is no pool (M5 off) or
+  // it is empty (no fusible runs in this block), erase any stale entry at this normalEntry — a re-jit of the
+  // same address must not leave a prior block's pool behind. This keeps m_block_fused in exact parity with
+  // m_block_ir's insert_or_assign (which always replaces the key).
+  if (fused_pool && !fused_pool->empty())
+    m_block_fused.insert_or_assign(b->normalEntry, std::move(fused_pool));
+  else
+    m_block_fused.erase(b->normalEntry);
+
   return true;
 }
 
@@ -1489,6 +1823,11 @@ void CachedInterpreterIR::ClearCache()
   m_block_cache.Clear();
   m_block_ir.clear();
   m_ir_pending_free.clear();
+  // iCube IR M5: free the fused-run pools in lockstep with the IR vectors (same dispatch-boundary safety:
+  // ClearCache only runs with no ExecuteOneBlock on the stack). m_block_fused is already drained into
+  // m_fused_pending_free by the DestroyBlock -> ReleaseBlockIR walk above; clear both for completeness.
+  m_block_fused.clear();
+  m_fused_pending_free.clear();
   m_block_cache.ClearRangesToFree();
   ClearCodeSpace();
   ResetFreeMemoryRanges();
@@ -1629,6 +1968,19 @@ s32 CachedInterpreterIR::SetRegConstValidate(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+s32 CachedInterpreterIR::FusedAluRun(std::ostream& stream, const FusedAluRunOperands& operands)
+{
+  fmt::println(stream, "FusedAluRun(count={}, offset={})", operands.count, operands.offset);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreterIR::FusedAluRunValidate(std::ostream& stream,
+                                             const FusedAluRunValidateOperands& operands)
+{
+  fmt::println(stream, "FusedAluRunValidate(count={}, offset={})", operands.count, operands.offset);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreterIR::IRBlockAnchor(std::ostream& stream, const IRBlockAnchorOperands& operands)
 {
   const std::vector<IRInst>& ir = *operands.ir;
@@ -1673,6 +2025,10 @@ std::size_t CachedInterpreterIR::Disassemble(const JitBlock& block, std::ostream
       // table walks), so never matched here — listed for lookup completeness / future IR-vector disassembly.
       LOOKUP_KV(CachedInterpreterIR::SetRegConst),
       LOOKUP_KV(CachedInterpreterIR::SetRegConstValidate),
+      // iCube IR M5: micro-op fusion ops. Live only in the IR vector (never written to the emitter buffer this
+      // table walks), so never matched here — listed for lookup completeness / future IR-vector disassembly.
+      LOOKUP_KV(CachedInterpreterIR::FusedAluRun),
+      LOOKUP_KV(CachedInterpreterIR::FusedAluRunValidate),
   });
 
 #undef LOOKUP_KV
