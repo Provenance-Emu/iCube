@@ -4,6 +4,8 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -38,6 +40,46 @@ enum class State;
 // flags (PIC / fusion / linking / dead-flag / profiler / specialized ops) are present here — those get
 // reintroduced as IR passes in later milestones.
 class CachedInterpreterIR;
+
+// ============================================================================
+// iCube Milestone 1: explicit typed IR node layer.
+//
+// M0 serialized a function-pointer + POD-operands record per CodeOp into the emitter buffer and
+// dispatched by walking that callback tape. M1 introduces an explicit typed IRInst node between
+// decode (DoJit) and dispatch (ExecuteOneBlock): every CodeOp is lowered 1:1 into exactly one
+// IRInst (same handler, same operands), and dispatch is a switch over IRInst records.
+//
+// This is a PURE REPRESENTATION CHANGE: no fusion, no flag elimination, no specialization. Behavior
+// is byte-identical to M0 / the stock Cached Interpreter. It stays data-interpreted (no machine code
+// is emitted), so it inherits the App-Store-legal no-codegen memory model unchanged.
+//
+// Storage: the per-block IRInst sequence lives in a std::vector<IRInst> owned by the engine in a
+// side table keyed by the block's normalEntry. To keep ALL existing JitBlock plumbing intact
+// (near_begin/near_end ranges, free-range reclamation, block-cache Dispatch() by normalEntry) the
+// engine still writes exactly ONE small "anchor" record into the emitter buffer per block; that
+// anchor carries a pointer to the block's IR vector. ExecuteOneBlock recovers the vector from the
+// anchor at the block's normalEntry and runs the dispatch loop over it.
+// ============================================================================
+
+// One-to-one with the static handler functions M0 emitted. Each IROp value selects exactly one
+// handler in ExecuteOneBlock's switch; the lowering in DoJit emits exactly one IRInst per CodeOp
+// callback M0 would have written, in the same order.
+enum class IROp : u8
+{
+  StartProfiledBlock,
+  EndBlock,           // EndBlock<false>
+  EndBlockProfiled,   // EndBlock<true>
+  Interpret,          // Interpret<false>
+  InterpretPC,        // Interpret<true>
+  InterpretChk,       // InterpretAndCheckExceptions<false>
+  InterpretChkPC,     // InterpretAndCheckExceptions<true>
+  HLEFunction,
+  WriteBrokenBlockNPC,
+  CheckFPU,
+  CheckBreakpoint,
+  CheckIdle,
+  FastForwardCtrIdle,
+};
 
 // Self-contained block cache for the IR engine. Mirrors CachedInterpreterBlockCache's free-range
 // reclamation, but does NOT support block linking (M0 has no LinkBlock trampoline), so WriteLinkBlock
@@ -100,6 +142,10 @@ public:
   const char* GetName() const override { return "Cached Interpreter (IR, experimental)"; }
   const CommonAsmRoutinesBase* GetAsmRoutines() override { return nullptr; }
 
+  // Called by the block cache when a block is destroyed: frees that block's IR vector from the
+  // side table. Keyed by the anchor record at the block's normalEntry.
+  void ReleaseBlockIR(const JitBlock& block);
+
 private:
   void ExecuteOneBlock();
 
@@ -125,6 +171,60 @@ private:
   struct CheckHaltOperands;
   struct CheckIdleOperands;
   struct CheckCtrIdleOperands;
+
+public:
+  // The explicit typed IR node. A 1:1 lowering does not need compactness, so this is a plain tagged
+  // union holding (the active member of) every operand struct the handlers read. Because the operand
+  // structs contain reference members, the union has no default constructor; an IRInst is always
+  // constructed fully via designated-init of the active member (see DoJit's Emit* helpers).
+  struct IRInst;
+
+private:
+  // Per-block IR storage. Owned by the engine, keyed by the block's normalEntry (the address of the
+  // anchor record the emitter wrote for that block). Looked up O(1) in ExecuteOneBlock via the
+  // pointer carried in the anchor; freed in ReleaseBlockIR / ClearCache.
+  std::unordered_map<const u8*, std::unique_ptr<std::vector<IRInst>>> m_block_ir;
+
+  // Anchor record placed in the emitter buffer (one per block) so the normal JitBlock plumbing
+  // (near_begin/near_end ranges, reclamation, Dispatch-by-normalEntry) keeps working unchanged.
+  // It carries a raw pointer to the block's IR vector for O(1) recovery at dispatch time.
+  struct IRBlockAnchorOperands
+  {
+    std::vector<IRInst>* ir;
+  };
+  static s32 IRBlockAnchor(PowerPC::PowerPCState& ppc_state, const IRBlockAnchorOperands& operands);
+  static s32 IRBlockAnchor(std::ostream& stream, const IRBlockAnchorOperands& operands);
+
+  // Runs one lowered IRInst against ppc_state. Returns the handler's value (0 => exit block).
+  static s32 DispatchIRInst(PowerPC::PowerPCState& ppc_state, const IRInst& inst);
+
+  // DOLPHIN_IR_VALIDATE=1 opt-in self-check: re-emits the M0 callback tape into a scratch buffer and
+  // asserts the lowered IR vector is 1:1 with it (same count, op<->callback, operands). Default off.
+  void ValidateBlockIR(const std::vector<IRInst>& ir) const;
+
+  // DoJit lowering state. m_current_ir points at the block's IR vector being built; the Emit*
+  // helpers append exactly one IRInst per CodeOp callback M0 would have written. When m_validate is
+  // set (DOLPHIN_IR_VALIDATE=1) each Emit* also Write()s the equivalent M0 callback into
+  // m_validate_buffer via m_validate_emitter, giving an independent serialization to diff against.
+  std::vector<IRInst>* m_current_ir = nullptr;
+  bool m_validate = false;
+  std::vector<u8> m_validate_buffer;
+  CachedInterpreterEmitter m_validate_emitter;
+
+  // Emit one IRInst (and, when validating, the M0 callback). One call == one M0 Write().
+  void EmitStartProfiledBlock(const StartProfiledBlockOperands& operands);
+  template <bool profiled>
+  void EmitEndBlock(const EndBlockOperands<profiled>& operands);
+  template <bool write_pc>
+  void EmitInterpret(const InterpretOperands& operands);
+  template <bool write_pc>
+  void EmitInterpretChk(const InterpretAndCheckExceptionsOperands& operands);
+  void EmitHLEFunction(const HLEFunctionOperands& operands);
+  void EmitWriteBrokenBlockNPC(const WriteBrokenBlockNPCOperands& operands);
+  void EmitCheckFPU(const CheckHaltOperands& operands);
+  void EmitCheckBreakpoint(const CheckHaltOperands& operands);
+  void EmitCheckIdle(const CheckIdleOperands& operands);
+  void EmitFastForwardCtrIdle(const CheckCtrIdleOperands& operands);
 
   static s32 StartProfiledBlock(PowerPC::PowerPCState& ppc_state,
                                 const StartProfiledBlockOperands& operands);
@@ -227,4 +327,25 @@ struct CachedInterpreterIR::CheckCtrIdleOperands
   CoreTiming::CoreTimingManager& core_timing;
   u32 idle_pc;         // PC of the CTR-branch at loop end
   u32 fallthrough_pc;  // PC after the branch (loop exit)
+};
+
+// The explicit typed IR node: an op tag plus a union of every operand struct the handlers read.
+// Exactly one operand member is active per inst, selected by `op`. The operand structs hold
+// reference members, so the union is constructed via designated-init of the active member only.
+struct CachedInterpreterIR::IRInst
+{
+  IROp op;
+  union Operands
+  {
+    StartProfiledBlockOperands start_profiled_block;
+    EndBlockOperands<false> end_block;
+    EndBlockOperands<true> end_block_profiled;
+    InterpretOperands interpret;
+    InterpretAndCheckExceptionsOperands interpret_chk;
+    HLEFunctionOperands hle;
+    WriteBrokenBlockNPCOperands broken_npc;
+    CheckHaltOperands check_halt;  // shared by CheckFPU + CheckBreakpoint
+    CheckIdleOperands check_idle;
+    CheckCtrIdleOperands ctr_idle;
+  } u;
 };

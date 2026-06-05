@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <mutex>
 #include <ranges>
 #include <span>
@@ -47,6 +48,9 @@ void CachedInterpreterIRBlockCache::Init()
 
 void CachedInterpreterIRBlockCache::DestroyBlock(JitBlock& block)
 {
+  // Free this block's IR vector from the engine's side table before the block storage goes away.
+  static_cast<CachedInterpreterIR&>(m_jit).ReleaseBlockIR(block);
+
   JitBaseBlockCache::DestroyBlock(block);
 
   if (block.near_begin != block.near_end)
@@ -227,6 +231,59 @@ s32 CachedInterpreterIR::FastForwardCtrIdle(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// The single record M0-style plumbing still writes into the emitter buffer per block. It only marks
+// the block's storage (so near_begin/near_end/reclamation/Dispatch-by-normalEntry keep working) and
+// carries a pointer to that block's IR vector. It is never executed by ExecuteOneBlock (which
+// recovers the vector directly), so it just returns "exit block" if ever reached.
+s32 CachedInterpreterIR::IRBlockAnchor(PowerPC::PowerPCState& ppc_state,
+                                       const IRBlockAnchorOperands& operands)
+{
+  return 0;
+}
+
+// Dispatches one lowered IRInst to the matching static handler with fields unpacked from the union.
+// Each handler keeps its exact M0 logic; only the return value's 0-vs-nonzero meaning is used here
+// (0 => exit block), so the dispatch contract is preserved exactly. The handlers' nonzero "distance"
+// returns are intentionally ignored — iteration advances over the IR vector instead.
+s32 CachedInterpreterIR::DispatchIRInst(PowerPC::PowerPCState& ppc_state, const IRInst& inst)
+{
+  switch (inst.op)
+  {
+  case IROp::StartProfiledBlock:
+    return StartProfiledBlock(ppc_state, inst.u.start_profiled_block);
+  case IROp::EndBlock:
+    return EndBlock<false>(ppc_state, inst.u.end_block);
+  case IROp::EndBlockProfiled:
+    return EndBlock<true>(ppc_state, inst.u.end_block_profiled);
+  case IROp::Interpret:
+    return Interpret<false>(ppc_state, inst.u.interpret);
+  case IROp::InterpretPC:
+    return Interpret<true>(ppc_state, inst.u.interpret);
+  case IROp::InterpretChk:
+    return InterpretAndCheckExceptions<false>(ppc_state, inst.u.interpret_chk);
+  case IROp::InterpretChkPC:
+    return InterpretAndCheckExceptions<true>(ppc_state, inst.u.interpret_chk);
+  case IROp::HLEFunction:
+    return HLEFunction(ppc_state, inst.u.hle);
+  case IROp::WriteBrokenBlockNPC:
+    return WriteBrokenBlockNPC(ppc_state, inst.u.broken_npc);
+  case IROp::CheckFPU:
+    return CheckFPU(ppc_state, inst.u.check_halt);
+  case IROp::CheckBreakpoint:
+    return CheckBreakpoint(ppc_state, inst.u.check_halt);
+  case IROp::CheckIdle:
+    return CheckIdle(ppc_state, inst.u.check_idle);
+  case IROp::FastForwardCtrIdle:
+    return FastForwardCtrIdle(ppc_state, inst.u.ctr_idle);
+  }
+  return 0;
+}
+
+void CachedInterpreterIR::ReleaseBlockIR(const JitBlock& block)
+{
+  m_block_ir.erase(block.normalEntry);
+}
+
 void CachedInterpreterIR::ExecuteOneBlock()
 {
   const u8* normal_entry = m_block_cache.Dispatch();
@@ -236,30 +293,169 @@ void CachedInterpreterIR::ExecuteOneBlock()
     return;
   }
 
+  // Recover the block's IR vector from the anchor record at its normalEntry.
+  const auto& anchor = *reinterpret_cast<const IRBlockAnchorOperands*>(normal_entry +
+                                                                       sizeof(AnyCallback));
+  const std::vector<IRInst>& ir = *anchor.ir;
+
   auto& ppc_state = m_ppc_state;
-  while (true)
+  for (const IRInst& inst : ir)
   {
-    const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
-    const u8* payload = normal_entry + sizeof(callback);
-    // Direct dispatch to the most commonly used callbacks for better performance.
-    if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<false>))) [[likely]]
+    if (DispatchIRInst(ppc_state, inst) == 0)
+      break;
+  }
+}
+
+// DOLPHIN_IR_VALIDATE=1 self-check. The IR vector was lowered 1:1 in DoJit; in parallel, each Emit*
+// also wrote the equivalent M0 callback record into m_validate_buffer. Here we walk that independent
+// M0 tape and assert, record by record, that the lowered IRInst matches: same count, the IROp maps
+// to exactly the callback M0 used (the op<->callback bijection from Disassemble's lookup), and the
+// operands are field-wise equal. Any mismatch traps. Default off => zero overhead in normal runs.
+void CachedInterpreterIR::ValidateBlockIR(const std::vector<IRInst>& ir) const
+{
+  const u8* p = m_validate_buffer.data();
+  const u8* end = m_validate_emitter.GetCodePtr();
+
+  std::size_t idx = 0;
+  for (; p != end; ++idx)
+  {
+    ASSERT_MSG(DYNA_REC, idx < ir.size(),
+               "IR self-check: M0 tape has more records ({}+) than IR vector ({}).", idx + 1,
+               ir.size());
+    if (idx >= ir.size())
+      return;
+
+    const auto callback = *reinterpret_cast<const AnyCallback*>(p);
+    const void* m0 = p + sizeof(AnyCallback);
+    const IRInst& inst = ir[idx];
+
+    const auto check = [&](IROp expected_op, bool operands_equal, std::size_t operand_size) {
+      ASSERT_MSG(DYNA_REC, inst.op == expected_op,
+                 "IR self-check: record {} op mismatch (IR={}, M0={}).", idx,
+                 static_cast<int>(inst.op), static_cast<int>(expected_op));
+      ASSERT_MSG(DYNA_REC, operands_equal, "IR self-check: record {} operand mismatch (op={}).", idx,
+                 static_cast<int>(expected_op));
+      p += sizeof(AnyCallback) + operand_size;
+    };
+
+    // Field-wise operand comparisons (no raw memcmp: EndBlockOperands<false> has an explicit
+    // padding bitfield whose bytes are indeterminate and would cause false mismatches).
+#define CB(fn) reinterpret_cast<AnyCallback>(AnyCallbackCast(fn))
+    if (callback == CB(StartProfiledBlock))
     {
-      Interpret<false>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
-      normal_entry = payload + sizeof(InterpretOperands);
+      const auto& o = *reinterpret_cast<const StartProfiledBlockOperands*>(m0);
+      const auto& a = inst.u.start_profiled_block;
+      check(IROp::StartProfiledBlock, a.profile_data == o.profile_data, sizeof(o));
     }
-    else if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<true>)))
+    else if (callback == CB(EndBlock<false>))
     {
-      Interpret<true>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
-      normal_entry = payload + sizeof(InterpretOperands);
+      const auto& o = *reinterpret_cast<const EndBlockOperands<false>*>(m0);
+      const auto& a = inst.u.end_block;
+      check(IROp::EndBlock,
+            a.downcount == o.downcount && a.num_load_stores == o.num_load_stores &&
+                a.num_fp_inst == o.num_fp_inst,
+            sizeof(o));
+    }
+    else if (callback == CB(EndBlock<true>))
+    {
+      const auto& o = *reinterpret_cast<const EndBlockOperands<true>*>(m0);
+      const auto& a = inst.u.end_block_profiled;
+      check(IROp::EndBlockProfiled,
+            a.downcount == o.downcount && a.num_load_stores == o.num_load_stores &&
+                a.num_fp_inst == o.num_fp_inst && a.profile_data == o.profile_data,
+            sizeof(o));
+    }
+    else if (callback == CB(Interpret<false>))
+    {
+      const auto& o = *reinterpret_cast<const InterpretOperands*>(m0);
+      const auto& a = inst.u.interpret;
+      check(IROp::Interpret,
+            &a.interpreter == &o.interpreter && a.func == o.func && a.current_pc == o.current_pc &&
+                a.inst.hex == o.inst.hex,
+            sizeof(o));
+    }
+    else if (callback == CB(Interpret<true>))
+    {
+      const auto& o = *reinterpret_cast<const InterpretOperands*>(m0);
+      const auto& a = inst.u.interpret;
+      check(IROp::InterpretPC,
+            &a.interpreter == &o.interpreter && a.func == o.func && a.current_pc == o.current_pc &&
+                a.inst.hex == o.inst.hex,
+            sizeof(o));
+    }
+    else if (callback == CB(InterpretAndCheckExceptions<false>))
+    {
+      const auto& o = *reinterpret_cast<const InterpretAndCheckExceptionsOperands*>(m0);
+      const auto& a = inst.u.interpret_chk;
+      check(IROp::InterpretChk,
+            &a.interpreter == &o.interpreter && a.func == o.func && a.current_pc == o.current_pc &&
+                a.inst.hex == o.inst.hex && &a.power_pc == &o.power_pc && a.downcount == o.downcount,
+            sizeof(o));
+    }
+    else if (callback == CB(InterpretAndCheckExceptions<true>))
+    {
+      const auto& o = *reinterpret_cast<const InterpretAndCheckExceptionsOperands*>(m0);
+      const auto& a = inst.u.interpret_chk;
+      check(IROp::InterpretChkPC,
+            &a.interpreter == &o.interpreter && a.func == o.func && a.current_pc == o.current_pc &&
+                a.inst.hex == o.inst.hex && &a.power_pc == &o.power_pc && a.downcount == o.downcount,
+            sizeof(o));
+    }
+    else if (callback == CB(HLEFunction))
+    {
+      const auto& o = *reinterpret_cast<const HLEFunctionOperands*>(m0);
+      const auto& a = inst.u.hle;
+      check(IROp::HLEFunction,
+            &a.system == &o.system && a.current_pc == o.current_pc && a.hook_index == o.hook_index,
+            sizeof(o));
+    }
+    else if (callback == CB(WriteBrokenBlockNPC))
+    {
+      const auto& o = *reinterpret_cast<const WriteBrokenBlockNPCOperands*>(m0);
+      const auto& a = inst.u.broken_npc;
+      check(IROp::WriteBrokenBlockNPC, a.current_pc == o.current_pc, sizeof(o));
+    }
+    else if (callback == CB(CheckFPU))
+    {
+      const auto& o = *reinterpret_cast<const CheckHaltOperands*>(m0);
+      const auto& a = inst.u.check_halt;
+      check(IROp::CheckFPU,
+            &a.power_pc == &o.power_pc && a.current_pc == o.current_pc && a.downcount == o.downcount,
+            sizeof(o));
+    }
+    else if (callback == CB(CheckBreakpoint))
+    {
+      const auto& o = *reinterpret_cast<const CheckHaltOperands*>(m0);
+      const auto& a = inst.u.check_halt;
+      check(IROp::CheckBreakpoint,
+            &a.power_pc == &o.power_pc && a.current_pc == o.current_pc && a.downcount == o.downcount,
+            sizeof(o));
+    }
+    else if (callback == CB(CheckIdle))
+    {
+      const auto& o = *reinterpret_cast<const CheckIdleOperands*>(m0);
+      const auto& a = inst.u.check_idle;
+      check(IROp::CheckIdle, &a.core_timing == &o.core_timing && a.idle_pc == o.idle_pc, sizeof(o));
+    }
+    else if (callback == CB(FastForwardCtrIdle))
+    {
+      const auto& o = *reinterpret_cast<const CheckCtrIdleOperands*>(m0);
+      const auto& a = inst.u.ctr_idle;
+      check(IROp::FastForwardCtrIdle,
+            &a.core_timing == &o.core_timing && a.idle_pc == o.idle_pc &&
+                a.fallthrough_pc == o.fallthrough_pc,
+            sizeof(o));
     }
     else
     {
-      if (const auto distance = callback(ppc_state, payload))
-        normal_entry += distance;
-      else
-        break;
+      ASSERT_MSG(DYNA_REC, false, "IR self-check: unknown M0 callback in record {}.", idx);
+      return;
     }
+#undef CB
   }
+
+  ASSERT_MSG(DYNA_REC, idx == ir.size(),
+             "IR self-check: count mismatch (M0={}, IR={}).", idx, ir.size());
 }
 
 void CachedInterpreterIR::Run()
@@ -294,7 +490,7 @@ bool CachedInterpreterIR::HandleFunctionHooking(u32 address)
   if (!result)
     return false;
 
-  Write(HLEFunction, {m_system, address, result.hook_index});
+  EmitHLEFunction({m_system, address, result.hook_index});
 
   if (result.type != HLE::HookType::Replace)
     return false;
@@ -308,14 +504,96 @@ void CachedInterpreterIR::WriteEndBlock()
 {
   if (IsProfilingEnabled())
   {
-    Write(EndBlock<true>,
-          {{js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst},
-           js.curBlock->profile_data.get()});
+    EmitEndBlock<true>({{js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst},
+                        js.curBlock->profile_data.get()});
   }
   else
   {
-    Write(EndBlock<false>, {js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst});
+    EmitEndBlock<false>({js.downcountAmount, js.numLoadStoreInst, js.numFloatingPointInst});
   }
+}
+
+// ----------------------------------------------------------------------------
+// IR emit helpers. Each appends exactly one IRInst (1:1 with the M0 callback it mirrors). Under
+// DOLPHIN_IR_VALIDATE=1 each also writes the equivalent M0 callback record into the scratch buffer
+// so ValidateBlockIR can diff the lowered IR against an independent M0 serialization.
+// ----------------------------------------------------------------------------
+void CachedInterpreterIR::EmitStartProfiledBlock(const StartProfiledBlockOperands& operands)
+{
+  m_current_ir->push_back(IRInst{IROp::StartProfiledBlock, {.start_profiled_block = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(StartProfiledBlock, operands);
+}
+
+template <bool profiled>
+void CachedInterpreterIR::EmitEndBlock(const EndBlockOperands<profiled>& operands)
+{
+  if constexpr (profiled)
+    m_current_ir->push_back(IRInst{IROp::EndBlockProfiled, {.end_block_profiled = operands}});
+  else
+    m_current_ir->push_back(IRInst{IROp::EndBlock, {.end_block = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(EndBlock<profiled>, operands);
+}
+
+template <bool write_pc>
+void CachedInterpreterIR::EmitInterpret(const InterpretOperands& operands)
+{
+  m_current_ir->push_back(
+      IRInst{write_pc ? IROp::InterpretPC : IROp::Interpret, {.interpret = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(Interpret<write_pc>, operands);
+}
+
+template <bool write_pc>
+void CachedInterpreterIR::EmitInterpretChk(const InterpretAndCheckExceptionsOperands& operands)
+{
+  m_current_ir->push_back(
+      IRInst{write_pc ? IROp::InterpretChkPC : IROp::InterpretChk, {.interpret_chk = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(InterpretAndCheckExceptions<write_pc>, operands);
+}
+
+void CachedInterpreterIR::EmitHLEFunction(const HLEFunctionOperands& operands)
+{
+  m_current_ir->push_back(IRInst{IROp::HLEFunction, {.hle = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(HLEFunction, operands);
+}
+
+void CachedInterpreterIR::EmitWriteBrokenBlockNPC(const WriteBrokenBlockNPCOperands& operands)
+{
+  m_current_ir->push_back(IRInst{IROp::WriteBrokenBlockNPC, {.broken_npc = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(WriteBrokenBlockNPC, operands);
+}
+
+void CachedInterpreterIR::EmitCheckFPU(const CheckHaltOperands& operands)
+{
+  m_current_ir->push_back(IRInst{IROp::CheckFPU, {.check_halt = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(CheckFPU, operands);
+}
+
+void CachedInterpreterIR::EmitCheckBreakpoint(const CheckHaltOperands& operands)
+{
+  m_current_ir->push_back(IRInst{IROp::CheckBreakpoint, {.check_halt = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(CheckBreakpoint, operands);
+}
+
+void CachedInterpreterIR::EmitCheckIdle(const CheckIdleOperands& operands)
+{
+  m_current_ir->push_back(IRInst{IROp::CheckIdle, {.check_idle = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(CheckIdle, operands);
+}
+
+void CachedInterpreterIR::EmitFastForwardCtrIdle(const CheckCtrIdleOperands& operands)
+{
+  m_current_ir->push_back(IRInst{IROp::FastForwardCtrIdle, {.ctr_idle = operands}});
+  if (m_validate) [[unlikely]]
+    m_validate_emitter.Write(FastForwardCtrIdle, operands);
 }
 
 bool CachedInterpreterIR::SetEmitterStateToFreeCodeRegion()
@@ -421,8 +699,27 @@ bool CachedInterpreterIR::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   auto& cpu = m_system.GetCPU();
   auto& breakpoints = power_pc.GetBreakPoints();
 
+  // M1: lower this block into an explicit IRInst vector instead of a callback tape. Build into a
+  // fresh vector, then attach it to the block via a single anchor record written to the emitter
+  // buffer (preserving near_begin/near_end/reclamation/Dispatch-by-normalEntry).
+  auto ir = std::make_unique<std::vector<IRInst>>();
+  m_current_ir = ir.get();
+
+  static const bool s_validate = [] {
+    const char* v = std::getenv("DOLPHIN_IR_VALIDATE");
+    return v && v[0] == '1';
+  }();
+  m_validate = s_validate;
+  if (m_validate)
+  {
+    // Generous scratch buffer for the parallel M0 emission used only for the 1:1 self-check.
+    m_validate_buffer.assign(m_code_buffer.size() * 64 + 256, 0);
+    m_validate_emitter.SetCodePtr(m_validate_buffer.data(),
+                                  m_validate_buffer.data() + m_validate_buffer.size());
+  }
+
   if (IsProfilingEnabled())
-    Write(StartProfiledBlock, {js.curBlock->profile_data.get()});
+    EmitStartProfiledBlock({js.curBlock->profile_data.get()});
 
   for (u32 i = 0; i < code_block.m_num_instructions; i++)
   {
@@ -445,11 +742,11 @@ bool CachedInterpreterIR::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       if (IsDebuggingEnabled() && !cpu.IsStepping() &&
           breakpoints.IsAddressBreakPoint(js.compilerPC))
       {
-        Write(CheckBreakpoint, {power_pc, js.compilerPC, js.downcountAmount});
+        EmitCheckBreakpoint({power_pc, js.compilerPC, js.downcountAmount});
       }
       if (!js.firstFPInstructionFound && (op.opinfo->flags & FL_USE_FPU) != 0)
       {
-        Write(CheckFPU, {power_pc, js.compilerPC, js.downcountAmount});
+        EmitCheckFPU({power_pc, js.compilerPC, js.downcountAmount});
         js.firstFPInstructionFound = true;
       }
 
@@ -461,25 +758,28 @@ bool CachedInterpreterIR::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             {interpreter, Interpreter::GetInterpreterOp(op.inst), js.compilerPC, op.inst},
             power_pc,
             js.downcountAmount};
-        Write(op.canEndBlock ? CallbackCast(InterpretAndCheckExceptions<true>) :
-                               CallbackCast(InterpretAndCheckExceptions<false>),
-              operands);
+        if (op.canEndBlock)
+          EmitInterpretChk<true>(operands);
+        else
+          EmitInterpretChk<false>(operands);
       }
       else
       {
         const auto func = Interpreter::GetInterpreterOp(op.inst);
         const InterpretOperands operands = {interpreter, func, js.compilerPC, op.inst};
-        Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
-              operands);
+        if (op.canEndBlock)
+          EmitInterpret<true>(operands);
+        else
+          EmitInterpret<false>(operands);
       }
 
       if (op.branchIsIdleLoop)
-        Write(CheckIdle, {m_system.GetCoreTiming(), js.blockStart});
+        EmitCheckIdle({m_system.GetCoreTiming(), js.blockStart});
       // For simple CTR-controlled tight loops, fast-forward by exiting the loop and yielding.
       if (op.branchIsCtrIdleLoop)
       {
         const u32 fallthrough_pc = op.address + 4;
-        Write(FastForwardCtrIdle, {m_system.GetCoreTiming(), js.blockStart, fallthrough_pc});
+        EmitFastForwardCtrIdle({m_system.GetCoreTiming(), js.blockStart, fallthrough_pc});
       }
       if (op.canEndBlock)
         WriteEndBlock();
@@ -487,15 +787,26 @@ bool CachedInterpreterIR::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   }
   if (code_block.m_broken)
   {
-    Write(WriteBrokenBlockNPC, {nextPC});
+    EmitWriteBrokenBlockNPC({nextPC});
     WriteEndBlock();
   }
 
+  m_current_ir = nullptr;
+
+  // Opt-in 1:1 self-check against an independent M0 callback emission.
+  if (m_validate) [[unlikely]]
+    ValidateBlockIR(*ir);
+
+  // Write the single anchor record. This sets b->normalEntry/near_begin..near_end and is the key
+  // the side table is indexed by. If the emitter is out of space, fail exactly like M0.
+  Write(IRBlockAnchor, {ir.get()});
   if (HasWriteFailed())
   {
     WARN_LOG_FMT(DYNA_REC, "JIT ran out of space in code region during code generation.");
     return false;
   }
+
+  m_block_ir.insert_or_assign(b->normalEntry, std::move(ir));
   return true;
 }
 
@@ -525,6 +836,7 @@ std::size_t CachedInterpreterIR::DisassembleFarCode(const JitBlock& block,
 
 void CachedInterpreterIR::ClearCache()
 {
+  m_block_ir.clear();
   m_block_cache.Clear();
   m_block_cache.ClearRangesToFree();
   ClearCodeSpace();
@@ -635,6 +947,13 @@ s32 CachedInterpreterIR::FastForwardCtrIdle(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+s32 CachedInterpreterIR::IRBlockAnchor(std::ostream& stream, const IRBlockAnchorOperands& operands)
+{
+  const std::vector<IRInst>& ir = *operands.ir;
+  fmt::println(stream, "IRBlockAnchor(ir_inst_count={})", ir.size());
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 static std::once_flag s_ir_sorted_lookup_flag;
 
 std::size_t CachedInterpreterIR::Disassemble(const JitBlock& block, std::ostream& stream)
@@ -648,6 +967,7 @@ std::size_t CachedInterpreterIR::Disassemble(const JitBlock& block, std::ostream
   // Function addresses aren't known at compile-time, so this array is sorted at run-time.
   static auto sorted_lookup = std::to_array<LookupKV>({
       LOOKUP_KV(CachedInterpreterEmitter::PoisonCallback),
+      LOOKUP_KV(CachedInterpreterIR::IRBlockAnchor),
       LOOKUP_KV(CachedInterpreterIR::StartProfiledBlock),
       LOOKUP_KV(CachedInterpreterIR::EndBlock<false>),
       LOOKUP_KV(CachedInterpreterIR::EndBlock<true>),
