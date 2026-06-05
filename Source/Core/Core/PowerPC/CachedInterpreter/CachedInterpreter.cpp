@@ -786,6 +786,10 @@ void CachedInterpreter::Init()
   // Config::Get on the hot path. When off the handlers run only the unchanged generic switch.
   PowerPC::SetPsqFastpathEnabled(Config::Get(Config::MAIN_CIR_PSQ_FASTPATH));
   PowerPC::SetPsqFastpathValidate(Config::Get(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE));
+  // iCube: refresh the shared NEON paired-single fast-path flags per game-boot (the handlers live in
+  // Interpreter_Paired.cpp and are reached from the CIR's Interpret dispatch). Previously read once per
+  // app process via a function-local static, so the toggle appeared inert until a full app restart.
+  Interpreter::RefreshNeonPairedConfig();
   // iCube: counted-store-loop (memset) fast-path (default OFF). Read once. Capture the MMU/Memory/
   // JitInterface handles for the StoreLoopFill static callback ONLY when the feature is on, so the
   // flag-off path leaves them null and is byte-identical to baseline. One-per-System, set at boot.

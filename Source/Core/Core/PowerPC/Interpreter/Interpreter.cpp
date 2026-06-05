@@ -76,6 +76,9 @@ Interpreter::~Interpreter() = default;
 void Interpreter::Init()
 {
   m_end_block = false;
+  // iCube: refresh the NEON paired-single fast-path flags per game-boot for the plain interpreter too
+  // (the CIR / IR engines do the same in their own Init()).
+  RefreshNeonPairedConfig();
 }
 
 void Interpreter::Shutdown()

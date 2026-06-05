@@ -41,6 +41,11 @@ public:
   void ClearCache() override;
   const char* GetName() const override;
 
+  // iCube: re-read the NEON paired-single fast-path config flags into the file-scope cache in
+  // Interpreter_Paired.cpp. Called from every CPU engine's Init() so toggling the setting + relaunching
+  // the game applies it (previously a process-lifetime static that needed a full app restart).
+  static void RefreshNeonPairedConfig();
+
   static void unknown_instruction(Interpreter& interpreter, UGeckoInstruction inst);
 
   // Branch Instructions

@@ -56,20 +56,16 @@
 
 namespace
 {
-// Read the flag once (function-local statics: thread-safe init, read-once; toggling needs an emulation
-// restart — same effective semantics as the psq fast-path, which reads at CachedInterpreter::Init). We read
-// Config directly here rather than via a PowerPC.cpp accessor so this stays inside Interpreter_Paired.cpp.
-bool PsNeonEnabled()
-{
-  static const bool enabled = Config::Get(Config::MAIN_CIR_PS_NEON);
-  return enabled;
-}
+// NEON paired-single fast-path flags, cached at file scope and refreshed each engine boot via
+// Interpreter::RefreshNeonPairedConfig() (called from every CPU engine's Init()). NOTE: these were
+// previously function-local `static const`, so they were read ONCE per app process — a toggle then
+// silently did nothing until a full app restart, making "NEON Paired-Single Math" appear broken when
+// only the game was relaunched. They now re-read per game-boot like every other CIR/IR optimization flag.
+bool s_ps_neon_enabled = false;
+bool s_ps_neon_validate = false;
 
-bool PsNeonValidate()
-{
-  static const bool validate = Config::Get(Config::MAIN_CIR_PS_NEON_VALIDATE);
-  return validate;
-}
+bool PsNeonEnabled() { return s_ps_neon_enabled; }
+bool PsNeonValidate() { return s_ps_neon_validate; }
 
 // The FPSCR-mode gate shared by every accelerated op: flag on, default round-to-nearest. NI is NOT gated
 // here: the fast path runs in BOTH NI==0 and NI==1, with the NI-difference (subnormal-single result flush)
@@ -79,6 +75,15 @@ inline bool PsNeonModeOk(const PowerPC::PowerPCState& ppc_state)
   return PsNeonEnabled() && ppc_state.fpscr.RN == Common::FPU::ROUND_NEAR;
 }
 }  // namespace
+
+// iCube: refresh the NEON paired-single fast-path flags from Config. Called from every CPU engine's Init()
+// so toggling the setting + relaunching the game applies it (see the s_ps_neon_* note above). Kept here so
+// the Config read stays in this translation unit with the flags it controls.
+void Interpreter::RefreshNeonPairedConfig()
+{
+  s_ps_neon_enabled = Config::Get(Config::MAIN_CIR_PS_NEON);
+  s_ps_neon_validate = Config::Get(Config::MAIN_CIR_PS_NEON_VALIDATE);
+}
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
 #include <arm_neon.h>

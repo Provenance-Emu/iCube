@@ -366,6 +366,13 @@ void CachedInterpreterIR::Init()
   // lowering); the validate twin only ever runs when BOTH are on.
   s_ir_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_ir_specialized_ops_validate = Config::Get(Config::MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE);
+  // iCube: the IR engine reaches the SAME shared paired-single handlers (Interpreter_Paired.cpp /
+  // Interpreter_LoadStorePaired.cpp) via its Interpret ops, so it must refresh those flags per game-boot
+  // too. The CIR set these in its own Init(); without these the IR engine ran with stale/never-set
+  // PS-NEON + PSQ fast-path state, so those toggles had no effect under the IR engine.
+  Interpreter::RefreshNeonPairedConfig();
+  PowerPC::SetPsqFastpathEnabled(Config::Get(Config::MAIN_CIR_PSQ_FASTPATH));
+  PowerPC::SetPsqFastpathValidate(Config::Get(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE));
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
