@@ -433,5 +433,8 @@ extern const Info<bool> MAIN_CIR_CACHE_LOOP_FF;
 // iCube: CachedInterpreter counted-store-loop (memset) fast-path + its validate twin. Default OFF.
 extern const Info<bool> MAIN_CIR_STORE_LOOP_FF;
 extern const Info<bool> MAIN_CIR_STORE_LOOP_FF_VALIDATE;
+// iCube: NEON (ARM64) paired-single arithmetic fast-path + its validate twin. Default OFF.
+extern const Info<bool> MAIN_CIR_PS_NEON;
+extern const Info<bool> MAIN_CIR_PS_NEON_VALIDATE;
 
 }  // namespace Config
