@@ -1967,67 +1967,60 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
     bool follow_link = false;
     for (const IRInst& inst : *ir)
     {
-      // iCube IR M3: inlined [[likely]] fast path for the hottest ops (plain Interpret<false>/<true>),
-      // mirroring the CIR ExecuteOneBlock's direct-dispatch of Interpret<false>/<true>. This cuts the
-      // switch + call indirection on the common per-instruction path; everything else falls through to
-      // the full switch in DispatchIRInst.
-      if (inst.op == IROp::Interpret) [[likely]]
+      // iCube IR M9: O(1) jump-table dispatch. The per-IRInst dispatch is now a SINGLE switch(inst.op)
+      // covering EVERY IROp inline, so the compiler lowers it to one jump table (one indirect branch) —
+      // there is NO preceding sequential if-chain. The hottest ops (Interpret/InterpretPC and the M4–M7
+      // inlined cases) keep their exact inlined bodies right here in the switch; the rest carry the EXACT
+      // bodies that DispatchIRInst uses, transformed only by the dispatch contract: a handler returning 0
+      // is a block exit (terminal / exception / halt) -> leave the chain. This is a behavior-IDENTICAL
+      // dispatch refactor (M1–M8 op semantics unchanged).
+      //
+      // CONTRACT INVARIANT: every case below ends in `continue` or `return`, EXCEPT EndBlockLink, which is
+      // the ONLY case that `break`s out of the switch. A switch `break` exits the switch, not the for-loop,
+      // so the trailing `break;` after the switch (reached only by EndBlockLink) is what exits the for to
+      // restart on the followed link's target vector. Do NOT let any other case fall through to it.
+      switch (inst.op)
       {
-        Interpret<false>(ppc_state, inst.u.interpret);
+      // ---- Hottest mid-block ops: inlined verbatim (these handlers never return 0 mid-block; the result
+      // is intentionally ignored exactly as before — do NOT normalize to the ==0 contract). ----
+      case IROp::Interpret:
+        // iCube IR M3: plain Interpret<false> — the hottest per-instruction path.
+        [[likely]] Interpret<false>(ppc_state, inst.u.interpret);
         continue;
-      }
-      if (inst.op == IROp::InterpretPC)
-      {
+      case IROp::InterpretPC:
         Interpret<true>(ppc_state, inst.u.interpret);
         continue;
-      }
-      // iCube IR M4: fused constant-set on the inlined fast path — this IS the perf win (one store, no
-      // interpreter dispatch, no switch). Only present when MAIN_CIR_IR_CONST_FUSION is on; with the flag off
-      // the pass never lowers it, so this branch is never taken and the path is byte-identical to M3.
-      if (inst.op == IROp::SetRegConst)
-      {
+      case IROp::SetRegConst:
+        // iCube IR M4: fused constant-set (one store, no interpreter dispatch). Byte-identical to the M4
+        // inlined fast path; only present when MAIN_CIR_IR_CONST_FUSION lowered it.
         ppc_state.gpr[inst.u.set_reg_const.reg] = inst.u.set_reg_const.value;
         continue;
-      }
-      // iCube IR M5: fused ALU run on the inlined fast path — THIS is the M5 dispatch-count win. One IRInst
-      // dispatch + one tight inner loop over the run's interpreter funcs, instead of N IROp::Interpret
-      // dispatches through this switch. Only present when MAIN_CIR_IR_MICROOP_FUSION is on; with the flag off
-      // the pass never lowers it, so this branch is never taken and the path is byte-identical to M4.
-      if (inst.op == IROp::FusedAluRun)
+      case IROp::FusedAluRun:
       {
+        // iCube IR M5: fused ALU run — one IRInst dispatch + a tight inner loop over the run's interpreter
+        // funcs. Byte-identical to the M5 inlined fast path.
         const auto& run = inst.u.fused_alu_run;
         const CachedInterpreterIRFusedOp* const ops = run.pool->data() + run.offset;
         for (u32 k = 0; k < run.count; ++k)
           ops[k].func(run.interpreter, ops[k].inst);
         continue;
       }
-      // iCube IR M6: PIC direct-pointer load/store on the inlined fast path — THIS is the M6 perf win (direct
-      // host-pointer access, no interpreter dispatch, no per-access MMU/region lookup). Only present when
-      // MAIN_CIR_PIC_LOADSTORE is on AND the access was eligible (PassPICLoadStore); with the flag off the pass
-      // never lowers it, so this branch is never taken and the path is byte-identical to M5. Mid-block
-      // (write_pc=false) is the overwhelming common case; the block-ending (LoadStorePICPC) variant is rarer
-      // and goes through the switch below.
-      if (inst.op == IROp::LoadStorePIC) [[likely]]
-      {
-        LoadStorePIC<false>(ppc_state, inst.u.load_store_pic);
+      case IROp::LoadStorePIC:
+        // iCube IR M6: PIC direct-pointer load/store, mid-block (write_pc=false). Byte-identical to the M6
+        // inlined fast path. The block-ending (LoadStorePICPC) variant is a separate case below.
+        [[likely]] LoadStorePIC<false>(ppc_state, inst.u.load_store_pic);
         continue;
-      }
-      // iCube IR M7: specialized direct dispatch on the inlined fast path — THIS is the M7 win (direct/inlinable
-      // Interpreter::name call via a jump-table, no indirect operands.func CALL). Placed AFTER the plain
-      // Interpret/InterpretPC [[likely]] branches (parity with M4/M5/M6), so the hottest plain path is untouched.
-      // Only present when MAIN_CIR_SPECIALIZED_OPS is on; with the flag off the pass never lowers it, so this
-      // branch is never taken and the path is byte-identical to M5/M6. Mid-block (write_pc=false) is the only
-      // case in practice (no whitelisted op is canEndBlock); the SpecializedPC variant goes through the switch.
-      if (inst.op == IROp::Specialized) [[likely]]
-      {
-        Specialized<false>(ppc_state, inst.u.specialized);
+      case IROp::Specialized:
+        // iCube IR M7: specialized direct dispatch, mid-block (write_pc=false). Byte-identical to the M7
+        // inlined fast path. The SpecializedPC variant is a separate case below.
+        [[likely]] Specialized<false>(ppc_state, inst.u.specialized);
         continue;
-      }
-      // iCube IR M3: linkable terminal. EndBlockLink does the EndBlock accounting and returns whether the
-      // chain may follow the link. We apply the remaining guards (Running + hop cap) here, in the loop
-      // that owns them, exactly as the CIR's ExecuteOneBlock does for its LinkBlock callback.
-      if (inst.op == IROp::EndBlockLink)
-      {
+
+      // ---- Linkable terminal: the ONLY case that breaks out of the switch (and thus the for-loop). ----
+      case IROp::EndBlockLink:
+        // iCube IR M3: EndBlockLink does the EndBlock accounting and returns whether the chain may follow
+        // the link. The remaining guards (Running + hop cap) are applied here, in the loop that owns them,
+        // exactly as the CIR's ExecuteOneBlock does for its LinkBlock callback.
         if (EndBlockLink(ppc_state, inst.u.end_block_link) == 0)
           return;  // accounting done; deopt to the dispatcher (slice end / mispredict / unlinked)
         // Per-hop Running re-check: a stop/pause/state-change would otherwise not be observed until the
@@ -2039,12 +2032,89 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
           return;
         ir = inst.u.end_block_link.link_target_ir;  // resolved non-null by EndBlockLink's guard
         follow_link = true;
-        break;  // restart the inner loop on the target vector
+        break;  // exits the SWITCH; the trailing break after the switch then exits the for to restart on `ir`
+
+      // ---- Everything else: the exact DispatchIRInst bodies, under the 0==exit-block contract. ----
+      case IROp::StartProfiledBlock:
+        if (StartProfiledBlock(ppc_state, inst.u.start_profiled_block) == 0)
+          return;
+        continue;
+      case IROp::EndBlock:
+        if (EndBlock<false>(ppc_state, inst.u.end_block) == 0)
+          return;
+        continue;
+      case IROp::EndBlockProfiled:
+        if (EndBlock<true>(ppc_state, inst.u.end_block_profiled) == 0)
+          return;
+        continue;
+      case IROp::InterpretChk:
+        if (InterpretAndCheckExceptions<false>(ppc_state, inst.u.interpret_chk) == 0)
+          return;
+        continue;
+      case IROp::InterpretChkPC:
+        if (InterpretAndCheckExceptions<true>(ppc_state, inst.u.interpret_chk) == 0)
+          return;
+        continue;
+      case IROp::HLEFunction:
+        if (HLEFunction(ppc_state, inst.u.hle) == 0)
+          return;
+        continue;
+      case IROp::WriteBrokenBlockNPC:
+        if (WriteBrokenBlockNPC(ppc_state, inst.u.broken_npc) == 0)
+          return;
+        continue;
+      case IROp::CheckFPU:
+        if (CheckFPU(ppc_state, inst.u.check_halt) == 0)
+          return;
+        continue;
+      case IROp::CheckBreakpoint:
+        if (CheckBreakpoint(ppc_state, inst.u.check_halt) == 0)
+          return;
+        continue;
+      case IROp::CheckIdle:
+        if (CheckIdle(ppc_state, inst.u.check_idle) == 0)
+          return;
+        continue;
+      case IROp::FastForwardCtrIdle:
+        if (FastForwardCtrIdle(ppc_state, inst.u.ctr_idle) == 0)
+          return;
+        continue;
+      case IROp::InterpretDeadFlagValidate:
+        if (InterpretDeadFlagValidate(ppc_state, inst.u.dead_flag_validate) == 0)
+          return;
+        continue;
+      case IROp::SetRegConstValidate:
+        if (SetRegConstValidate(ppc_state, inst.u.set_reg_const_validate) == 0)
+          return;
+        continue;
+      case IROp::FusedAluRunValidate:
+        if (FusedAluRunValidate(ppc_state, inst.u.fused_alu_run_validate) == 0)
+          return;
+        continue;
+      case IROp::LoadStorePICPC:
+        if (LoadStorePIC<true>(ppc_state, inst.u.load_store_pic) == 0)
+          return;
+        continue;
+      case IROp::LoadStorePICValidate:
+        // iCube IR M6: write_pc carried in cr_out bit 7 (load/stores write no CR field, so the bit is free).
+        if (((inst.cr_out & 0x80) ?
+                 LoadStorePICValidate<true>(ppc_state, inst.u.load_store_pic_validate) :
+                 LoadStorePICValidate<false>(ppc_state, inst.u.load_store_pic_validate)) == 0)
+          return;
+        continue;
+      case IROp::SpecializedPC:
+        if (Specialized<true>(ppc_state, inst.u.specialized) == 0)
+          return;
+        continue;
+      case IROp::SpecializedValidate:
+        // iCube IR M7: write_pc is always false for the whitelist (no canEndBlock op), so one enumerator.
+        if (SpecializedValidate<false>(ppc_state, inst.u.specialized_validate) == 0)
+          return;
+        continue;
       }
-      // Everything else (other terminals, checks, HLE, idle, M2 validate) goes through the full switch.
-      // A 0 return is a block exit (terminal / exception / halt) -> leave the chain.
-      if (DispatchIRInst(ppc_state, inst) == 0)
-        return;
+      // Reached ONLY by EndBlockLink (it `break`s the switch). Every other case `continue`s or `return`s
+      // above, so this never fires for them. Exit the for-loop to restart on the followed link's `ir`.
+      break;
     }
     if (!follow_link)
       break;  // fell off the end of a vector without a followed link (shouldn't happen — blocks end in a
