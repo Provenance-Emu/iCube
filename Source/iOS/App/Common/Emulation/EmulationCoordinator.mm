@@ -1571,7 +1571,7 @@ after_set:
     // Covers: (a) no debugger attached, (b) iOS 26 TXM device under Xcode.
     {
       const PowerPC::CPUCore current_core = Config::Get(Config::MAIN_CPU_CORE);
-      const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter;
+      const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter || current_core == PowerPC::CPUCore::CachedInterpreterIR;
       if ((![JitManager shared].acquiredJit || txmInterpreterFallback) && !is_interpreter_core)
       {
         Config::SetCurrent(Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);

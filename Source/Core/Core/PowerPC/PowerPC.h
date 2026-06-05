@@ -38,6 +38,10 @@ enum class CPUCore
   JIT64 = 1,
   JITARM64 = 4,
   CachedInterpreter = 5,
+  // iCube M0: third execution engine — a data-interpreted callback engine that is currently
+  // BEHAVIORALLY IDENTICAL to CachedInterpreter (no IR lowering yet). Config-serialized by int, so
+  // the value (6) is permanent; do NOT reuse the historical gaps 2/3.
+  CachedInterpreterIR = 6,
 };
 
 enum class CoreMode

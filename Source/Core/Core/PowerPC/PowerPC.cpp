@@ -203,11 +203,18 @@ void PowerPCManager::InitializeCPUCore(CPUCore cpu_core)
   if (const char* env = std::getenv("DOLPHIN_FORCE_CI"); env && env[0] == '1')
     cpu_core = CPUCore::CachedInterpreter;
 
+  // iCube M0: force the experimental IR engine for A/B testing. Checked AFTER DOLPHIN_FORCE_CI so the
+  // IR override wins if both are set. Mirrors the DOLPHIN_FORCE_CI pattern above.
+  if (const char* env = std::getenv("DOLPHIN_FORCE_CIR_IR"); env && env[0] == '1')
+    cpu_core = CPUCore::CachedInterpreterIR;
+
   INFO_LOG_FMT(POWERPC, "InitializeCPUCore: requested core {}", static_cast<int>(cpu_core));
 
   // Normalize invalid stored values (e.g., from older/incorrect UI mappings)
   const bool valid_core = (cpu_core == CPUCore::Interpreter) || (cpu_core == CPUCore::JIT64) ||
-                          (cpu_core == CPUCore::JITARM64) || (cpu_core == CPUCore::CachedInterpreter);
+                          (cpu_core == CPUCore::JITARM64) ||
+                          (cpu_core == CPUCore::CachedInterpreter) ||
+                          (cpu_core == CPUCore::CachedInterpreterIR);
   if (!valid_core)
   {
     const CPUCore def = DefaultCPUCore();
@@ -247,6 +254,8 @@ std::span<const CPUCore> AvailableCPUCores()
       CPUCore::JITARM64,
 #endif
       CPUCore::CachedInterpreter,
+      // iCube M0: experimental IR engine, opt-in via the in-app picker / MAIN_CPU_CORE=6.
+      CPUCore::CachedInterpreterIR,
       CPUCore::Interpreter,
   };
 

@@ -176,7 +176,7 @@
 
   if (!_didStartEmulation) {
     const PowerPC::CPUCore current_core = Config::Get(Config::MAIN_CPU_CORE);
-    const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter;
+    const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter || current_core == PowerPC::CPUCore::CachedInterpreterIR;
 
     if (![JitManager shared].acquiredJit && !is_interpreter_core) {
       // Fallback to Cached Interpreter for this run when JIT is unavailable

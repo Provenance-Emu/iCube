@@ -59,6 +59,9 @@
     case PowerPC::CPUCore::CachedInterpreter:
       cpuCore = @"Cached Interpreter (slower)";
       break;
+    case PowerPC::CPUCore::CachedInterpreterIR:
+      cpuCore = @"Cached Interpreter (IR, experimental)";
+      break;
     case PowerPC::CPUCore::JIT64:
       cpuCore = @"JIT Recompiler for x86-64 (recommended)";
       break;

@@ -490,6 +490,8 @@ add_library(core
   PowerPC/CachedInterpreter/CachedInterpreter_Disassembler.cpp
   PowerPC/CachedInterpreter/CachedInterpreter.cpp
   PowerPC/CachedInterpreter/CachedInterpreter.h
+  PowerPC/CachedInterpreter/CachedInterpreterIR.cpp
+  PowerPC/CachedInterpreter/CachedInterpreterIR.h
   PowerPC/CachedInterpreter/CachedInterpreterBlockCache.cpp
   PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h
   PowerPC/CachedInterpreter/CachedInterpreterEmitter.cpp
