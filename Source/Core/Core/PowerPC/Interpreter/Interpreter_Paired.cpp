@@ -25,8 +25,15 @@
 // to the existing scalar code; otherwise the op runs its UNCHANGED scalar body. The proof rests on:
 //   * default round-to-nearest (fpscr.RN == ROUND_NEAR) — the FMA single-round tie correction below is
 //     RNE-only, and a non-default mode would also change vcvt rounding.
-//   * fpscr.NI == 0 — when NI is set, ForceSingle() applies a non-IEEE subnormal-flush quirk that a plain
-//     f64->f32 vcvt does not reproduce.
+//   * the op runs in BOTH IEEE (NI==0) and non-IEEE (NI==1) mode. NI=1 differs from NI=0 ONLY in
+//     ForceSingle()'s subnormal-flush quirk, which fires when the pre-rounding f64 result magnitude is
+//     below the smallest normal single (0x3810000000000000 as a double): NI=1 flushes that to signed zero,
+//     NI=0 converts it normally. We therefore gate per-RESULT-lane on "the result is NI-independent": its
+//     magnitude is >= 0x3810000000000000 so ForceSingle's flush branch never fires AND its converted single
+//     is a normal single so ForceSingle's secondary FlushToZero(x) branch is a no-op too. For such results a
+//     plain f64->f32 vcvt is bit-identical under both NI modes. Subnormal-single results (the only remaining
+//     NI-sensitive case) bail to scalar. This is ADDED on top of the finite-normal result guard, not in
+//     place of it — inf/NaN also satisfy >= the threshold, so both checks are required.
 //   * every INPUT lane (a, and b and/or c as the op uses) is finite-and-normal, which excludes Force25Bit's
 //     subnormal-normalization branch and every NI_* NaN/inf/SNaN side-effect path (so the scalar NI_* calls
 //     would not have mutated FPSCR — making the reference run side-effect-free).
@@ -64,12 +71,12 @@ bool PsNeonValidate()
   return validate;
 }
 
-// The FPSCR-mode gate shared by every accelerated op: flag on, default round-to-nearest, IEEE (NI==0) mode.
-// Lane-level finite/normal checks are done per-op after this passes.
+// The FPSCR-mode gate shared by every accelerated op: flag on, default round-to-nearest. NI is NOT gated
+// here: the fast path runs in BOTH NI==0 and NI==1, with the NI-difference (subnormal-single result flush)
+// excluded per-RESULT-lane by ResultNiIndependent below. Lane-level finite/normal checks are done per-op.
 inline bool PsNeonModeOk(const PowerPC::PowerPCState& ppc_state)
 {
-  return PsNeonEnabled() && ppc_state.fpscr.NI == 0 &&
-         ppc_state.fpscr.RN == Common::FPU::ROUND_NEAR;
+  return PsNeonEnabled() && ppc_state.fpscr.RN == Common::FPU::ROUND_NEAR;
 }
 }  // namespace
 
@@ -90,6 +97,24 @@ inline bool BothFiniteNormal(float64x2_t v)
   const uint64x2_t in_range = vcltq_u64(minus_one, vdupq_n_u64(0x7FE));
   // Both lanes must be in range.
   return (vgetq_lane_u64(in_range, 0) & vgetq_lane_u64(in_range, 1)) != 0;
+}
+
+// True if BOTH result lanes are NI-independent: each lane's magnitude (sign stripped) is >= the smallest
+// normal single represented as a double (0x3810000000000000). This is ForceSingle's OWN flush comparison
+// (Interpreter_FPUtils.h ForceSingle, NI==1 branch) — at or above it the subnormal-flush never fires, and
+// the converted single is normal so the secondary FlushToZero(x) branch is a no-op too. Below it NI=1 would
+// flush to signed zero while NI=0 would not, so we must bail to scalar. This is an ADDITIONAL lower bound; it
+// does NOT subsume BothFiniteNormal (inf/NaN have exp 0x7FF and also pass this >= test), so callers apply
+// BOTH guards together. Caller has already established the result is finite-and-normal-f64.
+inline bool BothResultNiIndependent(float64x2_t v)
+{
+  const uint64x2_t bits = vreinterpretq_u64_f64(v);
+  const uint64x2_t magnitude =
+      vandq_u64(bits, vdupq_n_u64(Common::DOUBLE_EXP | Common::DOUBLE_FRAC));
+  // magnitude >= 0x3810000000000000  <=>  NOT (magnitude < smallest_normal_single)
+  const uint64x2_t below = vcltq_u64(magnitude, vdupq_n_u64(0x3810000000000000ULL));
+  // Both lanes must be at-or-above the threshold (neither lane "below").
+  return (vgetq_lane_u64(below, 0) | vgetq_lane_u64(below, 1)) == 0;
 }
 
 // SIMD Force25Bit for the finite-NORMAL case only (subnormal lanes are excluded by the predicate, so we only
@@ -141,7 +166,7 @@ inline bool FmaSingle(float64x2_t va, float64x2_t vc, float64x2_t vb, bool sub, 
   const float64x2_t b_signed = sub ? vnegq_f64(vb) : vb;
   // vfmaq_f64(acc, x, y) == x*y + acc, single-rounded — matches std::fma(a, c_round, b_sign).
   const float64x2_t vr = vfmaq_f64(b_signed, va, vc25);
-  if (!BothFiniteNormal(vr) || EitherEvenTie(vr))
+  if (!BothFiniteNormal(vr) || !BothResultNiIndependent(vr) || EitherEvenTie(vr))
     return false;
   *out = vr;
   return true;
@@ -365,7 +390,7 @@ void Interpreter::ps_sub(Interpreter& interpreter, UGeckoInstruction inst)
     if (BothFiniteNormal(va) && BothFiniteNormal(vb))
     {
       const float64x2_t vr = vsubq_f64(va, vb);
-      if (BothFiniteNormal(vr))
+      if (BothFiniteNormal(vr) && BothResultNiIndependent(vr))
       {
         float ps0, ps1;
         StoreLanes(vr, &ps0, &ps1);
@@ -418,7 +443,7 @@ void Interpreter::ps_add(Interpreter& interpreter, UGeckoInstruction inst)
     if (BothFiniteNormal(va) && BothFiniteNormal(vb))
     {
       const float64x2_t vr = vaddq_f64(va, vb);
-      if (BothFiniteNormal(vr))
+      if (BothFiniteNormal(vr) && BothResultNiIndependent(vr))
       {
         float ps0, ps1;
         StoreLanes(vr, &ps0, &ps1);
@@ -472,7 +497,7 @@ void Interpreter::ps_mul(Interpreter& interpreter, UGeckoInstruction inst)
     {
       const float64x2_t vc25 = Force25BitNormal(vc);
       const float64x2_t vr = vmulq_f64(va, vc25);
-      if (BothFiniteNormal(vr))
+      if (BothFiniteNormal(vr) && BothResultNiIndependent(vr))
       {
         float ps0, ps1;
         StoreLanes(vr, &ps0, &ps1);
@@ -791,7 +816,7 @@ void Interpreter::ps_muls0(Interpreter& interpreter, UGeckoInstruction inst)
     {
       const float64x2_t vc25 = Force25BitNormal(vc);
       const float64x2_t vr = vmulq_f64(va, vc25);
-      if (BothFiniteNormal(vr))
+      if (BothFiniteNormal(vr) && BothResultNiIndependent(vr))
       {
         float ps0, ps1;
         StoreLanes(vr, &ps0, &ps1);
@@ -843,7 +868,7 @@ void Interpreter::ps_muls1(Interpreter& interpreter, UGeckoInstruction inst)
     {
       const float64x2_t vc25 = Force25BitNormal(vc);
       const float64x2_t vr = vmulq_f64(va, vc25);
-      if (BothFiniteNormal(vr))
+      if (BothFiniteNormal(vr) && BothResultNiIndependent(vr))
       {
         float ps0, ps1;
         StoreLanes(vr, &ps0, &ps1);
