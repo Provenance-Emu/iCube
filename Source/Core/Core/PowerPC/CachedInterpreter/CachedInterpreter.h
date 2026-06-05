@@ -208,6 +208,13 @@ private:
   // when the validate flag is on, so the shipping (validate-off) stream stays byte-identical. See
   // InterpretDeadFlagValidate.
   struct InterpretDeadFlagValidateOperands;
+  // iCube: payload for the counted-store-loop (memset) fast-path (MAIN_CIR_STORE_LOOP_FF). Carries
+  // everything the StoreLoopFill handler needs at runtime: the interpreter (for the validate reference
+  // per-store run), the loop registers (rS value source, rB base), the per-iter stride M, the block's
+  // entry/exit PCs, and the per-iteration emulated-cycle cost so downcount can be reconciled without a
+  // dispatcher round-trip. Only ever written when the flag is on, so the flag-off stream is byte-
+  // identical to stock. See StoreLoopFill.
+  struct StoreLoopFillOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
@@ -327,6 +334,16 @@ private:
                                        const InterpretOperands& operands);
   template <bool write_pc>
   static s32 InterpretFPRFElimValidate(std::ostream& stream, const InterpretOperands& operands);
+  // iCube: counted-store-loop (memset) fast-path handler (MAIN_CIR_STORE_LOOP_FF). Emitted ALONGSIDE
+  // (before) the unchanged stb/addi/bdnz records of a recognized memset loop. Bulk-fills the first
+  // count-1 strides after a per-page RAM-not-MMIO contiguity guard over the WHOLE [base,base+total)
+  // range (bail -> the real records run unchanged), sets CTR=1 and rB += (count-1)*M, charges
+  // (count-1)*per_iter to downcount, and returns the NORMAL next-record distance so the genuine store
+  // records execute exactly the final iteration. NOT a block terminal (write_pc is always false). The
+  // validate twin (MAIN_CIR_STORE_LOOP_FF_VALIDATE) sequences a real per-store reference run against
+  // the bulk fill on a snapshot and asserts equivalence.
+  static s32 StoreLoopFill(PowerPC::PowerPCState& ppc_state, const StoreLoopFillOperands& operands);
+  static s32 StoreLoopFill(std::ostream& stream, const StoreLoopFillOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,
@@ -493,6 +510,23 @@ struct CachedInterpreter::InterpretDeadFlagValidateOperands : InterpretOperands
   UGeckoInstruction ref_inst;  // original (Rc set) — computes the reference CR
   u32 elim_cr_mask;            // op.crOut: the fields allowed to differ (all discardable). u32 keeps the
                                // struct sizeof a multiple of alignof(AnyCallback) for the emitter assert.
+};
+
+// iCube: payload for the counted-store-loop (memset) fast-path (MAIN_CIR_STORE_LOOP_FF). Trivially
+// copyable; only written when the flag is on. interpreter reaches the MMU/JitInterface (and is the
+// reference store engine for the validate twin). reg_s/reg_b are the loop's value-source and base GPR
+// indices; stride is M (bytes filled per iteration == the addi immediate == the stb count). current_pc
+// is the first stb's PC (the loop body start, == js.blockStart). per_iter_cycles is the block's full
+// emulated-cycle cost for ONE iteration (js.downcountAmount at the bdnz), used to reconcile downcount.
+struct CachedInterpreter::StoreLoopFillOperands
+{
+  Interpreter& interpreter;
+  u32 reg_s;
+  u32 reg_b;
+  u32 stride;
+  u32 current_pc;
+  u32 per_iter_cycles;
+  u32 : 32;
 };
 
 struct CachedInterpreter::HLEFunctionOperands

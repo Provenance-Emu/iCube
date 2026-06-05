@@ -33,6 +33,8 @@
 #include "Core/PowerPC/Gekko.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
 #include "Core/PowerPC/Jit64Common/Jit64Constants.h"
+#include "Core/PowerPC/JitInterface.h"
+#include "Core/PowerPC/MMU.h"
 #include "Core/PowerPC/PPCAnalyst.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
@@ -383,6 +385,25 @@ static bool s_dead_fprf_elim = false;
 // and all non-FPRF FPSCR bits match. Default OFF; correctness passes only. See InterpretFPRFElimValidate.
 static bool s_dead_fprf_elim_validate = false;
 
+// iCube: counted-store-loop (memset) fast-path (MAIN_CIR_STORE_LOOP_FF). Read once in Init. When OFF
+// (default) the DoJit recognizer never runs and NO StoreLoopFill callback is emitted, so the callback
+// stream is byte-for-byte identical to the flag-off baseline. When ON, a recognized "M*stb + addi +
+// bdnz" memset loop emits a StoreLoopFill callback alongside the unchanged store records. UNVALIDATED
+// on-device — gated for A/B.
+static bool s_store_loop_ff = false;
+// iCube: validate twin (MAIN_CIR_STORE_LOOP_FF_VALIDATE). When ON, StoreLoopFill sequences a real
+// per-store reference run against the bulk fill on a snapshot and asserts equivalence. Default OFF;
+// correctness passes only.
+static bool s_store_loop_ff_validate = false;
+// iCube: emulator handles for the StoreLoopFill static callback (a free function has no `this`). Set in
+// Init ONLY when the store-loop fast-path is on; left null otherwise so the flag-off path can never
+// touch them. Mirrors the s_profile_memory pattern (one-per-System, stable for the session). The MMU is
+// the translation/reference-store engine; Memory resolves the host RAM pointer for the bulk range; the
+// JitInterface invalidates the icache over the filled range (SMC coherency).
+static PowerPC::MMU* s_store_loop_mmu = nullptr;
+static Memory::MemoryManager* s_store_loop_memory = nullptr;
+static JitInterface* s_store_loop_jit = nullptr;
+
 namespace
 {
 // Flycast/PPSSPP-style fixed open-addressing hot-block table. Sized once at first use for a game's
@@ -606,6 +627,124 @@ std::string BuildHotBlocksReport(u32 top_n)
 }
 }  // namespace CIRProfiler
 
+// iCube: counted-store-loop (memset) recognizer (MAIN_CIR_STORE_LOOP_FF). Result of scanning a built
+// CIR block for the EXACT memset shape. matched==false leaves the block untouched (normal per-store).
+namespace
+{
+struct StoreLoopMatch
+{
+  bool matched = false;
+  u32 reg_s = 0;   // value-source GPR (stb rS); the byte filled is GPR[rS] & 0xFF
+  u32 reg_b = 0;   // base GPR (stb base + addi target); rB != 0, rB != rS
+  u32 stride = 0;  // M: bytes per iteration == addi immediate == number of stb records
+};
+
+// Recognize EXACTLY: M consecutive `stb rS,k(rB)` for k in {0..M-1} (each offset once, same rS, same
+// rB), then `addi rB,rB,M`, then a `bdnz` self-loop back to block start. rS/rB loop-invariant: rS != rB,
+// rB != 0, and no instruction writes any GPR except rB by that one addi. No other instructions. Anything
+// not matching => matched=false. Conservative by construction: every deviation bails.
+static StoreLoopMatch RecognizeStoreLoop(const PPCAnalyst::CodeOp* code, u32 num_insts, u32 block_start)
+{
+  StoreLoopMatch m;
+  // Need at least 1 stb + addi + bdnz = 3 instructions.
+  if (num_insts < 3)
+    return m;
+
+  const u32 store_count = num_insts - 2;  // M
+  const PPCAnalyst::CodeOp& addi_op = code[num_insts - 2];
+  const PPCAnalyst::CodeOp& br_op = code[num_insts - 1];
+
+  // --- Terminator must be a plain bdnz self-loop (decrement CTR, branch if CTR!=0, NO condition). ---
+  const UGeckoInstruction br = br_op.inst;
+  if (br.OPCD != 16)  // bcx
+    return m;
+  if (br.LK != 0)  // bdnzl writes LR — not loop-invariant
+    return m;
+  // BO = decrement (clear DONT_DECREMENT), branch-if-CTR!=0 (clear BRANCH_IF_CTR_0), don't-check-cond
+  // (set DONT_CHECK_CONDITION). Excludes bdz / bdnzt / bdnzf / plain conditional branches.
+  if ((br.BO & BO_DONT_DECREMENT_FLAG) != 0)
+    return m;
+  if ((br.BO & BO_BRANCH_IF_CTR_0) != 0)
+    return m;
+  if ((br.BO & BO_DONT_CHECK_CONDITION) == 0)
+    return m;
+  if (br_op.branchTo != block_start)  // must loop back to the first stb
+    return m;
+
+  // --- addi rB,rB,M : OPCD 14, RA==RD (in-place increment of the base), immediate == M. ---
+  const UGeckoInstruction ai = addi_op.inst;
+  if (ai.OPCD != 14)  // addi/li
+    return m;
+  const u32 reg_b = ai.RD;
+  if (reg_b == 0)  // RA==0 in addi means "li" (no base reg); the base must be a real GPR
+    return m;
+  if (ai.RA != reg_b)  // must read+write the SAME base register
+    return m;
+  if (static_cast<u32>(static_cast<s32>(ai.SIMM_16)) != store_count)  // immediate must equal M
+    return m;
+
+  // --- M stores: each `stb rS,k(rB)` for k in {0..M-1}, same rS, same rB (==reg_b), rS != rB, rB != 0.
+  u32 reg_s = 0;
+  bool reg_s_set = false;
+  // Track which offsets 0..M-1 we have seen (M <= num_insts <= code-buffer cap, well under 64).
+  u64 seen_offsets = 0;
+  if (store_count == 0 || store_count > 60)
+    return m;
+  for (u32 i = 0; i < store_count; ++i)
+  {
+    const UGeckoInstruction st = code[i].inst;
+    if (st.OPCD != 38)  // stb (NOT stbu=39, NOT any other store/update form)
+      return m;
+    if (st.RA != reg_b)  // base must be rB
+      return m;
+    const u32 cur_s = st.RS;
+    if (!reg_s_set)
+    {
+      reg_s = cur_s;
+      reg_s_set = true;
+    }
+    else if (cur_s != reg_s)  // value source must be loop-invariant across all stores
+    {
+      return m;
+    }
+    const s32 off = static_cast<s32>(st.SIMM_16);
+    if (off < 0 || static_cast<u32>(off) >= store_count)  // offsets must lie in {0..M-1}
+      return m;
+    const u64 bit = 1ull << static_cast<u32>(off);
+    if (seen_offsets & bit)  // each offset exactly once (gap-free, overlap-free tiling)
+      return m;
+    seen_offsets |= bit;
+  }
+  // Every offset 0..M-1 present exactly once.
+  if (seen_offsets != ((store_count >= 64) ? ~0ull : ((1ull << store_count) - 1)))
+    return m;
+
+  if (reg_s == reg_b)  // value source and base must differ (rS write would not be loop-invariant)
+    return m;
+  if (reg_b == 0)
+    return m;
+
+  // Loop-invariance: the ONLY GPR written anywhere in the block is rB, and only by that one addi. The
+  // stores write memory, not GPRs; the bdnz writes only CTR. Verify via regsOut: addi writes {rB}; every
+  // store and the branch write no GPR. (regsOut is the analyzer's per-op GPR write set.)
+  for (u32 i = 0; i < store_count; ++i)
+  {
+    if (code[i].regsOut != BitSet32{})  // a stb writes no GPR
+      return m;
+  }
+  if (addi_op.regsOut != BitSet32{static_cast<int>(reg_b)})  // addi writes exactly rB
+    return m;
+  if (br_op.regsOut != BitSet32{})  // bdnz writes no GPR
+    return m;
+
+  m.matched = true;
+  m.reg_s = reg_s;
+  m.reg_b = reg_b;
+  m.stride = store_count;
+  return m;
+}
+}  // namespace
+
 void CachedInterpreter::Init()
 {
   // Wire the fastmem arena BEFORE RefreshConfig() — RefreshConfig computes jo.fastmem from
@@ -647,6 +786,14 @@ void CachedInterpreter::Init()
   // Config::Get on the hot path. When off the handlers run only the unchanged generic switch.
   PowerPC::SetPsqFastpathEnabled(Config::Get(Config::MAIN_CIR_PSQ_FASTPATH));
   PowerPC::SetPsqFastpathValidate(Config::Get(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE));
+  // iCube: counted-store-loop (memset) fast-path (default OFF). Read once. Capture the MMU/Memory/
+  // JitInterface handles for the StoreLoopFill static callback ONLY when the feature is on, so the
+  // flag-off path leaves them null and is byte-identical to baseline. One-per-System, set at boot.
+  s_store_loop_ff = Config::Get(Config::MAIN_CIR_STORE_LOOP_FF);
+  s_store_loop_ff_validate = Config::Get(Config::MAIN_CIR_STORE_LOOP_FF_VALIDATE);
+  s_store_loop_mmu = s_store_loop_ff ? &m_system.GetMMU() : nullptr;
+  s_store_loop_memory = s_store_loop_ff ? &m_system.GetMemory() : nullptr;
+  s_store_loop_jit = s_store_loop_ff ? &m_system.GetJitInterface() : nullptr;
   s_block_profile.Clear();
   if (s_cir_profile)
     s_block_profile.EnsureAllocated();
@@ -3076,6 +3223,174 @@ s32 CachedInterpreter::FastForwardCtrIdle(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// iCube: counted-store-loop (memset) fast-path handler (MAIN_CIR_STORE_LOOP_FF). Emitted alongside the
+// recognized loop's records, BEFORE the first stb. Runs once on the first dispatch into the block. Bulk-
+// fills the first (count-1) strides directly into host RAM after a per-page RAM-not-MMIO contiguity
+// guard over the WHOLE filled range, then leaves exactly one iteration (CTR=1, rB at base+(count-1)*M)
+// for the real stb/addi/bdnz records to execute — so the final store goes through the genuine faulting
+// path and rB/CTR/npc/downcount end EXACTLY as the unfused loop. On ANY guard failure (range not
+// contiguous normal RAM, count<=1, overflow) it bails (returns the normal record distance) and the real
+// per-store loop runs unchanged, which correctly handles MMIO + per-store faults + CTR-underflow.
+namespace
+{
+// Per-page translation guard: resolve a host pointer for the ENTIRE guest range [base, base+total) and
+// require it to be contiguous normal RAM. Walks every page boundary (a guest-virtually contiguous range
+// can map to physically discontiguous pages), translating each via MMU::GetTranslatedAddress (which
+// honors MSR.DR / BAT / page tables), requiring physical contiguity, then resolving the single host
+// pointer for the physical base with a panic-free region pre-check before GetPointerForRange (which
+// PanicAlerts on a bad/oversized address). Returns nullptr on ANY failure (MMIO, unmapped, page-cross
+// out of RAM, non-contiguous) => caller bails to the per-store records. total must be >= 1.
+static u8* ResolveContiguousRamRange(PowerPC::MMU& mmu, Memory::MemoryManager& memory, u32 base,
+                                     u32 total)
+{
+  constexpr u32 kPageSize = 0x1000;  // 4 KiB; conservative page granularity for the contiguity walk.
+
+  // Translate the first byte. nullopt => not mapped for data access (or faults) => bail.
+  const std::optional<u32> first_phys_opt = mmu.GetTranslatedAddress(base);
+  if (!first_phys_opt)
+    return nullptr;
+  const u32 first_phys = *first_phys_opt;
+
+  // Walk each subsequent page start, requiring physical contiguity with the first page.
+  const u32 last = base + (total - 1);  // inclusive; total>=1 so no underflow
+  // Guard against a wrapped range (base + total overflowing the 32-bit guest space).
+  if (last < base)
+    return nullptr;
+  for (u32 page_base = (base & ~(kPageSize - 1)) + kPageSize; page_base != 0 && page_base <= last;
+       page_base += kPageSize)
+  {
+    const std::optional<u32> phys_opt = mmu.GetTranslatedAddress(page_base);
+    if (!phys_opt)
+      return nullptr;
+    // Physical address of this page must equal first_phys + (page_base - base-rounded). Compute the
+    // expected physical for page_base relative to the first translated byte.
+    const u32 expected_phys = first_phys + (page_base - base);
+    if (*phys_opt != expected_phys)
+      return nullptr;  // virtually contiguous but physically discontiguous => not safe to bulk-fill
+  }
+
+  // Panic-free region pre-check on the PHYSICAL base (mirror GetSpanForAddress's region math without its
+  // panic-on-miss), requiring the full [first_phys, first_phys+total) to fit inside ONE normal-RAM
+  // region (MEM1 or EXRAM). This is what excludes MMIO (e.g. the GX FIFO at 0xCC008000) and any range
+  // straddling a region tail — neither reaches the RAM branches below.
+  const u32 masked = first_phys & 0x3FFFFFFFu;
+  const u32 ram_real = memory.GetRamSizeReal();
+  bool in_ram = false;
+  if (ram_real >= total && masked <= ram_real - total)
+  {
+    in_ram = true;  // wholly inside MEM1
+  }
+  else if ((masked >> 28) == 0x1u)
+  {
+    const u32 exram_real = memory.GetExRamSizeReal();
+    const u32 exoff = masked & memory.GetExRamMask();
+    if (exram_real >= total && exoff <= exram_real - total)
+      in_ram = true;  // wholly inside EXRAM
+  }
+  if (!in_ram)
+    return nullptr;
+
+  // Safe now: the range is validated to fit one region, so GetPointerForRange will not panic.
+  return memory.GetPointerForRange(first_phys, total);
+}
+}  // namespace
+
+s32 CachedInterpreter::StoreLoopFill(PowerPC::PowerPCState& ppc_state,
+                                     const StoreLoopFillOperands& operands)
+{
+  const auto& [interpreter, reg_s, reg_b, stride, current_pc, per_iter_cycles] = operands;
+  const s32 normal_distance = sizeof(AnyCallback) + sizeof(operands);
+
+  const u32 count = CTR(ppc_state);
+  // count <= 1: nothing to pre-fill (the single real iteration does everything; count==0 underflows to
+  // a 2^32-iteration loop on real hardware, which we deliberately do NOT optimize). Bail to the records.
+  if (count <= 1)
+    return normal_distance;
+
+  const u32 bulk_count = count - 1;  // iterations we bulk-fill; the records run the last one.
+  // Overflow guard on total = bulk_count * stride (32-bit guest space). stride is small (M <= 60).
+  if (stride != 0 && bulk_count > (0xFFFFFFFFu / stride))
+    return normal_distance;
+  const u32 total = bulk_count * stride;
+  if (total == 0)
+    return normal_distance;
+
+  const u32 base = ppc_state.gpr[reg_b];
+  const u8 value = static_cast<u8>(ppc_state.gpr[reg_s] & 0xFFu);
+
+  PowerPC::MMU* const mmu = s_store_loop_mmu;
+  Memory::MemoryManager* const memory = s_store_loop_memory;
+  JitInterface* const jit = s_store_loop_jit;
+  if (!mmu || !memory || !jit)  // handles only set when the feature is on; defensive
+    return normal_distance;
+
+  // --- RAM-not-MMIO guard (load-bearing): host pointer for the WHOLE [base, base+total) range. ---
+  u8* const host = ResolveContiguousRamRange(*mmu, *memory, base, total);
+  if (host == nullptr)
+    return normal_distance;  // not contiguous normal RAM => run the real per-store loop unchanged.
+
+  // --- Validate twin (MAIN_CIR_STORE_LOOP_FF_VALIDATE): sequence a real per-store reference run against
+  // the bulk fill on a snapshot and assert equivalence. Memory can't be written twice, so: snapshot the
+  // range + (rB,CTR); run the authoritative per-store loop (mmu Write_U8, exactly the loop's stores);
+  // capture the reference (range, rB, CTR); restore; run the bulk path; compare. Trap on mismatch.
+  if (s_store_loop_ff_validate) [[unlikely]]
+  {
+    std::vector<u8> before(total);
+    std::memcpy(before.data(), host, total);
+
+    // Reference: emulate bulk_count iterations of "M*stb(value) ; rB += M" via the real MMU store path.
+    u32 ref_b = base;
+    for (u32 it = 0; it < bulk_count; ++it)
+    {
+      for (u32 k = 0; k < stride; ++k)
+        mmu->Write_U8(value, ref_b + k);
+      ref_b += stride;
+    }
+    std::vector<u8> ref_range(total);
+    std::memcpy(ref_range.data(), host, total);
+    const u32 ref_rb = ref_b;  // base + bulk_count*stride
+
+    // Restore memory so the bulk fill is the live write (no double-write commit).
+    std::memcpy(host, before.data(), total);
+
+    // Bulk path.
+    std::memset(host, value, total);
+
+    // Compare the filled range and the post-state rB the bulk path will commit.
+    ASSERT_MSG(DYNA_REC, std::memcmp(host, ref_range.data(), total) == 0,
+               "CIR store-loop validate: bulk range mismatch at pc {:#010x} (base {:#010x} total {})",
+               current_pc, base, total);
+    ASSERT_MSG(DYNA_REC, (base + total) == ref_rb,
+               "CIR store-loop validate: rB mismatch at pc {:#010x} (bulk {:#010x} vs ref {:#010x})",
+               current_pc, base + total, ref_rb);
+  }
+  else
+  {
+    std::memset(host, value, total);
+  }
+
+  // --- SMC / code coherency: the fill may overwrite cached code. Invalidate over the EFFECTIVE range
+  // (InvalidateICache translates internally). ---
+  jit->InvalidateICache(base, total, true);
+
+  // --- Exact post-state: rB advanced by the bulk-filled bytes; leave CTR=1 so the real bdnz decrements
+  // 1->0 and exits after the records run the FINAL iteration; reconcile downcount for the skipped
+  // iterations (the records' EndBlock charges the final one). pc/npc are NOT written here (this is not a
+  // terminal; write_pc is always false for this callback) — the records' stb/addi/bdnz set npc. ---
+  ppc_state.gpr[reg_b] = base + total;  // base + (count-1)*stride
+  CTR(ppc_state) = 1;
+  ppc_state.downcount -= static_cast<s32>(bulk_count * per_iter_cycles);
+
+  return normal_distance;
+}
+
+s32 CachedInterpreter::StoreLoopFill(std::ostream& stream, const StoreLoopFillOperands& operands)
+{
+  fmt::print(stream, "StoreLoopFill(rS=r{}, rB=r{}, M={}) at PC={:#010x}\n", operands.reg_s,
+             operands.reg_b, operands.stride, operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 bool CachedInterpreter::HandleFunctionHooking(u32 address)
 {
   // CachedInterpreter inherits from JitBase and is considered a JIT by relevant code.
@@ -3261,6 +3576,38 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   if (IsProfilingEnabled())
     Write(StartProfiledBlock, {js.curBlock->profile_data.get()});
 
+  // iCube: counted-store-loop (memset) fast-path recognition (MAIN_CIR_STORE_LOOP_FF, default OFF).
+  // Scan the WHOLE built block once for the exact "M*stb + addi + bdnz self-loop" shape. On match,
+  // before emitting the first stb record we emit a StoreLoopFill callback ALONGSIDE the unchanged
+  // records (emit-alongside, like FastForwardCtrIdle). The records are kept verbatim, so a runtime guard
+  // failure (range not contiguous normal RAM) or count==0 just runs the real loop. When OFF, the
+  // recognizer never runs and nothing is emitted -> byte-identical to baseline. We disable the fast path
+  // when debugging is on (the records must stay singly-steppable / breakpointable) — the callback would
+  // bulk-fill across instruction boundaries a breakpoint inside the loop could otherwise catch.
+  StoreLoopMatch store_loop;
+  u32 store_loop_per_iter = 0;
+  if (s_store_loop_ff && !IsDebuggingEnabled())
+  {
+    store_loop = RecognizeStoreLoop(m_code_buffer.data(), code_block.m_num_instructions, js.blockStart);
+    if (store_loop.matched)
+    {
+      // per-iteration emulated cycles = sum of every op's num_cycles (== js.downcountAmount at the bdnz,
+      // which the normal path charges once per dispatch == once per loop iteration).
+      for (u32 k = 0; k < code_block.m_num_instructions; ++k)
+        store_loop_per_iter += m_code_buffer[k].opinfo->num_cycles;
+      // Log ONCE that only this exact shape is covered (no silent cap; stw/other shapes are future work).
+      static bool logged_once = false;
+      if (!logged_once)
+      {
+        logged_once = true;
+        INFO_LOG_FMT(DYNA_REC,
+                     "iCube CIR store-loop fast-path: recognized memset loop at {:#010x} "
+                     "(M={} stb, rS=r{}, rB=r{}); only this exact stb+addi+bdnz shape is covered.",
+                     js.blockStart, store_loop.stride, store_loop.reg_s, store_loop.reg_b);
+      }
+    }
+  }
+
   for (u32 i = 0; i < code_block.m_num_instructions; i++)
   {
     PPCAnalyst::CodeOp& op = m_code_buffer[i];
@@ -3279,6 +3626,14 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
     if (!op.skip)
     {
+      // iCube: emit the counted-store-loop fill callback ALONGSIDE the records, immediately before the
+      // first stb (i == 0). The unchanged stb/addi/bdnz records that follow run the FINAL iteration; the
+      // handler bulk-fills the first count-1 strides and reconciles CTR/rB/downcount (see StoreLoopFill).
+      if (store_loop.matched && i == 0)
+      {
+        Write(StoreLoopFill, {interpreter, store_loop.reg_s, store_loop.reg_b, store_loop.stride,
+                              js.compilerPC, store_loop_per_iter});
+      }
       if (IsDebuggingEnabled() && !cpu.IsStepping() &&
           breakpoints.IsAddressBreakPoint(js.compilerPC))
       {

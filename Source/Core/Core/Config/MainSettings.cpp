@@ -1039,5 +1039,23 @@ const Info<bool> MAIN_CIR_PSQ_FASTPATH_VALIDATE{
 // fast-forward investigation (Task 2). Default FALSE. See CachedInterpreter for whether the transform
 // shipped or was deferred.
 const Info<bool> MAIN_CIR_CACHE_LOOP_FF{{System::Main, "Core", "CIRCacheLoopFF"}, false};
+// iCube: counted-store-loop (memset) fast-path. Default OFF, for on-device A/B. When OFF the CIR is
+// byte-identical to current behavior (no fill callback emitted, recognizer never runs). When ON, DoJit
+// recognizes the EXACT shape "M contiguous stb rS,k(rB) + addi rB,rB,M + bdnz self-loop" (rS/rB
+// loop-invariant, rS!=rB, rB!=0) and emits a StoreLoopFill callback ALONGSIDE the unchanged store
+// records (emit-alongside, like FastForwardCtrIdle). At runtime the handler bulk-fills the first
+// count-1 strides into host RAM (guarded: the WHOLE [base,base+total) range must translate to
+// contiguous normal RAM via per-page GetTranslatedAddress + GetPointerForRange, else it bails and the
+// real per-store records run), sets CTR=1 and rB += (count-1)*M, charges (count-1)*per_iter to
+// downcount, then lets the real records execute the final iteration — so MMIO/DSI/SMC for the tail
+// store go through the genuine faulting path and rB/CTR/npc/downcount end exactly as the unfused loop.
+const Info<bool> MAIN_CIR_STORE_LOOP_FF{{System::Main, "Core", "CIRStoreLoopFF"}, false};
+// iCube: self-validation for CIRStoreLoopFF. EXACT analogue of the other CIR double-run validators, but
+// the two runs are SEQUENCED on a snapshot (memory can't be written twice): snapshot (rB, CTR, the
+// [base,total) bytes); run the REAL per-store loop (mmu.Write_U8 — the authoritative reference) and
+// capture (rB, CTR, range); restore memory+rB+CTR; run the bulk memset path; ASSERT the filled range,
+// rB, and CTR match. Trap on mismatch. Slow; on-device correctness passes only. Default OFF.
+const Info<bool> MAIN_CIR_STORE_LOOP_FF_VALIDATE{
+    {System::Main, "Core", "CIRStoreLoopFFValidate"}, false};
 
 }  // namespace Config
