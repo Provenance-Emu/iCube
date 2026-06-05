@@ -79,6 +79,10 @@ enum class IROp : u8
   CheckBreakpoint,
   CheckIdle,
   FastForwardCtrIdle,
+  // iCube M2: optimizer-pass validate op (MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE). Only ever lowered into
+  // the vector by the dead-flag pass when BOTH M2 flags are on; double-runs ref-vs-eliminated and asserts
+  // the live CR fields match. Never present in a shipping (validate-off) block.
+  InterpretDeadFlagValidate,
 };
 
 // Self-contained block cache for the IR engine. Mirrors CachedInterpreterBlockCache's free-range
@@ -171,6 +175,10 @@ private:
   struct CheckHaltOperands;
   struct CheckIdleOperands;
   struct CheckCtrIdleOperands;
+  // iCube M2: payload for the dead CR-flag elimination validate op. Carries the eliminated (Rc-cleared)
+  // shipping inst (the InterpretOperands base), the original (Rc-set) reference inst, and the crOut mask of
+  // fields allowed to differ. Only ever lowered when MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE is on.
+  struct InterpretDeadFlagValidateOperands;
 
 public:
   // The explicit typed IR node. A 1:1 lowering does not need compactness, so this is a plain tagged
@@ -197,6 +205,31 @@ private:
 
   // Runs one lowered IRInst against ppc_state. Returns the handler's value (0 => exit block).
   static s32 DispatchIRInst(PowerPC::PowerPCState& ppc_state, const IRInst& inst);
+
+  // ==========================================================================
+  // iCube M2: IR optimizer-pass framework.
+  //
+  // After DoJit lowers the block 1:1 into the IRInst vector (and AFTER the M1 DOLPHIN_IR_VALIDATE 1:1
+  // self-check, which only describes the unoptimized lowering) but BEFORE the anchor is written, this stage
+  // runs zero or more linear-IR passes that walk/rewrite the IRInst vector in place. Each pass is gated by
+  // its own config flag; registering a future pass is a one-line `if (flag) Pass(ir);` in the .cpp. Passes
+  // are LINEAR-IR shaped — they read the per-inst metadata (crOut/crDiscardable/flags/Rc copied in at lower
+  // time) and rewrite inst fields; no loop-pattern recognition. With every M2 flag OFF this stage makes ZERO
+  // edits, so the vector stays byte-identical to the M1 lowering and behavior is unchanged.
+  // ==========================================================================
+  void RunIROptimizationPasses(std::vector<IRInst>& ir) const;
+
+  // First pass: dead CR-flag elimination. Mirrors the shipping CIR's MAIN_CIR_DEAD_FLAG_ELIM exactly:
+  // for an Rc-form plain Interpret op whose ENTIRE crOut is discardable (proven dead by PPCAnalyst), clear
+  // the Rc bit in the lowered inst word so the same handler skips the dead CR. When the validate flag is on,
+  // the eliminated inst is instead rewritten into an InterpretDeadFlagValidate op that double-runs and
+  // asserts the live CR fields match. Consumes PPCAnalyst liveness via the per-inst metadata; does not
+  // re-run or fork the analysis.
+  void PassDeadFlagElim(std::vector<IRInst>& ir) const;
+
+  // The dead-flag-elim predicate, byte-identical to the CIR's DeadFlagElimApplies but reading the per-inst
+  // metadata the lowering copied from PPCAnalyst's CodeOp (crOut/crDiscardable/opinfo flags/Rc).
+  static bool DeadFlagElimApplies(const IRInst& inst);
 
   // DOLPHIN_IR_VALIDATE=1 opt-in self-check: re-emits the M0 callback tape into a scratch buffer and
   // asserts the lowered IR vector is 1:1 with it (same count, op<->callback, operands). Default off.
@@ -257,6 +290,16 @@ private:
   static s32 FastForwardCtrIdle(PowerPC::PowerPCState& ppc_state,
                                 const CheckCtrIdleOperands& operands);
   static s32 FastForwardCtrIdle(std::ostream& stream, const CheckCtrIdleOperands& operands);
+  // iCube M2: dead CR-flag elimination validate (MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE). Double-runs the op
+  // (reference Rc-set CR vs eliminated Rc-cleared, the eliminated form committed last = shipping behavior)
+  // and asserts every CR field OUTSIDE the eliminated crOut mask (the live/continuation-read fields) is
+  // byte-identical. Returns its own size (nonzero => continue): the eliminated op is mid-block by
+  // construction (crDiscardable is reset at every block-exit/exception boundary, so only plain
+  // write_pc=false Interpret ops ever qualify), so there is no write_pc variant.
+  static s32 InterpretDeadFlagValidate(PowerPC::PowerPCState& ppc_state,
+                                       const InterpretDeadFlagValidateOperands& operands);
+  static s32 InterpretDeadFlagValidate(std::ostream& stream,
+                                       const InterpretDeadFlagValidateOperands& operands);
 
   HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges;
   CachedInterpreterIRBlockCache m_block_cache;
@@ -294,6 +337,17 @@ struct CachedInterpreterIR::InterpretAndCheckExceptionsOperands : InterpretOpera
 {
   PowerPC::PowerPCManager& power_pc;
   u32 downcount;
+};
+
+// iCube M2: payload for the dead CR-flag elimination validate op (MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE).
+// The InterpretOperands base carries the ELIMINATED (Rc-cleared) inst the shipping path runs; ref_inst is
+// the ORIGINAL (Rc-set) inst used as the CR reference; elim_cr_mask is the op's crOut — the CR fields proven
+// discardable and therefore allowed to differ. func is the SAME opcode-keyed handler for both (Rc 0/1
+// select the same GetInterpreterOp entry). Mirrors the CIR's InterpretDeadFlagValidateOperands.
+struct CachedInterpreterIR::InterpretDeadFlagValidateOperands : InterpretOperands
+{
+  UGeckoInstruction ref_inst;  // original (Rc set) — computes the reference CR
+  u32 elim_cr_mask;            // op.crOut: the fields allowed to differ (all discardable)
 };
 
 struct CachedInterpreterIR::HLEFunctionOperands
@@ -347,5 +401,16 @@ struct CachedInterpreterIR::IRInst
     CheckHaltOperands check_halt;  // shared by CheckFPU + CheckBreakpoint
     CheckIdleOperands check_idle;
     CheckCtrIdleOperands ctr_idle;
+    InterpretDeadFlagValidateOperands dead_flag_validate;  // M2 validate op
   } u;
+
+  // iCube M2: per-inst PPCAnalyst liveness metadata, copied from the source CodeOp at lower time (only
+  // meaningful for Interpret/InterpretPC ops; left zero for control ops). The dead-flag optimizer pass
+  // CONSUMES this — it does not re-run or fork the analysis. Sits OUTSIDE the operand union (AFTER it so the
+  // existing positional `IRInst{op, {.member = ...}}` aggregate-inits keep working) so the handlers never
+  // read it and the M1 DOLPHIN_IR_VALIDATE (which compares only the operand fields) stays unaffected; with
+  // the M2 flags off these bytes are never read, so behavior is byte-identical to the M1 lowering.
+  u8 cr_out = 0;          // BitSet8 op.crOut — CR fields this op writes
+  u8 cr_discardable = 0;  // BitSet8 op.crDiscardable — CR fields proven dead (overwritten before any read)
+  u64 opinfo_flags = 0;   // op.opinfo->flags — for the FL_RC_BIT / FL_RC_BIT_F guard
 };

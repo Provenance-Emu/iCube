@@ -956,6 +956,27 @@ const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM{{System::Main, "Core", "CIRDeadFlagElim
 // eliminated op); on-device correctness passes only. Default false.
 const Info<bool> MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE{
     {System::Main, "Core", "CIRDeadFlagElimValidate"}, false};
+// iCube IR engine (CPUCore 6, experimental, NON-DEFAULT) Milestone 2: dead CR-flag elimination as the
+// FIRST optimizer pass over the explicit IRInst vector. SAME transform and SAME PPCAnalyst liveness as
+// the shipping CachedInterpreter's MAIN_CIR_DEAD_FLAG_ELIM (above) — an Rc-form op whose ENTIRE crOut is
+// proven discardable (overwritten before any branch/mfcr reads it, with crDiscardable reset at every
+// exception/block-exit/interrupt boundary so a discardable field is never observed) has the Rc bit cleared
+// in its lowered instruction word, so the same opcode-keyed handler computes the identical GPR result minus
+// the dead CR. Distinct flag from the CIR's because this gates the IR engine's post-lowering pass stage,
+// not the CIR's emit-time skip; the two engines are independent. Default FALSE: when off the IR pass stage
+// makes ZERO edits and the lowered vector is byte-identical to the M1 1:1 lowering.
+const Info<bool> MAIN_CIR_IR_DEAD_FLAG_ELIM{{System::Main, "Core", "CIRIRDeadFlagElim"}, false};
+// iCube IR engine M2: self-validation twin for MAIN_CIR_IR_DEAD_FLAG_ELIM. EXACT analogue of the CIR's
+// MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE. The M1 DOLPHIN_IR_VALIDATE (1:1 lowering-vs-M0-tape check) deliberately
+// does NOT apply to optimized blocks (the pass makes the IR differ from the M0 tape on purpose), so this is
+// the optimizer-pass validate mode. When ON, every eliminated op double-runs at execution time: first the
+// REFERENCE (original Rc-set inst, CR computed) on a snapshot, then the ELIMINATED (Rc-cleared, dead CR
+// skipped — the SHIPPING form, committed last), and ASSERTs every CR field OUTSIDE the eliminated crOut
+// (all the LIVE / continuation-read fields) is byte-identical between the two runs. Catches a wrongly-
+// eliminated live flag, the only real risk since the analyzer liveness is JIT-proven. Slow; correctness
+// passes only. Default false.
+const Info<bool> MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE{
+    {System::Main, "Core", "CIRIRDeadFlagElimValidate"}, false};
 // iCube: CachedInterpreter dead FP-Result-Flags (FPRF) elimination. The paired-single / floating-point
 // handlers call UpdateFPRFSingle/UpdateFPRFDouble on essentially every arithmetic FP op to classify the
 // result into the FPSCR.FPRF field — but PPCAnalyst's back-to-front pass already computes op.wantsFPRF,

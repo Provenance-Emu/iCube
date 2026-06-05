@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdlib>
 #include <mutex>
+#include <new>
 #include <ranges>
 #include <span>
 #include <sstream>
@@ -19,6 +20,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/GekkoDisassembler.h"
 #include "Common/Logging/Log.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
@@ -31,6 +33,13 @@
 #include "Core/PowerPC/PPCAnalyst.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
+
+// iCube M2: IR optimizer-pass flags, read once at codegen time (in ClearCache/RefreshConfig, mirroring the
+// CIR's Init read). When both are false the optimizer-pass stage makes ZERO edits to the lowered vector, so
+// the IR engine's behavior is byte-identical to M1. Config changes require a core restart (the established
+// CIR pattern — these are read once, not per-block).
+static bool s_ir_dead_flag_elim = false;
+static bool s_ir_dead_flag_elim_validate = false;
 
 // ============================================================================
 // Self-contained block cache (mirrors CachedInterpreterBlockCache, minus block linking).
@@ -89,6 +98,10 @@ CachedInterpreterIR::~CachedInterpreterIR() = default;
 void CachedInterpreterIR::Init()
 {
   RefreshConfig();
+
+  // iCube M2: read the optimizer-pass flags once at codegen time. Default OFF => no IR edits.
+  s_ir_dead_flag_elim = Config::Get(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM);
+  s_ir_dead_flag_elim_validate = Config::Get(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE);
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
@@ -275,6 +288,8 @@ s32 CachedInterpreterIR::DispatchIRInst(PowerPC::PowerPCState& ppc_state, const 
     return CheckIdle(ppc_state, inst.u.check_idle);
   case IROp::FastForwardCtrIdle:
     return FastForwardCtrIdle(ppc_state, inst.u.ctr_idle);
+  case IROp::InterpretDeadFlagValidate:
+    return InterpretDeadFlagValidate(ppc_state, inst.u.dead_flag_validate);
   }
   return 0;
 }
@@ -282,6 +297,157 @@ s32 CachedInterpreterIR::DispatchIRInst(PowerPC::PowerPCState& ppc_state, const 
 void CachedInterpreterIR::ReleaseBlockIR(const JitBlock& block)
 {
   m_block_ir.erase(block.normalEntry);
+}
+
+// ============================================================================
+// iCube M2: IR optimizer-pass framework + first pass (dead CR-flag elimination).
+// ============================================================================
+
+// The pass stage: a flat chain of `if (flag) Pass(ir);`. Registering a future pass (const-fold,
+// generalized fusion, dead-FPRF) is one line here plus its own config flag. Passes walk/rewrite the linear
+// IRInst vector in place. With every M2 flag off this loop does nothing and the vector is byte-identical to
+// the M1 lowering — so behavior with all M2 flags off is unchanged.
+void CachedInterpreterIR::RunIROptimizationPasses(std::vector<IRInst>& ir) const
+{
+  if (s_ir_dead_flag_elim)
+    PassDeadFlagElim(ir);
+  // Future passes register here, one line each:
+  //   if (s_ir_const_fold) PassConstFold(ir);
+  //   if (s_ir_fusion)     PassFusion(ir);
+}
+
+// iCube M2 dead-flag-elim predicate. Byte-identical logic to the shipping CIR's DeadFlagElimApplies, but
+// reading the per-inst metadata the lowering copied from PPCAnalyst (crOut/crDiscardable/opinfo flags/Rc)
+// instead of a live CodeOp. True IFF this op writes CR fields that are ALL discardable AND the Rc bit is the
+// genuine mechanism that controls that CR write — so clearing Rc in the inst word skips the dead CR while
+// leaving the GPR/XER result identical. The FL_RC_BIT/FL_RC_BIT_F guard is LOAD-BEARING: only those ops have
+// their CR gated on inst bit 0 (the real Rc bit); the always-record ops (andi./andis. -> FL_SET_CR0,
+// compares -> FL_SET_CRn) compute CR regardless of bit 0 AND would have an immediate's LSB corrupted if we
+// cleared "Rc", so deadCR alone would wrongly fire — the flag check excludes them.
+bool CachedInterpreterIR::DeadFlagElimApplies(const IRInst& inst)
+{
+  // Only plain Interpret ops carry meaningful metadata and are candidates. crDiscardable is reset at every
+  // block-exit/exception boundary in PPCAnalyst (canEndBlock/canCauseException ~line 1175, HLE/breakpoint
+  // ~1165, gather-pipe ~1127), so InterpretChk (canCauseException) and any write_pc=true (canEndBlock) op
+  // has crDiscardable == 0 and could never qualify anyway — but we gate on the op kind explicitly too.
+  if (inst.op != IROp::Interpret)
+    return false;
+  const BitSet8 cr_out{inst.cr_out};
+  const BitSet8 cr_discardable{inst.cr_discardable};
+  if (cr_out.Count() == 0)
+    return false;  // op writes no CR field; nothing to eliminate
+  if ((cr_out & ~cr_discardable) != BitSet8{})
+    return false;  // some written CR field is LIVE downstream — must keep computing it
+  if (inst.u.interpret.inst.Rc == 0)
+    return false;  // record bit already clear: CR not being written via Rc anyway
+  // Only ops whose CR write is gated on the Rc bit (and whose bit 0 IS the Rc bit) are safe to rewrite.
+  return (inst.opinfo_flags & (FL_RC_BIT | FL_RC_BIT_F)) != 0;
+}
+
+// First IR optimizer pass: dead CR-flag elimination. Mirrors the CIR's MAIN_CIR_DEAD_FLAG_ELIM transform on
+// the linear IR. For each qualifying plain Interpret op: when NOT validating, clear the Rc bit in the
+// lowered inst word so the same handler skips the dead CR (op.inst / m_code_buffer are never touched — only
+// the lowered copy in the IRInst). When validating (MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE), rewrite the op
+// into an InterpretDeadFlagValidate op that double-runs ref-vs-eliminated and asserts the live CR fields
+// match. Because crDiscardable is reset at every block/exception boundary, an eliminated field is never
+// observed — this is exactly why the transform is safe; the validate harness proves it per-op.
+void CachedInterpreterIR::PassDeadFlagElim(std::vector<IRInst>& ir) const
+{
+  for (IRInst& inst : ir)
+  {
+    if (!DeadFlagElimApplies(inst))
+      continue;
+
+    if (s_ir_dead_flag_elim_validate)
+    {
+      // Rewrite into the validate op: shipping (Rc-cleared) inst in the base, original (Rc-set) inst as the
+      // CR reference, crOut as the mask of fields allowed to differ. The operand structs hold reference
+      // members (deleted copy-assignment), so we change the active union member by constructing in place
+      // (designated-init of dead_flag_validate), exactly as DoJit's Emit* helpers build the union.
+      const InterpretOperands ref_operands = inst.u.interpret;  // original (Rc-set) operands
+      InterpretOperands elim_operands = ref_operands;
+      elim_operands.inst.Rc = 0;
+      inst.op = IROp::InterpretDeadFlagValidate;
+      // Construct the new active union member in place over the old InterpretOperands storage. The structs
+      // are trivially destructible (PODs + bound references), so no explicit destroy of the old member is
+      // needed before re-constructing.
+      ::new (&inst.u.dead_flag_validate)
+          InterpretDeadFlagValidateOperands{elim_operands, ref_operands.inst, inst.cr_out};
+    }
+    else
+    {
+      // Shipping path: clear Rc in the lowered inst word so the same handler skips the dead CR. Assigning
+      // the scalar Rc bitfield does not reassign the struct's reference members, so this is well-formed.
+      inst.u.interpret.inst.Rc = 0;
+    }
+  }
+}
+
+// iCube M2: dead CR-flag elimination validate handler. Direct analogue of the CIR's InterpretDeadFlagValidate,
+// adapted to the IR dispatch model (returns nonzero => ExecuteOneBlock continues). The transform only ever
+// clears Rc on an op whose ENTIRE crOut PPCAnalyst proved discardable; this double-runs the op (reference
+// Rc-set CR vs eliminated Rc-cleared) and asserts every CR field OUTSIDE that crOut mask — every LIVE field
+// read by the block continuation — is byte-identical. Run order mirrors the CIR: snapshot -> reference on
+// live -> capture -> restore -> eliminated (the SHIPPING path, committed last) -> capture -> assert.
+// GPR/XER/pc/npc/Exceptions are identical by construction (Rc 0/1 select the same handler and GPR/XER math),
+// so the diff is scoped to CR. These ops are always mid-block (write_pc=false) by the discardable-reset
+// invariant, so there is no pc write here.
+s32 CachedInterpreterIR::InterpretDeadFlagValidate(PowerPC::PowerPCState& ppc_state,
+                                                   const InterpretDeadFlagValidateOperands& operands)
+{
+  // Snapshot every register file the op can write, so the eliminated run starts from byte-identical inputs
+  // to the reference run. The FP register file (ps) is LOAD-BEARING: the predicate admits FP record-form ops
+  // (FL_RC_BIT_F), and with FP exceptions masked (the default) they reach this plain-Interpret path, so an
+  // in-place FP op like `fmul. f1,f1,f0` would have its source clobbered by the reference run and the
+  // committed eliminated run would compute a WRONG result if ps were not restored. (The CIR reference twin
+  // this mirrors omits ps; that is unsound for FP ops — fixed here. FPSCR is intentionally not snapshotted:
+  // its sticky bits OR idempotently and FPRF is overwritten to the correct value by the committed run.)
+  std::array<u64, 8> saved_cr;
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), saved_cr.begin());
+  std::array<u32, 32> saved_gpr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), saved_gpr.begin());
+  std::array<PowerPC::PairedSingle, 32> saved_ps;
+  std::copy(std::begin(ppc_state.ps), std::end(ppc_state.ps), saved_ps.begin());
+  const u8 saved_xer_ca = ppc_state.xer_ca;
+  const u8 saved_xer_so_ov = ppc_state.xer_so_ov;
+  const u32 saved_pc = ppc_state.pc;
+  const u32 saved_npc = ppc_state.npc;
+  const u32 saved_exceptions = ppc_state.Exceptions;
+
+  // REFERENCE RUN: the ORIGINAL (Rc-set) instruction, so the genuine CR result is computed.
+  operands.func(operands.interpreter, operands.ref_inst);
+  std::array<u64, 8> ref_cr;
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), ref_cr.begin());
+
+  // Restore to the pre-run state so the eliminated run sees identical inputs.
+  std::copy(saved_cr.begin(), saved_cr.end(), std::begin(ppc_state.cr.fields));
+  std::copy(saved_gpr.begin(), saved_gpr.end(), std::begin(ppc_state.gpr));
+  std::copy(saved_ps.begin(), saved_ps.end(), std::begin(ppc_state.ps));
+  ppc_state.xer_ca = saved_xer_ca;
+  ppc_state.xer_so_ov = saved_xer_so_ov;
+  ppc_state.pc = saved_pc;
+  ppc_state.npc = saved_npc;
+  ppc_state.Exceptions = saved_exceptions;
+
+  // ELIMINATED RUN — the SHIPPING path, run LAST so its result stays committed. operands.inst already has
+  // the Rc bit cleared, so the dead CR field(s) are NOT computed.
+  operands.func(operands.interpreter, operands.inst);
+
+  // Assert every CR field OUTSIDE the eliminated mask (the live/continuation-read fields) matches the
+  // reference. The masked fields are exactly op.crOut, all proven discardable, so a divergence there is
+  // expected and ignored; a divergence ANYWHERE else means a live flag was wrongly eliminated.
+  const u8 elim_mask = static_cast<u8>(operands.elim_cr_mask);
+  for (u32 k = 0; k < 8; ++k)
+  {
+    if ((elim_mask >> k) & 1u)
+      continue;  // this field was eliminated on purpose (proven dead) — allowed to differ
+    ASSERT_MSG(DYNA_REC, ppc_state.cr.fields[k] == ref_cr[k],
+               "CIR IR dead-flag-elim LIVE CR{} divergence at pc {:#010x} (elim={:#x} vs ref={:#x}, "
+               "elim_mask={:#04x})",
+               k, operands.current_pc, ppc_state.cr.fields[k], ref_cr[k], elim_mask);
+  }
+
+  return sizeof(AnyCallback) + sizeof(operands);
 }
 
 void CachedInterpreterIR::ExecuteOneBlock()
@@ -539,8 +705,16 @@ void CachedInterpreterIR::EmitEndBlock(const EndBlockOperands<profiled>& operand
 template <bool write_pc>
 void CachedInterpreterIR::EmitInterpret(const InterpretOperands& operands)
 {
-  m_current_ir->push_back(
-      IRInst{write_pc ? IROp::InterpretPC : IROp::Interpret, {.interpret = operands}});
+  IRInst inst{write_pc ? IROp::InterpretPC : IROp::Interpret, {.interpret = operands}};
+  // iCube M2: stamp the PPCAnalyst liveness metadata for this op so the dead-flag optimizer pass can
+  // consume it later (it does not re-run/fork the analysis). js.op is the CodeOp being lowered. Reading
+  // these out-of-union fields is free; the handlers and the M1 1:1 validate never look at them, so with the
+  // M2 flags off this is byte-identical to before.
+  const PPCAnalyst::CodeOp& op = *js.op;
+  inst.cr_out = static_cast<u8>(op.crOut.m_val);
+  inst.cr_discardable = static_cast<u8>(op.crDiscardable.m_val);
+  inst.opinfo_flags = op.opinfo->flags;
+  m_current_ir->push_back(inst);
   if (m_validate) [[unlikely]]
     m_validate_emitter.Write(Interpret<write_pc>, operands);
 }
@@ -793,9 +967,15 @@ bool CachedInterpreterIR::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
   m_current_ir = nullptr;
 
-  // Opt-in 1:1 self-check against an independent M0 callback emission.
+  // Opt-in 1:1 self-check against an independent M0 callback emission. This describes the UNOPTIMIZED M1
+  // lowering only, so it MUST run before the optimizer passes (which intentionally make the IR differ from
+  // the M0 tape).
   if (m_validate) [[unlikely]]
     ValidateBlockIR(*ir);
+
+  // iCube M2: run the IR optimizer passes over the lowered vector (in place), after the M1 1:1 check and
+  // before the anchor is written. With every M2 flag off this is a no-op and the vector is unchanged.
+  RunIROptimizationPasses(*ir);
 
   // Write the single anchor record. This sets b->normalEntry/near_begin..near_end and is the key
   // the side table is indexed by. If the emitter is out of space, fail exactly like M0.
@@ -947,6 +1127,16 @@ s32 CachedInterpreterIR::FastForwardCtrIdle(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+s32 CachedInterpreterIR::InterpretDeadFlagValidate(std::ostream& stream,
+                                                   const InterpretDeadFlagValidateOperands& operands)
+{
+  fmt::println(stream,
+               "InterpretDeadFlagValidate(current_pc=0x{:08x}, inst=0x{:08x}, ref_inst=0x{:08x}, "
+               "elim_mask=0x{:02x})",
+               operands.current_pc, operands.inst.hex, operands.ref_inst.hex, operands.elim_cr_mask);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreterIR::IRBlockAnchor(std::ostream& stream, const IRBlockAnchorOperands& operands)
 {
   const std::vector<IRInst>& ir = *operands.ir;
@@ -981,6 +1171,9 @@ std::size_t CachedInterpreterIR::Disassemble(const JitBlock& block, std::ostream
       LOOKUP_KV(CachedInterpreterIR::CheckBreakpoint),
       LOOKUP_KV(CachedInterpreterIR::CheckIdle),
       LOOKUP_KV(CachedInterpreterIR::FastForwardCtrIdle),
+      // iCube M2: validate op. Lives only in the IR vector (never written to the emitter buffer this table
+      // walks), so it is never matched here — listed for lookup completeness / future IR-vector disassembly.
+      LOOKUP_KV(CachedInterpreterIR::InterpretDeadFlagValidate),
   });
 
 #undef LOOKUP_KV
