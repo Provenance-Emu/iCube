@@ -605,6 +605,12 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   del(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE);
   del(Config::MAIN_CIR_SPECIALIZED_OPS);
   del(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
+  del(Config::MAIN_CIR_DEAD_FLAG_ELIM);
+  del(Config::MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE);
+  del(Config::MAIN_CIR_DEAD_FPRF_ELIM);
+  del(Config::MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE);
+  del(Config::MAIN_CIR_PSQ_FASTPATH);
+  del(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE);
   del(Config::MAIN_OVERCLOCK_ENABLE);
   del(Config::MAIN_OVERCLOCK);
   del(Config::MAIN_VI_OVERCLOCK_ENABLE);
@@ -617,6 +623,10 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   del(Config::MAIN_FAST_DISC_SPEED);
   del(Config::MAIN_CUSTOM_RTC_ENABLE);
   del(Config::MAIN_CUSTOM_RTC_VALUE);
+
+  // ---- Misc gameplay / boot feature toggles ----
+  del(Config::MAIN_SKIP_IPL);                 // boot: GC IPL/BIOS intro skip
+  del(Config::MAIN_EMULATE_SKYLANDER_PORTAL); // peripheral emulation (default off)
 
   // ---- Audio ----
   del(Config::MAIN_AUDIO_BACKEND);
