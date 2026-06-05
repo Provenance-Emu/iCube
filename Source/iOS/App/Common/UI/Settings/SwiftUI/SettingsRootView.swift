@@ -1987,6 +1987,8 @@ struct ConfigAdvancedView: View {
   @State private var cirPsqFastPathValidate: Bool = false
   @State private var cirStoreLoopFF: Bool = false
   @State private var cirStoreLoopFFValidate: Bool = false
+  @State private var cirCacheLoopFF: Bool = false
+  @State private var cirCacheLoopFFValidate: Bool = false
   @State private var cirIrConstFusion: Bool = false
   @State private var cirIrConstFusionValidate: Bool = false
   @State private var cirPsNeon: Bool = false
@@ -2136,6 +2138,9 @@ struct ConfigAdvancedView: View {
             optRow("Store-Loop (memset) Fast-Path", isOn: $cirStoreLoopFF,
                    set: { DOLConfigBridge.setCirStoreLoopFF($0) },
                    caption: "Detects tight byte-fill loops (the stb + addi + bdnz memset pattern) and performs the whole fill in one bulk write. The range is verified to be contiguous normal RAM first. Experimental. Applies on next game launch.")
+            optRow("Cache-Management Loop Fast-Forward", isOn: $cirCacheLoopFF,
+                   set: { DOLConfigBridge.setCirCacheLoopFF($0) },
+                   caption: "Fast-forwards tight cache-management CTR loops (dcbf/dcbi/dcbst + addi + bdnz) that just invalidate a memory range line-by-line — common before DMA. Skips the per-op dispatch and does the invalidation in one pass. Only engages when accurate CPU cache is off. Experimental. Applies on next game launch.")
           }
 
           if showIROpts {
@@ -2195,6 +2200,9 @@ struct ConfigAdvancedView: View {
               validateRow("Store-Loop Fast-Path: Validate", isOn: $cirStoreLoopFFValidate,
                           set: { DOLConfigBridge.setCirStoreLoopFFValidate($0) }, parentOn: cirStoreLoopFF,
                           caption: "Runs the real per-store loop on a snapshot and asserts the filled memory and post-loop registers match the bulk fill. Requires Store-Loop Fast-Path ON.")
+              validateRow("Cache-Loop Fast-Forward: Validate", isOn: $cirCacheLoopFFValidate,
+                          set: { DOLConfigBridge.setCirCacheLoopFFValidate($0) }, parentOn: cirCacheLoopFF,
+                          caption: "Runs the real per-line cache loop on a snapshot and asserts the post-loop registers and CTR match the fast-forward. Requires Cache-Management Loop Fast-Forward ON.")
             }
             if showIROpts {
               validateRow("PIC Load/Store: Validate", isOn: $cirIrPicLoadStoreValidate,
@@ -2421,6 +2429,7 @@ struct ConfigAdvancedView: View {
     cirDeadFprfElim = false; DOLConfigBridge.setCirDeadFprfElim(false)
     cirPsqFastPath = false; DOLConfigBridge.setCirPsqFastPath(false)
     cirStoreLoopFF = false; DOLConfigBridge.setCirStoreLoopFF(false)
+    cirCacheLoopFF = false; DOLConfigBridge.setCirCacheLoopFF(false)
     cirIrConstFusion = false; DOLConfigBridge.setCirIrConstFusion(false)
     cirIrMicroOpFusion = false; DOLConfigBridge.setCirIrMicroOpFusion(false)
     cirIrDeadFlagElim = false; DOLConfigBridge.setCirIrDeadFlagElim(false)
@@ -2431,6 +2440,7 @@ struct ConfigAdvancedView: View {
     cirDeadFprfElimValidate = false; DOLConfigBridge.setCirDeadFprfElimValidate(false)
     cirPsqFastPathValidate = false; DOLConfigBridge.setCirPsqFastPathValidate(false)
     cirStoreLoopFFValidate = false; DOLConfigBridge.setCirStoreLoopFFValidate(false)
+    cirCacheLoopFFValidate = false; DOLConfigBridge.setCirCacheLoopFFValidate(false)
     cirIrConstFusionValidate = false; DOLConfigBridge.setCirIrConstFusionValidate(false)
     cirPsNeonValidate = false; DOLConfigBridge.setCirPsNeonValidate(false)
     cirIrMicroOpFusionValidate = false; DOLConfigBridge.setCirIrMicroOpFusionValidate(false)
@@ -2464,6 +2474,8 @@ struct ConfigAdvancedView: View {
     cirPsqFastPathValidate = DOLConfigBridge.cirPsqFastPathValidate()
     cirStoreLoopFF = DOLConfigBridge.cirStoreLoopFF()
     cirStoreLoopFFValidate = DOLConfigBridge.cirStoreLoopFFValidate()
+    cirCacheLoopFF = DOLConfigBridge.cirCacheLoopFF()
+    cirCacheLoopFFValidate = DOLConfigBridge.cirCacheLoopFFValidate()
     cirIrConstFusion = DOLConfigBridge.cirIrConstFusion()
     cirIrConstFusionValidate = DOLConfigBridge.cirIrConstFusionValidate()
     cirPsNeon = DOLConfigBridge.cirPsNeon()
@@ -2637,6 +2649,7 @@ enum PerfAB {
     Flag(key: "deadFprfElim", get: { DOLConfigBridge.cirDeadFprfElim() }, set: { DOLConfigBridge.setCirDeadFprfElim($0) }),
     Flag(key: "psqFastPath", get: { DOLConfigBridge.cirPsqFastPath() }, set: { DOLConfigBridge.setCirPsqFastPath($0) }),
     Flag(key: "storeLoopFF", get: { DOLConfigBridge.cirStoreLoopFF() }, set: { DOLConfigBridge.setCirStoreLoopFF($0) }),
+    Flag(key: "cacheLoopFF", get: { DOLConfigBridge.cirCacheLoopFF() }, set: { DOLConfigBridge.setCirCacheLoopFF($0) }),
     Flag(key: "psNeon", get: { DOLConfigBridge.cirPsNeon() }, set: { DOLConfigBridge.setCirPsNeon($0) }),
     Flag(key: "irConstFusion", get: { DOLConfigBridge.cirIrConstFusion() }, set: { DOLConfigBridge.setCirIrConstFusion($0) }),
     Flag(key: "irMicroOpFusion", get: { DOLConfigBridge.cirIrMicroOpFusion() }, set: { DOLConfigBridge.setCirIrMicroOpFusion($0) }),
@@ -2648,6 +2661,7 @@ enum PerfAB {
     Flag(key: "deadFprfElimValidate", get: { DOLConfigBridge.cirDeadFprfElimValidate() }, set: { DOLConfigBridge.setCirDeadFprfElimValidate($0) }),
     Flag(key: "psqFastPathValidate", get: { DOLConfigBridge.cirPsqFastPathValidate() }, set: { DOLConfigBridge.setCirPsqFastPathValidate($0) }),
     Flag(key: "storeLoopFFValidate", get: { DOLConfigBridge.cirStoreLoopFFValidate() }, set: { DOLConfigBridge.setCirStoreLoopFFValidate($0) }),
+    Flag(key: "cacheLoopFFValidate", get: { DOLConfigBridge.cirCacheLoopFFValidate() }, set: { DOLConfigBridge.setCirCacheLoopFFValidate($0) }),
     Flag(key: "irConstFusionValidate", get: { DOLConfigBridge.cirIrConstFusionValidate() }, set: { DOLConfigBridge.setCirIrConstFusionValidate($0) }),
     Flag(key: "psNeonValidate", get: { DOLConfigBridge.cirPsNeonValidate() }, set: { DOLConfigBridge.setCirPsNeonValidate($0) }),
     Flag(key: "irMicroOpFusionValidate", get: { DOLConfigBridge.cirIrMicroOpFusionValidate() }, set: { DOLConfigBridge.setCirIrMicroOpFusionValidate($0) }),
