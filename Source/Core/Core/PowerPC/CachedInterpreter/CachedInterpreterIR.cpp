@@ -459,10 +459,44 @@ void CachedInterpreterIR::ExecuteOneBlock()
     return;
   }
 
-  // Recover the block's IR vector from the anchor record at its normalEntry.
-  const auto& anchor = *reinterpret_cast<const IRBlockAnchorOperands*>(normal_entry +
-                                                                       sizeof(AnyCallback));
-  const std::vector<IRInst>& ir = *anchor.ir;
+  // iCube CRASH DIAGNOSTIC (temporary): the IR engine (CPUCore 6 / M1 plumbing) was never runtime-tested
+  // before now and crashes in DispatchIRInst with a near-null `inst` (we are iterating a dead vector, i.e.
+  // anchor.ir is bad). Two hypotheses to distinguish before fixing:
+  //   H1 (stale dispatch): Dispatch() returned a DESTROYED block's normalEntry. DestroyBlock both poisons
+  //       the callback here (WriteDestroyBlock) AND frees the IR vector (ReleaseBlockIR), so the callback at
+  //       normalEntry would NOT be IRBlockAnchor -> the H1 trap fires. Root cause = a fast-block-map slot
+  //       not cleared on destroy.
+  //   H2 (intact anchor, freed/garbage vector): callback IS still IRBlockAnchor but anchor.ir points at a
+  //       freed vector (unpaired free, or a race on this "CPU-GPU thread") -> the H1 trap does NOT fire and
+  //       the crash still happens in the dispatch loop. Root cause = vector lifetime / threading.
+  // The callback-value check discriminates H1 from H2 deterministically in ONE run. Crash() (__builtin_trap)
+  // gives a clean stop with the diagnostic logged regardless of the iOS panic-handler config. Once we know
+  // which hypothesis holds, this block is replaced by the real fix.
+  const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
+  const auto* anchor_ptr =
+      reinterpret_cast<const IRBlockAnchorOperands*>(normal_entry + sizeof(AnyCallback));
+  const auto expected_anchor_cb =
+      reinterpret_cast<AnyCallback>(AnyCallbackCast(CachedInterpreterIR::IRBlockAnchor));
+  if (callback != expected_anchor_cb) [[unlikely]]
+  {
+    ERROR_LOG_FMT(DYNA_REC,
+                  "IR dispatch H1 (STALE/POISONED block): normalEntry={} callback={} (expected "
+                  "IRBlockAnchor={}) anchor.ir={} pc={:#010x}. Fast-block map handed a destroyed block.",
+                  fmt::ptr(normal_entry), fmt::ptr(reinterpret_cast<const void*>(callback)),
+                  fmt::ptr(reinterpret_cast<const void*>(expected_anchor_cb)), fmt::ptr(anchor_ptr->ir),
+                  m_ppc_state.pc);
+    Crash();
+  }
+  if (anchor_ptr->ir == nullptr) [[unlikely]]
+  {
+    ERROR_LOG_FMT(DYNA_REC, "IR dispatch H2 (NULL anchor.ir): normalEntry={} pc={:#010x}.",
+                  fmt::ptr(normal_entry), m_ppc_state.pc);
+    Crash();
+  }
+
+  // Recover the block's IR vector from the anchor record at its normalEntry. If we reach the loop and STILL
+  // crash here (callback was a valid IRBlockAnchor, anchor.ir non-null but dangling), that is H2.
+  const std::vector<IRInst>& ir = *anchor_ptr->ir;
 
   auto& ppc_state = m_ppc_state;
   for (const IRInst& inst : ir)
