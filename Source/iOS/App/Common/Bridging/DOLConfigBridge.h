@@ -160,6 +160,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirPsqFastPath:(BOOL)enabled;
 + (BOOL)cirPsqFastPathValidate;   // psq-fast-path self-validation (default OFF, correctness pass)
 + (void)setCirPsqFastPathValidate:(BOOL)enabled;
++ (BOOL)cirStoreLoopFF;           // counted-store-loop (memset) fast-path (default OFF, experimental)
++ (void)setCirStoreLoopFF:(BOOL)enabled;
++ (BOOL)cirStoreLoopFFValidate;   // store-loop fast-path self-validation (default OFF, slow)
++ (void)setCirStoreLoopFFValidate:(BOOL)enabled;
 + (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)

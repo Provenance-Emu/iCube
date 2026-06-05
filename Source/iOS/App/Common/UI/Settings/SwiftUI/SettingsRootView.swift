@@ -1985,6 +1985,8 @@ struct ConfigAdvancedView: View {
   @State private var cirDeadFprfElimValidate: Bool = false
   @State private var cirPsqFastPath: Bool = false
   @State private var cirPsqFastPathValidate: Bool = false
+  @State private var cirStoreLoopFF: Bool = false
+  @State private var cirStoreLoopFFValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -2101,6 +2103,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ Paired-Single Float Fast-Path: Validate (slow, correctness pass)"), isOn: $cirPsqFastPathValidate)
             .onChange(of: cirPsqFastPathValidate) { DOLConfigBridge.setCirPsqFastPathValidate($0) },
           L("Self-check for the Paired-Single Float Fast-Path: for every op that takes the fast path, double-derives the loaded FPR lanes / stored memory values both ways and flags any divergence (a mis-handled type, scale, or single-vs-paired case). Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Paired-Single Float Fast-Path to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Store-Loop (memset) Fast-Path (Cached Interpreter, experimental)"), isOn: $cirStoreLoopFF)
+            .onChange(of: cirStoreLoopFF) { DOLConfigBridge.setCirStoreLoopFF($0) },
+          L("⚠️ Detects tight byte-fill loops (the 8× stb + addi + bdnz memset pattern that dominates some games, e.g. Super Smash Bros. Melee) and performs the whole fill in one bulk write instead of interpreting each store. The target range is verified to be contiguous normal RAM first (MMIO ranges fall back to the normal loop). Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Store-Loop Fast-Path: Validate (slow, correctness pass)"), isOn: $cirStoreLoopFFValidate)
+            .onChange(of: cirStoreLoopFFValidate) { DOLConfigBridge.setCirStoreLoopFFValidate($0) },
+          L("Self-check for the Store-Loop Fast-Path: for every loop that takes the bulk fill, also runs the real per-store loop on a snapshot and asserts the filled memory and the post-loop registers match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Store-Loop Fast-Path to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2280,6 +2290,8 @@ struct ConfigAdvancedView: View {
     cirDeadFprfElimValidate = DOLConfigBridge.cirDeadFprfElimValidate()
     cirPsqFastPath = DOLConfigBridge.cirPsqFastPath()
     cirPsqFastPathValidate = DOLConfigBridge.cirPsqFastPathValidate()
+    cirStoreLoopFF = DOLConfigBridge.cirStoreLoopFF()
+    cirStoreLoopFFValidate = DOLConfigBridge.cirStoreLoopFFValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist
