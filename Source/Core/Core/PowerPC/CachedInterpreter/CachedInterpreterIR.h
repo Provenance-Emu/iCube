@@ -116,6 +116,22 @@ enum class IROp : u8
   // fusion pass when BOTH M5 flags are on; double-runs the same run un-fused (per-op) vs fused on a PPC-state
   // snapshot and asserts bit-identical GPR/CR/XER/PC. Never present in a shipping (validate-off) block.
   FusedAluRunValidate,
+  // iCube IR M6: PIC direct-pointer load/store fast path (MAIN_CIR_PIC_LOADSTORE). Ports the shipping CIR's
+  // LoadStoreDFormPIC/LoadStoreXFormPIC: resolves the guest EA to a host RAM pointer directly and does the
+  // integer D-form/X-form load/store with the correct endian swap (and update-form rA writeback), bypassing
+  // the per-access MMU/region lookup. Anything the fast path does not cover (MMIO, unaligned, translation
+  // miss, an opcode it doesn't specialize) falls back to the EXACT generic interpreter handler captured in
+  // the operand (the Cold_LoadStoreFallback analogue), so DSI/alignment/MMIO semantics are preserved. Only
+  // ever lowered by PassPICLoadStore when MAIN_CIR_PIC_LOADSTORE is on. The shipping (validate-off) form;
+  // the validate-on form is LoadStorePICValidate below. LoadStorePICPC is the write_pc=true variant for a
+  // block-ending load/store (mirrors Interpret<true>), needed because canEndBlock load/stores exist.
+  LoadStorePIC,         // LoadStorePIC<false>
+  LoadStorePICPC,       // LoadStorePIC<true>
+  // iCube IR M6: PIC load/store validate op (MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE). Only ever lowered by the
+  // pass when BOTH the PIC flag and its validate flag are on; runs the plain interpreter op on a PPC-state +
+  // memory snapshot and asserts the loaded register / stored memory / update-form rA writeback are bit-
+  // identical to the PIC result (committed last). Never present in a shipping (validate-off) block.
+  LoadStorePICValidate,
 };
 
 // iCube IR M5: one entry of a fused ALU run — the (interpreter func, decoded instruction) pair the fused
@@ -249,6 +265,13 @@ private:
   // offset/count) and its validate twin (additionally the count of run ops for the snapshot double-run).
   struct FusedAluRunOperands;
   struct FusedAluRunValidateOperands;
+  // iCube IR M6: payload for the PIC direct-pointer load/store op. Mirrors the CIR's LoadStoreDFormPICOperands:
+  // the generic interpreter handler + decoded inst + current_pc for the fallback / write_pc, the PowerPCManager
+  // for exception checking on fallback, and the host RAM region base/mask pointers captured at pass time. The
+  // validate twin reuses the same fields (the handler snapshots/dual-runs from them), so it is an empty derived
+  // struct, matching the M5 FusedAluRunValidateOperands pattern.
+  struct LoadStorePICOperands;
+  struct LoadStorePICValidateOperands;
 
 public:
   // The explicit typed IR node. A 1:1 lowering does not need compactness, so this is a plain tagged
@@ -362,6 +385,28 @@ private:
   // mirror of the CIR's run-build guard. Conservative: any opcode not on the allowlist returns false.
   static bool IsFusibleAluOp(UGeckoInstruction inst);
 
+  // iCube IR M6: PIC direct-pointer load/store pass. Registered FIRST (before M4/M5) so it runs on the plain
+  // lowered Interpret/InterpretPC ops before const/micro-op fusion touch them — load/stores are FL_LOADSTORE
+  // so IsFusibleAluOp/ConstAddrFusionApplies never select them, but ordering it first keeps the substitution
+  // independent of the other passes. Walks the lowered IR vector and rewrites every eligible plain
+  // Interpret<false>/<true> integer D-form/X-form load/store into a LoadStorePIC/LoadStorePICPC op (or
+  // LoadStorePICValidate when the validate flag is on). Eligibility MIRRORS the CIR's DoJit emission-site gate
+  // EXACTLY: !jo.memcheck && jo.fastmem && (FL_LOADSTORE && !FL_USE_FPU). Because memcheck loadstores are
+  // already lowered to InterpretChk (DoJit ~line 1681), only plain Interpret ops are ever candidates here, so
+  // InterpretChk/InterpretChkPC are excluded for free. Rebuilds a fresh vector (IRInst is not move-assignable)
+  // and swaps it in, exactly like M4/M5. The op carries everything inline in the IRInst union (region pointers
+  // captured here from m_system.GetMemory()), so it needs NO per-block side storage — it lives and dies with
+  // the IR vector under the existing m_ir_pending_free deferred-free discipline. With MAIN_CIR_PIC_LOADSTORE
+  // off this pass never runs and the vector stays byte-identical to the M5 lowering.
+  void PassPICLoadStore(std::vector<IRInst>& ir) const;
+
+  // iCube IR M6: the PIC eligibility predicate. True IFF the op is a plain IROp::Interpret or IROp::InterpretPC
+  // whose opinfo flags are (FL_LOADSTORE set, FL_USE_FPU clear) — an EXACT mirror of the CIR emission-site
+  // guard's FL_LOADSTORE && !FL_USE_FPU. The !jo.memcheck && jo.fastmem half of the gate is checked once in
+  // PassPICLoadStore (it is block-invariant). Opcode/alignment/region specifics live in the handler switch,
+  // which falls back to the generic interpreter for anything it does not specialize. Conservative.
+  static bool PICLoadStoreApplies(const IRInst& inst);
+
   // DOLPHIN_IR_VALIDATE=1 opt-in self-check: re-emits the M0 callback tape into a scratch buffer and
   // asserts the lowered IR vector is 1:1 with it (same count, op<->callback, operands). Default off.
   void ValidateBlockIR(const std::vector<IRInst>& ir) const;
@@ -465,6 +510,31 @@ private:
   static s32 FusedAluRunValidate(PowerPC::PowerPCState& ppc_state,
                                  const FusedAluRunValidateOperands& operands);
   static s32 FusedAluRunValidate(std::ostream& stream, const FusedAluRunValidateOperands& operands);
+  // iCube IR M6: PIC direct-pointer load/store handler. Computes the EA, resolves the host RAM region directly,
+  // and does the load/store with the correct endian swap + update-form rA writeback. INTEGER D-form (OPCD != 31)
+  // and X-form (OPCD == 31) only; anything the switch does not handle (FP, unaligned, MMIO, translation miss)
+  // delegates to PICLoadStoreFallback, which runs the exact generic interpreter handler — so DSI/alignment/MMIO
+  // semantics are identical to the generic path for everything PIC does not specialize. write_pc mirrors
+  // Interpret<write_pc> (pc/npc written before any access or fallback, matching the CIR). Returns its own size
+  // (nonzero => the dispatch loop continues); a fallback that raises an exception is handled by the generic
+  // handler exactly as a plain Interpret op would (the IR engine's plain loads were never InterpretChk).
+  template <bool write_pc>
+  static s32 LoadStorePIC(PowerPC::PowerPCState& ppc_state, const LoadStorePICOperands& operands);
+  template <bool write_pc>
+  static s32 LoadStorePIC(std::ostream& stream, const LoadStorePICOperands& operands);
+  // iCube IR M6: cold fallback — runs the exact generic interpreter handler captured at pass time, preserving
+  // DSI/alignment/MMIO semantics. pc/npc were already written by the PIC body (write_pc) before any fallback.
+  static s32 PICLoadStoreFallback(PowerPC::PowerPCState& ppc_state, const LoadStorePICOperands& operands);
+  // iCube IR M6: PIC load/store validate handler (MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE). Snapshots the PPC state
+  // (and, for stores, the touched memory bytes via the generic load), runs the plain interpreter op as the
+  // REFERENCE, captures the loaded register / stored memory / update-form rA, restores, runs the PIC body (the
+  // SHIPPING path, committed last), and asserts bit-identical. Mirrors the M5 validate snapshot/restore/commit-
+  // last discipline. A wrong fast path corrupts game memory/registers, so this is the bit-identical-or-trap gate.
+  template <bool write_pc>
+  static s32 LoadStorePICValidate(PowerPC::PowerPCState& ppc_state,
+                                  const LoadStorePICValidateOperands& operands);
+  template <bool write_pc>
+  static s32 LoadStorePICValidate(std::ostream& stream, const LoadStorePICValidateOperands& operands);
 
   HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges;
   CachedInterpreterIRBlockCache m_block_cache;
@@ -576,6 +646,34 @@ struct CachedInterpreterIR::FusedAluRunValidateOperands : CachedInterpreterIR::F
 {
 };
 
+// iCube IR M6: payload for the PIC direct-pointer load/store op (MAIN_CIR_PIC_LOADSTORE). Mirrors the CIR's
+// LoadStoreDFormPICOperands field-for-field: interpreter + func + current_pc + inst drive both the fast path
+// (EA-compute / write_pc) and the cold fallback (operands.func is the exact generic handler); power_pc drives
+// the exception check inside the (Chk-style) fallback path; the six region base/mask pointers (captured at
+// pass time from m_system.GetMemory(), stable for the block's life) feed CI-style region resolution. Holds a
+// reference member (interpreter), so an IRInst is always constructed via designated-init of this member.
+struct CachedInterpreterIR::LoadStorePICOperands
+{
+  Interpreter& interpreter;
+  void (*func)(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction (the cold-fallback handler)
+  u32 current_pc;
+  UGeckoInstruction inst;
+  PowerPC::PowerPCManager& power_pc;
+  u8* mem1_base;
+  u32 mem1_mask;
+  u8* exram_base;
+  u32 exram_mask;
+  u8* fakevmem_base;
+  u32 fakevmem_mask;
+};
+
+// iCube IR M6: payload for the PIC load/store validate op (MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE). Same fields as
+// the shipping op — the validate handler dual-runs the reference (plain interpreter) vs the PIC body from these,
+// so it needs nothing extra. Empty derived struct, matching the M5 FusedAluRunValidateOperands pattern.
+struct CachedInterpreterIR::LoadStorePICValidateOperands : CachedInterpreterIR::LoadStorePICOperands
+{
+};
+
 struct CachedInterpreterIR::HLEFunctionOperands
 {
   Core::System& system;
@@ -633,6 +731,8 @@ struct CachedInterpreterIR::IRInst
     SetRegConstValidateOperands set_reg_const_validate;    // iCube IR M4: const-fusion validate op
     FusedAluRunOperands fused_alu_run;                      // iCube IR M5: fused ALU run
     FusedAluRunValidateOperands fused_alu_run_validate;     // iCube IR M5: fused-run validate op
+    LoadStorePICOperands load_store_pic;                    // iCube IR M6: PIC direct-pointer load/store
+    LoadStorePICValidateOperands load_store_pic_validate;   // iCube IR M6: PIC load/store validate op
   } u;
 
   // iCube M2: per-inst PPCAnalyst liveness metadata, copied from the source CodeOp at lower time (only

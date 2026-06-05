@@ -429,6 +429,9 @@ extern const Info<bool> MAIN_CIR_IR_CONST_FUSION_VALIDATE;
 // ALU ops -> one FusedAluRun dispatch).
 extern const Info<bool> MAIN_CIR_IR_MICROOP_FUSION;
 extern const Info<bool> MAIN_CIR_IR_MICROOP_FUSION_VALIDATE;
+// iCube IR engine (CPUCore 6) Milestone 6: PIC direct-pointer load/store fast path. Reuses the shipping
+// CIR's MAIN_CIR_PIC_LOADSTORE flag to opt the fast path in/out; this is only its self-validation twin.
+extern const Info<bool> MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE;
 extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM;
 extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE;
 extern const Info<bool> MAIN_CIR_PSQ_FASTPATH;

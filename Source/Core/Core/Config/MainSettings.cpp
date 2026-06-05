@@ -1014,6 +1014,18 @@ const Info<bool> MAIN_CIR_IR_MICROOP_FUSION{{System::Main, "Core", "CIRIRMicroOp
 // implementations agree (there is only one). Slow; correctness only. Default false.
 const Info<bool> MAIN_CIR_IR_MICROOP_FUSION_VALIDATE{
     {System::Main, "Core", "CIRIRMicroOpFusionValidate"}, false};
+// iCube IR engine (CPUCore 6) Milestone 6: PIC direct-pointer load/store fast path. Ports the shipping
+// CachedInterpreter's proven LoadStoreDFormPIC/LoadStoreXFormPIC fast path (MAIN_CIR_PIC_LOADSTORE) to the
+// IR engine as an optimizer pass: integer D-form/X-form load/stores resolve the host RAM pointer directly
+// and do the access with the correct endian swap, bypassing the per-access MMU/region lookup — the single
+// biggest IR-vs-CIR gap (the IR ran plain interpreter loads/stores). The pass is gated by the EXISTING
+// MAIN_CIR_PIC_LOADSTORE flag (same toggle as the CIR; default ON) and the same hard gates as the CIR
+// (!jo.memcheck, jo.fastmem, FL_LOADSTORE && !FL_USE_FPU). This flag is ONLY its self-validation twin:
+// when ON, every op that takes the PIC path also runs the plain interpreter op on a PPC-state snapshot and
+// asserts the loaded register / stored memory / update-form rA writeback are bit-identical, committing the
+// PIC result last. Slow; correctness only. Default FALSE.
+const Info<bool> MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE{
+    {System::Main, "Core", "CIRIRPICLoadStoreValidate"}, false};
 // iCube: CachedInterpreter dead FP-Result-Flags (FPRF) elimination. The paired-single / floating-point
 // handlers call UpdateFPRFSingle/UpdateFPRFDouble on essentially every arithmetic FP op to classify the
 // result into the FPSCR.FPRF field — but PPCAnalyst's back-to-front pass already computes op.wantsFPRF,

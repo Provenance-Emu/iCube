@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <new>
 #include <ranges>
@@ -20,12 +21,14 @@
 #include "Common/CommonTypes.h"
 #include "Common/GekkoDisassembler.h"
 #include "Common/Logging/Log.h"
+#include "Common/Swap.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HW/CPU.h"
+#include "Core/HW/Memmap.h"
 #include "Core/Host.h"
 #include "Core/PowerPC/Gekko.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
@@ -56,6 +59,79 @@ static bool s_ir_microop_fusion_validate = false;
 // When false, EndBlockLink ops are never lowered (plain EndBlock instead) and jo.enableBlocklink stays off,
 // so the engine's behavior is byte-identical to the pre-M3 (M2) lowering.
 static bool s_ir_block_linking = false;
+
+// iCube IR M6: PIC direct-pointer load/store. Reuses the shipping CIR's MAIN_CIR_PIC_LOADSTORE flag (default
+// true) to opt the fast path in/out, mirroring the CIR's read-once-in-Init discipline. Its validate twin
+// (MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE, default false) double-runs every PIC op vs the plain interpreter op.
+// When the PIC flag is off PassPICLoadStore never runs, so the lowered vector stays byte-identical to the M5
+// lowering (every load/store stays a plain Interpret/InterpretPC). The !jo.memcheck && jo.fastmem half of the
+// eligibility is checked in the pass (block-invariant), exactly as the CIR checks it at the emission site.
+static bool s_ir_pic_loadstore = false;
+static bool s_ir_pic_loadstore_validate = false;
+
+// iCube IR M6: PIC (position-independent-code) direct-pointer load/store region resolution — PORTED VERBATIM
+// from CachedInterpreter.cpp's CI_GetRegionInfo / CI_RegionOffset. Resolves an effective address to a host RAM
+// base pointer + offset, bypassing the per-access MMU/region lookup. Integer single-access D-form/X-form only;
+// anything not resolvable here (base == nullptr) falls back to the generic interpreter handler. The CIR is the
+// proven reference; do NOT paraphrase the region math.
+namespace
+{
+struct IR_RegionInfo
+{
+  u8* base;
+  u32 mask;
+  u32 sub;
+  bool is_fake;
+};
+
+static inline IR_RegionInfo IR_GetRegionInfo(u32 ea, bool dr, u8* mem1_base, u32 mem1_mask, u8* exram_base,
+                                             u32 exram_mask, u8* fakevmem_base, u32 fakevmem_mask)
+{
+  IR_RegionInfo info{nullptr, 0, 0, false};
+  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
+  {
+    info.base = mem1_base;
+    info.mask = mem1_mask;
+    info.sub = Memory::MEM1_BASE_ADDR;
+    return info;
+  }
+  if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
+  {
+    info.base = exram_base;
+    info.mask = exram_mask;
+    info.sub = Memory::MEM2_BASE_ADDR;
+    return info;
+  }
+  if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
+  {
+    info.base = fakevmem_base;
+    info.mask = fakevmem_mask;
+    info.sub = 0;
+    info.is_fake = true;
+    return info;
+  }
+  if (!dr && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
+  {
+    info.base = mem1_base;
+    info.mask = mem1_mask;
+    info.sub = 0xC0000000u;
+    return info;
+  }
+  if (!dr && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
+  {
+    info.base = exram_base;
+    info.mask = exram_mask;
+    info.sub = 0xD0000000u;
+    return info;
+  }
+  return info;
+}
+
+static inline u32 IR_RegionOffset(const IR_RegionInfo& r, u32 ea)
+{
+  return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
+}
+}  // namespace
 
 // iCube IR M3: bound on consecutive linked hops inside one ExecuteOneBlock, mirroring the CIR's
 // CIR_MAX_LINKED_HOPS. Forces a dispatcher round-trip after this many links regardless of downcount, so a
@@ -123,6 +199,15 @@ CachedInterpreterIR::~CachedInterpreterIR() = default;
 
 void CachedInterpreterIR::Init()
 {
+  // iCube IR M6: wire the fastmem arena BEFORE RefreshConfig() — RefreshConfig computes jo.fastmem from
+  // jo.fastmem_arena (JitBase.cpp ~line 138), and the shipping CIR's Init does exactly this so its PIC fast
+  // path can be gated on jo.fastmem. Without this call jo.fastmem_arena stays false -> jo.fastmem is always
+  // false -> PassPICLoadStore's jo.fastmem gate is never satisfied and the PIC win is silently inert. The
+  // arena is a virtual reservation covered by the app's extended-virtual-addressing / increased-memory-limit
+  // entitlements; if reservation fails on a device, jo.fastmem_arena stays false and PIC gracefully no-ops.
+  // The IR engine never faults on the arena: the PIC path region-checks every access and falls back to the
+  // generic handler for anything it cannot resolve, so HandleFault staying false is fine (as in the CIR).
+  InitFastmemArena();
   RefreshConfig();
 
   // iCube M2: read the optimizer-pass flags once at codegen time. Default OFF => no IR edits.
@@ -139,6 +224,11 @@ void CachedInterpreterIR::Init()
 
   // iCube IR M3: read block linking once (reuses MAIN_CIR_BLOCK_LINKING; default true).
   s_ir_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
+
+  // iCube IR M6: read the PIC load/store flag (reuses MAIN_CIR_PIC_LOADSTORE; default true) and its validate
+  // twin (default false). When the PIC flag is off the pass never runs (byte-identical to the M5 lowering).
+  s_ir_pic_loadstore = Config::Get(Config::MAIN_CIR_PIC_LOADSTORE);
+  s_ir_pic_loadstore_validate = Config::Get(Config::MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE);
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
@@ -385,6 +475,17 @@ s32 CachedInterpreterIR::DispatchIRInst(PowerPC::PowerPCState& ppc_state, const 
     return FusedAluRun(ppc_state, inst.u.fused_alu_run);
   case IROp::FusedAluRunValidate:
     return FusedAluRunValidate(ppc_state, inst.u.fused_alu_run_validate);
+  case IROp::LoadStorePIC:
+    // iCube IR M6: fast-pathed inline in ExecuteOneBlock; handled here too as the switch fallback and to
+    // satisfy -Wswitch on the new enumerator.
+    return LoadStorePIC<false>(ppc_state, inst.u.load_store_pic);
+  case IROp::LoadStorePICPC:
+    return LoadStorePIC<true>(ppc_state, inst.u.load_store_pic);
+  case IROp::LoadStorePICValidate:
+    // iCube IR M6: write_pc carried in cr_out bit 7 (load/stores write no CR field, so the bit is free).
+    return (inst.cr_out & 0x80) ?
+               LoadStorePICValidate<true>(ppc_state, inst.u.load_store_pic_validate) :
+               LoadStorePICValidate<false>(ppc_state, inst.u.load_store_pic_validate);
   }
   return 0;
 }
@@ -477,6 +578,12 @@ void CachedInterpreterIR::PatchBlockLink(const JitBlock::LinkData& source, const
 void CachedInterpreterIR::RunIROptimizationPasses(std::vector<IRInst>& ir,
                                                   std::vector<CachedInterpreterIRFusedOp>& fused_pool) const
 {
+  // iCube IR M6: PIC direct-pointer load/store. Registered FIRST so it rewrites eligible plain Interpret
+  // load/stores before the other passes look at the vector. Load/stores are FL_LOADSTORE, so M4/M5 never
+  // select them (IsFusibleAluOp / ConstAddrFusionApplies require non-load/store ops), making the ordering
+  // independent — but running first keeps the substitution unambiguous. Gated on MAIN_CIR_PIC_LOADSTORE.
+  if (s_ir_pic_loadstore)
+    PassPICLoadStore(ir);
   if (s_ir_dead_flag_elim)
     PassDeadFlagElim(ir);
   // iCube IR M4: constant-address fusion (lis+addi/addis/ori -> SetRegConst). Default OFF.
@@ -985,6 +1092,593 @@ s32 CachedInterpreterIR::FusedAluRunValidate(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// ============================================================================
+// iCube IR M6: PIC direct-pointer load/store fast path. Ports the shipping CachedInterpreter's
+// LoadStoreDFormPIC / LoadStoreXFormPIC / Cold_LoadStoreFallback to the IR engine as an optimizer pass.
+// The handler bodies below are PORTED VERBATIM from CachedInterpreter.cpp (same EA-compute, same region
+// resolution, same per-opcode byte-swap / sign-extend / update-form rA writeback, same alignment guards,
+// same RAM-vs-fallback decision). Do NOT paraphrase the access semantics — the CIR is the proven reference.
+// ============================================================================
+
+// iCube IR M6: the PIC eligibility predicate. EXACT mirror of the CIR emission-site guard's
+// FL_LOADSTORE && !FL_USE_FPU half (the !jo.memcheck && jo.fastmem half is block-invariant, checked once in
+// PassPICLoadStore). Only plain Interpret / InterpretPC ops are candidates: memcheck loadstores are lowered to
+// InterpretChk in DoJit, and FP-exception loadstores too, so those never reach here. opinfo_flags is stamped
+// at lower time (DoJit EmitInterpret) for exactly these ops.
+bool CachedInterpreterIR::PICLoadStoreApplies(const IRInst& inst)
+{
+  if (inst.op != IROp::Interpret && inst.op != IROp::InterpretPC)
+    return false;
+  return (inst.opinfo_flags & FL_LOADSTORE) != 0 && (inst.opinfo_flags & FL_USE_FPU) == 0;
+}
+
+// iCube IR M6: PIC direct-pointer load/store pass. IRInst is NOT move-assignable (operand union holds a
+// reference member), so — exactly like M4/M5 — build a FRESH vector by construction and swap it in rather than
+// rewriting in place. Each eligible plain Interpret/InterpretPC integer load/store is rewritten into a
+// LoadStorePIC/LoadStorePICPC op (or LoadStorePICValidate when the validate flag is on); everything else is
+// copied through untouched. The op carries the generic-handler func + decoded inst + region pointers inline in
+// the IRInst union, so it needs ZERO per-block side storage and respects the existing m_ir_pending_free
+// deferred-free discipline automatically (it lives and dies with the IR vector). The !jo.memcheck && jo.fastmem
+// gate is block-invariant, so it short-circuits the whole pass — an EXACT mirror of the CIR's emission-site
+// gate (CachedInterpreter.cpp ~line 4438: `s_pic_loadstore && !jo.memcheck && jo.fastmem && FL_LOADSTORE &&
+// !FL_USE_FPU`). Region pointers are captured ONCE here from m_system.GetMemory() and copied into each op.
+void CachedInterpreterIR::PassPICLoadStore(std::vector<IRInst>& ir) const
+{
+  // Block-invariant half of the CIR gate. If memcheck is on (MMU-mode / watchpoints) or the fastmem arena is
+  // not valid, the CIR never emits PIC; mirror that exactly by leaving the vector untouched.
+  if (jo.memcheck || !jo.fastmem)
+    return;
+
+  auto& memory = m_system.GetMemory();
+  u8* const mem1_base = memory.GetRAM();
+  const u32 mem1_mask = memory.GetRamMask();
+  u8* const exram_base = memory.GetEXRAM();
+  const u32 exram_mask = memory.GetExRamMask();
+  u8* const fakevmem_base = memory.GetFakeVMEM();
+  const u32 fakevmem_mask = memory.GetFakeVMemMask();
+  auto& power_pc = m_system.GetPowerPC();
+
+  std::vector<IRInst> out;
+  out.reserve(ir.size());
+
+  for (const IRInst& inst : ir)
+  {
+    if (!PICLoadStoreApplies(inst))
+    {
+      out.push_back(inst);  // copy through untouched (construction-copy is fine; assignment is not)
+      continue;
+    }
+    const InterpretOperands& src = inst.u.interpret;
+    const LoadStorePICOperands pic = {src.interpreter, src.func,    src.current_pc,
+                                      src.inst,        power_pc,     mem1_base,
+                                      mem1_mask,       exram_base,   exram_mask,
+                                      fakevmem_base,   fakevmem_mask};
+    const bool write_pc = (inst.op == IROp::InterpretPC);
+    if (s_ir_pic_loadstore_validate)
+    {
+      // One validate enumerator covers both write_pc cases. Load/stores write NO CR field (cr_out is 0 for
+      // them), so cr_out bit 7 is free to carry the write_pc signal; DispatchIRInst reads it to pick the
+      // LoadStorePICValidate<write_pc> arm. Default-off correctness path, so the extra metadata read is unseen
+      // in shipping runs.
+      IRInst v{IROp::LoadStorePICValidate, {.load_store_pic_validate = {pic}}};
+      if (write_pc)
+        v.cr_out = 0x80;
+      out.push_back(v);
+    }
+    else
+    {
+      out.push_back(IRInst{write_pc ? IROp::LoadStorePICPC : IROp::LoadStorePIC,
+                           {.load_store_pic = pic}});
+    }
+  }
+
+  ir.swap(out);
+}
+
+// iCube IR M6: cold fallback — runs the exact generic interpreter handler captured at pass time. PORTED from
+// CachedInterpreter::Cold_LoadStoreFallback. pc/npc were already written by the PIC body (write_pc) before any
+// fallback, matching Interpret<write_pc>. Unlike the CIR, the IR engine's plain load/stores were never on an
+// InterpretChk path (memcheck loadstores are diverted earlier), so the fallback runs the handler and lets any
+// raised exception be picked up exactly as a plain Interpret op would — no inline CheckExceptions here.
+s32 CachedInterpreterIR::PICLoadStoreFallback(PowerPC::PowerPCState& ppc_state,
+                                              const LoadStorePICOperands& operands)
+{
+  operands.func(operands.interpreter, operands.inst);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube IR M6: PIC direct-pointer load/store handler. PORTED VERBATIM (merged D-form + X-form) from the CIR's
+// LoadStoreDFormPIC / LoadStoreXFormPIC. INTEGER ONLY (FP excluded by PICLoadStoreApplies). Any opcode /
+// alignment / region this switch does not handle delegates to PICLoadStoreFallback (the exact generic handler).
+template <bool write_pc>
+s32 CachedInterpreterIR::LoadStorePIC(PowerPC::PowerPCState& ppc_state,
+                                      const LoadStorePICOperands& operands)
+{
+  const UGeckoInstruction inst = operands.inst;
+
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+
+  const u32 ra = inst.RA;
+
+  if (inst.OPCD == 31)
+  {
+    // X-form EA: ea = (RA ? GPR[RA] : 0) + GPR[RB]
+    const u32 rb = inst.RB;
+    const u32 ea = (ra ? ppc_state.gpr[ra] : 0) + ppc_state.gpr[rb];
+
+    const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
+                                         operands.exram_base, operands.exram_mask,
+                                         operands.fakevmem_base, operands.fakevmem_mask);
+    if (region.base) [[likely]]
+    {
+      u8* const base_ptr = region.base;
+      const u32 offset = IR_RegionOffset(region, ea);
+      switch (inst.SUBOP10)
+      {
+      case 23:   // lwzx
+      case 55:   // lwzux (update)
+      {
+        const bool update = (inst.SUBOP10 == 55);
+        if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+          break;
+        const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+        ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 87:   // lbzx
+      case 119:  // lbzux (update)
+      {
+        const bool update = (inst.SUBOP10 == 119);
+        if (update && ra == 0)
+          break;
+        ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 279:  // lhzx
+      case 311:  // lhzux (update)
+      {
+        const bool update = (inst.SUBOP10 == 311);
+        if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
+          break;
+        const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+        ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 343:  // lhax
+      case 375:  // lhaux (update)
+      {
+        const bool update = (inst.SUBOP10 == 375);
+        if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
+          break;
+        const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+        ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 151:  // stwx
+      case 183:  // stwux (update)
+      {
+        const bool update = (inst.SUBOP10 == 183);
+        if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+          break;
+        *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 215:  // stbx
+      case 247:  // stbux (update)
+      {
+        const bool update = (inst.SUBOP10 == 247);
+        if (update && ra == 0)
+          break;
+        *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 407:  // sthx
+      case 439:  // sthux (update)
+      {
+        const bool update = (inst.SUBOP10 == 439);
+        if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
+          break;
+        *reinterpret_cast<u16*>(base_ptr + offset) =
+            Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
+        if (update)
+          ppc_state.gpr[ra] = ea;
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 534:  // lwbrx
+      {
+        if ((ea & 0b11) != 0) [[unlikely]]
+          break;
+        const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+        ppc_state.gpr[inst.RD] = Common::swap32(Common::FromBigEndian(raw));
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 790:  // lhbrx
+      {
+        if ((ea & 0b1) != 0) [[unlikely]]
+          break;
+        const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+        ppc_state.gpr[inst.RD] = static_cast<u32>(Common::swap16(Common::FromBigEndian(raw)));
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 662:  // stwbrx
+      {
+        if ((ea & 0b11) != 0)
+          break;
+        const u32 raw = ppc_state.gpr[inst.RS];
+        std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      case 918:  // sthbrx
+      {
+        if ((ea & 0b1) != 0)
+          break;
+        const u16 raw = static_cast<u16>(ppc_state.gpr[inst.RS]);
+        std::memcpy(base_ptr + offset, &raw, sizeof(raw));
+        return sizeof(AnyCallback) + sizeof(operands);
+      }
+      default:
+        break;  // FP-indexed / paired-single / unsupported X-form -> fallback
+      }
+    }
+    return PICLoadStoreFallback(ppc_state, operands);
+  }
+
+  // D-form EA: ea = (RA ? GPR[RA] : 0) + SIMM_16
+  const u32 ea =
+      ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16)) : static_cast<u32>(inst.SIMM_16);
+
+  const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
+                                       operands.exram_base, operands.exram_mask,
+                                       operands.fakevmem_base, operands.fakevmem_mask);
+  if (region.base) [[likely]]
+  {
+    u8* const base_ptr = region.base;
+    const u32 offset = IR_RegionOffset(region, ea);
+    switch (inst.OPCD)
+    {
+    case 32:  // lwz
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break;
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 33:  // lwzu (update)
+    {
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
+        break;
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 34:  // lbz
+    {
+      ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 35:  // lbzu (update)
+    {
+      if (ra == 0)
+        break;
+      ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 40:  // lhz
+    {
+      if ((ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 41:  // lhzu (update)
+    {
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 42:  // lha
+    {
+      if ((ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 43:  // lhau (update)
+    {
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
+        break;
+      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
+      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 36:  // stw
+    {
+      if ((ea & 0b11) != 0) [[unlikely]]
+        break;
+      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 37:  // stwu (update)
+    {
+      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
+        break;
+      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 38:  // stb
+    {
+      *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 39:  // stbu (update)
+    {
+      if (ra == 0)
+        break;
+      *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 44:  // sth
+    {
+      if ((ea & 0b1) != 0) [[unlikely]]
+        break;
+      *reinterpret_cast<u16*>(base_ptr + offset) =
+          Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 45:  // sthu (update)
+    {
+      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
+        break;
+      *reinterpret_cast<u16*>(base_ptr + offset) =
+          Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
+      ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 46:  // lmw
+    {
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break;
+      const u32 count = 32u - static_cast<u32>(inst.RD);
+      u8* region_base = nullptr;
+      u32 region_mask = 0;
+      u32 region_sub = 0;
+      bool region_is_fake = false;
+      bool ok = true;
+      u32 addr = ea;
+      for (u32 k = 0; k < count; ++k, addr += 4)
+      {
+        const auto r = IR_GetRegionInfo(addr, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
+                                        operands.exram_base, operands.exram_mask,
+                                        operands.fakevmem_base, operands.fakevmem_mask);
+        if (!r.base)
+        {
+          ok = false;
+          break;
+        }
+        if (!region_base)
+        {
+          region_base = r.base;
+          region_mask = r.mask;
+          region_sub = r.sub;
+          region_is_fake = r.is_fake;
+        }
+        else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
+                 region_is_fake != r.is_fake)
+        {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok || !region_base)
+        break;
+      addr = ea;
+      for (u32 r = static_cast<u32>(inst.RD); r <= 31u; ++r, addr += 4)
+      {
+        const u32 roff =
+            region_is_fake ? (addr & region_mask) : ((addr - region_sub) & region_mask);
+        const u32 raw = *reinterpret_cast<const u32*>(region_base + roff);
+        ppc_state.gpr[r] = Common::FromBigEndian(raw);
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 47:  // stmw
+    {
+      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+        break;
+      const u32 count = 32u - static_cast<u32>(inst.RS);
+      u8* region_base = nullptr;
+      u32 region_mask = 0;
+      u32 region_sub = 0;
+      bool region_is_fake = false;
+      bool ok = true;
+      u32 addr = ea;
+      for (u32 k = 0; k < count; ++k, addr += 4)
+      {
+        const auto r = IR_GetRegionInfo(addr, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
+                                        operands.exram_base, operands.exram_mask,
+                                        operands.fakevmem_base, operands.fakevmem_mask);
+        if (!r.base)
+        {
+          ok = false;
+          break;
+        }
+        if (!region_base)
+        {
+          region_base = r.base;
+          region_mask = r.mask;
+          region_sub = r.sub;
+          region_is_fake = r.is_fake;
+        }
+        else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
+                 region_is_fake != r.is_fake)
+        {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok || !region_base)
+        break;
+      addr = ea;
+      for (u32 r = static_cast<u32>(inst.RS); r <= 31u; ++r, addr += 4)
+      {
+        const u32 roff =
+            region_is_fake ? (addr & region_mask) : ((addr - region_sub) & region_mask);
+        *reinterpret_cast<u32*>(region_base + roff) = Common::swap32(ppc_state.gpr[r]);
+      }
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    default:
+      break;  // FP or unsupported D-form -> fallback
+    }
+  }
+  return PICLoadStoreFallback(ppc_state, operands);
+}
+
+// iCube IR M6: PIC load/store validate handler (MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE). Dual-runs the plain
+// interpreter op (REFERENCE) vs the PIC body (the SHIPPING path, committed last) on a PPC-state + memory
+// snapshot and asserts the loaded register / stored memory / update-form rA writeback are bit-identical. A
+// wrong fast path corrupts game memory/registers, so this is the bit-identical-or-trap gate, mirroring the
+// M5 validate snapshot/restore/commit-last discipline.
+//
+// MEMORY-AWARE SNAPSHOT: a store mutates RAM, so we cannot simply restore registers and re-run. Instead we
+// resolve the touched host bytes via the SAME region resolution and snapshot/restore them around the reference
+// run, then re-run the PIC body and compare. For a load the memory is untouched (we still snapshot defensively
+// for the lmw/stmw multi-word range). The reference run is the genuine generic interpreter handler, so this
+// catches any divergence in the ported fast-path semantics (swap, sign-extend, alignment, rA writeback).
+template <bool write_pc>
+s32 CachedInterpreterIR::LoadStorePICValidate(PowerPC::PowerPCState& ppc_state,
+                                              const LoadStorePICValidateOperands& operands)
+{
+  // Snapshot the full GPR file (covers RD/RS + update-form rA + lmw/stmw register range) and pc/npc/Exceptions.
+  std::array<u32, 32> saved_gpr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), saved_gpr.begin());
+  const u32 saved_pc = ppc_state.pc;
+  const u32 saved_npc = ppc_state.npc;
+  const u32 saved_exceptions = ppc_state.Exceptions;
+
+  // Snapshot the entire MEM1 / MEM2 / fakevmem regions touched by a store so the reference run can be undone
+  // before the PIC body re-runs. Cheap relative to a trap; this is a correctness-only (default-off) path. We
+  // snapshot up to a generous span around any possible EA by saving the whole resolved region offset window
+  // lazily: simplest correct approach is to snapshot the three region buffers' bytes the op could touch. For a
+  // single access that is <= 4 bytes; for lmw/stmw up to 128 bytes. We compute the EA the same way the bodies
+  // do and snapshot a 132-byte window (max stmw span + alignment slack) in the resolved region, if any.
+  const UGeckoInstruction inst = operands.inst;
+  const u32 ra = inst.RA;
+  u32 ea;
+  if (inst.OPCD == 31)
+    ea = (ra ? ppc_state.gpr[ra] : 0) + ppc_state.gpr[inst.RB];
+  else
+    ea = ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16)) : static_cast<u32>(inst.SIMM_16);
+
+  const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
+                                       operands.exram_base, operands.exram_mask,
+                                       operands.fakevmem_base, operands.fakevmem_mask);
+
+  // iCube IR M6: if the EA resolves to NO fast region, this op does NOT take the PIC path — LoadStorePIC
+  // delegates to the generic interpreter handler (MMIO, translation miss, fault). We must NOT dual-run such an
+  // op: a second MMIO access has real side effects (FIFO advance, read-to-clear status regs), a second fault
+  // double-raises, and a status register that legitimately changes between two reads would false-trap. Run the
+  // PIC body exactly once (which falls back) and return — validation only covers ops that actually fast-path.
+  // (An lmw/stmw whose FIRST word is in RAM but spans out is also caught: its body bails to the fallback, and
+  // the single run here matches what the shipping non-validate path does. The window comparison below only ever
+  // runs for a fully-resolved single RAM access / fully-in-region lmw/stmw.)
+  if (!region.base)
+    return LoadStorePIC<write_pc>(ppc_state, operands);
+
+  // Snapshot a window of host bytes covering the widest access (lmw/stmw: up to (32-RD)*4 <= 128 bytes).
+  constexpr u32 kWindow = 132;
+  std::array<u8, kWindow> saved_mem{};
+  u8* window_ptr = nullptr;
+  if (region.base)
+  {
+    const u32 offset = IR_RegionOffset(region, ea);
+    // Clamp so the window stays inside the region's mask (offset+window may wrap; guard conservatively).
+    if (offset + kWindow <= (region.mask + 1))
+    {
+      window_ptr = region.base + offset;
+      std::copy(window_ptr, window_ptr + kWindow, saved_mem.begin());
+    }
+  }
+
+  // REFERENCE RUN: the genuine generic interpreter handler.
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  operands.func(operands.interpreter, operands.inst);
+
+  std::array<u32, 32> ref_gpr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), ref_gpr.begin());
+  const u32 ref_pc = ppc_state.pc;
+  const u32 ref_npc = ppc_state.npc;
+  const u32 ref_exceptions = ppc_state.Exceptions;
+  std::array<u8, kWindow> ref_mem{};
+  if (window_ptr)
+    std::copy(window_ptr, window_ptr + kWindow, ref_mem.begin());
+
+  // Restore the pre-op state (registers + memory window) so the PIC body sees byte-identical inputs.
+  std::copy(saved_gpr.begin(), saved_gpr.end(), std::begin(ppc_state.gpr));
+  ppc_state.pc = saved_pc;
+  ppc_state.npc = saved_npc;
+  ppc_state.Exceptions = saved_exceptions;
+  if (window_ptr)
+    std::copy(saved_mem.begin(), saved_mem.end(), window_ptr);
+
+  // SHIPPING RUN: the PIC body, committed last. Reuse the exact LoadStorePIC<write_pc> path via a temporary
+  // operand view (the validate operand IS-A LoadStorePICOperands).
+  const s32 rv = LoadStorePIC<write_pc>(ppc_state, operands);
+
+  // Assert bit-identical architectural result.
+  for (u32 k = 0; k < 32; ++k)
+  {
+    ASSERT_MSG(DYNA_REC, ppc_state.gpr[k] == ref_gpr[k],
+               "CIR IR PIC load/store GPR{} mismatch at pc {:#010x} (PIC={:#x} vs ref={:#x}, inst={:#010x})",
+               k, operands.current_pc, ppc_state.gpr[k], ref_gpr[k], inst.hex);
+  }
+  ASSERT_MSG(DYNA_REC, ppc_state.pc == ref_pc && ppc_state.npc == ref_npc,
+             "CIR IR PIC load/store PC/NPC mismatch at pc {:#010x}", operands.current_pc);
+  ASSERT_MSG(DYNA_REC, ppc_state.Exceptions == ref_exceptions,
+             "CIR IR PIC load/store Exceptions mismatch at pc {:#010x}", operands.current_pc);
+  if (window_ptr)
+  {
+    std::array<u8, kWindow> pic_mem{};
+    std::copy(window_ptr, window_ptr + kWindow, pic_mem.begin());
+    ASSERT_MSG(DYNA_REC, pic_mem == ref_mem,
+               "CIR IR PIC load/store memory mismatch at pc {:#010x} (ea={:#010x}, inst={:#010x})",
+               operands.current_pc, ea, inst.hex);
+  }
+
+  return rv;
+}
+
 // iCube M2: dead CR-flag elimination validate handler. Direct analogue of the CIR's InterpretDeadFlagValidate,
 // adapted to the IR dispatch model (returns nonzero => ExecuteOneBlock continues). The transform only ever
 // clears Rc on an op whose ENTIRE crOut PPCAnalyst proved discardable; this double-runs the op (reference
@@ -1148,6 +1842,17 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
         const CachedInterpreterIRFusedOp* const ops = run.pool->data() + run.offset;
         for (u32 k = 0; k < run.count; ++k)
           ops[k].func(run.interpreter, ops[k].inst);
+        continue;
+      }
+      // iCube IR M6: PIC direct-pointer load/store on the inlined fast path — THIS is the M6 perf win (direct
+      // host-pointer access, no interpreter dispatch, no per-access MMU/region lookup). Only present when
+      // MAIN_CIR_PIC_LOADSTORE is on AND the access was eligible (PassPICLoadStore); with the flag off the pass
+      // never lowers it, so this branch is never taken and the path is byte-identical to M5. Mid-block
+      // (write_pc=false) is the overwhelming common case; the block-ending (LoadStorePICPC) variant is rarer
+      // and goes through the switch below.
+      if (inst.op == IROp::LoadStorePIC) [[likely]]
+      {
+        LoadStorePIC<false>(ppc_state, inst.u.load_store_pic);
         continue;
       }
       // iCube IR M3: linkable terminal. EndBlockLink does the EndBlock accounting and returns whether the
@@ -1981,6 +2686,23 @@ s32 CachedInterpreterIR::FusedAluRunValidate(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+template <bool write_pc>
+s32 CachedInterpreterIR::LoadStorePIC(std::ostream& stream, const LoadStorePICOperands& operands)
+{
+  fmt::println(stream, "LoadStorePIC<{}>(pc={:#010x}, inst={:#010x})", write_pc, operands.current_pc,
+               operands.inst.hex);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreterIR::LoadStorePICValidate(std::ostream& stream,
+                                              const LoadStorePICValidateOperands& operands)
+{
+  fmt::println(stream, "LoadStorePICValidate<{}>(pc={:#010x}, inst={:#010x})", write_pc,
+               operands.current_pc, operands.inst.hex);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreterIR::IRBlockAnchor(std::ostream& stream, const IRBlockAnchorOperands& operands)
 {
   const std::vector<IRInst>& ir = *operands.ir;
@@ -2029,6 +2751,13 @@ std::size_t CachedInterpreterIR::Disassemble(const JitBlock& block, std::ostream
       // table walks), so never matched here — listed for lookup completeness / future IR-vector disassembly.
       LOOKUP_KV(CachedInterpreterIR::FusedAluRun),
       LOOKUP_KV(CachedInterpreterIR::FusedAluRunValidate),
+      // iCube IR M6: PIC direct-pointer load/store ops. Live only in the IR vector (never written to the
+      // emitter buffer this table walks), so never matched here — listed for lookup completeness / future
+      // IR-vector disassembly.
+      LOOKUP_KV(CachedInterpreterIR::LoadStorePIC<false>),
+      LOOKUP_KV(CachedInterpreterIR::LoadStorePIC<true>),
+      LOOKUP_KV(CachedInterpreterIR::LoadStorePICValidate<false>),
+      LOOKUP_KV(CachedInterpreterIR::LoadStorePICValidate<true>),
   });
 
 #undef LOOKUP_KV
