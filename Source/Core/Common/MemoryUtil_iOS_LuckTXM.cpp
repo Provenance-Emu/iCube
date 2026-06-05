@@ -7,8 +7,10 @@
 #include <csignal>
 #include <cstdlib>
 
+#include <libkern/OSCacheControl.h>
 #include <lwmem/lwmem.h>
 #include <mach/mach.h>
+#include <os/log.h>
 #include <stdio.h>
 #include <string>
 #include <sys/mman.h>
@@ -85,12 +87,175 @@ static void TxmUniversalDetach()
   asm volatile("brk #0xf00d" : "+r"(x16) : : "memory");
 }
 
+// --------------------------------------------------------------------------
+// EXPERIMENT: brk-free TXM JIT path (env DOL_JIT_TXM_NOBRK=1).
+//
+// Open question this answers: under iOS 26 TXM, does CS_DEBUGGED (set by
+// StikDebug's stock attach) plus the JIT entitlements (allow-jit,
+// allow-unsigned-executable-memory, disable-executable-page-protection) ALONE
+// permit execution from an RX mapping, WITHOUT the unproven brk #0x69 StikDebug
+// "authorize region" handshake?
+//
+// Strategy: allocate the LuckTXM dual mapping exactly as the brk path does
+// (RX mmap + writable vm_remap alias), but SKIP the brk. Then prove the region
+// is executable BEFORE trusting it: write a tiny known function into the RW
+// alias, invalidate the icache over the RX range, and CALL it through the RX
+// mapping inside a fault guard. If TXM rejects RX execution it surfaces as
+// EXC_BAD_ACCESS -> SIGBUS/SIGSEGV (or SIGILL/SIGTRAP); the guard catches it,
+// we munmap and report failure, and the caller falls back to the Cached
+// Interpreter. Worst case is a clean fallback, never a crash.
+// --------------------------------------------------------------------------
+
+// AArch64: `mov w0, #0x2A` (movz w0,#42) ; `ret`  -> returns 42.
+static const u32 kTxmSelfTestCode[2] = {0x52800540u, 0xD65F03C0u};
+typedef int (*TxmSelfTestFn)(void);
+
+// Separate fault net for the NOBRK self-test. Traps the signals a TXM/codesign
+// rejection of RX execution can raise so a rejected region longjmps us back to
+// the failure path instead of crashing the app.
+static sigjmp_buf g_nobrk_jmp;
+static volatile sig_atomic_t g_nobrk_faulted = 0;
+
+static void TxmNobrkFaultHandler(int)
+{
+  g_nobrk_faulted = 1;
+  siglongjmp(g_nobrk_jmp, 1);
+}
+
+// Returns true if calling the test fn through rx_exec_addr returns 42 (RX
+// execution permitted under TXM); false if it faulted (TXM rejected it).
+// Caller must already have written kTxmSelfTestCode into the RW alias of
+// rx_exec_addr.
+static bool TxmNobrkSelfTest(void* rx_exec_addr)
+{
+  // Invalidate the icache over the RX EXECUTION address range (what the CPU
+  // fetches), not the RW alias we wrote through. sys_icache_invalidate is
+  // Apple's supported API and links cleanly under LTO (unlike the
+  // __builtin___clear_cache libcall, which lowers to an unresolved ___clear_cache
+  // in this build's link set).
+  sys_icache_invalidate(rx_exec_addr, sizeof(kTxmSelfTestCode));
+
+  struct sigaction old_bus{}, old_segv{}, old_ill{}, old_trap{};
+  struct sigaction net{};
+  net.sa_handler = TxmNobrkFaultHandler;
+  sigemptyset(&net.sa_mask);
+  net.sa_flags = 0;
+  sigaction(SIGBUS, &net, &old_bus);
+  sigaction(SIGSEGV, &net, &old_segv);
+  sigaction(SIGILL, &net, &old_ill);
+  sigaction(SIGTRAP, &net, &old_trap);
+
+  bool ok = false;
+  g_nobrk_faulted = 0;
+  if (sigsetjmp(g_nobrk_jmp, 1) == 0)
+  {
+    TxmSelfTestFn fn = reinterpret_cast<TxmSelfTestFn>(rx_exec_addr);
+    ok = (fn() == 42);
+  }
+
+  // Restore all four handlers symmetrically.
+  sigaction(SIGBUS, &old_bus, nullptr);
+  sigaction(SIGSEGV, &old_segv, nullptr);
+  sigaction(SIGILL, &old_ill, nullptr);
+  sigaction(SIGTRAP, &old_trap, nullptr);
+
+  return ok && !g_nobrk_faulted;
+}
+
+// brk-free allocator. Returns true on success (region installed + self-test
+// passed); false on any failure (region cleaned up, caller takes interpreter).
+static bool AllocateExecutableMemoryRegion_LuckTXM_NoBrk()
+{
+  const size_t size = EXECUTABLE_REGION_SIZE;
+  u8* rx_ptr = static_cast<u8*>(
+      mmap(nullptr, size, PROT_READ | PROT_EXEC, MAP_ANON | MAP_PRIVATE, -1, 0));
+  if (rx_ptr == MAP_FAILED || !rx_ptr)
+  {
+    os_log_error(OS_LOG_DEFAULT,
+                 "[LuckTXM] NOBRK: mmap RX failed — falling back to interpreter");
+    return false;
+  }
+
+  // Writable alias of the RX region (codegen writes here; CPU executes rx_ptr).
+  vm_address_t rw_region = 0;
+  vm_address_t target = reinterpret_cast<vm_address_t>(rx_ptr);
+  vm_prot_t cur_protection = 0;
+  vm_prot_t max_protection = 0;
+  kern_return_t retval =
+      vm_remap(mach_task_self(), &rw_region, size, 0, true, mach_task_self(), target, false,
+               &cur_protection, &max_protection, VM_INHERIT_DEFAULT);
+  if (retval != KERN_SUCCESS)
+  {
+    os_log_error(OS_LOG_DEFAULT,
+                 "[LuckTXM] NOBRK: vm_remap failed (0x%x) — falling back to interpreter",
+                 retval);
+    munmap(rx_ptr, size);
+    return false;
+  }
+
+  u8* rw_ptr = reinterpret_cast<u8*>(rw_region);
+  if (mprotect(rw_ptr, size, PROT_READ | PROT_WRITE) != 0)
+  {
+    os_log_error(OS_LOG_DEFAULT,
+                 "[LuckTXM] NOBRK: mprotect RW failed — falling back to interpreter");
+    munmap(rw_ptr, size);
+    munmap(rx_ptr, size);
+    return false;
+  }
+
+  // Self-test BEFORE lwmem takes ownership: write the known fn into the RW alias
+  // (so it appears at the matching offset in the RX mapping), then call it
+  // through the RX mapping under the fault guard.
+  *reinterpret_cast<u32*>(rw_ptr + 0) = kTxmSelfTestCode[0];
+  *reinterpret_cast<u32*>(rw_ptr + sizeof(u32)) = kTxmSelfTestCode[1];
+
+  if (!TxmNobrkSelfTest(rx_ptr))
+  {
+    os_log_error(
+        OS_LOG_DEFAULT,
+        "[LuckTXM] NOBRK self-test faulted (TXM rejected RX exec) — falling back to interpreter");
+    munmap(rw_ptr, size);
+    munmap(rx_ptr, size);
+    return false;
+  }
+
+  os_log(OS_LOG_DEFAULT, "[LuckTXM] NOBRK self-test: RX exec OK — JIT enabled");
+
+  // RX execution works under TXM with CS_DEBUGGED alone. Hand the RW alias to
+  // lwmem and publish the region, same as the brk success path.
+  lwmem_region_t regions[] = {{(void*)rw_ptr, size}, {NULL, 0}};
+  if (lwmem_assignmem(regions) == 0)
+  {
+    PanicAlertFmt("AllocateExecutableMemoryRegion failed!\nlwmem_assignmem failed");
+    munmap(rw_ptr, size);
+    munmap(rx_ptr, size);
+    return false;
+  }
+
+  g_rx_region = rx_ptr;
+  g_rw_region_diff = rw_ptr - rx_ptr;
+  return true;
+}
+
 namespace Common
 {
 void AllocateExecutableMemoryRegion_LuckTXM()
 {
   if (g_rx_region)
   {
+    return;
+  }
+
+  // EXPERIMENT (env-gated, default OFF): brk-free path. When DOL_JIT_TXM_NOBRK=1
+  // we skip the brk #0x69 handshake entirely and instead prove RX execution with
+  // a guarded self-test. Default (unset/!= "1") leaves the brk path below
+  // completely unchanged.
+  const char* nobrk = getenv("DOL_JIT_TXM_NOBRK");
+  if (nobrk && nobrk[0] == '1')
+  {
+    os_log(OS_LOG_DEFAULT,
+           "[LuckTXM] NOBRK path selected (DOL_JIT_TXM_NOBRK=1) — skipping brk handshake");
+    AllocateExecutableMemoryRegion_LuckTXM_NoBrk();
     return;
   }
 
