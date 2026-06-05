@@ -2069,111 +2069,10 @@ struct ConfigAdvancedView: View {
           Toggle(L("NEON Texture Decoder"), isOn: $neonTextureDecode)
             .onChange(of: neonTextureDecode) { DOLConfigBridge.setGfxHackNeonTextureDecode($0) },
           L("ARM64 NEON SIMD texture decoder. ON by default; turning it off falls back to the slower scalar decoder. A/B knob. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("PIC Load/Store (Cached Interpreter)"), isOn: $cirPicLoadStore)
-            .onChange(of: cirPicLoadStore) { DOLConfigBridge.setCirPicLoadStore($0) },
-          L("Direct-pointer load/store fast path for the Cached Interpreter — a large CPU win on memory-heavy games. ON by default; falls back safely for MMU / non-fastmem access. Turn off to A/B. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Specialized Ops (Cached Interpreter)"), isOn: $cirSpecializedOps)
-            .onChange(of: cirSpecializedOps) { DOLConfigBridge.setCirSpecializedOps($0) },
-          L("Routes hot integer ops through a direct, inlinable dispatch instead of the pointer-compare chain — a CPU win on the interpreter path. ON by default; the dispatched handler is the same interpreter function, so it's the safest of these knobs. Turn off to A/B. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Specialized Ops: Validate (slow, correctness pass)"), isOn: $cirSpecializedOpsValidate)
-            .onChange(of: cirSpecializedOpsValidate) { DOLConfigBridge.setCirSpecializedOpsValidate($0) },
-          L("Self-check for Specialized Ops: double-runs every specialized op against the generic interpreter and flags any divergence. Much slower — turn ON only for a correctness pass, then back OFF. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Micro-Op Fusion (Cached Interpreter, experimental)"), isOn: $cirMicroOpFusion)
-            .onChange(of: cirMicroOpFusion) { DOLConfigBridge.setCirMicroOpFusion($0) },
-          L("⚠️ Fuses runs of integer ops into one dispatched block on the Cached Interpreter — a meaningful CPU win. Experimental/unvalidated; may cause wrong math, physics, or audio in some games. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Micro-Op Fusion: Validate (slow, correctness pass)"), isOn: $cirMicroOpFusionValidate)
-            .onChange(of: cirMicroOpFusionValidate) { DOLConfigBridge.setCirMicroOpFusionValidate($0) },
-          L("Self-check for Micro-Op Fusion: runs the real interpreter alongside each fused block and flags any divergence in registers, flags, or condition codes. Use this to A/B-verify fusion on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Micro-Op Fusion to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Dead Flag Elimination (Cached Interpreter, experimental)"), isOn: $cirDeadFlagElim)
-            .onChange(of: cirDeadFlagElim) { DOLConfigBridge.setCirDeadFlagElim($0) },
-          L("⚠️ Skips computing condition-flag (CR0/CR1) results that the analyzer proves are overwritten before any branch reads them — a meaningful CPU win on the Cached Interpreter (the JIT-like, no-codegen technique). Experimental/unvalidated; OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Dead Flag Elimination: Validate (slow, correctness pass)"), isOn: $cirDeadFlagElimValidate)
-            .onChange(of: cirDeadFlagElimValidate) { DOLConfigBridge.setCirDeadFlagElimValidate($0) },
-          L("Self-check for Dead Flag Elimination: double-runs every eliminated op (flag computed vs flag skipped) and flags any divergence in a condition field that is actually live. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead Flag Elimination to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Dead FPRF Elimination (Cached Interpreter, experimental)"), isOn: $cirDeadFprfElim)
-            .onChange(of: cirDeadFprfElim) { DOLConfigBridge.setCirDeadFprfElim($0) },
-          L("⚠️ Skips computing the floating-point result flags (FPRF) for FP/paired-single ops when the analyzer proves they are overwritten before any read — a meaningful CPU win on the FP-heavy hot path (the JIT-like, no-codegen technique). FP accuracy is sensitive; experimental/unvalidated, OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Dead FPRF Elimination: Validate (slow, correctness pass)"), isOn: $cirDeadFprfElimValidate)
-            .onChange(of: cirDeadFprfElimValidate) { DOLConfigBridge.setCirDeadFprfElimValidate($0) },
-          L("Self-check for Dead FPRF Elimination: double-runs every eliminated FP op (FPRF computed vs skipped) and flags any divergence in a result register or any FPSCR bit other than FPRF. Use this to A/B-verify FP accuracy on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead FPRF Elimination to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Paired-Single Float Fast-Path (Cached Interpreter, experimental)"), isOn: $cirPsqFastPath)
-            .onChange(of: cirPsqFastPath) { DOLConfigBridge.setCirPsqFastPath($0) },
-          L("⚠️ Speeds up the quantized paired-single load/store ops (psq_l/psq_st) for the common case where the graphics-quantization register is plain 32-bit float with no scaling — skips the per-op type-decode and conversion machinery and moves the two floats directly. This is the hot path in several GameCube titles (e.g. Chibi-Robo). The live quantization register is checked each execution, so non-float cases fall back unchanged. Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Paired-Single Float Fast-Path: Validate (slow, correctness pass)"), isOn: $cirPsqFastPathValidate)
-            .onChange(of: cirPsqFastPathValidate) { DOLConfigBridge.setCirPsqFastPathValidate($0) },
-          L("Self-check for the Paired-Single Float Fast-Path: for every op that takes the fast path, double-derives the loaded FPR lanes / stored memory values both ways and flags any divergence (a mis-handled type, scale, or single-vs-paired case). Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Paired-Single Float Fast-Path to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Store-Loop (memset) Fast-Path (Cached Interpreter, experimental)"), isOn: $cirStoreLoopFF)
-            .onChange(of: cirStoreLoopFF) { DOLConfigBridge.setCirStoreLoopFF($0) },
-          L("⚠️ Detects tight byte-fill loops (the 8× stb + addi + bdnz memset pattern that dominates some games, e.g. Super Smash Bros. Melee) and performs the whole fill in one bulk write instead of interpreting each store. The target range is verified to be contiguous normal RAM first (MMIO ranges fall back to the normal loop). Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Store-Loop Fast-Path: Validate (slow, correctness pass)"), isOn: $cirStoreLoopFFValidate)
-            .onChange(of: cirStoreLoopFFValidate) { DOLConfigBridge.setCirStoreLoopFFValidate($0) },
-          L("Self-check for the Store-Loop Fast-Path: for every loop that takes the bulk fill, also runs the real per-store loop on a snapshot and asserts the filled memory and the post-loop registers match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Store-Loop Fast-Path to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Constant-Address Fusion (IR engine only, experimental)"), isOn: $cirIrConstFusion)
-            .onChange(of: cirIrConstFusion) { DOLConfigBridge.setCirIrConstFusion($0) },
-          L("⚠️ Only affects the Cached Interpreter (IR) engine. Fuses the ubiquitous lis+addi/ori/subi base-address pairs into a single precomputed constant load, halving the dispatch on that pattern (which saturates every hot block). No effect on the default Cached Interpreter. Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Constant-Address Fusion: Validate (slow, correctness pass)"), isOn: $cirIrConstFusionValidate)
-            .onChange(of: cirIrConstFusionValidate) { DOLConfigBridge.setCirIrConstFusionValidate($0) },
-          L("Self-check for Constant-Address Fusion: for every fused pair, also runs the original two ops and asserts the destination register matches the precomputed constant. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Constant-Address Fusion (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("NEON Paired-Single Math (experimental)"), isOn: $cirPsNeon)
-            .onChange(of: cirPsNeon) { DOLConfigBridge.setCirPsNeon($0) },
-          L("⚠️ Computes GameCube paired-single FP ops (ps_mul/add/madd/…) BOTH lanes at once with ARM NEON instead of two scalar ops — the trick Dolphin's JIT uses, which the jitless interpreter lacked. Helps FP-heavy games on BOTH CPU engines. Only fires when the FPU is in IEEE mode (NI=0) with finite/normal values; otherwise falls back to scalar (so some games may see little change). Experimental; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ NEON Paired-Single Math: Validate (slow, correctness pass)"), isOn: $cirPsNeonValidate)
-            .onChange(of: cirPsNeonValidate) { DOLConfigBridge.setCirPsNeonValidate($0) },
-          L("Self-check for NEON Paired-Single Math: for every op that takes the NEON path, also runs the scalar computation and asserts both result lanes are bit-identical. Use this to A/B-verify FP accuracy on your games before trusting it (and to see whether it even engages — if a game runs in non-IEEE mode it stays on the scalar path). Much slower — turn ON for a correctness pass, then back OFF. Requires NEON Paired-Single Math to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Micro-Op Fusion (IR engine only, experimental)"), isOn: $cirIrMicroOpFusion)
-            .onChange(of: cirIrMicroOpFusion) { DOLConfigBridge.setCirIrMicroOpFusion($0) },
-          L("⚠️ Only affects the Cached Interpreter (IR) engine. Coalesces runs of consecutive flag-free, exception-free integer ALU ops into a single dispatched unit (the same fusion the default Cached Interpreter uses), cutting per-op dispatch overhead on straight-line code. No effect on the default Cached Interpreter. Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Micro-Op Fusion: Validate (slow, correctness pass)"), isOn: $cirIrMicroOpFusionValidate)
-            .onChange(of: cirIrMicroOpFusionValidate) { DOLConfigBridge.setCirIrMicroOpFusionValidate($0) },
-          L("Self-check for Micro-Op Fusion: for every fused run, also runs the ops un-fused and asserts the resulting registers match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Micro-Op Fusion (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Dead CR-Flag Elimination (IR engine only, experimental)"), isOn: $cirIrDeadFlagElim)
-            .onChange(of: cirIrDeadFlagElim) { DOLConfigBridge.setCirIrDeadFlagElim($0) },
-          L("⚠️ Only affects the Cached Interpreter (IR) engine. Skips computing condition-flag (CR) results the block-analyzer proves are overwritten before any read — the same elimination the default Cached Interpreter offers, as an IR pass. No effect on the default Cached Interpreter. Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Dead CR-Flag Elimination: Validate (slow, correctness pass)"), isOn: $cirIrDeadFlagElimValidate)
-            .onChange(of: cirIrDeadFlagElimValidate) { DOLConfigBridge.setCirIrDeadFlagElimValidate($0) },
-          L("Self-check for IR Dead CR-Flag Elimination: double-runs every eliminated op (CR computed vs skipped) and asserts the live CR fields match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead CR-Flag Elimination (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("IR PIC Load/Store: Validate (slow, correctness pass)"), isOn: $cirIrPicLoadStoreValidate)
-            .onChange(of: cirIrPicLoadStoreValidate) { DOLConfigBridge.setCirIrPicLoadStoreValidate($0) },
-          L("Self-check for the IR engine's PIC direct-pointer load/store: for every load/store that takes the fast path, also runs the plain interpreter access on a snapshot and asserts the loaded register / stored memory / update-form writeback are bit-identical. IR-engine only; requires PIC Load/Store ON. Much slower — turn ON for a correctness pass, then OFF. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("IR Specialized Ops: Validate (slow, correctness pass)"), isOn: $cirIrSpecializedOpsValidate)
-            .onChange(of: cirIrSpecializedOpsValidate) { DOLConfigBridge.setCirIrSpecializedOpsValidate($0) },
-          L("Self-check for the IR engine's specialized-ops fast path: dual-runs each specialized op vs the plain interpreter op and asserts bit-identical state. IR-engine only; requires Specialized Ops ON. Much slower — turn ON for a correctness pass, then OFF. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
-            .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
-          L("⚠️ Chains hot interpreter blocks directly to cut per-block dispatcher overhead. Experimental; can affect timing-sensitive games. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("↳ Block Linking: Validate (slow, correctness pass)"), isOn: $cirBlockLinkingValidate)
-            .onChange(of: cirBlockLinkingValidate) { DOLConfigBridge.setCirBlockLinkingValidate($0) },
-          L("Self-check for Block Linking: re-resolves each linked block through the dispatcher and flags stale or wrong-target links. Much slower — turn ON for a correctness pass, then back OFF. Requires Block Linking to be ON. OFF by default. Applies on next game launch."))
-        rowWithCaption(
-          Toggle(L("CIR Hot-Block Profiler (diagnostic)"), isOn: Binding(
-            get: { UserDefaults.standard.bool(forKey: "icube.cirProfile") },
-            set: { UserDefaults.standard.set($0, forKey: "icube.cirProfile") })),
-          L("Records the hottest interpreter blocks for the running game. Turn ON, relaunch the game, play the slow scene, then tap Copy State in the perf HUD — the dump ends with a CIR HOT BLOCKS section showing where CPU time goes. Diagnostic only (no perf cost when OFF). OFF by default; applies on next game launch."))
+        // Engine-specific optimizations (PIC, specialized ops, fusion, etc.) and their
+        // correctness-validation twins now live in their own engine-aware sections below
+        // (see "Engine Optimizations" + "Correctness Validation"), so this list only carries
+        // the general, engine-agnostic CPU options.
         rowWithCaption(
           Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
             .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) },
@@ -2191,6 +2090,128 @@ struct ConfigAdvancedView: View {
           Toggle(L("Sync on Skip Idle"), isOn: $syncOnSkipIdle)
             .onChange(of: syncOnSkipIdle) { DOLConfigBridge.setMainSyncOnSkipIdle($0) },
           L("When the CPU fast-forwards through an idle loop, flush the GPU so it stays in sync. ON by default for correctness; turning it off skips the flush for a small CPU win but can cause graphical glitches in some games. A/B knob."))
+      }
+
+      // MARK: Engine Optimizations (engine-aware: only the toggles that affect the
+      // currently selected Cached Interpreter engine are shown; experimental ones are
+      // unmarked, the proven default-on wins carry a "Recommended" badge).
+      if showEngineOpts {
+        Section(header: Text(L("Engine Optimizations")),
+                footer: Text(engineOptsFooter)) {
+          Button(L("Reset Optimizations to Recommended")) { resetOptimizationsToRecommended() }
+          // Shared — honored by BOTH the Cached Interpreter and the IR engine.
+          optRow("PIC Load/Store", recommended: true, isOn: $cirPicLoadStore,
+                 set: { DOLConfigBridge.setCirPicLoadStore($0) },
+                 caption: "Direct-pointer load/store fast path — a large CPU win on memory-heavy games. Falls back safely for MMU / non-fastmem access. Applies on next game launch.")
+          optRow("Specialized Ops", recommended: true, isOn: $cirSpecializedOps,
+                 set: { DOLConfigBridge.setCirSpecializedOps($0) },
+                 caption: "Routes hot integer ops through a direct, inlinable dispatch instead of the pointer-compare chain. The dispatched handler is the same interpreter function, so it's the safest of these knobs. Applies on next game launch.")
+          optRow("Block Linking", recommended: true, isOn: $cirBlockLinking,
+                 set: { DOLConfigBridge.setCirBlockLinking($0) },
+                 caption: "Chains hot blocks directly to cut per-block dispatcher overhead — the biggest dispatch win. Any mismatch deopts safely to the dispatcher. Applies on next game launch.")
+          optRow("NEON Paired-Single Math", isOn: $cirPsNeon,
+                 set: { DOLConfigBridge.setCirPsNeon($0) },
+                 caption: "Computes GameCube paired-single FP ops (ps_mul/add/madd/…) both lanes at once with ARM NEON instead of two scalar ops — the trick the JIT uses. Only fires for finite/normal values in IEEE mode; otherwise falls back to scalar. Experimental. Applies on next game launch.")
+
+          if showCIROpts {
+            optRow("Micro-Op Fusion", recommended: true, isOn: $cirMicroOpFusion,
+                   set: { DOLConfigBridge.setCirMicroOpFusion($0) },
+                   caption: "Fuses runs of integer ops into one dispatched block, cutting per-op dispatch overhead. The fused handlers are code-audited and self-validating. Applies on next game launch.")
+            optRow("Dead Flag Elimination", isOn: $cirDeadFlagElim,
+                   set: { DOLConfigBridge.setCirDeadFlagElim($0) },
+                   caption: "Skips computing condition-flag (CR0/CR1) results the analyzer proves are overwritten before any branch reads them. Experimental; run its Validate pass before trusting it. Applies on next game launch.")
+            optRow("Dead FPRF Elimination", isOn: $cirDeadFprfElim,
+                   set: { DOLConfigBridge.setCirDeadFprfElim($0) },
+                   caption: "Skips computing FP result flags (FPRF) for FP/paired-single ops when proven dead — a win on the FP-heavy hot path. FP accuracy is sensitive; experimental, run its Validate pass first. Applies on next game launch.")
+            optRow("Paired-Single Float Fast-Path", isOn: $cirPsqFastPath,
+                   set: { DOLConfigBridge.setCirPsqFastPath($0) },
+                   caption: "Speeds up quantized paired-single load/stores (psq_l/psq_st) for the common plain-float, no-scale case (the hot path in titles like Chibi-Robo). The live quantization register is checked each execution, so other cases fall back unchanged. Experimental. Applies on next game launch.")
+            optRow("Store-Loop (memset) Fast-Path", isOn: $cirStoreLoopFF,
+                   set: { DOLConfigBridge.setCirStoreLoopFF($0) },
+                   caption: "Detects tight byte-fill loops (the stb + addi + bdnz memset pattern) and performs the whole fill in one bulk write. The range is verified to be contiguous normal RAM first. Experimental. Applies on next game launch.")
+          }
+
+          if showIROpts {
+            optRow("Constant-Address Fusion", isOn: $cirIrConstFusion,
+                   set: { DOLConfigBridge.setCirIrConstFusion($0) },
+                   caption: "Fuses the ubiquitous lis+addi/ori/subi base-address pairs into a single precomputed constant load, halving the dispatch on that pattern. IR engine only. Experimental. Applies on next game launch.")
+            optRow("Micro-Op Fusion", isOn: $cirIrMicroOpFusion,
+                   set: { DOLConfigBridge.setCirIrMicroOpFusion($0) },
+                   caption: "Coalesces runs of flag-free, exception-free integer ALU ops into a single dispatched unit, cutting per-op dispatch overhead on straight-line code. IR engine only. Experimental. Applies on next game launch.")
+            optRow("Dead CR-Flag Elimination", isOn: $cirIrDeadFlagElim,
+                   set: { DOLConfigBridge.setCirIrDeadFlagElim($0) },
+                   caption: "Skips computing condition-flag (CR) results the block-analyzer proves are overwritten before any read — the same elimination the default Cached Interpreter offers, as an IR pass. IR engine only. Experimental. Applies on next game launch.")
+          }
+        }
+
+        // MARK: Correctness Validation — collapsed by default. These re-run each
+        // optimization against the reference interpreter and assert bit-identical
+        // results (much slower). Each row is disabled until its parent optimization
+        // is ON, so the "requires X" relationship is enforced, not just documented.
+        Section {
+          DisclosureGroup(L("Correctness Validation (developer, slow)")) {
+            // Shared
+            validateRow("NEON Paired-Single Math: Validate", isOn: $cirPsNeonValidate,
+                        set: { DOLConfigBridge.setCirPsNeonValidate($0) }, parentOn: cirPsNeon,
+                        caption: "Double-runs each NEON paired-single op against the scalar computation and asserts both lanes are bit-identical. Requires NEON Paired-Single Math ON.")
+            if showCIROpts {
+              validateRow("Specialized Ops: Validate", isOn: $cirSpecializedOpsValidate,
+                          set: { DOLConfigBridge.setCirSpecializedOpsValidate($0) }, parentOn: cirSpecializedOps,
+                          caption: "Double-runs every specialized op against the generic interpreter and flags any divergence. Requires Specialized Ops ON.")
+              validateRow("Block Linking: Validate", isOn: $cirBlockLinkingValidate,
+                          set: { DOLConfigBridge.setCirBlockLinkingValidate($0) }, parentOn: cirBlockLinking,
+                          caption: "Re-resolves each linked block through the dispatcher and flags stale or wrong-target links. Requires Block Linking ON.")
+              validateRow("Micro-Op Fusion: Validate", isOn: $cirMicroOpFusionValidate,
+                          set: { DOLConfigBridge.setCirMicroOpFusionValidate($0) }, parentOn: cirMicroOpFusion,
+                          caption: "Runs the real interpreter alongside each fused block and flags any divergence in registers, flags, or condition codes. Requires Micro-Op Fusion ON.")
+              validateRow("Dead Flag Elimination: Validate", isOn: $cirDeadFlagElimValidate,
+                          set: { DOLConfigBridge.setCirDeadFlagElimValidate($0) }, parentOn: cirDeadFlagElim,
+                          caption: "Double-runs every eliminated op (flag computed vs skipped) and flags any divergence in a live condition field. Requires Dead Flag Elimination ON.")
+              validateRow("Dead FPRF Elimination: Validate", isOn: $cirDeadFprfElimValidate,
+                          set: { DOLConfigBridge.setCirDeadFprfElimValidate($0) }, parentOn: cirDeadFprfElim,
+                          caption: "Double-runs every eliminated FP op (FPRF computed vs skipped) and flags any divergence in a result register or non-FPRF FPSCR bit. Requires Dead FPRF Elimination ON.")
+              validateRow("Paired-Single Float Fast-Path: Validate", isOn: $cirPsqFastPathValidate,
+                          set: { DOLConfigBridge.setCirPsqFastPathValidate($0) }, parentOn: cirPsqFastPath,
+                          caption: "For every psq op that takes the fast path, derives the result both ways and flags any divergence (a mis-handled type, scale, or single-vs-paired case). Requires Paired-Single Float Fast-Path ON.")
+              validateRow("Store-Loop Fast-Path: Validate", isOn: $cirStoreLoopFFValidate,
+                          set: { DOLConfigBridge.setCirStoreLoopFFValidate($0) }, parentOn: cirStoreLoopFF,
+                          caption: "Runs the real per-store loop on a snapshot and asserts the filled memory and post-loop registers match the bulk fill. Requires Store-Loop Fast-Path ON.")
+            }
+            if showIROpts {
+              validateRow("PIC Load/Store: Validate", isOn: $cirIrPicLoadStoreValidate,
+                          set: { DOLConfigBridge.setCirIrPicLoadStoreValidate($0) }, parentOn: cirPicLoadStore,
+                          caption: "For every load/store that takes the PIC fast path, runs the plain interpreter access on a snapshot and asserts the loaded register / stored memory / update-form writeback are bit-identical. Requires PIC Load/Store ON.")
+              validateRow("Specialized Ops: Validate", isOn: $cirIrSpecializedOpsValidate,
+                          set: { DOLConfigBridge.setCirIrSpecializedOpsValidate($0) }, parentOn: cirSpecializedOps,
+                          caption: "Dual-runs each specialized op vs the plain interpreter op and asserts bit-identical state. Requires Specialized Ops ON.")
+              validateRow("Constant-Address Fusion: Validate", isOn: $cirIrConstFusionValidate,
+                          set: { DOLConfigBridge.setCirIrConstFusionValidate($0) }, parentOn: cirIrConstFusion,
+                          caption: "For every fused pair, runs the original two ops and asserts the destination register matches the precomputed constant. Requires Constant-Address Fusion ON.")
+              validateRow("Micro-Op Fusion: Validate", isOn: $cirIrMicroOpFusionValidate,
+                          set: { DOLConfigBridge.setCirIrMicroOpFusionValidate($0) }, parentOn: cirIrMicroOpFusion,
+                          caption: "For every fused run, runs the ops un-fused and asserts the resulting registers match. Requires Micro-Op Fusion ON.")
+              validateRow("Dead CR-Flag Elimination: Validate", isOn: $cirIrDeadFlagElimValidate,
+                          set: { DOLConfigBridge.setCirIrDeadFlagElimValidate($0) }, parentOn: cirIrDeadFlagElim,
+                          caption: "Double-runs every eliminated op (CR computed vs skipped) and asserts the live CR fields match. Requires Dead CR-Flag Elimination ON.")
+            }
+          }
+        }
+
+        // Diagnostics — the hot-block profiler is a Cached Interpreter feature.
+        if showCIROpts {
+          Section(header: Text(L("Diagnostics"))) {
+            rowWithCaption(
+              Toggle(L("CIR Hot-Block Profiler"), isOn: Binding(
+                get: { UserDefaults.standard.bool(forKey: "icube.cirProfile") },
+                set: { UserDefaults.standard.set($0, forKey: "icube.cirProfile") })),
+              L("Records the hottest interpreter blocks for the running game. Turn ON, relaunch the game, play the slow scene, then tap Copy State in the perf HUD — the dump ends with a CIR HOT BLOCKS section showing where CPU time goes. Diagnostic only (no perf cost when OFF). Applies on next game launch."))
+          }
+        }
+      } else {
+        Section(header: Text(L("Engine Optimizations"))) {
+          Text(L("Select Cached Interpreter or Cached Interpreter (IR) as the CPU engine above to configure optimizations. The plain Interpreter and JIT engines don't use these."))
+            .font(.caption).foregroundStyle(.secondary)
+        }
       }
 
       Section(header: Text(L("Clock Override"))) {
@@ -2318,6 +2339,88 @@ struct ConfigAdvancedView: View {
     settingsCaption(content, caption)
   }
 
+  /// The engine that ACTUALLY runs. On a jitless build a stored JIT core silently
+  /// runs as the Cached Interpreter, so optimization applicability follows that
+  /// truth (mirrors `effectiveCpuEngineLabel`).
+  private var effectiveEngine: CpuEngine {
+    if !jitAvailable && (cpuEngine == .jit64 || cpuEngine == .jitARM64) {
+      return .cachedInterpreter
+    }
+    return cpuEngine
+  }
+  /// Optimizations apply only to the two Cached Interpreter engines.
+  private var showCIROpts: Bool { effectiveEngine == .cachedInterpreter }
+  private var showIROpts: Bool { effectiveEngine == .cachedInterpreterIR }
+  private var showEngineOpts: Bool { showCIROpts || showIROpts }
+
+  private var engineOptsFooter: String {
+    showIROpts
+      ? L("Optimizations for the Cached Interpreter (IR) engine. The shared options at the top also apply to the default Cached Interpreter. \"Recommended\" options are on by default and are the proven speed wins — leave them on. The rest are experimental A/B knobs; verify one with its Validate pass before trusting it.")
+      : L("Optimizations for the Cached Interpreter engine. \"Recommended\" options are on by default and are the proven speed wins — leave them on. The rest are experimental A/B knobs; verify one with its Validate pass before trusting it.")
+  }
+
+  /// A standard optimization toggle row. `recommended` adds the green badge for the
+  /// proven default-on wins so their on/off state is impossible to miss.
+  @ViewBuilder
+  private func optRow(_ title: String, recommended: Bool = false, isOn: Binding<Bool>,
+                      set: @escaping (Bool) -> Void, caption: String) -> some View {
+    rowWithCaption(
+      Toggle(isOn: isOn) {
+        if recommended {
+          HStack(spacing: 6) { Text(L(title)); RecommendedBadge() }
+        } else {
+          Text(L(title))
+        }
+      }
+      .onChange(of: isOn.wrappedValue) { set($0) },
+      L(caption))
+  }
+
+  /// A correctness-validation toggle, disabled until its parent optimization is ON.
+  @ViewBuilder
+  private func validateRow(_ title: String, isOn: Binding<Bool>,
+                           set: @escaping (Bool) -> Void, parentOn: Bool, caption: String) -> some View {
+    rowWithCaption(
+      Toggle(L(title), isOn: isOn)
+        .disabled(!parentOn)
+        .onChange(of: isOn.wrappedValue) { set($0) },
+      L(caption))
+  }
+
+  /// Restore every optimization flag to its shipping default: the proven wins ON,
+  /// every experimental knob and every Validate twin OFF. This is the fix for the
+  /// "no gains" reports that turned out to be runs with the recommended opts toggled off.
+  private func resetOptimizationsToRecommended() {
+    // Shared + CIR proven wins -> ON.
+    cirBlockLinking = true; DOLConfigBridge.setCirBlockLinking(true)
+    cirPicLoadStore = true; DOLConfigBridge.setCirPicLoadStore(true)
+    cirSpecializedOps = true; DOLConfigBridge.setCirSpecializedOps(true)
+    cirMicroOpFusion = true; DOLConfigBridge.setCirMicroOpFusion(true)
+    // Experimental -> OFF.
+    cirPsNeon = false; DOLConfigBridge.setCirPsNeon(false)
+    cirDeadFlagElim = false; DOLConfigBridge.setCirDeadFlagElim(false)
+    cirDeadFprfElim = false; DOLConfigBridge.setCirDeadFprfElim(false)
+    cirPsqFastPath = false; DOLConfigBridge.setCirPsqFastPath(false)
+    cirStoreLoopFF = false; DOLConfigBridge.setCirStoreLoopFF(false)
+    cirIrConstFusion = false; DOLConfigBridge.setCirIrConstFusion(false)
+    cirIrMicroOpFusion = false; DOLConfigBridge.setCirIrMicroOpFusion(false)
+    cirIrDeadFlagElim = false; DOLConfigBridge.setCirIrDeadFlagElim(false)
+    // All Validate twins -> OFF.
+    cirSpecializedOpsValidate = false; DOLConfigBridge.setCirSpecializedOpsValidate(false)
+    cirMicroOpFusionValidate = false; DOLConfigBridge.setCirMicroOpFusionValidate(false)
+    cirDeadFlagElimValidate = false; DOLConfigBridge.setCirDeadFlagElimValidate(false)
+    cirDeadFprfElimValidate = false; DOLConfigBridge.setCirDeadFprfElimValidate(false)
+    cirPsqFastPathValidate = false; DOLConfigBridge.setCirPsqFastPathValidate(false)
+    cirStoreLoopFFValidate = false; DOLConfigBridge.setCirStoreLoopFFValidate(false)
+    cirIrConstFusionValidate = false; DOLConfigBridge.setCirIrConstFusionValidate(false)
+    cirPsNeonValidate = false; DOLConfigBridge.setCirPsNeonValidate(false)
+    cirIrMicroOpFusionValidate = false; DOLConfigBridge.setCirIrMicroOpFusionValidate(false)
+    cirIrDeadFlagElimValidate = false; DOLConfigBridge.setCirIrDeadFlagElimValidate(false)
+    cirIrPicLoadStoreValidate = false; DOLConfigBridge.setCirIrPicLoadStoreValidate(false)
+    cirIrSpecializedOpsValidate = false; DOLConfigBridge.setCirIrSpecializedOpsValidate(false)
+    cirBlockLinkingValidate = false; DOLConfigBridge.setCirBlockLinkingValidate(false)
+  }
+
   private func syncAdvanced() {
     jitAvailable = JitManager.shared().acquiredJit
     cpuEngine = CpuEngine.from(raw: DOLConfigBridge.mainCpuCore())
@@ -2371,6 +2474,18 @@ struct ConfigAdvancedView: View {
     mem2MB = DOLConfigBridge.mainMem2SizeMB()
     rtcEnabled = DOLConfigBridge.mainCustomRtcEnable()
     rtcDate = Date(timeIntervalSince1970: TimeInterval(DOLConfigBridge.mainCustomRtcValue()))
+  }
+}
+
+/// Small green "Recommended" pill shown next to the proven default-on optimizations
+/// so their on/off state is obvious at a glance.
+private struct RecommendedBadge: View {
+  var body: some View {
+    Text(L("Recommended"))
+      .font(.caption2).bold()
+      .foregroundStyle(.green)
+      .padding(.horizontal, 6).padding(.vertical, 2)
+      .background(Color.green.opacity(0.12), in: Capsule())
   }
 }
 
