@@ -193,6 +193,13 @@ private:
   // pointer carried in the anchor; freed in ReleaseBlockIR / ClearCache.
   std::unordered_map<const u8*, std::unique_ptr<std::vector<IRInst>>> m_block_ir;
 
+  // Retired IR vectors awaiting release. A block can be destroyed WHILE ExecuteOneBlock is iterating
+  // its vector (an interpreted dcbf/icbi/dcbst invalidates the running block -> DestroyBlock ->
+  // ReleaseBlockIR), so ReleaseBlockIR moves the vector here instead of freeing it inline (which
+  // would dangle the in-flight `for (inst : ir)` -> use-after-free). Released at the next dispatch
+  // boundary (top of ExecuteOneBlock) and in ClearCache, when no loop is iterating them.
+  std::vector<std::unique_ptr<std::vector<IRInst>>> m_ir_pending_free;
+
   // Anchor record placed in the emitter buffer (one per block) so the normal JitBlock plumbing
   // (near_begin/near_end ranges, reclamation, Dispatch-by-normalEntry) keeps working unchanged.
   // It carries a raw pointer to the block's IR vector for O(1) recovery at dispatch time.

@@ -296,7 +296,17 @@ s32 CachedInterpreterIR::DispatchIRInst(PowerPC::PowerPCState& ppc_state, const 
 
 void CachedInterpreterIR::ReleaseBlockIR(const JitBlock& block)
 {
-  m_block_ir.erase(block.normalEntry);
+  // Retire (do NOT free inline) the block's IR vector. DestroyBlock can run while ExecuteOneBlock is
+  // iterating this very vector (interpreted dcbf/icbi/dcbst -> InvalidateICache -> DestroyBlock ->
+  // here), so an inline free would dangle the in-flight `for (inst : ir)` (use-after-free). Move the
+  // vector to the pending list; it keeps its heap address across the move, so any in-flight reference
+  // stays valid until the next dispatch boundary frees the list (ExecuteOneBlock / ClearCache).
+  auto it = m_block_ir.find(block.normalEntry);
+  if (it != m_block_ir.end())
+  {
+    m_ir_pending_free.push_back(std::move(it->second));
+    m_block_ir.erase(it);
+  }
 }
 
 // ============================================================================
@@ -452,6 +462,12 @@ s32 CachedInterpreterIR::InterpretDeadFlagValidate(PowerPC::PowerPCState& ppc_st
 
 void CachedInterpreterIR::ExecuteOneBlock()
 {
+  // Release IR vectors retired during a PREVIOUS dispatch. The free is deferred to this point (see
+  // ReleaseBlockIR / m_ir_pending_free) because a block can be destroyed while ExecuteOneBlock is
+  // iterating its vector; we are not inside any prior dispatch now, so this is the safe boundary.
+  if (!m_ir_pending_free.empty()) [[unlikely]]
+    m_ir_pending_free.clear();
+
   const u8* normal_entry = m_block_cache.Dispatch();
   if (!normal_entry)
   {
@@ -459,43 +475,25 @@ void CachedInterpreterIR::ExecuteOneBlock()
     return;
   }
 
-  // iCube CRASH DIAGNOSTIC (temporary): the IR engine (CPUCore 6 / M1 plumbing) was never runtime-tested
-  // before now and crashes in DispatchIRInst with a near-null `inst` (we are iterating a dead vector, i.e.
-  // anchor.ir is bad). Two hypotheses to distinguish before fixing:
-  //   H1 (stale dispatch): Dispatch() returned a DESTROYED block's normalEntry. DestroyBlock both poisons
-  //       the callback here (WriteDestroyBlock) AND frees the IR vector (ReleaseBlockIR), so the callback at
-  //       normalEntry would NOT be IRBlockAnchor -> the H1 trap fires. Root cause = a fast-block-map slot
-  //       not cleared on destroy.
-  //   H2 (intact anchor, freed/garbage vector): callback IS still IRBlockAnchor but anchor.ir points at a
-  //       freed vector (unpaired free, or a race on this "CPU-GPU thread") -> the H1 trap does NOT fire and
-  //       the crash still happens in the dispatch loop. Root cause = vector lifetime / threading.
-  // The callback-value check discriminates H1 from H2 deterministically in ONE run. Crash() (__builtin_trap)
-  // gives a clean stop with the diagnostic logged regardless of the iOS panic-handler config. Once we know
-  // which hypothesis holds, this block is replaced by the real fix.
+  // A destroyed block's slot is poisoned by WriteDestroyBlock (the callback at normalEntry is no
+  // longer an IRBlockAnchor). If the block cache ever hands us such a slot, rebuild rather than
+  // dereferencing a stale anchor. (With the deferred free above, the anchor's vector itself can no
+  // longer dangle mid-dispatch.)
   const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
+  if (callback != reinterpret_cast<AnyCallback>(AnyCallbackCast(CachedInterpreterIR::IRBlockAnchor)))
+      [[unlikely]]
+  {
+    Jit(m_ppc_state.pc);
+    return;
+  }
   const auto* anchor_ptr =
       reinterpret_cast<const IRBlockAnchorOperands*>(normal_entry + sizeof(AnyCallback));
-  const auto expected_anchor_cb =
-      reinterpret_cast<AnyCallback>(AnyCallbackCast(CachedInterpreterIR::IRBlockAnchor));
-  if (callback != expected_anchor_cb) [[unlikely]]
-  {
-    ERROR_LOG_FMT(DYNA_REC,
-                  "IR dispatch H1 (STALE/POISONED block): normalEntry={} callback={} (expected "
-                  "IRBlockAnchor={}) anchor.ir={} pc={:#010x}. Fast-block map handed a destroyed block.",
-                  fmt::ptr(normal_entry), fmt::ptr(reinterpret_cast<const void*>(callback)),
-                  fmt::ptr(reinterpret_cast<const void*>(expected_anchor_cb)), fmt::ptr(anchor_ptr->ir),
-                  m_ppc_state.pc);
-    Crash();
-  }
   if (anchor_ptr->ir == nullptr) [[unlikely]]
   {
-    ERROR_LOG_FMT(DYNA_REC, "IR dispatch H2 (NULL anchor.ir): normalEntry={} pc={:#010x}.",
-                  fmt::ptr(normal_entry), m_ppc_state.pc);
-    Crash();
+    Jit(m_ppc_state.pc);
+    return;
   }
 
-  // Recover the block's IR vector from the anchor record at its normalEntry. If we reach the loop and STILL
-  // crash here (callback was a valid IRBlockAnchor, anchor.ir non-null but dangling), that is H2.
   const std::vector<IRInst>& ir = *anchor_ptr->ir;
 
   auto& ppc_state = m_ppc_state;
@@ -1051,6 +1049,7 @@ std::size_t CachedInterpreterIR::DisassembleFarCode(const JitBlock& block,
 void CachedInterpreterIR::ClearCache()
 {
   m_block_ir.clear();
+  m_ir_pending_free.clear();
   m_block_cache.Clear();
   m_block_cache.ClearRangesToFree();
   ClearCodeSpace();
