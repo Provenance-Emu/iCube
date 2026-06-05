@@ -15,8 +15,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       options.dsn = "https://aa3e806dc811b751d7c2ce91290f1fd6@o199354.ingest.us.sentry.io/4511503509815296"
       options.enableCrashHandler = true
       options.debug = false
-      // Modest tracing sample rate; crash/error reporting is the priority here.
-      options.tracesSampleRate = 0.1
+      // Crash/error reporting ONLY. The emulator pins the CPU thread, so:
+      //  - App-hang tracking mistakes the busy CPU thread for a "hang", spamming false
+      //    "App Hanging 2000 ms" issues AND burning a background thread on stack
+      //    capture + dyld symbolication (showed as ~13% in profiling).
+      //  - Performance tracing/profiling adds the same backtrace-symbolication overhead.
+      // Disable both; keep only the crash handler.
+      options.tracesSampleRate = 0.0
+      options.enableAppHangTracking = false
+      options.enableAppHangTrackingV2 = false
+      options.enableAutoPerformanceTracing = false
     }
 
     // Settings-sync backbone: one global Config-changed hook (debounced auto-save of menu changes so
