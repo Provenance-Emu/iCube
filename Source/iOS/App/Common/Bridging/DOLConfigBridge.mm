@@ -313,6 +313,10 @@ static bool ICubeEmulationActive() {
 + (void)setCirStoreLoopFF:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_STORE_LOOP_FF, (bool)enabled); }
 + (BOOL)cirStoreLoopFFValidate { return Config::Get(Config::MAIN_CIR_STORE_LOOP_FF_VALIDATE); }
 + (void)setCirStoreLoopFFValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_STORE_LOOP_FF_VALIDATE, (bool)enabled); }
++ (BOOL)cirIrConstFusion { return Config::Get(Config::MAIN_CIR_IR_CONST_FUSION); }
++ (void)setCirIrConstFusion:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_IR_CONST_FUSION, (bool)enabled); }
++ (BOOL)cirIrConstFusionValidate { return Config::Get(Config::MAIN_CIR_IR_CONST_FUSION_VALIDATE); }
++ (void)setCirIrConstFusionValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_IR_CONST_FUSION_VALIDATE, (bool)enabled); }
 + (BOOL)cirBlockLinking { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING); }
 + (void)setCirBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING, (bool)enabled); }
 + (BOOL)cirBlockLinkingValidate { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE); }
@@ -671,6 +675,8 @@ static bool ICubeEmulationActive() {
   del(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE);
   del(Config::MAIN_CIR_STORE_LOOP_FF);
   del(Config::MAIN_CIR_STORE_LOOP_FF_VALIDATE);
+  del(Config::MAIN_CIR_IR_CONST_FUSION);
+  del(Config::MAIN_CIR_IR_CONST_FUSION_VALIDATE);
   del(Config::MAIN_OVERCLOCK_ENABLE);
   del(Config::MAIN_OVERCLOCK);
   del(Config::MAIN_VI_OVERCLOCK_ENABLE);

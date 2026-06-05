@@ -1987,6 +1987,8 @@ struct ConfigAdvancedView: View {
   @State private var cirPsqFastPathValidate: Bool = false
   @State private var cirStoreLoopFF: Bool = false
   @State private var cirStoreLoopFFValidate: Bool = false
+  @State private var cirIrConstFusion: Bool = false
+  @State private var cirIrConstFusionValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -2111,6 +2113,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ Store-Loop Fast-Path: Validate (slow, correctness pass)"), isOn: $cirStoreLoopFFValidate)
             .onChange(of: cirStoreLoopFFValidate) { DOLConfigBridge.setCirStoreLoopFFValidate($0) },
           L("Self-check for the Store-Loop Fast-Path: for every loop that takes the bulk fill, also runs the real per-store loop on a snapshot and asserts the filled memory and the post-loop registers match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Store-Loop Fast-Path to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Constant-Address Fusion (IR engine only, experimental)"), isOn: $cirIrConstFusion)
+            .onChange(of: cirIrConstFusion) { DOLConfigBridge.setCirIrConstFusion($0) },
+          L("⚠️ Only affects the Cached Interpreter (IR) engine. Fuses the ubiquitous lis+addi/ori/subi base-address pairs into a single precomputed constant load, halving the dispatch on that pattern (which saturates every hot block). No effect on the default Cached Interpreter. Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Constant-Address Fusion: Validate (slow, correctness pass)"), isOn: $cirIrConstFusionValidate)
+            .onChange(of: cirIrConstFusionValidate) { DOLConfigBridge.setCirIrConstFusionValidate($0) },
+          L("Self-check for Constant-Address Fusion: for every fused pair, also runs the original two ops and asserts the destination register matches the precomputed constant. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Constant-Address Fusion (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2292,6 +2302,8 @@ struct ConfigAdvancedView: View {
     cirPsqFastPathValidate = DOLConfigBridge.cirPsqFastPathValidate()
     cirStoreLoopFF = DOLConfigBridge.cirStoreLoopFF()
     cirStoreLoopFFValidate = DOLConfigBridge.cirStoreLoopFFValidate()
+    cirIrConstFusion = DOLConfigBridge.cirIrConstFusion()
+    cirIrConstFusionValidate = DOLConfigBridge.cirIrConstFusionValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist
