@@ -17,6 +17,26 @@ import GameController
 #endif
 import Foundation
 
+// Keeps a settings view bound to Dolphin's Config (the single source of truth): seeds it on appear
+// and re-reads on every Config change (Reset / game-INI / runtime). Replaces the copy-pasted
+// `.onAppear { syncX() } + .onReceive(DOLConfigChangedNotification) { syncX() }` pair on each view.
+private struct ConfigSynced: ViewModifier {
+  let sync: () -> Void
+  func body(content: Content) -> some View {
+    content
+      .onAppear(perform: sync)
+      .onReceive(NotificationCenter.default.publisher(for: .DOLConfigChanged)) { _ in sync() }
+  }
+}
+
+private extension View {
+  /// Seed from Config on appear and re-sync whenever Config changes. `sync` should copy the relevant
+  /// Config values into the view's @State (the view's existing syncX() function).
+  func configSynced(_ sync: @escaping () -> Void) -> some View {
+    modifier(ConfigSynced(sync: sync))
+  }
+}
+
 /// Root Settings page implemented in SwiftUI for iOS/tvOS
 struct SettingsRootView<Background: View>: View {
   @Environment(\.openURL) private var openURL
@@ -1739,7 +1759,7 @@ struct ConfigGeneralView: View {
       }
     }
     .navigationTitle(L("General"))
-    .onAppear { syncFromConfig() }
+    .configSynced { syncFromConfig() }
   }
 
   private func syncFromConfig() {
@@ -2218,7 +2238,7 @@ struct ConfigAdvancedView: View {
       }
     }
     .navigationTitle(L("Advanced"))
-    .onAppear { syncAdvanced() }
+    .configSynced { syncAdvanced() }
   }
 
   /// The engine label to display. On jitless builds a stored JIT core actually
@@ -2468,7 +2488,7 @@ struct ConfigInterfaceView: View {
       }
     }
     .navigationTitle(L("Interface"))
-    .onAppear { sync() }
+    .configSynced { sync() }
   }
 
   private func sync() {
@@ -2551,7 +2571,7 @@ struct ConfigAudioView: View {
       }
     }
     .navigationTitle(L("Audio"))
-    .onAppear { syncAudio() }
+    .configSynced { syncAudio() }
   }
 
   private func syncAudio() {
@@ -2635,7 +2655,7 @@ struct ConfigGameCubeView: View {
       }
     }
     .navigationTitle(L("GameCube"))
-    .onAppear { syncGC() }
+    .configSynced { syncGC() }
   }
 
   private func syncGC() {
@@ -2811,7 +2831,7 @@ struct ConfigWiiView: View {
       }
     }
     .navigationTitle(L("Wii"))
-    .onAppear { syncWii() }
+    .configSynced { syncWii() }
   }
 
   private func syncWii() {
@@ -3014,7 +3034,7 @@ struct ConfigAchievementsView: View {
       }
     }
     .navigationTitle(L("Achievements"))
-    .onAppear { sync() }
+    .configSynced { sync() }
   }
 
   private func sync() {
@@ -3178,7 +3198,7 @@ struct GraphicsGeneralView: View {
       }
     }
     .navigationTitle(L("General"))
-    .onAppear { syncFromConfig() }
+    .configSynced { syncFromConfig() }
     .onAppear { frameCap = UserDefaults.standard.integer(forKey: "ui_frame_cap") }
 #if os(iOS)
     .onAppear {
@@ -3465,7 +3485,7 @@ struct GraphicsEnhancementsView: View {
       }, header: { Text(L("Compatibility")) })
     }
     .navigationTitle(L("Enhancements"))
-    .onAppear { sync() }
+    .configSynced { sync() }
     .sheet(isPresented: $showHelp) {
       NavigationView {
         ScrollView { Text(helpMessage).padding() }
@@ -3665,7 +3685,7 @@ struct GraphicsHacksView: View {
       }
     }
     .navigationTitle(L("Hacks"))
-    .onAppear { sync() }
+    .configSynced { sync() }
     .sheet(isPresented: $showHelp) {
       NavigationView {
         ScrollView { Text(helpMessage).padding() }
@@ -3931,7 +3951,7 @@ struct GraphicsAdvancedView: View {
       }
     }
     .navigationTitle(L("Advanced"))
-    .onAppear { sync() }
+    .configSynced { sync() }
   }
   private func sync() {
     fastDepth = DOLConfigBridge.gfxFastDepthCalc()
@@ -3987,7 +4007,7 @@ private struct ControllersPortView: View {
         .disabled(!canConfigure)
     }
     .navigationTitle(Text(title))
-    .onAppear { sync() }
+    .configSynced { sync() }
   }
   private func sync() {
     if isGC {
@@ -4027,7 +4047,7 @@ private struct ControllersTypePicker: View {
       }
     }
     .navigationTitle(L("Type"))
-    .onAppear { sync() }
+    .configSynced { sync() }
   }
   private func sync() {
     if isGC {

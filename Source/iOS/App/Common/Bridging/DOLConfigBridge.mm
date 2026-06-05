@@ -23,6 +23,7 @@
 #include "Core/AchievementManager.h"
 #include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
 #include "Common/Logging/Log.h"
+#include "Core/Core.h"
 #include "Core/System.h"
 #include "Common/IOFile.h"
 #include "Core/IOS/USB/Emulated/Skylanders/Skylander.h"
@@ -32,10 +33,59 @@
 // Extern DSU client RX counter for DEBUG HUD (defined in DualShockUDPClient.cpp)
 namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g_rx_counter; } }
 
+NSNotificationName const DOLConfigChangedNotification = @"DOLConfigChanged";
+
+// iCube settings-sync backbone (see startConfigAutoSyncBridge). Coalescing flags so a burst of
+// Config changes (e.g. a Reset writing ~120 keys) collapses to ONE UI notification + ONE debounced
+// save instead of 120 of each.
+static std::atomic_bool s_cfg_notify_pending{false};
+static std::atomic_bool s_cfg_save_pending{false};
+
+// True while the core is actively executing. Config changes then are mostly runtime overrides
+// (adaptive clock, per-run layer) that churn rapidly and that Save() (Base-only) shouldn't thrash
+// I/O for — the save-on-background path persists those. Settings the user edits in menus happen
+// outside this state.
+static bool ICubeEmulationActive() {
+  const Core::State st = Core::GetState(Core::System::GetInstance());
+  return st == Core::State::Running || st == Core::State::Starting;
+}
+
 @implementation DOLConfigBridge
 
 + (void)initializeConfigIfNeeded {
   Config::Init();
+}
+
+// iCube settings-sync backbone: one global Config-changed hook that keeps the SwiftUI settings in
+// sync with Dolphin's Config (the single source of truth) WITHOUT per-setter plumbing.
+//   (a) Debounced auto-save of the Base layer — fixes "settings don't persist between runs"
+//       universally: most setters write Base via SetBaseOrCurrent without a per-toggle Save(), so
+//       any change is otherwise lost unless something flushes. Skipped during active emulation.
+//   (b) Coalesced "DOLConfigChanged" notification — lets open settings screens re-read live Config
+//       after a Reset / game-INI load / runtime change so the UI never shows a stale value.
+// Idempotent: registers exactly once.
++ (void)startConfigAutoSyncBridge {
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    Config::AddConfigChangedCallback([] {
+      // (b) one UI-refresh notification per runloop tick (cheap no-op when no settings view observes).
+      if (!s_cfg_notify_pending.exchange(true)) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          s_cfg_notify_pending = false;
+          [[NSNotificationCenter defaultCenter] postNotificationName:DOLConfigChangedNotification object:nil];
+        });
+      }
+      // (a) one debounced Base-layer save (skip during emulation; re-check at fire time).
+      if (!ICubeEmulationActive() && !s_cfg_save_pending.exchange(true)) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+          s_cfg_save_pending = false;
+          if (!ICubeEmulationActive())
+            Config::Save();
+        });
+      }
+    });
+  });
 }
 
 + (NSString *)gfxBackend {

@@ -19,6 +19,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       options.tracesSampleRate = 0.1
     }
 
+    // Settings-sync backbone: one global Config-changed hook (debounced auto-save of menu changes so
+    // settings persist between runs, + a coalesced refresh notification so open settings UI re-reads
+    // live Config after resets/external changes).
+    DOLConfigBridge.startConfigAutoSyncBridge()
+
     return ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

@@ -416,6 +416,16 @@ NS_ASSUME_NONNULL_BEGIN
 // if something flushes. Call this on app background to persist any pending changes.
 + (void)flushSettingsToDisk NS_SWIFT_NAME(flushSettingsToDisk());
 
+// Posted (coalesced, on the main thread) whenever Dolphin's Config changes — see
+// startConfigAutoSyncBridge. Single cross-language source of truth for the name (Swift imports it as
+// a Notification.Name); never spell the string inline. Observers re-read live Config.
+extern NSNotificationName const DOLConfigChangedNotification;
+
+// Register the global Config-changed hook (settings-sync backbone): debounced auto-save of menu
+// changes (so settings persist between runs) + a coalesced DOLConfigChangedNotification (so open
+// settings UI re-reads live Config after resets / external changes). Call once at app launch.
++ (void)startConfigAutoSyncBridge NS_SWIFT_NAME(startConfigAutoSyncBridge());
+
 + (NSArray<NSString*>*)audioBackendsForPicker;
 
 // Main.EmulatedUSBDevices (subset for iOS)
