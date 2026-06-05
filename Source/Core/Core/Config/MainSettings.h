@@ -439,7 +439,10 @@ extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM;
 extern const Info<bool> MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE;
 extern const Info<bool> MAIN_CIR_PSQ_FASTPATH;
 extern const Info<bool> MAIN_CIR_PSQ_FASTPATH_VALIDATE;
+// iCube: CachedInterpreter cache-management loop fast-forward (dcbf/dcbi/dcbst CTR loop) + validate
+// twin. Default OFF.
 extern const Info<bool> MAIN_CIR_CACHE_LOOP_FF;
+extern const Info<bool> MAIN_CIR_CACHE_LOOP_FF_VALIDATE;
 // iCube: CachedInterpreter counted-store-loop (memset) fast-path + its validate twin. Default OFF.
 extern const Info<bool> MAIN_CIR_STORE_LOOP_FF;
 extern const Info<bool> MAIN_CIR_STORE_LOOP_FF_VALIDATE;

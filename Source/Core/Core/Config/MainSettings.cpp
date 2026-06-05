@@ -1096,10 +1096,27 @@ const Info<bool> MAIN_CIR_PSQ_FASTPATH{{System::Main, "Core", "CIRPsqFastPath"},
 // assert. Slow (an extra reference run per fast-path op); on-device correctness passes only. Default false.
 const Info<bool> MAIN_CIR_PSQ_FASTPATH_VALIDATE{
     {System::Main, "Core", "CIRPsqFastPathValidate"}, false};
-// iCube: CachedInterpreter cache-management loop fast-forward. Reserved key for the dcbf/dcbi CTR-loop
-// fast-forward investigation (Task 2). Default FALSE. See CachedInterpreter for whether the transform
-// shipped or was deferred.
+// iCube: CachedInterpreter cache-management loop fast-forward. Default OFF, for on-device A/B. When OFF
+// the CIR is byte-identical to current behavior (no fast-forward callback emitted, recognizer never
+// runs). When ON, DoJit recognizes the EXACT shape "dcbX 0,rB + addi rB,rB,STRIDE + bdnz self-loop"
+// (dcbX in {dcbf,dcbi,dcbst}, rB!=0, STRIDE>0) and emits a CacheLoopFlush callback ALONGSIDE the
+// unchanged cache-op records (emit-alongside, like StoreLoopFill). On the App-Store jitless config
+// (!m_enable_dcache) dcbf/dcbi/dcbst do nothing but per-line JitInterface::InvalidateICacheLine; at
+// runtime the handler fast-forwards the first count-1 line-invalidations in a tight C++ loop (no per-op
+// dispatch), sets CTR=1 and rB += (count-1)*STRIDE, charges (count-1)*per_iter to downcount, then lets
+// the real records execute the final iteration — so CTR/rB/npc/downcount end exactly as the unfused
+// loop. Bails (CTR untouched, real records run) when m_enable_dcache is ON (the ops do a real D-cache
+// flush then) or, for dcbi only, when msr.PR is set (privileged — the real op would fault). Targets the
+// hot Chibi-Robo dcbf/dcbi CTR loops (~2% of all cycles doing nothing but per-line ICache invalidation).
 const Info<bool> MAIN_CIR_CACHE_LOOP_FF{{System::Main, "Core", "CIRCacheLoopFF"}, false};
+// iCube: self-validation for CIRCacheLoopFF. EXACT analogue of the other CIR double-run validators, but
+// no memory snapshot is needed (ICache invalidation is idempotent — double-running the lines is safe):
+// snapshot (rB, CTR, Exceptions); run the REAL per-line loop (InvalidateICacheLine each EA + advance rB)
+// as the authoritative reference and capture (rB, Exceptions); restore rB+CTR; run the fast-forward
+// path; ASSERT the post rB and Exceptions match. Trap on mismatch. Slow; on-device correctness passes
+// only. Default OFF.
+const Info<bool> MAIN_CIR_CACHE_LOOP_FF_VALIDATE{
+    {System::Main, "Core", "CIRCacheLoopFFValidate"}, false};
 // iCube: counted-store-loop (memset) fast-path. Default OFF, for on-device A/B. When OFF the CIR is
 // byte-identical to current behavior (no fill callback emitted, recognizer never runs). When ON, DoJit
 // recognizes the EXACT shape "M contiguous stb rS,k(rB) + addi rB,rB,M + bdnz self-loop" (rS/rB

@@ -164,6 +164,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirStoreLoopFF:(BOOL)enabled;
 + (BOOL)cirStoreLoopFFValidate;   // store-loop fast-path self-validation (default OFF, slow)
 + (void)setCirStoreLoopFFValidate:(BOOL)enabled;
++ (BOOL)cirCacheLoopFF;           // cache-management loop (dcbf/dcbi/dcbst) fast-forward (default OFF)
++ (void)setCirCacheLoopFF:(BOOL)enabled;
++ (BOOL)cirCacheLoopFFValidate;   // cache-loop fast-forward self-validation (default OFF, slow)
++ (void)setCirCacheLoopFFValidate:(BOOL)enabled;
 + (BOOL)cirIrConstFusion;         // IR engine: constant-address fusion pass (default OFF; IR core only)
 + (void)setCirIrConstFusion:(BOOL)enabled;
 + (BOOL)cirIrConstFusionValidate; // IR const-fusion self-validation (default OFF, slow)

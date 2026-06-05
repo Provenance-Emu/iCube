@@ -215,6 +215,13 @@ private:
   // dispatcher round-trip. Only ever written when the flag is on, so the flag-off stream is byte-
   // identical to stock. See StoreLoopFill.
   struct StoreLoopFillOperands;
+  // iCube: payload for the cache-management loop fast-forward (MAIN_CIR_CACHE_LOOP_FF). Carries
+  // everything the CacheLoopFlush handler needs at runtime: the loop's cache-op kind (dcbf/dcbi/dcbst),
+  // the EA-base GPR (== the addi target that advances each line), the per-iter stride (the addi
+  // immediate, in bytes), the block's entry PC, and the per-iteration emulated-cycle cost so downcount
+  // can be reconciled without a dispatcher round-trip. Only ever written when the flag is on, so the
+  // flag-off stream is byte-identical to stock. See CacheLoopFlush.
+  struct CacheLoopFlushOperands;
   struct HLEFunctionOperands;
   struct WriteBrokenBlockNPCOperands;
   struct CheckHaltOperands;
@@ -344,6 +351,21 @@ private:
   // the bulk fill on a snapshot and asserts equivalence.
   static s32 StoreLoopFill(PowerPC::PowerPCState& ppc_state, const StoreLoopFillOperands& operands);
   static s32 StoreLoopFill(std::ostream& stream, const StoreLoopFillOperands& operands);
+  // iCube: cache-management loop fast-forward handler (MAIN_CIR_CACHE_LOOP_FF). Emitted ALONGSIDE
+  // (before) the unchanged dcbX/addi/bdnz records of a recognized per-line cache-invalidation loop.
+  // On the App-Store jitless config (!m_enable_dcache) dcbf/dcbi/dcbst do nothing but call
+  // JitInterface::InvalidateICacheLine(EA) and return, so the handler fast-forwards the first count-1
+  // iterations by calling InvalidateICacheLine over the line addresses in a tight C++ loop, sets CTR=1
+  // and advances the EA-base GPR by (count-1)*stride, charges (count-1)*per_iter to downcount, and
+  // returns the NORMAL next-record distance so the genuine dcbX records execute exactly the final
+  // iteration. Bails (CTR untouched, real records run unchanged) when m_enable_dcache is ON (the ops
+  // do a real D-cache flush/invalidate then) or, for dcbi only, when msr.PR is set (privileged — the
+  // real op would fault). NOT a block terminal (write_pc is always false). The validate twin
+  // (MAIN_CIR_CACHE_LOOP_FF_VALIDATE) runs a real per-line reference loop on a snapshot of
+  // (EA-base GPR, CTR, Exceptions) and asserts the fast path matches (ICache invalidation is
+  // idempotent, so double-running the lines is safe).
+  static s32 CacheLoopFlush(PowerPC::PowerPCState& ppc_state, const CacheLoopFlushOperands& operands);
+  static s32 CacheLoopFlush(std::ostream& stream, const CacheLoopFlushOperands& operands);
   static s32 HLEFunction(PowerPC::PowerPCState& ppc_state, const HLEFunctionOperands& operands);
   static s32 HLEFunction(std::ostream& stream, const HLEFunctionOperands& operands);
   static s32 WriteBrokenBlockNPC(PowerPC::PowerPCState& ppc_state,
@@ -522,6 +544,32 @@ struct CachedInterpreter::StoreLoopFillOperands
 {
   Interpreter& interpreter;
   u32 reg_s;
+  u32 reg_b;
+  u32 stride;
+  u32 current_pc;
+  u32 per_iter_cycles;
+  u32 : 32;
+};
+
+// iCube: payload for the cache-management loop fast-forward (MAIN_CIR_CACHE_LOOP_FF). Trivially
+// copyable; only written when the flag is on. kind discriminates the loop's cache op (the handler
+// gates dcbi on msr.PR, and all three on !m_enable_dcache). reg_b is the EA-base GPR == the addi
+// target that advances each line by stride bytes. current_pc is the first dcbX's PC (the loop body
+// start, == js.blockStart). per_iter_cycles is the block's full emulated-cycle cost for ONE
+// iteration (js.downcountAmount at the bdnz), used to reconcile downcount without a dispatcher
+// round-trip. The recognizer requires the dcbX's rA==0 form, so EA == gpr[reg_b] and EA_i ==
+// gpr[reg_b] + i*stride.
+struct CachedInterpreter::CacheLoopFlushOperands
+{
+  // X-form subopcodes (primary 31): dcbst=54, dcbf=86, dcbi=470. Stored verbatim so CacheLoopFlush
+  // can apply the dcbi-only privilege gate without re-decoding the instruction word.
+  enum class CacheOp : u32
+  {
+    Dcbst = 54,
+    Dcbf = 86,
+    Dcbi = 470,
+  };
+  CacheOp kind;
   u32 reg_b;
   u32 stride;
   u32 current_pc;

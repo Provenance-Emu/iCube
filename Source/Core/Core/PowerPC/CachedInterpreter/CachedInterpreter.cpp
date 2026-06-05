@@ -404,6 +404,24 @@ static PowerPC::MMU* s_store_loop_mmu = nullptr;
 static Memory::MemoryManager* s_store_loop_memory = nullptr;
 static JitInterface* s_store_loop_jit = nullptr;
 
+// iCube: cache-management loop fast-forward (MAIN_CIR_CACHE_LOOP_FF). Read once in Init. When OFF
+// (default) the DoJit recognizer never runs and NO CacheLoopFlush callback is emitted, so the callback
+// stream is byte-for-byte identical to the flag-off baseline. When ON, a recognized "dcbX 0,rB + addi
+// rB,rB,STRIDE + bdnz" per-line cache-invalidation loop emits a CacheLoopFlush callback alongside the
+// unchanged dcbX records. Targets the hot Chibi-Robo dcbf/dcbi CTR loops (block 0x80162fc4 runs 14.6M
+// times) that, on the App-Store jitless config (!m_enable_dcache), do nothing but per-line
+// JitInterface::InvalidateICacheLine. UNVALIDATED on-device — gated for A/B.
+static bool s_cache_loop_ff = false;
+// iCube: validate twin (MAIN_CIR_CACHE_LOOP_FF_VALIDATE). When ON, CacheLoopFlush runs a real per-line
+// reference loop against the fast-forward on a snapshot and asserts equivalence. Default OFF;
+// correctness passes only.
+static bool s_cache_loop_ff_validate = false;
+// iCube: JitInterface handle for the CacheLoopFlush static callback (a free function has no `this`).
+// Set in Init ONLY when the cache-loop fast-path is on; left null otherwise so the flag-off path can
+// never touch it. Unlike StoreLoopFill, this path touches NO guest memory (it only invalidates ICache
+// lines), so it needs no MMU/Memory handle — InvalidateICacheLine is the entire fast-forwarded effect.
+static JitInterface* s_cache_loop_jit = nullptr;
+
 namespace
 {
 // Flycast/PPSSPP-style fixed open-addressing hot-block table. Sized once at first use for a game's
@@ -865,6 +883,113 @@ static StoreLoopMatch RecognizeStoreLoop(const PPCAnalyst::CodeOp* code, u32 num
 }
 }  // namespace
 
+// iCube: cache-management loop fast-forward recognizer (MAIN_CIR_CACHE_LOOP_FF). Result of scanning a
+// built CIR block for the EXACT per-line cache-invalidation shape. matched==false leaves the block
+// untouched (normal per-op dispatch).
+namespace
+{
+struct CacheLoopMatch
+{
+  bool matched = false;
+  // X-form subopcode of the cache op (dcbst=54, dcbf=86, dcbi=470). Kept as a plain u32 here (this free
+  // function has no access to the private nested CacheLoopFlushOperands::CacheOp); DoJit converts it to
+  // the enum at the emission site. The subopcode VALUES are the enum values (see CacheLoopFlushOperands).
+  u32 sub = 0;
+  u32 reg_b = 0;   // EA-base GPR (dcbX rB + addi target); rB != 0
+  u32 stride = 0;  // bytes per iteration == addi immediate (STRIDE > 0)
+};
+
+// X-form subopcodes recognized as cache-management ops. Local copies of the
+// CacheLoopFlushOperands::CacheOp values (which are private to CachedInterpreter); the values are the
+// architectural subopcodes, so they are stable.
+static constexpr u32 kSubDcbst = 54;
+static constexpr u32 kSubDcbf = 86;
+static constexpr u32 kSubDcbi = 470;
+
+// Recognize EXACTLY a 3-instruction CTR self-loop: `dcbX 0,rB` (one of dcbf/dcbi/dcbst, rA==0 form),
+// then `addi rB,rB,STRIDE` (STRIDE > 0), then a `bdnz` self-loop back to block start. rB loop-invariant
+// except for that one addi; the dcbX writes no GPR/CR, the bdnz writes only CTR. Anything not matching =>
+// matched=false. As conservative as RecognizeStoreLoop: every deviation bails.
+//
+// We require the dcbX's rA==0 form (the common `dcbX 0,rB` the hot Chibi-Robo blocks use), so the
+// effective address is exactly gpr[rB] (Helper_Get_EA_X with RA==0) and the per-line addresses are
+// gpr[rB] + i*STRIDE. Bailing on rA!=0 keeps the EA single-register and the advance unambiguous.
+static CacheLoopMatch RecognizeCacheLoop(const PPCAnalyst::CodeOp* code, u32 num_insts, u32 block_start)
+{
+  CacheLoopMatch m;
+  // Exactly dcbX + addi + bdnz = 3 instructions, no more, no fewer.
+  if (num_insts != 3)
+    return m;
+
+  const PPCAnalyst::CodeOp& cache_op = code[0];
+  const PPCAnalyst::CodeOp& addi_op = code[1];
+  const PPCAnalyst::CodeOp& br_op = code[2];
+
+  // --- Cache op must be dcbf/dcbi/dcbst: X-form, primary opcode 31, subopcode {54,86,470}. ---
+  const UGeckoInstruction ci = cache_op.inst;
+  if (ci.OPCD != 31)
+    return m;
+  const u32 sub = ci.SUBOP10;  // bits 1..10
+  if (sub != kSubDcbst && sub != kSubDcbf && sub != kSubDcbi)
+    return m;
+  // Require the rA==0 form so EA == gpr[rB] exactly (Helper_Get_EA_X). The RA field of an X-form dcbX
+  // is the high half of the 5-bit register pair; for dcbX the architectural EA base is (rA?gpr[rA]:0)+
+  // gpr[rB]. rA!=0 would mean a two-register EA — bail (conservative; the hot blocks are all dcbX 0,rB).
+  if (ci.RA != 0)
+    return m;
+  const u32 reg_b = ci.RB;
+  if (reg_b == 0)  // rB==0 would make EA constant (no advancing base) — not the loop shape we fuse
+    return m;
+
+  // --- Terminator must be a plain bdnz self-loop (decrement CTR, branch if CTR!=0, NO condition). ---
+  const UGeckoInstruction br = br_op.inst;
+  if (br.OPCD != 16)  // bcx
+    return m;
+  if (br.LK != 0)  // bdnzl writes LR — not loop-invariant
+    return m;
+  // BO = decrement (clear DONT_DECREMENT), branch-if-CTR!=0 (clear BRANCH_IF_CTR_0), don't-check-cond
+  // (set DONT_CHECK_CONDITION). Excludes bdz / bdnzt / bdnzf / plain conditional branches.
+  if ((br.BO & BO_DONT_DECREMENT_FLAG) != 0)
+    return m;
+  if ((br.BO & BO_BRANCH_IF_CTR_0) != 0)
+    return m;
+  if ((br.BO & BO_DONT_CHECK_CONDITION) == 0)
+    return m;
+  if (br_op.branchTo != block_start)  // must loop back to the dcbX
+    return m;
+
+  // --- addi rB,rB,STRIDE : OPCD 14, RA==RD==reg_b (in-place increment of the EA base), STRIDE > 0. ---
+  const UGeckoInstruction ai = addi_op.inst;
+  if (ai.OPCD != 14)  // addi/li
+    return m;
+  if (ai.RD != reg_b)  // addi target must be the EA base register
+    return m;
+  if (ai.RA != reg_b)  // must read+write the SAME base register (RA==0 would be "li", not an increment)
+    return m;
+  const s32 stride = static_cast<s32>(ai.SIMM_16);
+  if (stride <= 0)  // stride must be a positive forward step
+    return m;
+
+  // Loop-invariance: the ONLY GPR written anywhere in the block is rB, and only by that one addi. The
+  // dcbX writes no GPR (FL_IN_A0B|FL_LOADSTORE, no FL_OUT, no FL_SET_CR) and no CR; the bdnz writes only
+  // CTR. Verify via regsOut/crOut (the analyzer's per-op write sets).
+  if (cache_op.regsOut != BitSet32{})  // dcbX writes no GPR
+    return m;
+  if (cache_op.crOut != BitSet8{})  // dcbX writes no CR
+    return m;
+  if (addi_op.regsOut != BitSet32{static_cast<int>(reg_b)})  // addi writes exactly rB
+    return m;
+  if (br_op.regsOut != BitSet32{})  // bdnz writes no GPR
+    return m;
+
+  m.matched = true;
+  m.sub = sub;
+  m.reg_b = reg_b;
+  m.stride = static_cast<u32>(stride);
+  return m;
+}
+}  // namespace
+
 void CachedInterpreter::Init()
 {
   // Wire the fastmem arena BEFORE RefreshConfig() — RefreshConfig computes jo.fastmem from
@@ -918,6 +1043,13 @@ void CachedInterpreter::Init()
   s_store_loop_mmu = s_store_loop_ff ? &m_system.GetMMU() : nullptr;
   s_store_loop_memory = s_store_loop_ff ? &m_system.GetMemory() : nullptr;
   s_store_loop_jit = s_store_loop_ff ? &m_system.GetJitInterface() : nullptr;
+  // iCube: cache-management loop fast-forward (default OFF). Read once. Capture the JitInterface handle
+  // for the CacheLoopFlush static callback ONLY when the feature is on, so the flag-off path leaves it
+  // null and is byte-identical to baseline. This path touches no guest memory (only ICache lines), so
+  // it needs no MMU/Memory handle. One-per-System, set at boot.
+  s_cache_loop_ff = Config::Get(Config::MAIN_CIR_CACHE_LOOP_FF);
+  s_cache_loop_ff_validate = Config::Get(Config::MAIN_CIR_CACHE_LOOP_FF_VALIDATE);
+  s_cache_loop_jit = s_cache_loop_ff ? &m_system.GetJitInterface() : nullptr;
   s_block_profile.Clear();
   if (s_cir_profile)
     s_block_profile.EnsureAllocated();
@@ -3515,6 +3647,120 @@ s32 CachedInterpreter::StoreLoopFill(std::ostream& stream, const StoreLoopFillOp
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+s32 CachedInterpreter::CacheLoopFlush(PowerPC::PowerPCState& ppc_state,
+                                      const CacheLoopFlushOperands& operands)
+{
+  using CacheOp = CacheLoopFlushOperands::CacheOp;
+  const auto& [kind, reg_b, stride, current_pc, per_iter_cycles] = operands;
+  const s32 normal_distance = sizeof(AnyCallback) + sizeof(operands);
+
+  // --- !m_enable_dcache gate (load-bearing): on the App-Store jitless config dcbf/dcbi/dcbst do NOTHING
+  // but call JitInterface::InvalidateICacheLine(EA) and return (Interpreter_LoadStore.cpp). That is the
+  // entire effect we fast-forward. When dcache emulation is ON, the same ops do a real D-cache
+  // flush/invalidate via the MMU — NOT idempotent, NOT a pure ICache invalidate — so we MUST NOT
+  // fast-forward; bail to the records (CTR untouched => the real loop runs exactly as unfused). ---
+  if (ppc_state.m_enable_dcache)
+    return normal_distance;
+
+  // --- dcbi privilege gate: dcbi is a supervisor instruction. In user mode (msr.PR set) the real op
+  // raises a PrivilegedInstruction program exception BEFORE touching the cache (Interpreter::dcbi). We
+  // do not reproduce that fault here; bail to the records so the genuine dcbi raises it. dcbf/dcbst are
+  // unprivileged, so they are unaffected by PR. ---
+  if (kind == CacheOp::Dcbi && ppc_state.msr.PR)
+    return normal_distance;
+
+  const u32 count = CTR(ppc_state);
+  // count <= 1: nothing to fast-forward (the single real iteration does everything; count==0 underflows
+  // to a 2^32-iteration loop on real hardware, which we deliberately do NOT optimize). Bail to records.
+  if (count <= 1)
+    return normal_distance;
+
+  JitInterface* const jit = s_cache_loop_jit;
+  if (!jit)  // handle only set when the feature is on; defensive
+    return normal_distance;
+
+  const u32 bulk_count = count - 1;  // iterations we fast-forward; the records run the last one.
+  // Overflow guard on the byte span we step across (32-bit guest space). stride is a positive forward
+  // step; the addresses wrap mod 2^32 exactly as the guest addi would, so we only guard the multiply.
+  if (stride != 0 && bulk_count > (0xFFFFFFFFu / stride))
+    return normal_distance;
+
+  // rA==0 form guaranteed by the recognizer => EA == gpr[reg_b], and line i is gpr[reg_b] + i*stride.
+  const u32 base = ppc_state.gpr[reg_b];
+
+  // --- Validate twin (MAIN_CIR_CACHE_LOOP_FF_VALIDATE): run a REAL per-line reference loop (invalidate
+  // each line + advance the base) as the authoritative reference, capture (base, CTR, Exceptions),
+  // restore base+CTR, run the fast-forward path, and ASSERT they match. ICache invalidation is
+  // idempotent, so double-running the lines is safe (no memory is written) — no snapshot needed beyond
+  // the three architectural values the loop touches. ---
+  if (s_cache_loop_ff_validate) [[unlikely]]
+  {
+    const u32 saved_ctr = CTR(ppc_state);
+    const u32 saved_base = ppc_state.gpr[reg_b];
+    const u32 saved_exceptions = ppc_state.Exceptions;
+
+    // Reference: emulate bulk_count iterations of "dcbX(EA) ; rB += stride" via the real per-line call.
+    u32 ref_b = base;
+    for (u32 it = 0; it < bulk_count; ++it)
+    {
+      jit->InvalidateICacheLine(ref_b);  // EA == gpr[rB] (rA==0); same call dcbf/dcbi/dcbst make
+      ref_b += stride;
+    }
+    const u32 ref_exceptions = ppc_state.Exceptions;  // InvalidateICacheLine raises none, but capture it
+
+    // Restore the architectural values the fast path will commit, then run the fast path below.
+    CTR(ppc_state) = saved_ctr;
+    ppc_state.gpr[reg_b] = saved_base;
+    (void)saved_exceptions;
+
+    // Fast path (the SHIPPING path, committed last).
+    for (u32 i = 0; i < bulk_count; ++i)
+      jit->InvalidateICacheLine(base + i * stride);
+
+    ASSERT_MSG(DYNA_REC, ref_b == (base + bulk_count * stride),
+               "CIR cache-loop validate: base mismatch at pc {:#010x} (ref {:#010x} vs fast {:#010x})",
+               current_pc, ref_b, base + bulk_count * stride);
+    ASSERT_MSG(DYNA_REC, ppc_state.Exceptions == ref_exceptions,
+               "CIR cache-loop validate: Exceptions mismatch at pc {:#010x} ({:#x} vs {:#x})",
+               current_pc, ppc_state.Exceptions, ref_exceptions);
+    // CTR is set to 1 below by both paths deterministically; assert the pre-commit value still reads as
+    // the loop-entry count (the fast path has not yet written CTR=1 here), matching the enumerated
+    // (base, CTR, Exceptions) check. The reference loop does not decrement CTR (it only invalidates +
+    // advances rB), so CTR is still saved_ctr at this point.
+    ASSERT_MSG(DYNA_REC, CTR(ppc_state) == saved_ctr,
+               "CIR cache-loop validate: CTR mismatch at pc {:#010x} ({} vs {})", current_pc,
+               CTR(ppc_state), saved_ctr);
+  }
+  else
+  {
+    // Fast-forward: invalidate the icache line for each of the first count-1 iterations in a tight C++
+    // loop (no per-op interpreter dispatch). EA_i == base + i*stride (rA==0 form).
+    for (u32 i = 0; i < bulk_count; ++i)
+      jit->InvalidateICacheLine(base + i * stride);
+  }
+
+  // --- Exact post-state: rB advanced by the fast-forwarded strides; leave CTR=1 so the real bdnz
+  // decrements 1->0 and exits after the records run the FINAL iteration; reconcile downcount for the
+  // skipped iterations (the records' EndBlock charges the final one). pc/npc are NOT written here (this
+  // is not a terminal; write_pc is always false for this callback) — the records' dcbX/addi/bdnz set
+  // npc. ---
+  ppc_state.gpr[reg_b] = base + bulk_count * stride;  // base + (count-1)*stride
+  CTR(ppc_state) = 1;
+  ppc_state.downcount -= static_cast<s32>(bulk_count * per_iter_cycles);
+
+  return normal_distance;
+}
+
+s32 CachedInterpreter::CacheLoopFlush(std::ostream& stream, const CacheLoopFlushOperands& operands)
+{
+  const char* name = operands.kind == CacheLoopFlushOperands::CacheOp::Dcbi ?
+                         "dcbi" :
+                         (operands.kind == CacheLoopFlushOperands::CacheOp::Dcbst ? "dcbst" : "dcbf");
+  fmt::print(stream, "CacheLoopFlush({} rB=r{}, stride={}) at PC={:#010x}\n", name, operands.reg_b,
+             operands.stride, operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 bool CachedInterpreter::HandleFunctionHooking(u32 address)
 {
   // CachedInterpreter inherits from JitBase and is considered a JIT by relevant code.
@@ -3732,6 +3978,39 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
     }
   }
 
+  // iCube: cache-management loop fast-forward recognition (MAIN_CIR_CACHE_LOOP_FF, default OFF). Scan the
+  // WHOLE built block once for the exact "dcbX 0,rB + addi rB,rB,STRIDE + bdnz self-loop" shape. On
+  // match, before emitting the first dcbX record we emit a CacheLoopFlush callback ALONGSIDE the
+  // unchanged records (emit-alongside, exactly like StoreLoopFill). The records are kept verbatim, so a
+  // runtime guard failure (m_enable_dcache on, dcbi while msr.PR, or count<=1) just runs the real loop.
+  // When OFF, the recognizer never runs and nothing is emitted -> byte-identical to baseline. Disabled
+  // when debugging is on (the records must stay singly-steppable / breakpointable) — the callback would
+  // fast-forward across instruction boundaries a breakpoint inside the loop could otherwise catch. The
+  // store-loop and cache-loop shapes are mutually exclusive (stb vs dcbX), so at most one matches.
+  CacheLoopMatch cache_loop;
+  u32 cache_loop_per_iter = 0;
+  if (s_cache_loop_ff && !IsDebuggingEnabled())
+  {
+    cache_loop = RecognizeCacheLoop(m_code_buffer.data(), code_block.m_num_instructions, js.blockStart);
+    if (cache_loop.matched)
+    {
+      // per-iteration emulated cycles = sum of every op's num_cycles (== js.downcountAmount at the bdnz,
+      // which the normal path charges once per dispatch == once per loop iteration).
+      for (u32 k = 0; k < code_block.m_num_instructions; ++k)
+        cache_loop_per_iter += m_code_buffer[k].opinfo->num_cycles;
+      // Log ONCE that only this exact shape is covered.
+      static bool logged_once = false;
+      if (!logged_once)
+      {
+        logged_once = true;
+        INFO_LOG_FMT(DYNA_REC,
+                     "iCube CIR cache-loop fast-path: recognized per-line cache-invalidation loop at "
+                     "{:#010x} (stride={}, rB=r{}); only this exact dcbX+addi+bdnz shape is covered.",
+                     js.blockStart, cache_loop.stride, cache_loop.reg_b);
+      }
+    }
+  }
+
   for (u32 i = 0; i < code_block.m_num_instructions; i++)
   {
     PPCAnalyst::CodeOp& op = m_code_buffer[i];
@@ -3757,6 +4036,15 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       {
         Write(StoreLoopFill, {interpreter, store_loop.reg_s, store_loop.reg_b, store_loop.stride,
                               js.compilerPC, store_loop_per_iter});
+      }
+      // iCube: emit the cache-management loop fast-forward callback ALONGSIDE the records, immediately
+      // before the first dcbX (i == 0). The unchanged dcbX/addi/bdnz records that follow run the FINAL
+      // iteration; the handler fast-forwards the first count-1 line-invalidations and reconciles
+      // CTR/rB/downcount (see CacheLoopFlush).
+      if (cache_loop.matched && i == 0)
+      {
+        Write(CacheLoopFlush, {static_cast<CacheLoopFlushOperands::CacheOp>(cache_loop.sub),
+                               cache_loop.reg_b, cache_loop.stride, js.compilerPC, cache_loop_per_iter});
       }
       if (IsDebuggingEnabled() && !cpu.IsStepping() &&
           breakpoints.IsAddressBreakPoint(js.compilerPC))
