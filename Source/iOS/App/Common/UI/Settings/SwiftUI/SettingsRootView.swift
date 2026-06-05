@@ -1989,6 +1989,8 @@ struct ConfigAdvancedView: View {
   @State private var cirStoreLoopFFValidate: Bool = false
   @State private var cirIrConstFusion: Bool = false
   @State private var cirIrConstFusionValidate: Bool = false
+  @State private var cirPsNeon: Bool = false
+  @State private var cirPsNeonValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -2121,6 +2123,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ Constant-Address Fusion: Validate (slow, correctness pass)"), isOn: $cirIrConstFusionValidate)
             .onChange(of: cirIrConstFusionValidate) { DOLConfigBridge.setCirIrConstFusionValidate($0) },
           L("Self-check for Constant-Address Fusion: for every fused pair, also runs the original two ops and asserts the destination register matches the precomputed constant. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Constant-Address Fusion (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("NEON Paired-Single Math (experimental)"), isOn: $cirPsNeon)
+            .onChange(of: cirPsNeon) { DOLConfigBridge.setCirPsNeon($0) },
+          L("⚠️ Computes GameCube paired-single FP ops (ps_mul/add/madd/…) BOTH lanes at once with ARM NEON instead of two scalar ops — the trick Dolphin's JIT uses, which the jitless interpreter lacked. Helps FP-heavy games on BOTH CPU engines. Only fires when the FPU is in IEEE mode (NI=0) with finite/normal values; otherwise falls back to scalar (so some games may see little change). Experimental; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ NEON Paired-Single Math: Validate (slow, correctness pass)"), isOn: $cirPsNeonValidate)
+            .onChange(of: cirPsNeonValidate) { DOLConfigBridge.setCirPsNeonValidate($0) },
+          L("Self-check for NEON Paired-Single Math: for every op that takes the NEON path, also runs the scalar computation and asserts both result lanes are bit-identical. Use this to A/B-verify FP accuracy on your games before trusting it (and to see whether it even engages — if a game runs in non-IEEE mode it stays on the scalar path). Much slower — turn ON for a correctness pass, then back OFF. Requires NEON Paired-Single Math to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2304,6 +2314,8 @@ struct ConfigAdvancedView: View {
     cirStoreLoopFFValidate = DOLConfigBridge.cirStoreLoopFFValidate()
     cirIrConstFusion = DOLConfigBridge.cirIrConstFusion()
     cirIrConstFusionValidate = DOLConfigBridge.cirIrConstFusionValidate()
+    cirPsNeon = DOLConfigBridge.cirPsNeon()
+    cirPsNeonValidate = DOLConfigBridge.cirPsNeonValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist

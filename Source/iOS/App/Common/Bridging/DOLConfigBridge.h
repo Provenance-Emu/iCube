@@ -168,6 +168,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirIrConstFusion:(BOOL)enabled;
 + (BOOL)cirIrConstFusionValidate; // IR const-fusion self-validation (default OFF, slow)
 + (void)setCirIrConstFusionValidate:(BOOL)enabled;
++ (BOOL)cirPsNeon;                // NEON paired-single arithmetic fast-path (default OFF; both cores)
++ (void)setCirPsNeon:(BOOL)enabled;
++ (BOOL)cirPsNeonValidate;        // NEON paired-single self-validation (default OFF, slow)
++ (void)setCirPsNeonValidate:(BOOL)enabled;
 + (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)
