@@ -55,31 +55,31 @@ class ServiceManager {
 
   func applicationWillTerminate() {
     for service in services {
-      service.applicationWillTerminate?(application!)
+      service.applicationWillTerminate?(application ?? UIApplication.shared)
     }
   }
 
   func applicationDidBecomeActive() {
     for service in services {
-      service.applicationDidBecomeActive?(application!)
+      service.applicationDidBecomeActive?(application ?? UIApplication.shared)
     }
   }
 
   func applicationWillResignActive() {
     for service in services {
-      service.applicationWillResignActive?(application!)
+      service.applicationWillResignActive?(application ?? UIApplication.shared)
     }
   }
 
   func applicationDidEnterBackground() {
     for service in services {
-      service.applicationDidEnterBackground?(application!)
+      service.applicationDidEnterBackground?(application ?? UIApplication.shared)
     }
   }
 
   func applicationDidReceiveMemoryWarning() {
     for service in services {
-      service.applicationDidReceiveMemoryWarning?(application!)
+      service.applicationDidReceiveMemoryWarning?(application ?? UIApplication.shared)
     }
   }
 
