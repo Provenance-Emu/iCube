@@ -69,6 +69,15 @@ enum class IROp : u8
   StartProfiledBlock,
   EndBlock,           // EndBlock<false>
   EndBlockProfiled,   // EndBlock<true>
+  // iCube IR M3: linkable block terminal (MAIN_CIR_BLOCK_LINKING). Mirrors EndBlock<false>'s accounting
+  // exactly, but additionally carries the STATIC branch target (expected_pc) and a resolved pointer to
+  // the target block's IR vector (link_target_ir), patched by the block cache's WriteLinkBlock. When the
+  // chain in ExecuteOneBlock reaches this op it does the EndBlock accounting and — IFF the slice still
+  // has downcount, npc==expected_pc, the link is resolved, the core is still Running, and the hop cap is
+  // not hit — continues straight into the target's IR vector WITHOUT a Dispatch() round-trip. Only ever
+  // lowered for STATIC direct-branch terminals (the same gating the CIR's WriteEndBlock uses), so we never
+  // link past a terminal that can change MSR/feature_flags or toggle EE (sc/rfi/bclr/bcctr/broken/HLE).
+  EndBlockLink,
   Interpret,          // Interpret<false>
   InterpretPC,        // Interpret<true>
   InterpretChk,       // InterpretAndCheckExceptions<false>
@@ -86,8 +95,11 @@ enum class IROp : u8
 };
 
 // Self-contained block cache for the IR engine. Mirrors CachedInterpreterBlockCache's free-range
-// reclamation, but does NOT support block linking (M0 has no LinkBlock trampoline), so WriteLinkBlock
-// is a no-op and there is no coupling to any other engine's link-patch helper.
+// reclamation. iCube IR M3: WriteLinkBlock is now real — it patches the source block's EndBlockLink IR
+// op (recovered from the anchor at source.exitPtrs) to point at the destination block's IR vector (or
+// clears it on unlink/destroy), reusing the SAME upstream JitBaseBlockCache link/unlink machinery the
+// shipping CIR uses. There is still no machine-code trampoline (the link target is a vector pointer in
+// the engine's side table, not a byte rel into a code tape).
 class CachedInterpreterIRBlockCache final : public JitBaseBlockCache
 {
 public:
@@ -150,11 +162,25 @@ public:
   // side table. Keyed by the anchor record at the block's normalEntry.
   void ReleaseBlockIR(const JitBlock& block);
 
+  // iCube IR M3: block-linking patcher, invoked by the block cache's WriteLinkBlock (reusing the upstream
+  // JitBaseBlockCache link/unlink machinery). Recovers the SOURCE block's IR vector from the anchor at
+  // source.exitPtrs, finds its terminal EndBlockLink op, and sets that op's link_target_ir to the
+  // destination block's IR vector (dest != nullptr) or clears it to nullptr (dest == nullptr = unlink /
+  // destroy). The engine owns m_block_ir + the IR layout, so this lives here, not in the cache.
+  void PatchBlockLink(const JitBlock::LinkData& source, const JitBlock* dest);
+
 private:
-  void ExecuteOneBlock();
+  // iCube IR M3: the run-state pointer is threaded through so the block-linking chain loop can re-check
+  // CPU::State::Running per linked hop (a long chain has no downcount<=0 exit of its own), mirroring the
+  // CIR's ExecuteOneBlock(state_ptr) guard.
+  void ExecuteOneBlock(const CPU::State* state_ptr);
 
   bool HandleFunctionHooking(u32 address);
-  void WriteEndBlock();
+  // iCube IR M3: link_target is the STATIC branch target (op.branchTo) for a linkable terminal, or
+  // 0xFFFFFFFF for a non-linkable one (sc/rfi/bclr/bcctr/broken-block/HLE-replace/idle terminals). When
+  // linking is on and link_target != 0xFFFFFFFF, a linkable EndBlockLink is emitted; otherwise a plain
+  // EndBlock, identical to the pre-M3 path. Default arg keeps the HLE/broken-block call sites unchanged.
+  void WriteEndBlock(u32 link_target = 0xFFFFFFFF);
 
   // Finds a free memory region and sets the code emitter to point at that region.
   // Returns false if no free memory region can be found.
@@ -168,6 +194,7 @@ private:
   struct StartProfiledBlockOperands;
   template <bool profiled>
   struct EndBlockOperands;
+  struct EndBlockLinkOperands;  // iCube IR M3: linkable terminal payload
   struct InterpretOperands;
   struct InterpretAndCheckExceptionsOperands;
   struct HLEFunctionOperands;
@@ -255,6 +282,9 @@ private:
   void EmitStartProfiledBlock(const StartProfiledBlockOperands& operands);
   template <bool profiled>
   void EmitEndBlock(const EndBlockOperands<profiled>& operands);
+  // iCube IR M3: emit a linkable terminal (records a JitBlock::LinkData so the upstream linker resolves
+  // it). exitPtrs is set to the block's anchor slot so PatchBlockLink can recover this block's IR vector.
+  void EmitEndBlockLink(const EndBlockLinkOperands& operands, u32 link_target);
   template <bool write_pc>
   void EmitInterpret(const InterpretOperands& operands);
   template <bool write_pc>
@@ -273,6 +303,11 @@ private:
   static s32 EndBlock(PowerPC::PowerPCState& ppc_state, const EndBlockOperands<profiled>& operands);
   template <bool profiled>
   static s32 EndBlock(std::ostream& stream, const EndBlockOperands<profiled>& operands);
+  // iCube IR M3: linkable terminal handler. Does the EndBlock<false> accounting (pc/downcount/PMC), then
+  // returns whether the chain may follow the link: the returned value is the link guard result, NOT a
+  // tape distance (the IR engine has no tape rel). ExecuteOneBlock interprets it directly.
+  static s32 EndBlockLink(PowerPC::PowerPCState& ppc_state, const EndBlockLinkOperands& operands);
+  static s32 EndBlockLink(std::ostream& stream, const EndBlockLinkOperands& operands);
   template <bool write_pc>
   static s32 Interpret(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   template <bool write_pc>
@@ -330,6 +365,24 @@ template <>
 struct CachedInterpreterIR::EndBlockOperands<true> : CachedInterpreterIR::EndBlockOperands<false>
 {
   JitBlock::ProfileData* profile_data;
+};
+
+// iCube IR M3: linkable-terminal payload (MAIN_CIR_BLOCK_LINKING). The first three fields mirror
+// EndBlockOperands<false> so EndBlockLink's accounting is identical to EndBlock<false>. expected_pc is the
+// STATIC branch target (op.branchTo) this exit was compiled for — the chain follows the link only when
+// ppc_state.npc == expected_pc (fail-safe deopt to the dispatcher otherwise; the not-taken edge of a bcx
+// naturally has npc == fallthrough != expected_pc). link_target_ir is the resolved pointer to the target
+// block's IR vector, patched by PatchBlockLink (nullptr == not linked / unlinked == forces a Dispatch()).
+// This is the IR analogue of the CIR LinkBlockOperands' `rel`, but a vector pointer (side table) instead
+// of a byte offset into a code tape. The cache mutates ONLY link_target_ir after emit; everything else is
+// immutable, matching the CIR's single-mutable-field discipline.
+struct CachedInterpreterIR::EndBlockLinkOperands
+{
+  u32 downcount;
+  u32 num_load_stores;
+  u32 num_fp_inst;
+  u32 expected_pc;
+  std::vector<IRInst>* link_target_ir;
 };
 
 struct CachedInterpreterIR::InterpretOperands
@@ -401,6 +454,7 @@ struct CachedInterpreterIR::IRInst
     StartProfiledBlockOperands start_profiled_block;
     EndBlockOperands<false> end_block;
     EndBlockOperands<true> end_block_profiled;
+    EndBlockLinkOperands end_block_link;  // iCube IR M3: linkable terminal
     InterpretOperands interpret;
     InterpretAndCheckExceptionsOperands interpret_chk;
     HLEFunctionOperands hle;
