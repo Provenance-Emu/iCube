@@ -522,6 +522,90 @@ static bool CIR_IsBlockTerminator(u32 op)
   return primary == 16 || primary == 18 || primary == 19;
 }
 
+// iCube: dispatch-class taxonomy for the profiler's DISPATCH CLASS DENSITY summary. Report-time ONLY.
+// Buckets a guest instruction by primary (and, for X-form, sub-) opcode into the classes that matter for
+// the CIR's per-op dispatch cost: integer ALU/LS take the specialized direct jump-table (one direct,
+// inlinable call), while FP load/store, FP arithmetic, and paired-single ops are NOT on the specialized
+// whitelist and go through the generic Interpret<> trampoline — an EXTRA indirect operands.func call per
+// op (the "2-call tax" this profile is meant to size). Coarse family classification (no dependency on the
+// handler-table internals); the FP/PS buckets are exact by opcode.
+enum class CIRDispClass
+{
+  IntAluOrOther,  // integer ALU / system / misc — hot ones are specialized (direct dispatch)
+  IntLoadStore,   // integer D-form load/store — specialized (direct dispatch)
+  FpLoadStore,    // lfs/lfd/stfs/stfd (+ u / indexed forms) — GENERIC (2-call tax)
+  FpArith,        // primary 59/63 FP arithmetic + compare — GENERIC (2-call tax + CheckFPU)
+  PairedSingle,   // primary 4 ps_*, 56/57/60/61 psq_l/st — GENERIC (2-call tax)
+  Branch,         // 16/18/19 control flow (block terminators)
+  COUNT
+};
+static const char* CIR_DispClassName(CIRDispClass c)
+{
+  switch (c)
+  {
+  case CIRDispClass::IntAluOrOther: return "int ALU/other  (specialized)";
+  case CIRDispClass::IntLoadStore:  return "int load/store (specialized)";
+  case CIRDispClass::FpLoadStore:   return "FP load/store  (GENERIC 2-call)";
+  case CIRDispClass::FpArith:       return "FP arithmetic  (GENERIC 2-call)";
+  case CIRDispClass::PairedSingle:  return "paired-single  (GENERIC 2-call)";
+  case CIRDispClass::Branch:        return "branch/terminal";
+  default:                          return "?";
+  }
+}
+static CIRDispClass CIR_ClassifyOp(u32 op)
+{
+  const u32 primary = (op >> 26) & 0x3Fu;
+  switch (primary)
+  {
+  case 16: case 18: case 19:
+    return CIRDispClass::Branch;
+  case 4: case 56: case 57: case 60: case 61:  // ps_* and psq_l/lu/st/stu
+    return CIRDispClass::PairedSingle;
+  case 48: case 49: case 50: case 51:          // lfs/lfsu/lfd/lfdu
+  case 52: case 53: case 54: case 55:          // stfs/stfsu/stfd/stfdu
+    return CIRDispClass::FpLoadStore;
+  case 59: case 63:                            // FP single / double arith + compare
+    return CIRDispClass::FpArith;
+  case 32: case 33: case 34: case 35: case 36: case 37: case 38: case 39:
+  case 40: case 41: case 42: case 43: case 44: case 45: case 46: case 47:  // integer D-form LS
+    return CIRDispClass::IntLoadStore;
+  case 31:
+  {
+    // X-form: split out the FP load/store indexed ops (exact); everything else -> int ALU/other.
+    switch ((op >> 1) & 0x3FFu)
+    {
+    case 535: case 567: case 599: case 631:            // lfsx/lfsux/lfdx/lfdux
+    case 663: case 695: case 727: case 759: case 983:  // stfsx/stfsux/stfdx/stfdux/stfiwx
+      return CIRDispClass::FpLoadStore;
+    default:
+      return CIRDispClass::IntAluOrOther;
+    }
+  }
+  default:
+    return CIRDispClass::IntAluOrOther;
+  }
+}
+
+// iCube: walk one profiled block from entry_pc (stopping after the first block-terminator, same shape as
+// CIR_AppendBlockDisasm) and add `runs` to the per-class instruction-execution tally for each instruction.
+// Report-time only; bounded by kMaxInsts. Unreadable words end the walk (rest of the block is gone).
+static void CIR_AccumulateBlockClasses(u32 entry_pc, u64 runs, u64* class_runs, u64* total_runs)
+{
+  constexpr u32 kMaxInsts = 32;
+  u32 addr = entry_pc;
+  for (u32 i = 0; i < kMaxInsts; ++i, addr += 4)
+  {
+    u32 op = 0;
+    if (!CIR_TryReadGuestU32(addr, &op))
+      break;
+    const CIRDispClass c = CIR_ClassifyOp(op);
+    class_runs[static_cast<int>(c)] += runs;
+    *total_runs += runs;
+    if (CIR_IsBlockTerminator(op))
+      break;
+  }
+}
+
 // iCube: append the PPC disassembly of a block to the report. Report-time ONLY (Copy State); never on
 // the accumulation hot path. Walks up to kMaxInsts words from entry_pc, stopping after the first
 // block-terminating branch. Each readable word is rendered "    0xADDR: 0xOPCODE  mnemonic operands";
@@ -598,6 +682,42 @@ std::string BuildHotBlocksReport(u32 top_n)
   std::ostringstream out;
   out << "  unique_blocks=" << entries.size() << " total_block_runs="
       << s_block_profile.grand_total_runs << " total_cycles=" << grand_cycles << "\n";
+
+  // iCube: DISPATCH CLASS DENSITY — the dynamic instruction mix, weighted by each block's run-count, so
+  // it reflects what the CPU actually EXECUTES (not static code size). The FP load/store, FP arithmetic,
+  // and paired-single classes go through the generic Interpret<> trampoline (an extra indirect call per
+  // op vs the specialized direct jump-table); their combined % is the headroom a FP specialization /
+  // fusion pass could remove from the per-op dispatch cost. Pair this with the Instruments self-time of
+  // ExecuteOneBlock: if FP+PS is a large share AND self-time is high, the per-op call tax is the sink.
+  {
+    u64 class_runs[static_cast<int>(CIRDispClass::COUNT)] = {};
+    u64 total_runs = 0;
+    for (const auto& e : entries)
+      CIR_AccumulateBlockClasses(e.pc, e.runs, class_runs, &total_runs);
+    if (total_runs != 0)
+    {
+      out << "  -- DISPATCH CLASS DENSITY (dynamic, run-count weighted) --\n";
+      for (int c = 0; c < static_cast<int>(CIRDispClass::COUNT); ++c)
+      {
+        const double pct = 100.0 * static_cast<double>(class_runs[c]) / static_cast<double>(total_runs);
+        char line[96];
+        snprintf(line, sizeof(line), "     %-30s %14llu  %5.1f%%\n", CIR_DispClassName(CIRDispClass(c)),
+                 static_cast<unsigned long long>(class_runs[c]), pct);
+        out << line;
+      }
+      const u64 generic_fp_ps = class_runs[static_cast<int>(CIRDispClass::FpLoadStore)] +
+                                class_runs[static_cast<int>(CIRDispClass::FpArith)] +
+                                class_runs[static_cast<int>(CIRDispClass::PairedSingle)];
+      const double generic_pct =
+          100.0 * static_cast<double>(generic_fp_ps) / static_cast<double>(total_runs);
+      char sum[128];
+      snprintf(sum, sizeof(sum),
+               "     GENERIC FP+PS (2-call tax, specialization/fusion candidates): %.1f%%\n",
+               generic_pct);
+      out << sum;
+    }
+  }
+
   out << "  rank  entry_pc    runs         cycles        cyc/run   %cyc  hint\n";
   for (u32 i = 0; i < n; ++i)
   {
