@@ -172,6 +172,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirPsNeon:(BOOL)enabled;
 + (BOOL)cirPsNeonValidate;        // NEON paired-single self-validation (default OFF, slow)
 + (void)setCirPsNeonValidate:(BOOL)enabled;
++ (BOOL)cirIrMicroOpFusion;       // IR engine: micro-op fusion pass (default OFF; IR core only)
++ (void)setCirIrMicroOpFusion:(BOOL)enabled;
++ (BOOL)cirIrMicroOpFusionValidate; // IR micro-op fusion self-validation (default OFF, slow)
++ (void)setCirIrMicroOpFusionValidate:(BOOL)enabled;
 + (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)

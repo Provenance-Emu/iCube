@@ -1991,6 +1991,8 @@ struct ConfigAdvancedView: View {
   @State private var cirIrConstFusionValidate: Bool = false
   @State private var cirPsNeon: Bool = false
   @State private var cirPsNeonValidate: Bool = false
+  @State private var cirIrMicroOpFusion: Bool = false
+  @State private var cirIrMicroOpFusionValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -2131,6 +2133,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ NEON Paired-Single Math: Validate (slow, correctness pass)"), isOn: $cirPsNeonValidate)
             .onChange(of: cirPsNeonValidate) { DOLConfigBridge.setCirPsNeonValidate($0) },
           L("Self-check for NEON Paired-Single Math: for every op that takes the NEON path, also runs the scalar computation and asserts both result lanes are bit-identical. Use this to A/B-verify FP accuracy on your games before trusting it (and to see whether it even engages — if a game runs in non-IEEE mode it stays on the scalar path). Much slower — turn ON for a correctness pass, then back OFF. Requires NEON Paired-Single Math to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("Micro-Op Fusion (IR engine only, experimental)"), isOn: $cirIrMicroOpFusion)
+            .onChange(of: cirIrMicroOpFusion) { DOLConfigBridge.setCirIrMicroOpFusion($0) },
+          L("⚠️ Only affects the Cached Interpreter (IR) engine. Coalesces runs of consecutive flag-free, exception-free integer ALU ops into a single dispatched unit (the same fusion the default Cached Interpreter uses), cutting per-op dispatch overhead on straight-line code. No effect on the default Cached Interpreter. Experimental/unvalidated; OFF by default. Run the Validate pass below before trusting it. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("↳ Micro-Op Fusion: Validate (slow, correctness pass)"), isOn: $cirIrMicroOpFusionValidate)
+            .onChange(of: cirIrMicroOpFusionValidate) { DOLConfigBridge.setCirIrMicroOpFusionValidate($0) },
+          L("Self-check for Micro-Op Fusion: for every fused run, also runs the ops un-fused and asserts the resulting registers match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Micro-Op Fusion (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2316,6 +2326,8 @@ struct ConfigAdvancedView: View {
     cirIrConstFusionValidate = DOLConfigBridge.cirIrConstFusionValidate()
     cirPsNeon = DOLConfigBridge.cirPsNeon()
     cirPsNeonValidate = DOLConfigBridge.cirPsNeonValidate()
+    cirIrMicroOpFusion = DOLConfigBridge.cirIrMicroOpFusion()
+    cirIrMicroOpFusionValidate = DOLConfigBridge.cirIrMicroOpFusionValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist

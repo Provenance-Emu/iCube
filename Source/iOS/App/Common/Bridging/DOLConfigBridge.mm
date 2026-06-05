@@ -321,6 +321,10 @@ static bool ICubeEmulationActive() {
 + (void)setCirPsNeon:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_PS_NEON, (bool)enabled); }
 + (BOOL)cirPsNeonValidate { return Config::Get(Config::MAIN_CIR_PS_NEON_VALIDATE); }
 + (void)setCirPsNeonValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_PS_NEON_VALIDATE, (bool)enabled); }
++ (BOOL)cirIrMicroOpFusion { return Config::Get(Config::MAIN_CIR_IR_MICROOP_FUSION); }
++ (void)setCirIrMicroOpFusion:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_IR_MICROOP_FUSION, (bool)enabled); }
++ (BOOL)cirIrMicroOpFusionValidate { return Config::Get(Config::MAIN_CIR_IR_MICROOP_FUSION_VALIDATE); }
++ (void)setCirIrMicroOpFusionValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_IR_MICROOP_FUSION_VALIDATE, (bool)enabled); }
 + (BOOL)cirBlockLinking { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING); }
 + (void)setCirBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING, (bool)enabled); }
 + (BOOL)cirBlockLinkingValidate { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE); }
@@ -683,6 +687,8 @@ static bool ICubeEmulationActive() {
   del(Config::MAIN_CIR_IR_CONST_FUSION_VALIDATE);
   del(Config::MAIN_CIR_PS_NEON);
   del(Config::MAIN_CIR_PS_NEON_VALIDATE);
+  del(Config::MAIN_CIR_IR_MICROOP_FUSION);
+  del(Config::MAIN_CIR_IR_MICROOP_FUSION_VALIDATE);
   del(Config::MAIN_OVERCLOCK_ENABLE);
   del(Config::MAIN_OVERCLOCK);
   del(Config::MAIN_VI_OVERCLOCK_ENABLE);
