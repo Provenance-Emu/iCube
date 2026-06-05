@@ -69,6 +69,137 @@ static bool s_ir_block_linking = false;
 static bool s_ir_pic_loadstore = false;
 static bool s_ir_pic_loadstore_validate = false;
 
+// iCube IR M7: specialized-op direct dispatch. Reuses the shipping CIR's MAIN_CIR_SPECIALIZED_OPS flag (already
+// in the UI, default ON) so the IR honors the SAME toggle as the CIR — no new user-facing flag. Its validate
+// twin (MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE, default false) dual-runs every specialized op vs the plain
+// interpreter op. When the specialized flag is off PassSpecializedOps never runs, so the lowered vector stays
+// byte-identical to the M5/M6 lowering (every whitelisted op stays a plain Interpret/InterpretPC). Read once in
+// Init, mirroring the read-once discipline of every other IR flag.
+static bool s_ir_specialized_ops = false;
+static bool s_ir_specialized_ops_validate = false;
+
+// iCube IR M7: specialized-op whitelist + compact-op-id machinery, COPIED VERBATIM from the shipping CIR
+// (CachedInterpreter.cpp's CIR_SPECIALIZED_ALU_OPS / CIR_SPECIALIZED_LS_OPS X-macros). KEEP IN SYNC with that
+// file: the two whitelists, the enum, IsSpecializedOp, SpecOpId, IsLoadStoreSpecOp, and the dispatch switch
+// must match the CIR op-for-op so the IR honors the exact same specialized set + semantics + eligibility. A
+// header can't be shared within scope, so the list is duplicated here as the single source of truth for the IR
+// engine's emit / dispatch / eligibility (an X-macro so adding an op stays a single line in lockstep).
+//
+// CIR_SPECIALIZED_ALU_OPS — Tier-1 pure-register integer ALU. NOT FL_LOADSTORE / FL_USE_FPU; side effects
+// confined to the register file (GPR/CR/XER); never raises an exception => safe to DOUBLE-RUN in validate.
+#define IR_SPECIALIZED_ALU_OPS(X)                                                                  \
+  X(addi)                                                                                           \
+  X(addis)                                                                                          \
+  X(ori)                                                                                            \
+  X(oris)                                                                                           \
+  X(orx)                                                                                            \
+  X(rlwinmx)                                                                                        \
+  X(addx)                                                                                           \
+  X(subfx)                                                                                          \
+  X(andx)                                                                                           \
+  X(andi_rc)                                                                                        \
+  X(xorx)                                                                                           \
+  X(slwx)                                                                                           \
+  X(srwx)                                                                                           \
+  X(cmp)                                                                                            \
+  X(rlwimix)
+
+// CIR_SPECIALIZED_LS_OPS — Tier-3 D-form integer load/store. With memcheck OFF the generic path routes these
+// through plain Interpret too, so specialized-vs-generic is identical by construction. NOT safe to double-run
+// (stores write memory, loads can read MMIO) => SINGLE-RUN validation only. In the IR these only ever fire when
+// M6 PIC is OFF (PIC otherwise claims them first); when PIC is on they are already LoadStorePIC, not Interpret.
+#define IR_SPECIALIZED_LS_OPS(X)                                                                    \
+  X(lwz)                                                                                            \
+  X(lwzu)                                                                                           \
+  X(lhz)                                                                                            \
+  X(lhzu)                                                                                           \
+  X(lha)                                                                                            \
+  X(lhau)                                                                                           \
+  X(lbz)                                                                                            \
+  X(lbzu)                                                                                           \
+  X(stw)                                                                                            \
+  X(stwu)                                                                                           \
+  X(sth)                                                                                            \
+  X(sthu)                                                                                           \
+  X(stb)                                                                                            \
+  X(stbu)
+
+// Combined list driving the op-id enum, the pass emit site, the dispatch switch, and IsSpecializedOp. ALU
+// entries first so their enum ids stay stable across LS additions (matches the CIR ordering exactly).
+#define IR_SPECIALIZED_OP_LIST(X)                                                                  \
+  IR_SPECIALIZED_ALU_OPS(X)                                                                        \
+  IR_SPECIALIZED_LS_OPS(X)
+
+// Compact op-id carried inline in SpecializedOperands so the dispatch jump-table keys on a small int instead
+// of a chain of handler-pointer compares. X-macro-generated from the same list, so it can never drift.
+enum class IrSpecOp : u16
+{
+#define IR_SPEC_ENUM(name) name,
+  IR_SPECIALIZED_OP_LIST(IR_SPEC_ENUM)
+#undef IR_SPEC_ENUM
+      IR_SPEC_OP_COUNT
+};
+
+// True if this opcode's chosen interpreter handler is on the specialized whitelist. EXACT mirror of the CIR's
+// IsSpecializedOp — keyed on the same Interpreter::name handler pointer the lowering captured into func.
+static bool IRIsSpecializedOp(void (*func)(Interpreter&, UGeckoInstruction))
+{
+#define IR_SPEC_CHECK(name)                                                                        \
+  if (func == &Interpreter::name)                                                                  \
+    return true;
+  IR_SPECIALIZED_OP_LIST(IR_SPEC_CHECK)
+#undef IR_SPEC_CHECK
+  return false;
+}
+
+// Map a whitelisted handler pointer to its compact op-id (pass-time only; not on the hot path).
+static IrSpecOp IRSpecOpId(void (*func)(Interpreter&, UGeckoInstruction))
+{
+#define IR_SPEC_ID(name)                                                                           \
+  if (func == &Interpreter::name)                                                                  \
+    return IrSpecOp::name;
+  IR_SPECIALIZED_OP_LIST(IR_SPEC_ID)
+#undef IR_SPEC_ID
+  return IrSpecOp::IR_SPEC_OP_COUNT;  // unreachable: callers gate on IRIsSpecializedOp first
+}
+
+// True if the op-id is a Tier-3 load/store (vs a Tier-1 ALU op). LS ops are NOT safe to double-run in validate.
+// Generated from IR_SPECIALIZED_LS_OPS so it can't drift.
+static bool IRIsLoadStoreSpecOp(IrSpecOp id)
+{
+  switch (id)
+  {
+#define IR_LS_CASE(name)                                                                           \
+  case IrSpecOp::name:                                                                             \
+    return true;
+    IR_SPECIALIZED_LS_OPS(IR_LS_CASE)
+#undef IR_LS_CASE
+  default:
+    return false;
+  }
+}
+
+// The single source of dispatch for specialized ops. Given a decoded IrSpecOp `id`, the live `ppc_state`, and a
+// SpecializedOperands `ops`, runs the same per-op handler the generic path would have — but by its compile-time-
+// constant pointer Interpreter::name(...), so the call is DIRECT and inlinable (zero indirect CALL). The switch
+// lowers to a jump-table (one indirect BRANCH, not call). Identical whether inlined in ExecuteOneBlock or inside
+// the Specialized callback. EXACT mirror of the CIR's CIR_SPEC_SWITCH.
+#define IR_SPEC_CASE(name)                                                                         \
+  case IrSpecOp::name:                                                                             \
+    Interpreter::name(ir_spec_ops.interpreter, ir_spec_ops.inst);                                 \
+    break;
+#define IR_SPEC_SWITCH(id_expr, ops_expr)                                                          \
+  do                                                                                               \
+  {                                                                                                \
+    const CachedInterpreterIR::SpecializedOperands& ir_spec_ops = (ops_expr);                      \
+    switch (id_expr)                                                                                \
+    {                                                                                              \
+      IR_SPECIALIZED_OP_LIST(IR_SPEC_CASE)                                                          \
+    default:                                                                                       \
+      break;                                                                                       \
+    }                                                                                              \
+  } while (0)
+
 // iCube IR M6: PIC (position-independent-code) direct-pointer load/store region resolution — PORTED VERBATIM
 // from CachedInterpreter.cpp's CI_GetRegionInfo / CI_RegionOffset. Resolves an effective address to a host RAM
 // base pointer + offset, bypassing the per-access MMU/region lookup. Integer single-access D-form/X-form only;
@@ -229,6 +360,12 @@ void CachedInterpreterIR::Init()
   // twin (default false). When the PIC flag is off the pass never runs (byte-identical to the M5 lowering).
   s_ir_pic_loadstore = Config::Get(Config::MAIN_CIR_PIC_LOADSTORE);
   s_ir_pic_loadstore_validate = Config::Get(Config::MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE);
+
+  // iCube IR M7: read the specialized-op flag (reuses MAIN_CIR_SPECIALIZED_OPS; default true) and its validate
+  // twin (default false). When the specialized flag is off the pass never runs (byte-identical to the M5/M6
+  // lowering); the validate twin only ever runs when BOTH are on.
+  s_ir_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
+  s_ir_specialized_ops_validate = Config::Get(Config::MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE);
 
   AllocCodeSpace(CODE_SIZE);
   ResetFreeMemoryRanges();
@@ -486,6 +623,17 @@ s32 CachedInterpreterIR::DispatchIRInst(PowerPC::PowerPCState& ppc_state, const 
     return (inst.cr_out & 0x80) ?
                LoadStorePICValidate<true>(ppc_state, inst.u.load_store_pic_validate) :
                LoadStorePICValidate<false>(ppc_state, inst.u.load_store_pic_validate);
+  case IROp::Specialized:
+    // iCube IR M7: fast-pathed inline in ExecuteOneBlock; handled here too as the switch fallback and to
+    // satisfy -Wswitch on the new enumerator. write_pc is encoded in the op TAG (Specialized vs SpecializedPC),
+    // NOT in cr_out — specialized ALU ops can have a nonzero cr_out (cmp/andx. etc.), so the M6 cr_out-bit-7
+    // trick is unsafe here.
+    return Specialized<false>(ppc_state, inst.u.specialized);
+  case IROp::SpecializedPC:
+    return Specialized<true>(ppc_state, inst.u.specialized);
+  case IROp::SpecializedValidate:
+    // iCube IR M7: write_pc is always false for the whitelist (no canEndBlock op), so there is one enumerator.
+    return SpecializedValidate<false>(ppc_state, inst.u.specialized_validate);
   }
   return 0;
 }
@@ -597,6 +745,15 @@ void CachedInterpreterIR::RunIROptimizationPasses(std::vector<IRInst>& ir,
   // a run, which is correct. Default OFF.
   if (s_ir_microop_fusion)
     PassMicroOpFusion(ir, fused_pool);
+  // iCube IR M7: specialized-op direct dispatch. Registered LAST on purpose. addi/addis/ori are in BOTH this
+  // whitelist and M4's const-fusion / M5's fusible allowlist, so running this before them would rewrite those
+  // ops to IROp::Specialized and starve M4/M5 (which match only IROp::Interpret) — running last makes
+  // specialized the mop-up for ALU ops that did not fuse. The integer load/stores were already claimed by M6's
+  // PassPICLoadStore (default ON) and are now LoadStorePIC, not Interpret, so the LS whitelist entries only fire
+  // when PIC is OFF — exactly the CIR's "PIC supersedes the specialized path for integer load/store" behavior.
+  // Gated on MAIN_CIR_SPECIALIZED_OPS; with it off the vector stays byte-identical to the M5/M6 lowering.
+  if (s_ir_specialized_ops)
+    PassSpecializedOps(ir);
   // Future passes register here, one line each:
   //   if (s_ir_const_fold) PassConstFold(ir);
 }
@@ -1855,6 +2012,17 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
         LoadStorePIC<false>(ppc_state, inst.u.load_store_pic);
         continue;
       }
+      // iCube IR M7: specialized direct dispatch on the inlined fast path — THIS is the M7 win (direct/inlinable
+      // Interpreter::name call via a jump-table, no indirect operands.func CALL). Placed AFTER the plain
+      // Interpret/InterpretPC [[likely]] branches (parity with M4/M5/M6), so the hottest plain path is untouched.
+      // Only present when MAIN_CIR_SPECIALIZED_OPS is on; with the flag off the pass never lowers it, so this
+      // branch is never taken and the path is byte-identical to M5/M6. Mid-block (write_pc=false) is the only
+      // case in practice (no whitelisted op is canEndBlock); the SpecializedPC variant goes through the switch.
+      if (inst.op == IROp::Specialized) [[likely]]
+      {
+        Specialized<false>(ppc_state, inst.u.specialized);
+        continue;
+      }
       // iCube IR M3: linkable terminal. EndBlockLink does the EndBlock accounting and returns whether the
       // chain may follow the link. We apply the remaining guards (Running + hop cap) here, in the loop
       // that owns them, exactly as the CIR's ExecuteOneBlock does for its LinkBlock callback.
@@ -2703,6 +2871,209 @@ s32 CachedInterpreterIR::LoadStorePICValidate(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// ============================================================================
+// iCube IR M7: specialized-op direct dispatch (MAIN_CIR_SPECIALIZED_OPS).
+// ============================================================================
+
+// iCube IR M7: specialized direct-dispatch pass. IRInst is NOT move-assignable (operand union holds a reference
+// member), so — exactly like M4/M5/M6 — build a FRESH vector by construction and swap it in rather than rewriting
+// in place. Each eligible plain Interpret/InterpretPC op (its chosen handler is on the whitelist) is rewritten
+// into a Specialized/SpecializedPC op carrying the compact op-id inline (or SpecializedValidate when the validate
+// flag is on); everything else is copied through untouched. Eligibility MIRRORS the CIR's IsSpecializedOp EXACTLY
+// — keyed purely on the func pointer. No fastmem/memcheck gate: memcheck load/stores are already lowered to
+// InterpretChk (so inst.op == Interpret/InterpretPC excludes them), and ALU ops are not load/stores. Zero
+// per-block side storage (op-id rides inline in the union), so it respects m_ir_pending_free automatically.
+void CachedInterpreterIR::PassSpecializedOps(std::vector<IRInst>& ir) const
+{
+  std::vector<IRInst> out;
+  out.reserve(ir.size());
+
+  for (const IRInst& inst : ir)
+  {
+    // Only plain Interpret / InterpretPC ops are candidates (memcheck/FP-exception load/stores are already
+    // InterpretChk; const/micro-op fusion already consumed the ALU ops they cover; PIC already consumed the
+    // integer load/stores when MAIN_CIR_PIC_LOADSTORE is on). Everything else copies through untouched.
+    if (inst.op != IROp::Interpret && inst.op != IROp::InterpretPC)
+    {
+      out.push_back(inst);
+      continue;
+    }
+    if (!IRIsSpecializedOp(inst.u.interpret.func))
+    {
+      out.push_back(inst);
+      continue;
+    }
+
+    const InterpretOperands& src = inst.u.interpret;
+    const u16 op_id = static_cast<u16>(IRSpecOpId(src.func));
+    const SpecializedOperands spec = {{src.interpreter, src.func, src.current_pc, src.inst}, op_id};
+    const bool write_pc = (inst.op == IROp::InterpretPC);
+
+    if (s_ir_specialized_ops_validate)
+    {
+      // write_pc is always false for the whitelist (no canEndBlock op). A future canEndBlock candidate would
+      // fall back to plain Interpret here so the single-enumerator validate op never has to encode write_pc.
+      if (write_pc)
+      {
+        out.push_back(inst);  // robustness: keep the generic form (no PC validate enumerator)
+        continue;
+      }
+      out.push_back(IRInst{IROp::SpecializedValidate, {.specialized_validate = {spec}}});
+    }
+    else
+    {
+      out.push_back(IRInst{write_pc ? IROp::SpecializedPC : IROp::Specialized, {.specialized = spec}});
+    }
+  }
+
+  ir.swap(out);
+}
+
+// iCube IR M7: specialized direct-dispatch handler. The ONLY behavioral difference from Interpret<write_pc> is
+// that the per-op handler is invoked by its compile-time-constant pointer (direct/inlinable) via the jump-table
+// switch instead of operands.func (indirect). write_pc pc/npc writes and the return distance are reproduced
+// exactly, so this is a correct STANDALONE callback if ever reached through DispatchIRInst.
+template <bool write_pc>
+s32 CachedInterpreterIR::Specialized(PowerPC::PowerPCState& ppc_state, const SpecializedOperands& operands)
+{
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  const auto id = static_cast<IrSpecOp>(operands.op_id);
+  IR_SPEC_SWITCH(id, operands);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreterIR::Specialized(std::ostream& stream, const SpecializedOperands& operands)
+{
+  fmt::println(stream, "Specialized<{}>(pc={:#010x}, inst={:#010x}, op_id={})", write_pc,
+               operands.current_pc, operands.inst.hex, operands.op_id);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube IR M7: specialized-op validate handler. Two regimes keyed on op category, mirroring the CIR's
+// InterpretSpecialized validate (CachedInterpreter.cpp ~line 1156). The specialized func IS &Interpreter::name,
+// so both runs call the SAME handler — this catches op-id->handler MAPPING bugs (pass construction), not
+// arithmetic divergence. The shipping (specialized) result is committed last.
+template <bool write_pc>
+s32 CachedInterpreterIR::SpecializedValidate(PowerPC::PowerPCState& ppc_state,
+                                             const SpecializedValidateOperands& operands)
+{
+  const auto id = static_cast<IrSpecOp>(operands.op_id);
+  const s32 specialized_distance = sizeof(AnyCallback) + sizeof(operands);
+
+  if (IRIsLoadStoreSpecOp(id))
+  {
+    // SINGLE-RUN validation: a second/reference run is UNSAFE for load/stores (a store would double-write
+    // memory, a load could double-read MMIO). Handler math is identical by construction (the switch calls the
+    // SAME Interpreter::name the generic path's func points at), so there is nothing to diff — we validate only
+    // the BOOKKEEPING contract: pc/npc behavior and that the dispatch never CLEARS a pending exception.
+    // write_pc is always false for these (D-form), so pc/npc must be UNCHANGED by a !write_pc dispatch.
+    [[maybe_unused]] const u32 saved_pc = ppc_state.pc;
+    [[maybe_unused]] const u32 saved_npc = ppc_state.npc;
+    const u32 saved_exceptions = ppc_state.Exceptions;
+
+    if constexpr (write_pc)
+    {
+      ppc_state.pc = operands.current_pc;
+      ppc_state.npc = operands.current_pc + 4;
+    }
+    IR_SPEC_SWITCH(id, operands);
+
+    if constexpr (!write_pc)
+    {
+      ASSERT_MSG(DYNA_REC, ppc_state.pc == saved_pc && ppc_state.npc == saved_npc,
+                 "IR specialized LS op unexpectedly wrote pc/npc at pc {:#x} (pc {:#x}->{:#x}, npc "
+                 "{:#x}->{:#x})",
+                 operands.current_pc, saved_pc, ppc_state.pc, saved_npc, ppc_state.npc);
+    }
+    else
+    {
+      ASSERT_MSG(DYNA_REC,
+                 ppc_state.pc == operands.current_pc && ppc_state.npc == operands.current_pc + 4,
+                 "IR specialized LS op pc/npc contract violated at pc {:#x}", operands.current_pc);
+    }
+    ASSERT_MSG(DYNA_REC, (ppc_state.Exceptions & saved_exceptions) == saved_exceptions,
+               "IR specialized LS op cleared a pending exception at pc {:#x} ({:#x}->{:#x})",
+               operands.current_pc, saved_exceptions, ppc_state.Exceptions);
+    return specialized_distance;
+  }
+
+  // DOUBLE-RUN validation for Tier-1 ALU ops (safe: side effects confined to the register file). Run the
+  // generic Interpret<write_pc> on the live state via operands.func, snapshot the result, restore, run the
+  // specialized switch, and assert architectural state matches. Mirrors the CIR's ALU validate snapshot set.
+  std::array<u32, 32> saved_gpr;
+  std::array<u64, 8> saved_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), saved_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), saved_cr.begin());
+  const u8 saved_xer_ca = ppc_state.xer_ca;
+  const u8 saved_xer_so_ov = ppc_state.xer_so_ov;
+  const u32 saved_pc = ppc_state.pc;
+  const u32 saved_npc = ppc_state.npc;
+  const u32 saved_exceptions = ppc_state.Exceptions;
+
+  // Generic reference run on the live state (exactly what the unspecialized block would have done, using the
+  // same func the lowering captured). operands is a SpecializedValidateOperands whose InterpretOperands base
+  // carries interpreter/func/current_pc/inst, so Interpret<write_pc> reads it correctly.
+  Interpret<write_pc>(ppc_state, operands);
+
+  std::array<u32, 32> generic_gpr;
+  std::array<u64, 8> generic_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), generic_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), generic_cr.begin());
+  const u8 generic_xer_ca = ppc_state.xer_ca;
+  const u8 generic_xer_so_ov = ppc_state.xer_so_ov;
+  const u32 generic_pc = ppc_state.pc;
+  const u32 generic_npc = ppc_state.npc;
+  const u32 generic_exceptions = ppc_state.Exceptions;
+
+  // Restore (including Exceptions) and run the specialized switch (the SHIPPING path, committed last).
+  std::copy(saved_gpr.begin(), saved_gpr.end(), std::begin(ppc_state.gpr));
+  std::copy(saved_cr.begin(), saved_cr.end(), std::begin(ppc_state.cr.fields));
+  ppc_state.xer_ca = saved_xer_ca;
+  ppc_state.xer_so_ov = saved_xer_so_ov;
+  ppc_state.pc = saved_pc;
+  ppc_state.npc = saved_npc;
+  ppc_state.Exceptions = saved_exceptions;
+
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+  IR_SPEC_SWITCH(id, operands);
+
+  std::array<u32, 32> spec_gpr;
+  std::array<u64, 8> spec_cr;
+  std::copy(std::begin(ppc_state.gpr), std::end(ppc_state.gpr), spec_gpr.begin());
+  std::copy(std::begin(ppc_state.cr.fields), std::end(ppc_state.cr.fields), spec_cr.begin());
+
+  ASSERT_MSG(DYNA_REC, spec_gpr == generic_gpr, "IR specialized op GPR mismatch at pc {:#x}",
+             operands.current_pc);
+  ASSERT_MSG(DYNA_REC, spec_cr == generic_cr, "IR specialized op CR mismatch at pc {:#x}",
+             operands.current_pc);
+  ASSERT_MSG(DYNA_REC, ppc_state.xer_ca == generic_xer_ca && ppc_state.xer_so_ov == generic_xer_so_ov,
+             "IR specialized op XER mismatch at pc {:#x}", operands.current_pc);
+  ASSERT_MSG(DYNA_REC, ppc_state.pc == generic_pc && ppc_state.npc == generic_npc,
+             "IR specialized op PC/NPC mismatch at pc {:#x}", operands.current_pc);
+  ASSERT_MSG(DYNA_REC, ppc_state.Exceptions == generic_exceptions,
+             "IR specialized op Exceptions mismatch at pc {:#x} ({:#x} vs generic {:#x})",
+             operands.current_pc, ppc_state.Exceptions, generic_exceptions);
+  return specialized_distance;
+}
+
+template <bool write_pc>
+s32 CachedInterpreterIR::SpecializedValidate(std::ostream& stream,
+                                             const SpecializedValidateOperands& operands)
+{
+  fmt::println(stream, "SpecializedValidate<{}>(pc={:#010x}, inst={:#010x}, op_id={})", write_pc,
+               operands.current_pc, operands.inst.hex, operands.op_id);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 s32 CachedInterpreterIR::IRBlockAnchor(std::ostream& stream, const IRBlockAnchorOperands& operands)
 {
   const std::vector<IRInst>& ir = *operands.ir;
@@ -2758,6 +3129,10 @@ std::size_t CachedInterpreterIR::Disassemble(const JitBlock& block, std::ostream
       LOOKUP_KV(CachedInterpreterIR::LoadStorePIC<true>),
       LOOKUP_KV(CachedInterpreterIR::LoadStorePICValidate<false>),
       LOOKUP_KV(CachedInterpreterIR::LoadStorePICValidate<true>),
+      LOOKUP_KV(CachedInterpreterIR::Specialized<false>),
+      LOOKUP_KV(CachedInterpreterIR::Specialized<true>),
+      LOOKUP_KV(CachedInterpreterIR::SpecializedValidate<false>),
+      LOOKUP_KV(CachedInterpreterIR::SpecializedValidate<true>),
   });
 
 #undef LOOKUP_KV

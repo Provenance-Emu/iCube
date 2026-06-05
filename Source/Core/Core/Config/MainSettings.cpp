@@ -1026,6 +1026,18 @@ const Info<bool> MAIN_CIR_IR_MICROOP_FUSION_VALIDATE{
 // PIC result last. Slow; correctness only. Default FALSE.
 const Info<bool> MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE{
     {System::Main, "Core", "CIRIRPICLoadStoreValidate"}, false};
+// iCube IR engine (CPUCore 6) Milestone 7: specialized-op direct dispatch. Ports the shipping CachedInterpreter's
+// proven InterpretSpecialized fast path (MAIN_CIR_SPECIALIZED_OPS) to the IR engine as an optimizer pass: a
+// whitelisted hot integer ALU / D-form load-store op is dispatched by its compile-time-constant Interpreter::name
+// handler via a jump-table switch keyed on a compact op-id, instead of the generic indirect operands.func call
+// (zero indirect CALL on the hot per-instruction path). The pass is gated by the EXISTING MAIN_CIR_SPECIALIZED_OPS
+// flag (same toggle as the CIR; default ON), with eligibility mirroring the CIR's IsSpecializedOp exactly. This
+// flag is ONLY its self-validation twin: when ON, every specialized op dual-runs vs the plain interpreter op on a
+// PPC-state snapshot (ALU ops double-run and assert bit-identical GPR/CR/XER/PC/Exceptions; load/stores single-run
+// and assert the pc/npc/Exceptions bookkeeping contract), committing the specialized result last. Slow; correctness
+// only. Default FALSE.
+const Info<bool> MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE{
+    {System::Main, "Core", "CIRIRSpecializedOpsValidate"}, false};
 // iCube: CachedInterpreter dead FP-Result-Flags (FPRF) elimination. The paired-single / floating-point
 // handlers call UpdateFPRFSingle/UpdateFPRFDouble on essentially every arithmetic FP op to classify the
 // result into the FPSCR.FPRF field — but PPCAnalyst's back-to-front pass already computes op.wantsFPRF,
