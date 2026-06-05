@@ -597,6 +597,19 @@ bool Metal::Gfx::TryComputeBlitRGBA8(AbstractTexture* dst, const MathUtil::Recta
     if (!src_tex || !dst_tex)
       return false;
 
+    // The kernels below bind plain, NON-array 2D textures (texture2d / texture2d_ms). EFB textures
+    // are 2D ARRAYS (FramebufferManager creates them as Texture_2DArray for layer/stereo support).
+    // Binding an array to a texture2d kernel argument is a hard Metal validation failure — and
+    // undefined behavior even without the validation layer (it happened to read layer 0 for
+    // non-stereo). Fall back to the stock, layer-aware raster path for any array (or otherwise
+    // non-2D) texture. The only callers — EFB resolve and EFB pixel-format reinterpret — are
+    // infrequent, so the fallback cost is negligible. (A future array-aware compute kernel could
+    // restore this path; it needs per-layer dispatch + stereo-correct indexing.)
+    const bool src_ok =
+        src_tex.textureType == MTLTextureType2D || src_tex.textureType == MTLTextureType2DMultisample;
+    if (!src_ok || dst_tex.textureType != MTLTextureType2D)
+      return false;
+
     // MSAA resolve path
     if (src_tex.sampleCount > 1)
     {

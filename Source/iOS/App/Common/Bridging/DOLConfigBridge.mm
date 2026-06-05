@@ -789,6 +789,16 @@ namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g
   Config::Save();
 }
 
++ (void)flushSettingsToDisk {
+  // Persist any in-memory Base config changes to the INI. Most setters write Base via
+  // SetBaseOrCurrent without an immediate Save(), so a setting toggled in the menu would
+  // otherwise be lost on app termination (it reverts to its compiled/launch default on the
+  // next launch — the visible "some toggles forget their value" bug). Called on app
+  // background. Safe while emulating: per-game changes live in CurrentRun, and Save() only
+  // serializes the Base layer.
+  Config::Save();
+}
+
 + (void)resetPageToDefaults:(NSInteger)page {
   auto safe_delete = [](auto info) {
     // Only delete from CurrentRun if that layer exists and the active layer is CurrentRun

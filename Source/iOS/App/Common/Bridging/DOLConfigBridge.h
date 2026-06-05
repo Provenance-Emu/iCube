@@ -411,6 +411,11 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)resetAllToDefaults NS_SWIFT_NAME(resetAllToDefaults());
 + (void)resetPageToDefaults:(NSInteger)page NS_SWIFT_NAME(resetPage(toDefaults:)); // 0=config, 1=graphics, 2=controllers, 3=debug, 4=about
 
+// Flush the in-memory Base config layer to disk. Most setters write Base via
+// SetBaseOrCurrent but do NOT Save() per-toggle, so settings only survive a relaunch
+// if something flushes. Call this on app background to persist any pending changes.
++ (void)flushSettingsToDisk NS_SWIFT_NAME(flushSettingsToDisk());
+
 + (NSArray<NSString*>*)audioBackendsForPicker;
 
 // Main.EmulatedUSBDevices (subset for iOS)

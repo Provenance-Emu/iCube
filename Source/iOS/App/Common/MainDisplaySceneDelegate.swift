@@ -64,6 +64,10 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func sceneDidEnterBackground(_ scene: UIScene) {
     ServiceManager.shared.applicationDidEnterBackground()
+    // Flush any pending in-memory Base config changes. Settings toggled in the menu write
+    // Base via SetBaseOrCurrent, but most setters don't Save() per-toggle, so without this
+    // a non-default toggle reverts to its launch default on the next launch.
+    DOLConfigBridge.flushSettingsToDisk()
   }
 
   func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
