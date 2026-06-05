@@ -89,6 +89,11 @@
 		<string>stikdebug</string>
 		<string>stikjit</string>
 	</array>
+	<key>LSEnvironment</key>
+	<dict>
+		<key>DOL_JIT_TXM_NOBRK</key>
+		<string>1</string>
+	</dict>
 	<key>DOLBuildSource</key>
 	<string>$(DOL_BUILD_SOURCE)</string>
 	<key>DOLCoreVersion</key>
