@@ -1995,6 +1995,8 @@ struct ConfigAdvancedView: View {
   @State private var cirIrMicroOpFusionValidate: Bool = false
   @State private var cirIrDeadFlagElim: Bool = false
   @State private var cirIrDeadFlagElimValidate: Bool = false
+  @State private var cirIrPicLoadStoreValidate: Bool = false
+  @State private var cirIrSpecializedOpsValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
   // CPU idle detection toggles
@@ -2151,6 +2153,14 @@ struct ConfigAdvancedView: View {
           Toggle(L("↳ Dead CR-Flag Elimination: Validate (slow, correctness pass)"), isOn: $cirIrDeadFlagElimValidate)
             .onChange(of: cirIrDeadFlagElimValidate) { DOLConfigBridge.setCirIrDeadFlagElimValidate($0) },
           L("Self-check for IR Dead CR-Flag Elimination: double-runs every eliminated op (CR computed vs skipped) and asserts the live CR fields match. Use this to A/B-verify on your games before trusting it. Much slower — turn ON for a correctness pass, then back OFF. Requires Dead CR-Flag Elimination (and the IR engine) to be ON. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("IR PIC Load/Store: Validate (slow, correctness pass)"), isOn: $cirIrPicLoadStoreValidate)
+            .onChange(of: cirIrPicLoadStoreValidate) { DOLConfigBridge.setCirIrPicLoadStoreValidate($0) },
+          L("Self-check for the IR engine's PIC direct-pointer load/store: for every load/store that takes the fast path, also runs the plain interpreter access on a snapshot and asserts the loaded register / stored memory / update-form writeback are bit-identical. IR-engine only; requires PIC Load/Store ON. Much slower — turn ON for a correctness pass, then OFF. OFF by default. Applies on next game launch."))
+        rowWithCaption(
+          Toggle(L("IR Specialized Ops: Validate (slow, correctness pass)"), isOn: $cirIrSpecializedOpsValidate)
+            .onChange(of: cirIrSpecializedOpsValidate) { DOLConfigBridge.setCirIrSpecializedOpsValidate($0) },
+          L("Self-check for the IR engine's specialized-ops fast path: dual-runs each specialized op vs the plain interpreter op and asserts bit-identical state. IR-engine only; requires Specialized Ops ON. Much slower — turn ON for a correctness pass, then OFF. OFF by default. Applies on next game launch."))
         rowWithCaption(
           Toggle(L("Block Linking (Cached Interpreter, experimental)"), isOn: $cirBlockLinking)
             .onChange(of: cirBlockLinking) { DOLConfigBridge.setCirBlockLinking($0) },
@@ -2340,6 +2350,8 @@ struct ConfigAdvancedView: View {
     cirIrMicroOpFusionValidate = DOLConfigBridge.cirIrMicroOpFusionValidate()
     cirIrDeadFlagElim = DOLConfigBridge.cirIrDeadFlagElim()
     cirIrDeadFlagElimValidate = DOLConfigBridge.cirIrDeadFlagElimValidate()
+    cirIrPicLoadStoreValidate = DOLConfigBridge.cirIrPicLoadStoreValidate()
+    cirIrSpecializedOpsValidate = DOLConfigBridge.cirIrSpecializedOpsValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist

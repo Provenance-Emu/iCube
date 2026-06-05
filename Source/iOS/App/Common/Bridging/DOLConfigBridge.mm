@@ -329,6 +329,10 @@ static bool ICubeEmulationActive() {
 + (void)setCirIrDeadFlagElim:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM, (bool)enabled); }
 + (BOOL)cirIrDeadFlagElimValidate { return Config::Get(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE); }
 + (void)setCirIrDeadFlagElimValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE, (bool)enabled); }
++ (BOOL)cirIrPicLoadStoreValidate { return Config::Get(Config::MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE); }
++ (void)setCirIrPicLoadStoreValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE, (bool)enabled); }
++ (BOOL)cirIrSpecializedOpsValidate { return Config::Get(Config::MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE); }
++ (void)setCirIrSpecializedOpsValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE, (bool)enabled); }
 + (BOOL)cirBlockLinking { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING); }
 + (void)setCirBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING, (bool)enabled); }
 + (BOOL)cirBlockLinkingValidate { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE); }
@@ -695,6 +699,8 @@ static bool ICubeEmulationActive() {
   del(Config::MAIN_CIR_IR_MICROOP_FUSION_VALIDATE);
   del(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM);
   del(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE);
+  del(Config::MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE);
+  del(Config::MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE);
   del(Config::MAIN_OVERCLOCK_ENABLE);
   del(Config::MAIN_OVERCLOCK);
   del(Config::MAIN_VI_OVERCLOCK_ENABLE);

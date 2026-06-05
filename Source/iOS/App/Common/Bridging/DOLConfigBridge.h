@@ -180,6 +180,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirIrDeadFlagElim:(BOOL)enabled;
 + (BOOL)cirIrDeadFlagElimValidate; // IR dead-flag elim self-validation (default OFF, slow)
 + (void)setCirIrDeadFlagElimValidate:(BOOL)enabled;
++ (BOOL)cirIrPicLoadStoreValidate;   // IR PIC load/store self-validation (default OFF, slow)
++ (void)setCirIrPicLoadStoreValidate:(BOOL)enabled;
++ (BOOL)cirIrSpecializedOpsValidate; // IR specialized-ops self-validation (default OFF, slow)
++ (void)setCirIrSpecializedOpsValidate:(BOOL)enabled;
 + (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)
