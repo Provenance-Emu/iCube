@@ -13,6 +13,7 @@
 #include "VideoBackends/Metal/MTLVertexManager.h"
 
 #include "Common/Config/Config.h"            // iCube FastMath: Config::Get
+#include "Common/Logging/Log.h"              // iCube: ERROR_LOG_FMT for the texture-size guard
 #include "Core/Config/GraphicsSettings.h"    // iCube FastMath: GFX_HACK_FAST_MATH
 
 #include "VideoCommon/FramebufferManager.h"
@@ -62,6 +63,19 @@ std::unique_ptr<AbstractTexture> Metal::Gfx::CreateTexture(const TextureConfig& 
 {
   @autoreleasepool
   {
+    // Guard against bogus dimensions (e.g. an overflow/garbage config producing width/height = INT_MAX),
+    // which otherwise trips a FATAL Metal descriptor-validation assertion (ICUBE-2). Reject gracefully —
+    // callers handle a null texture. 16384 is the conservative Apple-GPU max texture dimension; real
+    // iCube textures are far smaller, so anything beyond it (or zero) is a bug upstream, not a valid size.
+    constexpr u32 kMaxTextureDim = 16384;
+    if (config.width == 0 || config.height == 0 || config.width > kMaxTextureDim ||
+        config.height > kMaxTextureDim)
+    {
+      ERROR_LOG_FMT(VIDEO, "Metal::CreateTexture: rejecting invalid texture size {}x{} (name '{}')",
+                    config.width, config.height, name);
+      return nullptr;
+    }
+
     MRCOwned<MTLTextureDescriptor*> desc = MRCTransfer([MTLTextureDescriptor new]);
     [desc setTextureType:FromAbstract(config.type, config.samples > 1)];
     [desc setPixelFormat:Util::FromAbstract(config.format)];
