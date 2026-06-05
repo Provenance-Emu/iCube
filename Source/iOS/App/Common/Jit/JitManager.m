@@ -45,11 +45,20 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 
     // JIT is supported iff the process is debuggable (carries get-task-allow): that
     // is the universal precondition for enabling JIT on iOS. Determined at runtime
-    // rather than from the APPSTORE macro so it adapts to how a build is actually
-    // run — App Store / TestFlight installs are jitless (flag stripped → false),
-    // while sideload / jailbreak / TrollStore / dev builds, AND the App Store scheme
-    // launched from Xcode or StikDebug, are debuggable (flag present → true).
+    // for non-App-Store builds so it adapts to how the binary is actually run —
+    // sideload / jailbreak / TrollStore / dev builds are debuggable (flag present
+    // → true), normal App Store / TestFlight installs are jitless (flag stripped).
+    //
+    // App Store builds are jitless by contract: hard-lock JIT off at compile time so
+    // the App Store scheme stays jitless even when dev-signed for local testing
+    // (dev-signing carries get-task-allow, and Xcode sets CS_DEBUGGED on attach,
+    // which would otherwise make the runtime check report JIT as available and lead
+    // the boot path to attempt the LuckTXM handshake and crash).
+#if APPSTORE
+    self.jitSupported = false;
+#else
     self.jitSupported = [self checkIfProcessIsJitCapable];
+#endif
     
     if (@available(iOS 26, tvOS 26, *)) {
       self.deviceHasTxm = [self checkIfDeviceUsesTXM];
@@ -63,6 +72,16 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 }
 
 - (void)recheckIfJitIsAcquired {
+  // Builds that cannot support JIT at all (App Store / jitless) must never acquire
+  // it, even with a debugger attached — Xcode sets CS_DEBUGGED on any attached
+  // process, and a dev-signed App Store binary carries get-task-allow, either of
+  // which would otherwise flip acquiredJit true and drive the boot path into the
+  // JIT/LuckTXM handshake. Hard-stop here keeps such builds jitless and crash-free.
+  if (!self.jitSupported) {
+    self.acquiredJit = false;
+    return;
+  }
+
   if (_jitType == DOLJitTypeDebugger) {
     if (self.deviceHasTxm) {
       NSDictionary* environment = [[NSProcessInfo processInfo] environment];

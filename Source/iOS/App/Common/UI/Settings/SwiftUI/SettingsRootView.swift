@@ -2327,12 +2327,14 @@ func settingsNavCaption<Destination: View, Label: View>(
 private enum CpuEngine: Int, CaseIterable {
   case interpreter = 0
   case cachedInterpreter = 5
+  case cachedInterpreterIR = 6
   case jit64 = 1
   case jitARM64 = 4
   var label: String {
     switch self {
     case .interpreter: return L("Interpreter (slowest)")
     case .cachedInterpreter: return L("Cached Interpreter (slower)")
+    case .cachedInterpreterIR: return L("Cached Interpreter (IR, experimental)")
     case .jit64: return L("JIT Recompiler for x86-64 (recommended)")
     case .jitARM64: return L("JIT Recompiler for ARM64 (recommended)")
     }
@@ -2347,7 +2349,9 @@ private struct CpuEnginePicker: View {
   /// Interpreter at launch.
   var jitAvailable: Bool = true
   private var choices: [CpuEngine] {
-    jitAvailable ? CpuEngine.allCases : [.interpreter, .cachedInterpreter]
+    // The IR core (CPUCore 6) is data-interpreted and App-Store-legal, so it must
+    // appear in the jitless list too — not just when JIT is available.
+    jitAvailable ? CpuEngine.allCases : [.interpreter, .cachedInterpreter, .cachedInterpreterIR]
   }
   var body: some View {
     List {

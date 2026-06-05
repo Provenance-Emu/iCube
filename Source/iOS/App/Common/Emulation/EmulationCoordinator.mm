@@ -1511,17 +1511,16 @@ after_set:
         {
           // TXM device + CS_DEBUGGED.
           //
-          // Default ON: attempt LuckTXM + full JIT. MemoryUtil_iOS_LuckTXM issues the
-          // StikDebug broker handshake (brk #0x69 -> #0xf00d) to authorize TXM, then
-          // vm_remap. Reaching here already implies a broker is attached and we are
-          // NOT under Xcode (JitManager leaves acquiredJit false in the Xcode case),
-          // i.e. StikDebug is attached — so the handshake is expected to be answered.
-          // If the attached broker has no compatible script, the brk falls through the
-          // SIGTRAP net / auth flag, IsTXMAvailable() is false, and we drop to
-          // CachedInterpreter. DOL_JIT_TXM=0 forces that interpreter fallback (e.g. for
-          // debugging the no-JIT path without detaching StikDebug).
+          // Opt-in ONLY (default OFF). The LuckTXM brk #0x69 handshake is answered
+          // exclusively by a real StikDebug broker, and CS_DEBUGGED cannot tell a
+          // broker apart from Xcode (or any debugger attached to a dev-signed build) —
+          // both set the same flag. So auto-attempting the brk raises an uncatchable
+          // EXC_BREAKPOINT whenever no broker is actually present (Xcode, dev testing).
+          // We therefore require an explicit DOL_JIT_TXM=1 to attempt it; unset or any
+          // other value drops straight to CachedInterpreter (no brk, no crash). A
+          // StikDebug user who wants the experimental JIT path opts in via that env var.
           NSDictionary* env = [[NSProcessInfo processInfo] environment];
-          BOOL enableTXM = ![env[@"DOL_JIT_TXM"] isEqualToString:@"0"];
+          BOOL enableTXM = [env[@"DOL_JIT_TXM"] isEqualToString:@"1"];
 
           if (enableTXM)
           {
