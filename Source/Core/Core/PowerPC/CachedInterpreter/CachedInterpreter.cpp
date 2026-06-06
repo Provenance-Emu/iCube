@@ -177,6 +177,13 @@ static bool s_specialized_ops_validate = false;
 // false, FP-LS fall through to the unchanged generic Interpret<false> emit — no marker callback is ever
 // written for them, so the callback stream is byte-identical to the flag-off baseline. Read once in Init.
 static bool s_specialized_fp_ls = false;
+// iCube: when true, the emission site ALSO routes the hot paired-single quantized load/store ops (the
+// CIR_SPECIALIZED_PSQ_OPS set) through the specialized direct-dispatch. SEPARATE from both s_specialized_ops
+// and s_specialized_fp_ls so psq can be A/B-tested independently. ORTHOGONAL to MAIN_CIR_PSQ_FASTPATH (a
+// compute opt inside the handler) — this only changes how the handler is CALLED. Default OFF: when false,
+// psq ops fall through to the unchanged generic Interpret<false> emit — no marker callback is ever written
+// for them, so the callback stream is byte-identical to the flag-off baseline. Read once in Init.
+static bool s_specialized_psq = false;
 
 // iCube: software-prefetch hints (MAIN_CACHED_INTERPRETER_PREFETCH). When OFF (the default on this
 // Apple-only fork) NO __builtin_prefetch is ever emitted, so the CIR hot loop and the PIC load/store
@@ -317,13 +324,49 @@ static CachedInterpreter* s_validate_instance = nullptr;
   X(stfdux) /* X-form indexed update: Write_U64(riPS0(FS), EA_U); gpr[RA] = EA on no-DSI */         \
   X(stfiwx) /* X-form indexed: Write_U32(low 32 bits of riPS0(FS), EA) (store-int-from-FPR) */
 
+// CIR_SPECIALIZED_PSQ_OPS — Tier-3 paired-single QUANTIZED load/store (D-form + primary-4 indexed). The psq
+// analogue of CIR_SPECIALIZED_FP_LS_OPS, broken out as a SEPARATE list because it is gated on its own
+// default-OFF flag (s_specialized_psq / MAIN_CIR_SPECIALIZED_PSQ) so it can be A/B-tested independently of
+// both the default-ON integer specialization and the FP-LS flag. Membership (ALL must hold; verified against
+// Interpreter.h handler declarations — every name below is a real `static void Interpreter::<name>(
+// Interpreter&, UGeckoInstruction)`; all 8 candidates have real handlers, none dropped):
+//   - FL_LOADSTORE + FL_USE_FPU (a quantized paired-single FPR load/store), canEndBlock == false (so
+//     write_pc is ALWAYS false for these).
+//   - Eligible ONLY because on the App-Store jitless config jo.memcheck is OFF and BOTH jo.fp_exceptions and
+//     jo.div_by_zero_exceptions are OFF, so ShouldHandleFPExceptionForInstruction returns false. With all
+//     three off the DoJit guard `(jo.memcheck && FL_LOADSTORE) || (!canEndBlock &&
+//     ShouldHandleFPExceptionForInstruction)` is false, so the GENERIC path ALSO routes these through the
+//     plain Interpret<false> trampoline — NOT InterpretAndCheckExceptions. The HID2.LSQE privilege check and
+//     the GQR dequantize/quantize both live INSIDE the handler (Interpreter::psq_l etc.); specialization
+//     just calls that SAME handler by a direct, inlinable pointer instead of via the indirect operands.func.
+//     Specialized-vs-generic is therefore identical BY CONSTRUCTION (same GetInterpreterOp handler, same
+//     trampoline contract): a DSI raised inside the MMU access sits in ppc_state.Exceptions identically
+//     either way, deferred to the next block boundary (neither path calls CheckExceptions). CheckFPU is
+//     still emitted ONCE per block at the first FP instruction, independent of specialization. When
+//     fp-exceptions or memcheck are ON these take the DoJit `if` branch and are never specialized — so
+//     specialization only ever happens in the else branch where the generic path uses Interpret. NOT safe to
+//     double-run (psq_st writes memory, psq_l can read MMIO) => single-run validation only (IsLoadStoreSpecOp
+//     returns true for these).
+//   - ORTHOGONAL to the MAIN_CIR_PSQ_FASTPATH compute opt inside the handler body (and to PS_NEON): this
+//     list only governs how the handler is CALLED, so all three compose.
+#define CIR_SPECIALIZED_PSQ_OPS(X)                                                                 \
+  X(psq_l)    /* D-form: dequantize 1-2 paired singles from EA into ps0/ps1(FD) via GQR[I]; RA-base */ \
+  X(psq_lu)   /* D-form update: dequantize from EA_U into ps(FD); gpr[RA] = EA on no-DSI */         \
+  X(psq_st)   /* D-form: quantize ps0/ps1(FS) to EA via GQR[I]; RA-base */                          \
+  X(psq_stu)  /* D-form update: quantize ps(FS) to EA_U; gpr[RA] = EA on no-DSI */                  \
+  X(psq_lx)   /* primary-4 indexed: dequantize from EA = (RA?gpr[RA]:0)+gpr[RB] into ps(FD) */      \
+  X(psq_lux)  /* primary-4 indexed update: dequantize from EA_U into ps(FD); gpr[RA] = EA on no-DSI */ \
+  X(psq_stx)  /* primary-4 indexed: quantize ps(FS) to EA = (RA?gpr[RA]:0)+gpr[RB] */               \
+  X(psq_stux) /* primary-4 indexed update: quantize ps(FS) to EA_U; gpr[RA] = EA on no-DSI */
+
 // Combined list driving the op-id enum, the emit site, the dispatch switch, and IsSpecializedOp.
-// ALU entries first so their enum ids stay stable across LS additions; integer LS next, then FP LS
-// (appended last so existing integer enum ids are unchanged).
+// ALU entries first so their enum ids stay stable across LS additions; integer LS next, then FP LS, then
+// psq LS (each appended last so all existing enum ids are unchanged).
 #define CIR_SPECIALIZED_OP_LIST(X)                                                                 \
   CIR_SPECIALIZED_ALU_OPS(X)                                                                       \
   CIR_SPECIALIZED_LS_OPS(X)                                                                        \
-  CIR_SPECIALIZED_FP_LS_OPS(X)
+  CIR_SPECIALIZED_FP_LS_OPS(X)                                                                     \
+  CIR_SPECIALIZED_PSQ_OPS(X)
 
 // iCube: compact op-id stored in the specialized-only operand payload (SpecializedInterpretOperands)
 // so ExecuteOneBlock can dispatch via a switch/jump-table keyed on the id instead of a linear chain
@@ -370,6 +413,22 @@ static bool IsFpLsSpecializedOp(Interpreter::Instruction func)
     return true;
   CIR_SPECIALIZED_FP_LS_OPS(CIR_FP_CHECK)
 #undef CIR_FP_CHECK
+  return false;
+}
+
+// iCube: true IFF this opcode's chosen interpreter handler is a paired-single quantized load/store on the
+// psq whitelist (CIR_SPECIALIZED_PSQ_OPS). The emit site uses this to pick WHICH flag gates specialization:
+// psq on the default-OFF s_specialized_psq, every other specialized op (ALU + integer LS) on the default-ON
+// s_specialized_ops, FP-LS on s_specialized_fp_ls. The three whitelists are DISJOINT (distinct mnemonics),
+// so the nested gate ternary is unambiguous. Generated from the same X-macro so it can never drift from the
+// list. Emit-time only.
+static bool IsPsqSpecializedOp(Interpreter::Instruction func)
+{
+#define CIR_PSQ_CHECK(name)                                                                        \
+  if (func == &Interpreter::name)                                                                  \
+    return true;
+  CIR_SPECIALIZED_PSQ_OPS(CIR_PSQ_CHECK)
+#undef CIR_PSQ_CHECK
   return false;
 }
 
@@ -1073,6 +1132,11 @@ void CachedInterpreter::Init()
   // When off the FP-LS emit branch is never taken, so the callback stream is byte-identical to baseline.
   // Reuses s_specialized_ops_validate for its single-run validation (no separate FP-LS validate flag).
   s_specialized_fp_ls = Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_LS);
+  // iCube: psq load/store DISPATCH specialization (default OFF; independent A/B toggle). Read once at codegen
+  // time. When off the psq emit branch is never taken, so the callback stream is byte-identical to baseline.
+  // Reuses s_specialized_ops_validate for its single-run validation (no separate psq validate flag).
+  // ORTHOGONAL to MAIN_CIR_PSQ_FASTPATH (a compute opt inside the handler) — this only changes the call.
+  s_specialized_psq = Config::Get(Config::MAIN_CIR_SPECIALIZED_PSQ);
   s_microop_fusion = Config::Get(Config::MAIN_CIR_MICROOP_FUSION);
   s_microop_fusion_validate = Config::Get(Config::MAIN_CIR_MICROOP_FUSION_VALIDATE);
   s_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
@@ -1447,10 +1511,10 @@ s32 CachedInterpreter::Interpret(PowerPC::PowerPCState& ppc_state,
 
 // True if the op-id is a Tier-3 load/store (vs a Tier-1 ALU op). LS ops are NOT safe to double-run
 // (a store would double-write memory, a load could double-read MMIO), so the validate path uses
-// single-run validation for them. Generated from BOTH CIR_SPECIALIZED_LS_OPS (integer) AND
-// CIR_SPECIALIZED_FP_LS_OPS (FP) so it can't drift — CRITICAL: the FP-LS ops MUST be here so they take
-// the single-run validate path (an FP store double-writes memory, an FP load could double-read MMIO,
-// exactly like the integer LS), and are NEVER routed to the double-run ALU path.
+// single-run validation for them. Generated from CIR_SPECIALIZED_LS_OPS (integer), CIR_SPECIALIZED_FP_LS_OPS
+// (FP), AND CIR_SPECIALIZED_PSQ_OPS (paired-single quantized) so it can't drift — CRITICAL: the FP-LS and
+// psq ops MUST be here so they take the single-run validate path (psq_st double-writes memory, psq_l could
+// double-read MMIO, exactly like the integer LS), and are NEVER routed to the double-run ALU path.
 static bool IsLoadStoreSpecOp(CirSpecOp id)
 {
   switch (id)
@@ -1460,6 +1524,7 @@ static bool IsLoadStoreSpecOp(CirSpecOp id)
     return true;
     CIR_SPECIALIZED_LS_OPS(CIR_LS_CASE)
     CIR_SPECIALIZED_FP_LS_OPS(CIR_LS_CASE)
+    CIR_SPECIALIZED_PSQ_OPS(CIR_LS_CASE)
 #undef CIR_LS_CASE
   default:
     return false;
@@ -5001,16 +5066,21 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // write_pc == op.canEndBlock, matching the generic Interpret selection. Cold/non-whitelisted
         // ops fall through to the unchanged generic emission below.
         //
-        // TWO INDEPENDENT FLAGS gate this: FP load/stores (IsFpLsSpecializedOp) are gated on the
-        // default-OFF s_specialized_fp_ls (MAIN_CIR_SPECIALIZED_FP_LS); every other specialized op (ALU +
+        // THREE INDEPENDENT FLAGS gate this (the three whitelists are DISJOINT, so the nested ternary is
+        // unambiguous): FP load/stores (IsFpLsSpecializedOp) are gated on the default-OFF s_specialized_fp_ls
+        // (MAIN_CIR_SPECIALIZED_FP_LS); paired-single quantized load/stores (IsPsqSpecializedOp) are gated on
+        // the default-OFF s_specialized_psq (MAIN_CIR_SPECIALIZED_PSQ); every other specialized op (ALU +
         // integer LS) is gated on the default-ON s_specialized_ops. So integer specialization stays on by
-        // default while FP-LS stays opt-in/A/B-able. When the relevant flag is OFF the op's marker
+        // default while FP-LS and psq stay opt-in/A/B-able. When the relevant flag is OFF the op's marker
         // callback is never written and it falls through to the generic Interpret emit, so the flag-off
         // callback stream is byte-identical to stock. Because this whole block is inside the DoJit ELSE
-        // branch (fp-exceptions+memcheck off), FP-LS specialize ONLY when the generic path would have
-        // used Interpret<write_pc> — so specialized ≡ generic by construction.
+        // branch (fp-exceptions+memcheck off), FP-LS/psq specialize ONLY when the generic path would have
+        // used Interpret<write_pc> — so specialized ≡ generic by construction. (psq dispatch specialization
+        // is ORTHOGONAL to MAIN_CIR_PSQ_FASTPATH, which optimizes COMPUTE inside the handler body.)
         if (!emitted && IsSpecializedOp(func) &&
-            (IsFpLsSpecializedOp(func) ? s_specialized_fp_ls : s_specialized_ops))
+            (IsFpLsSpecializedOp(func) ?
+                 s_specialized_fp_ls :
+                 (IsPsqSpecializedOp(func) ? s_specialized_psq : s_specialized_ops)))
         {
           const SpecializedInterpretOperands spec_operands = {operands,
                                                               static_cast<u16>(SpecOpId(func))};

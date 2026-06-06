@@ -862,6 +862,34 @@ const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE{
 // Default OFF pending on-device A/B; flag-off the emitted callback stream is byte-identical to baseline
 // (no marker callback is ever written for FP-LS — they fall through to the unchanged generic emit).
 const Info<bool> MAIN_CIR_SPECIALIZED_FP_LS{{System::Main, "Core", "CIRSpecializedFpLs"}, false};
+// iCube: paired-single quantized load/store DISPATCH specialization — the psq analogue of
+// MAIN_CIR_SPECIALIZED_FP_LS, again as its OWN default-OFF flag so it can be A/B-tested on device
+// independently of both the (default-ON) integer specialization and the FP-LS flag. Routes the hot psq
+// quantized paired load/stores (D-form psq_l/psq_lu/psq_st/psq_stu and the primary-4 indexed
+// psq_lx/psq_lux/psq_stx/psq_stux) through the same specialized DIRECT jump-table dispatch — one direct,
+// inlinable Interpreter::name call — instead of the generic Interpret<write_pc> trampoline (which costs an
+// extra indirect operands.func call per op). psq_l is the SINGLE hottest op in the target title
+// (Chibi-Robo's rank-1 block is five psq_l), so this is the highest-value dispatch cut after FP-LS.
+//
+// ELIGIBLE BY CONSTRUCTION (do not re-litigate; same argument as FP-LS): psq_l/psq_st are FL_LOADSTORE +
+// FL_USE_FPU. With both jo.fp_exceptions and jo.div_by_zero_exceptions off (the App-Store jitless default)
+// ShouldHandleFPExceptionForInstruction is always false, and with jo.memcheck off the DoJit guard
+// `(jo.memcheck && FL_LOADSTORE)` is false — so these fall into the SAME else-branch of DoJit where the
+// generic path emits a plain Interpret<write_pc> (NOT InterpretAndCheckExceptions). The HID2.LSQE privilege
+// check and the GQR quantization/dequantization both live INSIDE the handler (Interpreter::psq_l etc.);
+// specialization just calls that SAME handler by a direct, inlinable pointer instead of via the indirect
+// operands.func — so specialized ≡ generic by construction (only the call is direct). The DoJit if/else
+// gates this: when fp-exceptions OR memcheck are on these take the `if` branch and are NEVER specialized.
+// CheckFPU is still emitted once per block, untouched.
+//
+// ORTHOGONAL to MAIN_CIR_PSQ_FASTPATH: that flag is a COMPUTE optimization inside the dequant/quant switch
+// of the handler body; this flag only changes how the handler is CALLED. They compose (as does PS_NEON).
+// Single-run validated only (psq_l reads memory/MMIO, psq_st writes — NEVER double-run): reuses
+// MAIN_CIR_SPECIALIZED_OPS_VALIDATE (the single-run LS bookkeeping check is handler-agnostic), so there is
+// no separate psq validate flag. Default OFF pending on-device A/B; flag-off the emitted callback stream is
+// byte-identical to baseline (no marker callback is ever written for psq — they fall through to the
+// unchanged generic emit).
+const Info<bool> MAIN_CIR_SPECIALIZED_PSQ{{System::Main, "Core", "CIRSpecializedPsq"}, false};
 // iCube: CachedInterpreter block linking. When a block ends at a STATIC direct branch (bx/bcx) whose
 // target block is already compiled with matching feature_flags, let the block continue DIRECTLY into
 // the target's callback stream instead of round-tripping through the dispatcher (Dispatch +

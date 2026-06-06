@@ -415,6 +415,13 @@ extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE;
 // specialization. Reuses MAIN_CIR_SPECIALIZED_OPS_VALIDATE for its single-run validation (no separate
 // validate flag). See MainSettings.cpp for the full eligibility/gating rationale.
 extern const Info<bool> MAIN_CIR_SPECIALIZED_FP_LS;
+// iCube: paired-single quantized load/store (psq_l/psq_st) DISPATCH specialization, the psq analogue of
+// MAIN_CIR_SPECIALIZED_FP_LS. Separate, default-OFF flag so the psq direct-dispatch can be A/B-tested on
+// device independently of both the (default-ON) integer specialization and the FP-LS flag. Reuses
+// MAIN_CIR_SPECIALIZED_OPS_VALIDATE for its single-run validation (no separate validate flag). ORTHOGONAL
+// to MAIN_CIR_PSQ_FASTPATH (a compute opt INSIDE the handler) — this only changes how the handler is
+// CALLED (direct vs indirect trampoline). See MainSettings.cpp for the full eligibility/gating rationale.
+extern const Info<bool> MAIN_CIR_SPECIALIZED_PSQ;
 extern const Info<bool> MAIN_CIR_BLOCK_LINKING;
 extern const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE;
 extern const Info<bool> MAIN_CIR_PIC_LOADSTORE;

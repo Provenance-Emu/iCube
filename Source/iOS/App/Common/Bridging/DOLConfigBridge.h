@@ -146,6 +146,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirSpecializedOpsValidate:(BOOL)enabled;
 + (BOOL)cirSpecializedFpLs;       // FP load/store specialization (default OFF, A/B-able)
 + (void)setCirSpecializedFpLs:(BOOL)enabled;
++ (BOOL)cirSpecializedPsq;        // psq quantized load/store dispatch specialization (default OFF, A/B-able)
++ (void)setCirSpecializedPsq:(BOOL)enabled;
 + (BOOL)cirMicroOpFusion;         // micro-op fusion (default OFF, experimental)
 + (void)setCirMicroOpFusion:(BOOL)enabled;
 + (BOOL)cirMicroOpFusionValidate; // micro-op-fusion self-validation (default OFF, correctness pass)

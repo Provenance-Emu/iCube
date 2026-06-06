@@ -123,6 +123,7 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   lineB("MAIN_CIR_BLOCK_LINKING", Config::Get(Config::MAIN_CIR_BLOCK_LINKING));
   lineB("MAIN_CIR_SPECIALIZED_OPS", Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS));
   lineB("MAIN_CIR_SPECIALIZED_FP_LS", Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_LS));
+  lineB("MAIN_CIR_SPECIALIZED_PSQ", Config::Get(Config::MAIN_CIR_SPECIALIZED_PSQ));
   lineB("GFX_USE_COMPUTE_EFBXFB", Config::Get(Config::GFX_USE_COMPUTE_EFBXFB));
   lineB("GFX_USE_COMPUTE_VERTEX_DECODE", Config::Get(Config::GFX_USE_COMPUTE_VERTEX_DECODE));
   lineB("MAIN_DSP_HLE", Config::Get(Config::MAIN_DSP_HLE));
