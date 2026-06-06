@@ -345,6 +345,9 @@ static bool ICubeEmulationActive() {
 + (void)setCirBlockLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING, (bool)enabled); }
 + (BOOL)cirBlockLinkingValidate { return Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE); }
 + (void)setCirBlockLinkingValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE, (bool)enabled); }
+// Stall instrumentation: measures where the CPU thread waits (default ON; <0.5% overhead).
++ (BOOL)stallMetrics { return Config::Get(Config::MAIN_STALL_METRICS); }
++ (void)setStallMetrics:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_STALL_METRICS, (bool)enabled); }
 // MANUAL CPU/VI clock setters: write the Base layer (resolver step #3 layer discipline). The
 // adaptive clock controller writes these same keys on the CurrentRun layer directly via
 // Config::SetCurrent (EmulationCoordinator.mm:484-489,584-593), NOT through these bridges, so

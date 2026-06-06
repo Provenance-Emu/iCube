@@ -89,6 +89,7 @@
 #include "VideoCommon/FrameDumper.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/PerformanceMetrics.h"
+#include "VideoCommon/StallMetrics.h"
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoEvents.h"
 
@@ -354,6 +355,10 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
     Common::SetCurrentThreadName("CPU thread");
   else
     Common::SetCurrentThreadName("CPU-GPU thread");
+
+  // Register with StallMetrics so the window boundary can sample this thread's CPU utilization
+  // (the central "is the CPU thread blocked or just idle?" signal). Role matches the thread name.
+  StallMetrics::RegisterThread(system.IsDualCoreMode() ? "CPU thread" : "CPU-GPU thread");
 
   // This needs to be delayed until after the video backend is ready.
   DolphinAnalytics::Instance().ReportGameStart();
@@ -634,6 +639,7 @@ static void EmuThread(Core::System& system, std::unique_ptr<BootParameters> boot
     // This thread, after creating the EmuWindow, spawns a CPU
     // thread, and then takes over and becomes the video thread
     Common::SetCurrentThreadName("Video thread");
+    StallMetrics::RegisterThread("Video thread");
     UndeclareAsCPUThread();
     Common::FPU::LoadDefaultSIMDState();
 

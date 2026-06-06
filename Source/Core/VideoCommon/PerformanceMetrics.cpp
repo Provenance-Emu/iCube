@@ -10,6 +10,7 @@
 
 #include "Core/Config/GraphicsSettings.h"
 #include "VideoCommon/OnScreenDisplay.h"
+#include "VideoCommon/StallMetrics.h"
 #include "VideoCommon/VideoConfig.h"
 
 PerformanceMetrics g_perf_metrics;
@@ -36,6 +37,10 @@ void PerformanceMetrics::Reset()
 
   m_speed = 0;
   m_max_speed = 0;
+
+  // Re-prime the StallMetrics window on the next marker (the sleep baseline just reset to zero).
+  m_stall_window_primed = false;
+  m_stall_window_last_sleeping = DT::zero();
 }
 
 void PerformanceMetrics::CountFrame()
@@ -89,6 +94,27 @@ void PerformanceMetrics::CountPerformanceMarker(s64 core_ticks, u32 ticks_per_se
 
   m_speed.store(elapsed_core_time / (clock_time - oldest.clock_time), std::memory_order_relaxed);
   m_max_speed.store(elapsed_core_time / (work_time - oldest.work_time), std::memory_order_relaxed);
+
+  // iCube StallMetrics window roll. Hot-path cost is one wall-time compare; everything else runs at
+  // most ~1 Hz. m_time_sleeping is cumulative, so pass the delta over this window (the throttle.sleep
+  // line), letting StallMetrics own the per-site accumulators without double-counting throttle idle.
+  if (!m_stall_window_primed)
+  {
+    m_stall_window_last_time = clock_time;
+    m_stall_window_last_sleeping = m_time_sleeping;
+    m_stall_window_primed = true;
+  }
+  else if (clock_time - m_stall_window_last_time >= std::chrono::seconds{1})
+  {
+    const DT window_wall = clock_time - m_stall_window_last_time;
+    const DT window_sleep = m_time_sleeping - m_stall_window_last_sleeping;
+    m_stall_window_last_time = clock_time;
+    m_stall_window_last_sleeping = m_time_sleeping;
+    StallMetrics::OnWindowBoundary(
+        static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(window_wall).count()),
+        static_cast<u64>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(window_sleep).count()));
+  }
 }
 
 double PerformanceMetrics::GetFPS() const

@@ -124,6 +124,15 @@ private:
 
   std::deque<PerfSample> m_samples;
   DT m_time_sleeping{};
+
+  // --- iCube StallMetrics window hook ---
+  // The StallMetrics report rolls on the same cadence as the speed/maxSpeed sensors, but gated to a
+  // ~1 s wall window (the per-marker rate is far too fast for a human-readable stall table). These
+  // track the previous boundary so CountPerformanceMarker can pass StallMetrics the wall time and
+  // the throttle-sleep delta for THIS window (m_time_sleeping is cumulative, zeroed only at Reset).
+  TimePoint m_stall_window_last_time{};
+  DT m_stall_window_last_sleeping{};
+  bool m_stall_window_primed = false;
 };
 
 extern PerformanceMetrics g_perf_metrics;

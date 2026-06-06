@@ -30,6 +30,7 @@
 
 #include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
+#include "Common/StallSignpost.h"
 #include "Common/StringUtil.h"
 
 namespace Common
@@ -60,12 +61,12 @@ void SetCurrentThreadAffinity(u32 mask)
 // Supporting functions
 void SleepCurrentThread(int ms)
 {
+  // Signpost only: Thread.cpp lives in Common and must not depend on VideoCommon/StallMetrics, and
+  // every caller here is a peripheral/IO thread (Wiimote/EXI/SI/USB/GCAdapter/Hotkey) — not the CPU
+  // thread — so a CPU-thread-blocked accumulator would be near-worthless. The interval still shows
+  // up in Instruments for cross-thread correlation.
+  ICUBE_STALL_INTERVAL("thread.sleep");
   Sleep(ms);
-}
-
-void SwitchCurrentThread()
-{
-  SwitchToThread();
 }
 
 // Sets the debugger-visible name of the current thread.
@@ -159,12 +160,9 @@ void SetCurrentThreadAffinity(u32 mask)
 
 void SleepCurrentThread(int ms)
 {
+  // Signpost only — see the Win32 SleepCurrentThread above for why this is not a StallMetrics site.
+  ICUBE_STALL_INTERVAL("thread.sleep");
   usleep(1000 * ms);
-}
-
-void SwitchCurrentThread()
-{
-  usleep(1000 * 1);
 }
 
 #ifdef __APPLE__
@@ -178,11 +176,13 @@ static void SetCurrentThreadQoS_Apple(const char* name)
   if (!name)
     return;
   qos_class_t qos = QOS_CLASS_DEFAULT;
-  if (std::strstr(name, "CPU"))
+  // AsyncShaderCompiler rides USER_INTERACTIVE with the CPU thread: the hot thread gates on its
+  // output (pipeline-cache misses / ubershader replacement), so one tier down = E-core eligible =
+  // priority inversion on the thread the emulated core is waiting for (2026-06-06 QoS audit).
+  if (std::strstr(name, "CPU") || std::strstr(name, "AsyncShaderCompiler"))
     qos = QOS_CLASS_USER_INTERACTIVE;
   else if (std::strstr(name, "DSP") || std::strstr(name, "Audio") || std::strstr(name, "Video") ||
-           std::strstr(name, "GPU") || std::strstr(name, "FIFO-GPU") ||
-           std::strstr(name, "AsyncShaderCompiler"))
+           std::strstr(name, "GPU") || std::strstr(name, "FIFO-GPU"))
     qos = QOS_CLASS_USER_INITIATED;
   else if (std::strstr(name, "DVD") || std::strstr(name, "Memcard") || std::strstr(name, "Asset") ||
            std::strstr(name, "Analytics") || std::strstr(name, "FrameDumping") ||

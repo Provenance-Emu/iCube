@@ -15,6 +15,7 @@
 #include "Common/ChunkFile.h"
 #include "Common/Logging/Log.h"
 #include "Common/SPSCQueue.h"
+#include "Common/StallSignpost.h"
 
 #include "Core/AchievementManager.h"
 #include "Core/CPUThreadConfigCallback.h"
@@ -404,10 +405,16 @@ void CoreTimingManager::SleepUntil(TimePoint time_point)
   {
     const TimePoint time = Clock::now();
 
-    if (use_precision_timer)
-      m_precision_cpu_timer.SleepUntil(time_point);
-    else
-      std::this_thread::sleep_until(time_point);
+    {
+      // Signpost ONLY: the throttle-sleep duration is already measured by PerformanceMetrics
+      // (m_time_sleeping, counted just below) and surfaced as StallMetrics' throttle.sleep line, so
+      // a StallMetrics accumulator here would double-count. The interval still shows in Instruments.
+      ICUBE_STALL_INTERVAL("throttle.sleep");
+      if (use_precision_timer)
+        m_precision_cpu_timer.SleepUntil(time_point);
+      else
+        std::this_thread::sleep_until(time_point);
+    }
 
     // Count amount of time sleeping for analytics
     const TimePoint time_after_sleep = Clock::now();

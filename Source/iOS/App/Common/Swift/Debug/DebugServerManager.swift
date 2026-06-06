@@ -4,15 +4,22 @@
 // TARGET PATH (when integrated):
 //   Source/iOS/App/Common/Swift/Debug/DebugServerManager.swift
 //
-// Lifecycle owner for the debug/benchmark HTTP server. DEBUG-gated: in a
-// release build `start()` is a no-op and nothing binds, so there is no
-// always-on local HTTP server to flag in App Store review.
+// Lifecycle owner for the debug/benchmark HTTP server. Self-gating:
+//   - DEBUG builds: `start()` always starts the server (developer convenience).
+//   - Release builds: `start()` starts ONLY when the user has flipped the
+//     "Perf Test Bench (HTTP)" toggle, persisted in UserDefaults under
+//     `ICubeBenchServerEnabled` (default OFF). With the toggle off — the default
+//     for every shipping install — nothing binds, so there is no always-on local
+//     HTTP server to flag in App Store review.
+//
+// App Store safety: the server is loopback-only (NativeWebServer binds 127.0.0.1;
+// do not change that — it's the review-safety property), default-off, and gated
+// behind a user-visible toggle. Reaching it requires an explicit USB
+// `iproxy 8723 8723` forward from a Mac. Opt-in developer feature, not a service.
 //
 // ObjC visibility: this is `@objc`/NSObject so EmulationCoordinator.mm (ObjC++)
 // can call `[DebugServerManager.shared start]` through the generated
-// iCube-Swift.h. The whole class is compiled in release too, but `start()` is
-// `#if DEBUG` internally, so the release build links an empty method and binds
-// nothing.
+// iCube-Swift.h.
 
 import Foundation
 
@@ -33,9 +40,22 @@ final class DebugServerManager: NSObject {
 
   override private init() { super.init() }
 
-  /// Start the server. No-op unless this is a DEBUG build.
-  @objc func start() {
+  /// UserDefaults key for the Release-build opt-in. Default OFF.
+  static let enabledDefaultsKey = "ICubeBenchServerEnabled"
+
+  /// Whether the server is permitted to run. Always true in DEBUG; in Release
+  /// only when the user has opted in via the "Perf Test Bench (HTTP)" toggle.
+  private var isEnabled: Bool {
     #if DEBUG
+    return true
+    #else
+    return UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey)
+    #endif
+  }
+
+  /// Start the server. No-op unless permitted (see `isEnabled`).
+  @objc func start() {
+    guard isEnabled else { return }
     guard !isRunning else { return }
     routes.registerRoutes(on: server)
     Task {
@@ -49,16 +69,12 @@ final class DebugServerManager: NSObject {
         NSLog("[DebugServer] failed to start: \(error.localizedDescription)")
       }
     }
-    #else
-    // Release builds: intentionally do nothing.
-    #endif
   }
 
   @objc func stop() {
-    #if DEBUG
+    guard isRunning else { return }
     server.stop()
     isRunning = false
     serverURL = ""
-    #endif
   }
 }

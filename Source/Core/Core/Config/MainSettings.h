@@ -461,5 +461,10 @@ extern const Info<bool> MAIN_CIR_STORE_LOOP_FF_VALIDATE;
 // iCube: NEON (ARM64) paired-single arithmetic fast-path + its validate twin. Default OFF.
 extern const Info<bool> MAIN_CIR_PS_NEON;
 extern const Info<bool> MAIN_CIR_PS_NEON_VALIDATE;
+// iCube: stall / wasted-time instrumentation (VideoCommon/StallMetrics). Gates the per-site
+// accumulators and the windowed report. Default TRUE — the cost is one relaxed atomic load per
+// CPU-thread wait when on, and the data drives the "CPU under-utilized, where's the wasted time"
+// investigation, so it ships enabled and is only flipped off for a clean A/B against the overhead.
+extern const Info<bool> MAIN_STALL_METRICS;
 
 }  // namespace Config

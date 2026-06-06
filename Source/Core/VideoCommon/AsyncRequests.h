@@ -12,6 +12,8 @@
 #include "Common/Flag.h"
 #include "Common/Functional.h"
 
+#include "VideoCommon/StallMetrics.h"
+
 struct EfbPokeData;
 class PointerWrap;
 
@@ -55,6 +57,10 @@ public:
     QueueEvent(Event{[&] { task(); }});
 
     lock.unlock();
+    // The dual-core EFB-peek / bbox / perfquery path: the CPU thread blocks here until the GPU
+    // thread runs the queued event. The single most important new stall site — this is where
+    // synchronous readback serializes the two threads.
+    ICUBE_SCOPED_STALL(StallMetrics::Site::BlockingEvent, "video.blocking.event");
     return task.get_future().get();
   }
 

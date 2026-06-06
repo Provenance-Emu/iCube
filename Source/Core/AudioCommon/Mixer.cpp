@@ -12,6 +12,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/MathUtil.h"
+#include "Common/StallSignpost.h"
 #include "Common/Swap.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
@@ -566,7 +567,11 @@ bool Mixer::MixerFifo::Dequeue(Granule* granule)
     // silence branch never fires. Only the primary (DMA) fifo counts, to avoid false positives
     // from routinely-empty streaming/wiimote/gba fifos.
     if (m_is_primary && is_running)
+    {
       PerformanceMetrics::CountAudioUnderrun();
+      // Instruments marker so an underrun lines up against CPU-thread stalls in a capture.
+      ICUBE_STALL_POINT("audio.underrun", 0);
+    }
     if (m_mixer->m_config_fill_audio_gaps && is_running)
     {
       // Jump the playhead to half the queue size behind the head.

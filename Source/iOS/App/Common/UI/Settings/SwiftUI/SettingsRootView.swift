@@ -1451,6 +1451,21 @@ struct DebugRootView: View {
           Label(L("Motion Debug"), systemImage: "sensor.tag.radiowaves.forward")
         }
         #endif // canImport(CoreMotion)
+        // Stall instrumentation is engine-agnostic (VideoCommon), so it lives in this
+        // always-visible Diagnostics group rather than the CIR-gated one. Config-backed
+        // (MAIN_STALL_METRICS), so bind read-through to the bridge — no @State — to avoid
+        // the write-through desync that bit the gated toggles.
+        settingsCaption(
+          Toggle(L("Stall Metrics"), isOn: Binding(
+            get: { DOLConfigBridge.stallMetrics() },
+            set: { DOLConfigBridge.setStallMetrics($0) })),
+          L("Measures where the CPU thread waits during emulation. Adds the data to Copy State as a STALL REPORT section. <0.5% overhead."))
+        // Perf test bench: UserDefaults-backed (DebugServerManager reads it at boot).
+        settingsCaption(
+          Toggle(L("Perf Test Bench (HTTP)"), isOn: Binding(
+            get: { UserDefaults.standard.bool(forKey: "ICubeBenchServerEnabled") },
+            set: { UserDefaults.standard.set($0, forKey: "ICubeBenchServerEnabled") })),
+          L("Runs a loopback-only HTTP server on port 8723 for automated perf testing. Reach it from the Mac with `iproxy 8723 8723` over USB. Takes effect at the next game boot."))
       }
 
       Section(header: Text(L("Logging"))) {

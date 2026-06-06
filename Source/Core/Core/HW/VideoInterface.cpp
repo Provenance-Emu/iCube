@@ -12,6 +12,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Config/Config.h"
 #include "Common/Logging/Log.h"
+#include "Common/StallSignpost.h"
 
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/PerformanceMetrics.h"
@@ -1118,7 +1119,11 @@ void VideoInterfaceManager::Update(u64 ticks)
 
   // TODO: Findout why skipping interrupts acts as a frameskip
   if (core_timing.GetVISkip())
+  {
+    // Instruments marker: a dropped vblank IRQ (catch-up frameskip). Correlate against the clock.
+    ICUBE_STALL_POINT("vi.skip", 0);
     return;
+  }
 
   // Check if we need to assert IR_INT. Note that the granularity of our current horizontal
   // position is limited to half-lines.

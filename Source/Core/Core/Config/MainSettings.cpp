@@ -1206,5 +1206,10 @@ const Info<bool> MAIN_CIR_PS_NEON{{System::Main, "Core", "CIRPsNeon"}, false};
 // mutate FPSCR), so the reference run is pure and the single commit happens once. Trap on mismatch. Slow (an
 // extra scalar run per accelerated op); on-device correctness passes only. Default OFF = zero overhead.
 const Info<bool> MAIN_CIR_PS_NEON_VALIDATE{{System::Main, "Core", "CIRPsNeonValidate"}, false};
+// iCube: stall / wasted-time instrumentation (VideoCommon/StallMetrics). Gates the per-site
+// accumulators and the windowed report. Default TRUE — the cost is one relaxed atomic load per
+// CPU-thread wait when on, and the data drives the "CPU under-utilized, where's the wasted time"
+// investigation, so it ships enabled and is only flipped off for a clean A/B against the overhead.
+const Info<bool> MAIN_STALL_METRICS{{System::Main, "Core", "StallMetrics"}, true};
 
 }  // namespace Config

@@ -6,6 +6,7 @@
 #include "VideoBackends/Metal/MTLObjectCache.h"
 #include "VideoBackends/Metal/MTLStateTracker.h"
 
+#include "VideoCommon/StallMetrics.h"
 #include "VideoCommon/VideoConfig.h"  // iCube async present: g_ActiveConfig.bAsyncPresent
 
 static constexpr size_t BUFFER_SIZE = sizeof(BBoxType) * NUM_BBOX_VALUES;
@@ -43,7 +44,12 @@ std::vector<BBoxType> Metal::BoundingBox::Read(u32 index, u32 length)
     // (default on Apple ARM). BBox readback may be one frame stale in exchange for
     // not stalling the CPU thread. Matches feature/icube-testflight.
     if (!g_ActiveConfig.bAsyncPresent)
+    {
+      // Single-core / Metal inline path: bbox readback blocks the CPU thread on the GPU finishing
+      // the flushed encoders. (No-op on the default Apple path, where bAsyncPresent skips this.)
+      ICUBE_SCOPED_STALL(StallMetrics::Site::BBoxFlushWait, "bbox.flush.wait");
       g_state_tracker->WaitForFlushedEncoders();
+    }
     return std::vector<BBoxType>(m_cpu_buffer_ptr + index, m_cpu_buffer_ptr + index + length);
   }
 }

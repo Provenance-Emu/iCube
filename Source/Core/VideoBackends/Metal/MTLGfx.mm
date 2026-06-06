@@ -14,6 +14,7 @@
 
 #include "Common/Config/Config.h"            // iCube FastMath: Config::Get
 #include "Common/Logging/Log.h"              // iCube: ERROR_LOG_FMT for the texture-size guard
+#include "Common/StallSignpost.h"            // iCube: ICUBE_STALL_POINT
 #include "Core/Config/GraphicsSettings.h"    // iCube FastMath: GFX_HACK_FAST_MATH
 
 #include "VideoCommon/FramebufferManager.h"
@@ -508,6 +509,8 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
     if (!next && g_ActiveConfig.bAsyncPresent)
     {
       // No drawable ready: skip this frame rather than stall the CPU thread.
+      // Instruments marker so present-side frame skips line up against CPU-thread stalls.
+      ICUBE_STALL_POINT("present.frameskip", 0);
       return false;
     }
     m_drawable = MRCRetain(next);

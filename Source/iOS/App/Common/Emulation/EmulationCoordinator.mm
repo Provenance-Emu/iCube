@@ -29,6 +29,7 @@
 
 #import "VideoCommon/VideoConfig.h"
 #import "VideoCommon/PerformanceMetrics.h"
+#import "VideoCommon/StallMetrics.h"
 
 #import "VideoCommon/Present.h"
 #import "VideoCommon/Present.h"
@@ -1144,6 +1145,10 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
     }
   }
 
+  // --- STALL REPORT --- (iCube stall instrumentation; FormatReport() emits the full
+  // "=== STALL REPORT ===" block itself — header included — so we just append it.)
+  b += StallMetrics::FormatReport();
+
   // --- SETTINGS ---
   b += "=== SETTINGS ===\n";
   b += _ICubeBuildPerfSettingsString("COPY");
@@ -1629,16 +1634,18 @@ after_set:
 
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidStartNotification object:self userInfo:nil];
 
-#if DEBUG
-  // DEBUG-only perf test-bench: start the loopback HTTP/JSON server once
-  // emulation is live (g_perf_metrics meaningful). DebugServerManager is
-  // @MainActor and idempotent (guards !isRunning); start() is a no-op in
-  // release builds, so this whole block is also compiled out by #if DEBUG.
-  // We are on the emulation background queue here, so hop to main.
+  // Perf test-bench: start the loopback HTTP/JSON server once emulation is live
+  // (g_perf_metrics meaningful). DebugServerManager self-gates — it always starts
+  // in DEBUG, and in Release only when the user has flipped the "Perf Test Bench
+  // (HTTP)" toggle (UserDefaults "ICubeBenchServerEnabled", default OFF). It is
+  // @MainActor and idempotent (guards !isRunning). We are on the emulation
+  // background queue here, so hop to main.
+  // App Store safety: default-off + loopback-only (NativeWebServer binds 127.0.0.1)
+  // + user-visible toggle = a benign, opt-in developer feature, never reachable
+  // off-device without an explicit USB iproxy forward.
   dispatch_async(dispatch_get_main_queue(), ^{
     [[DebugServerManager sharedManager] start];
   });
-#endif
 
   [self startAdaptiveClockIfEnabled];
   [self startInputPump];

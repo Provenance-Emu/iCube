@@ -28,6 +28,7 @@
 #include "VideoCommon/DataReader.h"
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/OpcodeDecoding.h"
+#include "VideoCommon/StallMetrics.h"
 #include "VideoCommon/VertexLoaderManager.h"
 #include "VideoCommon/VertexManagerBase.h"
 #include "VideoCommon/VideoBackendBase.h"
@@ -150,7 +151,11 @@ void FifoManager::SyncGPU(SyncGPUReason reason, bool may_move_read_ptr)
 {
   if (m_use_deterministic_gpu_thread)
   {
-    m_gpu_mainloop.Wait();
+    {
+      // CPU thread blocked waiting for the deterministic GPU thread to catch up.
+      ICUBE_SCOPED_STALL(StallMetrics::Site::GpuDetWait, "gpu.det.wait");
+      m_gpu_mainloop.Wait();
+    }
     if (!m_gpu_mainloop.IsRunning())
       return;
 
@@ -401,7 +406,11 @@ void FifoManager::FlushGpu()
   if (!m_system.IsDualCoreMode() || m_use_deterministic_gpu_thread)
     return;
 
-  m_gpu_mainloop.Wait();
+  {
+    // CPU thread blocked waiting for the GPU thread to drain the FIFO (dual-core flush).
+    ICUBE_SCOPED_STALL(StallMetrics::Site::GpuFlushWait, "gpu.flush.wait");
+    m_gpu_mainloop.Wait();
+  }
 }
 
 void FifoManager::GpuMaySleep()
@@ -559,7 +568,11 @@ int FifoManager::WaitForGpuThread(int ticks)
 
   // Wait for GPU
   if (now >= m_config_sync_gpu_max_distance)
+  {
+    // CPU thread blocked on the sync-GPU wakeup event (dual-core sync-GPU pacing).
+    ICUBE_SCOPED_STALL(StallMetrics::Site::GpuSyncWait, "gpu.sync.wait");
     m_sync_wakeup_event.Wait();
+  }
 
   return GPU_TIME_SLOT_SIZE;
 }

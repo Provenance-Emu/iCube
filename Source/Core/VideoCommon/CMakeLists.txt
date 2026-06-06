@@ -153,6 +153,8 @@ add_library(videocommon
   ShaderGenCommon.h
   Spirv.cpp
   Spirv.h
+  StallMetrics.cpp
+  StallMetrics.h
   Statistics.cpp
   Statistics.h
   TextureCacheBase.cpp
