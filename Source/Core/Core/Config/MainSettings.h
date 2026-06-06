@@ -410,6 +410,11 @@ extern const Info<bool> MAIN_RELAXED_IDLE_DETECTION;
 extern const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR;
 extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS;
 extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE;
+// iCube: FP load/store specialization, the FP analogue of MAIN_CIR_SPECIALIZED_OPS. Separate, default-OFF
+// flag so the FP-LS direct-dispatch can be A/B-tested on device independently of the (default-ON) integer
+// specialization. Reuses MAIN_CIR_SPECIALIZED_OPS_VALIDATE for its single-run validation (no separate
+// validate flag). See MainSettings.cpp for the full eligibility/gating rationale.
+extern const Info<bool> MAIN_CIR_SPECIALIZED_FP_LS;
 extern const Info<bool> MAIN_CIR_BLOCK_LINKING;
 extern const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE;
 extern const Info<bool> MAIN_CIR_PIC_LOADSTORE;

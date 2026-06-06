@@ -293,6 +293,8 @@ static bool ICubeEmulationActive() {
 + (void)setCirSpecializedOps:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_OPS, (bool)enabled); }
 + (BOOL)cirSpecializedOpsValidate { return Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE); }
 + (void)setCirSpecializedOpsValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE, (bool)enabled); }
++ (BOOL)cirSpecializedFpLs { return Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_LS); }
++ (void)setCirSpecializedFpLs:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_FP_LS, (bool)enabled); }
 + (BOOL)cirMicroOpFusion { return Config::Get(Config::MAIN_CIR_MICROOP_FUSION); }
 + (void)setCirMicroOpFusion:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_MICROOP_FUSION, (bool)enabled); }
 + (BOOL)cirMicroOpFusionValidate { return Config::Get(Config::MAIN_CIR_MICROOP_FUSION_VALIDATE); }
@@ -687,6 +689,7 @@ static bool ICubeEmulationActive() {
   del(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE);
   del(Config::MAIN_CIR_SPECIALIZED_OPS);
   del(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
+  del(Config::MAIN_CIR_SPECIALIZED_FP_LS);
   del(Config::MAIN_CIR_DEAD_FLAG_ELIM);
   del(Config::MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE);
   del(Config::MAIN_CIR_DEAD_FPRF_ELIM);

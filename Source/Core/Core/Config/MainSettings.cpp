@@ -839,6 +839,29 @@ const Info<bool> MAIN_CIR_SPECIALIZED_OPS{{System::Main, "Core", "CIRSpecialized
 // the same Interpreter:: function). Default false; flip true during on-device correctness passes.
 const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE{
     {System::Main, "Core", "CIRSpecializedOpsValidate"}, false};
+// iCube: FP load/store specialization — the FP analogue of MAIN_CIR_SPECIALIZED_OPS, but as its OWN
+// default-OFF flag so it can be A/B-tested on device independently of the (default-ON) integer
+// specialization. Routes the hot FP D-form/indexed load/stores (lfs/lfsu/lfd/lfdu/stfs/stfsu/stfd/stfdu
+// and the X-form lfsx/lfsux/lfdx/lfdux/stfsx/stfsux/stfdx/stfdux/stfiwx) through the same specialized
+// DIRECT jump-table dispatch the integer ops use — one direct, inlinable Interpreter::name call — instead
+// of the generic Interpret<write_pc> trampoline (which costs an extra indirect operands.func call per op).
+// Targets the FP-heavy hottest title (Chibi-Robo: lfs/stfs/lfd/stfd/psq_l dominate the profile).
+//
+// ELIGIBLE BY CONSTRUCTION (do not re-litigate): with both jo.fp_exceptions and jo.div_by_zero_exceptions
+// off (the App-Store jitless default) ShouldHandleFPExceptionForInstruction is always false, and with
+// jo.memcheck off the DoJit guard `(jo.memcheck && FL_LOADSTORE)` is false — so these FP load/stores fall
+// into the SAME else-branch of DoJit where the generic path emits a plain Interpret<write_pc> (NOT
+// InterpretAndCheckExceptions). The specialized switch invokes the exact same Interpreter::name handler the
+// generic GetInterpreterOp returned, so specialized ≡ generic by construction (only the call is direct).
+// The DoJit if/else gates this: when fp-exceptions OR memcheck are ON these ops take the `if` branch
+// (InterpretAndCheckExceptions) and are NEVER specialized; they specialize ONLY in the else branch, i.e.
+// exactly when the generic path would have used Interpret<write_pc>. CheckFPU is still emitted once per
+// block at the first FP instruction, independent of specialization. Single-run validated only (loads can
+// read MMIO, stores write memory — NEVER double-run): reuses MAIN_CIR_SPECIALIZED_OPS_VALIDATE (the
+// single-run LS bookkeeping check is handler-agnostic), so there is no separate FP-LS validate flag.
+// Default OFF pending on-device A/B; flag-off the emitted callback stream is byte-identical to baseline
+// (no marker callback is ever written for FP-LS — they fall through to the unchanged generic emit).
+const Info<bool> MAIN_CIR_SPECIALIZED_FP_LS{{System::Main, "Core", "CIRSpecializedFpLs"}, false};
 // iCube: CachedInterpreter block linking. When a block ends at a STATIC direct branch (bx/bcx) whose
 // target block is already compiled with matching feature_flags, let the block continue DIRECTLY into
 // the target's callback stream instead of round-tripping through the dispatcher (Dispatch +

@@ -171,6 +171,12 @@ static bool s_specialized_ops = false;
 // iCube: when true, each specialized callback re-derives and asserts the dispatch bookkeeping
 // against the generic Interpret<write_pc> contract before committing the real handler.
 static bool s_specialized_ops_validate = false;
+// iCube: when true, the emission site ALSO routes whitelisted hot FP load/store ops (the
+// CIR_SPECIALIZED_FP_LS_OPS set) through the specialized direct-dispatch. SEPARATE from s_specialized_ops
+// so FP-LS can be A/B-tested independently of the (default-ON) integer specialization. Default OFF: when
+// false, FP-LS fall through to the unchanged generic Interpret<false> emit — no marker callback is ever
+// written for them, so the callback stream is byte-identical to the flag-off baseline. Read once in Init.
+static bool s_specialized_fp_ls = false;
 
 // iCube: software-prefetch hints (MAIN_CACHED_INTERPRETER_PREFETCH). When OFF (the default on this
 // Apple-only fork) NO __builtin_prefetch is ever emitted, so the CIR hot loop and the PIC load/store
@@ -270,11 +276,54 @@ static CachedInterpreter* s_validate_instance = nullptr;
   X(stb)  /* D-form: Write_U8(gpr[RS], EA) */                                                      \
   X(stbu) /* D-form update: Write_U8(gpr[RS], EA_U); gpr[RA] = EA on no-DSI */
 
+// CIR_SPECIALIZED_FP_LS_OPS — Tier-3 FP load/store (D-form + X-form indexed). The FP analogue of
+// CIR_SPECIALIZED_LS_OPS, broken out as a SEPARATE list because it is gated on its own default-OFF flag
+// (s_specialized_fp_ls / MAIN_CIR_SPECIALIZED_FP_LS) so it can be A/B-tested independently of the
+// default-ON integer specialization. Membership (ALL must hold; verified against Interpreter.h handler
+// declarations — every name below is a real `static void Interpreter::<name>(Interpreter&,
+// UGeckoInstruction)`):
+//   - FL_LOADSTORE + FL_USE_FPU + FL_FLOAT_* (an FPR load/store), canEndBlock == false (so write_pc is
+//     ALWAYS false for these).
+//   - Eligible ONLY because on the App-Store jitless config jo.memcheck is OFF and BOTH jo.fp_exceptions
+//     and jo.div_by_zero_exceptions are OFF, so ShouldHandleFPExceptionForInstruction returns false. With
+//     all three off the DoJit guard `(jo.memcheck && FL_LOADSTORE) || (!canEndBlock &&
+//     ShouldHandleFPExceptionForInstruction)` is false, so the GENERIC path ALSO routes these through the
+//     plain Interpret<false> trampoline — NOT InterpretAndCheckExceptions. Specialized-vs-generic is
+//     therefore identical BY CONSTRUCTION (same GetInterpreterOp handler, same trampoline contract): a DSI
+//     raised inside the MMU access sits in ppc_state.Exceptions identically either way, deferred to the
+//     next block boundary (neither path calls CheckExceptions). CheckFPU is still emitted ONCE per block
+//     at the first FP instruction, independent of specialization. When fp-exceptions or memcheck are ON
+//     these take the DoJit `if` branch and are never specialized — so specialization only ever happens in
+//     the else branch where the generic path uses Interpret. NOT safe to double-run (stores write memory,
+//     loads can read MMIO) => single-run validation only (IsLoadStoreSpecOp returns true for these).
+//   - Excludes paired-single quantized loads/stores (psq_l/psq_st: a different GQR/quantization handler
+//     family) — deliberately out of scope for this change.
+#define CIR_SPECIALIZED_FP_LS_OPS(X)                                                                \
+  X(lfs)    /* D-form: ps0(FD) = double(Read_U32(EA)) (single->double widen); RA-base */            \
+  X(lfsu)   /* D-form update: ps0(FD) = double(Read_U32(EA_U)); gpr[RA] = EA on no-DSI */           \
+  X(lfd)    /* D-form: riPS0(FD) = Read_U64(EA) (raw double load) */                                \
+  X(lfdu)   /* D-form update: riPS0(FD) = Read_U64(EA_U); gpr[RA] = EA on no-DSI */                 \
+  X(stfs)   /* D-form: Write_U32(ConvertToSingle(riPS0(FS)), EA) */                                 \
+  X(stfsu)  /* D-form update: Write_U32(single(FS), EA_U); gpr[RA] = EA on no-DSI */                \
+  X(stfd)   /* D-form: Write_U64(riPS0(FS), EA) (raw double store) */                               \
+  X(stfdu)  /* D-form update: Write_U64(riPS0(FS), EA_U); gpr[RA] = EA on no-DSI */                 \
+  X(lfsx)   /* X-form indexed: ps0(FD) = double(Read_U32(EA)); EA = (RA?gpr[RA]:0)+gpr[RB] */       \
+  X(lfsux)  /* X-form indexed update: ps0(FD) = double(Read_U32(EA_U)); gpr[RA] = EA on no-DSI */   \
+  X(lfdx)   /* X-form indexed: riPS0(FD) = Read_U64(EA) */                                          \
+  X(lfdux)  /* X-form indexed update: riPS0(FD) = Read_U64(EA_U); gpr[RA] = EA on no-DSI */         \
+  X(stfsx)  /* X-form indexed: Write_U32(single(FS), EA) */                                         \
+  X(stfsux) /* X-form indexed update: Write_U32(single(FS), EA_U); gpr[RA] = EA on no-DSI */        \
+  X(stfdx)  /* X-form indexed: Write_U64(riPS0(FS), EA) */                                          \
+  X(stfdux) /* X-form indexed update: Write_U64(riPS0(FS), EA_U); gpr[RA] = EA on no-DSI */         \
+  X(stfiwx) /* X-form indexed: Write_U32(low 32 bits of riPS0(FS), EA) (store-int-from-FPR) */
+
 // Combined list driving the op-id enum, the emit site, the dispatch switch, and IsSpecializedOp.
-// ALU entries first so their enum ids stay stable across LS additions.
+// ALU entries first so their enum ids stay stable across LS additions; integer LS next, then FP LS
+// (appended last so existing integer enum ids are unchanged).
 #define CIR_SPECIALIZED_OP_LIST(X)                                                                 \
   CIR_SPECIALIZED_ALU_OPS(X)                                                                       \
-  CIR_SPECIALIZED_LS_OPS(X)
+  CIR_SPECIALIZED_LS_OPS(X)                                                                        \
+  CIR_SPECIALIZED_FP_LS_OPS(X)
 
 // iCube: compact op-id stored in the specialized-only operand payload (SpecializedInterpretOperands)
 // so ExecuteOneBlock can dispatch via a switch/jump-table keyed on the id instead of a linear chain
@@ -308,6 +357,20 @@ static CirSpecOp SpecOpId(Interpreter::Instruction func)
   CIR_SPECIALIZED_OP_LIST(CIR_ID)
 #undef CIR_ID
   return CirSpecOp::CIR_SPEC_OP_COUNT;  // unreachable: callers gate on IsSpecializedOp first
+}
+
+// iCube: true IFF this opcode's chosen interpreter handler is an FP load/store on the FP-LS whitelist
+// (CIR_SPECIALIZED_FP_LS_OPS). The emit site uses this to pick WHICH flag gates specialization: FP-LS on
+// the default-OFF s_specialized_fp_ls, every other specialized op (ALU + integer LS) on the default-ON
+// s_specialized_ops. Generated from the same X-macro so it can never drift from the list. Emit-time only.
+static bool IsFpLsSpecializedOp(Interpreter::Instruction func)
+{
+#define CIR_FP_CHECK(name)                                                                         \
+  if (func == &Interpreter::name)                                                                  \
+    return true;
+  CIR_SPECIALIZED_FP_LS_OPS(CIR_FP_CHECK)
+#undef CIR_FP_CHECK
+  return false;
 }
 
 // iCube: dead CR-flag elimination predicate. True IFF this op writes CR fields that are ALL discardable
@@ -1006,6 +1069,10 @@ void CachedInterpreter::Init()
   s_pic_loadstore = Config::Get(Config::MAIN_CIR_PIC_LOADSTORE);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_specialized_ops_validate = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
+  // iCube: FP load/store specialization (default OFF; independent A/B toggle). Read once at codegen time.
+  // When off the FP-LS emit branch is never taken, so the callback stream is byte-identical to baseline.
+  // Reuses s_specialized_ops_validate for its single-run validation (no separate FP-LS validate flag).
+  s_specialized_fp_ls = Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_LS);
   s_microop_fusion = Config::Get(Config::MAIN_CIR_MICROOP_FUSION);
   s_microop_fusion_validate = Config::Get(Config::MAIN_CIR_MICROOP_FUSION_VALIDATE);
   s_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
@@ -1380,7 +1447,10 @@ s32 CachedInterpreter::Interpret(PowerPC::PowerPCState& ppc_state,
 
 // True if the op-id is a Tier-3 load/store (vs a Tier-1 ALU op). LS ops are NOT safe to double-run
 // (a store would double-write memory, a load could double-read MMIO), so the validate path uses
-// single-run validation for them. Generated from CIR_SPECIALIZED_LS_OPS so it can't drift.
+// single-run validation for them. Generated from BOTH CIR_SPECIALIZED_LS_OPS (integer) AND
+// CIR_SPECIALIZED_FP_LS_OPS (FP) so it can't drift — CRITICAL: the FP-LS ops MUST be here so they take
+// the single-run validate path (an FP store double-writes memory, an FP load could double-read MMIO,
+// exactly like the integer LS), and are NEVER routed to the double-run ALU path.
 static bool IsLoadStoreSpecOp(CirSpecOp id)
 {
   switch (id)
@@ -1389,6 +1459,7 @@ static bool IsLoadStoreSpecOp(CirSpecOp id)
   case CirSpecOp::name:                                                                            \
     return true;
     CIR_SPECIALIZED_LS_OPS(CIR_LS_CASE)
+    CIR_SPECIALIZED_FP_LS_OPS(CIR_LS_CASE)
 #undef CIR_LS_CASE
   default:
     return false;
@@ -4924,14 +4995,22 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           }
           emitted = true;
         }
-        // iCube: route whitelisted hot ops to the specialized dispatch when MAIN_CIR_SPECIALIZED_OPS
-        // is on. We emit ONE of two marker callbacks (write_pc false/true) plus a
-        // SpecializedInterpretOperands payload that carries the InterpretOperands prefix verbatim and
-        // the compact op-id ExecuteOneBlock jump-tables on. write_pc == op.canEndBlock, matching the
-        // generic Interpret selection. Cold/non-whitelisted ops fall through to the unchanged generic
-        // emission below — and when the flag is OFF, no marker callback is ever written, so the
-        // dispatch never takes the specialized branch (flag-off stream is byte-identical to stock).
-        if (!emitted && s_specialized_ops && IsSpecializedOp(func))
+        // iCube: route whitelisted hot ops to the specialized dispatch. We emit ONE of two marker
+        // callbacks (write_pc false/true) plus a SpecializedInterpretOperands payload that carries the
+        // InterpretOperands prefix verbatim and the compact op-id ExecuteOneBlock jump-tables on.
+        // write_pc == op.canEndBlock, matching the generic Interpret selection. Cold/non-whitelisted
+        // ops fall through to the unchanged generic emission below.
+        //
+        // TWO INDEPENDENT FLAGS gate this: FP load/stores (IsFpLsSpecializedOp) are gated on the
+        // default-OFF s_specialized_fp_ls (MAIN_CIR_SPECIALIZED_FP_LS); every other specialized op (ALU +
+        // integer LS) is gated on the default-ON s_specialized_ops. So integer specialization stays on by
+        // default while FP-LS stays opt-in/A/B-able. When the relevant flag is OFF the op's marker
+        // callback is never written and it falls through to the generic Interpret emit, so the flag-off
+        // callback stream is byte-identical to stock. Because this whole block is inside the DoJit ELSE
+        // branch (fp-exceptions+memcheck off), FP-LS specialize ONLY when the generic path would have
+        // used Interpret<write_pc> — so specialized ≡ generic by construction.
+        if (!emitted && IsSpecializedOp(func) &&
+            (IsFpLsSpecializedOp(func) ? s_specialized_fp_ls : s_specialized_ops))
         {
           const SpecializedInterpretOperands spec_operands = {operands,
                                                               static_cast<u16>(SpecOpId(func))};
