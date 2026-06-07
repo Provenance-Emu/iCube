@@ -10,12 +10,29 @@ class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
   func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
     EmulationCoordinator.shared().isExternalDisplayConnected = true
 
-    // On tvOS, create an empty window programmatically to avoid storyboard requirements.
     if AppConsts.useSwiftUI {
       guard let windowScene = scene as? UIWindowScene else { return }
       let window = UIWindow(windowScene: windowScene)
-      // Placeholder content for external display on tvOS
+
+#if os(tvOS)
+      // tvOS has no wired external-display emulation path; show an empty placeholder.
       window.rootViewController = UIHostingController(rootView: Color.black)
+#else
+      // iOS / Mac Catalyst: instantiate the real external-display emulation VC from its storyboard.
+      // The SwiftUI app-shell graft sets the scene config's storyboard to nil (AppDelegate), so the
+      // storyboard no longer auto-loads — we load it explicitly here. Loading it wires the
+      // rendererView/waitView IBOutlets and runs viewDidLoad, which calls
+      // registerExternalDisplayView:, re-parenting the shared Metal render host onto the external
+      // screen. Without this the external window stayed a black placeholder. Falls back to black if
+      // the storyboard can't be loaded so a connect never crashes.
+      let storyboard = UIStoryboard(name: "ExternalDisplay", bundle: nil)
+      if let externalVC = storyboard.instantiateInitialViewController() {
+        window.rootViewController = externalVC
+      } else {
+        window.rootViewController = UIHostingController(rootView: Color.black)
+      }
+#endif
+
       if let tint = UIColor(named: "DolphinTint") {
         window.tintColor = tint
       }
