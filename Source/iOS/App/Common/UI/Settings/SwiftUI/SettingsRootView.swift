@@ -908,35 +908,10 @@ struct ControllersRootView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("GameCube Controllers"))) {
-        ForEach(1...4, id: \.self) { port in
-          NavigationLink {
-            ControllersPortView(isGC: true, portOneBased: port)
-          } label: {
-            HStack {
-              Text("\(L("Port")) \(port)")
-              Spacer()
-              Text(localizedSIDevice(gcPortDevices[port - 1]))
-                .foregroundStyle(.secondary)
-            }
-          }
-        }
-      }
-
-      Section(header: Text(L("Wii Remotes"))) {
-        ForEach(1...4, id: \.self) { port in
-          NavigationLink {
-            ControllersPortView(isGC: false, portOneBased: port)
-          } label: {
-            HStack {
-              Text("\(L("Wii Remote")) \(port)")
-              Spacer()
-              Text(localizedWiimoteSource(wiiSources[port - 1]))
-                .foregroundStyle(.secondary)
-            }
-          }
-        }
-      }
+      // Unified controller surface (Players + Connected + Global), shared with
+      // the Pause menu. Embedded here as raw Sections so this view can keep its
+      // own DSU Client + Alternate Input Sources sections below.
+      ControllerSetupView(system: .both).sections
 
       // DSU Client
       Section(
@@ -1107,11 +1082,10 @@ struct ControllersRootView: View {
         }
       }
 
+      // NOTE: Background Input, Continuous Scanning, Enable Speaker, and the
+      // master "Connect MFi Controllers" toggle now live in the unified
+      // ControllerSetupView sections above (relocated from here / the Debug tab).
       Section(header: Text(L("General"))) {
-        settingsCaption(
-          Toggle(L("Background Input"), isOn: $backgroundInput)
-            .onChange(of: backgroundInput) { newValue in DOLConfigBridge.setMainBackgroundInput(newValue) },
-          L("Keeps accepting controller input while iCube is in the background."))
         settingsCaption(
           Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
             .onChange(of: autoSelectOnScreenBySystem) { newValue in UserDefaults.standard.set(newValue, forKey: "auto_touchpad_by_system") },
@@ -1125,14 +1099,6 @@ struct ControllersRootView: View {
       }
 
       Section(header: Text(L("Wii Remotes"))) {
-        settingsCaption(
-          Toggle(L("Continuous Scanning"), isOn: $wiimoteScan)
-            .onChange(of: wiimoteScan) { newValue in DOLConfigBridge.setWiimoteContinuousScanning(newValue) },
-          L("Keeps looking for new Wii Remotes to connect."))
-        settingsCaption(
-          Toggle(L("Enable Speaker"), isOn: $wiimoteSpeaker)
-            .onChange(of: wiimoteSpeaker) { newValue in DOLConfigBridge.setWiimoteEnableSpeaker(newValue) },
-          L("Plays audio through a real Wii Remote's speaker."))
         settingsCaption(
           Toggle(L("Connect Wiimotes for Controller Interface"), isOn: $connectWiimotes)
             .onChange(of: connectWiimotes) { newValue in DOLConfigBridge.setConnectWiimotesForControllerInterface(newValue) },
@@ -1386,7 +1352,6 @@ private struct TouchIRModePicker: View {
 
 struct DebugRootView: View {
   @State private var fastmem: Bool = false
-  @State private var mfiConnect: Bool = false
   @State private var userFolder: String = ""
   @State private var jitAcquired: Bool = false
   @State private var jitError: String = ""
@@ -1409,14 +1374,8 @@ struct DebugRootView: View {
           L("Fast memory-access path for the CPU emulator. A large speedup where supported; disabled if the device can't provide it."))
       }
 
-      Section(header: Text(L("Controllers"))) {
-        settingsCaption(
-          Toggle(L("Connect MFi Controllers"), isOn: $mfiConnect)
-            .onChange(of: mfiConnect) { _ in
-              UserDefaults.standard.set(mfiConnect, forKey: "virtual_mfi_connect")
-            },
-          L("Routes connected MFi/Bluetooth game controllers into the emulator."))
-      }
+      // The master "Connect MFi Controllers" toggle was relocated to the unified
+      // ControllerSetupView's Global section (Settings ▸ Controllers).
 
       Section(header: Text(L("Recording"))) {
 #if os(iOS)
@@ -1517,7 +1476,6 @@ struct DebugRootView: View {
   private func syncDebugChunk1() async {
     await MainActor.run {
       fastmem = DOLConfigBridge.mainFastmem()
-      mfiConnect = UserDefaults.standard.bool(forKey: "virtual_mfi_connect")
       fastmemAvailable = (FastmemManager.shared().fastmemAvailable)
       launchTimes = UserDefaults.standard.integer(forKey: "launch_times")
     }
@@ -4485,10 +4443,12 @@ private struct ControllersTypePicker: View {
 
 #if os(tvOS)
 // UIKit wrapper for the legacy mapping UI (MappingRootViewController in ButtonMapping.storyboard)
-private typealias ControllersMappingView = ButtonMappingView
+// Not private: ControllerSetupView's "Customize buttons…" row drills into this same representable.
+typealias ControllersMappingView = ButtonMappingView
 #else
 // UIKit wrapper for the legacy mapping UI (MappingRootViewController in ButtonMapping.storyboard)
-private struct ControllersMappingView: UIViewControllerRepresentable {
+// Not private: ControllerSetupView's "Customize buttons…" row drills into this same representable.
+struct ControllersMappingView: UIViewControllerRepresentable {
   let isGC: Bool
   let portOneBased: Int
 

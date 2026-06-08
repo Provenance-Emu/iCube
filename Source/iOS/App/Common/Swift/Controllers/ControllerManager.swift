@@ -314,6 +314,33 @@ final class ControllerManager: NSObject, ObservableObject {
     reconcile()
   }
 
+  // MARK: Wii assign wrappers (mirror the GC wrappers; add reconcile + notification)
+
+  func assignTouchscreen(toWiimote indexOneBased: Int) {
+    assignmentService.assignTouchscreen(toPlayer: indexOneBased - 1, system: .wii)
+    reconcile()
+  }
+
+  func assign(_ controller: GCController, toWiimote indexOneBased: Int) {
+    let qualifier = TVControllerMappingBridge.qualifiedName(for: controller)
+    if qualifier.isEmpty {
+      assignmentService.activate(port: indexOneBased - 1, system: .wii)
+    } else {
+      assignmentService.assign(qualifier: qualifier, toPlayer: indexOneBased - 1, system: .wii)
+    }
+    controller.playerIndex = GCControllerPlayerIndex(rawValue: indexOneBased - 1) ?? .indexUnset
+    reconcile()
+  }
+
+  func clearDefaultDevice(forWiimote indexOneBased: Int) {
+    assignmentService.clear(player: indexOneBased - 1, system: .wii)
+    reconcile()
+  }
+
+  func defaultDeviceQualifier(forWiimote indexOneBased: Int) -> String {
+    return TVControllerMappingBridge.defaultDevice(forWiimote: indexOneBased) as String
+  }
+
   // MARK: Defaults API
 
   func clearDefaultDevice(forGCPort portOneBased: Int) {

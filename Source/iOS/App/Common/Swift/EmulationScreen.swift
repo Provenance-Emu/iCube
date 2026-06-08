@@ -264,8 +264,10 @@ struct EmulationScreen: View {
   @State private var desiredTouchControls: Bool = true
   @StateObject var touchVM = TouchControlsViewModel()
   @State private var wiiOverlaySignature: Int = 0
-  @ObservedObject private var controllerManager = ControllerManager.shared
   #endif
+  // Used by both the iOS and tvOS bodies (Phase 3/4 disconnect-pause + pill),
+  // so it must live outside the iOS-only block above.
+  @ObservedObject private var controllerManager = ControllerManager.shared
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
   // Drives the centered "Paused" HUD pill. Polled off the 1s timer and refreshed
