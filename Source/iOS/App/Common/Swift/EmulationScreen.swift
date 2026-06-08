@@ -264,10 +264,15 @@ struct EmulationScreen: View {
   @State private var desiredTouchControls: Bool = true
   @StateObject var touchVM = TouchControlsViewModel()
   @State private var wiiOverlaySignature: Int = 0
-  @ObservedObject private var controllerManager = ControllerManager.shared
   #endif
+  // Used by both the iOS and tvOS bodies (Phase 3/4 disconnect-pause + pill),
+  // so it must live outside the iOS-only block above.
+  @ObservedObject private var controllerManager = ControllerManager.shared
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
+  // Drives the centered "Paused" HUD pill. Polled off the 1s timer and refreshed
+  // on showPauseMenu changes; the pill is gated isPaused && !showPauseMenu.
+  @State private var isPaused: Bool = false
   @State var isWiiSystem: Bool = false
 
   // Quick performance overlay
@@ -312,6 +317,22 @@ struct EmulationScreen: View {
         .focusable(!showPauseMenu)
         .allowsHitTesting(!showPauseMenu)
         .navigationBarBackButtonHidden(true)
+
+      // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
+      // pause menu is open; the disconnect banner (zIndex 5) sits above it.
+      if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
+        PausedPill(onResume: {
+          TVEmulationBridge.resume()
+          isPaused = false
+        })
+        .zIndex(3)
+      }
+
+      // Banner shown while a disconnect-induced pause is active (reconnect resumes).
+      if controllerManager.disconnectPause != nil {
+        ControllerDisconnectBanner()
+          .zIndex(5)
+      }
 
       // Removed floating speed overlay toggle; moved into pause menu
 
@@ -504,13 +525,11 @@ struct EmulationScreen: View {
           NSLog("[INPUT] tvOS wireless controller discovery completed")
         })
       }
-      NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
-        if let c = note.object as? GCController {
-          configureController(c)
-          setupPauseGestureHandler(for: c)
-        }
-      }
-      NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
+      // Controller connect/disconnect is handled by the app-wide ControllerManager
+      // observer (started in MainDisplaySceneDelegate). Its connect path runs
+      // configureControllerForCurrentPlatform (installs input + pause-gesture
+      // handlers) and auto-assigns, so the previous redundant local observer here
+      // (with an empty disconnect handler) has been removed.
       endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
         dismiss()
       }
@@ -559,6 +578,12 @@ struct EmulationScreen: View {
       timer?.invalidate()
       timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
         elapsedSeconds += 1
+        isPaused = TVEmulationBridge.isPaused()
+        // If the game resumed via any path other than a controller reconnect
+        // (pill tap, pause menu Resume, new game), clear a stale disconnect banner.
+        if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
+          controllerManager.clearDisconnectPause()
+        }
         #if canImport(ActivityKit)
         GameActivityManager.update(isPaused: TVEmulationBridge.isPaused(), elapsedSeconds: elapsedSeconds)
         #endif
@@ -603,6 +628,7 @@ struct EmulationScreen: View {
     }
     .onChange(of: showPauseMenu) { visible in
       NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
+      isPaused = TVEmulationBridge.isPaused()
       #if canImport(ActivityKit)
       GameActivityManager.update(isPaused: visible, elapsedSeconds: elapsedSeconds)
       #endif
@@ -657,6 +683,22 @@ struct EmulationScreen: View {
             object: nil, queue: .main) { _ in
             SaveStateService.resumeIfAvailable()
           }
+        }
+
+        // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
+        // pause menu is open; the disconnect banner (zIndex 5) sits above it.
+        if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
+          PausedPill(onResume: {
+            TVEmulationBridge.resume()
+            isPaused = false
+          })
+          .zIndex(3)
+        }
+
+        // Banner shown while a disconnect-induced pause is active (reconnect resumes).
+        if controllerManager.disconnectPause != nil {
+          ControllerDisconnectBanner()
+            .zIndex(5)
         }
 
         // Top hit area: tap near status bar to reveal overlay (active only when hidden)
@@ -1133,7 +1175,9 @@ struct EmulationScreen: View {
     .onAppear {
       NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
       NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
-      ControllerManager.shared.startObserving()
+      // Controller observation is started app-wide from MainDisplaySceneDelegate
+      // (scene root) so hotplug auto-assign works in library/menus/in-game on both
+      // iOS and tvOS. Do not start/stop it here.
       // Initialize expected system early from metadata to avoid startup races
       isWiiSystem = inferIsWii(from: game)
       irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
@@ -1273,7 +1317,8 @@ struct EmulationScreen: View {
       if let t = obsShowPause { NotificationCenter.default.removeObserver(t)
         obsShowPause = nil
       }
-      ControllerManager.shared.stopObserving()
+      // Do not stopObserving() here — the controller observer is app-wide (started
+      // in MainDisplaySceneDelegate) so auto-assign stays live after exiting a game.
       // Disable motion when leaving screen
       TCDeviceMotion.shared.setMotionEnabled(false)
       arPollTask?.cancel()
@@ -1305,6 +1350,17 @@ struct EmulationScreen: View {
     .onReceive(controllerManager.$overlayVisible) { v in
       isTouchControlsActive = v
       touchPadsRefreshToken = UUID()
+    }
+    // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
+    .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+      isPaused = TVEmulationBridge.isPaused()
+      // Clear a stale disconnect banner if the game resumed via any other path.
+      if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
+        controllerManager.clearDisconnectPause()
+      }
+    }
+    .onChange(of: showPauseMenu) { _ in
+      isPaused = TVEmulationBridge.isPaused()
     }
     .navigationBarHidden(true)
     .statusBar(hidden: true)

@@ -42,8 +42,18 @@ internal struct PauseMenuView: View {
         CheatsMenuView(game: game, onBack: { pane = .main })
           .onAppear { NSLog("[PAUSE] Cheats menu appeared") }
       case .controllers:
-        ControllerMappingView(game: game, onBack: { pane = .main })
-          .onAppear { NSLog("[PAUSE] Controller mapping menu appeared") }
+        NavigationStack {
+          ControllerSetupView(system: ControllerManager.shared.isWiiSystem ? .wii : .gamecube)
+            .toolbar {
+              #if os(iOS)
+              ToolbarItem(placement: .navigationBarLeading) { Button(L("Back")) { pane = .main } }
+              #endif
+            }
+        }
+        #if os(tvOS)
+        .onExitCommand { pane = .main }
+        #endif
+        .onAppear { NSLog("[PAUSE] Controller setup menu appeared") }
       }
     }
     .onAppear {

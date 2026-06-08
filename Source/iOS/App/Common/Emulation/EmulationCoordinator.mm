@@ -1418,11 +1418,16 @@ static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev
     if (target_pad->GetDefaultDevice() == dq_new)
       return; // no change
 
-    target_pad->SetDefaultDevice(dq_new);
-    target_pad->LoadDefaults(g_controller_interface);
-    target_pad->UpdateReferences(g_controller_interface);
-    Pad::GetConfig()->SaveConfig();
-    NSLog(@"[iCube][Input] Auto-assigned external controller '%s' to Pad %d", dq_new.ToString().c_str(), target_index + 1);
+    // Route the mutation through ControllerAssignmentService (via ControllerManager)
+    // so the chosen slot is ACTIVATED (SIDevice type set) in addition to being bound
+    // and profiled — this is the fix that makes Pads 2-4 produce input. Device
+    // *selection* stays here in C++; only the write is delegated. Runs on this same
+    // host queue (matching the reconcile call above and the original mutation's
+    // threading), avoiding a main-queue race against the host thread.
+    const std::string qualifier_str = dq_new.ToString();
+    NSString* qualifier = [NSString stringWithUTF8String:qualifier_str.c_str()];
+    [[ControllerManager shared] assignViaServiceWithQualifier:qualifier toPort:target_index isWii:NO];
+    NSLog(@"[iCube][Input] Auto-assigned external controller '%s' to Pad %d (via service)", qualifier.UTF8String, target_index + 1);
   });
 }
 

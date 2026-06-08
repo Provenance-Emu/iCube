@@ -190,6 +190,7 @@
 		B96C5DC92CFE4B200046C029 /* Logger.ini in Resources */ = {isa = PBXBuildFile; fileRef = B96C5DC82CFE4B200046C029 /* Logger.ini */; };
 		B96C9A4A2A46501C002B5ECF /* DOLAppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C9A492A46501B002B5ECF /* DOLAppVersion.swift */; };
 		B96C9A602A46C2C1002B5ECF /* DOLAppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C9A5F2A46C2C1002B5ECF /* DOLAppVersionTests.swift */; };
+		CA51A55E000000000000DE01 /* ControllerAssignmentServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA51A55E000000000000DE02 /* ControllerAssignmentServiceTests.swift */; };
 		B974923C2960096C00794509 /* ImportFileManager.m in Sources */ = {isa = PBXBuildFile; fileRef = B974923B2960096C00794509 /* ImportFileManager.m */; };
 		B9749240296035F500794509 /* FastmemManager.m in Sources */ = {isa = PBXBuildFile; fileRef = B974923F296035F500794509 /* FastmemManager.m */; };
 		B974924429603A8A00794509 /* LegacyInputConfigMigrationService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B974924329603A8A00794509 /* LegacyInputConfigMigrationService.mm */; };
@@ -592,6 +593,7 @@
 		B96C9A4F2A46C1CE002B5ECF /* iCubeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iCubeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B96C9A5E2A46C2C0002B5ECF /* Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Bridging-Header.h"; sourceTree = "<group>"; };
 		B96C9A5F2A46C2C1002B5ECF /* DOLAppVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOLAppVersionTests.swift; sourceTree = "<group>"; };
+		CA51A55E000000000000DE02 /* ControllerAssignmentServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerAssignmentServiceTests.swift; sourceTree = "<group>"; };
 		B96F72CE27F0E8BD0024BA7D /* Debug (Non-Jailbroken).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Debug (Non-Jailbroken).xcconfig"; sourceTree = "<group>"; };
 		B96F72CF27F0FBE90024BA7D /* Debug (Jailbroken).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Debug (Jailbroken).xcconfig"; sourceTree = "<group>"; };
 		B96F72D027F0FC020024BA7D /* Release (Non-Jailbroken).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Release (Non-Jailbroken).xcconfig"; sourceTree = "<group>"; };
@@ -1577,6 +1579,7 @@
 			children = (
 				B96C9A612A46C315002B5ECF /* Swift */,
 				B96C9A5F2A46C2C1002B5ECF /* DOLAppVersionTests.swift */,
+				CA51A55E000000000000DE02 /* ControllerAssignmentServiceTests.swift */,
 			);
 			path = DolphiniOSTests;
 			sourceTree = "<group>";
@@ -2479,6 +2482,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B96C9A602A46C2C1002B5ECF /* DOLAppVersionTests.swift in Sources */,
+				CA51A55E000000000000DE01 /* ControllerAssignmentServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
