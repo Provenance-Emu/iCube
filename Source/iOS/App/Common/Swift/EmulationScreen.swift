@@ -268,6 +268,9 @@ struct EmulationScreen: View {
   #endif
   @State private var elapsedSeconds: Int = 0
   @State private var timer: Timer?
+  // Drives the centered "Paused" HUD pill. Polled off the 1s timer and refreshed
+  // on showPauseMenu changes; the pill is gated isPaused && !showPauseMenu.
+  @State private var isPaused: Bool = false
   @State var isWiiSystem: Bool = false
 
   // Quick performance overlay
@@ -312,6 +315,16 @@ struct EmulationScreen: View {
         .focusable(!showPauseMenu)
         .allowsHitTesting(!showPauseMenu)
         .navigationBarBackButtonHidden(true)
+
+      // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
+      // pause menu is open; the disconnect banner (zIndex 5) sits above it.
+      if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
+        PausedPill(onResume: {
+          TVEmulationBridge.resume()
+          isPaused = false
+        })
+        .zIndex(3)
+      }
 
       // Banner shown while a disconnect-induced pause is active (reconnect resumes).
       if controllerManager.disconnectPause != nil {
@@ -563,8 +576,9 @@ struct EmulationScreen: View {
       timer?.invalidate()
       timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
         elapsedSeconds += 1
+        isPaused = TVEmulationBridge.isPaused()
         // If the game resumed via any path other than a controller reconnect
-        // (pause menu Resume, new game), clear a stale disconnect banner.
+        // (pill tap, pause menu Resume, new game), clear a stale disconnect banner.
         if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
           controllerManager.clearDisconnectPause()
         }
@@ -612,6 +626,7 @@ struct EmulationScreen: View {
     }
     .onChange(of: showPauseMenu) { visible in
       NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
+      isPaused = TVEmulationBridge.isPaused()
       #if canImport(ActivityKit)
       GameActivityManager.update(isPaused: visible, elapsedSeconds: elapsedSeconds)
       #endif
@@ -666,6 +681,16 @@ struct EmulationScreen: View {
             object: nil, queue: .main) { _ in
             SaveStateService.resumeIfAvailable()
           }
+        }
+
+        // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
+        // pause menu is open; the disconnect banner (zIndex 5) sits above it.
+        if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
+          PausedPill(onResume: {
+            TVEmulationBridge.resume()
+            isPaused = false
+          })
+          .zIndex(3)
         }
 
         // Banner shown while a disconnect-induced pause is active (reconnect resumes).
@@ -1324,12 +1349,16 @@ struct EmulationScreen: View {
       isTouchControlsActive = v
       touchPadsRefreshToken = UUID()
     }
-    // iOS has no 1s timer (the tvOS branch does); poll to clear a stale disconnect
-    // banner if the game resumed via any path other than a controller reconnect.
+    // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+      isPaused = TVEmulationBridge.isPaused()
+      // Clear a stale disconnect banner if the game resumed via any other path.
       if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
         controllerManager.clearDisconnectPause()
       }
+    }
+    .onChange(of: showPauseMenu) { _ in
+      isPaused = TVEmulationBridge.isPaused()
     }
     .navigationBarHidden(true)
     .statusBar(hidden: true)
