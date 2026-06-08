@@ -422,6 +422,15 @@ extern const Info<bool> MAIN_CIR_SPECIALIZED_FP_LS;
 // to MAIN_CIR_PSQ_FASTPATH (a compute opt INSIDE the handler) — this only changes how the handler is
 // CALLED (direct vs indirect trampoline). See MainSettings.cpp for the full eligibility/gating rationale.
 extern const Info<bool> MAIN_CIR_SPECIALIZED_PSQ;
+// iCube: FP + paired-single ARITHMETIC dispatch specialization, the arithmetic analogue of
+// MAIN_CIR_SPECIALIZED_FP_LS. Separate, default-OFF flag so the FP/PS-arith direct-dispatch can be
+// A/B-tested on device independently of the (default-ON) integer specialization, the FP-LS flag, and the
+// psq flag. These ops are register-file/FPSCR-only and idempotent => DOUBLE-RUN-validate-safe (NOT in
+// IsLoadStoreSpecOp), reusing MAIN_CIR_SPECIALIZED_OPS_VALIDATE for the double-run check.
+// MAIN_CIR_SPECIALIZED_FP_ARITH_VALIDATE is declared for symmetry and not separately read. See
+// MainSettings.cpp for the full eligibility/gating rationale.
+extern const Info<bool> MAIN_CIR_SPECIALIZED_FP_ARITH;
+extern const Info<bool> MAIN_CIR_SPECIALIZED_FP_ARITH_VALIDATE;
 extern const Info<bool> MAIN_CIR_BLOCK_LINKING;
 extern const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE;
 extern const Info<bool> MAIN_CIR_PIC_LOADSTORE;

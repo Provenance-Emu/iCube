@@ -890,6 +890,35 @@ const Info<bool> MAIN_CIR_SPECIALIZED_FP_LS{{System::Main, "Core", "CIRSpecializ
 // byte-identical to baseline (no marker callback is ever written for psq — they fall through to the
 // unchanged generic emit).
 const Info<bool> MAIN_CIR_SPECIALIZED_PSQ{{System::Main, "Core", "CIRSpecializedPsq"}, false};
+// iCube: FP + paired-single ARITHMETIC DISPATCH specialization — the arithmetic analogue of
+// MAIN_CIR_SPECIALIZED_FP_LS, again as its OWN default-OFF flag so it can be A/B-tested on device
+// independently of the (default-ON) integer specialization, the FP-LS flag, and the psq flag. Routes the
+// hot FP arith/compare/FPSCR ops (faddx/fmulx/fmaddx/frspx/fcmpu/... ) and the paired-single arith ops
+// (ps_add/ps_madd/ps_merge*/ps_sel/... ) through the same specialized DIRECT jump-table dispatch the
+// integer/FP-LS/psq ops use — one direct, inlinable Interpreter::name call — instead of the generic
+// Interpret<write_pc> trampoline (which costs an extra indirect operands.func call per op). Targets the
+// FP-heavy hottest titles (Tony Hawk: FP+PS arithmetic dispatch is ~9% of cycles).
+//
+// ELIGIBLE BY CONSTRUCTION (do not re-litigate; same argument as FP-LS/psq): these are FL_USE_FPU but NOT
+// FL_LOADSTORE — pure register-file/FPSCR ops. With both jo.fp_exceptions and jo.div_by_zero_exceptions off
+// (the App-Store jitless default) ShouldHandleFPExceptionForInstruction is always false, so the DoJit guard
+// `(!canEndBlock && ShouldHandleFPExceptionForInstruction)` is false and the generic path emits a plain
+// Interpret<write_pc> (NOT InterpretAndCheckExceptions). The specialized switch invokes the exact same
+// Interpreter::name handler the generic GetInterpreterOp returned, so specialized ≡ generic by construction
+// (only the call is direct). The pass ONLY rewrites plain Interpret/InterpretPC ops; anything ever lowered as
+// InterpretChk (fp-exceptions on / memcheck) auto-skips, so over-inclusion is safe. CheckFPU is still emitted
+// once per block at the first FP instruction, independent of specialization.
+//
+// DOUBLE-RUN-VALIDATE-SAFE (unlike FP-LS/psq): register-file/FPSCR-only and idempotent, no memory writes, no
+// MMIO reads — so these are deliberately NOT added to IsLoadStoreSpecOp and take the ALU double-run validate
+// path. The actual double-run check reuses MAIN_CIR_SPECIALIZED_OPS_VALIDATE (the regime is selected by
+// IsLoadStoreSpecOp, handler-agnostic). MAIN_CIR_SPECIALIZED_FP_ARITH_VALIDATE below is declared for symmetry
+// with the rest of the specialized family and is not separately read (mirrors how FP-LS/psq have no separate
+// validate read). Default OFF pending on-device A/B; flag-off the emitted callback stream is byte-identical to
+// baseline (no marker callback is ever written for these — they fall through to the unchanged generic emit).
+const Info<bool> MAIN_CIR_SPECIALIZED_FP_ARITH{{System::Main, "Core", "CIRSpecializedFpArith"}, false};
+const Info<bool> MAIN_CIR_SPECIALIZED_FP_ARITH_VALIDATE{
+    {System::Main, "Core", "CIRSpecializedFpArithValidate"}, false};
 // iCube: CachedInterpreter block linking. When a block ends at a STATIC direct branch (bx/bcx) whose
 // target block is already compiled with matching feature_flags, let the block continue DIRECTLY into
 // the target's callback stream instead of round-tripping through the dispatcher (Dispatch +

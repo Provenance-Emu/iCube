@@ -77,6 +77,14 @@ static bool s_ir_pic_loadstore_validate = false;
 // Init, mirroring the read-once discipline of every other IR flag.
 static bool s_ir_specialized_ops = false;
 static bool s_ir_specialized_ops_validate = false;
+// iCube: FP + paired-single ARITHMETIC dispatch specialization, the IR mirror of the CIR's
+// s_specialized_fp_arith (MAIN_CIR_SPECIALIZED_FP_ARITH, default OFF). SEPARATE from s_ir_specialized_ops so
+// the FP/PS-arith direct-dispatch can be A/B-tested independently of the (default-ON) integer/LS
+// specialization — matching the CIR's per-list gating. When off PassSpecializedOps copies these ops through
+// untouched (they stay plain Interpret), so the lowered vector is byte-identical to the flag-off baseline.
+// These ops are register-file/FPSCR-only + idempotent => double-run-validate-safe (NOT in
+// IRIsLoadStoreSpecOp); the double-run reuses s_ir_specialized_ops_validate (no separate validate read).
+static bool s_ir_specialized_fp_arith = false;
 
 // iCube IR M7: specialized-op whitelist + compact-op-id machinery, COPIED VERBATIM from the shipping CIR
 // (CachedInterpreter.cpp's CIR_SPECIALIZED_ALU_OPS / CIR_SPECIALIZED_LS_OPS X-macros). KEEP IN SYNC with that
@@ -124,11 +132,42 @@ static bool s_ir_specialized_ops_validate = false;
   X(stb)                                                                                            \
   X(stbu)
 
+// IR_SPECIALIZED_FP_ARITH_OPS / IR_SPECIALIZED_PS_ARITH_OPS — FP + paired-single ARITHMETIC ops (NON
+// load/store), COPIED VERBATIM from the CIR's CIR_SPECIALIZED_FP_ARITH_OPS / CIR_SPECIALIZED_PS_ARITH_OPS.
+// FL_USE_FPU but NOT FL_LOADSTORE: register-file/FPSCR-only, idempotent => SAFE to DOUBLE-RUN in validate
+// (deliberately NOT in IRIsLoadStoreSpecOp). Gated at the pass site on s_ir_specialized_fp_arith
+// (MAIN_CIR_SPECIALIZED_FP_ARITH, default OFF), SEPARATELY from the always-on s_ir_specialized_ops, so the
+// IR honors the SAME default-OFF A/B toggle as the CIR. KEEP IN SYNC with CachedInterpreter.cpp.
+#define IR_SPECIALIZED_FP_ARITH_OPS(X)                                                             \
+  X(faddx)    X(faddsx)  X(fsubx)   X(fsubsx)                                                       \
+  X(fmulx)    X(fmulsx)  X(fdivx)   X(fdivsx)                                                       \
+  X(fmaddx)   X(fmaddsx) X(fmsubx)  X(fmsubsx)                                                      \
+  X(fnmaddx)  X(fnmaddsx) X(fnmsubx) X(fnmsubsx)                                                    \
+  X(fresx)    X(frsqrtex) X(fselx)  X(fmrx)                                                         \
+  X(fnegx)    X(fabsx)   X(fnabsx)  X(frspx)                                                        \
+  X(fctiwx)   X(fctiwzx) X(fcmpu)   X(fcmpo)                                                        \
+  X(mtfsb0x)  X(mtfsb1x) X(mtfsfix) X(mtfsfx)                                                       \
+  X(mffsx)    X(mcrfs)
+#define IR_SPECIALIZED_PS_ARITH_OPS(X)                                                             \
+  X(ps_add)     X(ps_sub)     X(ps_mul)     X(ps_div)                                               \
+  X(ps_madd)    X(ps_msub)    X(ps_nmadd)   X(ps_nmsub)                                             \
+  X(ps_sum0)    X(ps_sum1)    X(ps_muls0)   X(ps_muls1)                                             \
+  X(ps_madds0)  X(ps_madds1)  X(ps_merge00) X(ps_merge01)                                           \
+  X(ps_merge10) X(ps_merge11) X(ps_res)     X(ps_rsqrte)                                            \
+  X(ps_sel)     X(ps_neg)     X(ps_abs)     X(ps_nabs)                                              \
+  X(ps_mr)      X(ps_cmpu0)   X(ps_cmpo0)   X(ps_cmpu1)                                             \
+  X(ps_cmpo1)
+
 // Combined list driving the op-id enum, the pass emit site, the dispatch switch, and IsSpecializedOp. ALU
-// entries first so their enum ids stay stable across LS additions (matches the CIR ordering exactly).
+// entries first so their enum ids stay stable across LS additions (matches the CIR ordering exactly). FP/PS
+// arith appended LAST (the CIR's FP-LS/psq lists are intentionally NOT mirrored into the IR — out of scope —
+// so the per-engine enum ids legitimately differ; op-ids never cross engines, blocks are regenerated per
+// backend).
 #define IR_SPECIALIZED_OP_LIST(X)                                                                  \
   IR_SPECIALIZED_ALU_OPS(X)                                                                        \
-  IR_SPECIALIZED_LS_OPS(X)
+  IR_SPECIALIZED_LS_OPS(X)                                                                         \
+  IR_SPECIALIZED_FP_ARITH_OPS(X)                                                                   \
+  IR_SPECIALIZED_PS_ARITH_OPS(X)
 
 // Compact op-id carried inline in SpecializedOperands so the dispatch jump-table keys on a small int instead
 // of a chain of handler-pointer compares. X-macro-generated from the same list, so it can never drift.
@@ -177,6 +216,20 @@ static bool IRIsLoadStoreSpecOp(IrSpecOp id)
   default:
     return false;
   }
+}
+
+// iCube: true IFF this opcode's chosen handler is an FP or paired-single ARITHMETIC op on the arith
+// whitelists. The pass uses this to gate FP/PS arith on the default-OFF s_ir_specialized_fp_arith (mirroring
+// the CIR's emit-site IsFpArithSpecializedOp gate) while every other specialized op stays on s_ir_specialized_ops.
+static bool IRIsFpArithSpecializedOp(void (*func)(Interpreter&, UGeckoInstruction))
+{
+#define IR_FP_ARITH_CHECK(name)                                                                    \
+  if (func == &Interpreter::name)                                                                  \
+    return true;
+  IR_SPECIALIZED_FP_ARITH_OPS(IR_FP_ARITH_CHECK)
+  IR_SPECIALIZED_PS_ARITH_OPS(IR_FP_ARITH_CHECK)
+#undef IR_FP_ARITH_CHECK
+  return false;
 }
 
 // The single source of dispatch for specialized ops. Given a decoded IrSpecOp `id`, the live `ppc_state`, and a
@@ -366,6 +419,9 @@ void CachedInterpreterIR::Init()
   // lowering); the validate twin only ever runs when BOTH are on.
   s_ir_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_ir_specialized_ops_validate = Config::Get(Config::MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE);
+  // iCube: FP/PS arith dispatch specialization (reuses the CIR's MAIN_CIR_SPECIALIZED_FP_ARITH; default OFF).
+  // When off PassSpecializedOps copies these ops through untouched (byte-identical to baseline).
+  s_ir_specialized_fp_arith = Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_ARITH);
   // iCube: the IR engine reaches the SAME shared paired-single handlers (Interpreter_Paired.cpp /
   // Interpreter_LoadStorePaired.cpp) via its Interpret ops, so it must refresh those flags per game-boot
   // too. The CIR set these in its own Init(); without these the IR engine ran with stale/never-set
@@ -2976,6 +3032,15 @@ void CachedInterpreterIR::PassSpecializedOps(std::vector<IRInst>& ir) const
       continue;
     }
     if (!IRIsSpecializedOp(inst.u.interpret.func))
+    {
+      out.push_back(inst);
+      continue;
+    }
+    // iCube: FP/PS arith ops are gated on their OWN default-OFF flag (mirrors the CIR emit-site
+    // IsFpArithSpecializedOp gate). When off, copy the plain Interpret op through untouched so the lowered
+    // vector is byte-identical to the flag-off baseline; every other specialized op stays gated by the
+    // s_ir_specialized_ops that already guarded the whole pass run.
+    if (IRIsFpArithSpecializedOp(inst.u.interpret.func) && !s_ir_specialized_fp_arith)
     {
       out.push_back(inst);
       continue;

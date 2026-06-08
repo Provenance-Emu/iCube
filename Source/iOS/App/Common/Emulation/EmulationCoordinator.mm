@@ -125,6 +125,7 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   lineB("MAIN_CIR_SPECIALIZED_OPS", Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS));
   lineB("MAIN_CIR_SPECIALIZED_FP_LS", Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_LS));
   lineB("MAIN_CIR_SPECIALIZED_PSQ", Config::Get(Config::MAIN_CIR_SPECIALIZED_PSQ));
+  lineB("MAIN_CIR_SPECIALIZED_FP_ARITH", Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_ARITH));
   lineB("MAIN_CIR_PSQ_FASTPATH", Config::Get(Config::MAIN_CIR_PSQ_FASTPATH));
   lineB("MAIN_CIR_PS_NEON", Config::Get(Config::MAIN_CIR_PS_NEON));
   lineB("GFX_USE_COMPUTE_EFBXFB", Config::Get(Config::GFX_USE_COMPUTE_EFBXFB));
