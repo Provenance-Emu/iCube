@@ -127,6 +127,17 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   lineB("MAIN_CIR_SPECIALIZED_PSQ", Config::Get(Config::MAIN_CIR_SPECIALIZED_PSQ));
   lineB("GFX_USE_COMPUTE_EFBXFB", Config::Get(Config::GFX_USE_COMPUTE_EFBXFB));
   lineB("GFX_USE_COMPUTE_VERTEX_DECODE", Config::Get(Config::GFX_USE_COMPUTE_VERTEX_DECODE));
+  {
+    // iCube: surface the ACTUAL active vertex loader (Copy State previously omitted it). This is the
+    // ground truth for whether the forced/selected loader took effect (Software/NEON/Compare/Native).
+    const VertexLoaderType vlt = Config::Get(Config::GFX_VERTEX_LOADER_TYPE);
+    line("GFX_VERTEX_LOADER_TYPE", vlt == VertexLoaderType::Software ? "Software"
+                                   : vlt == VertexLoaderType::NEON    ? "NEON"
+                                   : vlt == VertexLoaderType::Compare ? "Compare"
+                                                                      : "Native");
+  }
+  lineB("GFX_HACK_FAST_TEXTURE_SAMPLING(fast=manual-off)",
+        Config::Get(Config::GFX_HACK_FAST_TEXTURE_SAMPLING));
   lineB("MAIN_DSP_HLE", Config::Get(Config::MAIN_DSP_HLE));
   lineB("MAIN_FAST_DISC_SPEED", Config::Get(Config::MAIN_FAST_DISC_SPEED));
   lineB("MAIN_SYNC_ON_SKIP_IDLE", Config::Get(Config::MAIN_SYNC_ON_SKIP_IDLE));
