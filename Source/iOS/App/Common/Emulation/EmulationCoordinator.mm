@@ -1568,6 +1568,18 @@ after_set:
       Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, ICubeJitlessVertexLoaderType());
     }
 
+    // iCube DIAGNOSTIC/FIX (2026-06-07): geometry corruption (blown-up polygons in Wii Mario,
+    // see-through surfaces in Lego Star Wars) reproduces across ALL GPU backends, ALL CPU cores,
+    // ALL graphics hacks, AND was unaffected by the in-app vertex-loader picker — because the
+    // acquiredJit branch above force-selects Native (VertexLoaderARM64 / JIT codegen) and ignores
+    // the picker on non-TXM/Legacy devices, so Software/NEON/Compare all collapsed to Native.
+    // Force the pure-C++ Software reference loader unconditionally and log the resolved state, so
+    // the decode path is known-correct. If geometry is correct now, the JIT vertex loader (or the
+    // ignored picker) was the cause; if it persists, the vertex loader is ruled out. Revert freely.
+    Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Software);
+    NSLog(@"[iCube][vtxloader] FORCED Software (diagnostic). acquiredJit=%d txmInterpreterFallback=%d",
+          (int)[JitManager shared].acquiredJit, (int)txmInterpreterFallback);
+
     // Clear any lingering per-run CPU core override so we honor current availability/config
     if (Config::GetLayer(Config::LayerType::CurrentRun)) {
       Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
