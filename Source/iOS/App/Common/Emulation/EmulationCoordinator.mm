@@ -1588,7 +1588,12 @@ after_set:
     // the decode path is known-correct. If geometry is correct now, the JIT vertex loader (or the
     // ignored picker) was the cause; if it persists, the vertex loader is ruled out. Revert freely.
     Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Software);
-    NSLog(@"[iCube][vtxloader] FORCED Software (diagnostic). acquiredJit=%d txmInterpreterFallback=%d",
+    // iCube DIAGNOSTIC: also force GPU-compute vertex decode OFF. With it ON, eligible draws are
+    // decoded by the Metal compute kernel and BYPASS the forced Software CPU loader entirely — which
+    // defeated the isolation (the first "forced Software" run still had compute-decode on). Forcing
+    // both guarantees EVERY vertex goes through the stock C++ Software loader. Revert with the rest.
+    Config::SetBase(Config::GFX_USE_COMPUTE_VERTEX_DECODE, false);
+    NSLog(@"[iCube][vtxloader] FORCED Software + compute-decode OFF (diagnostic). acquiredJit=%d txmInterpreterFallback=%d",
           (int)[JitManager shared].acquiredJit, (int)txmInterpreterFallback);
 
     // Clear any lingering per-run CPU core override so we honor current availability/config
