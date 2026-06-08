@@ -23,6 +23,11 @@ final class ControllerManager: NSObject, ObservableObject {
 
   let presets = PresetManager()
 
+  /// Single source of truth for controller assignment: activates the port,
+  /// binds the device, applies the default profile, and saves — atomically.
+  /// reconcile()/change-notification stay in this manager's wrappers, not the service.
+  private let assignmentService = ControllerAssignmentService(writer: BridgeControllerConfigWriter())
+
   override private init() {}
 
   // ObjC proxies for wrapped Swift properties
@@ -199,7 +204,8 @@ final class ControllerManager: NSObject, ObservableObject {
     let state = ControllerStateStore.shared.snapshot()
     let decision = AssignmentEngine().decide(from: state)
     if let p = decision.reassignPortOneBased {
-      TVControllerMappingBridge.assignTouchscreen(toGCPort: p)
+      // Route through the service so the chosen GC slot is activated, not just bound.
+      assignmentService.assignTouchscreen(toPlayer: p - 1, system: .gamecube)
     }
 
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
@@ -208,19 +214,37 @@ final class ControllerManager: NSObject, ObservableObject {
   // MARK: Assign
 
   func assignTouchscreen(toGCPort portOneBased: Int) {
-    TVControllerMappingBridge.assignTouchscreen(toGCPort: portOneBased)
+    assignmentService.assignTouchscreen(toPlayer: portOneBased - 1, system: .gamecube)
     reconcile()
   }
 
   func assign(_ controller: GCController, toGCPort portOneBased: Int) {
-    TVControllerMappingBridge.assign(controller, toGCPort: portOneBased)
+    let qualifier = TVControllerMappingBridge.qualifiedName(for: controller)
+    if qualifier.isEmpty {
+      // Fallback path retains the bridge's first-connected-MFi heuristic; still
+      // activate the port so ports 2-4 produce input.
+      assignmentService.activate(port: portOneBased - 1, system: .gamecube)
+      TVControllerMappingBridge.assign(controller, toGCPort: portOneBased)
+    } else {
+      assignmentService.assign(qualifier: qualifier, toPlayer: portOneBased - 1, system: .gamecube)
+    }
+    controller.playerIndex = GCControllerPlayerIndex(rawValue: portOneBased - 1) ?? .indexUnset
+    reconcile()
+  }
+
+  /// ObjC-callable assignment that routes through the service (activate + bind +
+  /// profile + save). Used by the C++ auto-assign path so slots 2-4 get activated.
+  /// `portZeroBased` is 0-based (Pad controller index).
+  @objc func assignViaService(qualifier: String, toPort portZeroBased: Int, isWii: Bool) {
+    let system: EmulatedSystem = isWii ? .wii : .gamecube
+    assignmentService.assign(qualifier: qualifier, toPlayer: portZeroBased, system: system)
     reconcile()
   }
 
   // MARK: Defaults API
 
   func clearDefaultDevice(forGCPort portOneBased: Int) {
-    TVControllerMappingBridge.clearDefaultDevice(forGCPort: portOneBased)
+    assignmentService.clear(player: portOneBased - 1, system: .gamecube)
     reconcile()
   }
 
