@@ -1952,6 +1952,7 @@ struct ConfigAdvancedView: View {
   @State private var cirSpecializedOpsValidate: Bool = false
   @State private var cirSpecializedFpLs: Bool = false
   @State private var cirSpecializedPsq: Bool = false
+  @State private var cirSpecializedFpArith: Bool = false
   @State private var cirMicroOpFusion: Bool = false
   @State private var cirMicroOpFusionValidate: Bool = false
   @State private var cirDeadFlagElim: Bool = false
@@ -2104,6 +2105,9 @@ struct ConfigAdvancedView: View {
             optRow("Paired-Single Load/Store Specialization", isOn: $cirSpecializedPsq,
                    set: { DOLConfigBridge.setCirSpecializedPsq($0) },
                    caption: "Routes quantized paired-single loads/stores (psq_l/psq_st + update/indexed) through direct dispatch — the single hottest op class in paired-single-heavy games like Chibi-Robo. Composes with the Paired-Single Float Fast-Path (that speeds the handler body; this speeds how it's called). Experimental; verify with Specialized Ops: Validate. Applies on next game launch.")
+            optRow("FP / Paired-Single Arithmetic Specialization", isOn: $cirSpecializedFpArith,
+                   set: { DOLConfigBridge.setCirSpecializedFpArith($0) },
+                   caption: "Routes FP and paired-single ARITHMETIC ops (fadd/fmul/fmadd…, ps_add/ps_mul/ps_madd…) through the same direct jump-table dispatch the integer ops use — one fewer indirect call per op. Composes with NEON Paired-Single Math (that speeds the math; this speeds how it's called). Targets FP/3D-heavy games (e.g. Tony Hawk). Dispatch-only, so identical to the generic handler. Experimental. Applies on next game launch.")
             optRow("Micro-Op Fusion", recommended: true, isOn: $cirMicroOpFusion,
                    set: { DOLConfigBridge.setCirMicroOpFusion($0) },
                    caption: "Fuses runs of integer ops into one dispatched block, cutting per-op dispatch overhead. The fused handlers are code-audited and self-validating. Applies on next game launch.")
@@ -2408,6 +2412,7 @@ struct ConfigAdvancedView: View {
     cirPsNeon = false; DOLConfigBridge.setCirPsNeon(false)
     cirSpecializedFpLs = false; DOLConfigBridge.setCirSpecializedFpLs(false)
     cirSpecializedPsq = false; DOLConfigBridge.setCirSpecializedPsq(false)
+    cirSpecializedFpArith = false; DOLConfigBridge.setCirSpecializedFpArith(false)
     cirDeadFlagElim = false; DOLConfigBridge.setCirDeadFlagElim(false)
     cirDeadFprfElim = false; DOLConfigBridge.setCirDeadFprfElim(false)
     cirPsqFastPath = false; DOLConfigBridge.setCirPsqFastPath(false)
@@ -2449,6 +2454,7 @@ struct ConfigAdvancedView: View {
     cirSpecializedOpsValidate = DOLConfigBridge.cirSpecializedOpsValidate()
     cirSpecializedFpLs = DOLConfigBridge.cirSpecializedFpLs()
     cirSpecializedPsq = DOLConfigBridge.cirSpecializedPsq()
+    cirSpecializedFpArith = DOLConfigBridge.cirSpecializedFpArith()
     cirMicroOpFusion = DOLConfigBridge.cirMicroOpFusion()
     cirMicroOpFusionValidate = DOLConfigBridge.cirMicroOpFusionValidate()
     cirDeadFlagElim = DOLConfigBridge.cirDeadFlagElim()
@@ -2631,6 +2637,7 @@ enum PerfAB {
     Flag(key: "specializedOps", get: { DOLConfigBridge.cirSpecializedOps() }, set: { DOLConfigBridge.setCirSpecializedOps($0) }),
     Flag(key: "specializedFpLs", get: { DOLConfigBridge.cirSpecializedFpLs() }, set: { DOLConfigBridge.setCirSpecializedFpLs($0) }),
     Flag(key: "specializedPsq", get: { DOLConfigBridge.cirSpecializedPsq() }, set: { DOLConfigBridge.setCirSpecializedPsq($0) }),
+    Flag(key: "specializedFpArith", get: { DOLConfigBridge.cirSpecializedFpArith() }, set: { DOLConfigBridge.setCirSpecializedFpArith($0) }),
     Flag(key: "microOpFusion", get: { DOLConfigBridge.cirMicroOpFusion() }, set: { DOLConfigBridge.setCirMicroOpFusion($0) }),
     Flag(key: "deadFlagElim", get: { DOLConfigBridge.cirDeadFlagElim() }, set: { DOLConfigBridge.setCirDeadFlagElim($0) }),
     Flag(key: "deadFprfElim", get: { DOLConfigBridge.cirDeadFprfElim() }, set: { DOLConfigBridge.setCirDeadFprfElim($0) }),

@@ -295,6 +295,8 @@ static bool ICubeEmulationActive() {
 + (void)setCirSpecializedOpsValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE, (bool)enabled); }
 + (BOOL)cirSpecializedFpLs { return Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_LS); }
 + (void)setCirSpecializedFpLs:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_FP_LS, (bool)enabled); }
++ (BOOL)cirSpecializedFpArith { return Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_ARITH); }
++ (void)setCirSpecializedFpArith:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_FP_ARITH, (bool)enabled); }
 + (BOOL)cirSpecializedPsq { return Config::Get(Config::MAIN_CIR_SPECIALIZED_PSQ); }
 + (void)setCirSpecializedPsq:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_SPECIALIZED_PSQ, (bool)enabled); }
 + (BOOL)cirMicroOpFusion { return Config::Get(Config::MAIN_CIR_MICROOP_FUSION); }
