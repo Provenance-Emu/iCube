@@ -125,6 +125,8 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   lineB("MAIN_CIR_SPECIALIZED_OPS", Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS));
   lineB("MAIN_CIR_SPECIALIZED_FP_LS", Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_LS));
   lineB("MAIN_CIR_SPECIALIZED_PSQ", Config::Get(Config::MAIN_CIR_SPECIALIZED_PSQ));
+  lineB("MAIN_CIR_PSQ_FASTPATH", Config::Get(Config::MAIN_CIR_PSQ_FASTPATH));
+  lineB("MAIN_CIR_PS_NEON", Config::Get(Config::MAIN_CIR_PS_NEON));
   lineB("GFX_USE_COMPUTE_EFBXFB", Config::Get(Config::GFX_USE_COMPUTE_EFBXFB));
   lineB("GFX_USE_COMPUTE_VERTEX_DECODE", Config::Get(Config::GFX_USE_COMPUTE_VERTEX_DECODE));
   {
@@ -1595,6 +1597,24 @@ after_set:
     Config::SetBase(Config::GFX_USE_COMPUTE_VERTEX_DECODE, false);
     NSLog(@"[iCube][vtxloader] FORCED Software + compute-decode OFF (diagnostic). acquiredJit=%d txmInterpreterFallback=%d",
           (int)[JitManager shared].acquiredJit, (int)txmInterpreterFallback);
+
+    // iCube DIAGNOSTIC: force the ENTIRE CPU path to stock to settle CPU-vs-rendering for good.
+    // Plain Interpreter (bypasses the custom CachedInterpreter engine) + every CIR/paired-single
+    // fast-path OFF, INCLUDING PS_NEON — the NEON paired-single arithmetic that does geometry/matrix
+    // math (the "large hands" suspect) and whose state Copy State never even showed. SLOW (use Lego,
+    // a GameCube title, not Mario Wii). If "large hands"/see-through persist with 100% stock CPU AND
+    // stock Software decode, the guest geometry data is provably correct => the bug is in rendering,
+    // and a bisect can target rendering only. Revert with the rest.
+    Config::SetBase(Config::MAIN_CPU_CORE, PowerPC::CPUCore::Interpreter);
+    Config::SetBase(Config::MAIN_CIR_PIC_LOADSTORE, false);
+    Config::SetBase(Config::MAIN_CIR_MICROOP_FUSION, false);
+    Config::SetBase(Config::MAIN_CIR_BLOCK_LINKING, false);
+    Config::SetBase(Config::MAIN_CIR_SPECIALIZED_OPS, false);
+    Config::SetBase(Config::MAIN_CIR_SPECIALIZED_FP_LS, false);
+    Config::SetBase(Config::MAIN_CIR_SPECIALIZED_PSQ, false);
+    Config::SetBase(Config::MAIN_CIR_PSQ_FASTPATH, false);
+    Config::SetBase(Config::MAIN_CIR_PS_NEON, false);
+    NSLog(@"[iCube][cpu] FORCED plain Interpreter + all CIR/paired fast-paths OFF (diagnostic).");
 
     // Clear any lingering per-run CPU core override so we honor current availability/config
     if (Config::GetLayer(Config::LayerType::CurrentRun)) {
