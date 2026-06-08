@@ -54,6 +54,48 @@ final class ControllerManager: NSObject, ObservableObject {
   var controllerDisconnectedPublisher: AnyPublisher<GCController?, Never> { controllerDisconnectedSubject.eraseToAnyPublisher() }
   var fastForwardToggledPublisher: AnyPublisher<Bool, Never> { fastForwardToggledSubject.eraseToAnyPublisher() }
 
+  // MARK: Disconnect-pause
+
+  /// Identifies a slot whose assigned physical controller dropped mid-game.
+  /// `port` is 0-based; `qualifier` is the bridge-qualified device name so the
+  /// same physical device can be matched on reconnect (object identity is gone).
+  struct DisconnectPause: Equatable {
+    let qualifier: String
+    let port: Int
+    let isWii: Bool
+  }
+
+  /// Non-nil while a disconnect-induced pause is active. The emulation screen
+  /// observes this to show the reconnect banner and to gate the paused pill.
+  @Published private(set) var disconnectPause: DisconnectPause?
+
+  /// Clears the disconnect-pause state (dismisses the banner). Called by the
+  /// emulation screen's poll when the game has resumed via any other path
+  /// (pill tap, pause menu Resume, new game launch) so the banner can never get
+  /// stuck over a running game.
+  func clearDisconnectPause() {
+    disconnectPause = nil
+  }
+
+  /// Returns the 0-based slot and Wii-ness for a controller currently assigned as
+  /// a physical device, or nil if it is not bound to any port (touchscreen-only /
+  /// unassigned). Matches by bridge qualifier across GC ports then Wiimotes.
+  private func assignedSlot(for controller: GCController) -> (port: Int, isWii: Bool)? {
+    let qualifier = TVControllerMappingBridge.qualifiedName(for: controller)
+    guard !qualifier.isEmpty else { return nil }
+    for portOneBased in 1 ... 4 {
+      if TVControllerMappingBridge.defaultDevice(forGCPort: portOneBased) as String == qualifier {
+        return (portOneBased - 1, false)
+      }
+    }
+    for indexOneBased in 1 ... 4 {
+      if TVControllerMappingBridge.defaultDevice(forWiimote: indexOneBased) as String == qualifier {
+        return (indexOneBased - 1, true)
+      }
+    }
+    return nil
+  }
+
   func startObserving() {
     guard !isObserving else { return }
     isObserving = true
@@ -67,6 +109,24 @@ final class ControllerManager: NSObject, ObservableObject {
       if let c = note.object as? GCController {
         self.configureControllerForCurrentPlatform(c)
         self.presets.applyCurrentPreset()
+        // If a disconnect-pause is active, any connecting controller resumes the
+        // game so the user is never stranded. If it is the SAME physical device,
+        // restore it to its original slot; otherwise auto-assign to the first
+        // free slot. Either way, clear the pause + dismiss the banner + resume.
+        if let pending = self.disconnectPause {
+          if TVControllerMappingBridge.qualifiedName(for: c) as String == pending.qualifier {
+            self.assignmentService.assign(qualifier: pending.qualifier, toPlayer: pending.port, system: pending.isWii ? .wii : .gamecube)
+            c.playerIndex = GCControllerPlayerIndex(rawValue: pending.port) ?? .indexUnset
+          } else {
+            EmulationCoordinator.autoAssignNewestExternalControllerToFirstAvailableSlot()
+          }
+          self.disconnectPause = nil
+          TVEmulationBridge.resume()
+          self.updateWiimoteEmulationForExternalControllers()
+          self.controllerConnectedSubject.send(c)
+          self.reconcile()
+          return
+        }
         EmulationCoordinator.autoAssignNewestExternalControllerToFirstAvailableSlot()
         self.updateWiimoteEmulationForExternalControllers()
         // Battery toast if available
@@ -89,6 +149,19 @@ final class ControllerManager: NSObject, ObservableObject {
     let onDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { [weak self] note in
       guard let self = self else { return }
       let c = note.object as? GCController
+      // Auto-pause when an ASSIGNED PHYSICAL controller drops mid-game. A
+      // touchscreen-only / unassigned disconnect does nothing. Capture the slot
+      // before reconcile() can rewrite the bindings.
+      if self.disconnectPause == nil,
+         let dropped = c,
+         let slot = self.assignedSlot(for: dropped),
+         TVEmulationBridge.isRunning(),
+         !(TVEmulationBridge.currentGameID() as String).isEmpty,
+         !TVEmulationBridge.isPaused() {
+        let qualifier = TVControllerMappingBridge.qualifiedName(for: dropped) as String
+        self.disconnectPause = DisconnectPause(qualifier: qualifier, port: slot.port, isWii: slot.isWii)
+        TVEmulationBridge.pause()
+      }
       self.presets.applyCurrentPreset()
       self.controllerDisconnectedSubject.send(c)
       self.reconcile()

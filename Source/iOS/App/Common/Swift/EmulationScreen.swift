@@ -313,6 +313,12 @@ struct EmulationScreen: View {
         .allowsHitTesting(!showPauseMenu)
         .navigationBarBackButtonHidden(true)
 
+      // Banner shown while a disconnect-induced pause is active (reconnect resumes).
+      if controllerManager.disconnectPause != nil {
+        ControllerDisconnectBanner()
+          .zIndex(5)
+      }
+
       // Removed floating speed overlay toggle; moved into pause menu
 
       // Semi-transparent overlay with controls
@@ -557,6 +563,11 @@ struct EmulationScreen: View {
       timer?.invalidate()
       timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
         elapsedSeconds += 1
+        // If the game resumed via any path other than a controller reconnect
+        // (pause menu Resume, new game), clear a stale disconnect banner.
+        if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
+          controllerManager.clearDisconnectPause()
+        }
         #if canImport(ActivityKit)
         GameActivityManager.update(isPaused: TVEmulationBridge.isPaused(), elapsedSeconds: elapsedSeconds)
         #endif
@@ -655,6 +666,12 @@ struct EmulationScreen: View {
             object: nil, queue: .main) { _ in
             SaveStateService.resumeIfAvailable()
           }
+        }
+
+        // Banner shown while a disconnect-induced pause is active (reconnect resumes).
+        if controllerManager.disconnectPause != nil {
+          ControllerDisconnectBanner()
+            .zIndex(5)
         }
 
         // Top hit area: tap near status bar to reveal overlay (active only when hidden)
@@ -1306,6 +1323,13 @@ struct EmulationScreen: View {
     .onReceive(controllerManager.$overlayVisible) { v in
       isTouchControlsActive = v
       touchPadsRefreshToken = UUID()
+    }
+    // iOS has no 1s timer (the tvOS branch does); poll to clear a stale disconnect
+    // banner if the game resumed via any path other than a controller reconnect.
+    .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+      if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
+        controllerManager.clearDisconnectPause()
+      }
     }
     .navigationBarHidden(true)
     .statusBar(hidden: true)
