@@ -1170,8 +1170,10 @@ struct TVLibraryView: View {
         .onAppear {
           emulationRunning = false
           if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] onAppear: controllers=\(GCController.controllers().count)") }
-          // Library should own controller handlers; stop global observers to avoid overrides
-          ControllerManager.shared.stopObserving()
+          // The controller observer is app-wide (started in MainDisplaySceneDelegate)
+          // so hotplug auto-assign stays live in the library. The library re-binds its
+          // own nav handlers below and on controllerConnectedPublisher, which runs
+          // after the manager's connect handler, so nav still wins for grid navigation.
           GCController.shouldMonitorBackgroundEvents = false
           for c in GCController.controllers() {
             c.extendedGamepad?.valueChangedHandler = nil

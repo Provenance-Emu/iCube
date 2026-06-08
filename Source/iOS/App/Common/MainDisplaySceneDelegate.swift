@@ -28,6 +28,10 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       self.window = window
       window.makeKeyAndVisible()
       applyFrameCap(to: windowScene)
+      // Start the universal controller observer at the app/scene root so hotplug
+      // auto-assign is live in library, menus, and in-game on iOS and tvOS — not
+      // only from the in-game screen. startObserving() is idempotent.
+      ControllerManager.shared.startObserving()
       #if !os(tvOS)
       // Handle cold-boot quick actions after UI is ready
       if let shortcut = connectionOptions.shortcutItem {

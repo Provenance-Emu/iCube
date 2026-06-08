@@ -504,13 +504,11 @@ struct EmulationScreen: View {
           NSLog("[INPUT] tvOS wireless controller discovery completed")
         })
       }
-      NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
-        if let c = note.object as? GCController {
-          configureController(c)
-          setupPauseGestureHandler(for: c)
-        }
-      }
-      NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { _ in }
+      // Controller connect/disconnect is handled by the app-wide ControllerManager
+      // observer (started in MainDisplaySceneDelegate). Its connect path runs
+      // configureControllerForCurrentPlatform (installs input + pause-gesture
+      // handlers) and auto-assigns, so the previous redundant local observer here
+      // (with an empty disconnect handler) has been removed.
       endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
         dismiss()
       }
@@ -1133,7 +1131,9 @@ struct EmulationScreen: View {
     .onAppear {
       NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
       NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
-      ControllerManager.shared.startObserving()
+      // Controller observation is started app-wide from MainDisplaySceneDelegate
+      // (scene root) so hotplug auto-assign works in library/menus/in-game on both
+      // iOS and tvOS. Do not start/stop it here.
       // Initialize expected system early from metadata to avoid startup races
       isWiiSystem = inferIsWii(from: game)
       irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
@@ -1273,7 +1273,8 @@ struct EmulationScreen: View {
       if let t = obsShowPause { NotificationCenter.default.removeObserver(t)
         obsShowPause = nil
       }
-      ControllerManager.shared.stopObserving()
+      // Do not stopObserving() here — the controller observer is app-wide (started
+      // in MainDisplaySceneDelegate) so auto-assign stays live after exiting a game.
       // Disable motion when leaving screen
       TCDeviceMotion.shared.setMotionEnabled(false)
       arPollTask?.cancel()
