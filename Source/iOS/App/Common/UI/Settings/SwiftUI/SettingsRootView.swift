@@ -4377,69 +4377,9 @@ struct GraphicsAdvancedView: View {
   }
 }
 
-// MARK: - Controllers Port
-private struct ControllersPortView: View {
-  let isGC: Bool
-  let portOneBased: Int
-  var title: String { isGC ? "\(L("GameCube Controller")) \(portOneBased)" : "\(L("Wii Remote")) \(portOneBased)" }
-  @State private var canConfigure: Bool = false
-  var body: some View {
-    List {
-      NavigationLink(L("Type"), destination: ControllersTypePicker(isGC: isGC, portOneBased: portOneBased))
-      NavigationLink(L("Configure"), destination: ControllersMappingView(isGC: isGC, portOneBased: portOneBased))
-        .disabled(!canConfigure)
-    }
-    .navigationTitle(Text(title))
-    .configSynced { sync() }
-  }
-  private func sync() {
-    if isGC {
-      let device = DOLConfigBridge.gcPortDevice(forPort: portOneBased)
-      canConfigure = device != 0
-    } else {
-      let source = DOLConfigBridge.wiimoteSource(for: portOneBased)
-      canConfigure = source != 0
-    }
-  }
-}
-
-private struct ControllersTypePicker: View {
-  let isGC: Bool
-  let portOneBased: Int
-  @State private var selected: Int = 0
-  var body: some View {
-    List {
-      if isGC {
-        // SIDevices: 0 = SIDEVICE_NONE, 6 = SIDEVICE_GC_CONTROLLER (NOT sequential)
-        SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 0) }
-        SelectRow(label: L("GameCube Controller"), checked: selected == 6) {
-          selected = 6
-          DOLConfigBridge.setGCPortDeviceForPort(portOneBased, device: 6)
-          EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
-          ControllerManager.shared.reconcile()
-        }
-      } else {
-        // 0: None, 1: Emulated
-        SelectRow(label: L("<Nothing>"), checked: selected == 0) { selected = 0; DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 0) }
-        SelectRow(label: L("Emulated Wii Remote"), checked: selected == 1) {
-          selected = 1
-          DOLConfigBridge.setWiimoteSourceFor(portOneBased, source: 1)
-          EmulationCoordinator.ensureWiimoteDefaultsToTouchscreen(forPort: portOneBased)
-          ControllerManager.shared.reconcile()
-        }
-      }
-    }
-    .navigationTitle(L("Type"))
-    .configSynced { sync() }
-  }
-  private func sync() {
-    if isGC {
-      selected = DOLConfigBridge.gcPortDevice(forPort: portOneBased)
-    } else {
-      selected = DOLConfigBridge.wiimoteSource(for: portOneBased)
-    }
-  }
-}
+// NOTE: The per-port Type→Configure flow (ControllersPortView / ControllersTypePicker)
+// was removed — ControllerSetupView's per-row Device picker now activates the port
+// (no separate Type step) and "Customize Buttons…" drills into ControllersMappingView.
 
 #if os(tvOS)
 // UIKit wrapper for the legacy mapping UI (MappingRootViewController in ButtonMapping.storyboard)
