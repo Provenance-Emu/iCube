@@ -74,11 +74,23 @@ elif [ "$PGO_MODE" = "on" ] && [ -z "$DOL_CORE_PGO_PROFILE" ]; then
     fi
 fi
 
-# CPU tuning flags per target arch
+# CPU tuning flags — per-platform ISA baselines pinned to each OS's true minimum device.
+#   iOS / iOS-sim : floor = A12 (iPhone XS/XR, the iOS 17 minimum) -> ARMv8.3-A.
+#     -mcpu=apple-a12 unlocks +lse (single-instruction CAS/SWP/LDADD instead of ldxr/stxr
+#     retry loops), +rcpc (cheaper acquire/release), +fullfp16, +complxnum, +pauth — a real
+#     win for cross-thread scheduler/sync. -mtune=apple-a15 schedules for the install-base
+#     majority while keeping the A12 ISA floor. Safe: A12 is the iOS 17 floor; the arm64 sim
+#     runs on M-series (a superset).
+#   tvOS / tvOS-sim : floor = A8 (Apple TV HD, still supported on tvOS 17) -> ARMv8.0-A only.
+#     A8 would SIGILL on v8.1+ atomics, so stay generic ARMv8.0 + crypto/neon, tuned for a15.
+#     (tvOS 18 gains nothing here — its floor is still the A8 Apple TV HD.)
 CPU_TUNE_FLAGS=""
 case "$PLATFORM" in
-  OS64|TVOS|SIMULATORARM64)
-    CPU_TUNE_FLAGS="-mcpu=apple-a10 -mtune=apple-a14 -march=armv8-a+simd+crc+crypto+fp16"
+  OS64|SIMULATORARM64)
+    CPU_TUNE_FLAGS="-mcpu=apple-a12 -mtune=apple-a15"
+    ;;
+  TVOS|SIMULATOR_TVOS)
+    CPU_TUNE_FLAGS="-march=armv8-a+simd+crypto -mtune=apple-a15"
     ;;
   *)
     CPU_TUNE_FLAGS=""
