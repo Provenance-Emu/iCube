@@ -86,27 +86,31 @@ case "$PLATFORM" in
 esac
 
 # Common compile flags
+#
+# CRITICAL: do NOT use -ffast-math / -Ofast / -funsafe-math-optimizations / -ffinite-math-only /
+# -freciprocal-math / -fno-signed-zeros / -ffp-contract=fast on the Dolphin CORE. An emulator core
+# requires exact IEEE-754 semantics: these flags assume no NaN/Inf, allow FP reassociation/contraction,
+# flush denormals, and approximate division — which (a) corrupts the emulated Gekko/Broadway FP the
+# games use for 3D transforms and (b) corrupts Dolphin's own projection/viewport/depth math. The
+# observable result was distorted geometry ("large hands" in Wii Mario) and broken/inverted depth
+# (see-through walls/floors in Lego Star Wars), backend- and CPU-engine-independent and immune to every
+# runtime setting because it's baked in at compile time. Stock Dolphin never uses fast-math for exactly
+# this reason. Keep -O3 and the IEEE-safe vectorization/LTO flags below.
 COMMON_C_FLAGS=" \
--Ofast \
+-O3 \
 -fvectorize \
--funsafe-math-optimizations \
 -funroll-loops \
 -ftree-vectorize \
 -fsplit-lto-unit \
--freciprocal-math \
 -fPIC \
 -fpermissive \
 -fomit-frame-pointer \
 -fno-trapping-math \
 -fno-strict-aliasing \
--fno-signed-zeros \
 -fno-math-errno \
 -flto=thin \
 -finline-functions \
 -ffunction-sections \
--ffp-contract=fast \
--ffinite-math-only \
--ffast-math \
 -fdata-sections \
 -fno-semantic-interposition \
 ${CPU_TUNE_FLAGS}"

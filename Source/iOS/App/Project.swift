@@ -28,7 +28,7 @@ let projectBase: SettingsDictionary = [
     "CLANG_ENABLE_MODULES": "YES",
     "CLANG_ENABLE_OBJC_ARC": "YES",
     "CLANG_ENABLE_OBJC_WEAK": "YES",
-    "MTL_FAST_MATH": "YES",
+    "MTL_FAST_MATH": "NO",
 ]
 
 // MARK: - Configurations

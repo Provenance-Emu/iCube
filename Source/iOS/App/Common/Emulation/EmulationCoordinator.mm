@@ -1581,41 +1581,6 @@ after_set:
       Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, ICubeJitlessVertexLoaderType());
     }
 
-    // iCube DIAGNOSTIC/FIX (2026-06-07): geometry corruption (blown-up polygons in Wii Mario,
-    // see-through surfaces in Lego Star Wars) reproduces across ALL GPU backends, ALL CPU cores,
-    // ALL graphics hacks, AND was unaffected by the in-app vertex-loader picker — because the
-    // acquiredJit branch above force-selects Native (VertexLoaderARM64 / JIT codegen) and ignores
-    // the picker on non-TXM/Legacy devices, so Software/NEON/Compare all collapsed to Native.
-    // Force the pure-C++ Software reference loader unconditionally and log the resolved state, so
-    // the decode path is known-correct. If geometry is correct now, the JIT vertex loader (or the
-    // ignored picker) was the cause; if it persists, the vertex loader is ruled out. Revert freely.
-    Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, VertexLoaderType::Software);
-    // iCube DIAGNOSTIC: also force GPU-compute vertex decode OFF. With it ON, eligible draws are
-    // decoded by the Metal compute kernel and BYPASS the forced Software CPU loader entirely — which
-    // defeated the isolation (the first "forced Software" run still had compute-decode on). Forcing
-    // both guarantees EVERY vertex goes through the stock C++ Software loader. Revert with the rest.
-    Config::SetBase(Config::GFX_USE_COMPUTE_VERTEX_DECODE, false);
-    NSLog(@"[iCube][vtxloader] FORCED Software + compute-decode OFF (diagnostic). acquiredJit=%d txmInterpreterFallback=%d",
-          (int)[JitManager shared].acquiredJit, (int)txmInterpreterFallback);
-
-    // iCube DIAGNOSTIC: force the ENTIRE CPU path to stock to settle CPU-vs-rendering for good.
-    // Plain Interpreter (bypasses the custom CachedInterpreter engine) + every CIR/paired-single
-    // fast-path OFF, INCLUDING PS_NEON — the NEON paired-single arithmetic that does geometry/matrix
-    // math (the "large hands" suspect) and whose state Copy State never even showed. SLOW (use Lego,
-    // a GameCube title, not Mario Wii). If "large hands"/see-through persist with 100% stock CPU AND
-    // stock Software decode, the guest geometry data is provably correct => the bug is in rendering,
-    // and a bisect can target rendering only. Revert with the rest.
-    Config::SetBase(Config::MAIN_CPU_CORE, PowerPC::CPUCore::Interpreter);
-    Config::SetBase(Config::MAIN_CIR_PIC_LOADSTORE, false);
-    Config::SetBase(Config::MAIN_CIR_MICROOP_FUSION, false);
-    Config::SetBase(Config::MAIN_CIR_BLOCK_LINKING, false);
-    Config::SetBase(Config::MAIN_CIR_SPECIALIZED_OPS, false);
-    Config::SetBase(Config::MAIN_CIR_SPECIALIZED_FP_LS, false);
-    Config::SetBase(Config::MAIN_CIR_SPECIALIZED_PSQ, false);
-    Config::SetBase(Config::MAIN_CIR_PSQ_FASTPATH, false);
-    Config::SetBase(Config::MAIN_CIR_PS_NEON, false);
-    NSLog(@"[iCube][cpu] FORCED plain Interpreter + all CIR/paired fast-paths OFF (diagnostic).");
-
     // Clear any lingering per-run CPU core override so we honor current availability/config
     if (Config::GetLayer(Config::LayerType::CurrentRun)) {
       Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
