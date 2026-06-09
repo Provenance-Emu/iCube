@@ -15,7 +15,7 @@ struct DSUDebugHUD: View {
         Text("DSU: \(enabled ? "On" : "Off")")
           .font(.caption2).foregroundColor(.white)
           .lineLimit(1)
-        let list = (DOLConfigBridge.dsuServersParsed() as? [[String: Any]]) ?? []
+        let list: [[String: Any]] = DOLConfigBridge.dsuServersParsed()
         Text("Srv=\(list.count)")
           .font(.caption2).foregroundColor(.white.opacity(0.9))
         // RX indicator + count

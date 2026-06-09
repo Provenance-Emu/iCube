@@ -347,13 +347,17 @@ struct BlogPostSkeletonCard: View {
 
 /// Blog post data model
 struct BlogPost: Identifiable, Codable {
-  let id = UUID()
+  var id: UUID = UUID()
   let title: String
   let link: String
   let summary: String
   let author: String
   let pubDate: Date
   let guid: String
+
+  enum CodingKeys: String, CodingKey {
+    case title, link, summary, author, pubDate, guid
+  }
 
   var formattedDate: String {
     let formatter = DateFormatter()

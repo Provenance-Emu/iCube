@@ -31,12 +31,13 @@ public final class LiveTipsService: TipsProviding {
 #endif
 
 private struct TipsServiceKey: EnvironmentKey {
-  static let defaultValue: TipsProviding = {
+  @MainActor
+  static var defaultValue: TipsProviding {
     #if canImport(TipKit)
     if #available(iOS 17, tvOS 17, *) { return LiveTipsService.shared }
     #endif
     return NoopTipsService.shared
-  }()
+  }
 }
 
 public extension EnvironmentValues {

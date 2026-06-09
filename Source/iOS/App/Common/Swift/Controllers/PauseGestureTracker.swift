@@ -53,7 +53,7 @@ final class PauseGestureTracker {
   func menuOrStartPressed() {
     NSLog("menuOrStartPressed entered: isAllShouldersHeld? \(isAllShouldersHeld ? "Yes" : "No")")
 
-    let now = Date().timeIntervalSince1970
+    // let now = Date().timeIntervalSince1970
     guard isAllShouldersHeld else { return }
     DispatchQueue.main.async {
       NSLog("menuOrStartPressed recognized shoulder gesture")

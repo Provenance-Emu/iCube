@@ -226,7 +226,7 @@ struct DSUSessionView: View {
         let prev = hasClient
         hasClient = DSUServerBridge.hasClient()
         clientAddr = DSUServerBridge.lastClientAddress()
-        clients = (DSUServerBridge.clients() as? [String]) ?? []
+        clients = DSUServerBridge.clients()
         if !prev && hasClient {
           NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Receiver connected")])
         }

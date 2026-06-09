@@ -185,7 +185,7 @@ private func installTouchpadIRHandlers(_ c: GCController, eg: GCExtendedGamepad)
 
     let id = ObjectIdentifier(c)
     if touchpadIRStates[id] == nil { touchpadIRStates[id] = TouchpadIRState() }
-    guard let state = touchpadIRStates[id] else { return }
+    guard touchpadIRStates[id] != nil else { return }
 
     // Read current pad values in [-1, 1]
     let xRaw = touchpad?.xAxis.value ?? 0.0

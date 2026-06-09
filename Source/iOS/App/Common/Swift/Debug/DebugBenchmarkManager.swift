@@ -206,9 +206,9 @@ final class DebugBenchmarkManager {
     let deadline = Date().addingTimeInterval(seconds)
     while Date() < deadline {
       let snap = DOLPerfBridge.snapshot()
-      let fps = (snap["fps"] as? NSNumber)?.doubleValue ?? 0
-      let raw = (snap["rawFrameTimeMs"] as? NSNumber)?.doubleValue ?? 0
-      let speed = (snap["speed"] as? NSNumber)?.doubleValue ?? 0
+      let fps = snap["fps"]?.doubleValue ?? 0
+      let raw = snap["rawFrameTimeMs"]?.doubleValue ?? 0
+      let speed = snap["speed"]?.doubleValue ?? 0
       // De-dup: only record when the per-frame raw dt advanced to a new value.
       if raw > 0 && raw != lastRaw {
         lastRaw = raw
