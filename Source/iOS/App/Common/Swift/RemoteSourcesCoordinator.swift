@@ -71,41 +71,40 @@ class RemoteSourcesCoordinator: ObservableObject {
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      guard let self else { return }
-      if Self.isGlobalRefreshRunning { print("DEBUG REFRESH: Global refresh already running; coalescing request")
-        return
-      }
-      Self.isGlobalRefreshRunning = true
-      print("DEBUG REFRESH: RefreshRemoteSources notification received - in-place refresh")
-      for src in self.sources {
-        if let w = src as? WebDAVSource {
-          w.requestRefresh()
-        } else {
-          // For non-WebDAV, fall back to start() if needed
-          src.start()
+      Task { @MainActor in
+        guard let self else { return }
+        if Self.isGlobalRefreshRunning {
+          print("DEBUG REFRESH: Global refresh already running; coalescing request")
+          return
         }
+        Self.isGlobalRefreshRunning = true
+        print("DEBUG REFRESH: RefreshRemoteSources notification received - in-place refresh")
+        for src in self.sources {
+          if let w = src as? WebDAVSource {
+            w.requestRefresh()
+          } else {
+            src.start()
+          }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { Self.isGlobalRefreshRunning = false }
       }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { Self.isGlobalRefreshRunning = false }
     }
 
     // Start reachability monitoring
-    pathMonitor.pathUpdateHandler = { @MainActor [weak self] path in
-      guard let self else { return }
-      let satisfied = path.status == .satisfied
+    pathMonitor.pathUpdateHandler = { [weak self] path in
+      Task { @MainActor in
+        guard let self else { return }
+        let satisfied = path.status == .satisfied
 
-      // Capture current state to avoid main actor isolation issues
-      let wasOffline = !self.lastPathSatisfied
-      let wasOnline = self.lastPathSatisfied
+        let wasOffline = !self.lastPathSatisfied
+        let wasOnline = self.lastPathSatisfied
 
-      if satisfied, wasOffline {
-        DispatchQueue.main.async {
+        if satisfied, wasOffline {
           self.isSystemOnline = true
-          // On cold boot, skip the first "back online" refresh to avoid duplicate scans.
           if self.suppressNextOnlineRefresh {
             print("Reachability: Online detected (initial). Suppressing first refresh.")
             self.lastPathSatisfied = true
             self.suppressNextOnlineRefresh = false
-            // Rebuild union to re-include remote sources immediately
             self.pushCacheUpdate(forceUpdate: true)
             return
           }
@@ -115,16 +114,12 @@ class RemoteSourcesCoordinator: ObservableObject {
             for src in self.sources {
               if let w = src as? WebDAVSource { w.requestRefresh() }
             }
-            // Rebuild union to include remote sources while new items stream in
             self.pushCacheUpdate(forceUpdate: true)
             NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
           }
-        }
-      } else if !satisfied, wasOnline {
-        DispatchQueue.main.async {
+        } else if !satisfied, wasOnline {
           self.isSystemOnline = false
           self.lastPathSatisfied = false
-          // Prune remote WebDAV items while offline
           self.pushCacheUpdate(forceUpdate: true)
           NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Offline — some sources unavailable")])
         }
