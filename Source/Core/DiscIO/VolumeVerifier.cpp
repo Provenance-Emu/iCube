@@ -129,7 +129,7 @@ RedumpVerifier::DownloadStatus RedumpVerifier::DownloadDatfile(const std::string
   Common::HttpRequest request;
 
   const std::optional<std::vector<u8>> result =
-      request.Get("http://redump.org/datfile/" + system + "/serial,version",
+      request.Get("https://redump.org/datfile/" + system + "/serial,version",
                   {{"User-Agent", Common::GetScmRevStr()}});
 
   const std::string output_path = GetPathForSystem(system);
@@ -319,7 +319,7 @@ std::vector<RedumpVerifier::PotentialMatch> RedumpVerifier::ScanDatfile(const st
         "Serial and/or version data is missing from {0}\n"
         "Please append \"{1}\" (without the quotes) to the datfile URL when downloading\n"
         "Example: {2}",
-        GetPathForSystem(system), "serial,version", "http://redump.org/datfile/gc/serial,version");
+        GetPathForSystem(system), "serial,version", "https://redump.org/datfile/gc/serial,version");
     m_result = {Status::Error, Common::GetStringT("Failed to parse Redump.org data")};
     return {};
   }
