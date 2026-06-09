@@ -300,6 +300,8 @@ struct EmulationScreen: View {
   @State private var ocAutoOverridden: Bool = false
   @State private var vbiAutoOverridden: Bool = false
   @State private var efbAutoOverridden: Bool = false
+  @AppStorage("gfx_overscan_fullscreen") private var overscanFullscreen = false
+  @State private var overscanApplicable = false
 
   #if os(iOS)
   @State private var showSkyMenu = false
@@ -421,6 +423,11 @@ struct EmulationScreen: View {
             Spacer()
             TVIntStepperOverlay(value: $anisotropyQuick, range: 1 ... 16, step: 1)
               .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+          }
+          if overscanApplicable {
+            Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
+              .tint(.blue)
+              .foregroundColor(.white)
           }
         }
         .padding(20)
@@ -570,6 +577,10 @@ struct EmulationScreen: View {
       viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
       showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
       overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
+      refreshOverscanApplicable()
+      if overscanApplicable {
+        TVEmulationBridge.setOverscanFullscreenEnabled(overscanFullscreen)
+      }
       // Live Activity start
       #if canImport(ActivityKit)
       GameActivityManager.start(gameId: game.gameID, title: game.title, subtitle: game.makerLong, isPaused: TVEmulationBridge.isPaused())
@@ -588,6 +599,9 @@ struct EmulationScreen: View {
         GameActivityManager.update(isPaused: TVEmulationBridge.isPaused(), elapsedSeconds: elapsedSeconds)
         #endif
       }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLExternalDisplayDidChangeNotification"))) { _ in
+      refreshOverscanApplicable()
     }
     .onDisappear {
       if let token = endObserver { NotificationCenter.default.removeObserver(token)
@@ -724,191 +738,9 @@ struct EmulationScreen: View {
         }
 
         if showTopBar {
-          VStack {
-            HStack(spacing: 16) {
-              Button {
-                hasTopBarInteraction = true
-                // Prompt to exit rather than opening pause menu
-                showExitConfirm = true
-              } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
-              Spacer()
-              // Touch controls menu
-              Menu {
-                Button {
-                  hasTopBarInteraction = true
-                  userOverrideTouchControls = true
-                  controllerManager.overlayVisible.toggle()
-                  isTouchControlsActive = controllerManager.overlayVisible
-                  touchPadsRefreshToken = UUID()
-                } label: {
-                  Label(controllerManager.overlayVisible ? "Hide On‑Screen Controller" : "Show On‑Screen Controller", systemImage: controllerManager.overlayVisible ? "eye.slash" : "eye")
-                }
-                Divider()
-                Button {
-                  hasTopBarInteraction = true
-                  userOverrideTouchControls = true
-                  controllerManager.overlayMode = .auto
-                  touchPadsRefreshToken = UUID()
-                } label: {
-                  Label("Auto", systemImage: controllerManager.overlayMode == .auto ? "checkmark" : "")
-                }
-                Button {
-                  hasTopBarInteraction = true
-                  userOverrideTouchControls = true
-                  controllerManager.overlayMode = .gamecube
-                  controllerManager.overlayVisible = true
-                  isTouchControlsActive = true
-                  touchPadsRefreshToken = UUID()
-                } label: {
-                  Label("GameCube", systemImage: controllerManager.overlayMode == .gamecube ? "checkmark" : "")
-                }
-                Button {
-                  hasTopBarInteraction = true
-                  userOverrideTouchControls = true
-                  controllerManager.overlayMode = .wii
-                  controllerManager.overlayVisible = true
-                  isTouchControlsActive = true
-                  touchPadsRefreshToken = UUID()
-                } label: {
-                  Label("Wii", systemImage: controllerManager.overlayMode == .wii ? "checkmark" : "")
-                }
-              } label: {
-                Image(systemName: "gamecontroller").font(.title2)
-              }
-              // Quick performance overlay button
-              Button {
-                hasTopBarInteraction = true
-                refreshPerfOverlayState()
-                showPerfOverlay = true
-              } label: {
-                Image(systemName: "speedometer").font(.title2)
-              }
-              Button {
-                hasTopBarInteraction = true
-                fastForwardEnabled = TVEmulationBridge.toggleFastForward()
-              } label: {
-                Image(systemName: fastForwardEnabled ? "forward.fill" : "forward")
-                  .font(.title2)
-              }
-
-              #if os(iOS)
-              // Thermal badge
-              if UserDefaults.standard.bool(forKey: "thermal_auto_enable") {
-                ThermalBadgeView()
-              }
-              if UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled") {
-                Button {
-                  hasTopBarInteraction = true
-                  ReplayKitManager.shared.saveRecentClip(seconds: 15)
-                } label: {
-                  Image(systemName: "clock.arrow.circlepath").font(.title2)
-                }
-              }
-              #endif // os(iOS)
-              Menu {
-                Button {
-                  hasTopBarInteraction = true
-                  showFXSheet = true
-                } label: {
-                  Label("Audio Effects", systemImage: "slider.horizontal.3")
-                }
-                Button {
-                  hasTopBarInteraction = true
-                  showShaderSheet = true
-                } label: {
-                  Label("Shaders", systemImage: "wand.and.stars")
-                }
-                Button {
-                  hasTopBarInteraction = true
-                  showShaderParams = true
-                } label: {
-                  Label("Shader Parameters", systemImage: "slider.horizontal.3")
-                }
-              } label: {
-                Image(systemName: "slider.horizontal.3").font(.title2)
-              }
-
-              Menu {
-                Menu {
-                  ForEach(1 ... 10, id: \.self) { slot in
-                    Button("Slot \(slot)") {
-                      hasTopBarInteraction = true
-                      selectedSlot = slot
-                      SaveStateService.saveSlot(slot)
-                    }
-                  }
-                } label: {
-                  Label("Save State", systemImage: "square.and.arrow.down")
-                }
-                Menu {
-                  ForEach(1 ... 10, id: \.self) { slot in
-                    Button("Slot \(slot)") {
-                      hasTopBarInteraction = true
-                      selectedSlot = slot
-                      TVEmulationBridge.loadState(fromSlot: slot)
-                    }
-                  }
-                } label: {
-                  Label("Load State", systemImage: "square.and.arrow.up")
-                }
-                #if os(iOS)
-                Menu {
-                  let currentIR = DOLConfigBridge.mainTouchPadIRMode()
-                  Button {
-                    hasTopBarInteraction = true
-                    DOLConfigBridge.setMainTouchPadIRMode(0)
-                    isTouchControlsActive = true
-                    userOverrideTouchControls = true
-                    touchPadsRefreshToken = UUID()
-                  } label: {
-                    Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
-                  }
-                  Button {
-                    hasTopBarInteraction = true
-                    DOLConfigBridge.setMainTouchPadIRMode(1)
-                    isTouchControlsActive = true
-                    userOverrideTouchControls = true
-                    touchPadsRefreshToken = UUID()
-                  } label: {
-                    Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
-                  }
-                  Button {
-                    hasTopBarInteraction = true
-                    DOLConfigBridge.setMainTouchPadIRMode(2)
-                    isTouchControlsActive = true
-                    userOverrideTouchControls = true
-                    touchPadsRefreshToken = UUID()
-                  } label: {
-                    Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
-                  }
-                } label: {
-                  Label("Touch Cursor Mode", systemImage: "cursor.rays")
-                }
-                #endif
-                Button {
-                  hasTopBarInteraction = true
-                  showMotionDebug = true
-                } label: {
-                  Label("Motion Controls", systemImage: "gyroscope")
-                }
-              } label: {
-                Image(systemName: "square.stack.3d.up").font(.title2)
-              }
-              Button { hasTopBarInteraction = true
-                showPauseMenu = true
-              } label: { Image(systemName: "list.bullet.rectangle").font(.title2) }
-              Button { hasTopBarInteraction = true
-                hideTopBar(now: true)
-              } label: { Image(systemName: "chevron.up.circle.fill").font(.title2) }
-            }
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .background(.ultraThinMaterial)
-            Spacer()
-          }
-          .transition(.move(edge: .top).combined(with: .opacity))
-          .zIndex(2)
+          emulationTopBar
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .zIndex(2)
         }
 
         // Semi-transparent overlay with quick performance controls (iOS)
@@ -992,6 +824,11 @@ struct EmulationScreen: View {
                         Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
                           .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
                         Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
+                      }
+                      if overscanApplicable {
+                        Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
+                          .tint(.blue)
+                          .foregroundColor(.white)
                       }
 
                       // Adaptive clock (auto) + VI-skip mode
@@ -1082,6 +919,11 @@ struct EmulationScreen: View {
                     Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
                       .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
                     Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+                  }
+                  if overscanApplicable {
+                    Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
+                      .tint(.blue)
+                      .foregroundColor(.white)
                   }
                 }
               }
@@ -1278,6 +1120,10 @@ struct EmulationScreen: View {
       viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
       showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
       overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
+      refreshOverscanApplicable()
+      if overscanApplicable {
+        TVEmulationBridge.setOverscanFullscreenEnabled(overscanFullscreen)
+      }
       // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
       let currentIR = DOLConfigBridge.mainTouchPadIRMode()
       if currentIR == 0 { // None
@@ -1303,6 +1149,9 @@ struct EmulationScreen: View {
       if !autoHideScheduled { autoHideScheduled = true
         scheduleAutoHide()
       }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLExternalDisplayDidChangeNotification"))) { _ in
+      refreshOverscanApplicable()
     }
     .onDisappear {
       if let token = endObserver { NotificationCenter.default.removeObserver(token)
@@ -1364,6 +1213,7 @@ struct EmulationScreen: View {
     }
     .navigationBarHidden(true)
     .statusBar(hidden: true)
+    .animation(.spring(response: 0.3, dampingFraction: 0.9), value: showTopBar)
     .sheet(isPresented: $showShaderSheet) {
       NavigationStack {
         ShaderSettingsView()
@@ -1415,7 +1265,7 @@ struct EmulationScreen: View {
         #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
         GameActivityManager.update(isPaused: false, elapsedSeconds: elapsedSeconds)
         #endif
-        withAnimation { showTopBar = false }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { showTopBar = false }
       }
     } message: {
       Text("Do you want to stop the current game and return to the library?")
@@ -1428,6 +1278,223 @@ struct EmulationScreen: View {
   // opened. The auto controllers (adaptive clock / Auto-IR / thermal) only write CurrentRun once
   // gameplay is underway — AFTER the one-time onAppear load — so re-reading here is what makes the
   // "Auto" badge appear and the manual controls disable when the user opens the overlay mid-game.
+
+  #if os(iOS)
+  /// Fixed-size quick-access bar; exit/hide are pinned, actions scroll horizontally to avoid layout jumps during show/hide animation.
+  private var emulationTopBar: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 8) {
+        topBarIconButton("xmark.circle.fill") {
+          hasTopBarInteraction = true
+          showExitConfirm = true
+        }
+        .accessibilityLabel(L("Exit Game"))
+
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 8) {
+            Menu {
+              Button {
+                hasTopBarInteraction = true
+                userOverrideTouchControls = true
+                controllerManager.overlayVisible.toggle()
+                isTouchControlsActive = controllerManager.overlayVisible
+                touchPadsRefreshToken = UUID()
+              } label: {
+                Label(controllerManager.overlayVisible ? "Hide On‑Screen Controller" : "Show On‑Screen Controller", systemImage: controllerManager.overlayVisible ? "eye.slash" : "eye")
+              }
+              Divider()
+              Button {
+                hasTopBarInteraction = true
+                userOverrideTouchControls = true
+                controllerManager.overlayMode = .auto
+                touchPadsRefreshToken = UUID()
+              } label: {
+                Label("Auto", systemImage: controllerManager.overlayMode == .auto ? "checkmark" : "")
+              }
+              Button {
+                hasTopBarInteraction = true
+                userOverrideTouchControls = true
+                controllerManager.overlayMode = .gamecube
+                controllerManager.overlayVisible = true
+                isTouchControlsActive = true
+                touchPadsRefreshToken = UUID()
+              } label: {
+                Label("GameCube", systemImage: controllerManager.overlayMode == .gamecube ? "checkmark" : "")
+              }
+              Button {
+                hasTopBarInteraction = true
+                userOverrideTouchControls = true
+                controllerManager.overlayMode = .wii
+                controllerManager.overlayVisible = true
+                isTouchControlsActive = true
+                touchPadsRefreshToken = UUID()
+              } label: {
+                Label("Wii", systemImage: controllerManager.overlayMode == .wii ? "checkmark" : "")
+              }
+            } label: {
+              topBarIconLabel("gamecontroller")
+            }
+            .buttonStyle(.plain)
+
+            topBarIconButton("speedometer") {
+              hasTopBarInteraction = true
+              refreshPerfOverlayState()
+              showPerfOverlay = true
+            }
+
+            topBarIconButton(fastForwardEnabled ? "forward.fill" : "forward") {
+              hasTopBarInteraction = true
+              fastForwardEnabled = TVEmulationBridge.toggleFastForward()
+            }
+            .animation(nil, value: fastForwardEnabled)
+
+            if overscanApplicable {
+              topBarIconButton(overscanFullscreen ? "rectangle.inset.filled" : "tv") {
+                hasTopBarInteraction = true
+                applyOverscanFullscreenToggle(!overscanFullscreen)
+              }
+              .accessibilityLabel(L("Full Screen Display"))
+              .animation(nil, value: overscanFullscreen)
+            }
+
+            if UserDefaults.standard.bool(forKey: "thermal_auto_enable") {
+              ThermalBadgeView()
+                .frame(width: 44, height: 44)
+            }
+            if UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled") {
+              topBarIconButton("clock.arrow.circlepath") {
+                hasTopBarInteraction = true
+                ReplayKitManager.shared.saveRecentClip(seconds: 15)
+              }
+            }
+
+            Menu {
+              Button {
+                hasTopBarInteraction = true
+                showFXSheet = true
+              } label: {
+                Label("Audio Effects", systemImage: "slider.horizontal.3")
+              }
+              Button {
+                hasTopBarInteraction = true
+                showShaderSheet = true
+              } label: {
+                Label("Shaders", systemImage: "wand.and.stars")
+              }
+              Button {
+                hasTopBarInteraction = true
+                showShaderParams = true
+              } label: {
+                Label("Shader Parameters", systemImage: "slider.horizontal.3")
+              }
+            } label: {
+              topBarIconLabel("slider.horizontal.3")
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+              Menu {
+                ForEach(1 ... 10, id: \.self) { slot in
+                  Button("Slot \(slot)") {
+                    hasTopBarInteraction = true
+                    selectedSlot = slot
+                    SaveStateService.saveSlot(slot)
+                  }
+                }
+              } label: {
+                Label("Save State", systemImage: "square.and.arrow.down")
+              }
+              Menu {
+                ForEach(1 ... 10, id: \.self) { slot in
+                  Button("Slot \(slot)") {
+                    hasTopBarInteraction = true
+                    selectedSlot = slot
+                    TVEmulationBridge.loadState(fromSlot: slot)
+                  }
+                }
+              } label: {
+                Label("Load State", systemImage: "square.and.arrow.up")
+              }
+              Menu {
+                let currentIR = DOLConfigBridge.mainTouchPadIRMode()
+                Button {
+                  hasTopBarInteraction = true
+                  DOLConfigBridge.setMainTouchPadIRMode(0)
+                  isTouchControlsActive = true
+                  userOverrideTouchControls = true
+                  touchPadsRefreshToken = UUID()
+                } label: {
+                  Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
+                }
+                Button {
+                  hasTopBarInteraction = true
+                  DOLConfigBridge.setMainTouchPadIRMode(1)
+                  isTouchControlsActive = true
+                  userOverrideTouchControls = true
+                  touchPadsRefreshToken = UUID()
+                } label: {
+                  Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
+                }
+                Button {
+                  hasTopBarInteraction = true
+                  DOLConfigBridge.setMainTouchPadIRMode(2)
+                  isTouchControlsActive = true
+                  userOverrideTouchControls = true
+                  touchPadsRefreshToken = UUID()
+                } label: {
+                  Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
+                }
+              } label: {
+                Label("Touch Cursor Mode", systemImage: "cursor.rays")
+              }
+              Button {
+                hasTopBarInteraction = true
+                showMotionDebug = true
+              } label: {
+                Label("Motion Controls", systemImage: "gyroscope")
+              }
+            } label: {
+              topBarIconLabel("square.stack.3d.up")
+            }
+            .buttonStyle(.plain)
+
+            topBarIconButton("list.bullet.rectangle") {
+              hasTopBarInteraction = true
+              showPauseMenu = true
+            }
+          }
+        }
+
+        topBarIconButton("chevron.up.circle.fill") {
+          hasTopBarInteraction = true
+          hideTopBar(now: true)
+        }
+        .accessibilityLabel(L("Hide Toolbar"))
+      }
+      .padding(.horizontal, 12)
+      .padding(.top, 12)
+      .padding(.bottom, 8)
+      .background(.ultraThinMaterial)
+      Spacer(minLength: 0)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+  }
+
+  private func topBarIconLabel(_ systemName: String) -> some View {
+    Image(systemName: systemName)
+      .font(.title2)
+      .frame(width: 44, height: 44)
+      .contentShape(Rectangle())
+  }
+
+  private func topBarIconButton(_ systemName: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      topBarIconLabel(systemName)
+    }
+    .buttonStyle(.plain)
+  }
+  #endif
+
   private func refreshPerfOverlayState() {
     ocEnabled = DOLConfigBridge.mainOverclockEnable()
     ocPercent = DOLConfigBridge.mainOverclockPercent()
@@ -1522,6 +1589,23 @@ struct EmulationScreen: View {
   }
 
   // The full overlay/diagnostics toggle grid, shared across all perf-overlay layouts.
+  private var overscanFullscreenBinding: Binding<Bool> {
+    Binding(
+      get: { overscanFullscreen },
+      set: { applyOverscanFullscreenToggle($0) }
+    )
+  }
+
+  private func refreshOverscanApplicable() {
+    overscanApplicable = TVEmulationBridge.isOverscanCompensationApplicable()
+  }
+
+  private func applyOverscanFullscreenToggle(_ enabled: Bool) {
+    overscanFullscreen = enabled
+    TVEmulationBridge.setOverscanFullscreenEnabled(enabled)
+    TVEmulationBridge.resizeSurfaceNow()
+  }
+
   @ViewBuilder
   private func overlayToggleGrid() -> some View {
     let columns = [GridItem(.adaptive(minimum: 84), spacing: 8)]
