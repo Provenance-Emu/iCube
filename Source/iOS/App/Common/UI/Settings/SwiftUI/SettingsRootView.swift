@@ -1192,7 +1192,7 @@ struct ControllersRootView: View {
   }
 
   private func refreshDsuServers() {
-    let arr = DOLConfigBridge.dsuServersParsed() as? [[String: Any]] ?? []
+    let arr: [[String: Any]] = DOLConfigBridge.dsuServersParsed() ?? []
     dsuServers = arr
   }
 
@@ -3451,6 +3451,7 @@ struct GraphicsGeneralView: View {
   @State private var showAutoIrOSD: Bool = false
   @State private var tripleBuffering: Bool = false // NSUserDefaults-backed
   @State private var forceScaleOneNonProMotion: Bool = false // NSUserDefaults-backed
+  @State private var overscanFullscreen: Bool = false // NSUserDefaults-backed
   @State private var asyncPresent: Bool = false
   @State private var autoIR: Bool = false
   @State private var targetFPS: TargetFPS = .fps60
@@ -3503,6 +3504,12 @@ struct GraphicsGeneralView: View {
           Toggle(L("Force scale 1.0 on non‑ProMotion"), isOn: $forceScaleOneNonProMotion)
             .onChange(of: forceScaleOneNonProMotion) { newValue in UserDefaults.standard.set(newValue, forKey: "gfx_force_scale_one_non_promo") },
           L("On non-ProMotion (non-120 Hz) devices, render at a 1.0 backing scale to save GPU/bandwidth. Helps on older devices; leave OFF on ProMotion displays."))
+        captionRow(
+          Toggle(L("Full screen (disable overscan compensation)"), isOn: $overscanFullscreen)
+            .onChange(of: overscanFullscreen) { newValue in
+              TVEmulationBridge.setOverscanFullscreenEnabled(newValue)
+            },
+          L("Disables system overscan scaling for edge-to-edge output. On iOS this applies when an external display is connected; on Apple TV it affects the main TV. Default OFF keeps safe margins; turn ON if you see letterboxing, OFF if edges clip."))
         captionRow(
           Toggle(L("Asynchronous Present"), isOn: $asyncPresent)
             .onChange(of: asyncPresent) { newValue in DOLConfigBridge.setGfxAsyncPresent(newValue) },
@@ -3624,6 +3631,7 @@ struct GraphicsGeneralView: View {
     // NSUserDefaults-backed toggles
     if UserDefaults.standard.object(forKey: "gfx_triple_buffering") != nil { tripleBuffering = UserDefaults.standard.bool(forKey: "gfx_triple_buffering") } else { tripleBuffering = true }
     forceScaleOneNonProMotion = UserDefaults.standard.bool(forKey: "gfx_force_scale_one_non_promo")
+    overscanFullscreen = UserDefaults.standard.bool(forKey: "gfx_overscan_fullscreen")
   }
 }
 
@@ -3970,28 +3978,56 @@ private struct EfbScalePicker: View {
 /// Graphics > Hacks placeholder
 struct GraphicsHacksView: View {
   @State private var efbAccess: Bool = false
-  @State private var skipEfbToRam: Bool = false
-  @State private var skipXfbToRam: Bool = false
+  @State private var skipEfbToRam: Bool = true
+  @State private var skipXfbToRam: Bool = true
   @State private var immediateXfb: Bool = false
   @State private var copyEfbScaled: Bool = true
-  @State private var efbFormatChanges: Bool = true
+  @State private var efbFormatChanges: Bool = false
   @State private var vertexRounding: Bool = false
-  @State private var forceProgressive: Bool = false
-  @State private var deferEfbCopies: Bool = false
-  @State private var viSkipMode: Int = 0 // TriState
+  @State private var forceProgressive: Bool = true
+  @State private var deferEfbCopies: Bool = true
+  @State private var viSkipMode: Int = 2 // TriState::Auto on Apple
   @State private var fastTextureSampling: Bool = true
-  @State private var fastMath: Bool = false
+  @State private var fastMath: Bool = true
   @State private var useComputeEfbXfb: Bool = false
   @State private var useComputeVertexDecode: Bool = false
   @State private var noMipmapping: Bool = false
   @State private var earlyXfbOutput: Bool = true
   @State private var skipDuplicateXFBs: Bool = true
   @State private var viDecimateInterlace: Bool = false
+  @State private var bboxEnabled: Bool = false
+  @State private var textureCacheSamples: Int = 128
+  @State private var backendSupportsBbox: Bool = true
   @State private var helpMessage: String = ""
   @State private var showHelp: Bool = false
+
+  /// Defer EFB Copies is unavailable when both EFB and XFB copies stay on the GPU (DolphinQt parity).
+  private var deferEfbCopiesEnabled: Bool {
+    !(skipEfbToRam && skipXfbToRam)
+  }
+
+  /// Skip Duplicate XFBs is redundant when Immediate XFB or VI Skip already handles presentation.
+  private var skipDuplicateXFBsEnabled: Bool {
+    !immediateXfb && viSkipMode == 0
+  }
+
   var body: some View {
     List {
       Section(header: Text(L("General Hacks"))) {
+        settingsNavCaption(
+          destination: TextureCacheAccuracyPicker(selected: $textureCacheSamples),
+          L("Adjusts how strictly the GPU tracks texture updates from RAM. Safer is slower but avoids garbled text in some games.")
+        ) {
+          Text("\(L("Texture Cache Accuracy")): \(textureCacheAccuracyLabel(textureCacheSamples))")
+        }
+        .onChange(of: textureCacheSamples) { DOLConfigBridge.setGfxSafeTextureCacheColorSamples($0) }
+        settingsCaption(
+          Toggle(L("Bounding Box Emulation"), isOn: $bboxEnabled)
+            .disabled(!backendSupportsBbox)
+            .onChange(of: bboxEnabled) { DOLConfigBridge.setGfxHackBboxEnable($0) },
+          backendSupportsBbox
+            ? L("Emulates GameCube/Wii bounding-box tests on the GPU. Required by some games; leave off unless needed.")
+            : L("The current graphics backend does not support bounding box emulation on this device."))
         settingsCaption(
           Toggle(L("Enable EFB Access"), isOn: $efbAccess)
             .onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) },
@@ -4018,8 +4054,11 @@ struct GraphicsHacksView: View {
           L("Outputs the frame earlier in the pipeline for lower latency. Recommended on; turn off if a game shows glitches."))
         settingsCaption(
           Toggle(L("Skip Duplicate XFBs"), isOn: $skipDuplicateXFBs)
+            .disabled(!skipDuplicateXFBsEnabled)
             .onChange(of: skipDuplicateXFBs) { DOLConfigBridge.setGfxHackSkipDuplicateXFBs($0) },
-          L("Avoids re-presenting identical frames, saving GPU work. Recommended on."))
+          skipDuplicateXFBsEnabled
+            ? L("Avoids re-presenting identical frames, saving GPU work. Recommended on.")
+            : L("Unavailable while Immediate XFB or VI Skip is enabled — duplicate frames are already handled."))
         settingsCaption(
           Toggle(L("Emulate EFB Format Changes"), isOn: $efbFormatChanges)
             .onChange(of: efbFormatChanges) { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) },
@@ -4034,8 +4073,11 @@ struct GraphicsHacksView: View {
           L("Forces 480p output where games allow it, for a cleaner image."))
         settingsCaption(
           Toggle(L("Defer EFB Copies"), isOn: $deferEfbCopies)
+            .disabled(!deferEfbCopiesEnabled)
             .onChange(of: deferEfbCopies) { DOLConfigBridge.setGfxHackDeferEfbCopies($0) },
-          L("Batches framebuffer copies to reduce overhead. Faster in most games; recommended on."))
+          deferEfbCopiesEnabled
+            ? L("Batches framebuffer copies to reduce overhead. Faster in most games; recommended on.")
+            : L("Unavailable while both EFB and XFB copies stay on the GPU — there is no RAM copy to defer."))
         settingsNavCaption(
           destination: ViSkipModePicker(selected: $viSkipMode),
           L("Skips video-interrupt frames to gain speed. Auto is the safe choice; On is more aggressive but can cause flicker.")
@@ -4105,7 +4147,25 @@ struct GraphicsHacksView: View {
     useComputeEfbXfb = DOLConfigBridge.gfxUseComputeEfbXfb()
     useComputeVertexDecode = DOLConfigBridge.gfxUseComputeVertexDecode()
     noMipmapping = DOLConfigBridge.gfxHackNoMipmapping()
+    earlyXfbOutput = DOLConfigBridge.gfxHackEarlyXfbOutput()
+    skipDuplicateXFBs = DOLConfigBridge.gfxHackSkipDuplicateXFBs()
     viDecimateInterlace = DOLConfigBridge.gfxHackViDecimateInterlace()
+    bboxEnabled = DOLConfigBridge.gfxHackBboxEnable()
+    backendSupportsBbox = DOLConfigBridge.gfxBackendSupportsBoundingBox()
+    textureCacheSamples = normalizedTextureCacheSamples(DOLConfigBridge.gfxSafeTextureCacheColorSamples())
+  }
+  private func textureCacheAccuracyLabel(_ samples: Int) -> String {
+    switch samples {
+    case 512: return L("Safe")
+    case 0: return L("Fast")
+    default: return L("Default")
+    }
+  }
+  private func normalizedTextureCacheSamples(_ samples: Int) -> Int {
+    switch samples {
+    case 512, 0: return samples
+    default: return 128
+    }
   }
   private func viSkipLabel(_ v: Int) -> String { switch v { case 1: return L("On"); case 2: return L("Auto"); default: return L("Off") } }
   // MARK: - Help UI & Text
@@ -4158,13 +4218,34 @@ struct GraphicsHacksView: View {
     L("Uses a faster, less accurate texture-sampling path.\n\nCan help on some GPUs but may cause banding, seams, or vertical lines in FMVs.\n\niOS note: GPU-side; rarely changes the CPU-bound framerate. Disable if you see texture artifacts. Default ON.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextFastMath() -> String {
-    L("Enables fast-math optimizations in iCube's Metal shaders.\n\nRelaxes IEEE precision for speed; can cause subtle lighting differences or rare shader bugs.\n\niOS note: GPU-side optimization; helps only when GPU-bound and won't move the CPU bottleneck. Default OFF.\n\nIf unsure, leave this unchecked.")
+    L("Enables fast-math optimizations in iCube's Metal shaders.\n\nRelaxes IEEE precision for speed; can cause subtle lighting differences or rare shader bugs.\n\niOS note: GPU-side optimization; helps only when GPU-bound and won't move the CPU bottleneck. Default ON.\n\nIf unsure, leave this enabled.")
   }
   private func helpTextUseComputeEfbXfb() -> String {
     L("Native-Metal compute acceleration for EFB/XFB.\n\nRoutes EFB color/depth resolve, RGBA8 blit/scale/gamma, and mipmap generation through Metal compute kernels instead of the stock raster path. This is an experimental GPU performance knob and is OFF by default.\n\nFalls back to the stock path automatically for any case it doesn't handle, so it is safe to leave on, but on untested hardware it can produce visual glitches (shimmer, wrong depth) — benchmark and visually verify GPU-bound titles before relying on it.\n\nApplies on next launch.")
   }
   private func helpTextNoMipmapping() -> String {
     L("Disables texture mipmapping.\n\nA workaround for rare driver bugs; normally increases shimmering/aliasing and can hurt performance via texture-cache inefficiency.\n\niOS note: GPU-side; leave OFF — it usually makes things both uglier and slightly slower.\n\nIf unsure, leave this unchecked.")
+  }
+}
+
+private struct TextureCacheAccuracyPicker: View {
+  @Binding var selected: Int
+  var body: some View {
+    List {
+      SelectRow(label: L("Safe"), checked: selected == 512) {
+        selected = 512
+        DOLConfigBridge.setGfxSafeTextureCacheColorSamples(512)
+      }
+      SelectRow(label: L("Default"), checked: selected == 128) {
+        selected = 128
+        DOLConfigBridge.setGfxSafeTextureCacheColorSamples(128)
+      }
+      SelectRow(label: L("Fast"), checked: selected == 0) {
+        selected = 0
+        DOLConfigBridge.setGfxSafeTextureCacheColorSamples(0)
+      }
+    }
+    .navigationTitle(L("Texture Cache Accuracy"))
   }
 }
 
@@ -4214,7 +4295,6 @@ struct GraphicsAdvancedView: View {
   @State private var maxThreads: Int = 2
   // Experimental
   @State private var deferEfbInvalidation: Bool = false
-  @State private var manualTexSampling: Bool = false
   var body: some View {
     List {
       Section(header: Text(L("Performance Statistics")), footer: Text(L("These overlays can also be toggled in-game from the pause menu."))) {
@@ -4334,10 +4414,6 @@ struct GraphicsAdvancedView: View {
         settingsCaption(
           Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation).onChange(of: deferEfbInvalidation) { _ in DOLConfigBridge.setGfxHackEfbDeferInvalidation(deferEfbInvalidation) },
           L("Delays invalidating cached framebuffer copies. Can speed things up but may show stale graphics."))
-        // Manual Texture Sampling is the inverse of Fast Texture Sampling
-        settingsCaption(
-          Toggle(L("Manual Texture Sampling"), isOn: $manualTexSampling).onChange(of: manualTexSampling) { _ in DOLConfigBridge.setGfxHackFastTextureSampling(!manualTexSampling) },
-          L("Uses precise, hardware-accurate texture sampling (the inverse of Fast Texture Sampling). More accurate, slightly slower."))
       }
     }
     .navigationTitle(L("Advanced"))
@@ -4380,7 +4456,6 @@ struct GraphicsAdvancedView: View {
     precompilerThreads = (pt <= 0) ? min(2, maxThreads) : pt
     // Experimental
     deferEfbInvalidation = DOLConfigBridge.gfxHackEfbDeferInvalidation()
-    manualTexSampling = !DOLConfigBridge.gfxHackFastTextureSampling()
   }
 }
 
@@ -4502,7 +4577,8 @@ struct FXChainEditor: View {
     availableCount = available.count
     NSLog("[FX] Available AUv3 effects count: %d", Int32(available.count))
     for (idx, entry) in available.enumerated() {
-      if let e = entry as? [AnyHashable: Any], let nm = e["name"] as? String, let ident = e["identifier"] as? String {
+      let e: [AnyHashable: Any] = entry
+      if let nm = e["name"] as? String, let ident = e["identifier"] as? String {
         NSLog("[FX] #%d name=%@ ident=%@", Int32(idx), nm, ident)
       }
     }
@@ -4968,44 +5044,49 @@ final class DSUDiscoveryBrowser: NSObject, ObservableObject {
 }
 
 extension DSUDiscoveryBrowser: NetServiceBrowserDelegate {
-  func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
-    service.delegate = self
-    services.append(service)
-    service.resolve(withTimeout: 5.0)
+  nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+    Task { @MainActor in
+      service.delegate = self
+      services.append(service)
+      service.resolve(withTimeout: 5.0)
+    }
   }
 
-  func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
-    services.removeAll { $0 == service }
-    // Remove matching server entry if exists
-    if let name = service.name as String? {
-      servers.removeAll { $0.name == name }
+  nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
+    Task { @MainActor in
+      services.removeAll { $0 == service }
+      if let name = service.name as String? {
+        servers.removeAll { $0.name == name }
+      }
     }
   }
 }
 
 extension DSUDiscoveryBrowser: NetServiceDelegate {
-  func netServiceDidResolveAddress(_ sender: NetService) {
-    guard let addresses = sender.addresses, !addresses.isEmpty else { return }
-    var ipv4: String?
-    for data in addresses {
-      data.withUnsafeBytes { (rawPtr: UnsafeRawBufferPointer) in
-        guard let sa = rawPtr.bindMemory(to: sockaddr.self).baseAddress else { return }
-        if sa.pointee.sa_family == sa_family_t(AF_INET) {
-          let sin = UnsafeRawPointer(sa).assumingMemoryBound(to: sockaddr_in.self).pointee
-          var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-          var addr = sin.sin_addr
-          inet_ntop(AF_INET, &addr, &buf, socklen_t(INET_ADDRSTRLEN))
-          ipv4 = String(cString: buf)
+  nonisolated func netServiceDidResolveAddress(_ sender: NetService) {
+    Task { @MainActor in
+      guard let addresses = sender.addresses, !addresses.isEmpty else { return }
+      var ipv4: String?
+      for data in addresses {
+        data.withUnsafeBytes { (rawPtr: UnsafeRawBufferPointer) in
+          guard let sa = rawPtr.bindMemory(to: sockaddr.self).baseAddress else { return }
+          if sa.pointee.sa_family == sa_family_t(AF_INET) {
+            let sin = UnsafeRawPointer(sa).assumingMemoryBound(to: sockaddr_in.self).pointee
+            var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            var addr = sin.sin_addr
+            inet_ntop(AF_INET, &addr, &buf, socklen_t(INET_ADDRSTRLEN))
+            ipv4 = String(cString: buf)
+          }
         }
+        if ipv4 != nil { break }
       }
-      if ipv4 != nil { break }
-    }
-    guard let ip = ipv4 else { return }
-    let port = sender.port
-    let name = sender.name
-    let item = DSUDiscoveredServer(name: name.isEmpty ? "DSU" : name, address: ip, port: port)
-    if !servers.contains(item) {
-      servers.append(item)
+      guard let ip = ipv4 else { return }
+      let port = sender.port
+      let name = sender.name
+      let item = DSUDiscoveredServer(name: name.isEmpty ? "DSU" : name, address: ip, port: port)
+      if !servers.contains(item) {
+        servers.append(item)
+      }
     }
   }
 }

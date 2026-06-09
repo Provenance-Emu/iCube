@@ -61,6 +61,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 // Speed / Fast-forward
 // Toggle temporary throttler disable (turbo). Returns the new state.
+// Overscan compensation (external display on iOS, main TV on tvOS)
++ (BOOL)isOverscanCompensationApplicable;
++ (BOOL)overscanFullscreenEnabled;
++ (void)setOverscanFullscreenEnabled:(BOOL)enabled;
+
 // Display / Orientation
 + (void)resizeSurfaceNow;
 + (void)reloadShadersNow;

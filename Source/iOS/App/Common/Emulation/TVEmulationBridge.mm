@@ -156,6 +156,18 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
     g_frame_dumper->SaveScreenshot(std::string(path.UTF8String));
 }
 
++ (BOOL)isOverscanCompensationApplicable {
+  return [[EmulationCoordinator shared] isOverscanCompensationApplicable];
+}
+
++ (BOOL)overscanFullscreenEnabled {
+  return [[EmulationCoordinator shared] overscanFullscreenEnabled];
+}
+
++ (void)setOverscanFullscreenEnabled:(BOOL)enabled {
+  [[EmulationCoordinator shared] setOverscanFullscreenEnabled:enabled];
+}
+
 // Display / Orientation helpers
 + (void)resizeSurfaceNow {
   if (g_presenter) {

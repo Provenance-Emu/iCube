@@ -97,11 +97,12 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   const bool fastmemAvail = [FastmemManager shared].fastmemAvailable;
 
   std::string b;
-  b.reserve(1400);
+  b.reserve(2800);
   auto line = [&](const char* k, const std::string& v) { b += "  "; b += k; b += "="; b += v; b += "\n"; };
   auto lineB = [&](const char* k, bool v) { line(k, boolStr(v)); };
   auto lineI = [&](const char* k, long v) { line(k, std::to_string(v)); };
   auto lineF = [&](const char* k, float v) { char buf[32]; snprintf(buf, sizeof(buf), "%.3f", v); line(k, buf); };
+  auto section = [&](const char* title) { b += "  --- "; b += title; b += " ---\n"; };
 
   b += "=== iCube settings @ ";
   b += phase;
@@ -109,6 +110,8 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   b += gid.empty() ? "(no-gameid)" : gid;
   b += " ===\n";
   line("title", title.empty() ? "(unknown)" : title);
+
+  section("CPU");
   line("MAIN_CPU_CORE", std::to_string((int)Config::Get(Config::MAIN_CPU_CORE)));
   lineB("MAIN_CPU_THREAD(dual-core)", Config::Get(Config::MAIN_CPU_THREAD));
   lineB("MAIN_OVERCLOCK_ENABLE", Config::Get(Config::MAIN_OVERCLOCK_ENABLE));
@@ -116,9 +119,6 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   lineB("MAIN_VI_OVERCLOCK_ENABLE", Config::Get(Config::MAIN_VI_OVERCLOCK_ENABLE));
   lineF("MAIN_VI_OVERCLOCK", (float)Config::Get(Config::MAIN_VI_OVERCLOCK));
   lineB("adaptive_clock_enable(NSUserDefault)", adaptiveClock);
-  lineI("GFX_EFB_SCALE", Config::Get(Config::GFX_EFB_SCALE));
-  lineB("GFX_AUTO_IR_ENABLE", Config::Get(Config::GFX_AUTO_IR_ENABLE));
-  line("GFX_HACK_VI_SKIP_MODE", triStr(Config::Get(Config::GFX_HACK_VI_SKIP_MODE)));
   lineB("MAIN_CIR_PIC_LOADSTORE", Config::Get(Config::MAIN_CIR_PIC_LOADSTORE));
   lineB("MAIN_CIR_MICROOP_FUSION", Config::Get(Config::MAIN_CIR_MICROOP_FUSION));
   lineB("MAIN_CIR_BLOCK_LINKING", Config::Get(Config::MAIN_CIR_BLOCK_LINKING));
@@ -128,25 +128,57 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   lineB("MAIN_CIR_SPECIALIZED_FP_ARITH", Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_ARITH));
   lineB("MAIN_CIR_PSQ_FASTPATH", Config::Get(Config::MAIN_CIR_PSQ_FASTPATH));
   lineB("MAIN_CIR_PS_NEON", Config::Get(Config::MAIN_CIR_PS_NEON));
-  lineB("GFX_USE_COMPUTE_EFBXFB", Config::Get(Config::GFX_USE_COMPUTE_EFBXFB));
-  lineB("GFX_USE_COMPUTE_VERTEX_DECODE", Config::Get(Config::GFX_USE_COMPUTE_VERTEX_DECODE));
-  {
-    // iCube: surface the ACTUAL active vertex loader (Copy State previously omitted it). This is the
-    // ground truth for whether the forced/selected loader took effect (Software/NEON/Compare/Native).
-    const VertexLoaderType vlt = Config::Get(Config::GFX_VERTEX_LOADER_TYPE);
-    line("GFX_VERTEX_LOADER_TYPE", vlt == VertexLoaderType::Software ? "Software"
-                                   : vlt == VertexLoaderType::NEON    ? "NEON"
-                                   : vlt == VertexLoaderType::Compare ? "Compare"
-                                                                      : "Native");
-  }
-  lineB("GFX_HACK_FAST_TEXTURE_SAMPLING(fast=manual-off)",
-        Config::Get(Config::GFX_HACK_FAST_TEXTURE_SAMPLING));
   lineB("MAIN_DSP_HLE", Config::Get(Config::MAIN_DSP_HLE));
   lineB("MAIN_FAST_DISC_SPEED", Config::Get(Config::MAIN_FAST_DISC_SPEED));
   lineB("MAIN_SYNC_ON_SKIP_IDLE", Config::Get(Config::MAIN_SYNC_ON_SKIP_IDLE));
-  line("MAIN_GFX_BACKEND", Config::Get(Config::MAIN_GFX_BACKEND));
   lineB("MAIN_FASTMEM(cfg)", fastmemCfg);
   lineB("fastmem_available(host)", fastmemAvail);
+
+  section("GFX");
+  lineI("GFX_EFB_SCALE", Config::Get(Config::GFX_EFB_SCALE));
+  lineB("GFX_AUTO_IR_ENABLE", Config::Get(Config::GFX_AUTO_IR_ENABLE));
+  line("MAIN_GFX_BACKEND", Config::Get(Config::MAIN_GFX_BACKEND));
+  lineB("GFX_FAST_DEPTH_CALC", Config::Get(Config::GFX_FAST_DEPTH_CALC));
+  lineB("GFX_ENABLE_GPU_TEXTURE_DECODING", Config::Get(Config::GFX_ENABLE_GPU_TEXTURE_DECODING));
+  lineI("GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES", Config::Get(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES));
+  // GameSpecific/PerfQueriesEnable — no global UI; set per-game INI or NetPlay sync.
+  lineB("GFX_PERF_QUERIES_ENABLE(game-ini/netplay)", Config::Get(Config::GFX_PERF_QUERIES_ENABLE));
+
+  section("GFX Hacks");
+  lineB("GFX_HACK_EFB_ACCESS_ENABLE", Config::Get(Config::GFX_HACK_EFB_ACCESS_ENABLE));
+  lineB("GFX_HACK_SKIP_EFB_COPY_TO_RAM", Config::Get(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM));
+  lineB("GFX_HACK_SKIP_XFB_COPY_TO_RAM", Config::Get(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM));
+  lineB("GFX_HACK_DEFER_EFB_COPIES", Config::Get(Config::GFX_HACK_DEFER_EFB_COPIES));
+  lineB("GFX_HACK_IMMEDIATE_XFB", Config::Get(Config::GFX_HACK_IMMEDIATE_XFB));
+  lineB("GFX_HACK_EARLY_XFB_OUTPUT", Config::Get(Config::GFX_HACK_EARLY_XFB_OUTPUT));
+  lineB("GFX_HACK_SKIP_DUPLICATE_XFBS", Config::Get(Config::GFX_HACK_SKIP_DUPLICATE_XFBS));
+  line("GFX_HACK_VI_SKIP_MODE", triStr(Config::Get(Config::GFX_HACK_VI_SKIP_MODE)));
+  lineB("GFX_HACK_VI_DECIMATE_INTERLACE", Config::Get(Config::GFX_HACK_VI_DECIMATE_INTERLACE));
+  lineB("GFX_HACK_BBOX_ENABLE", Config::Get(Config::GFX_HACK_BBOX_ENABLE));
+  lineB("GFX_HACK_FAST_TEXTURE_SAMPLING", Config::Get(Config::GFX_HACK_FAST_TEXTURE_SAMPLING));
+
+  section("iCube");
+  lineB("GFX_HACK_FAST_MATH", Config::Get(Config::GFX_HACK_FAST_MATH));
+  lineB("GFX_HACK_NEON_TEXTURE_DECODE", Config::Get(Config::GFX_HACK_NEON_TEXTURE_DECODE));
+  lineB("GFX_ASYNC_PRESENT", Config::Get(Config::GFX_ASYNC_PRESENT));
+  lineB("GFX_USE_COMPUTE_EFBXFB", Config::Get(Config::GFX_USE_COMPUTE_EFBXFB));
+  lineB("GFX_USE_COMPUTE_VERTEX_DECODE", Config::Get(Config::GFX_USE_COMPUTE_VERTEX_DECODE));
+#ifdef __APPLE__
+  lineB("GFX_HACK_NO_MIPMAPPING", Config::Get(Config::GFX_HACK_NO_MIPMAPPING));
+#endif
+  {
+    NSUserDefaults* ud = [NSUserDefaults standardUserDefaults];
+    if ([ud objectForKey:@"icube_vertex_loader_mode"] == nil)
+      line("icube_vertex_loader_mode", "default(NEON)");
+    else
+      lineI("icube_vertex_loader_mode", [ud integerForKey:@"icube_vertex_loader_mode"]);
+    const VertexLoaderType vlt = Config::Get(Config::GFX_VERTEX_LOADER_TYPE);
+    line("GFX_VERTEX_LOADER_TYPE(runtime)", vlt == VertexLoaderType::Software ? "Software"
+                                         : vlt == VertexLoaderType::NEON    ? "NEON"
+                                         : vlt == VertexLoaderType::Compare ? "Compare"
+                                                                            : "Native");
+  }
+
   b += "=== end ===";
   return b;
 }
@@ -186,21 +218,16 @@ static void _ICubeDumpPerfSettings(const char* phase)
 @end
 
 // iCube: the jitless vertex loader is user-selectable from Settings via the NSUserDefaults
-// key "icube_vertex_loader_mode": 0/unset = Software (safe default), 1 = NEON (SIMD),
-// 2 = Compare (bit-validate NEON vs Software through Dolphin's VertexLoaderTester).
+// key "icube_vertex_loader_mode": 0 = Software, 1 = NEON (default), 2 = Compare
+// (bit-validate NEON vs Software through Dolphin's VertexLoaderTester).
 // Native is JIT codegen, so it stays on the acquiredJit non-fallback path only and is
 // never returned here.
 static VertexLoaderType ICubeJitlessVertexLoaderType()
 {
   NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
-  // Default to the SOFTWARE (reference) vertex loader when the user hasn't picked.
-  // The NEON loader has a decode bug (texcoord tail over-read / scalar-passthrough color
-  // paths) that corrupts vertices on some titles — blown-up/mispositioned polygons,
-  // identical across Metal/Vulkan/GLES because it's a CPU-side decode bug, not a renderer
-  // issue. Software is correct and the safe default; NEON stays opt-in (mode 1) and
-  // Compare (mode 2) bit-validates it. Was TEMP-defaulted to NEON for perf testing.
+  // Default to NEON when the user hasn't picked (matches ConfigAdvancedView @AppStorage default).
   if ([d objectForKey:@"icube_vertex_loader_mode"] == nil)
-    return VertexLoaderType::Software;
+    return VertexLoaderType::NEON;
   switch ([d integerForKey:@"icube_vertex_loader_mode"])
   {
     case 0:  return VertexLoaderType::Software;
@@ -337,9 +364,13 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 
   NSString* _adaptiveGameID;  // current game id, for persisting learned clocks per game
   CGSize _lastDrawableSize;
+  /// Last scale read on main thread; safe for emulation thread WSI setup.
+  CGFloat _cachedRenderSurfaceScale;
 }
 
 @synthesize userRequestedPause = _userRequestedPause;
+
+static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 
 + (EmulationCoordinator*)shared {
   static EmulationCoordinator* sharedInstance = nil;
@@ -350,6 +381,51 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
   });
 
   return sharedInstance;
+}
+
+- (UIScreen*)activeRenderScreen {
+  if (![NSThread isMainThread]) {
+    return UIScreen.mainScreen;
+  }
+  UIWindow* window = _renderHost.window;
+  if (window.windowScene.screen) {
+    return window.windowScene.screen;
+  }
+  return UIScreen.mainScreen;
+}
+
+- (BOOL)isOverscanCompensationApplicable {
+#if TARGET_OS_TV
+  return YES;
+#else
+  return self.isExternalDisplayConnected;
+#endif
+}
+
+- (BOOL)overscanFullscreenEnabled {
+  return [NSUserDefaults.standardUserDefaults boolForKey:kGfxOverscanFullscreenKey];
+}
+
+- (void)setOverscanFullscreenEnabled:(BOOL)enabled {
+  [NSUserDefaults.standardUserDefaults setBool:enabled forKey:kGfxOverscanFullscreenKey];
+  [self applyOverscanCompensationPreference];
+}
+
+- (void)applyOverscanCompensationPreference {
+  if (![NSThread isMainThread]) {
+    dispatch_async(dispatch_get_main_queue(), ^{ [self applyOverscanCompensationPreference]; });
+    return;
+  }
+  if (![self isOverscanCompensationApplicable]) {
+    return;
+  }
+  UIScreen* screen = [self activeRenderScreen];
+  screen.overscanCompensation =
+      [self overscanFullscreenEnabled] ? UIScreenOverscanCompensationNone : UIScreenOverscanCompensationScale;
+  [self updateMetalLayerFrame];
+  if (g_presenter) {
+    g_presenter->ResizeSurface();
+  }
 }
 
 - (void)applyMetalLayerPreferences {
@@ -366,8 +442,9 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
     if ([_metalLayer respondsToSelector:@selector(setMaximumDrawableCount:)]) {
       _metalLayer.maximumDrawableCount = tripleBuffering ? 3 : 2;
     }
-    CGFloat surfaceScale = UIScreen.mainScreen.scale;
-    if (forceScaleOneOnNonProMotion && UIScreen.mainScreen.maximumFramesPerSecond <= 60) {
+    UIScreen* screen = [self activeRenderScreen];
+    CGFloat surfaceScale = screen.scale;
+    if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60) {
       surfaceScale = 1.0;
     }
     _metalLayer.contentsScale = surfaceScale;
@@ -378,10 +455,23 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 - (CGFloat)currentRenderSurfaceScale {
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
   BOOL forceScaleOneOnNonProMotion = [defaults boolForKey:@"gfx_force_scale_one_non_promo"];
-  CGFloat surfaceScale = UIScreen.mainScreen.scale;
-  if (forceScaleOneOnNonProMotion && UIScreen.mainScreen.maximumFramesPerSecond <= 60) {
+  if (![NSThread isMainThread]) {
+    if (_cachedRenderSurfaceScale > 0.0) {
+      return _cachedRenderSurfaceScale;
+    }
+    UIScreen* screen = UIScreen.mainScreen;
+    CGFloat surfaceScale = screen.scale;
+    if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60) {
+      surfaceScale = 1.0;
+    }
+    return surfaceScale;
+  }
+  UIScreen* screen = [self activeRenderScreen];
+  CGFloat surfaceScale = screen.scale;
+  if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60) {
     surfaceScale = 1.0;
   }
+  _cachedRenderSurfaceScale = surfaceScale;
   return surfaceScale;
 }
 
@@ -399,6 +489,7 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 
     self.isExternalDisplayConnected = false;
     _lastDrawableSize = CGSizeZero;
+    _cachedRenderSurfaceScale = 0;
   }
 
   return self;
@@ -409,6 +500,12 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 
   if (!_isExternalDisplayConnected) {
     [self requestDisplayOnSuperview:_mainDisplayView];
+  }
+
+  [[NSNotificationCenter defaultCenter] postNotificationName:DOLExternalDisplayDidChangeNotification object:nil];
+
+  if (connected) {
+    dispatch_async(dispatch_get_main_queue(), ^{ [self applyOverscanCompensationPreference]; });
   }
 }
 
@@ -443,6 +540,7 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
   }
 
   [self updateMetalLayerFrame];
+  [self applyOverscanCompensationPreference];
 
   if (g_presenter) {
     g_presenter->ResizeSurface();
@@ -1350,7 +1448,7 @@ static bool IsTouchscreenDevice(const std::shared_ptr<ciface::Core::Device>& dev
 
 + (void)autoAssignNewestExternalControllerToFirstAvailableSlot
 {
-  DOLHostQueueRunAsync(^{
+  DOLHostQueueRunSync(^{
     if (!Pad::GetConfig() || Pad::GetConfig()->GetControllerCount() == 0)
       return;
 
@@ -1509,15 +1607,17 @@ after_set:
 }
 
 - (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter {
+  __block CGFloat renderSurfaceScale = UIScreen.mainScreen.scale;
   dispatch_sync(dispatch_get_main_queue(), ^{
     Core::UndeclareAsHostThread();
+    renderSurfaceScale = [self currentRenderSurfaceScale];
   });
 
   DOLHostQueueRunSync(^{
     __block WindowSystemInfo wsi;
     wsi.type = WindowSystemType::iOS;
     wsi.render_surface = (__bridge void*)self->_metalLayer;
-    wsi.render_surface_scale = [self currentRenderSurfaceScale];
+    wsi.render_surface_scale = renderSurfaceScale;
 
     auto& system = Core::System::GetInstance();
 

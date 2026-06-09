@@ -4,10 +4,12 @@
 #import <Foundation/Foundation.h>
 
 @class EmulationBootParameter;
+@class UIScreen;
 @class UIView;
 
 NSString* _Nonnull const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
 NSString* _Nonnull const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotification";
+NSString* _Nonnull const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDidChangeNotification";
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -30,6 +32,19 @@ NS_ASSUME_NONNULL_BEGIN
 /// (i.e. the backbuffer_scale the video backend uses). Accounts for the force-scale-1 preference,
 /// so it is NOT always UIScreen.scale. Use this to convert UIKit points to backbuffer pixels.
 - (CGFloat)currentRenderSurfaceScale;
+
+/// UIScreen hosting the Metal render surface (external display when connected, else main).
+- (UIScreen*)activeRenderScreen;
+
+/// YES on tvOS (main TV) or when an iOS external display scene is connected.
+- (BOOL)isOverscanCompensationApplicable;
+
+/// User preference `gfx_overscan_fullscreen`: when YES, sets overscanCompensation to .none.
+- (BOOL)overscanFullscreenEnabled;
+- (void)setOverscanFullscreenEnabled:(BOOL)enabled;
+
+/// Applies the overscan preference to the active render screen when applicable.
+- (void)applyOverscanCompensationPreference;
 
 /// Ensures GameCube Pad 1 is bound to the iOS Touchscreen when no default device is connected.
 /// Also provides auto-assignment for newly connected external controllers.

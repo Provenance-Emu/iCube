@@ -38,6 +38,13 @@ class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       }
       self.window = window
       window.makeKeyAndVisible()
+
+#if !os(tvOS)
+      // UIKit may ignore overscanCompensation if set before the external window is on-screen.
+      DispatchQueue.main.async {
+        TVEmulationBridge.setOverscanFullscreenEnabled(TVEmulationBridge.overscanFullscreenEnabled())
+      }
+#endif
     }
   }
 
