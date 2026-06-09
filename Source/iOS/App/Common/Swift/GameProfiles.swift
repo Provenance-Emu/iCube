@@ -68,6 +68,16 @@ final class GameProfiles {
     save()
   }
 
+  /// Applies a touch-controller override to multiple games, preserving other profile fields.
+  func batchSetControllerOverride(_ override: TouchControllerOverride, forGameIDs gameIDs: [String]) {
+    for gameID in gameIDs where !gameID.isEmpty {
+      var profile = profiles[gameID] ?? GameProfile()
+      profile.touchControllerOverride = override == .systemAuto ? nil : override
+      profiles[gameID] = profile
+    }
+    save()
+  }
+
   func clearProfile(for gameID: String) {
     profiles.removeValue(forKey: gameID)
     save()

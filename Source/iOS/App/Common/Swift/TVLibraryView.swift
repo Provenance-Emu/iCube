@@ -247,6 +247,20 @@ struct TVLibraryView: View {
   /// Sort direction. true == ascending. Persisted via AppStorage.
   @AppStorage("library_sort_ascending") private var sortAscending: Bool = true
 
+  // MARK: - Platform filter & grid density (persisted)
+
+  @AppStorage("library_platform_filter") private var platformFilter: LibraryPlatformCategory = .all
+  @AppStorage("library_grid_column_offset") private var gridColumnOffset: Int = 0
+
+  // MARK: - Multi-select state
+
+  @State private var isSelectionMode = false
+  @State private var selectedFilePaths: Set<String> = []
+  @State private var platformOverridesVersion: Int = 0
+  @State private var showBatchDeleteConfirm = false
+  @State private var pendingBatchDeletePaths: Set<String> = []
+  @State private var lastPinchScale: CGFloat = 1.0
+
   enum SortField: String, CaseIterable {
     case name = "name"
     /// File creation date for local items (a.k.a. "Added" / import date).
@@ -290,19 +304,76 @@ struct TVLibraryView: View {
     return nil
   }
 
-  /// Precompute file creation dates once per sort pass (never call FileManager
-  /// inside a comparator). Remote items have no local date and are omitted.
-  private func creationDates(for items: [TVGameItem]) -> [String: Date] {
+  /// Precompute local file dates once per sort pass (never call FileManager inside a comparator).
+  /// Remote items have no local date and are omitted.
+  private func addedDates(for items: [TVGameItem]) -> [String: Date] {
     var map: [String: Date] = [:]
     let fm = FileManager.default
     for item in items {
       guard let path = Self.localPath(for: item) else { continue }
-      if let attrs = try? fm.attributesOfItem(atPath: path),
-         let date = attrs[.creationDate] as? Date {
-        map[item.filePath] = date
+      let url = URL(fileURLWithPath: path)
+      if let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey]) {
+        let date = values.contentModificationDate ?? values.creationDate
+        if let date {
+          map[item.filePath] = date
+          map[path] = date
+        }
+      } else if let attrs = try? fm.attributesOfItem(atPath: path) {
+        let date = (attrs[.modificationDate] as? Date) ?? (attrs[.creationDate] as? Date)
+        if let date {
+          map[item.filePath] = date
+          map[path] = date
+        }
       }
     }
     return map
+  }
+
+  private var platformOverrides: [String: LibraryPlatformCategory] {
+    _ = platformOverridesVersion
+    return LibraryPlatformOverrideStore.load()
+  }
+
+  private var showPlatformFilterBar: Bool {
+    LibraryPlatformMapper.availableCategories(in: model.games, overrides: platformOverrides).count > 1
+  }
+
+  /// Clamps auto-fit column count plus user offset for the current platform.
+  private func effectiveColumnCount(autoFit: Int) -> Int {
+#if os(tvOS)
+    return min(7, max(3, autoFit + gridColumnOffset))
+#else
+    return min(8, max(2, autoFit + gridColumnOffset))
+#endif
+  }
+
+  private static func tvOSBaseColumns() -> Int { 5 }
+
+  /// Full library pipeline: platform filter → search → sort.
+  private func filteredGames(from games: [TVGameItem]) -> [TVGameItem] {
+    let overrides = platformOverrides
+    var result = games
+    if showPlatformFilterBar, platformFilter != .all {
+      result = result.filter {
+        LibraryPlatformMapper.category(for: $0, override: overrides[$0.filePath]) == platformFilter
+      }
+    }
+    let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !q.isEmpty {
+      let needle = q.lowercased()
+      result = result.filter { item in
+        let title = item.title.lowercased()
+        if title.contains(needle) { return true }
+        if Self.sortTitle(for: item).lowercased().contains(needle) { return true }
+        if item.gameID.lowercased().contains(needle) { return true }
+        if item.makerLong.lowercased().contains(needle) { return true }
+        if item.countryName.lowercased().contains(needle) { return true }
+        if item.gametdbID.lowercased().contains(needle) { return true }
+        if item.filePath.lowercased().contains(needle) { return true }
+        return false
+      }
+    }
+    return applySort(result)
   }
 
   /// Apply the persisted sort to an already-filtered list of games.
@@ -316,10 +387,19 @@ struct TVLibraryView: View {
         return asc ? (r == .orderedAscending) : (r == .orderedDescending)
       }
     case .added:
-      let dates = creationDates(for: games)
+      let dates = addedDates(for: games)
       return games.sorted { a, b in
-        let da = dates[a.filePath]
-        let db = dates[b.filePath]
+        let da = dates[a.filePath] ?? Self.localPath(for: a).flatMap { dates[$0] }
+        let db = dates[b.filePath] ?? Self.localPath(for: b).flatMap { dates[$0] }
+#if DEBUG
+        // Lightweight audit: log first pass only when sorting by added with 3+ items.
+        if games.count >= 3, games.first?.filePath == a.filePath {
+          for item in games.prefix(5) {
+            let d = dates[item.filePath] ?? Self.localPath(for: item).flatMap { dates[$0] }
+            print("[LIB_SORT] added: '\(item.title)' date=\(d?.description ?? "nil")")
+          }
+        }
+#endif
         // Items with no local date (remote) sort last regardless of direction.
         switch (da, db) {
         case let (x?, y?):
@@ -392,7 +472,6 @@ struct TVLibraryView: View {
   @State private var showSettings = false
   @State private var didReloadOnce = false
   @State private var navigateTo: TVGameItem?
-  @State private var showMoreMenu = false
   @State private var showUpdateRegions = false
   @State private var showDSUSession = false
   /// Presents the About iCube sheet (tapped via the toolbar Dolphin logo on iOS).
@@ -400,7 +479,7 @@ struct TVLibraryView: View {
 
   // MARK: - Computed Bindings (extracted to prevent compiler timeout)
 
-  private struct NavigationItem: Identifiable {
+  private struct NavigationItem: Identifiable, Hashable {
     let id = UUID()
   }
 
@@ -425,12 +504,17 @@ struct TVLibraryView: View {
       }
 #endif
       .modifier(iOS16NavigationStyleModifier())
+      .navigationDestination(isPresented: Binding(
+        get: { navigateTo != nil },
+        set: { if !$0 { navigateTo = nil } }
+      )) {
+        if let item = navigateTo {
+          EmulationScreen(game: item)
+            .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
+        }
+      }
       .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
         SaveStateFilmstripView(gameID: route.id)
-      }
-      .navigationDestinationItemCompat(item: $navigateTo) { item in
-        EmulationScreen(game: item)
-          .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
       }
   }
 
@@ -450,8 +534,17 @@ struct TVLibraryView: View {
       .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
       .modifier(LibrarySearchableModifier(searchText: $searchText))
 #endif
+      .safeAreaInset(edge: .bottom, spacing: 8) {
+        libraryBottomChrome
+      }
+#if !os(tvOS)
+      .modifier(LibraryNavigationSubtitleModifier(subtitle: libraryNavigationSubtitle))
+#endif
       .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FavoritesChanged"))) { _ in
         favoritesVersion &+= 1
+      }
+      .onChangeCompat(of: model.games.count) { _, _ in
+        if !showPlatformFilterBar { platformFilter = .all }
       }
   }
   /// Game to present in the SwiftUI properties sheet
@@ -503,6 +596,8 @@ struct TVLibraryView: View {
 
   /// Whether emulation is currently running (disables library input)
   @State private var emulationRunning = false
+  /// Current grid columns (kept in state for controller navigation)
+  @State private var gridColumnCount: Int = 3
 
   /// iOS document pickers
 #if os(iOS) || targetEnvironment(macCatalyst)
@@ -518,8 +613,6 @@ struct TVLibraryView: View {
   /// Previous controller handlers to restore on teardown
   @State private var prevEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
   @State private var prevMGPHandlers: [ObjectIdentifier: (GCMicroGamepad, GCControllerElement) -> Void] = [:]
-  /// Current grid columns (kept in state for reuse)
-  @State private var gridColumnCount: Int = 3
   @State private var dropTargeted: Bool = false
   @State private var dropPreviewCount: Int = 0
   // Library GCController observers
@@ -806,6 +899,8 @@ struct TVLibraryView: View {
 
       if model.games.isEmpty {
         emptyLibraryView
+      } else if filteredGames(from: model.games).isEmpty {
+        filteredEmptyLibraryView
       } else {
         libraryView
       }
@@ -828,34 +923,8 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var libraryView: some View {
     let _ = favoritesVersion
-    // Shared filtered view of games for both platforms
-    let displayGames: [TVGameItem] = {
-      let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-      let filtered: [TVGameItem]
-      if q.isEmpty {
-        filtered = model.games
-      } else {
-        let needle = q.lowercased()
-        func filenameLower(_ path: String) -> String {
-          if let url = URL(string: path) {
-            return (url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent).lowercased()
-          }
-          return path.lowercased()
-        }
-        filtered = model.games.filter { item in
-          let title = item.title.lowercased()
-          if title.contains(needle) { return true }
-          if filenameLower(item.filePath).contains(needle) { return true }
-          if item.gameID.lowercased().contains(needle) { return true }
-          if item.makerLong.lowercased().contains(needle) { return true }
-          if item.countryName.lowercased().contains(needle) { return true }
-          if item.gametdbID.lowercased().contains(needle) { return true }
-          if item.filePath.lowercased().contains(needle) { return true }
-          return false
-        }
-      }
-      return applySort(filtered)
-    }()
+    let _ = platformOverridesVersion
+    let displayGames = filteredGames(from: model.games)
 #if os(iOS) || targetEnvironment(macCatalyst)
     libraryView_iOS(displayGames)
 #else
@@ -863,11 +932,47 @@ struct TVLibraryView: View {
 #endif
   }
 
+  /// Shared grid item builder wired to selection mode and context actions.
+  @ViewBuilder
+  private func gameGridItem(for item: TVGameItem) -> some View {
+    GameGridItem(
+      item: item,
+      select: selectGame,
+      focusedFilePath: $focusedFilePath,
+      showProperties: { showPropertiesFor = $0 },
+      showCheatList: { showCheatListFor = $0 },
+      downloadGeckoAction: { downloadGecko(for: $0) },
+      presentCheatGecko: { showGeckoEditorFor = $0 },
+      presentCheatAR: { showAREditorFor = $0 },
+      requestDelete: { itemPendingDelete = $0 },
+      showFavoriteToggle: { toggleFavorite(for: $0) },
+      showStorageAlert: { message in
+        storageAlertMessage = message
+        showStorageErrorAlert = true
+      },
+      showCacheInfo: { showCacheInfoFor = $0 },
+      showSaveStates: { item in
+        let gid = item.gameID
+        if !gid.isEmpty {
+          navigateToSaveStates = GameIDRoute(id: gid)
+        }
+      },
+      autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
+      isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
+      showSubtitles: showSubtitles,
+      selectionMode: isSelectionMode,
+      isSelected: selectedFilePaths.contains(item.filePath),
+      onToggleSelection: { toggleSelection(for: item) },
+      onEnterSelectionMode: { enterSelectionMode(selecting: item) }
+    )
+  }
+
   #if os(tvOS)
   private func libraryView_tvOS(_ displayGames: [TVGameItem]) -> some View {
     ScrollView {
       libraryToolbar_tvOS_favorites
       libraryToolbar_tvOS_main(displayGames)
+        .padding(.bottom, libraryBottomInsetPadding)
     }
   }
 
@@ -911,34 +1016,7 @@ struct TVLibraryView: View {
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: Constants.gridHorizontalSpacing) {
             ForEach(favs, id: \.filePath) { fav in
-              GameGridItem(
-                item: fav,
-                select: selectGame,
-                focusedFilePath: $focusedFilePath,
-                showProperties: { showPropertiesFor = $0 },
-                showCheatList: { showCheatListFor = $0 },
-                downloadGeckoAction: { downloadGecko(for: $0) },
-                presentCheatGecko: { showGeckoEditorFor = $0 },
-                presentCheatAR: { showAREditorFor = $0 },
-                requestDelete: { itemPendingDelete = $0 },
-                showFavoriteToggle: { toggleFavorite(for: $0) },
-                showStorageAlert: { message in
-                  storageAlertMessage = message
-                  showStorageErrorAlert = true
-                },
-                showCacheInfo: { item in
-                  showCacheInfoFor = item
-                },
-                showSaveStates: { item in
-                  let gid = item.gameID
-                  if !gid.isEmpty {
-                    navigateToSaveStates = GameIDRoute(id: gid)
-                  }
-                },
-                autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
-                isAutoPreCaching: autoPreCacheActive.contains(fav.filePath),
-                showSubtitles: showSubtitles
-              )
+              gameGridItem(for: fav)
             }
           }
           .background(
@@ -959,40 +1037,17 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private func libraryToolbar_tvOS_main(_ displayGames: [TVGameItem]) -> some View {
-    LazyVGrid(columns: Constants.columns, spacing: Constants.gridVerticalSpacing) {
+    let count = effectiveColumnCount(autoFit: Self.tvOSBaseColumns())
+    let columns = Array(repeating: GridItem(.flexible(), spacing: Constants.gridHorizontalSpacing), count: count)
+    LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
       ForEach(displayGames, id: \.filePath) { item in
-        GameGridItem(
-          item: item,
-          select: selectGame,
-          focusedFilePath: $focusedFilePath,
-          showProperties: { showPropertiesFor = $0 },
-          showCheatList: { showCheatListFor = $0 },
-          downloadGeckoAction: { downloadGecko(for: $0) },
-          presentCheatGecko: { showGeckoEditorFor = $0 },
-          presentCheatAR: { showAREditorFor = $0 },
-          requestDelete: { itemPendingDelete = $0 },
-          showFavoriteToggle: { toggleFavorite(for: $0) },
-          showStorageAlert: { message in
-            storageAlertMessage = message
-            showStorageErrorAlert = true
-          },
-          showCacheInfo: { item in
-            showCacheInfoFor = item
-          },
-          showSaveStates: { item in
-            let gid = item.gameID
-            if !gid.isEmpty {
-              navigateToSaveStates = GameIDRoute(id: gid)
-            }
-          },
-          autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
-          isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
-          showSubtitles: showSubtitles
-        )
+        gameGridItem(for: item)
       }
     }
     .padding(.horizontal, Constants.gridHorizontalPadding)
     .padding(.vertical, Constants.gridVerticalPadding)
+    .onAppear { gridColumnCount = count }
+    .onChangeCompat(of: count) { _, newVal in gridColumnCount = newVal }
   }
   #endif // os(tvOS)
 
@@ -1004,7 +1059,8 @@ struct TVLibraryView: View {
       let spacingH = Constants.gridHorizontalSpacing
       let cardW = LibraryLayout.cardSize.width
       let available = max(0, proxy.size.width - (paddingH * 2))
-      let count = max(2, Int((available + spacingH) / (cardW + spacingH)))
+      let autoCount = max(2, Int((available + spacingH) / (cardW + spacingH)))
+      let count = effectiveColumnCount(autoFit: autoCount)
       let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
       ScrollViewReader { scr in
         ScrollView {
@@ -1040,34 +1096,7 @@ struct TVLibraryView: View {
               ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: spacingH) {
                   ForEach(favs, id: \.filePath) { fav in
-                    GameGridItem(
-                      item: fav,
-                      select: selectGame,
-                      focusedFilePath: $focusedFilePath,
-                      showProperties: { showPropertiesFor = $0 },
-                      showCheatList: { showCheatListFor = $0 },
-                      downloadGeckoAction: { downloadGecko(for: $0) },
-                      presentCheatGecko: { showGeckoEditorFor = $0 },
-                      presentCheatAR: { showAREditorFor = $0 },
-                      requestDelete: { itemPendingDelete = $0 },
-                      showFavoriteToggle: { toggleFavorite(for: $0) },
-                      showStorageAlert: { message in
-                        storageAlertMessage = message
-                        showStorageErrorAlert = true
-                      },
-                      showCacheInfo: { item in
-                        showCacheInfoFor = item
-                      },
-                      showSaveStates: { item in
-                        let gid = item.gameID
-                        if !gid.isEmpty {
-                          navigateToSaveStates = GameIDRoute(id: gid)
-                        }
-                      },
-                      autoPreCacheProgress: autoPreCacheProgress[fav.filePath] ?? 0.0,
-                      isAutoPreCaching: autoPreCacheActive.contains(fav.filePath),
-                      showSubtitles: showSubtitles
-                    )
+                    gameGridItem(for: fav)
                   }
                 }
                 .padding(.horizontal, paddingH)
@@ -1088,34 +1117,7 @@ struct TVLibraryView: View {
           }
           LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
             ForEach(displayGames, id: \.filePath) { item in
-              GameGridItem(
-                item: item,
-                select: selectGame,
-                focusedFilePath: $focusedFilePath,
-                showProperties: { showPropertiesFor = $0 },
-                showCheatList: { showCheatListFor = $0 },
-                downloadGeckoAction: { downloadGecko(for: $0) },
-                presentCheatGecko: { showGeckoEditorFor = $0 },
-                presentCheatAR: { showAREditorFor = $0 },
-                requestDelete: { itemPendingDelete = $0 },
-                showFavoriteToggle: { toggleFavorite(for: $0) },
-                showStorageAlert: { message in
-                  storageAlertMessage = message
-                  showStorageErrorAlert = true
-                },
-                showCacheInfo: { item in
-                  showCacheInfoFor = item
-                },
-                showSaveStates: { item in
-                  let gid = item.gameID
-                  if !gid.isEmpty {
-                    navigateToSaveStates = GameIDRoute(id: gid)
-                  }
-                },
-                autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
-                isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
-                showSubtitles: showSubtitles
-              )
+              gameGridItem(for: item)
               .id(item.filePath)
               .overlay(
                 RoundedRectangle(cornerRadius: 14)
@@ -1135,7 +1137,22 @@ struct TVLibraryView: View {
           }
           .padding(.horizontal, paddingH)
           .padding(.vertical, Constants.gridVerticalSpacing)
+          .padding(.bottom, libraryBottomInsetPadding)
         }
+        .simultaneousGesture(
+          MagnificationGesture()
+            .onChanged { scale in
+              let delta = scale - lastPinchScale
+              if delta > 0.12 {
+                adjustGridZoom(delta: 1)
+                lastPinchScale = scale
+              } else if delta < -0.12 {
+                adjustGridZoom(delta: -1)
+                lastPinchScale = scale
+              }
+            }
+            .onEnded { _ in lastPinchScale = 1.0 }
+        )
         .background((!emulationRunning) ? AnyView(KeyCommandHostView(
           onLeft: {
             let idx = displayGames.firstIndex(where: { $0.filePath == focusedFilePath }) ?? 0
@@ -1246,14 +1263,43 @@ struct TVLibraryView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
+  @ViewBuilder
+  private var filteredEmptyLibraryView: some View {
+    ZStack {
+      SwimmingDolphinsView(count: 2, direction: .leftToRight, maxSize: 100, opacity: 0.18)
+      VStack(spacing: 16) {
+        DolphinErrorView(
+          title: L("No Matching Games"),
+          message: filteredEmptyMessage
+        )
+        if showPlatformFilterBar, platformFilter != .all {
+          Button(L("Show All Games")) {
+            platformFilter = .all
+          }
+          .buttonStyle(.borderedProminent)
+        } else if isSearching {
+          Button(L("Clear Search")) { searchText = "" }
+            .buttonStyle(.borderedProminent)
+        }
+      }
+      .padding()
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private var filteredEmptyMessage: String {
+    if isSearching, platformFilter != .all {
+      return String(format: L("No %1 games match your search."), platformFilter.displayName)
+    }
+    if platformFilter != .all {
+      return String(format: L("No %1 games in your library."), platformFilter.displayName)
+    }
+    return L("No games match your search.")
+  }
+
   #if os(tvOS)
   @ToolbarContentBuilder
   private var libraryToolbar_tvOS: some ToolbarContent {
-    ToolbarItem(placement: .navigationBarTrailing) {
-      Button { showMoreMenu = true } label: { Image(systemName: "ellipsis.circle") }
-        .buttonStyle(.automatic)
-        .focusable(true)
-    }
     ToolbarItem(placement: .navigationBarTrailing) {
       let store = RemoteSourcesStore.shared
       if store.isScanning {
@@ -1270,25 +1316,12 @@ struct TVLibraryView: View {
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      Button(action: { model.rescan() }) {
-        if model.isRescanning {
-          DolphinCircularSpinner(size: 20, lineWidth: 2, dolphinSize: 8)
-        } else {
-          Label("", systemImage: "arrow.clockwise")
-        }
-      }
-    }
-    ToolbarItem(placement: .navigationBarTrailing) {
-      sortMenu
-    }
-    ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: { showSearchSheet = true }) { Image(systemName: "magnifyingglass") }
+        .focusable(true)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      Button(action: { showSources = true }) { Image(systemName: "externaldrive.badge.plus") }
-    }
-    ToolbarItem(placement: .navigationBarTrailing) {
-      Button(action: { showSettings = true }) { Image(systemName: "gearshape") }
+      libraryOptionsMenu
+        .focusable(true)
     }
   }
   #else // iOS
@@ -1327,77 +1360,6 @@ struct TVLibraryView: View {
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      if #available(tvOS 17.0, iOS 14.0, *) {
-        Menu {
-          // System / Boot
-          Section(L("System")) {
-            Button(action: { model.loadGameCubeMainMenu() }) {
-              Label(L("Load GameCube Main Menu"), systemImage: "gamecontroller")
-            }
-            Button(action: { model.performOnlineSystemUpdate() }) {
-              Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
-            }
-#if os(iOS)
-            Button(action: {
-              let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
-              if role == "receiver" {
-                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Switch role to Sender to start DSU Controller")])
-              } else {
-                showDSUSession = true
-              }
-            }) {
-              Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
-            }
-#endif
-          }
-          // Import
-          Section(L("Import")) {
-            Button(action: {
-#if os(iOS) || targetEnvironment(macCatalyst)
-              showImportSoftwarePicker = true
-#endif
-            }) {
-              Label(L("Import Game"), systemImage: "square.and.arrow.down")
-            }
-            Button(action: {
-#if os(iOS) || targetEnvironment(macCatalyst)
-              showImportNANDPicker = true
-#endif
-            }) {
-              Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
-            }
-          }
-          // Sources / Other
-          Section(L("Sources")) {
-            Button(action: { showSources = true }) {
-              Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
-            }
-          }
-        } label: {
-          Image(systemName: "ellipsis.circle")
-        }
-        .tipAttachCompat(.importGame)
-      } else {
-        // Fallback for tvOS 16: Show most important action directly
-        Button(action: { showSources = true }) {
-          Image(systemName: "externaldrive.badge.plus")
-        }
-        .tipAttachCompat(.importGame)
-      }
-    }
-    ToolbarItem(placement: .navigationBarTrailing) {
-      sortMenu
-    }
-    ToolbarItem(placement: .navigationBarTrailing) {
-      Button(action: { model.rescan() }) {
-        if model.isRescanning {
-          DolphinCircularSpinner(size: 22, lineWidth: 2, dolphinSize: 9)
-        } else {
-          Label(L("Rescan"), systemImage: "arrow.clockwise")
-        }
-      }
-    }
-    ToolbarItem(placement: .navigationBarTrailing) {
       Button(action: {
 #if os(iOS) || targetEnvironment(macCatalyst)
         showImportSoftwarePicker = true
@@ -1409,11 +1371,8 @@ struct TVLibraryView: View {
       .help(L("Import Game"))
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      Button(action: {
-#if os(iOS) || targetEnvironment(macCatalyst)
-        navigateToSettings = true
-#endif
-      }) { Image(systemName: "gearshape") }
+      libraryOptionsMenu
+        .tipAttachCompat(.importGame)
     }
 
   }
@@ -1428,41 +1387,235 @@ struct TVLibraryView: View {
     #endif
   }
 
-  /// Sort control shared by both platforms. Lets the user pick a field
-  /// (Name / Date Added / Disc Date) and toggle ascending/descending. The
-  /// selection is persisted via AppStorage and applied in `displayGames`.
+  /// Consolidated overflow menu: view controls, library actions, system tools, and settings.
   @ViewBuilder
-  private var sortMenu: some View {
+  private var libraryOptionsMenu: some View {
     Menu {
-      Section(L("Sort By")) {
-        ForEach(SortField.allCases, id: \.self) { field in
-          Button(action: {
-            if sortField == field {
-              sortAscending.toggle()
-            } else {
-              sortField = field
-              sortAscending = true
-            }
-          }) {
-            if sortField == field {
-              Label(field.displayName, systemImage: sortAscending ? "arrow.up" : "arrow.down")
-            } else {
-              Label(field.displayName, systemImage: field.systemImage)
-            }
+      libraryViewMenuSection
+      librarySystemMenuSection
+      libraryImportMenuSection
+      librarySourcesMenuSection
+      librarySettingsMenuSection
+    } label: {
+      Image(systemName: "ellipsis.circle")
+    }
+    .accessibilityLabel(L("Library Options"))
+  }
+
+  @ViewBuilder
+  private var libraryViewMenuSection: some View {
+    Section(L("View")) {
+      Button(action: {
+        if isSelectionMode {
+          exitSelectionMode()
+        } else {
+          isSelectionMode = true
+        }
+      }) {
+        Label(
+          isSelectionMode ? L("Done Selecting") : L("Select Games"),
+          systemImage: isSelectionMode ? "checkmark.circle.fill" : "checkmark.circle"
+        )
+      }
+      Menu {
+        sortMenuItems
+      } label: {
+        Label(L("Sort"), systemImage: "arrow.up.arrow.down")
+      }
+      Menu {
+        gridZoomMenuItems
+      } label: {
+        Label(L("Grid Size"), systemImage: "square.grid.3x3")
+      }
+      Button(action: { model.rescan() }) {
+        Label(L("Rescan"), systemImage: "arrow.clockwise")
+      }
+      .disabled(model.isRescanning)
+    }
+  }
+
+  @ViewBuilder
+  private var librarySystemMenuSection: some View {
+    Section(L("System")) {
+      Button(action: { model.loadGameCubeMainMenu() }) {
+        Label(L("Load GameCube Main Menu"), systemImage: "gamecontroller")
+      }
+#if os(tvOS)
+      Button(action: { showUpdateRegions = true }) {
+        Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
+      }
+#else
+      Button(action: { model.performOnlineSystemUpdate() }) {
+        Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
+      }
+#endif
+#if os(iOS)
+      Button(action: {
+        let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
+        if role == "receiver" {
+          NotificationCenter.default.post(
+            name: NSNotification.Name("DOLShowSnackbar"),
+            object: nil,
+            userInfo: ["text": L("Switch role to Sender to start DSU Controller")]
+          )
+        } else {
+          showDSUSession = true
+        }
+      }) {
+        Label(L("Start DSU Controller"), systemImage: "dot.radiowaves.left.and.right")
+      }
+#endif
+    }
+  }
+
+  @ViewBuilder
+  private var libraryImportMenuSection: some View {
+    Section(L("Import")) {
+      Button(action: {
+#if os(iOS) || targetEnvironment(macCatalyst)
+        showImportSoftwarePicker = true
+#endif
+      }) {
+        Label(L("Import Game"), systemImage: "square.and.arrow.down")
+      }
+      Button(action: {
+#if os(iOS) || targetEnvironment(macCatalyst)
+        showImportNANDPicker = true
+#endif
+      }) {
+        Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var librarySourcesMenuSection: some View {
+    Section(L("Sources")) {
+      Button(action: { showSources = true }) {
+        Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var librarySettingsMenuSection: some View {
+    Section {
+      Button(action: {
+#if os(iOS) || targetEnvironment(macCatalyst)
+        navigateToSettings = true
+#elseif os(tvOS)
+        showSettings = true
+#endif
+      }) {
+        Label(L("Settings"), systemImage: "gearshape")
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var sortMenuItems: some View {
+    Section(L("Sort By")) {
+      ForEach(SortField.allCases, id: \.self) { field in
+        Button(action: {
+          if sortField == field {
+            sortAscending.toggle()
+          } else {
+            sortField = field
+            sortAscending = true
+          }
+        }) {
+          if sortField == field {
+            Label(field.displayName, systemImage: sortAscending ? "arrow.up" : "arrow.down")
+          } else {
+            Label(field.displayName, systemImage: field.systemImage)
           }
         }
       }
-      Section(L("Direction")) {
-        Button(action: { sortAscending = true }) {
-          Label(L("Ascending"), systemImage: sortAscending ? "checkmark" : "arrow.up")
-        }
-        Button(action: { sortAscending = false }) {
-          Label(L("Descending"), systemImage: !sortAscending ? "checkmark" : "arrow.down")
-        }
-      }
-    } label: {
-      Image(systemName: sortAscending ? "arrow.up.arrow.down.circle" : "arrow.up.arrow.down.circle.fill")
     }
+    Section(L("Direction")) {
+      Button(action: { sortAscending = true }) {
+        Label(L("Ascending"), systemImage: sortAscending ? "checkmark" : "arrow.up")
+      }
+      Button(action: { sortAscending = false }) {
+        Label(L("Descending"), systemImage: !sortAscending ? "checkmark" : "arrow.down")
+      }
+    }
+    Section(L("Quick Sort")) {
+      Button(action: {
+        sortField = .added
+        sortAscending = false
+      }) {
+        Label(L("Newest First"), systemImage: "clock.arrow.circlepath")
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var gridZoomMenuItems: some View {
+    Button(action: { adjustGridZoom(delta: -1) }) {
+      Label(L("Fewer Per Row"), systemImage: "minus.magnifyingglass")
+    }
+    Button(action: { adjustGridZoom(delta: 1) }) {
+      Label(L("More Per Row"), systemImage: "plus.magnifyingglass")
+    }
+    Button(action: { gridColumnOffset = 0 }) {
+      Label(L("Reset Grid Size"), systemImage: "arrow.counterclockwise")
+    }
+  }
+
+  @ViewBuilder
+  private var libraryBottomChrome: some View {
+    VStack(spacing: 6) {
+      if isSelectionMode && !selectedFilePaths.isEmpty {
+        LibrarySelectionActionBar(
+          selectedCount: selectedFilePaths.count,
+          onDelete: { pendingBatchDeletePaths = selectedFilePaths; showBatchDeleteConfirm = true },
+          onFavorite: { batchSetFavorite(true) },
+          onUnfavorite: { batchSetFavorite(false) },
+          onPlatformOverride: { batchSetPlatformOverride($0) },
+          onControllerOverride: { batchSetControllerOverride($0) },
+          onSelectAll: { selectAllVisibleGames() },
+          onDeselectAll: { selectedFilePaths.removeAll() },
+          onProperties: {
+            if let path = selectedFilePaths.first,
+               let item = model.games.first(where: { $0.filePath == path }) {
+              showPropertiesFor = item
+            }
+          },
+          onDone: { exitSelectionMode() }
+        )
+      }
+      if showPlatformFilterBar {
+        LibraryPlatformFilterBar(
+          selection: $platformFilter,
+          games: model.games,
+          overrides: platformOverrides
+        )
+      }
+    }
+  }
+
+  private var libraryNavigationSubtitle: String {
+    let count = filteredGames(from: model.games).count
+    if showPlatformFilterBar, platformFilter != .all {
+      return "\(platformFilter.displayName) · \(count) \(L("games"))"
+    }
+    if count != model.games.count {
+      return "\(count) \(L("games"))"
+    }
+    return "\(model.games.count) \(L("games"))"
+  }
+
+  /// Extra scroll padding so the last grid row clears bottom filter/selection chrome.
+  private var libraryBottomInsetPadding: CGFloat {
+    var pad: CGFloat = 0
+    if showPlatformFilterBar { pad += 56 }
+    if isSelectionMode && !selectedFilePaths.isEmpty { pad += 92 }
+    return pad
+  }
+
+  private func adjustGridZoom(delta: Int) {
+    gridColumnOffset = min(4, max(-3, gridColumnOffset + delta))
   }
 
   var body: some View {
@@ -1543,7 +1696,9 @@ struct TVLibraryView: View {
       }
       // Rescan library when a file import completes
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLImportFileFinishedNotification"), object: nil, queue: .main) { _ in
-        model.rescan()
+        Task { @MainActor in
+          model.rescan()
+        }
       }
       // Global DSU approval toast
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DSUNewClientApproval"), object: nil, queue: .main) { note in
@@ -1600,11 +1755,6 @@ struct TVLibraryView: View {
       }
     }
 #endif
-    .confirmationDialog(L("More"), isPresented: $showMoreMenu, titleVisibility: .visible) {
-      Button(L("Load GameCube Main Menu")) { model.loadGameCubeMainMenu() }
-      Button(L("Perform Online System Update")) { showUpdateRegions = true }
-      Button(L("Cancel"), role: .cancel) {}
-    }
     .confirmationDialog(L("Select Region"), isPresented: $showUpdateRegions, titleVisibility: .visible) {
       Button(L("Europe")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "EUR") }
       Button(L("Japan")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "JPN") }
@@ -1643,8 +1793,9 @@ struct TVLibraryView: View {
         NavigationStack {
           DocumentPickerView(
             contentTypes: DocumentPickerView.softwareContentTypes,
-            onPick: { url in
-              ImportFileManager.shared().importFile(at: url)
+            allowsMultipleSelection: true,
+            onPick: { urls in
+              ImportFileManager.shared().importFiles(at: urls as [NSURL])
             }
           )
           .navigationTitle(L("Import Game"))
@@ -1654,7 +1805,8 @@ struct TVLibraryView: View {
         NavigationStack {
           DocumentPickerView(
             contentTypes: [DocumentPickerView.binType],
-            onPick: { url in
+            onPick: { urls in
+              guard let url = urls.first else { return }
               NANDImportManager.importNAND(from: url)
             }
           )
@@ -1666,13 +1818,23 @@ struct TVLibraryView: View {
       .alert(L("Delete Game?"), isPresented: Binding(get: { itemPendingDelete != nil }, set: { if !$0 { itemPendingDelete = nil } })) {
         Button(L("Delete"), role: .destructive) {
           if let toDelete = itemPendingDelete {
-            try? FileManager.default.removeItem(atPath: toDelete.filePath)
+            if deleteLocalGame(toDelete) { model.rescan() }
             itemPendingDelete = nil
-            model.rescan()
           }
         }
         Button(L("Cancel"), role: .cancel) { itemPendingDelete = nil }
       } message: { if let item = itemPendingDelete { Text(L("This will delete \(item.title). This action cannot be undone.")) } }
+      .alert(L("Delete Selected Games?"), isPresented: $showBatchDeleteConfirm) {
+        Button(L("Delete"), role: .destructive) {
+          performBatchDelete(paths: pendingBatchDeletePaths)
+          pendingBatchDeletePaths.removeAll()
+        }
+        Button(L("Cancel"), role: .cancel) {
+          pendingBatchDeletePaths.removeAll()
+        }
+      } message: {
+        Text("\(pendingBatchDeletePaths.count) \(L("selected games will be deleted. This cannot be undone."))")
+      }
     // Storage error alert
       .alert(L("Storage Error"), isPresented: $showStorageErrorAlert) {
         Button(L("OK")) {}
@@ -2365,11 +2527,108 @@ struct TVLibraryView: View {
 #endif
   }
 
+  // MARK: - Selection & batch actions
+
+  private func enterSelectionMode(selecting item: TVGameItem) {
+    isSelectionMode = true
+    selectedFilePaths.insert(item.filePath)
+  }
+
+  private func toggleSelection(for item: TVGameItem) {
+    if selectedFilePaths.contains(item.filePath) {
+      selectedFilePaths.remove(item.filePath)
+    } else {
+      selectedFilePaths.insert(item.filePath)
+    }
+  }
+
+  private func exitSelectionMode() {
+    isSelectionMode = false
+    selectedFilePaths.removeAll()
+  }
+
+  private func selectAllVisibleGames() {
+    let visible = filteredGames(from: model.games)
+    selectedFilePaths = Set(visible.map(\.filePath))
+  }
+
+  private func batchSetFavorite(_ favorite: Bool) {
+    var favDict = UserDefaults.standard.dictionary(forKey: "favorites_by_gameid") ?? [:]
+    let items = model.games.filter { selectedFilePaths.contains($0.filePath) }
+    for item in items where !item.gameID.isEmpty {
+      favDict[item.gameID] = favorite
+      item.isFavorite = favorite
+    }
+    UserDefaults.standard.set(favDict, forKey: "favorites_by_gameid")
+    favoritesVersion &+= 1
+    NotificationCenter.default.post(name: Notification.Name("FavoritesChanged"), object: nil)
+  }
+
+  private func batchSetPlatformOverride(_ category: LibraryPlatformCategory?) {
+    LibraryPlatformOverrideStore.batchSetOverride(category, forFilePaths: Array(selectedFilePaths))
+    platformOverridesVersion &+= 1
+    showSnackbar(L("Platform assignment updated"))
+  }
+
+  private func batchSetControllerOverride(_ override: TouchControllerOverride) {
+    let gameIDs = model.games
+      .filter { selectedFilePaths.contains($0.filePath) }
+      .map(\.gameID)
+      .filter { !$0.isEmpty }
+    GameProfiles.shared.batchSetControllerOverride(override, forGameIDs: gameIDs)
+    showSnackbar(L("Controller assignment updated"))
+  }
+
+  private func deleteLocalGame(_ item: TVGameItem) -> Bool {
+    guard let path = Self.localPath(for: item) else {
+      showSnackbar(L("Remote games cannot be deleted from the library."))
+      return false
+    }
+    do {
+      try FileManager.default.removeItem(atPath: path)
+      return true
+    } catch {
+      showSnackbar(String(format: L("Delete failed: %1"), error.localizedDescription))
+      return false
+    }
+  }
+
+  private func performBatchDelete(paths: Set<String>) {
+    var deleted = 0
+    var skippedRemote = 0
+    for path in paths {
+      guard let item = model.games.first(where: { $0.filePath == path }) else { continue }
+      if deleteLocalGame(item) { deleted += 1 } else { skippedRemote += 1 }
+    }
+    if deleted > 0 { model.rescan() }
+    if skippedRemote > 0 {
+      showSnackbar("\(skippedRemote) \(L("remote items could not be deleted."))")
+    } else if deleted > 0 {
+      showSnackbar("\(L("Deleted")) \(deleted) \(L("games."))")
+    }
+    exitSelectionMode()
+  }
+
+  private func showSnackbar(_ text: String) {
+    snackbarText = text
+    withAnimation { snackbarVisible = true }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+      withAnimation { snackbarVisible = false }
+    }
+  }
+
   private func favorites() -> [TVGameItem]? {
-    let favDict = UserDefaults.standard.dictionary(forKey: "favorites_by_gameid") as? [String: Any] ?? [:]
+    let favDict = UserDefaults.standard.dictionary(forKey: "favorites_by_gameid") ?? [:]
     let set = Set(favDict.compactMap { (k, v) in (v as? Bool) == true ? k : nil })
     guard !set.isEmpty else { return [] }
-    return model.games.filter { set.contains($0.gameID) }
+    var items = model.games.filter { set.contains($0.gameID) }
+    if showPlatformFilterBar, platformFilter != .all, !isSearching {
+      let overrides = platformOverrides
+      items = items.filter {
+        LibraryPlatformMapper.category(for: $0, override: overrides[$0.filePath]) == platformFilter
+      }
+    }
+    return items
   }
 
   private func toggleFavorite(for item: TVGameItem) {
@@ -2529,40 +2788,14 @@ extension TVLibraryView {
     }
     group.notify(queue: .main) {
       dropPreviewCount = pendingURLs.count
-      let files = expandAndFilterImportURLs(pendingURLs)
+      let files = ImportableFileTypes.filterImportURLs(pendingURLs)
       guard !files.isEmpty else {
         NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("No supported files to import")])
         return
       }
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Importing %1 files…"), files.count)])
-      for u in files { ImportFileManager.shared().importFile(at: u) }
+      ImportFileManager.shared().importFiles(at: files as [NSURL])
     }
-  }
-
-  private func expandAndFilterImportURLs(_ urls: [URL]) -> [URL] {
-    let allowed: Set<String> = ["iso","gcm","wbfs","gcz","ciso","rvz","wad","dol","elf"]
-    var results: [URL] = []
-    let fm = FileManager.default
-    for url in urls {
-      var isDir: ObjCBool = false
-      if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-        // Recurse directory
-        if let e = fm.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
-          for case let f as URL in e {
-            if allowed.contains(f.pathExtension.lowercased()) { results.append(f) }
-          }
-        }
-      } else {
-        let ext = url.pathExtension.lowercased()
-        if allowed.contains(ext) {
-          results.append(url)
-        } else if ext == "zip" {
-          // Pass zip to importer; if importer unzips, it will handle contents
-          results.append(url)
-        }
-      }
-    }
-    return results
   }
 }
 #endif
@@ -2603,17 +2836,11 @@ private extension View {
   }
 
   @ViewBuilder
-  func navigationDestinationItemCompat<Item: Identifiable, Destination: View>(item: Binding<Item?>,
-                                                                              @ViewBuilder destination: @escaping (Item) -> Destination) -> some View {
-    self.background(
-      NavigationLink(
-        destination: Group {
-          if let it = item.wrappedValue { destination(it) } else { EmptyView() }
-        },
-        isActive: Binding(get: { item.wrappedValue != nil }, set: { active in if !active { item.wrappedValue = nil } })
-      ) { EmptyView() }
-        .hidden()
-    )
+  func navigationDestinationItemCompat<Item: Identifiable & Hashable, Destination: View>(
+    item: Binding<Item?>,
+    @ViewBuilder destination: @escaping (Item) -> Destination
+  ) -> some View {
+    self.navigationDestination(item: item, destination: destination)
   }
 
   @ViewBuilder
@@ -2657,6 +2884,21 @@ struct iOS16NavigationStyleModifier: ViewModifier {
 #endif
   }
 }
+
+#if !os(tvOS)
+/// Applies navigationSubtitle on iOS 17+; no-op on earlier OS versions.
+private struct LibraryNavigationSubtitleModifier: ViewModifier {
+  let subtitle: String
+
+  func body(content: Content) -> some View {
+    if #available(iOS 26.0, *) {
+      content.navigationSubtitle(subtitle)
+    } else {
+      content
+    }
+  }
+}
+#endif
 
 #if os(iOS) || targetEnvironment(macCatalyst)
 /// Searchable modifier that adopts the iOS 26 "Liquid Glass" floating search

@@ -22,6 +22,11 @@ struct GameGridItem: View {
   let autoPreCacheProgress: Double
   let isAutoPreCaching: Bool
   let showSubtitles: Bool
+  /// When true, taps toggle selection instead of launching the game.
+  var selectionMode: Bool = false
+  var isSelected: Bool = false
+  var onToggleSelection: (() -> Void)?
+  var onEnterSelectionMode: (() -> Void)?
 
   @AppStorage("library_disable_artwork") private var disableArtwork: Bool = false
 
@@ -133,53 +138,40 @@ struct GameGridItem: View {
     return source.isCached(remoteItem)
   }
 
-  /// Detect if this is a GameCube or Wii game based on DiscIO::Platform
-  private var gameSystem: GameSystem {
-    // DiscIO::Platform enum values:
-    // GameCubeDisc = 0, WiiDisc = 1, WiiWAD = 2, ELFOrDOL = 3
-    switch item.platform {
-    case 0: // GameCubeDisc
-      #if DEBUG
-      print("DEBUG: Platform-detected GameCube game: '\(item.gameID)' for '\(item.title)'")
-      #endif
-      return .gamecube
+  /// Cover template system derived from DiscIO::Platform via LibraryPlatformMapper.
+  private var gameSystem: LibraryGameSystem {
+    LibraryGameSystem.from(item: item)
+  }
 
-    case 1, 2: // WiiDisc, WiiWAD
-      #if DEBUG
-      print("DEBUG: Platform-detected Wii game: '\(item.gameID)' for '\(item.title)' (platform: \(item.platform))")
-      #endif
-      return .wii
-
-    case 3: // ELFOrDOL
-      // ELF/DOL files can be either GameCube or Wii, but are typically GameCube homebrew
-      #if DEBUG
-      print("DEBUG: Platform-detected ELF/DOL: '\(item.gameID)' for '\(item.title)' - defaulting to GameCube")
-      #endif
-      return .gamecube
-
-    default:
-      // Unknown platform, default to GameCube as fallback
-      #if DEBUG
-      print("DEBUG: Unknown platform \(item.platform) for '\(item.gameID)' '\(item.title)' - defaulting to GameCube")
-      #endif
-      return .gamecube
+  /// Selection chrome overlaid on the card cover.
+  @ViewBuilder
+  private var selectionOverlay: some View {
+    if selectionMode {
+      ZStack(alignment: .topLeading) {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .stroke(isSelected ? Color.accentColor : Color.white.opacity(0.35), lineWidth: isSelected ? 4 : 2)
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+          .font(.system(size: 22, weight: .semibold))
+          .foregroundStyle(isSelected ? Color.accentColor : Color.white.opacity(0.8))
+          .padding(10)
+          .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+      }
+      .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
+      .allowsHitTesting(false)
     }
   }
 
-  private enum GameSystem {
-    case gamecube, wii
-
-    var templateImageName: String {
-      switch self {
-      #if APPSTORE
-      case .gamecube: return "GCCoverTemplate-NoLogo"
-      case .wii: return "WiiCoverTemplate-NoLogo"
-      #else
-      case .gamecube: return "GCCoverTemplate"
-      case .wii: return "WiiCoverTemplate"
-      #endif
-      }
+  private func handlePrimaryAction() {
+    if selectionMode {
+      onToggleSelection?()
+    } else {
+      select(item)
     }
+  }
+
+  private func handleLongPress() {
+    onEnterSelectionMode?()
+    onToggleSelection?()
   }
 
   /// Check if we're using the default placeholder cover
@@ -216,7 +208,7 @@ struct GameGridItem: View {
       RoundedRectangle(cornerRadius: 16, style: .continuous)
         .fill(
           RadialGradient(
-            colors: gameSystem == .gamecube ?
+            colors: gameSystem == .gameCube ?
               [
                 Color(red: 0.35, green: 0.25, blue: 0.75), // GameCube purple
                 Color(red: 0.25, green: 0.15, blue: 0.65),
@@ -259,7 +251,7 @@ struct GameGridItem: View {
         )
 
       // Authentic GameCube disc case details
-      if gameSystem == .gamecube {
+      if gameSystem == .gameCube {
         VStack {
           // Top edge highlight
           HStack {
@@ -330,7 +322,7 @@ struct GameGridItem: View {
       //              .modifier(iOS16TrackingModifier(tracking: 2))
       //              .shadow(color: .black.opacity(0.8), radius: 1, x: 0, y: 1)
 
-      //            Text(gameSystem == .gamecube ? "GAMECUBE" : "Wii")
+      //            Text(gameSystem == .gameCube ? "GAMECUBE" : "Wii")
       //              .font(.system(
       //                size: screenScaledFontSize(base: 7),
       //                weight: .bold,
@@ -372,7 +364,7 @@ struct GameGridItem: View {
           .lineLimit(3)
           .minimumScaleFactor(0.6)
           .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 2)
-          .shadow(color: gameSystem == .gamecube ? .purple.opacity(0.5) : .blue.opacity(0.5),
+          .shadow(color: gameSystem == .gameCube ? .purple.opacity(0.5) : .blue.opacity(0.5),
                   radius: 8, x: 0, y: 0)
 
         // Enhanced Game ID with authentic styling
@@ -679,8 +671,12 @@ struct GameGridItem: View {
         if focused { focusedFilePath = item.filePath } else if focusedFilePath == item.filePath { focusedFilePath = nil }
       }
     }
-    .onTapGesture { select(item) }
-    .onPlayPauseCommand { select(item) }
+    .overlay(selectionOverlay)
+    .onTapGesture { handlePrimaryAction() }
+    .onLongPressGesture(minimumDuration: 0.5) { handleLongPress() }
+    .onPlayPauseCommand {
+      if selectionMode { handlePrimaryAction() } else { select(item) }
+    }
     .contextMenu {
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
@@ -768,7 +764,7 @@ struct GameGridItem: View {
     }
     .zIndex(isFocused ? 1 : 0)
     #else
-    Button(action: { select(item) }) {
+    Button(action: { handlePrimaryAction() }) {
       VStack(alignment: .leading, spacing: 12) {
         ZStack(alignment: .topTrailing) {
           // Show templated cover if using placeholder, otherwise show real cover with skeumorphism
@@ -879,6 +875,7 @@ struct GameGridItem: View {
     }
     .buttonStyle(.plain)
     .scaleEffect(1.0)
+    .overlay(selectionOverlay)
     .overlay(
       // Subtle iOS press highlight
       RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -886,12 +883,9 @@ struct GameGridItem: View {
         .opacity(0)
         .animation(.easeInOut(duration: 0.15), value: UUID())
     )
-    .onTapGesture {
-      // Haptic feedback for premium feel
-      let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-      impactFeedback.impactOccurred()
-      select(item)
-    }
+    .simultaneousGesture(
+      LongPressGesture(minimumDuration: 0.5).onEnded { _ in handleLongPress() }
+    )
     .contextMenu {
       // Align with tvOS context menu
       Button(action: { showProperties(item) }) {
