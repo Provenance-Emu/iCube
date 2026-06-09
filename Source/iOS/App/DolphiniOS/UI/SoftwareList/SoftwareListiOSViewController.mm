@@ -22,6 +22,7 @@
 #import "GameFilePtrWrapper.h"
 #import "ImportFileManager.h"
 #import "LocalizationUtil.h"
+#import "Swift.h"
 
 typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
   DOLSoftwareListDocumentPickerTypeImportSoftware,
@@ -144,17 +145,13 @@ typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
 
 - (void)openDocumentPickerWithSoftwareContentTypesAndPickerType:(DOLSoftwareListDocumentPickerType)pickerType {
 #if TARGET_OS_IOS
-  NSArray<UTType*>* types = @[
-    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.generic-software"],
-    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.gamecube-software"],
-    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.wii-software"],
-    [UTType typeWithIdentifier:@"public.iso-image"],
-    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.rvz-image"],
-    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.dol-executable"],
-    [UTType typeWithIdentifier:@"me.oatmealdome.dolphinios.elf-executable"],
-    [UTType typeWithIdentifier:@"public.archive"],
-    [UTType typeWithIdentifier:@"public.data"]
-  ];
+  NSMutableArray<UTType*>* types = [NSMutableArray array];
+  for (NSString* identifier in [DOLImportableFileTypes documentPickerContentTypeIdentifiers]) {
+    UTType* type = [UTType typeWithIdentifier:identifier];
+    if (type != nil) {
+      [types addObject:type];
+    }
+  }
 
   [self openDocumentPickerWithContentTypes:types pickerType:pickerType];
 #else
@@ -165,18 +162,18 @@ typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
 - (void)openDocumentPickerWithContentTypes:(NSArray<UTType*>*)contentTypes pickerType:(DOLSoftwareListDocumentPickerType)pickerType {
 #if TARGET_OS_IOS
   UIDocumentPickerViewController* pickerController = nil;
-  if (@available(iOS 14.0, *)) {
+//  if (@available(iOS 14.0, *)) {
     pickerController = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:contentTypes asCopy:YES];
-  } else {
-    NSMutableArray<NSString*>* legacy = [NSMutableArray arrayWithCapacity:contentTypes.count];
-    for (UTType* t in contentTypes) {
-      [legacy addObject:t.identifier];
-    }
-    pickerController = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:legacy inMode:UIDocumentPickerModeImport];
-  }
+//  } else {
+//    NSMutableArray<NSString*>* legacy = [NSMutableArray arrayWithCapacity:contentTypes.count];
+//    for (UTType* t in contentTypes) {
+//      [legacy addObject:t.identifier];
+//    }
+//    pickerController = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:legacy inMode:UIDocumentPickerModeImport];
+//  }
   pickerController.delegate = self;
   pickerController.modalPresentationStyle = UIModalPresentationPageSheet;
-  pickerController.allowsMultipleSelection = false;
+  pickerController.allowsMultipleSelection = (pickerType == DOLSoftwareListDocumentPickerTypeImportSoftware);
 
   _pickerType = pickerType;
 
@@ -206,7 +203,7 @@ typedef NS_ENUM(NSInteger, DOLSoftwareListDocumentPickerType) {
   };
 
   if (_pickerType == DOLSoftwareListDocumentPickerTypeImportSoftware) {
-    [[ImportFileManager shared] importFileAtUrl:urls[0]];
+    [[ImportFileManager shared] importFilesAtUrls:urls];
   } else if (_pickerType == DOLSoftwareListDocumentPickerTypeOpenExternal) {
     NSURL* url = urls[0];
 
