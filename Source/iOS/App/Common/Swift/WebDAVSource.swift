@@ -477,8 +477,8 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     }
 
     private func hasSupportedExtension(_ url: URL) -> Bool {
-        let exts = ["dol","iso","zip","nkit","cso","img","rvz","wia","gcz","wad","elf","gcm","tgc","wbfs","ciso","png","jpg"]
-        return exts.contains(url.pathExtension.lowercased())
+        ImportableFileTypes.isImportableFile(url)
+            || ImportableFileTypes.webDAVCoverExtensions.contains(url.pathExtension.lowercased())
     }
 
     private func enumerateWebDAV() async throws -> [RemoteLibraryItem] {
@@ -978,6 +978,46 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                 break
             }
         }
+    }
+}
+
+// MARK: - Remote file operations
+
+extension WebDAVSource {
+    private var fileOperations: WebDAVFileOperations {
+        WebDAVFileOperations(baseURL: baseURL, username: username, password: password)
+    }
+
+    /// Rename a remote item by MOVE within its parent directory.
+    func renameItem(at source: URL, to newName: String) async throws {
+        let destination = source.deletingLastPathComponent().appendingPathComponent(newName)
+        try await fileOperations.moveItem(from: source, to: destination)
+    }
+
+    /// Copy a remote item to `destination`.
+    func copyItem(from source: URL, to destination: URL, overwrite: Bool = true) async throws {
+        try await fileOperations.copyItem(from: source, to: destination, overwrite: overwrite)
+    }
+
+    /// Move a remote item to `destination`.
+    func moveItem(from source: URL, to destination: URL, overwrite: Bool = true) async throws {
+        try await fileOperations.moveItem(from: source, to: destination, overwrite: overwrite)
+    }
+
+    /// Delete a remote item.
+    func deleteItem(at url: URL) async throws {
+        try await fileOperations.deleteItem(at: url)
+    }
+
+    /// Create a folder under `parent` with `name`.
+    func createFolder(named name: String, under parent: URL) async throws {
+        let folderURL = parent.appendingPathComponent(name, isDirectory: true)
+        try await fileOperations.createCollection(at: folderURL)
+    }
+
+    /// Upload bytes to a remote path via PUT.
+    func uploadFile(_ data: Data, to url: URL, overwrite: Bool = true) async throws {
+        try await fileOperations.putFile(data, at: url, overwrite: overwrite)
     }
 }
 

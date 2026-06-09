@@ -61,6 +61,10 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
     private let server: ROMUploadServer
     private var rescanWorkItem: DispatchWorkItem?
     private var pendingUploadCount = 0
+    /// Optional hook for the app target to post-process uploads (e.g. archive extraction).
+    private var uploadPostProcessor: ((String) -> Void)?
+    /// Optional hook returning custom snackbar text for a debounced upload burst (`nil` → default).
+    private var uploadSummaryProvider: ((Int) -> String?)?
 
     // MARK: Init
 
@@ -158,9 +162,34 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
     /// resolves.)
     @objc public var bonjourSeverURL: URL? { server.bonjourServerURL }
 
+    /// Register a block invoked on a background queue for each completed upload path
+    /// before the debounced library rescan runs (used for archive extraction).
+    @objc public func setUploadPostProcessor(_ block: @escaping (String) -> Void) {
+        uploadPostProcessor = block
+    }
+
+    /// Register a block returning custom snackbar text for a debounced upload burst.
+    /// Return `nil` to use the default "Upload received" message.
+    @objc public func setUploadSummaryProvider(_ block: @escaping (Int) -> String?) {
+        uploadSummaryProvider = block
+    }
+
     // MARK: - Import / rescan bridge
 
     @objc private func onUploadCompleted(_ note: Notification) {
+        let path = note.userInfo?["filePath"] as? String
+        let processor = uploadPostProcessor
+
+        if let path, let processor {
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                processor(path)
+                DispatchQueue.main.async {
+                    self?.scheduleRescan()
+                }
+            }
+            return
+        }
+
         // NotificationCenter delivers on the poster's thread (the server's
         // background queue). Marshal all debounce state onto main so it isn't
         // raced against the work item, which reads/zeroes it on main.
@@ -188,7 +217,8 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
             )
 
             // Surface a toast via iCube's snackbar channel.
-            let text = count == 1 ? "Upload received" : "\(count) uploads received"
+            let defaultText = count == 1 ? "Upload received" : "\(count) uploads received"
+            let text = self.uploadSummaryProvider?(count) ?? defaultText
             NotificationCenter.default.post(
                 name: Notification.Name("DOLShowSnackbar"),
                 object: nil, userInfo: ["text": text]

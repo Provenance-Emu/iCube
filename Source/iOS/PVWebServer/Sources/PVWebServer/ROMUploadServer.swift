@@ -29,6 +29,45 @@ import Network
 import UIKit
 #endif
 
+// MARK: - SerialFileWriter
+
+/// Offloads `FileHandle` writes to a per-file serial queue so `NWConnection.receive`
+/// can schedule the next socket read without waiting on flash I/O.
+private final class SerialFileWriter: @unchecked Sendable {
+    private let handle: FileHandle
+    private let queue: DispatchQueue
+
+    init?(at url: URL) {
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        guard let handle = FileHandle(forWritingAtPath: url.path) else { return nil }
+        self.handle = handle
+        self.queue = DispatchQueue(
+            label: "org.dolphin.iCube.uploadserver.disk.\(UUID().uuidString)",
+            qos: .utility
+        )
+    }
+
+    init(handle: FileHandle) {
+        self.handle = handle
+        self.queue = DispatchQueue(
+            label: "org.dolphin.iCube.uploadserver.disk.\(UUID().uuidString)",
+            qos: .utility
+        )
+    }
+
+    func write(_ data: Data) {
+        guard !data.isEmpty else { return }
+        queue.async { self.handle.write(data) }
+    }
+
+    func finalize(completion: @escaping @Sendable () -> Void) {
+        queue.async {
+            self.handle.closeFile()
+            DispatchQueue.global(qos: .userInitiated).async(execute: completion)
+        }
+    }
+}
+
 // MARK: - ROMUploadServer
 
 /// A lightweight HTTP + WebDAV server built on `NWListener` for receiving ROM /
@@ -53,6 +92,17 @@ final class ROMUploadServer: @unchecked Sendable {
         let handler: CustomHandlerBlock
     }
 
+    private struct ConnectionContext {
+        let isWebDAV: Bool
+        /// Serializes receive/send callbacks for this socket (Finder pipelines on keep-alive).
+        let ioQueue: DispatchQueue
+        var activeRequest: HTTPRequest?
+        /// Prevents concurrent `NWConnection.receive` on one socket (POSIX 96 if doubled).
+        var isReceiving: Bool = false
+        var readClosed: Bool = false
+        var pendingPipelined: Data = Data()
+    }
+
     // MARK: - Configuration
 
     let httpPort: UInt16
@@ -64,10 +114,28 @@ final class ROMUploadServer: @unchecked Sendable {
 
     // MARK: - State
 
+    private static let readChunkSize = 1_048_576
+    /// Stream PROPFIND / file bodies above this size instead of one giant `send`.
+    private static let streamBodyThreshold = 256 * 1024
+
+    /// Background enumeration + XML assembly for PROPFIND (never blocks socket I/O).
+    private static let diskIOQueue = DispatchQueue(
+        label: "org.dolphin.iCube.uploadserver.disk",
+        qos: .utility
+    )
+
+    private static let webDAVISO8601Formatter: ISO8601DateFormatter = {
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime]
+        return fmt
+    }()
+
     private var httpListener: NWListener?
     private var webdavListener: NWListener?
     private var activeConnections = [ObjectIdentifier: NWConnection]()
-    private let queue = DispatchQueue(label: "org.dolphin.iCube.uploadserver", qos: .userInitiated)
+    private var connectionContexts = [ObjectIdentifier: ConnectionContext]()
+    /// Serial queue for listener accept/state only — each connection gets its own `ioQueue`.
+    private let listenerQueue = DispatchQueue(label: "org.dolphin.iCube.uploadserver.listener", qos: .userInitiated)
     private let lock = NSLock()
     private var customRoutes: [CustomRoute] = []
     private var cachedIPAddress: String?
@@ -129,6 +197,15 @@ final class ROMUploadServer: @unchecked Sendable {
                                                   withIntermediateDirectories: true)
     }
 
+    private static func makeTCPParameters() -> NWParameters {
+        let params = NWParameters.tcp
+        params.allowLocalEndpointReuse = true
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.noDelay = true
+        params.defaultProtocolStack.transportProtocol = tcpOptions
+        return params
+    }
+
     // MARK: - Start / Stop
 
     /// Start both HTTP and WebDAV listeners. Waits until both reach `.ready`
@@ -137,16 +214,12 @@ final class ROMUploadServer: @unchecked Sendable {
     func start() async throws {
         guard !isHTTPRunning else { return }
 
-        let httpParams = NWParameters.tcp
-        httpParams.allowLocalEndpointReuse = true
-        let httpListener = try NWListener(using: httpParams, on: NWEndpoint.Port(rawValue: httpPort)!)
+        let httpListener = try NWListener(using: Self.makeTCPParameters(), on: NWEndpoint.Port(rawValue: httpPort)!)
         httpListener.newConnectionHandler = { [weak self] conn in
             self?.handleNewConnection(conn, isWebDAV: false)
         }
 
-        let davParams = NWParameters.tcp
-        davParams.allowLocalEndpointReuse = true
-        let davListener = try NWListener(using: davParams, on: NWEndpoint.Port(rawValue: webDAVPort)!)
+        let davListener = try NWListener(using: Self.makeTCPParameters(), on: NWEndpoint.Port(rawValue: webDAVPort)!)
         davListener.newConnectionHandler = { [weak self] conn in
             self?.handleNewConnection(conn, isWebDAV: true)
         }
@@ -176,7 +249,7 @@ final class ROMUploadServer: @unchecked Sendable {
 
         // Start HTTP listener and wait for .ready
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            var resumed = false
+            nonisolated(unsafe) var resumed = false
             httpListener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
@@ -193,13 +266,13 @@ final class ROMUploadServer: @unchecked Sendable {
                     break
                 }
             }
-            httpListener.start(queue: self.queue)
+            httpListener.start(queue: self.listenerQueue)
         }
         self.httpListener = httpListener
 
         // Start WebDAV listener and wait for .ready
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            var resumed = false
+            nonisolated(unsafe) var resumed = false
             davListener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
@@ -216,9 +289,18 @@ final class ROMUploadServer: @unchecked Sendable {
                     break
                 }
             }
-            davListener.start(queue: self.queue)
+            davListener.start(queue: self.listenerQueue)
         }
         self.webdavListener = davListener
+
+        let root = romsDirectory
+        Self.diskIOQueue.async {
+            _ = try? FileManager.default.contentsOfDirectory(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )
+        }
 
         NSLog("[ROMUploadServer] started — HTTP :\(httpPort), WebDAV :\(webDAVPort)")
     }
@@ -227,6 +309,7 @@ final class ROMUploadServer: @unchecked Sendable {
         lock.lock()
         let conns = activeConnections
         activeConnections.removeAll()
+        connectionContexts.removeAll()
         lock.unlock()
 
         for conn in conns.values { conn.cancel() }
@@ -262,73 +345,179 @@ final class ROMUploadServer: @unchecked Sendable {
     // MARK: - Connection Handling
 
     private func handleNewConnection(_ connection: NWConnection, isWebDAV: Bool) {
+        let connID = ObjectIdentifier(connection)
+        let ioQueue = DispatchQueue(label: "org.dolphin.iCube.uploadserver.conn.\(connID)")
         lock.lock()
-        activeConnections[ObjectIdentifier(connection)] = connection
+        activeConnections[connID] = connection
+        connectionContexts[connID] = ConnectionContext(isWebDAV: isWebDAV, ioQueue: ioQueue, activeRequest: nil)
         lock.unlock()
 
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .cancelled, .failed:
                 self?.lock.lock()
-                self?.activeConnections.removeValue(forKey: ObjectIdentifier(connection))
+                self?.activeConnections.removeValue(forKey: connID)
+                self?.connectionContexts.removeValue(forKey: connID)
                 self?.lock.unlock()
             default:
                 break
             }
         }
-        connection.start(queue: queue)
-        receiveHTTPRequest(on: connection, isWebDAV: isWebDAV, accumulated: Data())
+        connection.start(queue: ioQueue)
+        ioQueue.async { [weak self] in
+            self?.scheduleReceive(on: connection, isWebDAV: isWebDAV, accumulated: Data())
+        }
     }
 
-    private func receiveHTTPRequest(on connection: NWConnection,
-                                    isWebDAV: Bool,
-                                    accumulated: Data) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
+    /// Arm a single `receive` or process bytes already buffered (pipelined keep-alive).
+    private func scheduleReceive(on connection: NWConnection,
+                                   isWebDAV: Bool,
+                                   accumulated: Data) {
+        if !accumulated.isEmpty {
+            processIncomingBuffer(on: connection, isWebDAV: isWebDAV, buffer: accumulated)
+            return
+        }
+
+        let connID = ObjectIdentifier(connection)
+        lock.lock()
+        guard var ctx = connectionContexts[connID], !ctx.readClosed else {
+            lock.unlock()
+            connection.cancel()
+            return
+        }
+        if ctx.isReceiving {
+            lock.unlock()
+            ctx.ioQueue.asyncAfter(deadline: .now() + 0.01) { [weak self] in
+                self?.scheduleReceive(on: connection, isWebDAV: isWebDAV, accumulated: accumulated)
+            }
+            return
+        }
+        ctx.isReceiving = true
+        connectionContexts[connID] = ctx
+        lock.unlock()
+
+        connection.receive(minimumIncompleteLength: 1, maximumLength: Self.readChunkSize) {
             [weak self] data, _, isComplete, error in
             guard let self else { return }
 
+            let connID = ObjectIdentifier(connection)
+            self.lock.lock()
+            if var ctx = self.connectionContexts[connID] {
+                ctx.isReceiving = false
+                if isComplete { ctx.readClosed = true }
+                self.connectionContexts[connID] = ctx
+            }
+            self.lock.unlock()
+
             if let error {
-                NSLog("[ROMUploadServer] receive error: \(error)")
+                let ns = error as NSError
+                let posixCode = ns.domain == NSPOSIXErrorDomain ? ns.code
+                    : (ns.userInfo["POSIXErrorCode"] as? Int)
+                if posixCode != 54 && posixCode != 96 {
+                    NSLog("[ROMUploadServer] receive error: \(error)")
+                }
                 connection.cancel()
                 return
             }
 
-            var buffer = accumulated
+            var buffer = Data()
             if let data { buffer.append(data) }
+            self.processIncomingBuffer(on: connection, isWebDAV: isWebDAV, buffer: buffer)
+        }
+    }
 
-            let headerEnd = buffer.findRange(of: Data([0x0D, 0x0A, 0x0D, 0x0A]))
-            if let headerEnd {
-                let headersData = buffer[buffer.startIndex..<headerEnd.lowerBound]
-                let bodyStart = buffer[headerEnd.upperBound...]
+    /// Parse buffered bytes into HTTP requests; may leave pipelined tail for keep-alive.
+    private func processIncomingBuffer(on connection: NWConnection,
+                                       isWebDAV: Bool,
+                                       buffer: Data) {
+        let headerEnd = buffer.findRange(of: Data([0x0D, 0x0A, 0x0D, 0x0A]))
+        if let headerEnd {
+            let headersData = buffer[buffer.startIndex..<headerEnd.lowerBound]
+            let bodyStart = buffer[headerEnd.upperBound...]
 
-                guard let headersStr = String(data: headersData, encoding: .utf8),
-                      let request = HTTPRequest.parse(headersStr) else {
-                    self.sendResponse(on: connection, status: 400,
-                                      statusText: "Bad Request", body: "Bad Request")
-                    return
-                }
+            guard let headersStr = String(data: headersData, encoding: .utf8),
+                  let request = HTTPRequest.parse(headersStr) else {
+                sendResponse(on: connection, status: 400, statusText: "Bad Request", body: "Bad Request",
+                             isWebDAV: isWebDAV, forceClose: true)
+                return
+            }
 
-                let contentLength = request.contentLength
+            let connID = ObjectIdentifier(connection)
+            let contentLength = request.contentLength
 
-                if contentLength > 0 && bodyStart.count < contentLength {
-                    self.handleRequestWithBody(
-                        on: connection, request: request, isWebDAV: isWebDAV,
-                        initialBody: Data(bodyStart),
-                        remaining: contentLength - bodyStart.count
-                    )
-                } else {
-                    let body = contentLength > 0 ? Data(bodyStart.prefix(contentLength)) : Data()
-                    self.routeRequest(on: connection, request: request,
-                                      body: body, isWebDAV: isWebDAV)
-                }
-            } else if buffer.count > 64 * 1024 {
-                self.sendResponse(on: connection, status: 413,
-                                  statusText: "Request Entity Too Large",
-                                  body: "Headers too large")
-            } else if isComplete {
-                connection.cancel()
+            lock.lock()
+            if var ctx = connectionContexts[connID] {
+                ctx.activeRequest = request
+                connectionContexts[connID] = ctx
+            }
+            lock.unlock()
+
+            if request.isChunked {
+                beginChunkedBody(on: connection, request: request, isWebDAV: isWebDAV,
+                                 initial: Data(bodyStart))
+                return
+            }
+
+            let headerByteCount = buffer.distance(from: buffer.startIndex, to: headerEnd.upperBound)
+            let totalConsumed = headerByteCount + contentLength
+            let leftover: Data = buffer.count > totalConsumed
+                ? Data(buffer.dropFirst(totalConsumed))
+                : Data()
+
+            lock.lock()
+            if var ctx = connectionContexts[connID] {
+                if !leftover.isEmpty { ctx.pendingPipelined = leftover }
+                connectionContexts[connID] = ctx
+            }
+            lock.unlock()
+
+            if contentLength > 0 && bodyStart.count < contentLength {
+                handleRequestWithBody(
+                    on: connection, request: request, isWebDAV: isWebDAV,
+                    initialBody: Data(bodyStart),
+                    remaining: contentLength - bodyStart.count
+                )
             } else {
-                self.receiveHTTPRequest(on: connection, isWebDAV: isWebDAV, accumulated: buffer)
+                let body = contentLength > 0 ? Data(bodyStart.prefix(contentLength)) : Data()
+                routeRequest(on: connection, request: request, body: body, isWebDAV: isWebDAV)
+            }
+        } else if buffer.count > 64 * 1024 {
+            sendResponse(on: connection, status: 413, statusText: "Request Entity Too Large",
+                         body: "Headers too large", isWebDAV: isWebDAV, forceClose: true)
+        } else if buffer.isEmpty {
+            connection.cancel()
+        } else {
+            let connID = ObjectIdentifier(connection)
+            lock.lock()
+            let canRead = connectionContexts[connID]?.isReceiving != true
+                && connectionContexts[connID]?.readClosed != true
+            lock.unlock()
+            if canRead {
+                lock.lock()
+                if var ctx = connectionContexts[connID] {
+                    ctx.isReceiving = true
+                    connectionContexts[connID] = ctx
+                }
+                lock.unlock()
+                connection.receive(minimumIncompleteLength: 1, maximumLength: Self.readChunkSize) {
+                    [weak self] data, _, isComplete, error in
+                    guard let self else { return }
+                    let connID = ObjectIdentifier(connection)
+                    self.lock.lock()
+                    if var ctx = self.connectionContexts[connID] {
+                        ctx.isReceiving = false
+                        if isComplete { ctx.readClosed = true }
+                        self.connectionContexts[connID] = ctx
+                    }
+                    self.lock.unlock()
+                    if error != nil || isComplete {
+                        connection.cancel()
+                        return
+                    }
+                    var grown = buffer
+                    if let data { grown.append(data) }
+                    self.processIncomingBuffer(on: connection, isWebDAV: isWebDAV, buffer: grown)
+                }
             }
         }
     }
@@ -349,8 +538,15 @@ final class ROMUploadServer: @unchecked Sendable {
         }
 
         if isWebDAV && request.method == "PUT" {
-            streamWebDAVPut(on: connection, request: request,
-                            initialBody: initialBody, remaining: remaining)
+            let beginPut: () -> Void = { [weak self] in
+                self?.streamWebDAVPut(on: connection, request: request,
+                                      initialBody: initialBody, remaining: remaining)
+            }
+            if request.expectsContinue {
+                sendContinue(on: connection, isWebDAV: isWebDAV, request: request, then: beginPut)
+            } else {
+                beginPut()
+            }
             return
         }
 
@@ -368,7 +564,7 @@ final class ROMUploadServer: @unchecked Sendable {
         func readRemaining(_ bytesLeft: Int) {
             if bytesLeft <= 0 { completion(buffer); return }
             connection.receive(minimumIncompleteLength: 1,
-                               maximumLength: min(bytesLeft, 65536)) { data, _, isComplete, error in
+                               maximumLength: min(bytesLeft, Self.readChunkSize)) { data, _, isComplete, error in
                 if let data { buffer.append(data) }
                 let newLeft = bytesLeft - (data?.count ?? 0)
                 if newLeft <= 0 || isComplete || error != nil {
@@ -379,6 +575,228 @@ final class ROMUploadServer: @unchecked Sendable {
             }
         }
         readRemaining(remaining)
+    }
+
+    // MARK: - Chunked request bodies
+
+    /// Finder WebDAV PUT omits Content-Length and sends `Transfer-Encoding: chunked`.
+    private func beginChunkedBody(on connection: NWConnection,
+                                  request: HTTPRequest,
+                                  isWebDAV: Bool,
+                                  initial: Data) {
+        if isWebDAV && request.method == "PUT" {
+            let beginPut: () -> Void = { [weak self] in
+                self?.streamChunkedWebDAVPut(on: connection, request: request, initial: initial)
+            }
+            if request.expectsContinue {
+                sendContinue(on: connection, isWebDAV: isWebDAV, request: request, then: beginPut)
+            } else {
+                beginPut()
+            }
+            return
+        }
+
+        accumulateChunkedBody(on: connection, initial: initial) { [weak self] body, trailing in
+            guard let self else { return }
+            if !trailing.isEmpty {
+                let connID = ObjectIdentifier(connection)
+                self.lock.lock()
+                if var ctx = self.connectionContexts[connID] {
+                    ctx.pendingPipelined = trailing
+                    self.connectionContexts[connID] = ctx
+                }
+                self.lock.unlock()
+            }
+            self.routeRequest(on: connection, request: request, body: body, isWebDAV: isWebDAV)
+        }
+    }
+
+    /// Incremental `Transfer-Encoding: chunked` decoder (RFC 9112 §7.1).
+    private final class ChunkedBodyReader: @unchecked Sendable {
+        enum Event {
+            case payload(Data)
+            case complete(trailing: Data)
+            case invalid
+        }
+
+        private var buffer = Data()
+        private var chunkRemaining = 0
+        private var finished = false
+
+        func feed(_ incoming: Data) -> [Event] {
+            guard !finished else { return [] }
+            if !incoming.isEmpty { buffer.append(incoming) }
+            var events: [Event] = []
+
+            parsing: while !finished {
+                if chunkRemaining > 0 {
+                    guard buffer.count >= chunkRemaining + 2 else { break parsing }
+                    let payload = Data(buffer.prefix(chunkRemaining))
+                    buffer.removeFirst(chunkRemaining + 2)
+                    chunkRemaining = 0
+                    events.append(.payload(payload))
+                    continue
+                }
+
+                guard let lineEnd = buffer.findRange(of: Data([0x0D, 0x0A])) else { break parsing }
+                let lineData = buffer[buffer.startIndex..<lineEnd.lowerBound]
+                guard let line = String(data: lineData, encoding: .utf8) else {
+                    finished = true
+                    events.append(.invalid)
+                    break
+                }
+                buffer.removeSubrange(buffer.startIndex..<lineEnd.upperBound)
+
+                let sizeToken = line.split(separator: ";", maxSplits: 1).first
+                    .map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""
+                guard let size = Int(sizeToken, radix: 16), size >= 0 else {
+                    finished = true
+                    events.append(.invalid)
+                    break
+                }
+
+                if size == 0 {
+                    finished = true
+                    if buffer.starts(with: Data([0x0D, 0x0A])) {
+                        buffer.removeFirst(2)
+                    } else if let trailerEnd = buffer.findRange(of: Data([0x0D, 0x0A, 0x0D, 0x0A])) {
+                        buffer.removeSubrange(buffer.startIndex..<trailerEnd.upperBound)
+                    } else if !buffer.isEmpty {
+                        break parsing
+                    }
+                    events.append(.complete(trailing: buffer))
+                    buffer = Data()
+                    break
+                }
+                chunkRemaining = size
+            }
+            return events
+        }
+    }
+
+    private func accumulateChunkedBody(on connection: NWConnection,
+                                       initial: Data,
+                                       completion: @escaping (Data, Data) -> Void) {
+        let reader = ChunkedBodyReader()
+        var body = Data()
+
+        func process(_ events: [ChunkedBodyReader.Event]) -> Bool {
+            for event in events {
+                switch event {
+                case .payload(let chunk):
+                    body.append(chunk)
+                case .complete(let trailing):
+                    completion(body, trailing)
+                    return true
+                case .invalid:
+                    completion(body, Data())
+                    return true
+                }
+            }
+            return false
+        }
+
+        if process(reader.feed(initial)) { return }
+
+        func readMore() {
+            connection.receive(minimumIncompleteLength: 1, maximumLength: Self.readChunkSize) {
+                data, _, isComplete, error in
+                if error != nil {
+                    completion(body, Data())
+                    return
+                }
+                let events = reader.feed(data ?? Data())
+                if process(events) { return }
+                if isComplete {
+                    completion(body, Data())
+                    return
+                }
+                readMore()
+            }
+        }
+        readMore()
+    }
+
+    private func streamChunkedWebDAVPut(on connection: NWConnection,
+                                       request: HTTPRequest,
+                                       initial: Data) {
+        let rawPath = String(request.path.dropFirst())
+        let decoded = rawPath.removingPercentEncoding ?? rawPath
+        guard let target = resolvedPath(decoded, within: romsDirectory) else {
+            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden",
+                               request: request, forceClose: true)
+            return
+        }
+
+        let parent = target.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: target.path, contents: nil)
+        guard let handle = FileHandle(forWritingAtPath: target.path) else {
+            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
+                               body: "Cannot create file", request: request, forceClose: true)
+            return
+        }
+
+        postUploadStarted(path: target.path)
+        let writer = SerialFileWriter(handle: handle)
+        let reader = ChunkedBodyReader()
+
+        let finishSuccess: (Data) -> Void = { [weak self] trailing in
+            guard let self else { return }
+            writer.finalize {
+                self.postUploadCompleted(filePath: target.path)
+                if !trailing.isEmpty {
+                    let connID = ObjectIdentifier(connection)
+                    self.lock.lock()
+                    if var ctx = self.connectionContexts[connID] {
+                        ctx.pendingPipelined = trailing
+                        self.connectionContexts[connID] = ctx
+                    }
+                    self.lock.unlock()
+                }
+                self.sendWebDAVResponse(on: connection, status: 201, statusText: "Created", request: request)
+            }
+        }
+
+        func handleEvents(_ events: [ChunkedBodyReader.Event]) -> Bool {
+            for event in events {
+                switch event {
+                case .payload(let chunk):
+                    if !chunk.isEmpty { writer.write(chunk) }
+                case .complete(let trailing):
+                    finishSuccess(trailing)
+                    return true
+                case .invalid:
+                    sendWebDAVResponse(on: connection, status: 400, statusText: "Bad Request",
+                                       body: "Invalid chunked body", request: request, forceClose: true)
+                    return true
+                }
+            }
+            return false
+        }
+
+        if handleEvents(reader.feed(initial)) { return }
+
+        func readMore() {
+            connection.receive(minimumIncompleteLength: 1, maximumLength: Self.readChunkSize) {
+                [weak self] data, _, isComplete, error in
+                guard let self else { return }
+                if error != nil {
+                    sendWebDAVResponse(on: connection, status: 400, statusText: "Bad Request",
+                                       request: request, forceClose: true)
+                    return
+                }
+                let events = reader.feed(data ?? Data())
+                if handleEvents(events) { return }
+                if isComplete {
+                    sendWebDAVResponse(on: connection, status: 400, statusText: "Bad Request",
+                                       body: "Truncated chunked body", request: request, forceClose: true)
+                    return
+                }
+                readMore()
+            }
+        }
+        readMore()
     }
 
     // MARK: - Request Routing
@@ -410,18 +828,22 @@ final class ROMUploadServer: @unchecked Sendable {
                     if let rawData = result["__rawData"] as? Data {
                         let ct = result["__contentType"] as? String ?? "application/octet-stream"
                         sendDataResponse(on: connection, status: 200, statusText: "OK",
-                                         contentType: ct, body: rawData)
+                                         contentType: ct, body: rawData,
+                                         request: request, isWebDAV: isWebDAV)
                     } else if let jsonData = try? JSONSerialization.data(
                         withJSONObject: result, options: [.sortedKeys]) {
                         sendDataResponse(on: connection, status: 200, statusText: "OK",
-                                         contentType: "application/json", body: jsonData)
+                                         contentType: "application/json", body: jsonData,
+                                         request: request, isWebDAV: isWebDAV)
                     } else {
                         sendResponse(on: connection, status: 500,
                                      statusText: "Internal Server Error",
-                                     body: "Handler returned invalid JSON")
+                                     body: "Handler returned invalid JSON",
+                                     request: request, isWebDAV: isWebDAV, forceClose: true)
                     }
                 } else {
-                    sendResponse(on: connection, status: 404, statusText: "Not Found", body: "Not Found")
+                    sendResponse(on: connection, status: 404, statusText: "Not Found", body: "Not Found",
+                                   request: request, isWebDAV: isWebDAV)
                 }
                 return
             }
@@ -440,25 +862,104 @@ final class ROMUploadServer: @unchecked Sendable {
         let path = request.path
         switch (request.method, path) {
         case ("GET", "/"):
-            serveHTML(on: connection, subpath: request.queryParameters["path"] ?? "")
+            serveHTML(on: connection, request: request, subpath: request.queryParameters["path"] ?? "")
+        case ("GET", "/api/list"):
+            serveFileListJSON(on: connection, request: request,
+                              subpath: request.queryParameters["path"] ?? "")
         case ("GET", _) where path.hasPrefix("/files/"):
             serveFile(on: connection, path: String(path.dropFirst("/files/".count)))
         case ("DELETE", _) where path.hasPrefix("/files/"):
-            deleteFile(on: connection, path: String(path.dropFirst("/files/".count)))
+            deleteFile(on: connection, request: request,
+                       path: String(path.dropFirst("/files/".count)))
         case ("POST", "/upload"):
             handleBufferedUpload(on: connection, request: request, body: body)
         default:
-            sendResponse(on: connection, status: 404, statusText: "Not Found", body: "Not Found")
+            sendResponse(on: connection, status: 404, statusText: "Not Found", body: "Not Found",
+                           request: request, isWebDAV: false)
         }
     }
 
     // MARK: - HTML Serving
 
-    private func serveHTML(on connection: NWConnection, subpath: String = "") {
+    private func connectionIOQueue(for connection: NWConnection) -> DispatchQueue? {
+        lock.lock()
+        defer { lock.unlock() }
+        return connectionContexts[ObjectIdentifier(connection)]?.ioQueue
+    }
+
+    private func serveHTML(on connection: NWConnection, request: HTTPRequest, subpath: String = "") {
         let ip = getLocalIPAddress() ?? "unknown"
         let portSuffix = httpPort == 80 ? "" : ":\(httpPort)"
         let davPortStr = "\(webDAVPort)"
+        let ctx = listDirectoryContext(subpath: subpath)
+        let listDir = ctx.listDir
+        let currentSub = ctx.currentSub
+        let ioQueue = connectionIOQueue(for: connection)
 
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+            let files = self.listFiles(in: listDir)
+            var rows: [String] = []
+
+            if !currentSub.isEmpty {
+                let parent = currentSub.contains("/")
+                    ? String(currentSub[..<currentSub.lastIndex(of: "/")!])
+                    : ""
+                let parentQuery = parent.isEmpty ? "/" : "/?path=\(parent.urlPathEscaped)"
+                rows.append("""
+                <tr>
+                  <td><a href="\(parentQuery)">&#x2B05;&#xFE0F; ..</a></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                </tr>
+                """)
+            }
+
+            rows += files.map { self.fileRowHTML(entry: $0, currentSub: currentSub) }
+
+            let emptyMessage = (rows.isEmpty)
+                ? "<tr><td colspan=\"4\" class=\"empty\">No files yet. Drag and drop above to upload!</td></tr>"
+                : ""
+
+            let entriesPayload: [[String: Any]] = files.map { entry in
+                var dict: [String: Any] = [
+                    "name": entry.name,
+                    "size": entry.size,
+                    "isDirectory": entry.isDirectory,
+                    "modified": entry.modified.timeIntervalSince1970
+                ]
+                if let created = entry.created {
+                    dict["created"] = created.timeIntervalSince1970
+                }
+                return dict
+            }
+            let initialEntriesJSON = (try? JSONSerialization.data(withJSONObject: entriesPayload))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+
+            let html = Self.uploadPageHTML(
+                title: self.pageTitle,
+                ipAddress: ip, httpPort: portSuffix, davPort: davPortStr,
+                fileRows: rows.isEmpty ? emptyMessage : rows.joined(separator: "\n"),
+                currentPath: currentSub,
+                initialEntriesJSON: initialEntriesJSON
+            )
+            let data = Data(html.utf8)
+
+            let deliver = { [weak self] in
+                self?.sendDataResponse(on: connection, status: 200, statusText: "OK",
+                                       contentType: "text/html; charset=utf-8", body: data,
+                                       request: request, isWebDAV: false)
+            }
+            if let ioQueue {
+                ioQueue.async { deliver() }
+            } else {
+                deliver()
+            }
+        }
+    }
+
+    private func listDirectoryContext(subpath: String) -> (listDir: URL, currentSub: String) {
         let decodedSub = (subpath.removingPercentEncoding ?? subpath)
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let listDir: URL
@@ -471,64 +972,81 @@ final class ROMUploadServer: @unchecked Sendable {
             listDir = romsDirectory
         }
         let currentSub = listDir.path == romsDirectory.path ? "" : decodedSub
+        return (listDir, currentSub)
+    }
 
-        let files = listFiles(in: listDir)
-        var rows: [String] = []
+    private func serveFileListJSON(on connection: NWConnection, request: HTTPRequest, subpath: String) {
+        let ctx = listDirectoryContext(subpath: subpath)
+        let ioQueue = connectionIOQueue(for: connection)
 
-        if !currentSub.isEmpty {
-            let parent = currentSub.contains("/")
-                ? String(currentSub[..<currentSub.lastIndex(of: "/")!])
-                : ""
-            let parentQuery = parent.isEmpty ? "/" : "/?path=\(parent.urlPathEscaped)"
-            rows.append("""
-            <tr>
-              <td><a href="\(parentQuery)">&#x2B05;&#xFE0F; ..</a></td>
-              <td></td>
-              <td></td>
-            </tr>
-            """)
-        }
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+            let files = self.listFiles(in: ctx.listDir)
+            let entries: [[String: Any]] = files.map { entry in
+                var dict: [String: Any] = [
+                    "name": entry.name,
+                    "size": entry.size,
+                    "isDirectory": entry.isDirectory,
+                    "modified": entry.modified.timeIntervalSince1970
+                ]
+                if let created = entry.created {
+                    dict["created"] = created.timeIntervalSince1970
+                }
+                return dict
+            }
+            let payload: [String: Any] = [
+                "path": ctx.currentSub,
+                "entries": entries
+            ]
+            let data = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
 
-        rows += files.map { entry -> String in
-            let childSub = currentSub.isEmpty ? entry.name : "\(currentSub)/\(entry.name)"
-            let escapedName = entry.name.htmlEscaped
-            if entry.isDirectory {
-                return """
-                <tr>
-                  <td><a href="/?path=\(childSub.urlPathEscaped)">&#x1F4C1; \(escapedName)</a></td>
-                  <td>&mdash;</td>
-                  <td></td>
-                </tr>
-                """
+            let deliver = { [weak self] in
+                self?.sendDataResponse(on: connection, status: 200, statusText: "OK",
+                                       contentType: "application/json", body: data,
+                                       request: request, isWebDAV: false)
+            }
+            if let ioQueue {
+                ioQueue.async { deliver() }
             } else {
-                let sizeStr = ByteCountFormatter.string(fromByteCount: entry.size, countStyle: .file)
-                return """
-                <tr>
-                  <td><a href="/files/\(childSub.urlPathEscaped)" download>\(escapedName)</a></td>
-                  <td>\(sizeStr)</td>
-                  <td>
-                    <a href="/files/\(childSub.urlPathEscaped)" download class="btn btn-sm">Download</a>
-                    <button onclick="deleteFile('\(childSub.jsEscaped)')" class="btn btn-sm btn-danger">Delete</button>
-                  </td>
-                </tr>
-                """
+                deliver()
             }
         }
+    }
 
-        let emptyMessage = (rows.isEmpty)
-            ? "<tr><td colspan=\"3\" class=\"empty\">No files yet. Drag and drop above to upload!</td></tr>"
-            : ""
+    private func formatFileDate(_ date: Date?) -> String {
+        guard let date else { return "&mdash;" }
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+        return fmt.string(from: date).htmlEscaped
+    }
 
-        let html = Self.uploadPageHTML(
-            title: pageTitle,
-            ipAddress: ip, httpPort: portSuffix, davPort: davPortStr,
-            fileRows: rows.isEmpty ? emptyMessage : rows.joined(separator: "\n"),
-            currentPath: currentSub
-        )
-
-        let data = Data(html.utf8)
-        sendDataResponse(on: connection, status: 200, statusText: "OK",
-                         contentType: "text/html; charset=utf-8", body: data)
+    private func fileRowHTML(entry: FileEntry, currentSub: String) -> String {
+        let childSub = currentSub.isEmpty ? entry.name : "\(currentSub)/\(entry.name)"
+        let escapedName = entry.name.htmlEscaped
+        let dateStr = entry.isDirectory ? "&mdash;" : formatFileDate(entry.modified)
+        if entry.isDirectory {
+            return """
+            <tr>
+              <td><a href="/?path=\(childSub.urlPathEscaped)">&#x1F4C1; \(escapedName)</a></td>
+              <td>\(dateStr)</td>
+              <td>&mdash;</td>
+              <td></td>
+            </tr>
+            """
+        }
+        let sizeStr = ByteCountFormatter.string(fromByteCount: entry.size, countStyle: .file)
+        return """
+        <tr>
+          <td><a href="/files/\(childSub.urlPathEscaped)" download>\(escapedName)</a></td>
+          <td>\(dateStr)</td>
+          <td>\(sizeStr)</td>
+          <td>
+            <a href="/files/\(childSub.urlPathEscaped)" download class="btn btn-sm">Download</a>
+            <button onclick="deleteFile('\(childSub.jsEscaped)')" class="btn btn-sm btn-danger">Delete</button>
+          </td>
+        </tr>
+        """
     }
 
     // MARK: - File Serving
@@ -540,72 +1058,111 @@ final class ROMUploadServer: @unchecked Sendable {
             return
         }
 
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDir) else {
-            sendResponse(on: connection, status: 404, statusText: "Not Found", body: "File not found")
-            return
+        let ioQueue = connectionIOQueue(for: connection)
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDir) else {
+                let respond = { self.sendResponse(on: connection, status: 404, statusText: "Not Found", body: "File not found") }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                return
+            }
+
+            if isDir.boolValue {
+                let relative = decoded.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                let location = relative.isEmpty ? "/" : "/?path=\(relative.urlPathEscaped)"
+                let respond = {
+                    self.sendResponse(on: connection, status: 302, statusText: "Found",
+                                      body: "", extraHeaders: ["Location": location])
+                }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                return
+            }
+
+            guard let handle = try? FileHandle(forReadingFrom: resolved) else {
+                let respond = { self.sendResponse(on: connection, status: 500, statusText: "Internal Server Error", body: "Cannot open file") }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                return
+            }
+
+            let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path)
+            let fileSize = (attrs?[.size] as? Int64) ?? 0
+            let filename = resolved.lastPathComponent
+            let escapedName = filename.replacingOccurrences(of: "\"", with: "")
+
+            let header = """
+            HTTP/1.1 200 OK\r\n\
+            Content-Type: application/octet-stream\r\n\
+            Content-Length: \(fileSize)\r\n\
+            Content-Disposition: attachment; filename="\(escapedName)"\r\n\
+            Connection: close\r\n\
+            \r\n
+            """
+
+            let beginStream = {
+                connection.send(content: Data(header.utf8), completion: .contentProcessed { error in
+                    if error != nil { handle.closeFile(); connection.cancel(); return }
+                    self.streamFileData(handle: handle, on: connection, remaining: Int(fileSize), ioQueue: ioQueue)
+                })
+            }
+            if let ioQueue { ioQueue.async(execute: beginStream) } else { beginStream() }
         }
-
-        if isDir.boolValue {
-            let relative = decoded.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            let location = relative.isEmpty ? "/" : "/?path=\(relative.urlPathEscaped)"
-            sendResponse(on: connection, status: 302, statusText: "Found",
-                         body: "", extraHeaders: ["Location": location])
-            return
-        }
-
-        guard let handle = try? FileHandle(forReadingFrom: resolved) else {
-            sendResponse(on: connection, status: 500, statusText: "Internal Server Error", body: "Cannot open file")
-            return
-        }
-
-        let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path)
-        let fileSize = (attrs?[.size] as? Int64) ?? 0
-        let filename = resolved.lastPathComponent
-        let escapedName = filename.replacingOccurrences(of: "\"", with: "")
-
-        let header = """
-        HTTP/1.1 200 OK\r\n\
-        Content-Type: application/octet-stream\r\n\
-        Content-Length: \(fileSize)\r\n\
-        Content-Disposition: attachment; filename="\(escapedName)"\r\n\
-        Connection: close\r\n\
-        \r\n
-        """
-
-        connection.send(content: Data(header.utf8), completion: .contentProcessed { error in
-            if error != nil { handle.closeFile(); connection.cancel(); return }
-            self.streamFileData(handle: handle, on: connection, remaining: Int(fileSize))
-        })
     }
 
-    private func streamFileData(handle: FileHandle, on connection: NWConnection, remaining: Int) {
+    private func streamFileData(handle: FileHandle, on connection: NWConnection,
+                                remaining: Int, ioQueue: DispatchQueue? = nil) {
         let chunkSize = 256 * 1024
         guard remaining > 0 else { handle.closeFile(); connection.cancel(); return }
 
         let toRead = min(chunkSize, remaining)
-        let data = handle.readData(ofLength: toRead)
-        guard !data.isEmpty else { handle.closeFile(); connection.cancel(); return }
+        Self.diskIOQueue.async {
+            let data = handle.readData(ofLength: toRead)
+            guard !data.isEmpty else {
+                handle.closeFile()
+                if let ioQueue {
+                    ioQueue.async { connection.cancel() }
+                } else {
+                    connection.cancel()
+                }
+                return
+            }
 
-        connection.send(content: data, completion: .contentProcessed { [weak self] error in
-            if error != nil { handle.closeFile(); connection.cancel(); return }
-            self?.streamFileData(handle: handle, on: connection, remaining: remaining - data.count)
-        })
+            let sendChunk = {
+                connection.send(content: data, completion: .contentProcessed { [weak self] error in
+                    if error != nil { handle.closeFile(); connection.cancel(); return }
+                    self?.streamFileData(handle: handle, on: connection,
+                                         remaining: remaining - data.count, ioQueue: ioQueue)
+                })
+            }
+            if let ioQueue { ioQueue.async(execute: sendChunk) } else { sendChunk() }
+        }
     }
 
     // MARK: - File Delete
 
-    private func deleteFile(on connection: NWConnection, path: String) {
+    private func deleteFile(on connection: NWConnection, request: HTTPRequest, path: String) {
         let decoded = path.removingPercentEncoding ?? path
         guard let resolved = resolvedPath(decoded, within: romsDirectory) else {
-            sendResponse(on: connection, status: 403, statusText: "Forbidden", body: "Path traversal denied")
+            sendResponse(on: connection, status: 403, statusText: "Forbidden", body: "Path traversal denied",
+                         request: request, isWebDAV: false, forceClose: true)
             return
         }
-        do {
-            try FileManager.default.removeItem(at: resolved)
-            sendJSON(on: connection, status: 200, json: ["ok": true])
-        } catch {
-            sendJSON(on: connection, status: 404, json: ["ok": false, "error": error.localizedDescription])
+        let ioQueue = connectionIOQueue(for: connection)
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                try FileManager.default.removeItem(at: resolved)
+                let respond = { self.sendJSON(on: connection, status: 200, json: ["ok": true], request: request, isWebDAV: false) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            } catch {
+                let respond = {
+                    self.sendJSON(on: connection, status: 404,
+                                  json: ["ok": false, "error": error.localizedDescription],
+                                  request: request, isWebDAV: false, forceClose: true)
+                }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            }
         }
     }
 
@@ -618,63 +1175,75 @@ final class ROMUploadServer: @unchecked Sendable {
         initialBody: Data,
         remaining: Int
     ) {
-        let parser = StreamingMultipartParser(boundary: boundary,
-                                              outputDirectory: uploadDirectory(for: request))
+        let parser = StreamingMultipartParser(
+            boundary: boundary,
+            outputDirectory: uploadDirectory(for: request),
+            onFileCompleted: { [weak self] path in self?.postUploadCompleted(filePath: path) }
+        )
         parser.feed(initialBody)
 
         if remaining <= 0 {
-            parser.finalize()
-            finishMultipartUpload(on: connection, parser: parser)
+            parser.finalize { [weak self] in
+                self?.finishMultipartUpload(on: connection, request: request, parser: parser)
+            }
             return
         }
-        streamMultipartChunks(on: connection, parser: parser, remaining: remaining)
+        streamMultipartChunks(on: connection, request: request, parser: parser, remaining: remaining)
     }
 
     private func streamMultipartChunks(on connection: NWConnection,
+                                       request: HTTPRequest,
                                        parser: StreamingMultipartParser,
                                        remaining: Int) {
         if remaining <= 0 {
-            parser.finalize()
-            finishMultipartUpload(on: connection, parser: parser)
+            parser.finalize { [weak self] in
+                self?.finishMultipartUpload(on: connection, request: request, parser: parser)
+            }
             return
         }
         connection.receive(minimumIncompleteLength: 1,
-                           maximumLength: min(remaining, 262144)) { [weak self] data, _, isComplete, error in
+                           maximumLength: min(remaining, Self.readChunkSize)) { [weak self] data, _, isComplete, error in
             guard let self else { return }
             if let data, !data.isEmpty { parser.feed(data) }
             let newRemaining = remaining - (data?.count ?? 0)
             if newRemaining <= 0 || isComplete || error != nil {
-                parser.finalize()
-                self.finishMultipartUpload(on: connection, parser: parser)
+                parser.finalize {
+                    self.finishMultipartUpload(on: connection, request: request, parser: parser)
+                }
             } else {
-                self.streamMultipartChunks(on: connection, parser: parser, remaining: newRemaining)
+                self.streamMultipartChunks(on: connection, request: request, parser: parser, remaining: newRemaining)
             }
         }
     }
 
-    private func finishMultipartUpload(on connection: NWConnection, parser: StreamingMultipartParser) {
+    private func finishMultipartUpload(on connection: NWConnection, request: HTTPRequest,
+                                       parser: StreamingMultipartParser) {
         let files = parser.completedFiles
         if files.isEmpty {
-            sendJSON(on: connection, status: 400, json: ["ok": false, "error": "No files uploaded"])
+            sendJSON(on: connection, status: 400, json: ["ok": false, "error": "No files uploaded"],
+                     request: request, isWebDAV: false, forceClose: true)
             return
         }
-        for filePath in files {
-            postUploadCompleted(filePath: filePath)
-        }
-        sendJSON(on: connection, status: 200, json: ["ok": true, "uploaded": files.count])
+        sendJSON(on: connection, status: 200, json: ["ok": true, "uploaded": files.count],
+                 request: request, isWebDAV: false)
     }
 
     private func handleBufferedUpload(on connection: NWConnection, request: HTTPRequest, body: Data) {
         guard let boundary = request.multipartBoundary else {
             sendResponse(on: connection, status: 400, statusText: "Bad Request",
-                         body: "Missing multipart boundary")
+                         body: "Missing multipart boundary",
+                         request: request, isWebDAV: false, forceClose: true)
             return
         }
-        let parser = StreamingMultipartParser(boundary: boundary,
-                                              outputDirectory: uploadDirectory(for: request))
+        let parser = StreamingMultipartParser(
+            boundary: boundary,
+            outputDirectory: uploadDirectory(for: request),
+            onFileCompleted: { [weak self] path in self?.postUploadCompleted(filePath: path) }
+        )
         parser.feed(body)
-        parser.finalize()
-        finishMultipartUpload(on: connection, parser: parser)
+        parser.finalize { [weak self] in
+            self?.finishMultipartUpload(on: connection, request: request, parser: parser)
+        }
     }
 
     private func uploadDirectory(for request: HTTPRequest) -> URL {
@@ -695,96 +1264,150 @@ final class ROMUploadServer: @unchecked Sendable {
         let rawPath = String(request.path.dropFirst())
         let decoded = rawPath.removingPercentEncoding ?? rawPath
         guard let target = resolvedPath(decoded, within: romsDirectory) else {
-            sendResponse(on: connection, status: 403, statusText: "Forbidden", body: "Path traversal denied")
+            sendResponse(on: connection, status: 403, statusText: "Forbidden", body: "Path traversal denied",
+                           request: request, isWebDAV: true, forceClose: true)
             return
         }
 
         let parent = target.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
 
-        FileManager.default.createFile(atPath: target.path, contents: nil)
-        guard let handle = FileHandle(forWritingAtPath: target.path) else {
-            sendResponse(on: connection, status: 500, statusText: "Internal Server Error", body: "Cannot create file")
+        guard let writer = SerialFileWriter(at: target) else {
+            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
+                               body: "Cannot create file", request: request, forceClose: true)
             return
         }
 
         postUploadStarted(path: target.path)
 
-        if !initialBody.isEmpty { handle.write(initialBody) }
+        if !initialBody.isEmpty { writer.write(initialBody) }
+
+        let finishPut = { [weak self] in
+            guard let self else { return }
+            writer.finalize {
+                self.postUploadCompleted(filePath: target.path)
+                self.sendWebDAVResponse(on: connection, status: 201, statusText: "Created", request: request)
+            }
+        }
 
         if remaining <= 0 {
-            handle.closeFile()
-            postUploadCompleted(filePath: target.path)
-            sendWebDAVResponse(on: connection, status: 201, statusText: "Created")
+            finishPut()
             return
         }
-        streamPutChunks(on: connection, handle: handle, target: target, remaining: remaining)
+        streamPutChunks(on: connection, request: request, writer: writer, target: target, remaining: remaining)
     }
 
-    private func streamPutChunks(on connection: NWConnection, handle: FileHandle,
-                                 target: URL, remaining: Int) {
+    private func streamPutChunks(on connection: NWConnection, request: HTTPRequest,
+                                 writer: SerialFileWriter, target: URL, remaining: Int) {
         if remaining <= 0 {
-            handle.closeFile()
-            postUploadCompleted(filePath: target.path)
-            sendWebDAVResponse(on: connection, status: 201, statusText: "Created")
+            writer.finalize { [weak self] in
+                self?.postUploadCompleted(filePath: target.path)
+                self?.sendWebDAVResponse(on: connection, status: 201, statusText: "Created", request: request)
+            }
             return
         }
         connection.receive(minimumIncompleteLength: 1,
-                           maximumLength: min(remaining, 262144)) { [weak self] data, _, isComplete, error in
-            guard let self else { handle.closeFile(); return }
-            if let data, !data.isEmpty { handle.write(data) }
+                           maximumLength: min(remaining, Self.readChunkSize)) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+            if let data, !data.isEmpty { writer.write(data) }
             let newRemaining = remaining - (data?.count ?? 0)
             if newRemaining <= 0 || isComplete || error != nil {
-                handle.closeFile()
-                self.postUploadCompleted(filePath: target.path)
-                self.sendWebDAVResponse(on: connection, status: 201, statusText: "Created")
+                writer.finalize {
+                    self.postUploadCompleted(filePath: target.path)
+                    self.sendWebDAVResponse(on: connection, status: 201, statusText: "Created", request: request)
+                }
             } else {
-                self.streamPutChunks(on: connection, handle: handle, target: target, remaining: newRemaining)
+                self.streamPutChunks(on: connection, request: request, writer: writer,
+                                     target: target, remaining: newRemaining)
             }
         }
     }
 
     // MARK: - WebDAV Routes
 
+    /// Open LAN upload server: anonymous access and any basic-auth credentials are allowed.
+    private func webDAVAllows(_ request: HTTPRequest) -> Bool {
+        _ = request
+        return true
+    }
+
     private func routeWebDAV(on connection: NWConnection, request: HTTPRequest, body: Data) {
+        guard webDAVAllows(request) else {
+            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden",
+                               body: "Access denied", request: request, forceClose: true)
+            return
+        }
+
         let path = request.path
         let decoded = (path == "/" ? "" : String(path.dropFirst()))
             .removingPercentEncoding ?? String(path.dropFirst())
 
         switch request.method {
-        case "OPTIONS": handleWebDAVOptions(on: connection)
-        case "PROPFIND": handlePROPFIND(on: connection, path: decoded, depth: request.headers["depth"] ?? "1")
-        case "GET": serveWebDAVFile(on: connection, path: decoded)
-        case "DELETE": handleWebDAVDelete(on: connection, path: decoded)
-        case "MKCOL": handleMKCOL(on: connection, path: decoded)
-        case "MOVE": handleMOVE(on: connection, path: decoded, destination: request.headers["destination"] ?? "")
-        case "PUT": handleWebDAVPutBuffered(on: connection, path: decoded, body: body)
+        case "OPTIONS": handleWebDAVOptions(on: connection, request: request)
+        case "PROPFIND": handlePROPFIND(on: connection, request: request, path: decoded,
+                                        depth: request.headers["depth"] ?? "1")
+        case "GET": serveWebDAVFile(on: connection, request: request, path: decoded, includeBody: true)
+        case "HEAD": serveWebDAVFile(on: connection, request: request, path: decoded, includeBody: false)
+        case "DELETE": handleWebDAVDelete(on: connection, request: request, path: decoded)
+        case "MKCOL": handleMKCOL(on: connection, request: request, path: decoded)
+        case "MOVE": handleMOVE(on: connection, request: request, path: decoded)
+        case "COPY": handleCOPY(on: connection, request: request, path: decoded)
+        case "PUT": handleWebDAVPutBuffered(on: connection, request: request, path: decoded, body: body)
+        case "LOCK": handleWebDAVLock(on: connection, request: request, path: decoded)
+        case "UNLOCK": handleWebDAVUnlock(on: connection, request: request)
+        case "PROPPATCH": handlePROPPATCH(on: connection, request: request, path: decoded, body: body)
         default:
             sendWebDAVResponse(on: connection, status: 405, statusText: "Method Not Allowed",
-                               body: "Method not supported")
+                               body: "Method not supported", request: request)
         }
     }
 
-    private func handleWebDAVOptions(on connection: NWConnection) {
-        let header = """
-        HTTP/1.1 200 OK\r\n\
-        DAV: 1\r\n\
-        Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, MOVE\r\n\
-        Content-Length: 0\r\n\
-        Connection: close\r\n\
-        \r\n
-        """
-        connection.send(content: Data(header.utf8),
-                        completion: .contentProcessed { _ in connection.cancel() })
+    private func handleWebDAVOptions(on connection: NWConnection, request: HTTPRequest) {
+        sendRawHeaders(on: connection, status: 200, statusText: "OK", headers: [
+            "DAV": "1, 2",
+            "MS-Author-Via": "DAV",
+            "Allow": "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK",
+            "Content-Length": "0"
+        ], body: Data(), request: request, isWebDAV: true)
     }
 
-    private func handlePROPFIND(on connection: NWConnection, path: String, depth: String) {
+    private func handleWebDAVLock(on connection: NWConnection, request: HTTPRequest, path: String) {
+        let token = "opaquelocktoken:icube-\(UUID().uuidString)"
+        let xml = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <D:prop xmlns:D="DAV:">
+          <D:lockdiscovery>
+            <D:activelock>
+              <D:locktype><D:write/></D:locktype>
+              <D:lockscope><D:exclusive/></D:lockscope>
+              <D:timeout>Second-3600</D:timeout>
+              <D:locktoken><D:href>\(token.xmlEscaped)</D:href></D:locktoken>
+            </D:activelock>
+          </D:lockdiscovery>
+        </D:prop>
+        """
+        let data = Data(xml.utf8)
+        sendRawHeaders(on: connection, status: 200, statusText: "OK", headers: [
+            "Content-Type": "application/xml; charset=utf-8",
+            "Content-Length": "\(data.count)",
+            "Lock-Token": "<\(token)>"
+        ], body: data, request: request, isWebDAV: true)
+        _ = path
+    }
+
+    private func handleWebDAVUnlock(on connection: NWConnection, request: HTTPRequest) {
+        sendWebDAVResponse(on: connection, status: 204, statusText: "No Content", request: request)
+    }
+
+    private func handlePROPFIND(on connection: NWConnection, request: HTTPRequest, path: String, depth: String) {
         let target: URL
         if path.isEmpty {
             target = romsDirectory
         } else {
             guard let resolved = resolvedPath(path, within: romsDirectory) else {
-                sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden")
+                let status = isFinderProbePath(path) ? 404 : 403
+                let text = status == 404 ? "Not Found" : "Forbidden"
+                sendWebDAVResponse(on: connection, status: status, statusText: text, request: request)
                 return
             }
             target = resolved
@@ -792,59 +1415,93 @@ final class ROMUploadServer: @unchecked Sendable {
 
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: target.path, isDirectory: &isDir) else {
-            sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found")
+            sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found", request: request)
             return
         }
 
-        var responses: [String] = [propfindEntry(for: target)]
-        if isDir.boolValue && depth != "0" {
-            let contents = (try? FileManager.default.contentsOfDirectory(
-                at: target,
-                includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey]
-            )) ?? []
-            for url in contents where !url.lastPathComponent.hasPrefix(".") {
-                responses.append(propfindEntry(for: url))
+        let listingDepth = depth.lowercased()
+        let targetPath = target.path
+        let connID = ObjectIdentifier(connection)
+        lock.lock()
+        let ioQueue = connectionContexts[connID]?.ioQueue
+        lock.unlock()
+
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+            var responses: [String] = []
+            self.appendPROPFINDEntries(at: URL(fileURLWithPath: targetPath),
+                                       depth: listingDepth, into: &responses)
+            let data = self.webDAVMultistatusData(blocks: responses)
+
+            let deliver = { self.sendWebDAVMultistatus(on: connection, body: data, request: request) }
+            if let ioQueue {
+                ioQueue.async { deliver() }
+            } else {
+                deliver()
             }
         }
+    }
 
-        let xml = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <D:multistatus xmlns:D="DAV:">
-        \(responses.joined(separator: "\n"))
-        </D:multistatus>
-        """
+    private func webDAVMultistatusData(blocks: [String]) -> Data {
+        var xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+        xml += "<D:multistatus xmlns:D=\"DAV:\">\n"
+        xml += blocks.joined(separator: "\n")
+        xml += "\n</D:multistatus>\n"
+        return Data(xml.utf8)
+    }
 
-        let data = Data(xml.utf8)
-        let header = """
-        HTTP/1.1 207 Multi-Status\r\n\
-        Content-Type: application/xml; charset=utf-8\r\n\
-        Content-Length: \(data.count)\r\n\
-        Connection: close\r\n\
-        \r\n
-        """
-        var fullResponse = Data(header.utf8)
-        fullResponse.append(data)
-        connection.send(content: fullResponse,
-                        completion: .contentProcessed { _ in connection.cancel() })
+    private func sendWebDAVMultistatus(on connection: NWConnection, body: Data, request: HTTPRequest?) {
+        let headers: [String: String] = [
+            "Content-Type": "application/xml; charset=utf-8",
+            "Content-Length": "\(body.count)"
+        ]
+        if body.count <= Self.streamBodyThreshold {
+            sendRawHeaders(on: connection, status: 207, statusText: "Multi-Status",
+                           headers: headers, body: body, request: request, isWebDAV: true)
+        } else {
+            sendRawThenStreamBody(on: connection, status: 207, statusText: "Multi-Status",
+                                  headers: headers, body: body, request: request, isWebDAV: true)
+        }
+    }
+
+    /// Recursively collects PROPFIND responses for `depth` 0, 1, or infinity.
+    private func appendPROPFINDEntries(at url: URL, depth: String, into responses: inout [String]) {
+        responses.append(propfindEntry(for: url))
+        guard depth != "0" else { return }
+
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { return }
+
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [
+                .fileSizeKey, .contentModificationDateKey, .creationDateKey, .isDirectoryKey
+            ],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        for child in contents where !child.lastPathComponent.hasPrefix(".") {
+            if depth == "1" {
+                responses.append(propfindEntry(for: child))
+            } else {
+                appendPROPFINDEntries(at: child, depth: depth, into: &responses)
+            }
+        }
     }
 
     private func propfindEntry(for url: URL) -> String {
-        let attrs = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey])
+        let attrs = try? url.resourceValues(forKeys: [
+            .fileSizeKey, .contentModificationDateKey, .creationDateKey, .isDirectoryKey
+        ])
         let isDir = attrs?.isDirectory ?? false
         let size = attrs?.fileSize ?? 0
-        let mtime = (attrs?.contentModificationDate).map { date -> String in
-            let fmt = DateFormatter()
-            fmt.locale = Locale(identifier: "en_US_POSIX")
-            fmt.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
-            fmt.timeZone = TimeZone(abbreviation: "GMT")
-            return fmt.string(from: date)
-        } ?? ""
-
-        let relativePath = url.path.hasPrefix(romsDirectory.path)
-            ? String(url.path.dropFirst(romsDirectory.path.count))
-            : "/" + url.lastPathComponent
-        let href = relativePath.isEmpty ? "/" : relativePath
+        let mtime = webDAVFormattedDate(attrs?.contentModificationDate)
+        let ctime = webDAVFormattedDate(attrs?.creationDate)
+        let displayName = url.lastPathComponent
+        let href = webDAVHref(for: url)
         let resourceType = isDir ? "<D:collection/>" : ""
+        let contentType = isDir ? "" : "<D:getcontenttype>\(mimeType(for: url).xmlEscaped)</D:getcontenttype>"
+        let creationProp = ctime.isEmpty ? "" : "<D:creationdate>\(ctime)</D:creationdate>"
 
         return """
             <D:response>
@@ -852,8 +1509,17 @@ final class ROMUploadServer: @unchecked Sendable {
                 <D:propstat>
                     <D:prop>
                         <D:resourcetype>\(resourceType)</D:resourcetype>
+                        <D:displayname>\(displayName.xmlEscaped)</D:displayname>
                         <D:getcontentlength>\(size)</D:getcontentlength>
                         <D:getlastmodified>\(mtime)</D:getlastmodified>
+                        \(creationProp)
+                        \(contentType)
+                        <D:supportedlock>
+                            <D:lockentry>
+                                <D:lockscope><D:exclusive/></D:lockscope>
+                                <D:locktype><D:write/></D:locktype>
+                            </D:lockentry>
+                        </D:supportedlock>
                     </D:prop>
                     <D:status>HTTP/1.1 200 OK</D:status>
                 </D:propstat>
@@ -861,103 +1527,362 @@ final class ROMUploadServer: @unchecked Sendable {
         """
     }
 
-    private func serveWebDAVFile(on connection: NWConnection, path: String) {
+    private func serveWebDAVFile(on connection: NWConnection, request: HTTPRequest, path: String,
+                                 includeBody: Bool) {
         guard !path.isEmpty,
-              let resolved = resolvedPath(path, within: romsDirectory),
-              FileManager.default.fileExists(atPath: resolved.path) else {
-            sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found")
+              let resolved = resolvedPath(path, within: romsDirectory) else {
+            sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found", request: request)
             return
         }
 
-        guard let handle = try? FileHandle(forReadingFrom: resolved) else {
-            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error")
+        let ioQueue = connectionIOQueue(for: connection)
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+            guard FileManager.default.fileExists(atPath: resolved.path) else {
+                let respond = { self.sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                return
+            }
+
+            let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path)
+            let fileSize = (attrs?[.size] as? Int64) ?? 0
+            let keepAlive = request.wantsKeepAlive
+            let connHeader = keepAlive ? "keep-alive" : "close"
+
+            if !includeBody {
+                let respond = {
+                    self.sendRawHeaders(on: connection, status: 200, statusText: "OK", headers: [
+                        "Content-Type": self.mimeType(for: resolved),
+                        "Content-Length": "\(fileSize)",
+                        "Connection": connHeader
+                    ], body: Data(), request: request, isWebDAV: true)
+                }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                return
+            }
+
+            guard let handle = try? FileHandle(forReadingFrom: resolved) else {
+                let respond = { self.sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                return
+            }
+
+            let header = """
+            HTTP/1.1 200 OK\r\n\
+            Content-Type: \(self.mimeType(for: resolved))\r\n\
+            Content-Length: \(fileSize)\r\n\
+            Connection: \(connHeader)\r\n\
+            \r\n
+            """
+
+            let beginStream = {
+                connection.send(content: Data(header.utf8), completion: .contentProcessed { error in
+                    if error != nil { handle.closeFile(); connection.cancel(); return }
+                    self.streamWebDAVFileData(handle: handle, on: connection, request: request,
+                                              remaining: Int(fileSize), ioQueue: ioQueue)
+                })
+            }
+            if let ioQueue { ioQueue.async(execute: beginStream) } else { beginStream() }
+        }
+    }
+
+    private func streamWebDAVFileData(handle: FileHandle, on connection: NWConnection,
+                                      request: HTTPRequest, remaining: Int,
+                                      ioQueue: DispatchQueue?) {
+        let chunkSize = 256 * 1024
+        guard remaining > 0 else {
+            handle.closeFile()
+            finishResponse(on: connection, request: request, isWebDAV: true, forceClose: !request.wantsKeepAlive)
             return
         }
 
-        let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path)
-        let fileSize = (attrs?[.size] as? Int64) ?? 0
+        let toRead = min(chunkSize, remaining)
+        Self.diskIOQueue.async { [weak self] in
+            let data = handle.readData(ofLength: toRead)
+            guard !data.isEmpty else {
+                handle.closeFile()
+                if let ioQueue {
+                    ioQueue.async { connection.cancel() }
+                } else {
+                    connection.cancel()
+                }
+                return
+            }
 
-        let header = """
-        HTTP/1.1 200 OK\r\n\
-        Content-Type: application/octet-stream\r\n\
-        Content-Length: \(fileSize)\r\n\
-        Connection: close\r\n\
-        \r\n
+            let sendChunk = {
+                connection.send(content: data, completion: .contentProcessed { error in
+                    if error != nil { handle.closeFile(); connection.cancel(); return }
+                    self?.streamWebDAVFileData(handle: handle, on: connection, request: request,
+                                               remaining: remaining - data.count, ioQueue: ioQueue)
+                })
+            }
+            if let ioQueue { ioQueue.async(execute: sendChunk) } else { sendChunk() }
+        }
+    }
+
+    private func handleWebDAVDelete(on connection: NWConnection, request: HTTPRequest, path: String) {
+        guard !path.isEmpty, let resolved = resolvedPath(path, within: romsDirectory) else {
+            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
+            return
+        }
+        let ioQueue = connectionIOQueue(for: connection)
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                try FileManager.default.removeItem(at: resolved)
+                let respond = { self.sendWebDAVResponse(on: connection, status: 204, statusText: "No Content", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            } catch {
+                let respond = { self.sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            }
+        }
+    }
+
+    private func handleMKCOL(on connection: NWConnection, request: HTTPRequest, path: String) {
+        guard !path.isEmpty, let resolved = resolvedPath(path, within: romsDirectory) else {
+            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
+            return
+        }
+        let ioQueue = connectionIOQueue(for: connection)
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                try FileManager.default.createDirectory(at: resolved, withIntermediateDirectories: true)
+                let respond = { self.sendWebDAVResponse(on: connection, status: 201, statusText: "Created", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            } catch {
+                let respond = { self.sendWebDAVResponse(on: connection, status: 405, statusText: "Method Not Allowed", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            }
+        }
+    }
+
+    private func handleMOVE(on connection: NWConnection, request: HTTPRequest, path: String) {
+        performWebDAVTransfer(on: connection, request: request, sourcePath: path, copy: false)
+    }
+
+    private func handleCOPY(on connection: NWConnection, request: HTTPRequest, path: String) {
+        performWebDAVTransfer(on: connection, request: request, sourcePath: path, copy: true)
+    }
+
+    private func handlePROPPATCH(on connection: NWConnection, request: HTTPRequest, path: String, body: Data) {
+        _ = body
+        guard path.isEmpty || resolvedPath(path, within: romsDirectory) != nil else {
+            let status = isFinderProbePath(path) ? 404 : 403
+            let text = status == 404 ? "Not Found" : "Forbidden"
+            sendWebDAVResponse(on: connection, status: status, statusText: text, request: request)
+            return
+        }
+
+        let href = path.isEmpty ? "/" : webDAVHref(for: romsDirectory.appendingPathComponent(path))
+        let xml = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <D:multistatus xmlns:D="DAV:">
+            <D:response>
+                <D:href>\(href.xmlEscaped)</D:href>
+                <D:propstat>
+                    <D:prop/>
+                    <D:status>HTTP/1.1 200 OK</D:status>
+                </D:propstat>
+            </D:response>
+        </D:multistatus>
         """
-        connection.send(content: Data(header.utf8), completion: .contentProcessed { error in
-            if error != nil { handle.closeFile(); connection.cancel(); return }
-            self.streamFileData(handle: handle, on: connection, remaining: Int(fileSize))
-        })
+        let data = Data(xml.utf8)
+        sendRawHeaders(on: connection, status: 207, statusText: "Multi-Status", headers: [
+            "Content-Type": "application/xml; charset=utf-8",
+            "Content-Length": "\(data.count)"
+        ], body: data, request: request, isWebDAV: true)
     }
 
-    private func handleWebDAVDelete(on connection: NWConnection, path: String) {
-        guard !path.isEmpty, let resolved = resolvedPath(path, within: romsDirectory) else {
-            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden")
+    private enum WebDAVTransferFailure: Error {
+        case forbidden
+        case notFound
+        case preconditionFailed
+        case conflict
+    }
+
+    private func performWebDAVTransfer(on connection: NWConnection, request: HTTPRequest,
+                                       sourcePath: String, copy: Bool) {
+        guard !sourcePath.isEmpty, let source = resolvedPath(sourcePath, within: romsDirectory) else {
+            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
             return
         }
+
+        guard let destination = webDAVResolvedDestination(from: request.headers["destination"] ?? "") else {
+            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
+            return
+        }
+
+        let overwrite = webDAVOverwriteAllowed(request)
+        let ioQueue = connectionIOQueue(for: connection)
+
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+            guard FileManager.default.fileExists(atPath: source.path) else {
+                let respond = { self.sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                return
+            }
+
+            switch self.performWebDAVFilesystemTransfer(copy: copy, source: source,
+                                                        destination: destination, overwrite: overwrite) {
+            case .success:
+                self.notifyWebDAVResourceChanged(at: destination)
+                let respond = { self.sendWebDAVResponse(on: connection, status: 204, statusText: "No Content", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            case .failure(.preconditionFailed):
+                let respond = { self.sendWebDAVResponse(on: connection, status: 412, statusText: "Precondition Failed", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            case .failure(.forbidden):
+                let respond = { self.sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            case .failure(.notFound):
+                let respond = { self.sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            case .failure(.conflict):
+                let respond = { self.sendWebDAVResponse(on: connection, status: 409, statusText: "Conflict", request: request) }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+            }
+        }
+    }
+
+    private func performWebDAVFilesystemTransfer(copy: Bool, source: URL, destination: URL,
+                                                 overwrite: Bool) -> Result<Void, WebDAVTransferFailure> {
+        let fm = FileManager.default
+        guard destination.path.hasPrefix(romsDirectory.standardized.path) else {
+            return .failure(.forbidden)
+        }
+
+        if fm.fileExists(atPath: destination.path) {
+            if !overwrite { return .failure(.preconditionFailed) }
+            do {
+                try fm.removeItem(at: destination)
+            } catch {
+                return .failure(.conflict)
+            }
+        }
+
         do {
-            try FileManager.default.removeItem(at: resolved)
-            sendWebDAVResponse(on: connection, status: 204, statusText: "No Content")
+            try fm.createDirectory(at: destination.deletingLastPathComponent(),
+                                   withIntermediateDirectories: true)
+            if copy {
+                try fm.copyItem(at: source, to: destination)
+            } else {
+                try fm.moveItem(at: source, to: destination)
+            }
+            return .success(())
         } catch {
-            sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found")
+            return .failure(.conflict)
         }
     }
 
-    private func handleMKCOL(on connection: NWConnection, path: String) {
-        guard !path.isEmpty, let resolved = resolvedPath(path, within: romsDirectory) else {
-            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden")
-            return
-        }
-        do {
-            try FileManager.default.createDirectory(at: resolved, withIntermediateDirectories: true)
-            sendWebDAVResponse(on: connection, status: 201, statusText: "Created")
-        } catch {
-            sendWebDAVResponse(on: connection, status: 405, statusText: "Method Not Allowed")
-        }
+    private func webDAVOverwriteAllowed(_ request: HTTPRequest) -> Bool {
+        guard let value = request.headers["overwrite"]?.uppercased() else { return true }
+        return value != "F"
     }
 
-    private func handleMOVE(on connection: NWConnection, path: String, destination: String) {
-        guard !path.isEmpty, let source = resolvedPath(path, within: romsDirectory) else {
-            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden")
-            return
-        }
+    private func webDAVResolvedDestination(from header: String) -> URL? {
+        guard !header.isEmpty else { return nil }
 
-        let destPath: String
-        if let url = URL(string: destination) {
-            destPath = url.path.removingPercentEncoding ?? url.path
+        let rawPath: String
+        if let url = URL(string: header), !url.path.isEmpty {
+            rawPath = url.path.removingPercentEncoding ?? url.path
         } else {
-            destPath = destination
-        }
-        let cleanDest = destPath.hasPrefix("/") ? String(destPath.dropFirst()) : destPath
-        guard !cleanDest.isEmpty, let target = resolvedPath(cleanDest, within: romsDirectory) else {
-            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden")
-            return
+            rawPath = header.removingPercentEncoding ?? header
         }
 
-        do {
-            try? FileManager.default.removeItem(at: target)
-            try FileManager.default.moveItem(at: source, to: target)
-            sendWebDAVResponse(on: connection, status: 201, statusText: "Created")
-        } catch {
-            sendWebDAVResponse(on: connection, status: 409, statusText: "Conflict")
+        var clean = rawPath.hasPrefix("/") ? String(rawPath.dropFirst()) : rawPath
+        if clean.hasSuffix("/") { clean = String(clean.dropLast()) }
+        guard !clean.isEmpty else { return nil }
+        return resolvedPath(clean, within: romsDirectory)
+    }
+
+    private func webDAVHref(for url: URL) -> String {
+        let basePath = romsDirectory.standardized.path
+        let itemPath = url.standardized.path
+        let relative: String
+        if itemPath == basePath {
+            relative = ""
+        } else if itemPath.hasPrefix(basePath + "/") {
+            relative = String(itemPath.dropFirst(basePath.count + 1))
+        } else {
+            relative = url.lastPathComponent
+        }
+
+        if relative.isEmpty { return "/" }
+        let encoded = relative.split(separator: "/").map { String($0).urlPathEscaped }.joined(separator: "/")
+        return "/\(encoded)"
+    }
+
+    private func webDAVFormattedDate(_ date: Date?) -> String {
+        guard let date else { return "" }
+        return Self.webDAVISO8601Formatter.string(from: date)
+    }
+
+    private func mimeType(for url: URL) -> String {
+        switch url.pathExtension.lowercased() {
+        case "zip": return "application/zip"
+        case "7z": return "application/x-7z-compressed"
+        case "gz", "gzip": return "application/gzip"
+        case "bz2": return "application/x-bzip2"
+        case "tar": return "application/x-tar"
+        case "xml": return "application/xml"
+        case "json": return "application/json"
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        default: return "application/octet-stream"
         }
     }
 
-    private func handleWebDAVPutBuffered(on connection: NWConnection, path: String, body: Data) {
+    private func isFinderProbePath(_ path: String) -> Bool {
+        let lower = path.lowercased()
+        let name = (path as NSString).lastPathComponent
+        if name == ".DS_Store" || name.hasPrefix("._") { return true }
+        if lower.contains(".spotlight-v100") || lower.contains(".metadata_never_index") { return true }
+        if lower.contains("backups.backupdb") || name == "mach_kernel" { return true }
+        return false
+    }
+
+    private func notifyWebDAVResourceChanged(at url: URL) {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return }
+
+        if isDir.boolValue {
+            guard let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else { return }
+            for case let fileURL as URL in enumerator {
+                let isRegular = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
+                if isRegular {
+                    postUploadCompleted(filePath: fileURL.path)
+                }
+            }
+        } else {
+            postUploadCompleted(filePath: url.path)
+        }
+    }
+
+    private func handleWebDAVPutBuffered(on connection: NWConnection, request: HTTPRequest,
+                                         path: String, body: Data) {
         guard !path.isEmpty, let resolved = resolvedPath(path, within: romsDirectory) else {
-            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden")
+            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
             return
         }
         let parent = resolved.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
 
         postUploadStarted(path: resolved.path)
-        do {
-            try body.write(to: resolved)
-            postUploadCompleted(filePath: resolved.path)
-            sendWebDAVResponse(on: connection, status: 201, statusText: "Created")
-        } catch {
-            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error")
+        guard let writer = SerialFileWriter(at: resolved) else {
+            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error", request: request)
+            return
+        }
+        writer.write(body)
+        writer.finalize { [weak self] in
+            self?.postUploadCompleted(filePath: resolved.path)
+            self?.sendWebDAVResponse(on: connection, status: 201, statusText: "Created", request: request)
         }
     }
 
@@ -983,52 +1908,169 @@ final class ROMUploadServer: @unchecked Sendable {
 
     // MARK: - Response Helpers
 
+    private func sendContinue(on connection: NWConnection, isWebDAV: Bool, request: HTTPRequest,
+                              then work: @escaping () -> Void) {
+        let header = "HTTP/1.1 100 Continue\r\n\r\n"
+        connection.send(content: Data(header.utf8), completion: .contentProcessed { error in
+            if error != nil {
+                connection.cancel()
+                return
+            }
+            work()
+        })
+    }
+
+    private func finishResponse(on connection: NWConnection, request: HTTPRequest?,
+                                isWebDAV: Bool, forceClose: Bool) {
+        if forceClose {
+            connection.cancel()
+            return
+        }
+
+        let connID = ObjectIdentifier(connection)
+        lock.lock()
+        let ctx = connectionContexts[connID]
+        let activeRequest = request ?? ctx?.activeRequest
+        var pipelined = Data()
+        if var live = ctx {
+            pipelined = live.pendingPipelined
+            live.pendingPipelined = Data()
+            connectionContexts[connID] = live
+        }
+        lock.unlock()
+
+        guard let ctx else {
+            connection.cancel()
+            return
+        }
+
+        if !pipelined.isEmpty {
+            ctx.ioQueue.async { [weak self] in
+                self?.processIncomingBuffer(on: connection, isWebDAV: ctx.isWebDAV, buffer: pipelined)
+            }
+            return
+        }
+
+        let keepAlive = activeRequest?.wantsKeepAlive ?? false
+        if !keepAlive || ctx.readClosed {
+            connection.cancel()
+            return
+        }
+        scheduleReceive(on: connection, isWebDAV: isWebDAV, accumulated: Data())
+    }
+
+    private func sendRawThenStreamBody(on connection: NWConnection, status: Int, statusText: String,
+                                         headers: [String: String], body: Data,
+                                         request: HTTPRequest?, isWebDAV: Bool,
+                                         forceClose: Bool = false) {
+        let keepAlive = !forceClose && (request?.wantsKeepAlive ?? false)
+        let connHeader = keepAlive ? "keep-alive" : "close"
+        var header = "HTTP/1.1 \(status) \(statusText)\r\nConnection: \(connHeader)\r\n"
+        for (key, value) in headers { header += "\(key): \(value)\r\n" }
+        header += "\r\n"
+
+        connection.send(content: Data(header.utf8), completion: .contentProcessed { [weak self] error in
+            guard let self else { return }
+            if error != nil {
+                connection.cancel()
+                return
+            }
+            self.streamResponseBody(body, on: connection, request: request, isWebDAV: isWebDAV,
+                                    forceClose: forceClose || !keepAlive)
+        })
+    }
+
+    private func streamResponseBody(_ body: Data, on connection: NWConnection,
+                                    request: HTTPRequest?, isWebDAV: Bool,
+                                    forceClose: Bool, offset: Int = 0) {
+        let chunkSize = 256 * 1024
+        guard offset < body.count else {
+            finishResponse(on: connection, request: request, isWebDAV: isWebDAV, forceClose: forceClose)
+            return
+        }
+        let end = min(offset + chunkSize, body.count)
+        let chunk = body[offset..<end]
+        connection.send(content: Data(chunk), completion: .contentProcessed { [weak self] error in
+            guard let self else { return }
+            if error != nil {
+                connection.cancel()
+                return
+            }
+            self.streamResponseBody(body, on: connection, request: request, isWebDAV: isWebDAV,
+                                    forceClose: forceClose, offset: end)
+        })
+    }
+
     private func sendResponse(on connection: NWConnection, status: Int, statusText: String,
                               body: String, contentType: String = "text/plain; charset=utf-8",
+                              request: HTTPRequest? = nil, isWebDAV: Bool = false,
+                              forceClose: Bool = false,
                               extraHeaders: [String: String] = [:]) {
         sendDataResponse(on: connection, status: status, statusText: statusText,
-                         contentType: contentType, body: Data(body.utf8), extraHeaders: extraHeaders)
+                         contentType: contentType, body: Data(body.utf8),
+                         request: request, isWebDAV: isWebDAV, forceClose: forceClose,
+                         extraHeaders: extraHeaders)
     }
 
     private func sendDataResponse(on connection: NWConnection, status: Int, statusText: String,
                                   contentType: String, body: Data,
+                                  request: HTTPRequest? = nil, isWebDAV: Bool = false,
+                                  forceClose: Bool = false,
                                   extraHeaders: [String: String] = [:]) {
+        let keepAlive = !forceClose && (request?.wantsKeepAlive ?? false)
+        let connHeader = keepAlive ? "keep-alive" : "close"
         var header = """
         HTTP/1.1 \(status) \(statusText)\r\n\
         Content-Type: \(contentType)\r\n\
         Content-Length: \(body.count)\r\n\
-        Connection: close\r\n
+        Connection: \(connHeader)\r\n
         """
         for (key, value) in extraHeaders { header += "\(key): \(value)\r\n" }
         header += "\r\n"
         var response = Data(header.utf8)
         response.append(body)
-        connection.send(content: response,
-                        completion: .contentProcessed { _ in connection.cancel() })
+        connection.send(content: response, completion: .contentProcessed { [weak self] _ in
+            self?.finishResponse(on: connection, request: request, isWebDAV: isWebDAV,
+                                 forceClose: forceClose || !keepAlive)
+        })
+    }
+
+    private func sendRawHeaders(on connection: NWConnection, status: Int, statusText: String,
+                                headers: [String: String], body: Data,
+                                request: HTTPRequest?, isWebDAV: Bool,
+                                forceClose: Bool = false) {
+        let keepAlive = !forceClose && (request?.wantsKeepAlive ?? false)
+        let connHeader = keepAlive ? "keep-alive" : "close"
+        var header = "HTTP/1.1 \(status) \(statusText)\r\nConnection: \(connHeader)\r\n"
+        for (key, value) in headers { header += "\(key): \(value)\r\n" }
+        header += "\r\n"
+        var response = Data(header.utf8)
+        response.append(body)
+        connection.send(content: response, completion: .contentProcessed { [weak self] _ in
+            self?.finishResponse(on: connection, request: request, isWebDAV: isWebDAV,
+                                 forceClose: forceClose || !keepAlive)
+        })
     }
 
     private func sendWebDAVResponse(on connection: NWConnection, status: Int,
-                                    statusText: String, body: String? = nil) {
+                                    statusText: String, body: String? = nil,
+                                    request: HTTPRequest? = nil, forceClose: Bool = false) {
         let bodyData = body.map { Data($0.utf8) } ?? Data()
         let ct = body != nil ? "text/plain; charset=utf-8" : "text/plain"
-        let header = """
-        HTTP/1.1 \(status) \(statusText)\r\n\
-        Content-Type: \(ct)\r\n\
-        Content-Length: \(bodyData.count)\r\n\
-        Connection: close\r\n\
-        \r\n
-        """
-        var response = Data(header.utf8)
-        response.append(bodyData)
-        connection.send(content: response,
-                        completion: .contentProcessed { _ in connection.cancel() })
+        sendRawHeaders(on: connection, status: status, statusText: statusText, headers: [
+            "Content-Type": ct,
+            "Content-Length": "\(bodyData.count)"
+        ], body: bodyData, request: request, isWebDAV: true, forceClose: forceClose)
     }
 
-    private func sendJSON(on connection: NWConnection, status: Int, json: [String: Any]) {
+    private func sendJSON(on connection: NWConnection, status: Int, json: [String: Any],
+                          request: HTTPRequest? = nil, isWebDAV: Bool = false,
+                          forceClose: Bool = false) {
         let data = (try? JSONSerialization.data(withJSONObject: json)) ?? Data()
         sendDataResponse(on: connection, status: status,
                          statusText: status == 200 ? "OK" : "Error",
-                         contentType: "application/json", body: data)
+                         contentType: "application/json", body: data,
+                         request: request, isWebDAV: isWebDAV, forceClose: forceClose)
     }
 
     // MARK: - Path Safety
@@ -1072,23 +2114,38 @@ final class ROMUploadServer: @unchecked Sendable {
         let name: String
         let size: Int64
         let isDirectory: Bool
+        let modified: Date
+        let created: Date?
     }
 
     private func listFiles(in directory: URL) -> [FileEntry] {
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey]
+            at: directory,
+            includingPropertiesForKeys: [
+                .fileSizeKey, .isDirectoryKey,
+                .contentModificationDateKey, .creationDateKey
+            ],
+            options: [.skipsHiddenFiles]
         ) else { return [] }
 
         return contents
             .filter { !$0.lastPathComponent.hasPrefix(".") }
             .map { url -> FileEntry in
-                let attrs = try? url.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
-                return FileEntry(name: url.lastPathComponent,
-                                 size: Int64(attrs?.fileSize ?? 0),
-                                 isDirectory: attrs?.isDirectory ?? false)
+                let attrs = try? url.resourceValues(forKeys: [
+                    .fileSizeKey, .isDirectoryKey,
+                    .contentModificationDateKey, .creationDateKey
+                ])
+                return FileEntry(
+                    name: url.lastPathComponent,
+                    size: Int64(attrs?.fileSize ?? 0),
+                    isDirectory: attrs?.isDirectory ?? false,
+                    modified: attrs?.contentModificationDate ?? .distantPast,
+                    created: attrs?.creationDate
+                )
             }
             .sorted { lhs, rhs in
                 if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+                if lhs.modified != rhs.modified { return lhs.modified > rhs.modified }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
     }
@@ -1118,6 +2175,23 @@ private struct HTTPRequest {
     let headers: [String: String]
 
     var contentLength: Int { Int(headers["content-length"] ?? "") ?? 0 }
+
+    /// Finder WebDAV PUT uses `Transfer-Encoding: chunked` instead of Content-Length.
+    var isChunked: Bool {
+        headers["transfer-encoding"]?.lowercased().contains("chunked") == true
+    }
+
+    var wantsKeepAlive: Bool {
+        if let connection = headers["connection"]?.lowercased() {
+            if connection.contains("close") { return false }
+            if connection.contains("keep-alive") { return true }
+        }
+        return httpVersion.uppercased() == "HTTP/1.1"
+    }
+
+    var expectsContinue: Bool {
+        headers["expect"]?.lowercased().contains("100-continue") == true
+    }
 
     var queryParameters: [String: String] {
         guard let qs = queryString else { return [:] }
@@ -1186,28 +2260,37 @@ private final class StreamingMultipartParser {
     private let boundary: Data
     private let endBoundary: Data
     private let outputDirectory: URL
+    private let onFileCompleted: ((String) -> Void)?
     private var buffer = Data()
     private var state: ParserState = .seekingBoundary
     private var currentFilename: String?
-    private var currentHandle: FileHandle?
+    private var currentWriter: SerialFileWriter?
     private var currentFilePath: URL?
     private(set) var completedFiles: [String] = []
+    private var pendingCloses = 0
+    private var finalizeCompletion: (() -> Void)?
 
     private let headerEndMarker = Data([0x0D, 0x0A, 0x0D, 0x0A])
 
     private enum ParserState { case seekingBoundary, readingHeaders, readingBody, done }
 
-    init(boundary: String, outputDirectory: URL) {
+    init(boundary: String, outputDirectory: URL, onFileCompleted: ((String) -> Void)? = nil) {
         self.boundary = Data("--\(boundary)".utf8)
         self.endBoundary = Data("--\(boundary)--".utf8)
         self.outputDirectory = outputDirectory
+        self.onFileCompleted = onFileCompleted
     }
 
     func feed(_ data: Data) { buffer.append(data); process() }
 
-    func finalize() {
+    func finalize(completion: @escaping () -> Void) {
         if state == .readingBody { flushBodyBuffer(isFinal: true) }
         closeCurrentFile()
+        if pendingCloses == 0 {
+            completion()
+        } else {
+            finalizeCompletion = completion
+        }
     }
 
     private func process() {
@@ -1240,8 +2323,7 @@ private final class StreamingMultipartParser {
                     currentFilename = sanitized
                     let filePath = outputDirectory.appendingPathComponent(sanitized)
                     currentFilePath = filePath
-                    FileManager.default.createFile(atPath: filePath.path, contents: nil)
-                    currentHandle = FileHandle(forWritingAtPath: filePath.path)
+                    currentWriter = SerialFileWriter(at: filePath)
                     NotificationCenter.default.post(
                         name: Notification.Name(PVWebServerFileUploadStartedNotificationName),
                         object: nil, userInfo: ["path": filePath.path]
@@ -1268,7 +2350,7 @@ private final class StreamingMultipartParser {
                 if crlfCheck == Data([0x0D, 0x0A]) { endIdx -= 2 }
             }
             let bodyChunk = buffer[buffer.startIndex..<endIdx]
-            currentHandle?.write(bodyChunk)
+            currentWriter?.write(bodyChunk)
             closeCurrentFile()
 
             buffer = Data(buffer[range.upperBound...])
@@ -1279,27 +2361,39 @@ private final class StreamingMultipartParser {
                 state = .readingHeaders
             }
         } else if isFinal {
-            if !buffer.isEmpty { currentHandle?.write(buffer); buffer = Data() }
+            if !buffer.isEmpty { currentWriter?.write(buffer); buffer = Data() }
             closeCurrentFile()
         } else {
             let safeSize = boundary.count + 4
             if buffer.count > safeSize {
                 let writeCount = buffer.count - safeSize
                 let chunk = buffer[buffer.startIndex..<buffer.index(buffer.startIndex, offsetBy: writeCount)]
-                currentHandle?.write(chunk)
+                currentWriter?.write(chunk)
                 buffer = Data(buffer[buffer.index(buffer.startIndex, offsetBy: writeCount)...])
             }
         }
     }
 
     private func closeCurrentFile() {
-        currentHandle?.closeFile()
-        currentHandle = nil
-        if let path = currentFilePath?.path, currentFilename != nil {
-            completedFiles.append(path)
-        }
+        guard let writer = currentWriter else { return }
+        let path = currentFilePath?.path
+        let filename = currentFilename
+        currentWriter = nil
         currentFilename = nil
         currentFilePath = nil
+        pendingCloses += 1
+        writer.finalize { [weak self] in
+            guard let self else { return }
+            if let path, filename != nil {
+                self.completedFiles.append(path)
+                self.onFileCompleted?(path)
+            }
+            self.pendingCloses -= 1
+            if self.pendingCloses == 0, let completion = self.finalizeCompletion {
+                self.finalizeCompletion = nil
+                completion()
+            }
+        }
     }
 
     private func extractFilename(from headers: String) -> String? {
@@ -1367,7 +2461,8 @@ private extension String {
 extension ROMUploadServer {
     static func uploadPageHTML(title: String, ipAddress: String, httpPort: String,
                                davPort: String, fileRows: String,
-                               currentPath: String = "") -> String {
+                               currentPath: String = "",
+                               initialEntriesJSON: String = "[]") -> String {
         let uploadTarget = currentPath.isEmpty
             ? "/upload"
             : "/upload?path=\(currentPath.urlPathEscaped)"
@@ -1428,10 +2523,26 @@ extension ROMUploadServer {
               background: linear-gradient(90deg, var(--accent), var(--success));
               width: 0%; transition: width 0.15s; }
             #status { margin-top: 6px; font-size: 13px; color: var(--text-muted); }
+            #status-detail { margin-top: 4px; font-size: 12px; color: var(--success); min-height: 1.2em; }
+            #toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999;
+              display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+            .toast { background: var(--surface); border: 1px solid var(--border);
+              border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 14px;
+              font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+              animation: toast-in 0.2s ease; max-width: 320px; word-break: break-word; }
+            .toast-success { border-left-color: var(--success); }
+            .toast-error { border-left-color: var(--danger); }
+            .toast.fade { opacity: 0; transition: opacity 0.3s; }
+            @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); }
+              to { opacity: 1; transform: translateY(0); } }
             table { width: 100%; border-collapse: collapse; margin-top: 10px; }
             thead th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 600;
               color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
-              border-bottom: 1px solid var(--border); }
+              border-bottom: 1px solid var(--border); user-select: none; }
+            thead th.sortable { cursor: pointer; }
+            thead th.sortable:hover { color: var(--text); }
+            thead th.sort-active { color: var(--accent); }
+            .sort-indicator { margin-left: 4px; opacity: 0.85; }
             tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
             tbody tr:hover { background: rgba(74,144,217,0.06); }
             td { padding: 10px; font-size: 14px; vertical-align: middle; }
@@ -1472,13 +2583,21 @@ extension ROMUploadServer {
             <div id="progress-container">
               <div id="progress-bar"><div id="progress-fill"></div></div>
               <div id="status"></div>
+              <div id="status-detail"></div>
             </div>
           </div>
+
+          <div id="toast-container"></div>
 
           <div class="card">
             <h2>Files &mdash; \(locationLabel)</h2>
             <table>
-              <thead><tr><th>Name</th><th>Size</th><th></th></tr></thead>
+              <thead><tr>
+                <th class="sortable" data-sort="name" id="sort-name">Name<span class="sort-indicator"></span></th>
+                <th class="sortable sort-active" data-sort="modified" id="sort-modified">Modified<span class="sort-indicator"></span></th>
+                <th class="sortable" data-sort="size" id="sort-size">Size<span class="sort-indicator"></span></th>
+                <th></th>
+              </tr></thead>
               <tbody id="file-list">
                 \(fileRows)
               </tbody>
@@ -1487,68 +2606,283 @@ extension ROMUploadServer {
 
           <script>
             const zone = document.getElementById('drop-zone');
+            const currentPath = '\(currentPath.jsEscaped)';
+            const uploadTarget = '\(uploadTarget)';
+            const maxConcurrent = 3;
+
             zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('hover'); });
             zone.addEventListener('dragleave', () => zone.classList.remove('hover'));
             zone.addEventListener('drop', e => {
               e.preventDefault(); zone.classList.remove('hover');
-              uploadFiles(e.dataTransfer.files);
+              enqueueFiles(e.dataTransfer.files);
             });
             document.getElementById('upload-btn').addEventListener('click', () => {
               document.getElementById('file-input').click();
             });
             document.getElementById('file-input').addEventListener('change', e => {
-              uploadFiles(e.target.files);
+              enqueueFiles(e.target.files);
+              e.target.value = '';
             });
 
+            let cachedEntries = \(initialEntriesJSON);
+            let sortColumn = 'modified';
+            let sortAsc = false;
             const uploadQueue = [];
-            let uploading = false;
-            let totalQueued = 0;
-            let completed = 0;
+            let activeWorkers = 0;
+            let batchTotal = 0;
+            let batchCompleted = 0;
+            let nextUploadId = 0;
+            const activeUploads = new Map();
+            const recentCompleted = [];
             let reloadTimer = null;
+            let refreshTimer = null;
 
-            function uploadFiles(files) {
-              if (!files || !files.length) return;
-              if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
-              for (let k = 0; k < files.length; k++) uploadQueue.push(files[k]);
-              totalQueued += files.length;
-              if (!uploading) processQueue();
+            document.querySelectorAll('thead th.sortable').forEach(th => {
+              th.addEventListener('click', () => setSort(th.dataset.sort));
+            });
+            updateSortHeaders();
+            renderFileRows(cachedEntries);
+
+            function formatSize(bytes) {
+              if (!bytes || bytes === 0) return '0 B';
+              const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+              const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+              return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
             }
 
-            async function processQueue() {
-              uploading = true;
+            function formatDate(ts) {
+              if (!ts) return '—';
+              return new Date(ts * 1000).toLocaleString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: 'numeric', minute: '2-digit'
+              });
+            }
+
+            function setSort(column) {
+              if (sortColumn === column) {
+                sortAsc = !sortAsc;
+              } else {
+                sortColumn = column;
+                sortAsc = column === 'name';
+              }
+              updateSortHeaders();
+              renderFileRows(cachedEntries);
+            }
+
+            function updateSortHeaders() {
+              document.querySelectorAll('thead th.sortable').forEach(th => {
+                const col = th.dataset.sort;
+                const active = col === sortColumn;
+                th.classList.toggle('sort-active', active);
+                const indicator = th.querySelector('.sort-indicator');
+                if (indicator) indicator.textContent = active ? (sortAsc ? '▲' : '▼') : '';
+              });
+            }
+
+            function sortEntries(entries) {
+              const dirs = entries.filter(e => e.isDirectory);
+              const files = entries.filter(e => !e.isDirectory);
+              const cmp = (a, b) => {
+                let n = 0;
+                if (sortColumn === 'name') {
+                  n = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+                } else if (sortColumn === 'size') {
+                  n = (a.size || 0) - (b.size || 0);
+                } else {
+                  n = (a.modified || 0) - (b.modified || 0);
+                }
+                if (n === 0) n = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+                return sortAsc ? n : -n;
+              };
+              dirs.sort(cmp);
+              files.sort(cmp);
+              return [...dirs, ...files];
+            }
+
+            function renderFileRows(entries) {
+              const tbody = document.getElementById('file-list');
+              const sorted = sortEntries(entries || []);
+              let html = '';
+              if (currentPath) {
+                const parts = currentPath.split('/');
+                parts.pop();
+                const parent = parts.join('/');
+                const parentHref = parent ? '/?path=' + encodeURIComponent(parent) : '/';
+                html += '<tr><td><a href="' + parentHref + '">&#x2B05;&#xFE0F; ..</a></td><td></td><td></td><td></td></tr>';
+              }
+              if (!sorted.length) {
+                html += '<tr><td colspan="4" class="empty">No files yet. Drag and drop above to upload!</td></tr>';
+              } else {
+                for (const entry of sorted) {
+                  const childSub = currentPath ? currentPath + '/' + entry.name : entry.name;
+                  const enc = encodeURIComponent(childSub);
+                  const escapedName = entry.name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                  if (entry.isDirectory) {
+                    html += '<tr><td><a href="/?path=' + enc + '">&#x1F4C1; ' + escapedName + '</a></td>';
+                    html += '<td>—</td><td>—</td><td></td></tr>';
+                  } else {
+                    html += '<tr><td><a href="/files/' + enc + '" download>' + escapedName + '</a></td>';
+                    html += '<td>' + formatDate(entry.modified) + '</td>';
+                    html += '<td>' + formatSize(entry.size) + '</td>';
+                    html += '<td><a href="/files/' + enc + '" download class="btn btn-sm">Download</a> ';
+                    html += '<button onclick="deleteFile(\\'' + childSub.replace(/'/g, "\\\\'") + '\\')" class="btn btn-sm btn-danger">Delete</button></td></tr>';
+                  }
+                }
+              }
+              tbody.innerHTML = html;
+            }
+
+            function showToast(message, isSuccess) {
+              const container = document.getElementById('toast-container');
+              const el = document.createElement('div');
+              el.className = 'toast ' + (isSuccess ? 'toast-success' : 'toast-error');
+              el.textContent = message;
+              container.appendChild(el);
+              setTimeout(() => {
+                el.classList.add('fade');
+                setTimeout(() => el.remove(), 300);
+              }, 2800);
+            }
+
+            function updateStatusDetail() {
+              const detail = document.getElementById('status-detail');
+              if (!detail) return;
+              if (recentCompleted.length === 0) {
+                detail.textContent = '';
+                return;
+              }
+              const shown = recentCompleted.slice(0, 3);
+              const suffix = recentCompleted.length > 3 ? ' +' + (recentCompleted.length - 3) + ' more' : '';
+              detail.textContent = 'Finished: ' + shown.join(', ') + suffix;
+            }
+
+            function refreshFileList() {
+              const pathQuery = currentPath ? '?path=' + encodeURIComponent(currentPath) : '';
+              fetch('/api/list' + pathQuery)
+                .then(r => r.ok ? r.json() : Promise.reject())
+                .then(data => {
+                  cachedEntries = data.entries || [];
+                  renderFileRows(cachedEntries);
+                })
+                .catch(() => {});
+            }
+
+            function scheduleRefresh() {
+              if (refreshTimer) return;
+              refreshTimer = setTimeout(() => {
+                refreshTimer = null;
+                refreshFileList();
+              }, 2500);
+            }
+
+            function enqueueFiles(files) {
+              if (!files || !files.length) return;
+              if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+              const wasIdle = activeWorkers === 0 && uploadQueue.length === 0;
+              for (let k = 0; k < files.length; k++) uploadQueue.push(files[k]);
+              if (wasIdle) {
+                batchCompleted = 0;
+                batchTotal = uploadQueue.length;
+                activeUploads.clear();
+                recentCompleted.length = 0;
+                updateStatusDetail();
+              } else {
+                batchTotal += files.length;
+              }
+              const container = document.getElementById('progress-container');
+              container.style.display = 'block';
+              pumpQueue();
+            }
+
+            function updateProgress() {
+              const fill = document.getElementById('progress-fill');
+              const status = document.getElementById('status');
+              let inFlightFraction = 0;
+              const activeNames = [];
+              for (const upload of activeUploads.values()) {
+                if (upload.total > 0) inFlightFraction += upload.loaded / upload.total;
+                activeNames.push(upload.name);
+              }
+              const inFlightCount = activeUploads.size;
+              const queued = Math.max(0, batchTotal - batchCompleted - inFlightCount);
+              const pct = batchTotal > 0
+                ? ((batchCompleted + inFlightFraction) / batchTotal * 100)
+                : 0;
+              const pctRounded = Math.round(Math.min(100, pct));
+              fill.style.width = pctRounded + '%';
+
+              if (batchTotal === 0) {
+                status.textContent = '';
+              } else if (inFlightCount === 0 && batchCompleted === batchTotal) {
+                status.textContent = 'All ' + batchTotal + ' files uploaded';
+              } else if (inFlightCount === 0) {
+                status.textContent = batchCompleted + '/' + batchTotal + ' complete · ' + queued + ' queued';
+              } else {
+                const parts = [inFlightCount + ' uploading'];
+                if (queued > 0) parts.push(queued + ' queued');
+                parts.push(batchCompleted + '/' + batchTotal + ' complete');
+                parts.push(pctRounded + '%');
+                status.textContent = parts.join(' · ');
+              }
+              updateStatusDetail();
+            }
+
+            function pumpQueue() {
+              while (activeWorkers < maxConcurrent && uploadQueue.length) {
+                const file = uploadQueue.shift();
+                activeWorkers++;
+                const uploadId = nextUploadId++;
+                activeUploads.set(uploadId, { name: file.name, loaded: 0, total: file.size || 0 });
+                const fd = new FormData();
+                fd.append('files[]', file, file.name);
+                const xhr = new XMLHttpRequest();
+                xhr.upload.onprogress = (e) => {
+                  if (e.lengthComputable) {
+                    activeUploads.set(uploadId, { name: file.name, loaded: e.loaded, total: e.total });
+                    updateProgress();
+                  }
+                };
+                xhr.onload = xhr.onerror = () => {
+                  activeUploads.delete(uploadId);
+                  activeWorkers--;
+                  const ok = xhr.status >= 200 && xhr.status < 300;
+                  if (ok) {
+                    batchCompleted++;
+                    recentCompleted.unshift(file.name);
+                    if (recentCompleted.length > 8) recentCompleted.pop();
+                    showToast('Uploaded ' + file.name, true);
+                  } else {
+                    showToast('Failed: ' + file.name, false);
+                  }
+                  updateProgress();
+                  scheduleRefresh();
+                  pumpQueue();
+                  if (activeWorkers === 0 && uploadQueue.length === 0) {
+                    finishBatch();
+                  }
+                };
+                xhr.open('POST', uploadTarget);
+                xhr.send(fd);
+                updateProgress();
+              }
+            }
+
+            function finishBatch() {
               const container = document.getElementById('progress-container');
               const fill = document.getElementById('progress-fill');
               const status = document.getElementById('status');
-              container.style.display = 'block';
-
-              while (uploadQueue.length) {
-                const f = uploadQueue.shift();
-                status.textContent = 'Uploading ' + f.name + ' (' + (completed + 1) + '/' + totalQueued + ')...';
-                const fd = new FormData();
-                fd.append('files[]', f, f.name);
-                await new Promise((resolve) => {
-                  const xhr = new XMLHttpRequest();
-                  xhr.upload.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                      fill.style.width = ((completed + e.loaded / e.total) / totalQueued * 100) + '%';
-                    }
-                  };
-                  xhr.onload = resolve;
-                  xhr.onerror = resolve;
-                  xhr.open('POST', '\(uploadTarget)');
-                  xhr.send(fd);
-                });
-                completed++;
-                fill.style.width = (completed / totalQueued * 100) + '%';
-              }
-
-              uploading = false;
               fill.style.width = '100%';
-              status.textContent = 'Done! ' + completed + ' file(s) uploaded.';
+              status.textContent = 'Done — ' + batchCompleted + ' of ' + batchTotal + ' uploaded';
+              updateStatusDetail();
               reloadTimer = setTimeout(() => {
                 container.style.display = 'none';
                 fill.style.width = '0%';
                 status.textContent = '';
+                document.getElementById('status-detail').textContent = '';
+                batchTotal = 0;
+                batchCompleted = 0;
+                activeUploads.clear();
+                recentCompleted.length = 0;
                 location.reload();
               }, 2000);
             }
@@ -1556,7 +2890,7 @@ extension ROMUploadServer {
             function deleteFile(name) {
               if (!confirm('Delete "' + name + '"?')) return;
               fetch('/files/' + encodeURIComponent(name), { method: 'DELETE' })
-                .then(r => { if (r.ok) location.reload(); else alert('Delete failed'); })
+                .then(r => { if (r.ok) refreshFileList(); else alert('Delete failed'); })
                 .catch(() => alert('Delete failed'));
             }
           </script>
