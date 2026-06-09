@@ -50,7 +50,7 @@
                                 <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" textAlignment="center" lineBreakMode="tailTruncation" numberOfLines="0" baselineAdjustment="alignBaselines" adjustsFontForContentSizeCategory="YES" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="G2L-KW-hUh" userLabel="Information Text">
                                     <rect key="frame" x="0.0" y="61" width="280" height="345"/>
                                     <string key="text">If authorized, iCube can collect data on its performance, feature usage, and configuration, as well as data on your system's hardware and operating system.  No private data is ever collected. This data helps us understand how people and emulated games use iCube and prioritize our efforts. It also helps us identify rare configurations that are causing bugs, performance and stability issues.  This authorization can be revoked at any time through iCube's settings.</string>
-                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                    <fontDescription key="fontDescription" style="UICTFontTextStyleBody"/>
                                     <nil key="textColor"/>
                                     <nil key="highlightedColor"/>
                                 </label>
