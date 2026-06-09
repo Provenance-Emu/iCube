@@ -82,15 +82,33 @@
 
   NSFileManager* fileManager = [NSFileManager defaultManager];
 
-  // Archive imports: extract the zip and move only the supported disc images it
-  // contains into the Software folder where the scanner looks. The zip itself is
-  // never copied into the library, so a failed/empty archive leaves no phantom
-  // file that would block a retry ("already imported"). Extraction is
-  // synchronous so the security-scoped resource is still valid throughout.
-  if ([[[sourcePath pathExtension] lowercaseString] isEqualToString:@"zip"]) {
-    DOLZipImportResult* result = [DOLZipImportHelper extractZipAtPath:sourcePath toFolder:softwareFolder];
+  // Archive imports: extract zip/7z/gzip/tar archives and move only the supported
+  // disc images they contain into the Software folder where the scanner looks. The
+  // archive itself is never copied into the library, so a failed/empty archive
+  // leaves no phantom file that would block a retry ("already imported").
+  // Extraction is synchronous so the security-scoped resource is still valid throughout.
+  if ([DOLZipImportHelper isArchivePath:sourcePath]) {
+    DOLZipImportResult* result = [DOLZipImportHelper importArchiveAtPath:sourcePath toFolder:softwareFolder];
 
-    if (result.errorMessage != nil) {
+    if (result.importedCount > 0 || result.skippedExistingCount > 0) {
+      NSString* snackbar = [DOLZipImportHelper snackbarTextForImportedCount:result.importedCount
+                                                                 skippedCount:result.skippedExistingCount
+                                                            archivesProcessed:1];
+      [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar"
+                                                          object:nil
+                                                        userInfo:@{@"text": snackbar}];
+
+      if (result.errorMessage != nil) {
+        UIAlertController* warningAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Import") message:result.errorMessage preferredStyle:UIAlertControllerStyleAlert];
+        [warningAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
+          handler:^(UIAlertAction* action) {
+          finish();
+        }]];
+        [self presentViewControllerOnWindow:warningAlert];
+      } else {
+        finish();
+      }
+    } else if (result.errorMessage != nil) {
       UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:result.errorMessage preferredStyle:UIAlertControllerStyleAlert];
 
       [errorAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
