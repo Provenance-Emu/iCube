@@ -243,7 +243,7 @@ void GameFile::DownloadDefaultCover()
 
   Common::HttpRequest request;
 #ifdef IPHONEOS
-  static constexpr char cover_url[] = "http://art.gametdb.com/wii/cover/{}/{}.png";
+  static constexpr char cover_url[] = "https://art.gametdb.com/wii/cover/{}/{}.png";
 #else
   static constexpr char cover_url[] = "https://art.gametdb.com/wii/cover/{}/{}.png";
 #endif
