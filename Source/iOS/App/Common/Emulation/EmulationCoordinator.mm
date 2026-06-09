@@ -128,6 +128,7 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   lineB("MAIN_CIR_SPECIALIZED_FP_ARITH", Config::Get(Config::MAIN_CIR_SPECIALIZED_FP_ARITH));
   lineB("MAIN_CIR_PSQ_FASTPATH", Config::Get(Config::MAIN_CIR_PSQ_FASTPATH));
   lineB("MAIN_CIR_PS_NEON", Config::Get(Config::MAIN_CIR_PS_NEON));
+  lineB("MAIN_CIR_DEAD_FPRF_ELIM", Config::Get(Config::MAIN_CIR_DEAD_FPRF_ELIM));
   lineB("MAIN_DSP_HLE", Config::Get(Config::MAIN_DSP_HLE));
   lineB("MAIN_FAST_DISC_SPEED", Config::Get(Config::MAIN_FAST_DISC_SPEED));
   lineB("MAIN_SYNC_ON_SKIP_IDLE", Config::Get(Config::MAIN_SYNC_ON_SKIP_IDLE));
@@ -1247,6 +1248,32 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
     snprintf(buf, sizeof(buf), "%.3f", g_perf_metrics.GetFrameDtAvgSeconds() * 1000.0); b += "  frame_dt_avg_ms=" + std::string(buf) + "\n";
     snprintf(buf, sizeof(buf), "%.3f", g_perf_metrics.GetFrameDtStdSeconds() * 1000.0); b += "  frame_dt_std_ms=" + std::string(buf) + "\n";
 
+    // Present decimation: duplicate VI presents vs total (explains FPS << VPS when hacks skip dup XFBs).
+    {
+      const u64 total_presents = PerformanceMetrics::GetTotalPresentCount();
+      const u64 dup_presents = PerformanceMetrics::GetDuplicatePresentCount();
+      const u64 unique_presents = total_presents > dup_presents ? total_presents - dup_presents : 0;
+      b += "  present_total=" + std::to_string(total_presents) + "\n";
+      b += "  present_duplicate=" + std::to_string(dup_presents) + "\n";
+      b += "  present_unique=" + std::to_string(unique_presents) + "\n";
+      if (total_presents > 0) {
+        snprintf(buf, sizeof(buf), "%.1f%%", 100.0 * static_cast<double>(dup_presents) /
+                                                  static_cast<double>(total_presents));
+        b += "  present_dup_ratio=" + std::string(buf) + "\n";
+      }
+    }
+
+    // Bound classification (same sensor adaptive clock / Auto-IR use).
+    {
+      const char* bound_str = "unknown";
+      switch (PerformanceMetrics::GetBound()) {
+        case PerformanceMetrics::Bound::CpuBound: bound_str = "cpu"; break;
+        case PerformanceMetrics::Bound::GpuBound: bound_str = "gpu"; break;
+        default: break;
+      }
+      b += "  bound=" + std::string(bound_str) + "\n";
+    }
+
     // App resident memory: phys_footprint from TASK_VM_INFO.
     task_vm_info_data_t vmInfo = {};
     mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
@@ -1260,6 +1287,31 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   // --- STALL REPORT --- (iCube stall instrumentation; FormatReport() emits the full
   // "=== STALL REPORT ===" block itself — header included — so we just append it.)
   b += StallMetrics::FormatReport();
+
+  // --- A/B BASELINE --- (fields to diff adaptive-off @ CPU 100% vs adaptive-on seeded clocks)
+  b += "=== A/B BASELINE ===\n";
+  {
+    NSUserDefaults* ud = [NSUserDefaults standardUserDefaults];
+    const bool acOn = [ud boolForKey:@"adaptive_clock_enable"];
+    b += std::string("  adaptive_clock_enable=") + (acOn ? "true" : "false") + "\n";
+    if (!gid.empty()) {
+      NSString* cpuKey = [@"adaptive_clock_cpu_" stringByAppendingString:
+                          [NSString stringWithUTF8String:gid.c_str()]];
+      NSString* viKey = [@"adaptive_clock_vi_" stringByAppendingString:
+                         [NSString stringWithUTF8String:gid.c_str()]];
+      if ([ud objectForKey:cpuKey]) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.3f", [ud floatForKey:cpuKey]);
+        b += "  adaptive_clock_cpu_seed=" + std::string(buf) + "\n";
+      }
+      if ([ud objectForKey:viKey]) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.3f", [ud floatForKey:viKey]);
+        b += "  adaptive_clock_vi_seed=" + std::string(buf) + "\n";
+      }
+    }
+    b += "  ab_hint=Compare fps/speed/max_speed with adaptive OFF and MAIN_OVERCLOCK=1.0 vs this capture\n";
+  }
 
   // --- SETTINGS ---
   b += "=== SETTINGS ===\n";
