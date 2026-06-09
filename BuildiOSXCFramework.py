@@ -305,7 +305,7 @@ class DolphinBuilder:
         # Base optimization flags (common to all platforms)
         # Matches BuildCore.sh aggressive flags
         base_optimization_flags = (
-            "-Ofast "
+            "-O3 "
             "-fvectorize "
             "-funsafe-math-optimizations "
             "-funroll-loops "
