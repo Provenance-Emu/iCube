@@ -1,8 +1,10 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import CoreHaptics
 import GameController
 import SwiftUI
+import UIKit
 
 /// System filter for `ControllerSetupView`. Distinct from `EmulatedSystem`
 /// (which the assignment service switches on exhaustively) so `.both` can never
@@ -30,7 +32,32 @@ enum ControllerSetupSystem {
 /// `ControllersMappingView` representable all compile on iOS and tvOS). Hosts
 /// that need extra sections (Settings keeps DSU Client + Alternate Input
 /// Sources) embed `sections` in their own `List` instead of using `body`.
+/// Thin host wrapper. The Pause menu renders this directly (`body` wraps the
+/// sections in its own `List`); Settings embeds `sections` into its own `List`.
+///
+/// `sections` returns `ControllerSetupSections` — a real `View` node — rather
+/// than inlined section content. This is required for correctness: a host that
+/// accesses `.sections` on a transient `ControllerSetupView` value would never
+/// give that value's `@State` a managed storage node, so its refresh state
+/// (connected controllers, qualifiers) would stay empty. Wrapping the stateful
+/// content in its own view guarantees the state is owned by the tree in both
+/// hosting paths.
 struct ControllerSetupView: View {
+  let system: ControllerSetupSystem
+
+  init(system: ControllerSetupSystem) {
+    self.system = system
+  }
+
+  var sections: some View { ControllerSetupSections(system: system) }
+
+  var body: some View {
+    List { sections }
+      .navigationTitle(L("Controllers"))
+  }
+}
+
+struct ControllerSetupSections: View {
   let system: ControllerSetupSystem
 
   init(system: ControllerSetupSystem) {
@@ -61,6 +88,14 @@ struct ControllerSetupView: View {
   @State private var wiimoteScan: Bool = false
   @State private var wiimoteSpeaker: Bool = false
 
+  /// Rumble destination preference, honored by the core rumble path (`Motor`).
+  /// 0 = device haptics, 1 = controller rumble, 2 = both. tvOS has no device to
+  /// hold, so the option is hidden there and the core forces controller rumble.
+  @AppStorage("rumble_destination") private var rumbleDestination: Int = 1
+  /// Retains the transient haptic engines spun up by "Identify controller" so
+  /// they outlive the call and finish their pulse before being torn down.
+  @State private var identifyEngines: [CHHapticEngine] = []
+
   private struct MappingTarget: Identifiable {
     let isGC: Bool
     let portOneBased: Int
@@ -74,11 +109,41 @@ struct ControllerSetupView: View {
     case controller(String) // qualifier
   }
 
+  /// The controller sections. This view is embedded directly into a host `List`,
+  /// so its `@State` is owned by the tree in both hosting paths.
+  ///
+  /// The data-refresh lifecycle (`onAppear` / device + assignment notifications)
+  /// and the mapping/profile sheets are attached to the always-present
+  /// "Connected Controllers" section. Attaching to a single concrete `Section`
+  /// (not a `Group`, whose modifiers would propagate to every child) keeps a
+  /// single `onAppear` and one instance of each sheet.
+  @ViewBuilder
   var body: some View {
-    List {
-      sections
+    if system.showsGameCube {
+      Section(header: Text(L("GameCube Controllers"))) {
+        ForEach(1 ... 4, id: \.self) { port in
+          gcPlayerRow(port)
+        }
+      }
     }
-    .navigationTitle(L("Controllers"))
+
+    if system.showsWii {
+      Section(header: Text(L("Wii Remotes"))) {
+        ForEach(1 ... 4, id: \.self) { w in
+          wiiPlayerRow(w)
+        }
+      }
+    }
+
+    Section(header: Text(L("Connected Controllers"))) {
+      if controllers.isEmpty {
+        Text(L("No controllers connected")).foregroundStyle(.secondary)
+      } else {
+        ForEach(Array(controllers.enumerated()), id: \.offset) { _, c in
+          connectedRow(c)
+        }
+      }
+    }
     .onAppear { reloadAll() }
     .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in reloadDevices() }
     .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in reloadDevices() }
@@ -114,42 +179,18 @@ struct ControllerSetupView: View {
         showProfileForWiimote = nil
       }
     }
-  }
-
-  /// The controller sections, exposed so hosts can compose them inside their own
-  /// `List` (Settings appends DSU Client + Alternate Input Sources).
-  @ViewBuilder
-  var sections: some View {
-    if system.showsGameCube {
-      Section(header: Text(L("GameCube Controllers"))) {
-        ForEach(1 ... 4, id: \.self) { port in
-          gcPlayerRow(port)
-        }
-      }
-    }
-
-    if system.showsWii {
-      Section(header: Text(L("Wii Remotes"))) {
-        ForEach(1 ... 4, id: \.self) { w in
-          wiiPlayerRow(w)
-        }
-      }
-    }
-
-    Section(header: Text(L("Connected Controllers"))) {
-      if controllers.isEmpty {
-        Text(L("No controllers connected")).foregroundStyle(.secondary)
-      } else {
-        ForEach(Array(controllers.enumerated()), id: \.offset) { _, c in
-          connectedRow(c)
-        }
-      }
-    }
 
     Section(header: Text(L("General"))) {
       Toggle(L("Connect MFi Controllers"), isOn: $mfiConnect)
       Toggle(L("Background Input"), isOn: $backgroundInput)
         .onChange(of: backgroundInput) { DOLConfigBridge.setMainBackgroundInput($0) }
+      #if os(iOS)
+      Picker(L("Rumble Output"), selection: $rumbleDestination) {
+        Text(L("Device Haptics")).tag(0)
+        Text(L("Controller")).tag(1)
+        Text(L("Both")).tag(2)
+      }
+      #endif
     }
 
     if system.showsWii {
@@ -166,7 +207,7 @@ struct ControllerSetupView: View {
 
   @ViewBuilder
   private func gcPlayerRow(_ port: Int) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: 14) {
       devicePicker(
         label: String(format: L("Player %d"), port),
         current: gcQualifiers[port] ?? "",
@@ -177,18 +218,20 @@ struct ControllerSetupView: View {
           gcProfiles = TVControllerMappingBridge.profiles(forGCPort: port)
           showProfileForGCPort = port
         }
+        .padding(.vertical, 8)
         Spacer()
         Button(L("Customize Buttons…")) { mappingTarget = MappingTarget(isGC: true, portOneBased: port) }
+          .padding(.vertical, 8)
       }
       .font(.caption)
       .buttonStyle(.borderless)
     }
-    .padding(.vertical, 2)
+    .padding(.vertical, 6)
   }
 
   @ViewBuilder
   private func wiiPlayerRow(_ w: Int) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: 14) {
       devicePicker(
         label: String(format: L("Wii Remote %d"), w),
         current: wiiQualifiers[w] ?? "",
@@ -224,13 +267,15 @@ struct ControllerSetupView: View {
           wiiProfiles = TVControllerMappingBridge.profiles(forWiimote: w)
           showProfileForWiimote = w
         }
+        .padding(.vertical, 8)
         Spacer()
         Button(L("Customize Buttons…")) { mappingTarget = MappingTarget(isGC: false, portOneBased: w) }
+          .padding(.vertical, 8)
       }
       .font(.caption)
       .buttonStyle(.borderless)
     }
-    .padding(.vertical, 2)
+    .padding(.vertical, 6)
   }
 
   /// A Device picker: Touchscreen / each connected controller (by friendly
@@ -250,19 +295,36 @@ struct ControllerSetupView: View {
 
   @ViewBuilder
   private func connectedRow(_ c: GCController) -> some View {
-    HStack {
-      Image(systemName: "gamecontroller").foregroundStyle(.secondary)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(friendlyName(c))
-        Text(c.productCategory).font(.caption).foregroundStyle(.secondary)
+    VStack(alignment: .leading, spacing: 10) {
+      HStack {
+        Image(systemName: "gamecontroller").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(friendlyName(c))
+          Text(c.productCategory).font(.caption).foregroundStyle(.secondary)
+        }
+        Spacer()
+        if #available(iOS 14.0, tvOS 14.0, *), let battery = c.battery, battery.batteryLevel >= 0 {
+          Text("\(Int((battery.batteryLevel * 100).rounded()))%")
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        Text("P\(c.playerIndex.rawValue + 1)").font(.caption).foregroundStyle(.secondary)
       }
-      Spacer()
-      if #available(iOS 14.0, tvOS 14.0, *), let battery = c.battery, battery.batteryLevel >= 0 {
-        Text("\(Int((battery.batteryLevel * 100).rounded()))%")
-          .font(.caption).foregroundStyle(.secondary)
+
+      HStack(spacing: 16) {
+        Button(L("Identify")) { identify(c) }
+        #if os(iOS)
+        if #available(iOS 14.0, *), let light = c.light {
+          ColorPicker(L("LED Color"), selection: ledBinding(for: light))
+            .labelsHidden()
+          Text(L("LED Color")).foregroundStyle(.secondary)
+        }
+        #endif
+        Spacer()
       }
-      Text("P\(c.playerIndex.rawValue + 1)").font(.caption).foregroundStyle(.secondary)
+      .font(.caption)
+      .buttonStyle(.borderless)
     }
+    .padding(.vertical, 4)
   }
 
   @ViewBuilder
@@ -315,6 +377,59 @@ struct ControllerSetupView: View {
 
   private func friendlyName(_ c: GCController) -> String {
     c.vendorName ?? c.productCategory
+  }
+
+  #if os(iOS)
+  /// Two-way bridge between SwiftUI's `Color` and a controller's `GCDeviceLight`.
+  @available(iOS 14.0, *)
+  private func ledBinding(for light: GCDeviceLight) -> Binding<Color> {
+    Binding(
+      get: { Color(red: Double(light.color.red), green: Double(light.color.green), blue: Double(light.color.blue)) },
+      set: { newColor in
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(newColor).getRed(&r, green: &g, blue: &b, alpha: &a)
+        light.color = GCColor(red: Float(r), green: Float(g), blue: Float(b))
+      }
+    )
+  }
+  #endif
+
+  /// Makes a specific controller perceptibly react (LED blink + a short rumble
+  /// pulse where supported) so the user can tell which physical device maps to
+  /// which list entry.
+  private func identify(_ c: GCController) {
+    if #available(iOS 14.0, tvOS 14.0, *), let light = c.light {
+      let original = light.color
+      for step in 0 ..< 6 {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(step) * 0.15) {
+          light.color = step % 2 == 0 ? GCColor(red: 1, green: 1, blue: 1) : original
+        }
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { light.color = original }
+    }
+    if #available(iOS 14.0, tvOS 14.0, *), let haptics = c.haptics {
+      playIdentifyPulse(haptics)
+    }
+  }
+
+  @available(iOS 14.0, tvOS 14.0, *)
+  private func playIdentifyPulse(_ haptics: GCDeviceHaptics) {
+    guard let engine = haptics.createEngine(withLocality: .default) else { return }
+    do {
+      try engine.start()
+      let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0)
+      let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5)
+      let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [intensity, sharpness], relativeTime: 0, duration: 0.6)
+      let pattern = try CHHapticPattern(events: [event], parameters: [])
+      let player = try engine.makePlayer(with: pattern)
+      try player.start(atTime: 0)
+      identifyEngines.append(engine)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        try? player.stop(atTime: 0)
+        engine.stop(completionHandler: nil)
+        identifyEngines.removeAll { $0 === engine }
+      }
+    } catch {}
   }
 
   private func controller(forQualifier qualifier: String) -> GCController? {

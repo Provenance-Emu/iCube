@@ -50,8 +50,10 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
     // Mirrors ButtonMappingView.swift's defaultProfileName(forQualified:).
     if qualifier.hasPrefix("DSUClient/") { return "DSU" }
     if qualifier.hasPrefix("iOS/") { return "Touchscreen" }
-    if qualifier.hasPrefix("MFi") { return "Physical Controller" }
-    return nil
+    // Every other real hardware device (MFi and any generic/HID source) gets the
+    // physical-controller profile, which wires Rumble/Motor so game rumble reaches
+    // the device's motors.
+    return "Physical Controller"
   }
 
   func loadProfile(_ name: String, system: EmulatedSystem, port: Int, restoreDevice: Bool) {

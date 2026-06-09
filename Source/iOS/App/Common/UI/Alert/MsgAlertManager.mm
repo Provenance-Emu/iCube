@@ -78,8 +78,11 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
   }
   
   __block bool confirmed = false;
-  
-  dispatch_async(dispatch_get_main_queue(), ^{
+  __block bool alertFinished = false;
+
+  _waitEvent.Reset();
+
+  void (^presentAlert)(void) = ^{
     UIWindow* window = [[UIWindow alloc] initWithWindowScene:mainScene];
     window.frame = [UIScreen mainScreen].bounds;
     window.rootViewController = [[UIViewController alloc] init];
@@ -90,8 +93,9 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
     
     UIAlertController* alert = [UIAlertController alertControllerWithTitle:foundationCaption message:foundationText preferredStyle:UIAlertControllerStyleAlert];
     
-    void (^finish)() = ^void() {
+    void (^finish)(void) = ^void() {
       [window setHidden:true];
+      alertFinished = true;
       self->_waitEvent.Set();
     };
 
@@ -134,10 +138,20 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
     [window makeKeyAndVisible];
 
     [window.rootViewController presentViewController:alert animated:true completion:nil];
-  });
+  };
 
-  // Wait for a button press
-  _waitEvent.Wait();
+  if ([NSThread isMainThread]) {
+    // Present inline and pump the run loop so button handlers can fire while we wait.
+    // dispatch_async + condition_variable::wait would deadlock the main thread.
+    presentAlert();
+    while (!alertFinished) {
+      [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                               beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+    }
+  } else {
+    dispatch_async(dispatch_get_main_queue(), presentAlert);
+    _waitEvent.Wait();
+  }
 
   return confirmed;
 }

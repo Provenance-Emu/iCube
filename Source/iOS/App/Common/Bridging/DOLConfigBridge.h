@@ -376,6 +376,11 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxHackEarlyXfbOutput:(BOOL)enabled;
 + (BOOL)gfxHackSkipDuplicateXFBs;
 + (void)setGfxHackSkipDuplicateXFBs:(BOOL)enabled;
++ (BOOL)gfxHackBboxEnable;
++ (void)setGfxHackBboxEnable:(BOOL)enabled;
++ (BOOL)gfxBackendSupportsBoundingBox;
++ (NSInteger)gfxSafeTextureCacheColorSamples;
++ (void)setGfxSafeTextureCacheColorSamples:(NSInteger)samples;
 
 // Graphics > Advanced
 // Performance Statistics

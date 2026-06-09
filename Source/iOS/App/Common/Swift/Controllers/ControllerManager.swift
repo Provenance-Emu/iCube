@@ -167,7 +167,21 @@ final class ControllerManager: NSObject, ObservableObject {
       self.reconcile()
       self.updateWiimoteEmulationForExternalControllers()
     }
-    observers.append(contentsOf: [onConnect, onDisconnect])
+    // Boot auto-assign: controllers already connected when a game starts never
+    // fire GCControllerDidConnect, so assign the newest one here. This runs after
+    // the ControllerInterface is initialized (the notification is posted once the
+    // core reaches Running/Paused, after UICommon::InitControllers), which is the
+    // only point the bridge can produce valid device qualifiers.
+    let onEmulationStart = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { [weak self] _ in
+      guard let self = self else { return }
+      self.configureAllControllersForCurrentPlatform()
+      if !GCController.controllers().isEmpty {
+        EmulationCoordinator.autoAssignNewestExternalControllerToFirstAvailableSlot()
+      }
+      self.updateWiimoteEmulationForExternalControllers()
+      self.reconcile()
+    }
+    observers.append(contentsOf: [onConnect, onDisconnect, onEmulationStart])
 
     // Fast-forward toggled bridge -> publisher
     NotificationCenter.default.publisher(for: Notification.Name("DOLFastForwardToggled"))

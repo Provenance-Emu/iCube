@@ -68,7 +68,7 @@ static bool ICubeEmulationActive() {
 + (void)startConfigAutoSyncBridge {
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    Config::AddConfigChangedCallback([] {
+    Config::ConfigChangedCallbackID callbackID = Config::AddConfigChangedCallback([] {
       // (b) one UI-refresh notification per runloop tick (cheap no-op when no settings view observes).
       if (!s_cfg_notify_pending.exchange(true)) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -567,6 +567,16 @@ static bool ICubeEmulationActive() {
 + (void)setGfxHackEarlyXfbOutput:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_EARLY_XFB_OUTPUT, (bool)enabled); }
 + (BOOL)gfxHackSkipDuplicateXFBs { return Config::Get(Config::GFX_HACK_SKIP_DUPLICATE_XFBS); }
 + (void)setGfxHackSkipDuplicateXFBs:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_SKIP_DUPLICATE_XFBS, (bool)enabled); }
++ (BOOL)gfxHackBboxEnable { return Config::Get(Config::GFX_HACK_BBOX_ENABLE); }
++ (void)setGfxHackBboxEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_BBOX_ENABLE, (bool)enabled); }
++ (BOOL)gfxBackendSupportsBoundingBox
+{
+  // iCube ships Metal on Apple platforms; MTLUtil sets bSupportsBBox = true.
+  const std::string backend = Config::Get(Config::MAIN_GFX_BACKEND);
+  return backend.find("Metal") != std::string::npos;
+}
++ (NSInteger)gfxSafeTextureCacheColorSamples { return (NSInteger)Config::Get(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES); }
++ (void)setGfxSafeTextureCacheColorSamples:(NSInteger)samples { Config::SetBaseOrCurrent(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES, (int)samples); }
 
 // Graphics > Advanced
 + (BOOL)gfxFastDepthCalc { return Config::Get(Config::GFX_FAST_DEPTH_CALC); }
