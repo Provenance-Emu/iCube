@@ -2,54 +2,51 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Simple SwiftUI wrapper for UIDocumentPickerViewController
+/// SwiftUI wrapper for `UIDocumentPickerViewController`.
 struct DocumentPickerView: UIViewControllerRepresentable {
-  /// The allowed content types for the picker
+  /// Allowed content types for the picker.
   let contentTypes: [UTType]
-  /// Called when a single URL is picked
-  let onPick: (URL) -> Void
+  /// Whether the user may select multiple files at once.
+  var allowsMultipleSelection: Bool = false
+  /// Called when one or more URLs are picked.
+  let onPick: ([URL]) -> Void
 
+  /// UTTypes offered by the software import picker.
   static var softwareContentTypes: [UTType] {
-    [
-      UTType("me.oatmealdome.dolphinios.generic-software")!,
-      UTType("me.oatmealdome.dolphinios.gamecube-software")!,
-      UTType("me.oatmealdome.dolphinios.wii-software")!,
-      UTType(importedAs: "public.iso-image").self, // ISO images
-      UTType("me.oatmealdome.dolphinios.rvz-image")!,
-
-      UTType("me.oatmealdome.dolphinios.dol-executable")!,
-      UTType("me.oatmealdome.dolphinios.elf-executable")!,
-      UTType.archive,
-      UTType.data
-    ].compactMap { $0 }
+    ImportableFileTypes.documentPickerTypes
   }
 
-  static var binType: UTType { UTType(filenameExtension: "bin") ?? .data }
+  /// UTType for `.bin` NAND imports.
+  static var binType: UTType {
+    ImportableFileTypes.binPickerType
+  }
 
   func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
     let controller: UIDocumentPickerViewController
     if #available(iOS 14.0, *) {
-      // Request security-scoped access to the original file; ImportFileManager handles copy/move
       controller = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes, asCopy: false)
     } else {
       controller = UIDocumentPickerViewController(documentTypes: contentTypes.map { $0.identifier }, in: .open)
     }
     controller.delegate = context.coordinator
-    controller.allowsMultipleSelection = false
+    controller.allowsMultipleSelection = allowsMultipleSelection
     controller.modalPresentationStyle = .pageSheet
     return controller
   }
 
-  func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+  func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {
+    uiViewController.allowsMultipleSelection = allowsMultipleSelection
+  }
 
   func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
 
   final class Coordinator: NSObject, UIDocumentPickerDelegate {
-    let onPick: (URL) -> Void
-    init(onPick: @escaping (URL) -> Void) { self.onPick = onPick }
+    let onPick: ([URL]) -> Void
+    init(onPick: @escaping ([URL]) -> Void) { self.onPick = onPick }
+
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-      guard let url = urls.first else { return }
-      onPick(url)
+      guard !urls.isEmpty else { return }
+      onPick(urls)
     }
   }
 }
