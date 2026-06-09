@@ -25,15 +25,17 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
 
   /// Extracts archives immediately after they land in `Software/`.
   private func processUpload(atPath path: String) {
-    guard ZipImportHelper.isArchivePath(path),
-          let result = ZipImportHelper.processArchiveInPlace(atPath: path) else { return }
+    if ZipImportHelper.isArchivePath(path),
+       let result = ZipImportHelper.processArchiveInPlace(atPath: path) {
+      guard result.importedCount > 0 || result.skippedExistingCount > 0 else { return }
+      lock.lock()
+      archivesProcessed += 1
+      gamesImported += result.importedCount
+      lock.unlock()
+      return
+    }
 
-    guard result.importedCount > 0 || result.skippedExistingCount > 0 else { return }
-
-    lock.lock()
-    archivesProcessed += 1
-    gamesImported += result.importedCount
-    lock.unlock()
+    LibraryAddedDateStore.record(path: path)
   }
 
   /// Returns custom snackbar text when archives were extracted during a debounced upload burst.

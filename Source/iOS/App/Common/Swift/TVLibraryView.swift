@@ -305,26 +305,15 @@ struct TVLibraryView: View {
   }
 
   /// Precompute local file dates once per sort pass (never call FileManager inside a comparator).
-  /// Remote items have no local date and are omitted.
+  /// Uses explicit import timestamps first, then filesystem creation date (not mtime — ROM copies
+  /// preserve the source file's modification time from the PC).
   private func addedDates(for items: [TVGameItem]) -> [String: Date] {
     var map: [String: Date] = [:]
-    let fm = FileManager.default
     for item in items {
       guard let path = Self.localPath(for: item) else { continue }
-      let url = URL(fileURLWithPath: path)
-      if let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey]) {
-        let date = values.contentModificationDate ?? values.creationDate
-        if let date {
-          map[item.filePath] = date
-          map[path] = date
-        }
-      } else if let attrs = try? fm.attributesOfItem(atPath: path) {
-        let date = (attrs[.modificationDate] as? Date) ?? (attrs[.creationDate] as? Date)
-        if let date {
-          map[item.filePath] = date
-          map[path] = date
-        }
-      }
+      guard let date = LibraryAddedDateStore.resolvedAddedDate(forPath: path) else { continue }
+      map[item.filePath] = date
+      map[path] = date
     }
     return map
   }
@@ -603,6 +592,8 @@ struct TVLibraryView: View {
 #if os(iOS) || targetEnvironment(macCatalyst)
   @State private var showImportSoftwarePicker = false
   @State private var showImportNANDPicker = false
+  @State private var showImportSkylanderPicker = false
+  @State private var showWebImportSheet = false
   /// Navigate to settings as a push on iOS
   @State private var navigateToSettings = false
   /// Controller navigation repeat throttle
@@ -1316,11 +1307,19 @@ struct TVLibraryView: View {
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      Button(action: { showSearchSheet = true }) { Image(systemName: "magnifyingglass") }
+      libraryViewMenu
         .focusable(true)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      libraryOptionsMenu
+      libraryImportMenu
+        .focusable(true)
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      librarySystemMenu
+        .focusable(true)
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      librarySettingsButton
         .focusable(true)
     }
   }
@@ -1360,19 +1359,17 @@ struct TVLibraryView: View {
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      Button(action: {
-#if os(iOS) || targetEnvironment(macCatalyst)
-        showImportSoftwarePicker = true
-#endif
-      }) {
-        Image(systemName: "plus")
-      }
-      .tipAttachCompat(.importGame)
-      .help(L("Import Game"))
+      libraryViewMenu
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      libraryOptionsMenu
+      libraryImportMenu
         .tipAttachCompat(.importGame)
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      librarySystemMenu
+    }
+    ToolbarItem(placement: .navigationBarTrailing) {
+      librarySettingsButton
     }
 
   }
@@ -1387,24 +1384,63 @@ struct TVLibraryView: View {
     #endif
   }
 
-  /// Consolidated overflow menu: view controls, library actions, system tools, and settings.
+  /// View controls: selection, sort, grid zoom, rescan (+ search on tvOS).
   @ViewBuilder
-  private var libraryOptionsMenu: some View {
+  private var libraryViewMenu: some View {
     Menu {
       libraryViewMenuSection
-      librarySystemMenuSection
-      libraryImportMenuSection
-      librarySourcesMenuSection
-      librarySettingsMenuSection
     } label: {
-      Image(systemName: "ellipsis.circle")
+      Image(systemName: "square.grid.3x3")
     }
-    .accessibilityLabel(L("Library Options"))
+    .accessibilityLabel(L("View Options"))
+  }
+
+  /// Import paths: files, NAND, Skylanders, sources, Wi-Fi upload guide.
+  @ViewBuilder
+  private var libraryImportMenu: some View {
+    Menu {
+      libraryImportMenuSection
+    } label: {
+      Image(systemName: "square.and.arrow.down")
+    }
+    .accessibilityLabel(L("Import"))
+  }
+
+  /// System boot / update / DSU actions.
+  @ViewBuilder
+  private var librarySystemMenu: some View {
+    Menu {
+      librarySystemMenuSection
+    } label: {
+      Image(systemName: "gamecontroller")
+    }
+    .accessibilityLabel(L("System"))
+  }
+
+  @ViewBuilder
+  private var librarySettingsButton: some View {
+    Button(action: openLibrarySettings) {
+      Image(systemName: "gearshape")
+    }
+    .accessibilityLabel(L("Settings"))
+  }
+
+  private func openLibrarySettings() {
+#if os(iOS) || targetEnvironment(macCatalyst)
+    navigateToSettings = true
+#elseif os(tvOS)
+    showSettings = true
+#endif
   }
 
   @ViewBuilder
   private var libraryViewMenuSection: some View {
     Section(L("View")) {
+#if os(tvOS)
+      Button(action: { showSearchSheet = true }) {
+        Label(L("Search"), systemImage: "magnifyingglass")
+      }
+#endif
       Button(action: {
         if isSelectionMode {
           exitSelectionMode()
@@ -1476,7 +1512,7 @@ struct TVLibraryView: View {
         showImportSoftwarePicker = true
 #endif
       }) {
-        Label(L("Import Game"), systemImage: "square.and.arrow.down")
+        Label(L("Import Game"), systemImage: "doc.badge.plus")
       }
       Button(action: {
 #if os(iOS) || targetEnvironment(macCatalyst)
@@ -1485,29 +1521,18 @@ struct TVLibraryView: View {
       }) {
         Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
       }
-    }
-  }
-
-  @ViewBuilder
-  private var librarySourcesMenuSection: some View {
-    Section(L("Sources")) {
+#if os(iOS)
+      if DOLConfigBridge.mainEmulateSkylanderPortal() {
+        Button(action: { showImportSkylanderPicker = true }) {
+          Label(L("Import Skylander Figure…"), systemImage: "figure.stand")
+        }
+      }
+      Button(action: { showWebImportSheet = true }) {
+        Label(L("Upload via Wi-Fi…"), systemImage: "wifi")
+      }
+#endif
       Button(action: { showSources = true }) {
         Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var librarySettingsMenuSection: some View {
-    Section {
-      Button(action: {
-#if os(iOS) || targetEnvironment(macCatalyst)
-        navigateToSettings = true
-#elseif os(tvOS)
-        showSettings = true
-#endif
-      }) {
-        Label(L("Settings"), systemImage: "gearshape")
       }
     }
   }
@@ -1516,14 +1541,15 @@ struct TVLibraryView: View {
   private var sortMenuItems: some View {
     Section(L("Sort By")) {
       ForEach(SortField.allCases, id: \.self) { field in
-        Button(action: {
-          if sortField == field {
-            sortAscending.toggle()
-          } else {
-            sortField = field
-            sortAscending = true
-          }
-        }) {
+          Button(action: {
+            if sortField == field {
+              sortAscending.toggle()
+            } else {
+              sortField = field
+              // Names default A→Z; dates default newest-first.
+              sortAscending = (field == .name)
+            }
+          }) {
           if sortField == field {
             Label(field.displayName, systemImage: sortAscending ? "arrow.up" : "arrow.down")
           } else {
@@ -1654,6 +1680,12 @@ struct TVLibraryView: View {
       if #available(iOS 17, tvOS 17, *) {
         tipsService.configure()
       }
+      // Date Added sort should default to newest-first; migrate once for existing installs.
+      if sortField == .added,
+         !UserDefaults.standard.bool(forKey: "library_sort_added_direction_migrated_v1") {
+        sortAscending = false
+        UserDefaults.standard.set(true, forKey: "library_sort_added_direction_migrated_v1")
+      }
       // Initialize shared remote sources store to start querying immediately
       print("TVLibraryView: initializing RemoteSourcesStore.shared")
       let store = RemoteSourcesStore.shared
@@ -1697,6 +1729,7 @@ struct TVLibraryView: View {
       // Rescan library when a file import completes
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLImportFileFinishedNotification"), object: nil, queue: .main) { _ in
         Task { @MainActor in
+          LibraryAddedDateStore.recordRecentImportsInSoftwareFolder()
           model.rescan()
         }
       }
@@ -1787,6 +1820,29 @@ struct TVLibraryView: View {
       }
     // Sources sheet
       .sheet(isPresented: $showSources) { SourcesView() }
+      .sheet(isPresented: $showWebImportSheet) {
+        LibraryWebImportView()
+      }
+#if os(iOS)
+      .fileImporter(
+        isPresented: $showImportSkylanderPicker,
+        allowedContentTypes: [.data],
+        allowsMultipleSelection: false
+      ) { result in
+        if case .success(let urls) = result, let url = urls.first {
+          let started = url.startAccessingSecurityScopedResource()
+          defer { if started { url.stopAccessingSecurityScopedResource() } }
+          let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
+          if slot > 0 {
+            NotificationCenter.default.post(
+              name: NSNotification.Name("DOLShowSnackbar"),
+              object: nil,
+              userInfo: ["text": "\(L("Skylander loaded in portal slot")) \(slot)"]
+            )
+          }
+        }
+      }
+#endif
 #if os(iOS) || targetEnvironment(macCatalyst)
     // iOS Document Pickers
       .sheet(isPresented: $showImportSoftwarePicker) {

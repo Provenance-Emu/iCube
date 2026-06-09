@@ -82,44 +82,45 @@
 
   NSFileManager* fileManager = [NSFileManager defaultManager];
 
-  // Archive imports: extract zip/7z/gzip/tar archives and move only the supported
-  // disc images they contain into the Software folder where the scanner looks. The
-  // archive itself is never copied into the library, so a failed/empty archive
-  // leaves no phantom file that would block a retry ("already imported").
-  // Extraction is synchronous so the security-scoped resource is still valid throughout.
+  // Archive imports: extract on a background queue so the UI stays responsive.
+  // Security-scoped access must remain active for the duration of extraction.
   if ([DOLZipImportHelper isArchivePath:sourcePath]) {
-    DOLZipImportResult* result = [DOLZipImportHelper importArchiveAtPath:sourcePath toFolder:softwareFolder];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      DOLZipImportResult* result = [DOLZipImportHelper importArchiveAtPath:sourcePath toFolder:softwareFolder];
 
-    if (result.importedCount > 0 || result.skippedExistingCount > 0) {
-      NSString* snackbar = [DOLZipImportHelper snackbarTextForImportedCount:result.importedCount
-                                                                 skippedCount:result.skippedExistingCount
-                                                            archivesProcessed:1];
-      [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar"
-                                                          object:nil
-                                                        userInfo:@{@"text": snackbar}];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (result.importedCount > 0 || result.skippedExistingCount > 0) {
+          NSString* snackbar = [DOLZipImportHelper snackbarTextForImportedCount:result.importedCount
+                                                                     skippedCount:result.skippedExistingCount
+                                                                archivesProcessed:1];
+          [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar"
+                                                              object:nil
+                                                            userInfo:@{@"text": snackbar}];
 
-      if (result.errorMessage != nil) {
-        UIAlertController* warningAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Import") message:result.errorMessage preferredStyle:UIAlertControllerStyleAlert];
-        [warningAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
-          handler:^(UIAlertAction* action) {
+          if (result.errorMessage != nil) {
+            UIAlertController* warningAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Import") message:result.errorMessage preferredStyle:UIAlertControllerStyleAlert];
+            [warningAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* action) {
+              finish();
+            }]];
+            [self presentViewControllerOnWindow:warningAlert];
+          } else {
+            finish();
+          }
+        } else if (result.errorMessage != nil) {
+          UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:result.errorMessage preferredStyle:UIAlertControllerStyleAlert];
+
+          [errorAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
+            handler:^(UIAlertAction* action) {
+            finish();
+          }]];
+
+          [self presentViewControllerOnWindow:errorAlert];
+        } else {
           finish();
-        }]];
-        [self presentViewControllerOnWindow:warningAlert];
-      } else {
-        finish();
-      }
-    } else if (result.errorMessage != nil) {
-      UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:result.errorMessage preferredStyle:UIAlertControllerStyleAlert];
-
-      [errorAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
-        handler:^(UIAlertAction* action) {
-        finish();
-      }]];
-
-      [self presentViewControllerOnWindow:errorAlert];
-    } else {
-      finish();
-    }
+        }
+      });
+    });
 
     return;
   }
@@ -152,6 +153,7 @@
       
       [self presentViewControllerOnWindow:errorAlert];
     } else {
+      [LibraryAddedDateStoreBridge recordPath:destinationPath];
       finish();
     }
   }]];
@@ -169,6 +171,7 @@
       
       [self presentViewControllerOnWindow:errorAlert];
     } else {
+      [LibraryAddedDateStoreBridge recordPath:destinationPath];
       finish();
     }
   }]];

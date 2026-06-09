@@ -275,6 +275,8 @@ let iCube = Target.target(
         .xcframework(path: "../../../Externals/MoltenVK-iOS/MoltenVK.xcframework", condition: .when([.ios])),
         .package(product: "PVWebServer"),
         .package(product: "Zip"),
+        .package(product: "PLzmaSDK"),
+        .package(product: "SWCompression"),
         .package(product: "UICollectionViewLeftAlignedLayout"),
         .package(product: "AltKit"),
         .package(product: "Sentry"),
@@ -491,6 +493,8 @@ let project = Project(
     packages: [
         .local(path: "../PVWebServer"),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
+        .remote(url: "https://github.com/OlehKulykov/PLzmaSDK.git", requirement: .upToNextMajor(from: "1.5.1")),
+        .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.8.6")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
         // Sentry crash/error reporting (added via the Sentry installer; replicated here so it

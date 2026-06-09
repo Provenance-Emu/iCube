@@ -23,12 +23,15 @@ internal struct PauseMenuView: View {
   @State private var showExitDialog: Bool = false
   @State private var showShaders: Bool = false
   @State private var showSettingsSheet: Bool = false
+  @State private var showControllersSheet: Bool = false
   @State private var showFilmstripSheet: Bool = false
 
   /// iOS controller-driven focus index into `iosMenuItems`. iOS has no focus
   /// engine here, so navigation is driven manually from GCController input,
   /// mirroring the main library view. Unused on tvOS (native focus).
   @State private var iosFocusIndex: Int = 0
+  /// When false, no row shows the controller-navigation ring (touch-only use).
+  @State private var pauseMenuControllerNavActive: Bool = false
   @State private var lastPauseNavMoveTime: TimeInterval = 0
   #if !os(tvOS)
   /// Saved pre-existing gamepad handlers, restored on teardown so the emulation
@@ -56,7 +59,13 @@ internal struct PauseMenuView: View {
       },
       IOSMenuItem(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple, role: nil) { pane = .saves },
       IOSMenuItem(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow, role: nil) { pane = .cheats },
-      IOSMenuItem(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: nil) { pane = .controllers },
+      IOSMenuItem(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: nil) {
+        #if os(iOS)
+        showControllersSheet = true
+        #else
+        pane = .controllers
+        #endif
+      },
       IOSMenuItem(title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange, role: nil) { showShaders = true },
     ]
     #if os(iOS)
@@ -82,19 +91,20 @@ internal struct PauseMenuView: View {
       case .cheats:
         CheatsMenuView(game: game, onBack: { pane = .main })
           .onAppear { NSLog("[PAUSE] Cheats menu appeared") }
+      #if os(tvOS)
       case .controllers:
         NavigationStack {
           ControllerSetupView(system: ControllerManager.shared.isWiiSystem ? .wii : .gamecube)
             .toolbar {
-              #if os(iOS)
               ToolbarItem(placement: .navigationBarLeading) { Button(L("Back")) { pane = .main } }
-              #endif
             }
         }
-        #if os(tvOS)
         .onExitCommand { pane = .main }
-        #endif
         .onAppear { NSLog("[PAUSE] Controller setup menu appeared") }
+      #else
+      case .controllers:
+        mainMenu
+      #endif
       }
     }
     .onAppear {
@@ -152,6 +162,13 @@ internal struct PauseMenuView: View {
         SettingsRootView()
           .navigationTitle(L("Settings"))
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showSettingsSheet = false } } }
+      }
+    }
+    .sheet(isPresented: $showControllersSheet) {
+      NavigationStack {
+        ControllerSetupView(system: ControllerManager.shared.isWiiSystem ? .wii : .gamecube)
+          .navigationTitle(L("Controllers"))
+          .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showControllersSheet = false } } }
       }
     }
     #endif
@@ -241,7 +258,15 @@ internal struct PauseMenuView: View {
         // Adaptive grid: 1 column portrait, 2+ landscape based on width automatically
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12)], spacing: 12) {
           ForEach(Array(iosMenuItems.enumerated()), id: \.offset) { idx, item in
-            menuButtonIOS(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, role: item.role, focused: iosFocusIndex == idx, action: item.action)
+            menuButtonIOS(
+              title: item.title,
+              subtitle: item.subtitle,
+              icon: item.icon,
+              tint: item.tint,
+              role: item.role,
+              focused: pauseMenuControllerNavActive && iosFocusIndex == idx,
+              action: item.action
+            )
           }
         }
       }
@@ -250,16 +275,22 @@ internal struct PauseMenuView: View {
     }
     .background(backgroundView)
     .onAppear {
-      iosFocusIndex = 0
-      #if !os(tvOS)
-      setupPauseControllerNav()
-      #endif
+      refreshPauseMenuControllerNav()
     }
     .onDisappear {
       #if !os(tvOS)
       teardownPauseControllerNav()
+      pauseMenuControllerNavActive = false
       #endif
     }
+    #if os(iOS)
+    .onReceive(ControllerManager.shared.controllerConnectedPublisher) { _ in
+      refreshPauseMenuControllerNav()
+    }
+    .onReceive(ControllerManager.shared.controllerDisconnectedPublisher) { _ in
+      refreshPauseMenuControllerNav()
+    }
+    #endif
     .alert(L("Exit Game"), isPresented: $showExitDialog) {
       Button(L("Cancel"), role: .cancel) { showExitDialog = false }
       Button(L("Quit"), role: .destructive) {
@@ -328,9 +359,25 @@ internal struct PauseMenuView: View {
   }
 
   #if !os(tvOS)
+  /// True when at least one connected controller can drive pause-menu navigation.
+  private static func hasPauseMenuNavController() -> Bool {
+    GCController.controllers().contains { $0.extendedGamepad != nil }
+  }
+
+  private func refreshPauseMenuControllerNav() {
+    teardownPauseControllerNav()
+    let active = Self.hasPauseMenuNavController()
+    pauseMenuControllerNavActive = active
+    if active {
+      iosFocusIndex = min(iosFocusIndex, max(0, iosMenuItems.count - 1))
+      setupPauseControllerNav()
+    }
+  }
+
   /// Throttled focus move through `iosMenuItems`, mirroring the library's repeat
   /// guard so a held d-pad doesn't skip rows.
   private func movePauseFocus(_ delta: Int) {
+    guard pauseMenuControllerNavActive else { return }
     let now = Date().timeIntervalSince1970
     if now - lastPauseNavMoveTime < 0.18 { return }
     lastPauseNavMoveTime = now

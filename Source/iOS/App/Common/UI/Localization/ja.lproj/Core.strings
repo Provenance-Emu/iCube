@@ -3532,6 +3532,15 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "No games match your search." = "検索に一致するゲームがありません。";
 "Select Games" = "ゲームを選択";
 "Done Selecting" = "選択を完了";
+"View Options" = "表示オプション";
+"System" = "システム";
+"Upload via Wi-Fi" = "Wi-Fi経由でアップロード";
+"Upload via Wi-Fi…" = "Wi-Fi経由でアップロード…";
+"Import Skylander Figure…" = "Skylanderフィギュアをインポート…";
+"Learn More About Web Import" = "Webインポートの詳細";
+"Copied to clipboard" = "クリップボードにコピーしました";
+"Skylander loaded in portal slot" = "Skylanderをポータルスロットに読み込みました";
+"Device IP" = "デバイスIP";
 "Fewer Per Row" = "行あたりを減らす";
 "More Per Row" = "行あたりを増やす";
 "Reset Grid Size" = "グリッドサイズをリセット";

@@ -3508,6 +3508,15 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "No games match your search." = "No games match your search.";
 "Select Games" = "Select Games";
 "Done Selecting" = "Done Selecting";
+"View Options" = "View Options";
+"System" = "System";
+"Upload via Wi-Fi" = "Upload via Wi-Fi";
+"Upload via Wi-Fi…" = "Upload via Wi-Fi…";
+"Import Skylander Figure…" = "Import Skylander Figure…";
+"Learn More About Web Import" = "Learn More About Web Import";
+"Copied to clipboard" = "Copied to clipboard";
+"Skylander loaded in portal slot" = "Skylander loaded in portal slot";
+"Device IP" = "Device IP";
 "Fewer Per Row" = "Fewer Per Row";
 "More Per Row" = "More Per Row";
 "Reset Grid Size" = "Reset Grid Size";
