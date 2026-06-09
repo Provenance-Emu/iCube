@@ -47,3 +47,4 @@ CMakeLists.txt.user
 /Source/iOS/App/.mcp.json
 /Source/iOS/App/.package.resolved
 /Source/iOS/App/Project/Scripts/__pycache__
+/__pycache__
