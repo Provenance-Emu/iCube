@@ -201,6 +201,10 @@ private:
   // dispatch. Only ever written when MAIN_CIR_MICROOP_FUSION_VALIDATE is on, so the shipping
   // ExecuteMicroOps stream stays lean. See ExecuteMicroOpsValidate.
   struct ExecuteMicroOpsValidateOperands;
+  // iCube: payload for paired-single sequence fusion (MAIN_CIR_MICROOP_FUSION extension). Fuses
+  // consecutive psq_l / ps_mul / ps_madd ops from F-Zero-style hot blocks into one callback to cut
+  // per-op dispatch overhead. Only written when micro-op fusion is on. See ExecuteFusedPsqSeq.
+  struct ExecuteFusedPsqSeqOperands;
   // iCube: payload for the dead CR-flag elimination validate harness (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE).
   // Carries the original (Rc-set) reference instruction, the eliminated (Rc-cleared) shipping instruction,
   // the shared opcode-keyed handler, and the crOut mask of fields this op was permitted to eliminate, so
@@ -310,6 +314,13 @@ private:
   template <bool write_pc>
   static s32 ExecuteMicroOpsValidate(std::ostream& stream,
                                      const ExecuteMicroOpsValidateOperands& operands);
+  // iCube: paired-single sequence fusion (MAIN_CIR_MICROOP_FUSION extension). Runs 2–3 consecutive
+  // psq_l/ps_mul/ps_madd handlers in one callback. write_pc mirrors Interpret<write_pc>.
+  template <bool write_pc>
+  static s32 ExecuteFusedPsqSeq(PowerPC::PowerPCState& ppc_state,
+                                const ExecuteFusedPsqSeqOperands& operands);
+  template <bool write_pc>
+  static s32 ExecuteFusedPsqSeq(std::ostream& stream, const ExecuteFusedPsqSeqOperands& operands);
   // iCube: dead CR-flag elimination validate (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE). Self-validating analogue
   // of ExecuteMicroOpsValidate / InterpretSpecialized's double-run, specialized to the single-op flag-skip
   // transform: run the REFERENCE (original Rc-set inst, CR computed), snapshot CR, restore, run the
@@ -519,6 +530,18 @@ struct CachedInterpreter::ExecuteMicroOpsValidateOperands
   // dead) eliminated fields whenever both validate flags are on. Excluded from the CR diff. Zero when
   // dead-flag-elim is off, so the compare is unchanged. u32 keeps the struct alignment a multiple of 8.
   u32 elim_cr_mask;
+};
+
+// iCube: payload for paired-single sequence fusion (MAIN_CIR_MICROOP_FUSION extension). count is 2 or 3;
+// inst[] holds the original consumed PowerPC words in program order. Trivially copyable; only written when
+// micro-op fusion is on.
+struct CachedInterpreter::ExecuteFusedPsqSeqOperands
+{
+  static constexpr u32 kMaxOps = 3;
+  Interpreter& interpreter;
+  u32 count;
+  UGeckoInstruction inst[kMaxOps];
+  u32 current_pc;
 };
 
 // iCube: payload for the dead CR-flag elimination validate harness (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE).

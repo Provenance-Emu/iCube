@@ -98,6 +98,24 @@ s32 CachedInterpreter::FastForwardCtrIdle(std::ostream& stream, const CheckCtrId
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream,
+                                       const ExecuteMicroOpsOperands& operands)
+{
+  fmt::print(stream, "MicroOps (count={}) at PC={:#010x}\n", operands.count,
+             operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteFusedPsqSeq(std::ostream& stream,
+                                          const ExecuteFusedPsqSeqOperands& operands)
+{
+  fmt::print(stream, "FusedPsqSeq (count={}) at PC={:#010x}\n", operands.count,
+             operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 static std::once_flag s_sorted_lookup_flag;
 
 std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& stream)
@@ -125,6 +143,8 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
       LOOKUP_KV(CachedInterpreter::CheckBreakpoint),
       LOOKUP_KV(CachedInterpreter::CheckIdle),
       LOOKUP_KV(CachedInterpreter::FastForwardCtrIdle),
+      LOOKUP_KV(CachedInterpreter::ExecuteMicroOps<false>),
+      LOOKUP_KV(CachedInterpreter::ExecuteFusedPsqSeq<false>),
   });
 
 #undef LOOKUP_KV

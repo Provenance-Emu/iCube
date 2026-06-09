@@ -3297,12 +3297,27 @@ s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// iCube: paired-single sequence fusion (MAIN_CIR_MICROOP_FUSION extension). Invokes the same
+// Interpreter:: handlers the generic path would, in program order, with one callback overhead.
 template <bool write_pc>
-s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream,
-                                       const ExecuteMicroOpsOperands& operands)
+s32 CachedInterpreter::ExecuteFusedPsqSeq(PowerPC::PowerPCState& ppc_state,
+                                          const ExecuteFusedPsqSeqOperands& operands)
 {
-  fmt::print(stream, "MicroOps (count={}) at PC={:#010x}\n", operands.count,
-             operands.current_pc);
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+
+  for (u32 k = 0; k < operands.count; ++k)
+  {
+    const UGeckoInstruction inst = operands.inst[k];
+    const auto func = Interpreter::GetInterpreterOp(inst);
+    func(operands.interpreter, inst);
+    if (ppc_state.Exceptions != 0)
+      break;
+  }
+
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -4294,6 +4309,84 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // loops' explicit `+=`), so the slice downcount matches the unfused path op-for-op.
         if (s_microop_fusion && !op.canEndBlock)
         {
+          // iCube: paired-single sequence fusion (F-Zero rank-1 block 0x8006e204 pattern). Fuses
+          // consecutive psq_l / ps_mul / ps_madd into one callback when the register dependencies
+          // match, cutting per-op dispatch overhead on FP-heavy titles. Gated on the same flag as
+          // integer micro-op fusion; only runs in this fp-exceptions-off / memcheck-off else branch.
+          auto is_psq_l_dform = [](const UGeckoInstruction& ins) { return ins.OPCD == 56; };
+          auto is_ps_mul = [](const UGeckoInstruction& ins) {
+            return ins.OPCD == 4 && ins.SUBOP10 == 25;
+          };
+          auto is_ps_madd = [](const UGeckoInstruction& ins) {
+            return ins.OPCD == 4 && ins.SUBOP10 == 29;
+          };
+          auto psq_seq_fusible = [&](const PPCAnalyst::CodeOp& c) {
+            return !c.skip && !c.canEndBlock &&
+                   (is_psq_l_dform(c.inst) || is_ps_mul(c.inst) || is_ps_madd(c.inst));
+          };
+          auto emit_psq_seq = [&](u32 last_idx, u32 fuse_count) {
+            ExecuteFusedPsqSeqOperands fop{interpreter, fuse_count, {}, js.compilerPC};
+            for (u32 k = 0; k < fuse_count; ++k)
+            {
+              fop.inst[k] = m_code_buffer[i + k].inst;
+              if (k != 0)
+                js.downcountAmount += m_code_buffer[i + k].opinfo->num_cycles;
+            }
+            Write(CallbackCast(ExecuteFusedPsqSeq<false>), fop);
+            i += fuse_count - 1;
+          };
+
+          if (is_psq_l_dform(op.inst))
+          {
+            // psq_l + psq_l + ps_mul (rank-1 F-Zero hot block: mul uses first load's RD)
+            if (i + 2 < code_block.m_num_instructions)
+            {
+              const PPCAnalyst::CodeOp& op1 = m_code_buffer[i + 1];
+              const PPCAnalyst::CodeOp& op2 = m_code_buffer[i + 2];
+              if (psq_seq_fusible(op) && psq_seq_fusible(op1) && psq_seq_fusible(op2) &&
+                  is_psq_l_dform(op1.inst) && is_ps_mul(op2.inst) && op2.inst.FA == op.inst.RD)
+              {
+                emit_psq_seq(i + 2, 3);
+                continue;
+              }
+            }
+            // psq_l + ps_mul + ps_madd (load, in-place mul, accumulate)
+            if (i + 2 < code_block.m_num_instructions)
+            {
+              const PPCAnalyst::CodeOp& op1 = m_code_buffer[i + 1];
+              const PPCAnalyst::CodeOp& op2 = m_code_buffer[i + 2];
+              if (psq_seq_fusible(op) && psq_seq_fusible(op1) && psq_seq_fusible(op2) &&
+                  is_ps_mul(op1.inst) && is_ps_madd(op2.inst) && op1.inst.FA == op.inst.RD &&
+                  op1.inst.FD == op.inst.RD && op2.inst.FC == op.inst.RD)
+              {
+                emit_psq_seq(i + 2, 3);
+                continue;
+              }
+            }
+            // psq_l + ps_mul (consecutive load then in-place multiply)
+            if (i + 1 < code_block.m_num_instructions)
+            {
+              const PPCAnalyst::CodeOp& op1 = m_code_buffer[i + 1];
+              if (psq_seq_fusible(op) && psq_seq_fusible(op1) && is_ps_mul(op1.inst) &&
+                  op1.inst.FA == op.inst.RD)
+              {
+                emit_psq_seq(i + 1, 2);
+                continue;
+              }
+            }
+          }
+          else if (is_ps_mul(op.inst) && i + 1 < code_block.m_num_instructions)
+          {
+            // ps_mul + ps_madd (in-place mul then accumulate into same register)
+            const PPCAnalyst::CodeOp& op1 = m_code_buffer[i + 1];
+            if (psq_seq_fusible(op) && psq_seq_fusible(op1) && is_ps_madd(op1.inst) &&
+                op1.inst.FC == op.inst.FD)
+            {
+              emit_psq_seq(i + 1, 2);
+              continue;
+            }
+          }
+
           auto is_simple_mop = [](const UGeckoInstruction& ins) -> bool {
             switch (ins.OPCD)
             {
