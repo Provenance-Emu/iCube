@@ -43,3 +43,7 @@ CMakeLists.txt.user
 /.vscode/
 # Ignore flatpak-builder's cache dir
 .flatpak-builder
+/Source/iOS/App/.cursor
+/Source/iOS/App/.mcp.json
+/Source/iOS/App/.package.resolved
+/Source/iOS/App/Project/Scripts/__pycache__
