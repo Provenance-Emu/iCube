@@ -31,12 +31,12 @@ extension EmulationScreen {
   }
 
   func hideTopBar(now: Bool = false) {
+    withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+      showTopBar = false
+    }
     if now {
-      withAnimation { showTopBar = false }
       hideBarWorkItem?.cancel()
       hideBarWorkItem = nil
-    } else {
-      withAnimation { showTopBar = false }
     }
   }
 
@@ -46,7 +46,9 @@ extension EmulationScreen {
     autoHideToken = token
     let work = DispatchWorkItem {
       if token == autoHideToken && !hasTopBarInteraction {
-        withAnimation { self.showTopBar = false }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+          self.showTopBar = false
+        }
       }
     }
     hideBarWorkItem = work
