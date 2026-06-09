@@ -20,6 +20,25 @@ static dispatch_queue_t GameFileCacheQueue() {
   return queue;
 }
 
+/// Extract orphaned archives in the Software folder before scanning so web uploads and
+/// stale `.7z`/`.zip` files are imported through the same pipeline as the document picker.
+static void ProcessOrphanedArchivesBeforeRescan(void) {
+  NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
+  DOLArchiveBatchImportResult* batch = [DOLZipImportHelper processOrphanedArchivesInFolder:softwareFolder];
+  if (batch.archivesProcessed > 0) {
+    NSLog(@"[ArchiveImport] Recovered %ld archive(s), imported %ld game(s), skipped %ld existing, %ld failed",
+          (long)batch.archivesProcessed, (long)batch.gamesImported, (long)batch.gamesSkipped, (long)batch.failedArchives);
+    NSString* snackbar = [DOLZipImportHelper snackbarTextForBatchImportResult:batch];
+    if (snackbar.length > 0) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar"
+                                                            object:nil
+                                                          userInfo:@{@"text": snackbar}];
+      });
+    }
+  }
+}
+
 @implementation GameFileCacheManager
 
 + (GameFileCacheManager*)sharedManager {
@@ -44,6 +63,7 @@ static dispatch_queue_t GameFileCacheQueue() {
 
 - (void)updateCacheWithShouldUpdateMetadata:(bool)updateMetadata {
   dispatch_async(GameFileCacheQueue(), ^{
+    ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
     std::vector<std::string> scanPaths{ FoundationToCppString(softwareFolder) };
     bool cacheUpdated = self->_cache->Update(UICommon::FindAllGamePaths(scanPaths, true));
@@ -58,6 +78,7 @@ static dispatch_queue_t GameFileCacheQueue() {
 
 - (void)rescan {
   dispatch_async(GameFileCacheQueue(), ^{
+    ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
     // Only scan local folders during rescan - don't preserve old remote URLs
     // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
@@ -73,6 +94,7 @@ static dispatch_queue_t GameFileCacheQueue() {
 
 - (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
   dispatch_async(GameFileCacheQueue(), ^{
+    ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Only scan local folders - don't preserve old remote URLs during refresh
@@ -121,6 +143,7 @@ static dispatch_queue_t GameFileCacheQueue() {
 
 - (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
   dispatch_async(GameFileCacheQueue(), ^{
+    ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // During refresh: preserve existing remote URLs and only add/update local files
@@ -259,6 +282,9 @@ static dispatch_queue_t GameFileCacheQueue() {
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{ _updateQueue = dispatch_queue_create("org.dolphin-ios.gamefilecache.update", DISPATCH_QUEUE_SERIAL); });
   dispatch_async(_updateQueue, ^{
+    dispatch_sync(GameFileCacheQueue(), ^{
+      ProcessOrphanedArchivesBeforeRescan();
+    });
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Expand only local folders via FindAllGamePaths
