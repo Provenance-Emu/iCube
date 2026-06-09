@@ -31,6 +31,7 @@
 		B346BBFF2E73FA5400B3C00B /* URLRouterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346BBFE2E73FA5300B3C00B /* URLRouterService.swift */; };
 		B346C4EE2E7421FB00B3C00B /* DSUPingBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B346C4ED2E7421FB00B3C00B /* DSUPingBridge.mm */; };
 		B346CDDC2E75E42F00B3C00B /* GameGridItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDDB2E75E42E00B3C00B /* GameGridItem.swift */; };
+		B3LIB0012E9000001036EE31 /* LibraryPlatformCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3LIB0012E9000000036EE31 /* LibraryPlatformCategory.swift */; };
 		B346CDE02E75E4CF00B3C00B /* CacheInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */; };
 		B346CDE22E75E52900B3C00B /* DSUSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDE12E75E52900B3C00B /* DSUSessionView.swift */; };
 		B346CDE82E75F04100B3C00B /* ButtonMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */; };
@@ -338,6 +339,7 @@
 		B346C4EC2E7421FB00B3C00B /* DSUPingBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DSUPingBridge.h; sourceTree = "<group>"; };
 		B346C4ED2E7421FB00B3C00B /* DSUPingBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DSUPingBridge.mm; sourceTree = "<group>"; };
 		B346CDDB2E75E42E00B3C00B /* GameGridItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameGridItem.swift; sourceTree = "<group>"; };
+		B3LIB0012E9000000036EE31 /* LibraryPlatformCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPlatformCategory.swift; sourceTree = "<group>"; };
 		B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheInfoView.swift; sourceTree = "<group>"; };
 		B346CDE12E75E52900B3C00B /* DSUSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSUSessionView.swift; sourceTree = "<group>"; };
 		B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ButtonMappingView.swift; sourceTree = "<group>"; };
@@ -1266,6 +1268,7 @@
 				B37A7F6C2E790819001C90F4 /* EmulationScreen+TouchAndMotion.swift */,
 				B3F2166C2E5F741B00AF38F3 /* FilesystemSaveStateProvider.swift */,
 				B346CDDB2E75E42E00B3C00B /* GameGridItem.swift */,
+				B3LIB0012E9000000036EE31 /* LibraryPlatformCategory.swift */,
 				B31E804F2E6504940036EE31 /* GameProfiles.swift */,
 				B36B519A2E5E46AC009A2303 /* KeychainService.swift */,
 				B36B48C92E5D07D4009A2303 /* Localized.swift */,

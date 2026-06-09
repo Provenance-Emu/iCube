@@ -13,6 +13,7 @@ class ServiceManager {
   #if os(tvOS) || targetEnvironment(macCatalyst)
   let services: [UIApplicationDelegate] = [
     DefaultsInitService(),
+    WebUploadImportService(),
     DolphinCoreService(),
     FirstRunInitializationService(),
     LegacyInputConfigMigrationService(),
@@ -25,6 +26,7 @@ class ServiceManager {
   #else
   let services: [UIApplicationDelegate] = [
     DefaultsInitService(),
+    WebUploadImportService(),
     DolphinCoreService(),
     FirstRunInitializationService(),
     LegacyInputConfigMigrationService(),
