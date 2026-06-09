@@ -223,6 +223,8 @@
 					<string>rvz</string>
 					<string>dol</string>
 					<string>elf</string>
+					<string>nkit</string>
+					<string>img</string>
 				</array>
 			</dict>
 		</dict>
@@ -362,6 +364,154 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>elf</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>WIA Compressed Disk Image</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.wia-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>wia</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>NKit Compressed Disc Image</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.nkit-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>nkit</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.compressed-archive</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>7-Zip Archive</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.7z-archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>7z</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.zip-archive</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Zip Archive</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.zip-archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>zip</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>GZip Archive</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.gzip-archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>gz</string>
+					<string>gzip</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>BZip2 Archive</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.bzip2-archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>bz2</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.tar-archive</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Tar Archive</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.tar-archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>tar</string>
+					<string>tgz</string>
+					<string>tbz</string>
+					<string>tbz2</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.archive</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>XZ Archive</string>
+			<key>UTTypeIdentifier</key>
+			<string>me.oatmealdome.dolphinios.xz-archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>xz</string>
 				</array>
 			</dict>
 		</dict>
