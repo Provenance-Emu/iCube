@@ -200,7 +200,7 @@ let uploadDsymScript: TargetScript = .post(
 
 let iCube = Target.target(
     name: "iCube",
-    destinations: [.iPhone, .iPad, .appleTv, .macWithiPadDesign, .macCatalyst],
+    destinations: [.iPhone, .iPad, .appleTv, .macWithiPadDesign, .macCatalyst, .appleVisionWithiPadDesign],
     product: .app,
     bundleId: "com.joemattiello.iCube", // placeholder; real per-config ids set in appConfigs
     deploymentTargets: .multiplatform(iOS: "17.0", tvOS: "17.0"),
@@ -294,6 +294,9 @@ let iCube = Target.target(
     ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension")] : []),
     settings: .settings(
         base: projectBase.merging([
+            "ARCHS": "arm64",
+            "EXCLUDED_ARCHS": "x86_64",
+            "ONLY_ACTIVE_ARCH": "NO",
             "CODE_SIGN_STYLE": "Automatic",
             "ENABLE_HARDENED_RUNTIME": "YES",
             "ENABLE_STRICT_OBJC_MSGSEND": "NO",
@@ -303,7 +306,7 @@ let iCube = Target.target(
             "INFOPLIST_FILE[sdk=appletv*]": "DolphiniOS/Info-TV.plist",
             "INFOPLIST_KEY_GCSupportsControllerUserInteraction": "YES",
             "INFOPLIST_KEY_GCSupportsGameMode": "YES",
-            "INFOPLIST_KEY_LSApplicationCategoryType": "public.app-category.games",
+            "INFOPLIST_KEY_LSApplicationCategoryType": "public.app-category.entertainment",
             "INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace": "YES",
             "INFOPLIST_KEY_NSLocalNetworkUsageDescription": "iCube uses your local network to discover and connect to DSU controllers and devices.",
             "INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription": "Used to save gameplay clips you record with Instant Replay.",
@@ -325,7 +328,9 @@ let iCube = Target.target(
             "USER_HEADER_SEARCH_PATHS": ["$(inherited)", "$(SRCROOT)/Common/**", "$(SRCROOT)/DolphiniOS/**"],
             "MARKETING_VERSION": "1.0.0",
             "CURRENT_PROJECT_VERSION": "13",
-            "PRODUCT_NAME": "$(TARGET_NAME)",
+            // Literal name (not $(TARGET_NAME)): Tuist resolves PRODUCT_NAME at generate time;
+            // scheme-specific home-screen labels stay on DOL_APP_DISPLAY_NAME in preset xcconfigs.
+            "PRODUCT_NAME": "iCube",
             "SUPPORTS_MACCATALYST": "YES",
             "SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD": "YES",
             "SWIFT_VERSION": "5.0",
@@ -343,12 +348,9 @@ let iCube = Target.target(
             // Wide. Pin the specific keys to our real brandassets so every tvOS SDK variant agrees.
             "ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvos*]": "$(DOL_APP_ICON_ASSET_NAME_TV)",
             "ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvsimulator*]": "$(DOL_APP_ICON_ASSET_NAME_TV)",
-            // Tuist's .recommended defaults inject ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME=LaunchImage,
-            // but the app uses a LaunchScreen storyboard (no LaunchImage set) — clear it or actool fails.
-            "ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME": "",
         ]),
         configurations: appConfigs,
-        defaultSettings: .recommended
+        defaultSettings: .recommended(excluding: ["ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME"])
     )
 )
 
