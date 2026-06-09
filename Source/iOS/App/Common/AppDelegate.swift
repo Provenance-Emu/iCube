@@ -1,31 +1,15 @@
 // Copyright 2022 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import Sentry
 import UIKit
 
 class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
 
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-    // Start Sentry as early as possible so it captures crashes during app launch. The DSN is a
-    // client-side/public identifier (safe to embed in source, unlike the dSYM-upload auth token in
-    // .sentryclirc). Sentry is the sole crash/error reporter — Firebase Crashlytics was removed.
-    SentrySDK.start { options in
-      options.dsn = "https://aa3e806dc811b751d7c2ce91290f1fd6@o199354.ingest.us.sentry.io/4511503509815296"
-      options.enableCrashHandler = true
-      options.debug = false
-      // Crash/error reporting ONLY. The emulator pins the CPU thread, so:
-      //  - App-hang tracking mistakes the busy CPU thread for a "hang", spamming false
-      //    "App Hanging 2000 ms" issues AND burning a background thread on stack
-      //    capture + dyld symbolication (showed as ~13% in profiling).
-      //  - Performance tracing/profiling adds the same backtrace-symbolication overhead.
-      // Disable both; keep only the crash handler.
-      options.tracesSampleRate = 0.0
-      options.enableAppHangTracking = false
-      options.enableAppHangTrackingV2 = false
-      options.enableAutoPerformanceTracing = false
-    }
+    // Start Sentry as early as possible so it captures crashes during app launch. Configuration
+    // lives in SentryTelemetryService (emulation-gated tracing + hang tracking).
+    SentryTelemetryService.configure()
 
     // Settings-sync backbone: one global Config-changed hook (debounced auto-save of menu changes so
     // settings persist between runs, + a coalesced refresh notification so open settings UI re-reads

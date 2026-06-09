@@ -115,6 +115,12 @@ final class ZipImportHelper: NSObject {
   /// Extract a supported archive and import contained disc images into `destinationFolder`.
   @objc(importArchiveAtPath:toFolder:)
   static func importArchive(atPath sourcePath: String, toFolder destinationFolder: String) -> ZipImportResult {
+    SentryTelemetryService.trace("import.archive", op: "import.archive", tags: ["path_ext": (sourcePath as NSString).pathExtension]) {
+      importArchiveImpl(atPath: sourcePath, toFolder: destinationFolder)
+    }
+  }
+
+  private static func importArchiveImpl(atPath sourcePath: String, toFolder destinationFolder: String) -> ZipImportResult {
     guard let sourceKind = ImportableFileTypes.archiveKind(for: URL(fileURLWithPath: sourcePath)) else {
       return ZipImportResult(importedCount: 0,
                              skippedExistingCount: 0,
@@ -156,6 +162,12 @@ final class ZipImportHelper: NSObject {
   /// archive atomically once extraction completes.
   @objc(processOrphanedArchivesInFolder:)
   static func processOrphanedArchives(inFolder folder: String) -> ArchiveBatchImportResult {
+    SentryTelemetryService.trace("import.archive.batch", op: "import.archive", tags: ["source": "orphaned_scan"]) {
+      processOrphanedArchivesImpl(inFolder: folder)
+    }
+  }
+
+  private static func processOrphanedArchivesImpl(inFolder folder: String) -> ArchiveBatchImportResult {
     let fm = FileManager.default
     let folderURL = URL(fileURLWithPath: folder, isDirectory: true)
     guard fm.fileExists(atPath: folder) else {

@@ -7,6 +7,7 @@
 @class UIScreen;
 @class UIView;
 
+NSString* _Nonnull const DOLEmulationWillStartNotification = @"DOLEmulationWillStartNotification";
 NSString* _Nonnull const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
 NSString* _Nonnull const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotification";
 NSString* _Nonnull const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDidChangeNotification";

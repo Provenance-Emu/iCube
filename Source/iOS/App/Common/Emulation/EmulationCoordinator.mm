@@ -605,6 +605,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
     }
   }
 
+  [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationWillStartNotification object:self userInfo:nil];
+
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     [self emulationLoopWithBootParameter:bootParameter];
   });

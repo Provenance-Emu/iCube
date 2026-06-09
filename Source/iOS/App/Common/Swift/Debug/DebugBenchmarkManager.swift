@@ -120,7 +120,7 @@ final class DebugBenchmarkManager {
     try? await Task.sleep(for: .seconds(1.0))
 
     let samples = await sample(forSeconds: seconds)
-    let summary = BenchSummary.from(samples.frameTimes, fps: samples.fps, speed: samples.speed)
+    let summary = BenchSummary(from: FrameTimeStats.from(samples.frameTimes, fps: samples.fps, speed: samples.speed))
 
     let result = BenchResult(
       timestamp: Date(),

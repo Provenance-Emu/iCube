@@ -143,6 +143,10 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 
 - (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
   dispatch_async(GameFileCacheQueue(), ^{
+    [DOLSentryTelemetryBridge traceSyncWithName:@"library.metadata_fetch"
+                                      operation:@"library.metadata_fetch"
+                                           tags:@{@"source": @"local_remote"}
+                                           work:^{
     ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
@@ -211,6 +215,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     if (completion_handler) {
       completion_handler();
     }
+    }];
   });
 }
 

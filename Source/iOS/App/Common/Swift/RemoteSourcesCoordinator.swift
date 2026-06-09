@@ -411,8 +411,13 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     print("DEBUG PUSH: Calling TVLibraryBridge.updateLibrary with \(allUrls.count) URLs")
-    // Force metadata fetch for remote games to ensure artwork and database lookups work
-    TVLibraryBridge.updateLibrary(withRemotePaths: allUrls, fetchMetadata: true)
+    SentryTelemetryService.trace(
+      "library.remote_sync",
+      op: "library.remote_sync",
+      tags: ["url_count": "\(allUrls.count)"]) {
+      // Force metadata fetch for remote games to ensure artwork and database lookups work
+      TVLibraryBridge.updateLibrary(withRemotePaths: allUrls, fetchMetadata: true)
+    }
 
     if forceUpdate, allUrls.isEmpty {
       print("DEBUG PUSH: *** FORCE UPDATE: Cleaned up library after source deletion ***")
@@ -477,7 +482,9 @@ final class LibraryCoordinator: ObservableObject {
   /// Refreshes only local files and metadata, leaving remote streams intact
   func refreshLocal(completion: (() -> Void)? = nil) {
     isUpdating = true
+    let trace = SentryTelemetryService.beginTrace("library.rescan", op: "library.rescan", tags: ["source": "local"])
     TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+      SentryTelemetryService.finishTrace(trace)
       Task { @MainActor in
         self?.isUpdating = false
         self?.triggerReload()
@@ -489,8 +496,10 @@ final class LibraryCoordinator: ObservableObject {
   /// Triggers remote WebDAV refresh and a local rescan; debounced updates are published to subscribers
   func refreshAll(completion: (() -> Void)? = nil) {
     isUpdating = true
+    let trace = SentryTelemetryService.beginTrace("library.rescan", op: "library.rescan", tags: ["source": "all"])
     NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
     TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+      SentryTelemetryService.finishTrace(trace)
       Task { @MainActor in
         self?.isUpdating = false
         self?.triggerReload()

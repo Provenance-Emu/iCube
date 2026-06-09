@@ -495,14 +495,14 @@ let project = Project(
     packages: [
         .local(path: "../PVWebServer"),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        .remote(url: "https://github.com/OlehKulykov/PLzmaSDK.git", requirement: .upToNextMajor(from: "1.5.1")),
-        .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.8.6")),
+        .remote(url: "https://github.com/OlehKulykov/PLzmaSDK.git", requirement: .upToNextMajor(from: "1.6.1")),
+        .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
         // Sentry crash/error reporting (added via the Sentry installer; replicated here so it
         // survives `tuist generate`, which regenerates the gitignored iCube.xcodeproj). Pinned to
         // the resolved major; Package.resolved had 8.58.3 (installer floor was 8.0.0).
-        .remote(url: "https://github.com/getsentry/sentry-cocoa", requirement: .upToNextMajor(from: "8.58.3")),
+        .remote(url: "https://github.com/getsentry/sentry-cocoa", requirement: .upToNextMajor(from: "9.16.1")),
     ],
     settings: .settings(
         base: projectBase,
