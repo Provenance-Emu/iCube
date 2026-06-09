@@ -173,9 +173,16 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
   GCDeviceHaptics* haptics = controller.haptics;
   if (haptics != nil)
   {
-    CHHapticEngine* engine = [haptics createEngineWithLocality:GCHapticsLocalityDefault];
-    
-    AddOutput(new Motor(engine, "Rumble"));
+    // Prefer the handle (grip) motors, which carry rumble on DualSense/DualShock
+    // and most extended controllers; fall back to the default locality otherwise.
+    CHHapticEngine* engine = nil;
+    if ([haptics.supportedLocalities containsObject:GCHapticsLocalityHandles])
+      engine = [haptics createEngineWithLocality:GCHapticsLocalityHandles];
+    if (engine == nil)
+      engine = [haptics createEngineWithLocality:GCHapticsLocalityDefault];
+
+    if (engine != nil)
+      AddOutput(new Motor(engine, "Rumble"));
   }
 }
 
