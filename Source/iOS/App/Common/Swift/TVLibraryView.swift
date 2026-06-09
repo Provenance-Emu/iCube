@@ -1337,25 +1337,8 @@ struct TVLibraryView: View {
         )
       } else {
         // Show static dolphin logo when not scanning — tappable to open About.
-        // On iOS 26 adopt the Liquid Glass button treatment; older OSes keep
-        // the plain logo button.
-        if #available(iOS 26.0, *) {
-          Button(action: { showAbout = true }) {
-            Image("DolphinLogo")
-              .resizable()
-              .scaledToFit()
-          }
-          .buttonStyle(.glass)
-          .accessibilityLabel(L("About iCube"))
-        } else {
-          Button(action: { showAbout = true }) {
-            Image("DolphinLogo")
-              .resizable()
-              .scaledToFit()
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel(L("About iCube"))
-        }
+        // Single glass circle on iOS 26; plain framed button on older OSes.
+        aboutDolphinToolbarButton
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
@@ -1470,22 +1453,47 @@ struct TVLibraryView: View {
     }
   }
 
+  /// Tappable dolphin logo for the library toolbar leading slot.
+  @ViewBuilder
+  private var aboutDolphinToolbarButton: some View {
+    Button(action: { showAbout = true }) {
+      Image("DolphinLogo")
+        .resizable()
+        .scaledToFit()
+        .frame(width: 28, height: 28)
+        .padding(6)
+    }
+    .buttonStyle(.plain)
+    .background { aboutDolphinToolbarBackground }
+    .accessibilityLabel(L("About iCube"))
+  }
+
+  @ViewBuilder
+  private var aboutDolphinToolbarBackground: some View {
+    if #available(iOS 26.0, *) {
+      Circle()
+        .fill(.clear)
+        .glassEffect()
+    }
+  }
+
   @ViewBuilder
   private var librarySystemMenuSection: some View {
     Section(L("System")) {
       Button(action: { model.loadGameCubeMainMenu() }) {
-        Label(L("Load GameCube Main Menu"), systemImage: "gamecontroller")
+        Label(L("GameCube: Load Main Menu"), systemImage: "gamecontroller")
       }
 #if os(tvOS)
       Button(action: { showUpdateRegions = true }) {
-        Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
+        Label(L("Wii: Online System Update"), systemImage: "arrow.triangle.2.circlepath")
       }
 #else
       Button(action: { model.performOnlineSystemUpdate() }) {
-        Label(L("Perform Online System Update"), systemImage: "arrow.triangle.2.circlepath")
+        Label(L("Wii: Online System Update"), systemImage: "arrow.triangle.2.circlepath")
       }
 #endif
 #if os(iOS)
+      Divider()
       Button(action: {
         let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
         if role == "receiver" {
@@ -1527,9 +1535,11 @@ struct TVLibraryView: View {
           Label(L("Import Skylander Figure…"), systemImage: "figure.stand")
         }
       }
+      Divider()
       Button(action: { showWebImportSheet = true }) {
         Label(L("Upload via Wi-Fi…"), systemImage: "wifi")
       }
+      Divider()
 #endif
       Button(action: { showSources = true }) {
         Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
@@ -1827,17 +1837,24 @@ struct TVLibraryView: View {
       .fileImporter(
         isPresented: $showImportSkylanderPicker,
         allowedContentTypes: [.data],
-        allowsMultipleSelection: false
+        allowsMultipleSelection: true
       ) { result in
-        if case .success(let urls) = result, let url = urls.first {
-          let started = url.startAccessingSecurityScopedResource()
-          defer { if started { url.stopAccessingSecurityScopedResource() } }
-          let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
-          if slot > 0 {
+        if case .success(let urls) = result {
+          var loadedCount = 0
+          for url in urls {
+            let started = url.startAccessingSecurityScopedResource()
+            defer { if started { url.stopAccessingSecurityScopedResource() } }
+            let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
+            if slot > 0 { loadedCount += 1 }
+          }
+          if loadedCount > 0 {
+            let text = loadedCount == 1
+              ? L("Skylander loaded in portal")
+              : String(format: L("Loaded %1 Skylander figures"), loadedCount)
             NotificationCenter.default.post(
               name: NSNotification.Name("DOLShowSnackbar"),
               object: nil,
-              userInfo: ["text": "\(L("Skylander loaded in portal slot")) \(slot)"]
+              userInfo: ["text": text]
             )
           }
         }

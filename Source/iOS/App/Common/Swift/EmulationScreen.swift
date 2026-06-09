@@ -994,12 +994,14 @@ struct EmulationScreen: View {
           }
         }
       }
-      .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
-        if case .success(let urls) = result, let url = urls.first {
-          let started = url.startAccessingSecurityScopedResource()
-          defer { if started { url.stopAccessingSecurityScopedResource() } }
-          let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
-          if slot > 0 { skyLastLoadedSlot = slot }
+      .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+        if case .success(let urls) = result {
+          for url in urls {
+            let started = url.startAccessingSecurityScopedResource()
+            defer { if started { url.stopAccessingSecurityScopedResource() } }
+            let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
+            if slot > 0 { skyLastLoadedSlot = slot }
+          }
         }
       }
       .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {

@@ -213,6 +213,10 @@ struct SettingsRootView<Background: View>: View {
               currentSettingsPage = .config
             }
 
+            SettingsMenuRow(icon: "gauge.with.dots.needle.67percent", title: "Performance Tuning", subtitle: "CPU & interpreter speed") {
+              currentSettingsPage = .performance
+            }
+
             SettingsMenuRow(icon: "display", title: "Graphics", subtitle: "Video & rendering settings") {
               currentSettingsPage = .graphics
             }
@@ -357,6 +361,7 @@ struct SettingsRootView<Background: View>: View {
   private func titleForPage(_ page: SettingsPage) -> String {
     switch page {
     case .config: return "Config"
+    case .performance: return L("Performance Tuning")
     case .graphics: return "Graphics"
     case .controllers: return "Controllers"
     case .debug: return "Debug"
@@ -369,6 +374,8 @@ struct SettingsRootView<Background: View>: View {
     switch page {
     case .config:
       ConfigRootView()
+    case .performance:
+      PerformanceTuningView()
     case .graphics:
       GraphicsRootView()
     case .controllers:
@@ -388,6 +395,9 @@ struct SettingsRootView<Background: View>: View {
           NavigationLink(destination: ConfigRootView()) {
             Label(L("Config"), systemImage: "gear")
               .accessibilityLabel(L("Config Settings"))
+          }
+          NavigationLink(destination: PerformanceTuningView()) {
+            Label(L("Performance Tuning"), systemImage: "gauge.with.dots.needle.67percent")
           }
           NavigationLink(destination: GraphicsRootView()) {
             Label(L("Graphics"), systemImage: "display")
@@ -431,10 +441,12 @@ struct SettingsRootView<Background: View>: View {
             Label(L("Help"), systemImage: "questionmark.circle")
           }
 #else
-          Button(L("Help")) {
+          Button {
             if let url = URL(string: "https://icube-emu.com/support") {
               openURL(url)
             }
+          } label: {
+            Label(L("Help"), systemImage: "questionmark.circle")
           }
 #endif
         }
@@ -606,7 +618,7 @@ extension SettingsRootView where Background == EmptyView {
 
 /// Settings page types
 internal enum SettingsPage {
-  case config, graphics, controllers, debug, about
+  case config, performance, graphics, controllers, debug, about
 }
 
 // Settings submenu view for pause menu style
@@ -719,6 +731,7 @@ private struct SettingsSubMenuView: View {
         let index: Int
         switch page {
         case .config: index = 0
+        case .performance: index = 0
         case .graphics: index = 1
         case .controllers: index = 2
         case .debug: index = 3
@@ -734,6 +747,7 @@ private struct SettingsSubMenuView: View {
   private func titleForPage(_ page: SettingsPage) -> String {
     switch page {
     case .config: return "Config"
+    case .performance: return L("Performance Tuning")
     case .graphics: return "Graphics"
     case .controllers: return "Controllers"
     case .debug: return "Debug"
@@ -744,6 +758,7 @@ private struct SettingsSubMenuView: View {
   private func subtitleForPage(_ page: SettingsPage) -> String {
     switch page {
     case .config: return "General configuration"
+    case .performance: return "CPU & interpreter speed"
     case .graphics: return "Video & rendering settings"
     case .controllers: return "Input & controller setup"
     case .debug: return "Developer options"
@@ -756,6 +771,8 @@ private struct SettingsSubMenuView: View {
     switch page {
     case .config:
       ConfigRootView()
+    case .performance:
+      PerformanceTuningView()
     case .graphics:
       GraphicsRootView()
     case .controllers:
@@ -824,6 +841,9 @@ struct ConfigRootView: View {
     List {
       NavigationLink(destination: ConfigGeneralView()) {
         Label(L("General"), systemImage: "gear")
+      }
+      NavigationLink(destination: PerformanceTuningView()) {
+        Label(L("Performance Tuning"), systemImage: "gauge.with.dots.needle.67percent")
       }
       NavigationLink(destination: ConfigInterfaceView()) {
         Label(L("Interface"), systemImage: "menubar.rectangle")
@@ -1518,10 +1538,17 @@ struct DebugRootView: View {
   }
 }
 
+/// Animation style for the About sheet logo — chosen at random on each open.
+private enum AboutLogoAnimationStyle {
+  case centerPulse
+  case orbitRight
+}
+
 struct AboutView: View {
   @Environment(\.openURL) private var openURL
+  @State private var animationStyle: AboutLogoAnimationStyle = .centerPulse
   @State private var logoScale: CGFloat = 1.0
-  @State private var logoRotation: Double = 0.0
+  @State private var orbitAngle: Double = 0.0
   @State private var sparkleOpacity: Double = 0.3
 
   var body: some View {
@@ -1529,9 +1556,9 @@ struct AboutView: View {
       VStack(spacing: 20) {
         // Top spacer to mimic storyboard padding
         Color.clear.frame(height: 0)
-        // Animated dolphin with sparkle effects
+        // Animated iCube logo with sparkle effects
         ZStack {
-          // Subtle sparkles around the dolphin
+          // Subtle sparkles around the logo
           ForEach(0..<6, id: \.self) { index in
             Image(systemName: "sparkle")
               .font(.system(size: 12))
@@ -1544,15 +1571,16 @@ struct AboutView: View {
               .animation(.easeInOut(duration: 2.0).delay(Double(index) * 0.2).repeatForever(autoreverses: true), value: sparkleOpacity)
           }
 
-          // Main dolphin logo with gentle animation
+          // Main logo — center pulse or right-biased orbit, chosen at random.
           Image("iCube-Logo-Square-NoText")
             .resizable()
             .scaledToFit()
             .frame(height: 128)
             .scaleEffect(logoScale)
-            .rotationEffect(.degrees(logoRotation))
-            .animation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true), value: logoScale)
-            .animation(.easeInOut(duration: 4.0).repeatForever(autoreverses: true), value: logoRotation)
+            .offset(
+              x: animationStyle == .orbitRight ? 8 + 14 * cos(orbitAngle) : 0,
+              y: animationStyle == .orbitRight ? 6 * sin(orbitAngle) : 0
+            )
             .tint(Color("DolphinTint"))
         }
         .frame(height: 160)
@@ -1582,6 +1610,12 @@ struct AboutView: View {
 
         Button("github.com/JoeMatt") {
           if let url = URL(string: "https://github.com/JoeMatt") {
+            openURL(url)
+          }
+        }
+
+        Button("joemattiello.dev") {
+          if let url = URL(string: "https://joemattiello.dev") {
             openURL(url)
           }
         }
@@ -1631,9 +1665,21 @@ struct AboutView: View {
   }
 
   private func startAboutAnimation() {
-    logoScale = 1.05
-    logoRotation = 3.0
+    animationStyle = Bool.random() ? .centerPulse : .orbitRight
     sparkleOpacity = 0.8
+    switch animationStyle {
+    case .centerPulse:
+      logoScale = 0.94
+      withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {
+        logoScale = 1.08
+      }
+    case .orbitRight:
+      logoScale = 1.02
+      orbitAngle = 0
+      withAnimation(.linear(duration: 6.0).repeatForever(autoreverses: false)) {
+        orbitAngle = 2 * .pi
+      }
+    }
   }
 }
 
@@ -1926,9 +1972,9 @@ private struct HelpSheetButton: View {
   }
 }
 
-// MARK: - Config Advanced (wired)
+// MARK: - Performance Tuning (wired)
 
-struct ConfigAdvancedView: View {
+struct PerformanceTuningView: View {
   @State private var cpuEngine: CpuEngine = .jitARM64
   /// True when the runtime acquired a JIT entitlement. On the App Store (jitless)
   /// build this is always false, so JIT engine choices are hidden and the core
@@ -1993,12 +2039,6 @@ struct ConfigAdvancedView: View {
   @State private var vbiPercent: Int = 100
   @State private var vbiAutoOverridden: Bool = false
 
-  @State private var memOverride: Bool = false
-  @State private var mem1MB: Int = 24
-  @State private var mem2MB: Int = 64
-
-  @State private var rtcEnabled: Bool = false
-  @State private var rtcDate: Date = Date(timeIntervalSince1970: 946684800) // 2000-01-01 UTC
   // Correctness Validation disclosure (manual; DisclosureGroup is tvOS-unavailable). Collapsed by default.
   @State private var showValidation: Bool = false
 
@@ -2285,53 +2325,9 @@ struct ConfigAdvancedView: View {
         .disabled(!vbiEnabled || vbiAutoOverridden)
         .onChange(of: vbiPercent) { DOLConfigBridge.setMainViOverclockPercent($0) }
       }
-
-      Section(header: Text(L("Memory Override"))) {
-        rowWithCaption(
-          Toggle(L("Enable Emulated Memory Size Override"), isOn: $memOverride)
-            .onChange(of: memOverride) { DOLConfigBridge.setMainRamOverrideEnable($0) },
-          L("Changes the emulated console's RAM. MEM1 is main memory (24–64 MB); MEM2 is Wii extended memory (64–128 MB). ⚠️ Enabling this breaks many games and invalidates save states made at a different size."))
-        HStack {
-          Text("MEM1")
-          Spacer()
-#if os(tvOS)
-          TVIntStepper(value: $mem1MB, range: 24...64, step: 1)
-#else
-          Slider(value: Binding(get: { Double(mem1MB) }, set: { mem1MB = Int($0) }), in: 24...64)
-            .frame(width: 260)
-#endif
-        }
-        .disabled(!memOverride)
-        .onChange(of: mem1MB) { DOLConfigBridge.setMainMem1SizeMB($0) }
-        HStack {
-          Text("MEM2")
-          Spacer()
-#if os(tvOS)
-          TVIntStepper(value: $mem2MB, range: 64...128, step: 1)
-#else
-          Slider(value: Binding(get: { Double(mem2MB) }, set: { mem2MB = Int($0) }), in: 64...128)
-            .frame(width: 260)
-#endif
-        }
-        .disabled(!memOverride)
-        .onChange(of: mem2MB) { DOLConfigBridge.setMainMem2SizeMB($0) }
-      }
-
-      Section(header: Text(L("Custom RTC Options"))) {
-        rowWithCaption(
-          Toggle(L("Enable Custom RTC"), isOn: $rtcEnabled)
-            .onChange(of: rtcEnabled) { DOLConfigBridge.setMainCustomRtcEnable($0) },
-          L("Sets a custom real-time clock for the emulated console, separate from your device clock. Useful for time-based game events. If unsure, leave off."))
-#if !os(tvOS)
-        DatePicker("", selection: $rtcDate, displayedComponents: [.date, .hourAndMinute])
-          .labelsHidden()
-          .disabled(!rtcEnabled)
-          .onChange(of: rtcDate) { DOLConfigBridge.setMainCustomRtcValue(Int($0.timeIntervalSince1970)) }
-#endif
-      }
     }
-    .navigationTitle(L("Advanced"))
-    .configSynced { syncAdvanced() }
+    .navigationTitle(L("Performance Tuning"))
+    .configSynced { syncPerformanceTuning() }
   }
 
   /// The engine label to display. On jitless builds a stored JIT core actually
@@ -2438,7 +2434,7 @@ struct ConfigAdvancedView: View {
     cirBlockLinkingValidate = false; DOLConfigBridge.setCirBlockLinkingValidate(false)
   }
 
-  private func syncAdvanced() {
+  private func syncPerformanceTuning() {
     jitAvailable = JitManager.shared().acquiredJit
     cpuEngine = CpuEngine.from(raw: DOLConfigBridge.mainCpuCore())
     mmu = DOLConfigBridge.mainMMU()
@@ -2491,6 +2487,72 @@ struct ConfigAdvancedView: View {
     // Resolver step #3: is an auto controller currently overriding these clock keys (CurrentRun)?
     cpuClockAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
     vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
+  }
+}
+
+// MARK: - Config Advanced (hardware overrides)
+
+struct ConfigAdvancedView: View {
+  @State private var memOverride: Bool = false
+  @State private var mem1MB: Int = 24
+  @State private var mem2MB: Int = 64
+  @State private var rtcEnabled: Bool = false
+  @State private var rtcDate: Date = Date(timeIntervalSince1970: 946684800) // 2000-01-01 UTC
+
+  var body: some View {
+    List {
+      Section(
+        header: Text(L("Memory Override")),
+        footer: Text(L("For CPU and interpreter performance options, see Performance Tuning in Settings or Config."))
+      ) {
+        settingsCaption(
+          Toggle(L("Enable Emulated Memory Size Override"), isOn: $memOverride)
+            .onChange(of: memOverride) { DOLConfigBridge.setMainRamOverrideEnable($0) },
+          L("Changes the emulated console's RAM. MEM1 is main memory (24–64 MB); MEM2 is Wii extended memory (64–128 MB). ⚠️ Enabling this breaks many games and invalidates save states made at a different size."))
+        HStack {
+          Text("MEM1")
+          Spacer()
+#if os(tvOS)
+          TVIntStepper(value: $mem1MB, range: 24...64, step: 1)
+#else
+          Slider(value: Binding(get: { Double(mem1MB) }, set: { mem1MB = Int($0) }), in: 24...64)
+            .frame(width: 260)
+#endif
+        }
+        .disabled(!memOverride)
+        .onChange(of: mem1MB) { DOLConfigBridge.setMainMem1SizeMB($0) }
+        HStack {
+          Text("MEM2")
+          Spacer()
+#if os(tvOS)
+          TVIntStepper(value: $mem2MB, range: 64...128, step: 1)
+#else
+          Slider(value: Binding(get: { Double(mem2MB) }, set: { mem2MB = Int($0) }), in: 64...128)
+            .frame(width: 260)
+#endif
+        }
+        .disabled(!memOverride)
+        .onChange(of: mem2MB) { DOLConfigBridge.setMainMem2SizeMB($0) }
+      }
+
+      Section(header: Text(L("Custom RTC Options"))) {
+        settingsCaption(
+          Toggle(L("Enable Custom RTC"), isOn: $rtcEnabled)
+            .onChange(of: rtcEnabled) { DOLConfigBridge.setMainCustomRtcEnable($0) },
+          L("Sets a custom real-time clock for the emulated console, separate from your device clock. Useful for time-based game events. If unsure, leave off."))
+#if !os(tvOS)
+        DatePicker("", selection: $rtcDate, displayedComponents: [.date, .hourAndMinute])
+          .labelsHidden()
+          .disabled(!rtcEnabled)
+          .onChange(of: rtcDate) { DOLConfigBridge.setMainCustomRtcValue(Int($0.timeIntervalSince1970)) }
+#endif
+      }
+    }
+    .navigationTitle(L("Advanced"))
+    .configSynced { syncAdvancedHardware() }
+  }
+
+  private func syncAdvancedHardware() {
     memOverride = DOLConfigBridge.mainRamOverrideEnable()
     mem1MB = DOLConfigBridge.mainMem1SizeMB()
     mem2MB = DOLConfigBridge.mainMem2SizeMB()
