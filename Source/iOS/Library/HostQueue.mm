@@ -13,11 +13,18 @@
 
 static dispatch_queue_t s_host_queue;
 static dispatch_once_t s_host_queue_once;
+static void* s_host_queue_key = &s_host_queue_key;
+
+static bool IsOnHostQueue()
+{
+  return dispatch_get_specific(s_host_queue_key) != nullptr;
+}
 
 dispatch_queue_t DOLHostQueueGetUnderlyingQueue()
 {
   dispatch_once(&s_host_queue_once, ^{
     s_host_queue = dispatch_queue_create("me.oatmealdome.DolphiniOS.host-queue", DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_set_specific(s_host_queue, s_host_queue_key, s_host_queue_key, nullptr);
   });
 
   return s_host_queue;
@@ -55,7 +62,9 @@ void DOLHostQueueRunSync(void (^block)(void))
 
 void DOLHostQueueRunAsync(void (^block)(void))
 {
-  ASSERT(!Core::IsHostThread());
+  // Main thread is declared as the host thread on iOS, but host-queue work must still
+  // be dispatched asynchronously. Only reject reentrant calls from within the queue.
+  ASSERT(!IsOnHostQueue());
 
   dispatch_async(DOLHostQueueGetUnderlyingQueue(), ^{
     DOLHostQueueExecuteBlock(block);
