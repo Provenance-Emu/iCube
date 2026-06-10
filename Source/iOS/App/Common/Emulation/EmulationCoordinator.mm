@@ -288,6 +288,14 @@ static const float ACSpeedThreshold = 0.99f;
 // GC/Wii) presents ~50% duplicate fields at FULL speed, so those guards vetoed legit 30fps games and
 // walked the sweep to the floor (slow-motion). Audio underrun is the one remaining honesty guard.
 static const float ACSpeedHysteresis = 0.02f;
+// Audio-underrun honesty-guard tolerance: allowed underruns per elapsed tick before a window is
+// judged too-slow. The old guard vetoed the clock on the FIRST underrun in a window, which
+// rejected the narrow CPU-bound optimum where the host sits right at the edge and emits the
+// occasional crackle (the Tony Hawk Underground symptom: manual tuning finds a clock the auto
+// loop refused to settle on, because every probe there tripped one underrun and read NO-GO).
+// A genuinely starved buffer underruns continuously (many per tick), so this still catches real
+// too-slow clocks; and the speed>=threshold term remains the primary gate. Tune on-device.
+static const double ACUnderrunPerTickBudget = 1.0;
 // --- Headroom recovery (fix for the one-way-ratchet convergence bug). ---
 // The controller used to only ever DESCEND, so a transient-heavy moment (boot, scene transition,
 // thermal) walked the clock down and it could NEVER climb back when the scene lightened — leaving
@@ -830,8 +838,12 @@ static bool s_backgroundAutoPaused = false;
       if (thermal == NSProcessInfoThermalStateCritical) ceiling = 0.65f;
       else if (thermal == NSProcessInfoThermalStateSerious) ceiling = 0.80f;
 
-      // Health of the window since it began.
-      const bool newUnderrun = (underruns > self->_acUnderrunBase);
+      // Health of the window since it began. Tolerate occasional edge-of-cliff underruns
+      // (budget scales with elapsed ticks); only a sustained rate counts as genuinely too-slow.
+      const unsigned long long windowUnderruns =
+          (underruns > self->_acUnderrunBase) ? (underruns - self->_acUnderrunBase) : 0ULL;
+      const double underrunBudget = ACUnderrunPerTickBudget * (double)MAX(1, self->_acPhaseTicks);
+      const bool newUnderrun = ((double)windowUnderruns > underrunBudget);
 
       // --- The f* GO/NO-GO criterion: SPEED ONLY (+ underrun honesty guard). ---
       // f* = the HIGHEST clock at which the host keeps up. The throttle caps emulated speed at 100%,
