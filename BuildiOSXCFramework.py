@@ -307,7 +307,7 @@ class DolphinBuilder:
         base_optimization_flags = (
             "-O3 "
             "-fvectorize "
-            "-funsafe-math-optimizations "
+            # "-funsafe-math-optimizations "
             "-funroll-loops "
             "-ftree-vectorize "
             "-fsplit-lto-unit "
@@ -318,12 +318,12 @@ class DolphinBuilder:
             "-fno-trapping-math "
             "-fno-strict-aliasing "
             "-fno-signed-zeros "
-            "-fno-math-errno "
+            # "-fno-math-errno "
             "-finline-functions "
             "-ffunction-sections "
-            "-ffp-contract=fast "
+            # "-ffp-contract=fast "
             "-ffinite-math-only "
-            "-ffast-math "
+            # "-ffast-math "
             "-fdata-sections"
         ).strip()
 
