@@ -7,8 +7,12 @@
 
 #include "PGOFlush.h"
 
-extern int __llvm_profile_write_file(void) __attribute__((weak));
-extern void __llvm_profile_set_filename(const char* name) __attribute__((weak));
+// weak_import (NOT plain weak): on Darwin/Mach-O this makes these *weak references* that
+// resolve to NULL when the symbol is absent at link/load time. Plain __attribute__((weak)) is a
+// weak *definition* and still link-errors as "Undefined symbol" when nothing defines it — which
+// is exactly the normal (DOL_PGO=off) build, where the dylib carries no __llvm_profile_* runtime.
+extern int __llvm_profile_write_file(void) __attribute__((weak_import));
+extern void __llvm_profile_set_filename(const char* name) __attribute__((weak_import));
 
 void ICubePGOSetPath(const char* path)
 {
