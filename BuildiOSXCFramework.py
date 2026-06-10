@@ -336,6 +336,33 @@ class DolphinBuilder:
             "-fdata-sections"
         ).strip()
 
+        # --- Profile-Guided Optimization (env-driven; OFF by default -> normal builds unchanged) ---
+        # DOL_PGO=generate -> instrumented core (writes .profraw on device via the PGOFlush shim).
+        # DOL_PGO=use + DOL_PGO_PROFILE=<abs path to icube.profdata> -> profile-optimized core.
+        # IR-based PGO (-fprofile-generate/-use) places counters AFTER inlining, which is what the
+        # interpreter dispatch loop wants (block layout / branch ordering on the real hot path).
+        # The profile runtime must ALSO be on the link line — it goes into linker_flags below, which
+        # feeds CMAKE_SHARED_LINKER_FLAGS; without it the dylib fails to link with undefined
+        # __llvm_profile_* symbols. The -u force-keeps survive -dead_strip across the dylib boundary
+        # so the app's flush shim can resolve them.
+        pgo_mode = os.environ.get("DOL_PGO", "off")
+        pgo_cflags = ""
+        pgo_ldflags = ""
+        if pgo_mode == "generate":
+            pgo_cflags = "-fprofile-generate"
+            pgo_ldflags = ("-fprofile-generate "
+                           "-Wl,-u,___llvm_profile_write_file "
+                           "-Wl,-u,___llvm_profile_set_filename")
+        elif pgo_mode == "use":
+            pgo_profile = os.environ.get("DOL_PGO_PROFILE", "")
+            if not pgo_profile or not os.path.exists(pgo_profile):
+                raise RuntimeError(
+                    f"DOL_PGO=use but DOL_PGO_PROFILE is missing or not found: {pgo_profile!r}")
+            pgo_cflags = (f"-fprofile-use={pgo_profile} "
+                          "-Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date")
+        elif pgo_mode != "off":
+            raise RuntimeError(f"DOL_PGO must be off|generate|use, got {pgo_mode!r}")
+
         # Curl build fixes - apply to all platforms to resolve build issues
         curl_fixes = (
             "-DHAVE_POSIX_STRERROR_R=1 -DHAVE_STRERROR_R=1 -DHAVE_FCNTL_O_NONBLOCK=1 "
@@ -353,8 +380,8 @@ class DolphinBuilder:
 
         # Combine flags with ARM64-only enforcement
         arm64_defines = "-D_M_ARM_64 -U_M_X86_64 -U_M_IX86"  # ARM64 only, explicitly undefine x86 macros
-        c_flags = f"{base_optimization_flags} -w {arm64_defines} {curl_fixes}".strip()
-        cxx_flags = f"{base_optimization_flags} -w {arm64_defines} {curl_fixes}".strip()
+        c_flags = f"{base_optimization_flags} {pgo_cflags} -w {arm64_defines} {curl_fixes}".strip()
+        cxx_flags = f"{base_optimization_flags} {pgo_cflags} -w {arm64_defines} {curl_fixes}".strip()
 
         # Add architecture-specific flags only for device builds (not simulators)
         if platform not in ["SIMULATORARM64", "SIMULATOR_TVOS"]:
@@ -394,7 +421,7 @@ class DolphinBuilder:
 
         # Additional linker optimizations
         # Use -noall_load to avoid force-loading every static lib member (conflicts with LTO/bitcode archives)
-        linker_flags = "-Wl,-dead_strip -Wl,-noall_load"
+        linker_flags = f"-Wl,-dead_strip -Wl,-noall_load {pgo_ldflags}".strip()
 
         # Configure CMake command
         cmake_cmd = [
