@@ -3009,7 +3009,7 @@ struct ConfigAudioView: View {
             .frame(width: 260)
 #endif
           Spacer()
-          Text(String(format: L("%1 ms"), stretchLatency)).foregroundStyle(.secondary)
+          Text(String(format: L("%1$ld ms"), stretchLatency)).foregroundStyle(.secondary)
         }
         .disabled(!stretch)
         .onChange(of: stretchLatency) { DOLConfigBridge.setAudioStretchLatencyMs($0) }

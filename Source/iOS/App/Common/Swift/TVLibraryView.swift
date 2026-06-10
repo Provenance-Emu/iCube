@@ -1280,10 +1280,10 @@ struct TVLibraryView: View {
 
   private var filteredEmptyMessage: String {
     if isSearching, platformFilter != .all {
-      return String(format: L("No %1 games match your search."), platformFilter.displayName)
+      return String(format: L("No %1$@ games match your search."), platformFilter.displayName)
     }
     if platformFilter != .all {
-      return String(format: L("No %1 games in your library."), platformFilter.displayName)
+      return String(format: L("No %1$@ games in your library."), platformFilter.displayName)
     }
     return L("No games match your search.")
   }
@@ -1775,7 +1775,7 @@ struct TVLibraryView: View {
               .autocorrectionDisabled(true)
           }
           if !searchText.isEmpty {
-            Text(String(format: L("%1 results"), model.games.filter { item in
+            Text(String(format: L("%1$ld results"), model.games.filter { item in
               let q = searchText.lowercased()
               let title = item.title.lowercased()
               let maker = item.makerLong.lowercased()
@@ -1830,10 +1830,10 @@ struct TVLibraryView: View {
       }
     // Sources sheet
       .sheet(isPresented: $showSources) { SourcesView() }
+#if os(iOS)
       .sheet(isPresented: $showWebImportSheet) {
         LibraryWebImportView()
       }
-#if os(iOS)
       .fileImporter(
         isPresented: $showImportSkylanderPicker,
         allowedContentTypes: [.data],
@@ -1850,7 +1850,7 @@ struct TVLibraryView: View {
           if loadedCount > 0 {
             let text = loadedCount == 1
               ? L("Skylander loaded in portal")
-              : String(format: L("Loaded %1 Skylander figures"), loadedCount)
+              : String(format: L("Loaded %1$ld Skylander figures"), loadedCount)
             NotificationCenter.default.post(
               name: NSNotification.Name("DOLShowSnackbar"),
               object: nil,
@@ -2661,7 +2661,7 @@ struct TVLibraryView: View {
       try FileManager.default.removeItem(atPath: path)
       return true
     } catch {
-      showSnackbar(String(format: L("Delete failed: %1"), error.localizedDescription))
+      showSnackbar(String(format: L("Delete failed: %1$@"), error.localizedDescription))
       return false
     }
   }
@@ -2823,7 +2823,7 @@ extension TVLibraryView {
           HStack(spacing: 10) {
             Image(systemName: "square.and.arrow.down").foregroundStyle(.white)
             if dropPreviewCount > 0 {
-              Text(String(format: L("Drop %1 files to import"), dropPreviewCount))
+              Text(String(format: L("Drop %1$ld files to import"), dropPreviewCount))
                 .foregroundStyle(.white)
             } else {
               Text(L("Drop files to import")).foregroundStyle(.white)
@@ -2866,7 +2866,7 @@ extension TVLibraryView {
         NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("No supported files to import")])
         return
       }
-      NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Importing %1 files…"), files.count)])
+      NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Importing %1$ld files…"), files.count)])
       ImportFileManager.shared().importFiles(at: files as [NSURL])
     }
   }
