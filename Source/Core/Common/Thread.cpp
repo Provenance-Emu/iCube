@@ -179,10 +179,18 @@ static void SetCurrentThreadQoS_Apple(const char* name)
   // AsyncShaderCompiler rides USER_INTERACTIVE with the CPU thread: the hot thread gates on its
   // output (pipeline-cache misses / ubershader replacement), so one tier down = E-core eligible =
   // priority inversion on the thread the emulated core is waiting for (2026-06-06 QoS audit).
-  if (std::strstr(name, "CPU") || std::strstr(name, "AsyncShaderCompiler"))
+  //
+  // iCube B1: the dual-core "Video thread" (the GPU/FIFO worker) must also ride USER_INTERACTIVE.
+  // On the dual-core path the CPU thread (USER_INTERACTIVE) blocks in FifoManager::FlushGpu()
+  // waiting on this GPU thread to drain the FIFO. If the GPU thread sits one tier lower
+  // (USER_INITIATED) it is E-core eligible, so the interactive CPU thread waits on a
+  // lower-priority worker — a QoS priority inversion that stretches the flush wait. Promote
+  // Video/GPU/FIFO-GPU to match the waiter's tier. Note: the single-core "CPU-GPU thread" still
+  // matches "CPU" first (short-circuit) and stays USER_INTERACTIVE exactly as before — unchanged.
+  if (std::strstr(name, "CPU") || std::strstr(name, "AsyncShaderCompiler") ||
+      std::strstr(name, "Video") || std::strstr(name, "GPU") || std::strstr(name, "FIFO-GPU"))
     qos = QOS_CLASS_USER_INTERACTIVE;
-  else if (std::strstr(name, "DSP") || std::strstr(name, "Audio") || std::strstr(name, "Video") ||
-           std::strstr(name, "GPU") || std::strstr(name, "FIFO-GPU"))
+  else if (std::strstr(name, "DSP") || std::strstr(name, "Audio"))
     qos = QOS_CLASS_USER_INITIATED;
   else if (std::strstr(name, "DVD") || std::strstr(name, "Memcard") || std::strstr(name, "Asset") ||
            std::strstr(name, "Analytics") || std::strstr(name, "FrameDumping") ||

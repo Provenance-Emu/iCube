@@ -409,7 +409,16 @@ void FifoManager::FlushGpu()
   {
     // CPU thread blocked waiting for the GPU thread to drain the FIFO (dual-core flush).
     ICUBE_SCOPED_STALL(StallMetrics::Site::GpuFlushWait, "gpu.flush.wait");
-    m_gpu_mainloop.Wait();
+    // iCube A1: bounded wait instead of m_gpu_mainloop.Wait(). The unbounded Wait()
+    // only returns once the GPU loop reaches STATE_DONE, which needs m_may_sleep — and
+    // m_may_sleep is armed by GPUSleepCallback, a CoreTiming event that runs ON the CPU
+    // thread. If the CPU thread parks here in Wait(), that callback never fires, so the
+    // loop never goes Done and Wait() blocks forever (lost-wakeup deadlock on the
+    // dual-core path). WaitYield re-checks IsDone() each 100ms iteration and yields to
+    // the UI, converting the permanent freeze into at worst a periodic stutter and
+    // letting Stop()/ExitGpuLoop() make progress. Mirrors the bounded wait in
+    // PauseAndLock above; single-core never reaches this point (guarded above).
+    m_gpu_mainloop.WaitYield(std::chrono::milliseconds(100), Host_YieldToUI);
   }
 }
 
