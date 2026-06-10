@@ -373,6 +373,10 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 
 static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 
+// True only while emulation is paused because WE auto-paused it on app background/interruption
+// (as opposed to a user/manual pause). Singleton, so file-scope is fine.
+static bool s_backgroundAutoPaused = false;
+
 + (EmulationCoordinator*)shared {
   static EmulationCoordinator* sharedInstance = nil;
   static dispatch_once_t onceToken;
@@ -1865,6 +1869,35 @@ after_set:
   });
 
   _userRequestedPause = userRequestedPause;
+}
+
+- (void)pauseForBackground {
+  // Auto-pause a running game when the app is backgrounded/interrupted so the core stops
+  // submitting GPU work — iOS rejects GPU work from the background, which floods the log via
+  // the MTLGfx 0x0-texture guard — and to save battery. Keyed off the actual Core state and
+  // tracked separately from userRequestedPause, so a game the user already paused (or the pause
+  // menu) is left untouched and is NOT auto-resumed on return.
+  DOLHostQueueRunSync(^{
+    Core::System& sys = Core::System::GetInstance();
+    if (Core::GetState(sys) == Core::State::Running) {
+      Core::SetState(sys, Core::State::Paused);
+      s_backgroundAutoPaused = true;
+    }
+  });
+}
+
+- (void)resumeFromBackground {
+  // Resume only if we own the pause (we auto-paused on background) and the game is still paused.
+  DOLHostQueueRunSync(^{
+    if (!s_backgroundAutoPaused) {
+      return;
+    }
+    s_backgroundAutoPaused = false;
+    Core::System& sys = Core::System::GetInstance();
+    if (Core::GetState(sys) == Core::State::Paused) {
+      Core::SetState(sys, Core::State::Running);
+    }
+  });
 }
 
 - (void)clearMetalLayer {

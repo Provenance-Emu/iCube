@@ -21,6 +21,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, setter=setIsExternalDisplayConnected:) bool isExternalDisplayConnected;
 @property (nonatomic) bool userRequestedPause;
 
+// Auto-pause emulation when the app is backgrounded/interrupted, and resume on return.
+// Distinct from userRequestedPause: a manual pause survives a background round-trip.
+- (void)pauseForBackground;
+- (void)resumeFromBackground;
+
 - (void)registerMainDisplayView:(UIView*)mainView;
 - (void)registerExternalDisplayView:(UIView*)externalView;
 - (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter;

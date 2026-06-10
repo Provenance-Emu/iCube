@@ -54,12 +54,25 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
   func sceneDidBecomeActive(_ scene: UIScene) {
     ServiceManager.shared.applicationDidBecomeActive()
 
+    // Resume emulation if we auto-paused it when the app was backgrounded/interrupted.
+    // iOS only: tvOS handles backgrounding via the pause menu (EmulationScreen observer).
+    #if !os(tvOS)
+    EmulationCoordinator.shared().resumeFromBackground()
+    #endif
+
     BootNoticeManager.shared().presentToSceneIfNecessary()
     if let ws = scene as? UIWindowScene { applyFrameCap(to: ws) }
   }
 
   func sceneWillResignActive(_ scene: UIScene) {
     ServiceManager.shared.applicationWillResignActive()
+
+    // Pause emulation when another app/overlay takes over so the core stops submitting GPU
+    // work from the background (which iOS rejects and floods the log) and to save battery.
+    // iOS only: tvOS handles backgrounding via the pause menu (EmulationScreen observer).
+    #if !os(tvOS)
+    EmulationCoordinator.shared().pauseForBackground()
+    #endif
   }
 
   func sceneWillEnterForeground(_ scene: UIScene) {
