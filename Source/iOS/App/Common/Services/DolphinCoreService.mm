@@ -37,7 +37,13 @@ namespace {
 template <typename T>
 static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& value)
 {
-  if (Config::GetActiveLayerForConfig(info) == Config::LayerType::Base)
+  // Seed the default ONLY when the key has never been written to the persisted Base layer.
+  // The old check (active layer == Base) re-applied the default on EVERY launch and clobbered
+  // the user's own UI changes, which also persist to Base — so any toggle the user flipped
+  // (Immediate XFB, EFB-copy hacks, etc.) silently reset to this default on the next boot.
+  // Checking Base-layer presence instead means: seed on genuine first-run, then respect whatever
+  // the user sets. A higher-priority layer (game ini, current-run) still wins at read time.
+  if (!Config::GetLayer(Config::LayerType::Base)->Exists(info.GetLocation()))
     Config::SetBase(info, value);
 }
 }
