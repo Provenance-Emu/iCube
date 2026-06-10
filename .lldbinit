@@ -1,0 +1,8 @@
+# .lldbinit — loaded automatically by Xcode's LLDB when the working directory
+# is the DolphiniOS project root (i.e. when opening DolphiniOS.xcodeproj).
+#
+# Installs a skip-handler for the `brk #0x69` instruction in
+# AllocateExecutableMemoryRegion_LuckTXM so that Xcode's LLDB doesn't trap it
+# as EXC_BREAKPOINT.  Under CS_DEBUGGED, the subsequent vm_remap succeeds
+# without StikDebug's explicit TXM authorisation.
+command script import Source/iOS/App/Project/Scripts/dolphin_jit_lldb.py
