@@ -33,6 +33,8 @@
 #import "MsgAlertManager.h"
 #include "Common/Config/Config.h"
 
+#import "PGOFlush.h"
+
 namespace {
 template <typename T>
 static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& value)
@@ -196,6 +198,27 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   });
 #endif
 
+  // PGO (Profile-Guided Optimization) profile capture. Only active when the linked core was
+  // built with DOL_PGO=generate (the weak __llvm_profile_* symbols resolved); a normal shipping
+  // build returns 0 from ICubePGOAvailable() and this whole block is skipped. Point the
+  // instrumented runtime at <Software>/pgo/icube-%m.profraw — the Software folder is what the
+  // in-app web server already serves for download, and %m gives a cross-run merged profile.
+  if (ICubePGOAvailable()) {
+    NSString* pgoDir = [[UserFolderUtil getSoftwareFolder] stringByAppendingPathComponent:@"pgo"];
+    NSError* dirErr = nil;
+    [[NSFileManager defaultManager] createDirectoryAtPath:pgoDir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:&dirErr];
+    if (dirErr) {
+      NSLog(@"[PGO] failed to create profile dir %@: %@", pgoDir, dirErr);
+    } else {
+      NSString* pgoPath = [pgoDir stringByAppendingPathComponent:@"icube-%m.profraw"];
+      ICubePGOSetPath([pgoPath UTF8String]);
+      NSLog(@"[PGO] instrumented core detected; profiles -> %@", pgoPath);
+    }
+  }
+
   return YES;
 }
 
@@ -222,7 +245,17 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   });
 }
 
+- (void)applicationDidEnterBackground:(UIApplication*)application {
+  // Kill-safe PGO flush point. A long-running emulator force-killed by iOS while backgrounded
+  // never runs willTerminate/atexit, so background is the reliable place to persist counters.
+  // No-op on a non-instrumented (shipping) core.
+  ICubePGOFlush();
+}
+
 - (void)applicationWillTerminate:(UIApplication*)application {
+  // Flush PGO counters before tearing down the core (no-op on a shipping build).
+  ICubePGOFlush();
+
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
 

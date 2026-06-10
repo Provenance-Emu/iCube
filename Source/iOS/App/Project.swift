@@ -229,6 +229,11 @@ let iCube = Target.target(
         // In the original pbxproj it is a membershipEXCEPTION on the appex's "Activity" synchronized
         // folder — i.e. EXCLUDED from the appex, kept in the app. So it stays in the app glob.
         .glob("Common/**/*.{swift,h}"),
+        // PGOFlush.c (the iCube PGO profile-flush shim) is the only plain C source in the app.
+        // The {m,mm} globs below don't match *.c, so include it explicitly. Unconditional: the
+        // shim must build on both iOS and tvOS (its weak __llvm_profile_* refs no-op on a
+        // non-instrumented shipping core, so this never changes normal-build behavior).
+        .glob("Common/**/*.c"),
         .glob(
             "Common/**/*.{m,mm}",
             excluding: ["Common/UI/Settings/**/*.{m,mm}"]
