@@ -311,18 +311,27 @@ class DolphinBuilder:
             "-funroll-loops "
             "-ftree-vectorize "
             "-fsplit-lto-unit "
-            "-freciprocal-math "
+            # Value-affecting unsafe-math flags REMOVED: they corrupt the core's FP results.
+            # -freciprocal-math (approximate 1/x division) and -ffinite-math-only (assume no
+            # NaN/Inf, breaks ps_rsqrte / normalization) distort CPU-computed bone/skinning and
+            # perspective math -> e.g. NSMBW "cartoon hands". -fno-signed-zeros drops -0.0.
+            # The earlier "turn off fast math" pass only removed -ffast-math/-funsafe-math/
+            # -ffp-contract; these three survived and kept the build non-IEEE. Emulated FP must
+            # be exact, so keep them off (re-add selectively only if profiling demands it AND the
+            # geometry stays correct). NOTE: requires a CLEAN rebuild (wipe build-* + xcframework)
+            # to take effect — stale objects won't pick up the flag change.
+            # "-freciprocal-math "
             "-fPIC "
             "-fpermissive "
             "-fomit-frame-pointer "
             "-fno-trapping-math "
             "-fno-strict-aliasing "
-            "-fno-signed-zeros "
+            # "-fno-signed-zeros "
             # "-fno-math-errno "
             "-finline-functions "
             "-ffunction-sections "
             # "-ffp-contract=fast "
-            "-ffinite-math-only "
+            # "-ffinite-math-only "
             # "-ffast-math "
             "-fdata-sections"
         ).strip()
