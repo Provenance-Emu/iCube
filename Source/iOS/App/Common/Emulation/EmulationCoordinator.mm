@@ -1889,7 +1889,14 @@ after_set:
   // the MTLGfx 0x0-texture guard — and to save battery. Keyed off the actual Core state and
   // tracked separately from userRequestedPause, so a game the user already paused (or the pause
   // menu) is left untouched and is NOT auto-resumed on return.
-  DOLHostQueueRunSync(^{
+  //
+  // MUST be async + pre-checked: a synchronous host-queue wait from the scene-lifecycle (main)
+  // thread deadlocks the UI when the host queue is busy emulating (froze Wii games). Async never
+  // blocks the main thread; the cheap flag pre-check avoids dispatching when there's nothing to do.
+  if (s_backgroundAutoPaused) {
+    return;
+  }
+  DOLHostQueueRunAsync(^{
     Core::System& sys = Core::System::GetInstance();
     if (Core::GetState(sys) == Core::State::Running) {
       Core::SetState(sys, Core::State::Paused);
@@ -1899,8 +1906,14 @@ after_set:
 }
 
 - (void)resumeFromBackground {
-  // Resume only if we own the pause (we auto-paused on background) and the game is still paused.
-  DOLHostQueueRunSync(^{
+  // Resume only if WE auto-paused on background. Pre-check the flag on the calling (main) thread
+  // BEFORE any dispatch: in the common case (game launch / normal activate with no prior
+  // background-pause) this is a true no-op and never touches the host queue — which is what kept
+  // the old synchronous version from deadlocking the main thread on every sceneDidBecomeActive.
+  if (!s_backgroundAutoPaused) {
+    return;
+  }
+  DOLHostQueueRunAsync(^{
     if (!s_backgroundAutoPaused) {
       return;
     }
