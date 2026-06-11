@@ -469,15 +469,11 @@ class DolphinBuilder:
             f"-DCMAKE_BUILD_TYPE={CONFIG['build_target']}",
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",  # Fix pugixml compatibility
             # iCube: LTO — cross-TU inlining of the jitless interpreter dispatch + op handlers.
-            # DISABLED while investigating the geometry-corruption bug (NSMBW "big hands", Lego
-            # see-through walls). The bug is build-level: source is byte-identical to stock 2509,
-            # yet it reproduces on every backend and every interpreter, immune to all runtime
-            # toggles, and is NOT fixed by removing the unsafe-math flags. LTO is the remaining
-            # build lever that transforms exactly these FP/PS op handlers and is invisible to
-            # source diffs — a classic miscompile vector. If a clean no-LTO rebuild renders Mario
-            # and Lego correctly, LTO (or a flag interaction under it) is the cause; re-enable only
-            # after the offending TU/flag is isolated. Re-add for the dispatch-perf win once safe.
-            "-DENABLE_LTO=OFF",
+            # Worth ~15% on the interpreter hot path; kept ON. (Was briefly OFF as a
+            # geometry-corruption A/B in 16d5cc8fdd; that bug is upstream-drift/source, not an
+            # LTO miscompile, so LTO-off bought nothing and cost perf. Geometry bug tracked via
+            # the bisect plan, not by disabling LTO.)
+            "-DENABLE_LTO=ON",
         ])
 
         # Override deployment target at CMake level to ensure it's respected
