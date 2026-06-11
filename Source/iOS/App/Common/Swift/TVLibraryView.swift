@@ -1470,7 +1470,7 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private var aboutDolphinToolbarBackground: some View {
-    if #available(iOS 26.0, *) {
+    if #available(iOS 26.0, tvOS 26.0, watchOS 26.0, *) {
       Circle()
         .fill(.clear)
         .glassEffect()
