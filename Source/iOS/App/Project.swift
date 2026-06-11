@@ -353,6 +353,14 @@ let iCube = Target.target(
             // Wide. Pin the specific keys to our real brandassets so every tvOS SDK variant agrees.
             "ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvos*]": "$(DOL_APP_ICON_ASSET_NAME_TV)",
             "ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvsimulator*]": "$(DOL_APP_ICON_ASSET_NAME_TV)",
+            "LLVM_LTO[config=Release (AppStore)]": "YES_THIN",
+            "LLVM_LTO[config=Release (Beta, Jailbroken)]": "YES_THIN",
+            "LLVM_LTO[config=Release (Beta, Non-Jailbroken)]": "YES_THIN",
+            "LLVM_LTO[config=Release (Beta, TrollStore)]": "YES_THIN",
+            "LLVM_LTO[config=Release (Jailbroken)]": "YES_THIN",
+            "LLVM_LTO[config=Release (Non-Jailbroken)]": "YES_THIN",
+            "LLVM_LTO[config=Release (TrollStore)]": "YES_THIN",
+
         ]),
         configurations: appConfigs,
         defaultSettings: .recommended(excluding: ["ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME"])
@@ -422,24 +430,7 @@ let iCubeTests = Target.target(
 // MARK: - Schemes
 
 let appStoreEnvVars: [String: EnvironmentVariable] = [
-    "DOLPHIN_CI_HOT": .environmentVariable(value: "1", isEnabled: true),
-    "DOLPHIN_CI_HOT_SAMPLE": .environmentVariable(value: "64", isEnabled: true),
-    "DOLPHIN_CI_FP_FAST": .environmentVariable(value: "1", isEnabled: true),
-    "CI_ENABLE_INLINE_59": .environmentVariable(value: "1", isEnabled: true),
-    "CI_VERIFY_FP": .environmentVariable(value: "1", isEnabled: true),
-    "CI_VERIFY_SAMPLE": .environmentVariable(value: "1", isEnabled: true),
-    "CI_VERIFY_LOG": .environmentVariable(value: "1", isEnabled: true),
-    "DOLPHIN_CI_USE_ID_DISPATCH": .environmentVariable(value: "1", isEnabled: true),
-    "DOLPHIN_FORCE_CI": .environmentVariable(value: "1", isEnabled: false),
-    "DOLPHIN_CI_LINK_LOG": .environmentVariable(value: "1", isEnabled: false),
-    "DOL_JIT_FORCE_RWX": .environmentVariable(value: "1", isEnabled: false),
-    "CI_DISABLE_JUMP_CACHE": .environmentVariable(value: "1", isEnabled: false),
-    "CI_DISABLE_MICRO_OPS": .environmentVariable(value: "1", isEnabled: false),
-    "CI_DISABLE_PIC_LS": .environmentVariable(value: "1", isEnabled: false),
-    "DOLPHIN_CI_LINK_ENABLE": .environmentVariable(value: "0", isEnabled: false),
-    "DOLPHIN_CI_LINK_SAMPLE": .environmentVariable(value: "1", isEnabled: false),
-    "DOLPHIN_CI_LINK_LOG_VERBOSE": .environmentVariable(value: "1", isEnabled: false),
-    "DOLPHIN_CI_LINK_SKIP_RANGE": .environmentVariable(value: "0x80160000:0x20000", isEnabled: false),
+
 ]
 
 let schemes: [Scheme] = [
