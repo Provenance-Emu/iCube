@@ -13,7 +13,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
     #if os(tvOS)
     // For tvOS, create the view controller programmatically
     let mappingVC = TVMappingRootViewController()
-    mappingVC.mappingType = isGC ? .DOLMappingTypePad : .DOLMappingTypeWiimote
+    mappingVC.mappingType = isGC ? .pad : .wiimote
     mappingVC.mappingPort = Int32(max(0, portOneBased - 1))
 
     let navController = UINavigationController(rootViewController: mappingVC)
@@ -45,7 +45,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
 /// to avoid a same-name clash with the storyboard-backed ObjC class that crashed
 /// looking for the tvOS-absent ButtonMapping.storyboard.
 class TVMappingRootViewController: UITableViewController {
-  @objc var mappingType: DOLMappingType = .DOLMappingTypePad
+  @objc var mappingType: DOLMappingType = .pad
   @objc var mappingPort: Int32 = 0
 
   private var config: UnsafeMutableRawPointer?
@@ -112,7 +112,7 @@ class TVMappingRootViewController: UITableViewController {
   }
 
   private func currentDefaultDeviceQualifier() -> String {
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       return TVControllerMappingBridge.defaultDevice(forGCPort: Int(mappingPort + 1))
     } else {
       return TVControllerMappingBridge.defaultDevice(forWiimote: Int(mappingPort + 1))
@@ -141,7 +141,7 @@ class TVMappingRootViewController: UITableViewController {
     ])
 
     // Controller-specific sections
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       // GameCube controller sections
       sections.append([
         "title": L("General and Options"),
@@ -387,7 +387,7 @@ class TVMappingRootViewController: UITableViewController {
 
 // MARK: - Delegate Extensions
 
-extension MappingRootViewController: DeviceSelectionDelegate, GroupEditDelegate, ProfileLoadDelegate, ExtensionSelectionDelegate {
+extension TVMappingRootViewController: DeviceSelectionDelegate, GroupEditDelegate, ProfileLoadDelegate, ExtensionSelectionDelegate {
   func deviceDidChange() {
     // Reload sections to update device display
     populateSections()
@@ -431,7 +431,7 @@ protocol ExtensionSelectionDelegate: AnyObject {
 
 /// Programmatic device selection view controller
 class DeviceSelectionViewController: UITableViewController {
-  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingType: DOLMappingType = .pad
   var mappingPort: Int32 = 0
   weak var delegate: DeviceSelectionDelegate?
 
@@ -496,7 +496,7 @@ class DeviceSelectionViewController: UITableViewController {
     }
 
     // Set current selection based on current default device
-    let current = (mappingType == .DOLMappingTypePad)
+    let current = (mappingType == .pad)
       ? TVControllerMappingBridge.defaultDevice(forGCPort: Int(mappingPort + 1))
       : TVControllerMappingBridge.defaultDevice(forWiimote: Int(mappingPort + 1))
     selectedIndex = devices.firstIndex(of: current) ?? -1
@@ -523,7 +523,7 @@ class DeviceSelectionViewController: UITableViewController {
     if selectedIndex != indexPath.row {
       selectedIndex = indexPath.row
       let qualified = devices[indexPath.row]
-      if mappingType == .DOLMappingTypePad {
+      if mappingType == .pad {
         TVControllerMappingBridge.setDefaultDevice(qualified, forGCPort: Int(mappingPort + 1))
       } else {
         TVControllerMappingBridge.setDefaultDevice(qualified, forWiimote: Int(mappingPort + 1))
@@ -531,7 +531,7 @@ class DeviceSelectionViewController: UITableViewController {
 
       // Auto-load a default profile for known device types and restore the device binding
       if let profile = defaultProfileName(forQualified: qualified) {
-        if mappingType == .DOLMappingTypePad {
+        if mappingType == .pad {
           _ = TVControllerMappingBridge.loadProfile(profile, forGCPort: Int(mappingPort + 1), restoreDevice: true)
         } else {
           _ = TVControllerMappingBridge.loadProfile(profile, forWiimote: Int(mappingPort + 1), restoreDevice: true)
@@ -561,7 +561,7 @@ private func defaultProfileName(forQualified q: String) -> String? {
 
 /// Programmatic group edit view controller
 class GroupEditViewController: UITableViewController {
-  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingType: DOLMappingType = .pad
   var mappingPort: Int32 = 0
   var groupName: String = ""
   weak var delegate: GroupEditDelegate?
@@ -582,7 +582,7 @@ class GroupEditViewController: UITableViewController {
   private func loadControls() {
     // Query Dolphin for control names based on mapping type and group
     let groupId = groupIdForName(groupName)
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       controls = TVControllerMappingBridge.padControlNames(forGroup: Int(mappingPort + 1), group: groupId)
       controlExpressions = TVControllerMappingBridge.padControlExpressions(forGroup: Int(mappingPort + 1), group: groupId)
     } else {
@@ -593,7 +593,7 @@ class GroupEditViewController: UITableViewController {
   }
 
   private func groupIdForName(_ name: String) -> Int {
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       switch name {
       case L("Buttons"): return 0
       case L("D-Pad"): return 1
@@ -644,7 +644,7 @@ class GroupEditViewController: UITableViewController {
       let expr = alert.textFields?.first?.text ?? ""
       guard !expr.isEmpty else { return }
       let groupId = self.groupIdForName(self.groupName)
-      if self.mappingType == .DOLMappingTypePad {
+      if self.mappingType == .pad {
         TVControllerMappingBridge.setPadControlExpressionForPort(Int(self.mappingPort + 1), group: groupId, index: indexPath.row, expression: expr)
         self.controlExpressions = TVControllerMappingBridge.padControlExpressions(forGroup: Int(self.mappingPort + 1), group: groupId)
       } else {
@@ -659,7 +659,7 @@ class GroupEditViewController: UITableViewController {
 
 /// Programmatic profile load view controller
 class ProfileLoadViewController: UITableViewController {
-  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingType: DOLMappingType = .pad
   var mappingPort: Int32 = 0
   weak var delegate: ProfileLoadDelegate?
 
@@ -684,7 +684,7 @@ class ProfileLoadViewController: UITableViewController {
   }
 
   private func loadProfiles() {
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       profiles = TVControllerMappingBridge.profiles(forGCPort: Int(mappingPort + 1))
     } else {
       profiles = TVControllerMappingBridge.profiles(forWiimote: Int(mappingPort + 1))
@@ -708,7 +708,7 @@ class ProfileLoadViewController: UITableViewController {
     // Load the selected profile
     let name = profiles[indexPath.row]
     let ok: Bool
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       ok = TVControllerMappingBridge.loadProfile(name, forGCPort: Int(mappingPort + 1), restoreDevice: true)
     } else {
       ok = TVControllerMappingBridge.loadProfile(name, forWiimote: Int(mappingPort + 1), restoreDevice: true)
@@ -720,7 +720,7 @@ class ProfileLoadViewController: UITableViewController {
 
 /// Programmatic extension selection view controller
 class ExtensionSelectionViewController: UITableViewController {
-  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingType: DOLMappingType = .pad
   var mappingPort: Int32 = 0
   weak var delegate: ExtensionSelectionDelegate?
 
@@ -771,7 +771,7 @@ class ExtensionSelectionViewController: UITableViewController {
 
 /// Programmatic input display view controller
 class InputDisplayViewController: UITableViewController {
-  var mappingType: DOLMappingType = .DOLMappingTypePad
+  var mappingType: DOLMappingType = .pad
   var mappingPort: Int32 = 0
 
   private var inputs: [(String, String)] = [] // (name, value)
@@ -808,7 +808,7 @@ class InputDisplayViewController: UITableViewController {
   private func loadInputs() {
     // Seed from current device names
     let qualified: String
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       qualified = TVControllerMappingBridge.defaultDevice(forGCPort: Int(mappingPort + 1))
     } else {
       qualified = TVControllerMappingBridge.defaultDevice(forWiimote: Int(mappingPort + 1))
@@ -823,7 +823,7 @@ class InputDisplayViewController: UITableViewController {
   }
 
   private func groupIdForName(_ name: String) -> Int {
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       switch name {
       case L("Buttons"): return 0
       case L("D-Pad"): return 1
@@ -853,7 +853,7 @@ class InputDisplayViewController: UITableViewController {
   private func updateInputValues() {
     // Read states from the current default device via bridge when possible
     let qualified: String
-    if mappingType == .DOLMappingTypePad {
+    if mappingType == .pad {
       qualified = TVControllerMappingBridge.defaultDevice(forGCPort: Int(mappingPort + 1))
     } else {
       qualified = TVControllerMappingBridge.defaultDevice(forWiimote: Int(mappingPort + 1))
