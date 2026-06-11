@@ -91,11 +91,9 @@ enum LibraryAddedDateStore {
   }
 }
 
-#if os(iOS)
 @objcMembers
 final class LibraryAddedDateStoreBridge: NSObject {
   static func recordPath(_ path: String) {
     LibraryAddedDateStore.record(path: path)
   }
 }
-#endif
