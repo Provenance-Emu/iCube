@@ -12,7 +12,7 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
   func makeUIViewController(context: Context) -> UIViewController {
     #if os(tvOS)
     // For tvOS, create the view controller programmatically
-    let mappingVC = MappingRootViewController()
+    let mappingVC = TVMappingRootViewController()
     mappingVC.mappingType = isGC ? .DOLMappingTypePad : .DOLMappingTypeWiimote
     mappingVC.mappingPort = Int32(max(0, portOneBased - 1))
 
@@ -40,8 +40,11 @@ internal struct ButtonMappingView: UIViewControllerRepresentable {
 
 // MARK: - Programmatic MappingRootViewController for tvOS
 
-/// Programmatic version of MappingRootViewController that doesn't rely on storyboards
-@objc class MappingRootViewController: UITableViewController {
+/// Programmatic tvOS mapping screen (storyboard-free). Named distinctly from the
+/// legacy ObjC `MappingRootViewController` (whose .h is on the bridging-header path)
+/// to avoid a same-name clash with the storyboard-backed ObjC class that crashed
+/// looking for the tvOS-absent ButtonMapping.storyboard.
+class TVMappingRootViewController: UITableViewController {
   @objc var mappingType: DOLMappingType = .DOLMappingTypePad
   @objc var mappingPort: Int32 = 0
 
@@ -878,12 +881,9 @@ class InputDisplayViewController: UITableViewController {
   }
 }
 
-// MARK: - DOLMappingType enum for tvOS
-
-@objc enum DOLMappingType: UInt {
-  case DOLMappingTypePad = 0
-  case DOLMappingTypeWiimote = 1
-}
+// Note: DOLMappingType is provided to Swift by the bridged ObjC header
+// (MappingRootViewController.h), kept on the tvOS bridging-header path for exactly
+// this purpose. No Swift redeclaration — that was the second half of the name clash.
 
 #endif
 
