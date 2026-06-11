@@ -319,8 +319,9 @@ let iCube = Target.target(
             "INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates": "YES",
             "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
             "INFOPLIST_KEY_UILaunchStoryboardName": "LaunchScreen",
-            "INFOPLIST_KEY_UIMainStoryboardFile": "Main",
-            "INFOPLIST_KEY_UIMainStoryboardFile[sdk=appletv*]": "",
+            // Main.storyboard deleted (dead — AppDelegate sets config.storyboard = nil and roots
+            // SwiftUI via UIHostingController). Empty on all platforms; tvOS already shipped empty.
+            "INFOPLIST_KEY_UIMainStoryboardFile": "",
             "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
             "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
             "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/Frameworks"],
@@ -429,9 +430,7 @@ let iCubeTests = Target.target(
 
 // MARK: - Schemes
 
-let appStoreEnvVars: [String: EnvironmentVariable] = [
-
-]
+let appStoreEnvVars: [String: EnvironmentVariable] = [ : ]
 
 let schemes: [Scheme] = [
     .scheme(
