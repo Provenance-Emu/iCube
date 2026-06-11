@@ -66,10 +66,18 @@ enum SentryTelemetryService {
       options.enableAutoPerformanceTracing = true
       options.enableAppHangTracking = true
       options.enableReportNonFullyBlockingAppHangs = false
+      #if !os(tvOS)
       options.enableMetricKit = true
+      #endif
       options.enableTimeToFullDisplayTracing = true
       options.swiftAsyncStacktraces = true
       options.enableCaptureFailedRequests = true
+      options.enableFileManagerSwizzling = true
+//      options.enableSigtermReporting = true
+      #if DEBUG
+      // TODO: Actually add Sentry logs from dolphin's logger
+      options.enableLogs = true
+      #endif
     }
 
     installNotificationObservers()
