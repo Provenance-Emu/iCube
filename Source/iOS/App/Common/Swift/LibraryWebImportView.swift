@@ -27,7 +27,9 @@ struct LibraryWebImportView: View {
               Spacer()
               Text(ipAddress)
                 .foregroundStyle(.secondary)
+              #if !os(tvOS)
                 .textSelection(.enabled)
+              #endif
             }
           }
         } footer: {
@@ -45,7 +47,9 @@ struct LibraryWebImportView: View {
 #endif
       }
       .navigationTitle(L("Upload via Wi-Fi"))
+      #if !os(tvOS)
       .navigationBarTitleDisplayMode(.inline)
+      #endif
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button(L("Done")) { dismiss() }
@@ -70,7 +74,9 @@ struct LibraryWebImportView: View {
         Text(url)
           .font(.footnote)
           .foregroundStyle(.secondary)
+        #if !os(tvOS)
           .textSelection(.enabled)
+        #endif
           .lineLimit(3)
         HStack(spacing: 12) {
           Button {

@@ -274,9 +274,6 @@ internal struct PauseMenuView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .background(backgroundView)
-    .onAppear {
-      refreshPauseMenuControllerNav()
-    }
     .onDisappear {
       #if !os(tvOS)
       teardownPauseControllerNav()
@@ -284,6 +281,9 @@ internal struct PauseMenuView: View {
       #endif
     }
     #if os(iOS)
+    .onAppear {
+      refreshPauseMenuControllerNav()
+    }
     .onReceive(ControllerManager.shared.controllerConnectedPublisher) { _ in
       refreshPauseMenuControllerNav()
     }
