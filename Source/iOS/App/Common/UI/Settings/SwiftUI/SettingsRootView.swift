@@ -1447,6 +1447,16 @@ struct DebugRootView: View {
           L("Runs a loopback-only HTTP server on port 8723 for automated perf testing. Reach it from the Mac with `iproxy 8723 8723` over USB. Takes effect at the next game boot."))
       }
 
+      Section(header: Text(L("Rendering"))) {
+        // Config-backed (GFX_ENABLE_WIREFRAME). Read-through Binding (no @State) mirrors
+        // Stall Metrics above to avoid write-through desync.
+        settingsCaption(
+          Toggle(L("Wireframe"), isOn: Binding(
+            get: { DOLConfigBridge.gfxWireframe() },
+            set: { DOLConfigBridge.setGfxWireframe($0) })),
+          L("Renders geometry as wireframe instead of filled polygons. Diagnostic only — for inspecting how a scene is built."))
+      }
+
       Section(header: Text(L("Logging"))) {
         settingsCaption(
           Toggle(L("Enable Console Logging"), isOn: $loggingEnabled)
@@ -3826,6 +3836,9 @@ struct GraphicsShaderTypeView: View {
 /// Graphics > Enhancements placeholder
 struct GraphicsEnhancementsView: View {
   @State private var anisotropy: Int = 1
+  @State private var msaa: Int = 1 // sample count: 1/2/4/8
+  @State private var ssaa: Bool = false
+  @State private var outputResampling: Int = 0 // OutputResamplingMode: 0=Default..6=AreaSampling
   @State private var trueColor: Bool = true
   @State private var disableCopyFilter: Bool = true
   @State private var efbScale: Int = 1
@@ -3882,6 +3895,34 @@ struct GraphicsEnhancementsView: View {
           Text("\(L("Anisotropic Filtering")): \(anisotropy)x")
         }
         .onChange(of: anisotropy) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+        settingsNavCaption(
+          destination: MSAAPicker(selected: $msaa),
+          L("Multisample anti-aliasing smooths jagged polygon edges. Higher costs more GPU. The Metal backend clamps unsupported sample counts automatically.")
+        ) {
+          Text("\(L("Anti-Aliasing (MSAA)")): \(msaa == 1 ? L("None") : "\(msaa)x")")
+        }
+        .onChange(of: msaa) { newMsaa in
+          DOLConfigBridge.setGfxMsaa(newMsaa)
+          // Desktop parity: SSAA only applies when MSAA > 1. Clear it if MSAA drops to None.
+          if newMsaa <= 1 && ssaa {
+            ssaa = false
+            DOLConfigBridge.setGfxSsaa(false)
+          }
+        }
+        settingsCaption(
+          Toggle(L("Supersampling (SSAA)"), isOn: $ssaa)
+            .disabled(msaa <= 1)
+            .onChange(of: ssaa) { DOLConfigBridge.setGfxSsaa($0) },
+          msaa > 1
+            ? L("Supersampling renders MSAA samples at full shading for the sharpest result, at a heavy GPU cost. Requires MSAA above None.")
+            : L("Enable MSAA (above None) first to use supersampling."))
+        settingsNavCaption(
+          destination: OutputResamplingPicker(selected: $outputResampling),
+          L("How the final image is resampled to the screen. Default matches the backend; Sharp Bilinear and Area Sampling can look cleaner when up/down-scaling.")
+        ) {
+          Text("\(L("Output Resampling")): \(outputResamplingLabel(outputResampling))")
+        }
+        .onChange(of: outputResampling) { DOLConfigBridge.setGfxEnhanceOutputResampling($0) }
       }, header: { Text(L("Texture Filtering")) })
       Section(content: {
         settingsCaption(
@@ -3959,6 +4000,9 @@ struct GraphicsEnhancementsView: View {
     efbScale = DOLConfigBridge.gfxEfbScale()
     efbAutoOverridden = DOLConfigBridge.isEfbScaleAutoOverridden()
     anisotropy = DOLConfigBridge.gfxEnhanceAnisotropySamples()
+    msaa = normalizedMsaa(DOLConfigBridge.gfxMsaa())
+    ssaa = DOLConfigBridge.gfxSsaa()
+    outputResampling = DOLConfigBridge.gfxEnhanceOutputResampling()
     trueColor = DOLConfigBridge.gfxEnhanceForceTrueColor()
     disableCopyFilter = DOLConfigBridge.gfxEnhanceDisableCopyFilter()
     widescreenHack = DOLConfigBridge.gfxWidescreenHack()
@@ -3974,6 +4018,27 @@ struct GraphicsEnhancementsView: View {
       Spacer()
       Button(action: action) { Image(systemName: "info.circle") }
         .buttonStyle(.plain)
+    }
+  }
+
+  /// Snap an arbitrary stored MSAA sample count to the fixed UI ladder (1/2/4/8).
+  private func normalizedMsaa(_ samples: Int) -> Int {
+    switch samples {
+    case ..<2: return 1
+    case 2...3: return 2
+    case 4...7: return 4
+    default: return 8
+    }
+  }
+  private func outputResamplingLabel(_ v: Int) -> String {
+    switch v {
+    case 1: return L("Bilinear")
+    case 2: return L("B-Spline")
+    case 3: return L("Mitchell-Netravali")
+    case 4: return L("Catmull-Rom")
+    case 5: return L("Sharp Bilinear")
+    case 6: return L("Area Sampling")
+    default: return L("Default")
     }
   }
 
@@ -4014,6 +4079,45 @@ private struct AnisotropyPicker: View {
       }
     }
     .navigationTitle(L("Anisotropic Filtering"))
+  }
+}
+
+private struct MSAAPicker: View {
+  @Binding var selected: Int
+  // Fixed sample ladder. NOT gated on per-device AAModes — the Metal backend clamps
+  // unsupported counts at runtime, so an unsupported pick degrades, it doesn't crash.
+  private var options: [Int] { [1, 2, 4, 8] }
+  var body: some View {
+    List {
+      ForEach(options, id: \.self) { v in
+        SelectRow(label: v == 1 ? L("None") : "\(v)x", checked: v == selected) {
+          selected = v
+          DOLConfigBridge.setGfxMsaa(v)
+        }
+      }
+    }
+    .navigationTitle(L("Anti-Aliasing (MSAA)"))
+  }
+}
+
+private struct OutputResamplingPicker: View {
+  @Binding var selected: Int
+  // (label, OutputResamplingMode raw value 0..6)
+  private var options: [(String, Int)] {
+    [(L("Default"), 0), (L("Bilinear"), 1), (L("B-Spline"), 2),
+     (L("Mitchell-Netravali"), 3), (L("Catmull-Rom"), 4),
+     (L("Sharp Bilinear"), 5), (L("Area Sampling"), 6)]
+  }
+  var body: some View {
+    List {
+      ForEach(options, id: \.1) { opt in
+        SelectRow(label: opt.0, checked: opt.1 == selected) {
+          selected = opt.1
+          DOLConfigBridge.setGfxEnhanceOutputResampling(opt.1)
+        }
+      }
+    }
+    .navigationTitle(L("Output Resampling"))
   }
 }
 
@@ -4058,6 +4162,8 @@ struct GraphicsHacksView: View {
   @State private var skipDuplicateXFBs: Bool = true
   @State private var viDecimateInterlace: Bool = false
   @State private var bboxEnabled: Bool = false
+  @State private var bboxSyncMode: Int = 0 // 0=Latched (perf default), 1=Force Sync
+  @State private var gpuEfbPeekResolve: Bool = false
   @State private var textureCacheSamples: Int = 128
   @State private var backendSupportsBbox: Bool = true
   @State private var helpMessage: String = ""
@@ -4090,6 +4196,14 @@ struct GraphicsHacksView: View {
           backendSupportsBbox
             ? L("Emulates GameCube/Wii bounding-box tests on the GPU. Required by some games; leave off unless needed.")
             : L("The current graphics backend does not support bounding box emulation on this device."))
+        settingsNavCaption(
+          destination: BBoxSyncModePicker(selected: $bboxSyncMode),
+          L("How iCube delivers bounding-box values. Latched serves a 1-frame-stale snapshot with no CPU stall (faster). Force Sync blocks for exact same-frame values — try it if a game's bbox-driven effects (some 2D/UI culling) look wrong.")
+        ) {
+          Text("\(L("Bounding Box Sync")): \(bboxSyncLabel(bboxSyncMode))")
+        }
+        .disabled(!bboxEnabled || !backendSupportsBbox)
+        .onChange(of: bboxSyncMode) { DOLConfigBridge.setGfxBboxSyncMode($0) }
         settingsCaption(
           Toggle(L("Enable EFB Access"), isOn: $efbAccess)
             .onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) },
@@ -4170,6 +4284,10 @@ struct GraphicsHacksView: View {
           Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping)
             .onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) },
           L("Disables mipmaps. Saves a little memory/bandwidth but makes distant textures shimmer. Leave off normally."))
+        settingsCaption(
+          Toggle(L("GPU EFB Peek Resolve"), isOn: $gpuEfbPeekResolve)
+            .onChange(of: gpuEfbPeekResolve) { DOLConfigBridge.setGfxHackGpuEfbPeekResolve($0) },
+          L("Experimental: resolves EFB peek reads on the GPU instead of a CPU readback. May reduce CPU-thread stalls for games that read the framebuffer; OFF by default. Verify visuals per game."))
       }
       Section {
         settingsCaption(
@@ -4213,6 +4331,8 @@ struct GraphicsHacksView: View {
     skipDuplicateXFBs = DOLConfigBridge.gfxHackSkipDuplicateXFBs()
     viDecimateInterlace = DOLConfigBridge.gfxHackViDecimateInterlace()
     bboxEnabled = DOLConfigBridge.gfxHackBboxEnable()
+    bboxSyncMode = DOLConfigBridge.gfxBboxSyncMode()
+    gpuEfbPeekResolve = DOLConfigBridge.gfxHackGpuEfbPeekResolve()
     backendSupportsBbox = DOLConfigBridge.gfxBackendSupportsBoundingBox()
     textureCacheSamples = normalizedTextureCacheSamples(DOLConfigBridge.gfxSafeTextureCacheColorSamples())
   }
@@ -4230,6 +4350,7 @@ struct GraphicsHacksView: View {
     }
   }
   private func viSkipLabel(_ v: Int) -> String { switch v { case 1: return L("On"); case 2: return L("Auto"); default: return L("Off") } }
+  private func bboxSyncLabel(_ v: Int) -> String { switch v { case 1: return L("Force Sync"); default: return L("Latched") } }
   // MARK: - Help UI & Text
   private func labelWithInfo(_ title: String, action: @escaping () -> Void) -> some View {
     HStack {
@@ -4322,6 +4443,32 @@ private struct ViSkipModePicker: View {
     .navigationTitle(L("VI Skip Mode"))
   }
 }
+
+private struct BBoxSyncModePicker: View {
+  @Binding var selected: Int
+  var body: some View {
+    List {
+      SelectRow(label: L("Latched"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxBboxSyncMode(0) }
+      SelectRow(label: L("Force Sync"), checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxBboxSyncMode(1) }
+    }
+    .navigationTitle(L("Bounding Box Sync"))
+  }
+}
+
+/// Reusable Off/On/Auto picker for Metal TriState knobs (present-drawable, manual-upload).
+private struct MetalTriStatePicker: View {
+  @Binding var selected: Int
+  let title: String
+  let setter: (Int) -> Void
+  var body: some View {
+    List {
+      SelectRow(label: L("Off"), checked: selected == 0) { selected = 0; setter(0) }
+      SelectRow(label: L("On"), checked: selected == 1) { selected = 1; setter(1) }
+      SelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; setter(2) }
+    }
+    .navigationTitle(title)
+  }
+}
 /// Graphics > Advanced placeholder
 struct GraphicsAdvancedView: View {
   @State private var fastDepth: Bool = true
@@ -4357,6 +4504,9 @@ struct GraphicsAdvancedView: View {
   @State private var maxThreads: Int = 2
   // Experimental
   @State private var deferEfbInvalidation: Bool = false
+  // Metal present/upload strategy (TriState: 0=Off, 1=On, 2=Auto)
+  @State private var usePresentDrawable: Int = 2
+  @State private var manuallyUploadBuffers: Int = 2
   var body: some View {
     List {
       Section(header: Text(L("Performance Statistics")), footer: Text(L("These overlays can also be toggled in-game from the pause menu."))) {
@@ -4476,11 +4626,28 @@ struct GraphicsAdvancedView: View {
         settingsCaption(
           Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation).onChange(of: deferEfbInvalidation) { _ in DOLConfigBridge.setGfxHackEfbDeferInvalidation(deferEfbInvalidation) },
           L("Delays invalidating cached framebuffer copies. Can speed things up but may show stale graphics."))
+        settingsNavCaption(
+          destination: MetalTriStatePicker(selected: $usePresentDrawable, title: L("Use Present Drawable"),
+                                            setter: { DOLConfigBridge.setGfxMtlUsePresentDrawable($0) }),
+          L("Metal present path. Auto uses the presentDrawable path when VSync is active (correct for most). Force On/Off to A/B present latency vs stability.")
+        ) {
+          Text("\(L("Use Present Drawable")): \(metalTriStateLabel(usePresentDrawable))")
+        }
+        .onChange(of: usePresentDrawable) { DOLConfigBridge.setGfxMtlUsePresentDrawable($0) }
+        settingsNavCaption(
+          destination: MetalTriStatePicker(selected: $manuallyUploadBuffers, title: L("Manually Upload Buffers"),
+                                            setter: { DOLConfigBridge.setGfxMtlManuallyUploadBuffers($0) }),
+          L("Metal buffer upload strategy (managed vs shared). Auto detects unified memory and is correct on Apple Silicon; override only for benchmarking.")
+        ) {
+          Text("\(L("Manually Upload Buffers")): \(metalTriStateLabel(manuallyUploadBuffers))")
+        }
+        .onChange(of: manuallyUploadBuffers) { DOLConfigBridge.setGfxMtlManuallyUploadBuffers($0) }
       }
     }
     .navigationTitle(L("Advanced"))
     .configSynced { sync() }
   }
+  private func metalTriStateLabel(_ v: Int) -> String { switch v { case 0: return L("Off"); case 1: return L("On"); default: return L("Auto") } }
   private func sync() {
     fastDepth = DOLConfigBridge.gfxFastDepthCalc()
     pixelLighting = DOLConfigBridge.gfxEnablePixelLighting()
@@ -4518,6 +4685,8 @@ struct GraphicsAdvancedView: View {
     precompilerThreads = (pt <= 0) ? min(2, maxThreads) : pt
     // Experimental
     deferEfbInvalidation = DOLConfigBridge.gfxHackEfbDeferInvalidation()
+    usePresentDrawable = DOLConfigBridge.gfxMtlUsePresentDrawable()
+    manuallyUploadBuffers = DOLConfigBridge.gfxMtlManuallyUploadBuffers()
   }
 }
 

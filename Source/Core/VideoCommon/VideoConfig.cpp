@@ -82,6 +82,7 @@ void VideoConfig::Refresh()
   iManuallyUploadBuffers = Config::Get(Config::GFX_MTL_MANUALLY_UPLOAD_BUFFERS);
   iUsePresentDrawable = Config::Get(Config::GFX_MTL_USE_PRESENT_DRAWABLE);
   bAsyncPresent = Config::Get(Config::GFX_ASYNC_PRESENT);
+  iBBoxSyncMode = Config::Get(Config::GFX_BBOX_SYNC_MODE);
 
   bWidescreenHack = Config::Get(Config::GFX_WIDESCREEN_HACK);
   aspect_mode = Config::Get(Config::GFX_ASPECT_RATIO);

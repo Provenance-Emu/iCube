@@ -526,6 +526,14 @@ static bool ICubeEmulationActive() {
 + (void)setGfxEnhanceArbitraryMipmapDetectionThreshold:(float)threshold { Config::SetBaseOrCurrent(Config::GFX_ENHANCE_ARBITRARY_MIPMAP_DETECTION_THRESHOLD, (float)threshold); }
 + (BOOL)gfxEnhanceHDROutput { return Config::Get(Config::GFX_ENHANCE_HDR_OUTPUT); }
 + (void)setGfxEnhanceHDROutput:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_ENHANCE_HDR_OUTPUT, (bool)enabled); }
+// Anti-aliasing. MSAA is stored as a raw sample count (1/2/4/8). The Metal backend clamps any
+// unsupported sample count at runtime, so the UI can offer a fixed ladder without querying AAModes.
++ (NSInteger)gfxMsaa { return (NSInteger)Config::Get(Config::GFX_MSAA); }
++ (void)setGfxMsaa:(NSInteger)samples { Config::SetBaseOrCurrent(Config::GFX_MSAA, (u32)samples); }
++ (BOOL)gfxSsaa { return Config::Get(Config::GFX_SSAA); }
++ (void)setGfxSsaa:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_SSAA, (bool)enabled); }
++ (NSInteger)gfxEnhanceOutputResampling { return (NSInteger)Config::Get(Config::GFX_ENHANCE_OUTPUT_RESAMPLING); }
++ (void)setGfxEnhanceOutputResampling:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_ENHANCE_OUTPUT_RESAMPLING, static_cast<OutputResamplingMode>((int)mode)); }
 
 // Graphics > Hacks
 + (BOOL)gfxHackEfbAccessEnable { return Config::Get(Config::GFX_HACK_EFB_ACCESS_ENABLE); }
@@ -569,6 +577,10 @@ static bool ICubeEmulationActive() {
 + (void)setGfxHackSkipDuplicateXFBs:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_SKIP_DUPLICATE_XFBS, (bool)enabled); }
 + (BOOL)gfxHackBboxEnable { return Config::Get(Config::GFX_HACK_BBOX_ENABLE); }
 + (void)setGfxHackBboxEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_BBOX_ENABLE, (bool)enabled); }
++ (NSInteger)gfxBboxSyncMode { return (NSInteger)Config::Get(Config::GFX_BBOX_SYNC_MODE); }
++ (void)setGfxBboxSyncMode:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_BBOX_SYNC_MODE, (int)mode); }
++ (BOOL)gfxHackGpuEfbPeekResolve { return Config::Get(Config::GFX_HACK_GPU_EFB_PEEK_RESOLVE); }
++ (void)setGfxHackGpuEfbPeekResolve:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_GPU_EFB_PEEK_RESOLVE, (bool)enabled); }
 + (BOOL)gfxBackendSupportsBoundingBox
 {
   // iCube ships Metal on Apple platforms; MTLUtil sets bSupportsBBox = true.
@@ -612,11 +624,20 @@ static bool ICubeEmulationActive() {
 + (BOOL)gfxShowSpeedColors { return Config::Get(Config::GFX_SHOW_SPEED_COLORS); }
 + (void)setGfxShowSpeedColors:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_SHOW_SPEED_COLORS, (bool)enabled); }
 
+// Metal present/upload strategy (TriState). Cast mirrors setGfxHackViSkipMode.
++ (NSInteger)gfxMtlUsePresentDrawable { return (NSInteger)Config::Get(Config::GFX_MTL_USE_PRESENT_DRAWABLE); }
++ (void)setGfxMtlUsePresentDrawable:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_MTL_USE_PRESENT_DRAWABLE, (TriState)mode); }
++ (NSInteger)gfxMtlManuallyUploadBuffers { return (NSInteger)Config::Get(Config::GFX_MTL_MANUALLY_UPLOAD_BUFFERS); }
++ (void)setGfxMtlManuallyUploadBuffers:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_MTL_MANUALLY_UPLOAD_BUFFERS, (TriState)mode); }
+
 // Debugging
 + (BOOL)gfxOverlayStats { return Config::Get(Config::GFX_OVERLAY_STATS); }
 + (void)setGfxOverlayStats:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_OVERLAY_STATS, (bool)enabled); }
 + (BOOL)gfxEnableValidationLayer { return Config::Get(Config::GFX_ENABLE_VALIDATION_LAYER); }
 + (void)setGfxEnableValidationLayer:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_ENABLE_VALIDATION_LAYER, (bool)enabled); }
+// Wireframe (debug-only diagnostic)
++ (BOOL)gfxWireframe { return Config::Get(Config::GFX_ENABLE_WIREFRAME); }
++ (void)setGfxWireframe:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_ENABLE_WIREFRAME, (bool)enabled); }
 
 // Utility
 + (BOOL)gfxHiresTextures { return Config::Get(Config::GFX_HIRES_TEXTURES); }
@@ -782,6 +803,9 @@ static bool ICubeEmulationActive() {
   del(Config::GFX_ENHANCE_ARBITRARY_MIPMAP_DETECTION);
   del(Config::GFX_ENHANCE_ARBITRARY_MIPMAP_DETECTION_THRESHOLD);
   del(Config::GFX_ENHANCE_HDR_OUTPUT);
+  del(Config::GFX_ENHANCE_OUTPUT_RESAMPLING);
+  del(Config::GFX_MSAA);
+  del(Config::GFX_SSAA);
 
   // ---- Graphics: hacks (incl. iCube perf) ----
   del(Config::GFX_HACK_EFB_ACCESS_ENABLE);
@@ -806,9 +830,13 @@ static bool ICubeEmulationActive() {
   del(Config::GFX_HACK_SKIP_DUPLICATE_XFBS);
   del(Config::GFX_HACK_DISABLE_COPY_TO_VRAM);
   del(Config::GFX_HACK_EFB_DEFER_INVALIDATION);
+  del(Config::GFX_BBOX_SYNC_MODE);                  // iCube bbox latch; default 0 (Latched)
 
   // ---- Graphics: advanced/rendering ----
   del(Config::GFX_FAST_DEPTH_CALC);
+  del(Config::GFX_MTL_USE_PRESENT_DRAWABLE);        // TriState; default Auto
+  del(Config::GFX_MTL_MANUALLY_UPLOAD_BUFFERS);     // TriState; default Auto
+  del(Config::GFX_ENABLE_WIREFRAME);                // debug-only; default false
   del(Config::GFX_ENABLE_PIXEL_LIGHTING);
   del(Config::GFX_BACKEND_MULTITHREADING);
   del(Config::GFX_SHADER_CACHE);

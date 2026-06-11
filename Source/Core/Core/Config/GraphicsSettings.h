@@ -205,6 +205,9 @@ extern const Info<VertexLoaderType> GFX_VERTEX_LOADER_TYPE;
 
 // --- iCube re-baseline: carried custom Config keys ---
 extern const Info<bool> GFX_ASYNC_PRESENT;
+// iCube bbox readback mode. 0 = Latched (serve a complete 1-frame-stale snapshot, no CPU stall);
+// 1 = ForceSync (block on GPU completion for exact same-frame values). Game-INI overridable.
+extern const Info<int> GFX_BBOX_SYNC_MODE;
 extern const Info<bool> GFX_HACK_FAST_MATH;
 extern const Info<bool> GFX_HACK_GPU_EFB_PEEK_RESOLVE;
 extern const Info<bool> GFX_HACK_NEON_TEXTURE_DECODE;

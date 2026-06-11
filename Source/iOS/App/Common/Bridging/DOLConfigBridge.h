@@ -335,6 +335,14 @@ NS_ASSUME_NONNULL_BEGIN
 // HDR output
 + (BOOL)gfxEnhanceHDROutput;
 + (void)setGfxEnhanceHDROutput:(BOOL)enabled;
+// Anti-aliasing (MSAA = sample count u32; SSAA = bool). Backend clamps unsupported sample counts.
++ (NSInteger)gfxMsaa;
++ (void)setGfxMsaa:(NSInteger)samples;
++ (BOOL)gfxSsaa;
++ (void)setGfxSsaa:(BOOL)enabled;
+// Output resampling mode (OutputResamplingMode enum, 0=Default..6=AreaSampling)
++ (NSInteger)gfxEnhanceOutputResampling;
++ (void)setGfxEnhanceOutputResampling:(NSInteger)mode;
 
 // Graphics > Hacks
 + (BOOL)gfxHackEfbAccessEnable;
@@ -378,6 +386,12 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxHackSkipDuplicateXFBs:(BOOL)enabled;
 + (BOOL)gfxHackBboxEnable;
 + (void)setGfxHackBboxEnable:(BOOL)enabled;
+// iCube bbox latch: 0=Latched (perf default, 1-frame-stale snapshot), 1=Force Sync (exact, stalls CPU)
++ (NSInteger)gfxBboxSyncMode;
++ (void)setGfxBboxSyncMode:(NSInteger)mode;
+// iCube experimental: resolve EFB peek reads on the GPU instead of CPU readback
++ (BOOL)gfxHackGpuEfbPeekResolve;
++ (void)setGfxHackGpuEfbPeekResolve:(BOOL)enabled;
 + (BOOL)gfxBackendSupportsBoundingBox;
 + (NSInteger)gfxSafeTextureCacheColorSamples;
 + (void)setGfxSafeTextureCacheColorSamples:(NSInteger)samples;
@@ -401,11 +415,20 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)gfxShowSpeedColors;
 + (void)setGfxShowSpeedColors:(BOOL)enabled;
 
+// Metal present/upload strategy (TriState: 0=Off, 1=On, 2=Auto)
++ (NSInteger)gfxMtlUsePresentDrawable;
++ (void)setGfxMtlUsePresentDrawable:(NSInteger)mode;
++ (NSInteger)gfxMtlManuallyUploadBuffers;
++ (void)setGfxMtlManuallyUploadBuffers:(NSInteger)mode;
+
 // Debugging
 + (BOOL)gfxOverlayStats;
 + (void)setGfxOverlayStats:(BOOL)enabled;
 + (BOOL)gfxEnableValidationLayer;
 + (void)setGfxEnableValidationLayer:(BOOL)enabled;
+// Wireframe rendering (debug-only diagnostic)
++ (BOOL)gfxWireframe;
++ (void)setGfxWireframe:(BOOL)enabled;
 
 // Utility
 + (BOOL)gfxHiresTextures;

@@ -262,6 +262,10 @@ const Info<bool> GFX_ASYNC_PRESENT{{System::GFX, "Settings", "AsyncPresent"},
 #endif
 };
 
+// iCube bbox readback mode: 0 = Latched (default everywhere; safer than today's torn read), 1 =
+// ForceSync. Supersedes the old GFX_ASYNC_PRESENT branch in Metal::BoundingBox::Read.
+const Info<int> GFX_BBOX_SYNC_MODE{{System::GFX, "Settings", "BBoxSyncMode"}, 0};
+
 const Info<bool> GFX_HACK_FAST_MATH{{System::GFX, "Hacks", "FastMath"}, true};
 
 const Info<bool> GFX_HACK_GPU_EFB_PEEK_RESOLVE{{System::GFX, "Hacks", "GPUEFBPeekResolve"}, false};

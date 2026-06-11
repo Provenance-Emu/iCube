@@ -329,7 +329,10 @@ struct VideoConfig final
   TriState iUsePresentDrawable = TriState::Auto;
   // iCube: non-blocking present path (default true on Apple ARM via GFX_ASYNC_PRESENT key).
   // Populated in Refresh(); arch default lives on the config key, not the field.
-  bool bAsyncPresent = false;
+  bool bAsyncPresent = true;
+  // iCube: bbox readback mode. 0 = Latched (no CPU stall, complete 1-frame-stale snapshot),
+  // 1 = ForceSync (block for exact same-frame values). Populated in Refresh().
+  int iBBoxSyncMode = 0;
 
   // Enable API validation layers, currently only supported with Vulkan.
   bool bEnableValidationLayer = false;
@@ -342,14 +345,14 @@ struct VideoConfig final
   int iCommandBufferExecuteInterval = 0;
 
   // Shader compilation settings.
-  bool bWaitForShadersBeforeStarting = false;
+  bool bWaitForShadersBeforeStarting = true;
   ShaderCompilationMode iShaderCompilationMode{};
 
   // Number of shader compiler threads.
   // 0 disables background compilation.
   // -1 uses an automatic number based on the CPU threads.
-  int iShaderCompilerThreads = 0;
-  int iShaderPrecompilerThreads = 0;
+  int iShaderCompilerThreads = -1;
+  int iShaderPrecompilerThreads = -1;
 
   // Loading custom drivers on Android
   std::string customDriverLibraryName;
