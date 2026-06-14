@@ -202,6 +202,20 @@ static bool s_specialized_fp_arith = false;
 // Read once in Init.
 static bool s_prefetch_enabled = false;
 
+// iCube Phase-0 gate-0 SECONDARY/confirmatory discriminators (DEBUG; default 0 = inert, byte-identical).
+// The DECISIVE stride test is the compile-time CIR_TAPE_PAD_BYTES pad on the operand structs; these two
+// runtime knobs corroborate cheaply. Read once in Init. Distinct from s_prefetch_enabled above (which
+// prefetches the register file, not the tape).
+//  - s_tape_prefetch_dist: __builtin_prefetch the tape this many bytes ahead in ExecuteOneBlock.
+//  - s_tape_thrash_stride: touch one cold scratch line per op (lazily-allocated scratch) to probe
+//    memory-subsystem sensitivity. Confirmatory only; the volatile sink defeats dead-load elimination.
+static int s_tape_prefetch_dist = 0;
+static int s_tape_thrash_stride = 0;
+static u8* s_tape_thrash_scratch = nullptr;
+static u32 s_tape_thrash_idx = 0;
+static constexpr u32 CIR_THRASH_SCRATCH_SIZE = 16u * 1024u * 1024u;  // power of two; exceeds L1/L2
+static volatile u8 s_tape_thrash_sink = 0;
+
 // iCube WIN#2: when true, DoJit fuses runs of pure-register integer/immediate ops into a single
 // ExecuteMicroOps callback and folds the addis/ori CONST32 idiom. Read once in Init. Default OFF: with
 // the flag off NO ExecuteMicroOps callback is ever emitted and the DoJit fusion block is skipped
@@ -1217,6 +1231,12 @@ void CachedInterpreter::Init()
   s_validate_instance = s_block_linking_validate ? this : nullptr;
   // iCube: default false (no hints; the fast state). Flip ON only to A/B the +33%-by-removal finding.
   s_prefetch_enabled = Config::Get(Config::MAIN_CACHED_INTERPRETER_PREFETCH);
+  // iCube Phase-0 gate-0 secondary knobs (default 0 = inert). Lazily allocate the thrash scratch only
+  // when the knob is on, so the off path adds zero footprint. Process-lifetime; intentionally not freed.
+  s_tape_prefetch_dist = Config::Get(Config::MAIN_CIR_TAPE_PREFETCH_DIST);
+  s_tape_thrash_stride = Config::Get(Config::MAIN_CIR_TAPE_THRASH_STRIDE);
+  if (s_tape_thrash_stride > 0 && s_tape_thrash_scratch == nullptr)
+    s_tape_thrash_scratch = new u8[CIR_THRASH_SCRATCH_SIZE]();
   // iCube: hot-block profiler (default OFF). Read once; clear counters so each game boot starts fresh.
   // When ON, allocate the slot table HERE (before emulation starts, before any cross-thread report
   // read can fire) rather than lazily on the first Record() on the CPU thread — closes the (tiny)
@@ -1339,8 +1359,23 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
     __builtin_prefetch(&ppc_state.ps[0], 0, 3);
   }
 #endif
+  // iCube Phase-0 gate-0 SECONDARY discriminators (default-off; hoisted so the off path pays one
+  // predicted-not-taken branch per op and nothing else). Does NOT touch normal_entry/payload advance
+  // math, so dispatch correctness and block-linking are untouched.
+  const bool tape_instrument = (s_tape_prefetch_dist != 0) || (s_tape_thrash_stride != 0);
   while (true)
   {
+    if (tape_instrument) [[unlikely]]
+    {
+      if (s_tape_prefetch_dist != 0)
+        __builtin_prefetch(normal_entry + s_tape_prefetch_dist, 0 /*read*/, 1 /*low temporal*/);
+      if (s_tape_thrash_stride != 0 && s_tape_thrash_scratch != nullptr)
+      {
+        s_tape_thrash_idx = (s_tape_thrash_idx + static_cast<u32>(s_tape_thrash_stride)) &
+                            (CIR_THRASH_SCRATCH_SIZE - 1);
+        s_tape_thrash_sink = s_tape_thrash_scratch[s_tape_thrash_idx];
+      }
+    }
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
     const u8* payload = normal_entry + sizeof(callback);
     // Direct dispatch to the most commonly used callbacks for better performance

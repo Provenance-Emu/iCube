@@ -410,6 +410,14 @@ extern const Info<bool> MAIN_RELAXED_IDLE_DETECTION;
 extern const Info<bool> MAIN_CIR_SKIP_PERF_MONITOR;
 extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS;
 extern const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE;
+// iCube Phase-0 gate-0 SECONDARY/confirmatory discriminator knobs (DEBUG; default 0 = inert, byte-identical).
+// The DECISIVE stride test is the compile-time CIR_TAPE_PAD_BYTES pad (CachedInterpreterEmitter.h); these
+// corroborate cheaply. PREFETCH_DIST: __builtin_prefetch the tape this many bytes ahead in ExecuteOneBlock
+// (a speed gain corroborates a memory-bound tape; null is ambiguous — HW prefetch may already cover a linear
+// stream). THRASH_STRIDE: touch one cold scratch line per op (a steep slope vs stride => memory subsystem on
+// the critical path). Distinct from MAIN_CACHED_INTERPRETER_PREFETCH, which prefetches the register file.
+extern const Info<int> MAIN_CIR_TAPE_PREFETCH_DIST;
+extern const Info<int> MAIN_CIR_TAPE_THRASH_STRIDE;
 // iCube: FP load/store specialization, the FP analogue of MAIN_CIR_SPECIALIZED_OPS. Separate, default-OFF
 // flag so the FP-LS direct-dispatch can be A/B-tested on device independently of the (default-ON) integer
 // specialization. Reuses MAIN_CIR_SPECIALIZED_OPS_VALIDATE for its single-run validation (no separate

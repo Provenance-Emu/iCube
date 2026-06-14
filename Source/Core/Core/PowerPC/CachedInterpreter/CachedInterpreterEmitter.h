@@ -10,6 +10,19 @@
 #include "Common/CodeBlock.h"
 #include "Common/CommonTypes.h"
 
+// iCube Phase-0 gate-0 DECISIVE discriminator: pad the dominant operand structs by N bytes at COMPILE
+// TIME, then A/B 2-3 core builds (N=0/32/96). Advance-safe by construction: every ExecuteOneBlock advance
+// is sizeof(Operands)-driven and every LinkBlock distance is computed from m_code positions, so a larger
+// struct keeps both consistent — no runtime hazard. Set per build (edit this 0 -> 32 -> 96 and clean-rebuild
+// the core). N must be a multiple of 8 so Write<Operands>'s `sizeof % alignof(AnyCallback) == 0` still holds.
+// Defined in this lowest shared header (included by CachedInterpreter.h) so EVERY TU that sees the operand
+// structs computes the same sizeof — mismatched layouts across TUs would be an ODR/crash hazard.
+#ifndef CIR_TAPE_PAD_BYTES
+#define CIR_TAPE_PAD_BYTES 0
+#endif
+static_assert(CIR_TAPE_PAD_BYTES % 8 == 0,
+              "CIR_TAPE_PAD_BYTES must be a multiple of 8 (AnyCallback alignment)");
+
 namespace PowerPC
 {
 struct PowerPCState;

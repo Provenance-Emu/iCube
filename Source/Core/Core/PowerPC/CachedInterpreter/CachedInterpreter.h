@@ -453,6 +453,12 @@ struct CachedInterpreter::InterpretOperands
   void (*func)(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction
   u32 current_pc;
   UGeckoInstruction inst;
+#if CIR_TAPE_PAD_BYTES > 0
+  // iCube Phase-0 stride probe; absent (byte-identical) when 0. Padding the base also widens the derived
+  // SpecializedInterpretOperands / InterpretAndCheckExceptionsOperands records — covers the generic +
+  // specialized tape traffic in one place. Never read; only spreads the record across more cache lines.
+  char _cir_pad[CIR_TAPE_PAD_BYTES];
+#endif
 };
 
 // iCube: specialized-op payload (MAIN_CIR_SPECIALIZED_OPS). Inherits the full InterpretOperands so
@@ -494,6 +500,10 @@ struct CachedInterpreter::LoadStoreDFormPICOperands
   u32 exram_mask;
   u8* fakevmem_base;
   u32 fakevmem_mask;
+  // iCube Phase-0 note: deliberately NOT padded with CIR_TAPE_PAD_BYTES. This struct is consumed via
+  // structured bindings (decltype decomposition) at the PIC dispatch sites, where an extra member breaks
+  // the binding arity. The tape-stride probe pads InterpretOperands (generic + specialized) instead; the
+  // PIC path's dominant stall is guest-memory access (a Pillar-1b software-fastmem probe), not tape locality.
 };
 
 // iCube WIN#2: payload for one fused micro-op run (MAIN_CIR_MICROOP_FUSION). The embedded fixed array

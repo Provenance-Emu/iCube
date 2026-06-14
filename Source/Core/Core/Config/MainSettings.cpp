@@ -839,6 +839,10 @@ const Info<bool> MAIN_CIR_SPECIALIZED_OPS{{System::Main, "Core", "CIRSpecialized
 // the same Interpreter:: function). Default false; flip true during on-device correctness passes.
 const Info<bool> MAIN_CIR_SPECIALIZED_OPS_VALIDATE{
     {System::Main, "Core", "CIRSpecializedOpsValidate"}, false};
+// iCube Phase-0 gate-0 SECONDARY/confirmatory discriminators (default 0 = inert). See MainSettings.h and
+// the compile-time CIR_TAPE_PAD_BYTES pad (the decisive knob) in CachedInterpreterEmitter.h.
+const Info<int> MAIN_CIR_TAPE_PREFETCH_DIST{{System::Main, "Core", "CIRTapePrefetchDist"}, 0};
+const Info<int> MAIN_CIR_TAPE_THRASH_STRIDE{{System::Main, "Core", "CIRTapeThrashStride"}, 0};
 // iCube: FP load/store specialization — the FP analogue of MAIN_CIR_SPECIALIZED_OPS, but as its OWN
 // default-OFF flag so it can be A/B-tested on device independently of the (default-ON) integer
 // specialization. Routes the hot FP D-form/indexed load/stores (lfs/lfsu/lfd/lfdu/stfs/stfsu/stfd/stfdu
