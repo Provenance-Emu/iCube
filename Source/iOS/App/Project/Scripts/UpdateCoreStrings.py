@@ -8,14 +8,17 @@ import sys
 #
 # UpdateDolphinStrings.py <po files directory> <localizables directory>
 
+# iCube: matches a single `"key" = "value";` .strings line, tolerating escaped quotes in either field.
+STRINGS_LINE_RE = re.compile(r'^"((?:[^"\\]|\\.)*)" = "((?:[^"\\]|\\.)*)";\s*$')
+
 loaded_pos = {}
 
 def convert_string(str):
   # Strip (&X) for Japanese
-  str = re.sub("\(&(\S)\)", "", str)
+  str = re.sub(r"\(&(\S)\)", "", str)
   
   # Remove & in &X
-  str = re.sub("&(\S)", "\g<1>", str)
+  str = re.sub(r"&(\S)", r"\g<1>", str)
   
   # Strip trailing : and ： (full-width)
   if str.endswith(':') or str.endswith('：'):
@@ -63,6 +66,21 @@ for language, entries in loaded_pos.items():
     
     print('Processing ' + language + ' for ' + strings_path)
     
+    # iCube: MERGE, don't overwrite. The .po catalog is the source of truth, but Core.strings also
+    # carries DolphiniOS-specific UI strings absent from every .po (library grid, controller-force,
+    # etc.); a plain overwrite stripped them on every build. Preserve any existing entry whose key the
+    # .po does not provide (the .po still wins on overlap). The genstrings audit later folds these in.
+    po_keys_escaped = set(msgid.replace(r'"', r'\"') for msgid in entries)
+    preserved = []
+    if os.path.exists(strings_path):
+      with open(strings_path, 'r') as existing_file:
+        for line in existing_file:
+          match = STRINGS_LINE_RE.match(line.rstrip('\n'))
+          if match and match.group(1) not in po_keys_escaped:
+            preserved.append(line.rstrip('\n'))
+
     with open(strings_path, 'w') as strings_file:
       for msgid, msgstr in entries.items():
         strings_file.write('"' + msgid.replace(r'"', r'\"') + '" = "' + msgstr.replace(r'\"', r'\\"').replace(r'"', r'\"') + '";\n')
+      for line in preserved:
+        strings_file.write(line + '\n')
