@@ -3,6 +3,8 @@
 
 #import "ImportFileManager.h"
 
+NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotification";
+
 #import "Swift.h"
 
 #import "GameFileCacheManager.h"

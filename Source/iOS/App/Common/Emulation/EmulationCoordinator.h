@@ -7,10 +7,10 @@
 @class UIScreen;
 @class UIView;
 
-NSString* _Nonnull const DOLEmulationWillStartNotification = @"DOLEmulationWillStartNotification";
-NSString* _Nonnull const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
-NSString* _Nonnull const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotification";
-NSString* _Nonnull const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDidChangeNotification";
+FOUNDATION_EXPORT NSString* _Nonnull const DOLEmulationWillStartNotification;
+FOUNDATION_EXPORT NSString* _Nonnull const DOLEmulationDidStartNotification;
+FOUNDATION_EXPORT NSString* _Nonnull const DOLEmulationDidEndNotification;
+FOUNDATION_EXPORT NSString* _Nonnull const DOLExternalDisplayDidChangeNotification;
 
 NS_ASSUME_NONNULL_BEGIN
 

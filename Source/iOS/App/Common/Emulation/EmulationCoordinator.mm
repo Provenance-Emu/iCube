@@ -3,6 +3,11 @@
 
 #import "EmulationCoordinator.h"
 
+NSString* const DOLEmulationWillStartNotification = @"DOLEmulationWillStartNotification";
+NSString* const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
+NSString* const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotification";
+NSString* const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDidChangeNotification";
+
 #include <cmath>
 #include <variant>
 #include <mach/mach.h>

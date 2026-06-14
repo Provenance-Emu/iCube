@@ -109,12 +109,6 @@ struct TVCheatListView: View {
     }
   }
 
-  private func dismiss() {
-    #if os(tvOS)
-    UIApplication.shared.keyWindow?.rootViewController?.dismiss(animated: true)
-    #endif
-  }
-
   private func reload() {
     gecko = TVCheatsBridge.geckoCodes(forGameId: item.gameID, revision: item.revision)
     ar = TVCheatsBridge.actionReplayCodes(forGameId: item.gameID, revision: item.revision)
