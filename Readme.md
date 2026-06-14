@@ -6,27 +6,18 @@ This is the repository for the new DolphiniOS codebase.
 
 ## Building
 
-You will need the following:
+See **[Source/iOS/BUILDING.md](Source/iOS/BUILDING.md)** for the current iCube build workflow (Tuist, xcframework, schemes, and command-line builds).
 
-* A Mac capable of running macOS Big Sur 11.3 or later
-* Xcode 13 or later
-* Homebrew (or your favourite package manager)
+Quick start:
 
-First, install the necessary tools using Homebrew:
-
+```sh
+git submodule update --init --recursive
+brew install cmake ninja tuist bartycrouch
+cd Source/iOS/App && tuist generate
+open iCube.xcworkspace
 ```
-brew install cmake ninja bartycrouch
-```
 
-If you are using a different package manager, refer to its documentation.
-
-You must change the organization identifier and team ID before you can build!
-
-To change the organization identifier, go to `Project` -> `Config` -> `BundleIdentifier.xcconfig`, and change `use.your.own.organization.identifier` to something unique.
-
-To change the team ID, go to `Project` -> `Config` -> `DevelopmentTeam.xcconfig`, and replace `your-team-id` with your developer account's team ID.
-
-Once finished, you can open the Xcode project at `Source/iOS/App/DolphiniOS.xcodeproj` and build DolphiniOS.
+For code signing, edit `Source/iOS/App/Project/Config/DevelopmentTeam.xcconfig` and `BundleIdentifier.xcconfig` before installing on a device.
 
 # Dolphin - A GameCube and Wii Emulator
 
