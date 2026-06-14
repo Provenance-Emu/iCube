@@ -428,6 +428,10 @@ class DolphinBuilder:
             self.cmake_path, str(self.repo_root_dir),
         ]
 
+        # iCube: silence CMake 4.x deprecation-warning spam from vendored externals that still declare
+        # pre-3.10 cmake_minimum_required values. Suppresses noise only — changes no policy/behavior.
+        cmake_cmd.append("-Wno-deprecated")
+
         # Add generator if Ninja is available
         if self.has_ninja:
             cmake_cmd.extend(["-G", "Ninja"])
