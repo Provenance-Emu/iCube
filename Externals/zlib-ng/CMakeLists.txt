@@ -16,6 +16,16 @@ add_subdirectory(zlib-ng)
 set(ZLIB_INCLUDE_DIR ${CMAKE_BINARY_DIR}/zlib-ng CACHE STRING "Path to zlib include directory")
 set(ZLIB_LIBRARY ZLIB::ZLIB CACHE STRING "Path to zlib library")
 
-# Setup zlib alias project so FindZLIB doesn't recreate it
-add_library(ZLIB::ZLIB ALIAS zlib)
-dolphin_disable_warnings(zlib)
+# Setup zlib alias so FindZLIB doesn't recreate it. zlib-ng's target layout changed across versions:
+# older pins exposed a real `zlib` target; newer zlib-ng (current develop pin) names the real target
+# `zlib-ng` and makes `zlib`/`zlib-ng-static` ALIASES of it — and you cannot alias an alias or set
+# properties on one. Resolve the real target, only add ZLIB::ZLIB if zlib-ng didn't already export it.
+if(TARGET zlib-ng)
+  set(_zlibng_real zlib-ng)   # newer layout (develop)
+else()
+  set(_zlibng_real zlib)      # older layout
+endif()
+if(NOT TARGET ZLIB::ZLIB)
+  add_library(ZLIB::ZLIB ALIAS ${_zlibng_real})
+endif()
+dolphin_disable_warnings(${_zlibng_real})
