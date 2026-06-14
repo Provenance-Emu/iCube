@@ -6,8 +6,10 @@
 #include "VideoBackends/Metal/MTLObjectCache.h"
 #include "VideoBackends/Metal/MTLStateTracker.h"
 
+#include "Core/Core.h"  // iCube bbox latch: Core::WantsDeterminism()
+
 #include "VideoCommon/StallMetrics.h"
-#include "VideoCommon/VideoConfig.h"  // iCube async present: g_ActiveConfig.bAsyncPresent
+#include "VideoCommon/VideoConfig.h"  // iCube bbox latch: g_ActiveConfig.iBBoxSyncMode
 
 static constexpr size_t BUFFER_SIZE = sizeof(BBoxType) * NUM_BBOX_VALUES;
 
@@ -33,20 +35,33 @@ bool Metal::BoundingBox::Initialize()
   return true;
 }
 
-std::vector<BBoxType> Metal::BoundingBox::Read(u32 index, u32 length)
+std::vector<BBoxType> Metal::BoundingBox::Read(u32 index, u32 length, bool force_sync)
 {
   @autoreleasepool
   {
     g_state_tracker->EndRenderPass();
     g_state_tracker->FlushEncoders();
     g_state_tracker->NotifyOfCPUGPUSync();
-    // iCube async present: skip the blocking wait when async present is enabled
-    // (default on Apple ARM). BBox readback may be one frame stale in exchange for
-    // not stalling the CPU thread. Matches feature/icube-testflight.
-    if (!g_ActiveConfig.bAsyncPresent)
+
+    // iCube bbox latch: GFX_BBOX_SYNC_MODE supersedes the old bAsyncPresent branch here.
+    //   Latched (0, default): serve a complete, GPU-quiesced 1-frame-stale snapshot from the ring,
+    //                         no CPU stall, no torn read.
+    //   ForceSync (1):        block on GPU completion and read the live buffer (exact same-frame).
+    // force_sync (from save-state DoState) and WantsDeterminism (netplay/TAS) force the sync path
+    // regardless of mode.
+    const bool latched = (g_ActiveConfig.iBBoxSyncMode == 0) && !force_sync &&
+                         !Core::WantsDeterminism();
+
+    if (latched)
     {
-      // Single-core / Metal inline path: bbox readback blocks the CPU thread on the GPU finishing
-      // the flushed encoders. (No-op on the default Apple path, where bAsyncPresent skips this.)
+      BBoxType snap[NUM_BBOX_VALUES];
+      if (g_state_tracker->ReadLatestBBoxSnapshot(snap))
+        return std::vector<BBoxType>(snap + index, snap + index + length);
+      // Cold start / ring miss (nothing retired yet): fall through to a real sync this once.
+    }
+
+    // ForceSync, save-state, determinism, or cold-start fallthrough: block for exact values.
+    {
       ICUBE_SCOPED_STALL(StallMetrics::Site::BBoxFlushWait, "bbox.flush.wait");
       g_state_tracker->WaitForFlushedEncoders();
     }

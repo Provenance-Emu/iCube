@@ -26,7 +26,7 @@ bool D3D12BoundingBox::Initialize()
   return true;
 }
 
-std::vector<BBoxType> D3D12BoundingBox::Read(u32 index, u32 length)
+std::vector<BBoxType> D3D12BoundingBox::Read(u32 index, u32 length, bool /*force_sync*/)
 {
   // Copy from GPU->CPU buffer, and wait for the GPU to finish the copy.
   ResourceBarrier(g_dx_context->GetCommandList(), m_gpu_buffer.Get(),

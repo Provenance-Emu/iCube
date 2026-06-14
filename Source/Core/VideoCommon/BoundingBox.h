@@ -38,7 +38,9 @@ public:
   virtual bool Initialize() = 0;
 
 protected:
-  virtual std::vector<BBoxType> Read(u32 index, u32 length) = 0;
+  // force_sync: when true, the backend must block for exact same-frame values (used by save-state
+  // DoState). When false, a backend may serve a latched/cached snapshot (Metal bbox latch).
+  virtual std::vector<BBoxType> Read(u32 index, u32 length, bool force_sync) = 0;
   virtual void Write(u32 index, std::span<const BBoxType> values) = 0;
 
 private:

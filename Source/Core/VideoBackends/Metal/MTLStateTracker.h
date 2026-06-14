@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Metal/Metal.h>
+#include <array>
 #include <atomic>
 #include <memory>
 #include <vector>
@@ -17,6 +18,7 @@
 #include "VideoBackends/Metal/MTLTexture.h"
 #include "VideoBackends/Metal/MTLUtil.h"
 
+#include "VideoCommon/BoundingBox.h"  // BBoxType, NUM_BBOX_VALUES for the bbox snapshot ring
 #include "VideoCommon/Constants.h"
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/PerfQueryBase.h"
@@ -69,6 +71,10 @@ public:
   void EndRenderPass();
   void FlushEncoders();
   void WaitForFlushedEncoders();
+  // iCube bbox latch: copy the newest committed bbox snapshot whose cmdbuf has retired into `out`
+  // (NUM_BBOX_VALUES BBoxType). Returns false if no retired snapshot exists yet (cold start ->
+  // caller must do a real WaitForFlushedEncoders and read the live buffer).
+  bool ReadLatestBBoxSnapshot(BBoxType* out);
   bool HasUnflushedData() { return static_cast<bool>(m_current_render_cmdbuf); }
   bool GPUBusy()
   {
@@ -204,6 +210,17 @@ private:
   BufferPair m_upload_buffers[static_cast<int>(UploadBuffer::Last) + 1];
   u64 m_current_draw = 1;
   std::atomic<u64> m_last_finished_draw{0};
+
+  // iCube bbox latch: ring of GPU->CPU bbox snapshots, each tagged with the draw counter at blit
+  // submission. ReadLatestBBoxSnapshot serves the newest slot whose tag <= m_last_finished_draw
+  // (i.e. whose cmdbuf has retired -> Shared bytes settled). Depth must exceed the worst-case
+  // in-flight bbox-flush depth so heavy-bbox titles (Paper Mario, Star Fox Adventures) don't
+  // silently degrade to ForceSync. 16 slots * 4 * sizeof(s32) = 256 bytes; depth is free.
+  static constexpr u32 BBOX_RING = 16;
+  std::array<u64, BBOX_RING> m_bbox_ring_draw{};   // per-slot draw tag (0 = never written)
+  MRCOwned<id<MTLBuffer>> m_bbox_snapshot_buffer;  // BBOX_RING * NUM_BBOX_VALUES BBoxType, Shared
+  BBoxType* m_bbox_snapshot_ptr = nullptr;
+  bool m_bbox_touched_this_cmdbuf = false;  // a gx draw this cmdbuf bound/updated the bbox buffer
 
   MRCOwned<id<MTLTexture>> m_dummy_texture;
 

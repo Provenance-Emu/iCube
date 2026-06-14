@@ -36,7 +36,7 @@ public:
   bool Initialize() override { return true; }
 
 protected:
-  std::vector<BBoxType> Read(u32 index, u32 length) override;
+  std::vector<BBoxType> Read(u32 index, u32 length, bool force_sync) override;
   void Write(u32 index, std::span<const BBoxType> values) override;
 };
 

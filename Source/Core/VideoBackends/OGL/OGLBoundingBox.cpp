@@ -26,7 +26,7 @@ bool OGLBoundingBox::Initialize()
   return true;
 }
 
-std::vector<BBoxType> OGLBoundingBox::Read(u32 index, u32 length)
+std::vector<BBoxType> OGLBoundingBox::Read(u32 index, u32 length, bool /*force_sync*/)
 {
   std::vector<BBoxType> values(length);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_buffer_id);

@@ -37,7 +37,7 @@ bool VKBoundingBox::Initialize()
   return true;
 }
 
-std::vector<BBoxType> VKBoundingBox::Read(u32 index, u32 length)
+std::vector<BBoxType> VKBoundingBox::Read(u32 index, u32 length, bool /*force_sync*/)
 {
   // Can't be done within a render pass.
   StateTracker::GetInstance()->EndRenderPass();

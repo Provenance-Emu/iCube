@@ -70,7 +70,7 @@ bool D3DBoundingBox::Initialize()
   return true;
 }
 
-std::vector<BBoxType> D3DBoundingBox::Read(u32 index, u32 length)
+std::vector<BBoxType> D3DBoundingBox::Read(u32 index, u32 length, bool /*force_sync*/)
 {
   std::vector<BBoxType> values(length);
   D3D::context->CopyResource(m_staging_buffer.Get(), m_buffer.Get());

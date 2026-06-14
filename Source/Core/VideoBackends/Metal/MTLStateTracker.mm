@@ -386,6 +386,27 @@ void Metal::StateTracker::FlushEncoders()
   if (!m_current_render_cmdbuf)
     return;
   EndRenderPass();
+  // iCube bbox latch: if a gx draw this cmdbuf touched the bbox buffer, blit the 4 bbox values into
+  // the ring slot for this draw, ordered behind the fragment-stage download fence (updated in
+  // EndRenderPass). The blit rides this render cmdbuf, so it inherits the existing completion
+  // handler that advances m_last_finished_draw -> ReadLatestBBoxSnapshot knows when it's safe.
+  // Must endEncoding before the Sync() upload loop: Metal allows one open encoder per cmdbuf.
+  if (m_bbox_touched_this_cmdbuf && m_state.bbox && m_bbox_snapshot_buffer)
+  {
+    const u32 slot = static_cast<u32>(m_current_draw % BBOX_RING);
+    id<MTLBlitCommandEncoder> snap = [m_current_render_cmdbuf blitCommandEncoder];
+    [snap setLabel:@"BBox Snapshot"];
+    if (m_state.bbox_download_fence)
+      [snap waitForFence:m_state.bbox_download_fence];  // after fragment-stage bbox writes
+    [snap copyFromBuffer:m_state.bbox
+            sourceOffset:0
+                toBuffer:m_bbox_snapshot_buffer
+       destinationOffset:slot * NUM_BBOX_VALUES * sizeof(BBoxType)
+                    size:NUM_BBOX_VALUES * sizeof(BBoxType)];
+    [snap endEncoding];
+    m_bbox_ring_draw[slot] = m_current_draw;  // tag the slot; retirement is gated by completion
+    m_bbox_touched_this_cmdbuf = false;
+  }
   for (int i = 0; i <= static_cast<int>(UploadBuffer::Last); ++i)
     Sync(m_upload_buffers[i]);
   if (!m_manual_buffer_upload)
@@ -437,6 +458,32 @@ void Metal::StateTracker::FlushEncoders()
 void Metal::StateTracker::WaitForFlushedEncoders()
 {
   [m_last_render_cmdbuf waitUntilCompleted];
+}
+
+bool Metal::StateTracker::ReadLatestBBoxSnapshot(BBoxType* out)
+{
+  if (!m_bbox_snapshot_ptr)
+    return false;
+  // Acquire-load the completion fence: gates which ring slots have retired (their Shared snapshot
+  // bytes are settled). FlushEncoders and Read run on the same thread, so the m_bbox_ring_draw tag
+  // store is already visible here; m_last_finished_draw only answers "has this slot's blit retired".
+  const u64 finished = m_last_finished_draw.load(std::memory_order_acquire);
+  u64 best_draw = 0;
+  int best_slot = -1;
+  for (u32 i = 0; i < BBOX_RING; ++i)
+  {
+    const u64 d = m_bbox_ring_draw[i];
+    if (d != 0 && d <= finished && d > best_draw)
+    {
+      best_draw = d;
+      best_slot = static_cast<int>(i);
+    }
+  }
+  if (best_slot < 0)
+    return false;  // cold start / nothing retired yet -> caller does a real sync
+  const BBoxType* src = m_bbox_snapshot_ptr + best_slot * NUM_BBOX_VALUES;
+  std::copy(src, src + NUM_BBOX_VALUES, out);
+  return true;
 }
 
 void Metal::StateTracker::ReloadSamplers()
@@ -595,6 +642,26 @@ void Metal::StateTracker::SetBBoxBuffer(id<MTLBuffer> bbox, id<MTLFence> upload,
   m_state.bbox = bbox;
   m_state.bbox_upload_fence = upload;
   m_state.bbox_download_fence = download;
+  // iCube bbox latch: allocate the snapshot ring once, on first real bbox buffer. Shared +
+  // untracked: the CPU reads it directly after the producing cmdbuf retires (no hazard tracking
+  // needed; ordering is enforced by the per-cmdbuf completion fence we already wait on).
+  if (bbox && !m_bbox_snapshot_buffer)
+  {
+    const MTLResourceOptions opt =
+        MTLResourceStorageModeShared | MTLResourceHazardTrackingModeUntracked;
+    m_bbox_snapshot_buffer = MRCTransfer(
+        [g_device newBufferWithLength:BBOX_RING * NUM_BBOX_VALUES * sizeof(BBoxType) options:opt]);
+    [m_bbox_snapshot_buffer setLabel:@"BBox Snapshot Ring"];
+    m_bbox_snapshot_ptr = static_cast<BBoxType*>([m_bbox_snapshot_buffer contents]);
+    m_bbox_ring_draw.fill(0);
+  }
+  else if (!bbox)
+  {
+    m_bbox_snapshot_buffer = nullptr;
+    m_bbox_snapshot_ptr = nullptr;
+    m_bbox_ring_draw.fill(0);
+    m_bbox_touched_this_cmdbuf = false;
+  }
 }
 
 void Metal::StateTracker::SetVertexBufferNow(u32 idx, id<MTLBuffer> buffer, u32 offset)
@@ -747,6 +814,10 @@ void Metal::StateTracker::PrepareRender()
     if (is_gx && m_state.bbox_upload_fence && !m_flags.bbox_fence && pipe->UsesFragmentBuffer(2))
     {
       m_flags.bbox_fence = true;
+      // iCube bbox latch: this cmdbuf has a gx draw that may write the bbox atomics. m_flags.bbox_fence
+      // is per-encoder (reset by NewEncoder); m_bbox_touched_this_cmdbuf is cmdbuf-scoped and is what
+      // FlushEncoders keys the snapshot blit off (so multi-pass cmdbufs are covered).
+      m_bbox_touched_this_cmdbuf = true;
       [enc waitForFence:m_state.bbox_upload_fence beforeStages:MTLRenderStageFragment];
       [enc setFragmentBuffer:m_state.bbox offset:0 atIndex:2];
     }

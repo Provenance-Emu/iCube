@@ -43,7 +43,7 @@ void Update(u16 left, u16 right, u16 top, u16 bottom)
 
 namespace SW
 {
-std::vector<BBoxType> SWBoundingBox::Read(u32 index, u32 length)
+std::vector<BBoxType> SWBoundingBox::Read(u32 index, u32 length, bool /*force_sync*/)
 {
   std::vector<BBoxType> values(length);
 
