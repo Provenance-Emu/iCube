@@ -48,3 +48,7 @@ CMakeLists.txt.user
 /Source/iOS/App/.package.resolved
 /Source/iOS/App/Project/Scripts/__pycache__
 /__pycache__
+
+# iCube: build output is generated, never tracked — the xcframework dir and the CMake build dirs.
+/build/
+/build-*/
