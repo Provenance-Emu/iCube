@@ -1,14 +1,13 @@
 name: Lint
 
 # Lint/format only -- intentionally NOT a build.
-# The xcframework build needs a big self-hosted runner (it OOMs heavy -Ofast TUs);
-# the existing build.yml / release.yml already cover building on [self-hosted, macOS].
+# The IPA/deb build needs a self-hosted Mac runner (see build.yml).
 # This job stays cheap and fast on a GitHub-hosted runner so PRs get quick feedback.
 
 on:
   pull_request:
   push:
-    branches: [ feature/rebaseline-2509 ]
+    branches: [master, develop, feature/icube-testflight]
 
 # Cancel superseded runs on the same ref to save runner minutes.
 concurrency:

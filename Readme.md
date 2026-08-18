@@ -1,3 +1,17 @@
+# iCube
+
+iCube is a GameCube and Wii emulator for iOS, iPadOS, and tvOS (this tree is the Provenance-Emu fork of DolphiniOS). Website: [icube-emu.com](https://icube-emu.com).
+
+## Downloads
+
+| Channel | Where |
+| --- | --- |
+| **Stable** | [Latest GitHub release](https://github.com/Provenance-Emu/iCube/releases/latest) |
+| **Alpha** (rolling CI build) | [`alpha` prerelease](https://github.com/Provenance-Emu/iCube/releases/tag/alpha) |
+| **Install guide** | Auto-updated [alpha tracker issue](https://github.com/Provenance-Emu/iCube/issues?q=is%3Aissue+label%3Aalpha-tracker) · [icube-emu.com/downloads](https://icube-emu.com/downloads/) |
+
+Pushes to the default branch or `develop` replace the single `alpha` prerelease with unsigned IPAs/debs (`Non-Jailbroken.ipa`, `TrollStore.tipa`, jailbreak debs). Pushing a `v*` tag publishes a permanent release. The tracker issue is rewritten by CI on every alpha; do not edit it by hand.
+
 # DolphiniOS
 
 DolphiniOS is a port of the Dolphin Emulator to iOS and iPadOS. For installation instructions and downloads, check [our website](https://dolphinios.oatmealdome.me).
