@@ -62,3 +62,254 @@ jobs:
           "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateDeb.sh" "${{ github.workspace }}/archives/Jailbroken.xcarchive/Products/Applications/iCube.app" "-" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/${{ env.DEB_CONTROL_NAME }}.in" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postinst.sh" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postrm.sh" "Applications" "${{ github.workspace }}/products/Jailbroken-Rootful.deb"
           "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateDeb.sh" "${{ github.workspace }}/archives/Jailbroken.xcarchive/Products/Applications/iCube.app" "-" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/${{ env.DEB_CONTROL_NAME }}-rootless.in" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postinst.sh" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postrm.sh" "var/jb/Applications" "${{ github.workspace }}/products/Jailbroken-Rootless.deb"
       
+
+      # develop's build job produced IPAs in products/ but uploaded NOTHING, so
+      # there was nothing for a publish job to consume. The alpha-release job
+      # below expects an artifact named icube-ipas.
+      - name: Upload IPAs
+        uses: actions/upload-artifact@v4
+        with:
+          name: icube-ipas
+          path: products
+          if-no-files-found: error
+          retention-days: 14
+
+  alpha-release:
+    name: Update Alpha Release
+    needs: build
+    if: |
+      always() &&
+      needs.build.result == 'success' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'push'
+      ) &&
+      !startsWith(github.ref, 'refs/tags/') &&
+      (
+        github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
+        github.ref == 'refs/heads/develop'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: alpha
+      ISSUE_TITLE: 'Alpha builds — download, install, and what they are'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: icube-ipas
+          path: products
+
+      - name: Prepare alpha body
+        id: prep_body
+        run: |
+          set -euo pipefail
+          SHA="${GITHUB_SHA}"
+          SHORT_SHA="${SHA:0:7}"
+          DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+          RUN_URL="${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}"
+          BODY_FILE="$RUNNER_TEMP/alpha_body.md"
+
+          PREV_SHA=$(gh api "repos/${REPO}/git/refs/tags/${TAG}" --jq '.object.sha' 2>/dev/null || echo "")
+
+          CHANGES=""
+          if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" != "$SHA" ] \
+            && git cat-file -e "${PREV_SHA}^{commit}" 2>/dev/null; then
+            CHANGES=$(git log --oneline --no-merges "${PREV_SHA}..${SHA}" | head -40)
+          fi
+          [ -n "$CHANGES" ] || CHANGES=$(git log --oneline --no-merges -10)
+
+          {
+            echo "## Alpha Build \`${SHORT_SHA}\`"
+            echo
+            echo "**Automated alpha build from \`${GITHUB_REF_NAME}\`**"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Commit** | [\`${SHORT_SHA}\`](${GITHUB_SERVER_URL}/${REPO}/commit/${SHA}) |"
+            echo "| **Built** | ${DATE} |"
+            echo "| **CI Run** | [View build log](${RUN_URL}) |"
+            echo
+            echo "> Unsigned sideload builds. Replaced on every successful push to the default branch or \`develop\`. For a stable build use the [latest release](${GITHUB_SERVER_URL}/${REPO}/releases/latest)."
+            echo
+            echo "### Commits since last alpha"
+            echo
+            echo '```'
+            echo "${CHANGES}"
+            echo '```'
+            echo
+            echo "### Artifacts"
+            echo
+            echo "- \`Non-Jailbroken.ipa\` — SideStore / AltStore / Sideloadly"
+            echo "- \`TrollStore.tipa\` — TrollStore"
+            echo "- \`Jailbroken-Rootful.deb\` / \`Jailbroken-Rootless.deb\` — jailbroken devices"
+            echo
+            echo "> This release is automatically updated on every successful default-branch / \`develop\` CI run."
+          } > "$BODY_FILE"
+          echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Move alpha tag
+        run: |
+          set -euo pipefail
+          # -F (typed) for force so it serialises as a JSON boolean; -f would
+          # send the string "true", which the refs API rejects with 422.
+          gh api "repos/${REPO}/git/refs/tags/${TAG}" \
+            -X PATCH -f sha="${GITHUB_SHA}" -F force=true >/dev/null 2>&1 || \
+          gh api "repos/${REPO}/git/refs" \
+            -X POST -f ref="refs/tags/${TAG}" -f sha="${GITHUB_SHA}" >/dev/null
+
+      - name: Publish alpha prerelease
+        run: |
+          set -euo pipefail
+          TITLE="iCube Alpha (${{ steps.prep_body.outputs.short_sha }})"
+          shopt -s nullglob
+          FILES=(products/*)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::warning::No IPA/deb files to attach"
+            FILES=()
+          fi
+          if gh release view "${TAG}" --repo "${REPO}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --repo "${REPO}" \
+              --title "${TITLE}" \
+              --notes-file "${{ steps.prep_body.outputs.body_file }}" \
+              --target "${GITHUB_SHA}" \
+              --prerelease --draft=false
+            if [ ${#FILES[@]} -gt 0 ]; then
+              gh release upload "${TAG}" --repo "${REPO}" "${FILES[@]}" --clobber
+            fi
+            REL_ID=$(gh api "repos/${REPO}/releases/tags/${TAG}" --jq .id)
+            gh api -X PATCH "repos/${REPO}/releases/${REL_ID}" -F draft=true >/dev/null
+            gh api -X PATCH "repos/${REPO}/releases/${REL_ID}" \
+              -F draft=false -F prerelease=true >/dev/null
+          else
+            gh release create "${TAG}" --repo "${REPO}" \
+              --title "${TITLE}" \
+              --notes-file "${{ steps.prep_body.outputs.body_file }}" \
+              --prerelease \
+              --target "${GITHUB_SHA}" \
+              "${FILES[@]}"
+          fi
+
+      # iCube is listed in the COMBINED sideload source at
+      # https://provenance-emu.com/apps.json, generated by
+      # Provenance-Emu/Provenance/.github/workflows/sideload-feed.yml. It reads
+      # this repo's public releases directly, picking Non-Jailbroken.ipa --
+      # TrollStore.tipa is deliberately excluded, since TrollStore installs by a
+      # different route and is wrong for AltStore/SideStore.
+      #
+      # Ping the generator so a new alpha appears in the feed immediately
+      # instead of waiting for the next Provenance develop build to regenerate
+      # it. GITHUB_TOKEN cannot dispatch across repos, so this needs a PAT with
+      # `repo` scope stored here as FEED_DISPATCH_TOKEN. It warns and skips when
+      # unset, and never fails the job -- a missed notification just means the
+      # feed refreshes on the next Provenance build.
+      - name: Refresh combined sideload feed
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.FEED_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::FEED_DISPATCH_TOKEN not set — skipping feed refresh. \
+          The combined feed will pick this release up on the next Provenance build."
+            exit 0
+          fi
+          gh api repos/Provenance-Emu/Provenance/dispatches \
+            -f event_type=companion-release \
+            -F client_payload[app]=icube \
+            && echo "Requested combined-feed refresh" \
+            || echo "::warning::Feed dispatch failed; next Provenance build will refresh it"
+
+      - name: Update pinned tracking issue
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${{ steps.prep_body.outputs.short_sha }}"
+          DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+          RUN_URL="${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}"
+          BODY_FILE="$RUNNER_TEMP/issue_body.md"
+          {
+            echo "# Alpha Builds — Download & Install Guide"
+            echo
+            echo "## Latest Alpha Build"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Status** | :white_check_mark: Build Passing |"
+            echo "| **Commit** | [\`${SHORT_SHA}\`](${GITHUB_SERVER_URL}/${REPO}/commit/${GITHUB_SHA}) |"
+            echo "| **Built** | ${DATE} |"
+            echo "| **CI Run** | [View build log](${RUN_URL}) |"
+            echo "| **Download** | [\`alpha\` release](${GITHUB_SERVER_URL}/${REPO}/releases/tag/alpha) |"
+            echo
+            echo "---"
+            echo
+            echo "### What these are"
+            echo
+            echo "Every successful push to the **default branch** or \`develop\` rebuilds unsigned IPAs/debs and replaces the single [\`alpha\`](${GITHUB_SERVER_URL}/${REPO}/releases/tag/alpha) prerelease. There is only ever one alpha — the current tip."
+            echo
+            echo "| | Stable | Alpha |"
+            echo "|---|---|---|"
+            echo "| **Source** | tagged \`v*\` releases | automatic builds from the default branch / \`develop\` |"
+            echo "| **Updates** | periodic | every successful CI run |"
+            echo "| **Use it for** | daily play | testing a fix before it ships |"
+            echo
+            echo "### Installing"
+            echo
+            echo "1. Download from the [\`alpha\` release](${GITHUB_SERVER_URL}/${REPO}/releases/tag/alpha):"
+            echo "   - **SideStore / AltStore / Sideloadly:** \`Non-Jailbroken.ipa\`"
+            echo "   - **TrollStore:** \`TrollStore.tipa\`"
+            echo "   - **Jailbroken:** \`Jailbroken-Rootful.deb\` or \`Jailbroken-Rootless.deb\`"
+            echo "2. Sideload with your preferred installer. Website: [icube-emu.com/downloads](https://icube-emu.com/downloads/)."
+            echo
+            echo "### Reporting a bug in an alpha"
+            echo
+            echo "Please [open an issue](${GITHUB_SERVER_URL}/${REPO}/issues/new) and include:"
+            echo "- The commit SHA (\`${SHORT_SHA}\` or newer — Settings > About if shown)"
+            echo "- Steps to reproduce"
+            echo "- Device model and iOS/tvOS version"
+            echo
+            echo "---"
+            echo
+            echo "> Auto-updated by CI on every alpha build. Edits here are overwritten."
+          } > "$BODY_FILE"
+
+          LABEL=alpha-tracker
+          gh label create "$LABEL" --repo "${REPO}" --color 0E8A16 \
+            --description "Auto-updated alpha build tracker" >/dev/null 2>&1 || true
+
+          NUM=$(gh issue list --repo "${REPO}" --state all --label "$LABEL" \
+                  --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
+          if [ -z "$NUM" ]; then
+            NUM=$(gh issue list --repo "${REPO}" --state all --limit 500 \
+                    --json number,title \
+                    --jq "map(select(.title == \"${ISSUE_TITLE}\")) | .[0].number // empty")
+          fi
+
+          if [ -n "$NUM" ]; then
+            gh issue edit "$NUM" --repo "${REPO}" --body-file "$BODY_FILE" \
+              --add-label "$LABEL" >/dev/null
+          else
+            NUM=$(gh issue create --repo "${REPO}" \
+                    --title "${ISSUE_TITLE}" \
+                    --body-file "$BODY_FILE" \
+                    | grep -oE '[0-9]+$')
+            gh issue edit "$NUM" --repo "${REPO}" --add-label "$LABEL" >/dev/null 2>&1 || \
+              echo "::warning::could not label tracking issue #${NUM}; title match is now the only lookup"
+            echo "==> Created tracking issue #${NUM}"
+          fi
+
+          ID=$(gh api "repos/${REPO}/issues/${NUM}" --jq '.node_id')
+          gh api graphql -f query='mutation($id:ID!){pinIssue(input:{issueId:$id}){issue{number}}}' \
+            -f id="$ID" >/dev/null 2>&1 || \
+            echo "::warning::could not pin issue #${NUM} (already pinned, 3-pin cap, or permission)"
+
+          echo "==> Tracking issue: ${GITHUB_SERVER_URL}/${REPO}/issues/${NUM}"
