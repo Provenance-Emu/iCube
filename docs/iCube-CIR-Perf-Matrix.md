@@ -3,13 +3,13 @@
 On-device A/B protocol for the CachedInterpreter optimization flags that are built,
 validated and shipping-disabled.
 
-Branch: `perf/cir-flag-matrix`, based on `10da1d542a` — deliberately **without** the TXM
+Branch: `perf/cir-flag-matrix`, based on `develop` — deliberately **without** the TXM
 change on `feature/upstream-quickwins-2609`, so a regression here is attributable to a
 flag and nothing else.
 
 ## Why these flags are worth re-testing
 
-Nineteen `MAIN_CIR_*` flags exist; four are on. The rest are not experiments that failed —
+Twenty `MAIN_CIR_*` flags exist; four are on. The rest are not experiments that failed —
 most were authored default-OFF explicitly "for on-device A/B" and were never measured.
 
 Three of them carry a stronger claim. `-ffast-math` entered `BuildCore.sh` on **2 Jun**
@@ -68,7 +68,7 @@ together and re-measure. Gains are not additive: several of these touch the same
 
 ## The matrix
 
-All eight have a bridge setter in `DOLConfigBridge.mm` and a labelled toggle in
+All nine have a bridge setter in `DOLConfigBridge.mm` and a labelled toggle in
 Settings → the CIR section. Nothing needs building.
 
 Record: baseline FPS/speed%, flag-on FPS/speed%, delta, and the top three hot blocks.
@@ -78,11 +78,12 @@ Record: baseline FPS/speed%, flag-on FPS/speed%, delta, and the top three hot bl
 | 1 | `PS_NEON` | NEON Paired-Single Math | yes | **First** — miscompile window | |
 | 2 | `PSQ_FASTPATH` | Paired-Single Float Fast-Path | yes | **First** — miscompile window | |
 | 3 | `SPECIALIZED_FP_LS` | FP Load/Store Specialization | no | **First** — miscompile window | |
-| 4 | `SPECIALIZED_PSQ` | Paired-Single Load/Store Specialization | no | Second | |
-| 5 | `DEAD_FLAG_ELIM` | Dead Flag Elimination | yes | Second | |
-| 6 | `DEAD_FPRF_ELIM` | Dead FPRF Elimination | yes | Second | |
-| 7 | `CACHE_LOOP_FF` | Cache-Management Loop Fast-Forward | yes | Third | |
-| 8 | `STORE_LOOP_FF` | Store-Loop (memset) Fast-Path | yes | Third | |
+| 4 | `SPECIALIZED_FP_ARITH` | FP / Paired-Single Arithmetic Specialization | shared (see note) | **First** — FP family | |
+| 5 | `SPECIALIZED_PSQ` | Paired-Single Load/Store Specialization | no | Second | |
+| 6 | `DEAD_FLAG_ELIM` | Dead Flag Elimination | yes | Second | |
+| 7 | `DEAD_FPRF_ELIM` | Dead FPRF Elimination | yes | Second | |
+| 8 | `CACHE_LOOP_FF` | Cache-Management Loop Fast-Forward | yes | Third | |
+| 9 | `STORE_LOOP_FF` | Store-Loop (memset) Fast-Path | yes | Third | |
 
 ### Interaction notes
 
@@ -93,6 +94,9 @@ Record: baseline FPS/speed%, flag-on FPS/speed%, delta, and the top three hot bl
   benefit to scale with FP density in the title.
 - `DEAD_FLAG_ELIM` emits a byte-identical instruction stream when off, so a null result is a
   real null result, not a measurement artefact.
+- `SPECIALIZED_FP_ARITH` declares a `…_VALIDATE` twin for symmetry, but it is **not read**.
+  Its double-run check rides `MAIN_CIR_SPECIALIZED_OPS_VALIDATE` instead (the regime is chosen
+  by `IsLoadStoreSpecOp`, which is handler-agnostic). Enable that one for its pass-1.
 - `PS_NEON` falls back to running a whole op scalar on any lane failure, to preserve `NI_*`
   FPSCR exception ordering. A title that trips that path often will show little gain.
 
