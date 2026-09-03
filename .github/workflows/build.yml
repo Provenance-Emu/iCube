@@ -48,6 +48,47 @@ jobs:
           echo "XCODE_CONFIGURATION_TS=Release (TrollStore)" >> $GITHUB_ENV
           echo "DEB_CONTROL_NAME=control-normal" >> $GITHUB_ENV
       
+      # PVlibDolphin.xcframework is a PREBUILT dependency the Xcode project links
+      # against (build/xcframework/PVlibDolphin-ios*.framework). Nothing in CI
+      # ever produced it, so the archive died with
+      #   error: There is no XCFramework found at .../build/xcframework/PVlibDolphin...
+      # It existed only on a machine that had run BuildiOSXCFramework.py by hand.
+      #
+      # OS64 + SIMULATORARM64 are the iOS device and simulator slices; the
+      # archive is -sdk iphoneos, so tvOS slices are not needed here (add TVOS
+      # if a tvOS target comes back).
+      #
+      # The script builds incrementally, so cache build/ with a PREFIX restore
+      # key rather than an exact one: a near-miss still restores the previous
+      # object files and only the delta is recompiled. Saving is split out so a
+      # later failure does not discard a completed Dolphin build.
+      - name: Restore Dolphin xcframework cache
+        id: dolphincache
+        uses: actions/cache/restore@v4
+        with:
+          path: build
+          key: dolphin-xcf-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            dolphin-xcf-${{ runner.os }}-
+
+      - name: Build PVlibDolphin xcframework
+        id: dolphinbuild
+        run: |
+          set -euo pipefail
+          if [ -d build/xcframework/PVlibDolphin-ios.framework ]; then
+            echo "  cached slices present, letting the script confirm incrementally"
+          fi
+          python3 BuildiOSXCFramework.py --platforms OS64 SIMULATORARM64
+          echo "--- produced ---"
+          ls -d build/xcframework/* 2>/dev/null || { echo "::error::BuildiOSXCFramework.py produced no xcframework output"; exit 1; }
+
+      - name: Save Dolphin xcframework cache
+        if: always() && steps.dolphinbuild.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: build
+          key: dolphin-xcf-${{ runner.os }}-${{ github.sha }}
+
       - name: Build Application
         run: |
           rm -rf "${{ github.workspace }}/archives" || true
