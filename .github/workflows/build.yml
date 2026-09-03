@@ -1,10 +1,15 @@
 name: Build
 
 on:
+  # develop is the DEFAULT branch now; these triggers still named master only,
+  # so no push to develop has ever started a build — which is the other half of
+  # why nothing has published since 4.1.0beta5. master is kept for any branch
+  # still pointing there.
   push:
-    branches: [ master ]
+    branches: [ develop, master ]
   pull_request:
-    branches: [ master ]
+    branches: [ develop, master ]
+  workflow_dispatch:
 
 jobs:
   build:
