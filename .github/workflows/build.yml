@@ -54,9 +54,12 @@ jobs:
       #   error: There is no XCFramework found at .../build/xcframework/PVlibDolphin...
       # It existed only on a machine that had run BuildiOSXCFramework.py by hand.
       #
-      # OS64 + SIMULATORARM64 are the iOS device and simulator slices; the
-      # archive is -sdk iphoneos, so tvOS slices are not needed here (add TVOS
-      # if a tvOS target comes back).
+      # All four slices the pbxproj references: OS64 / SIMULATORARM64 (iOS
+      # device + simulator) and TVOS / SIMULATOR_TVOS. The iOS archive alone
+      # would only need the first two, but the project carries file references
+      # to all four, and a reference Xcode cannot resolve is a build error
+      # rather than a skipped target. MAC_CATALYST is deliberately omitted --
+      # nothing references it.
       #
       # The script builds incrementally, so cache build/ with a PREFIX restore
       # key rather than an exact one: a near-miss still restores the previous
@@ -78,7 +81,7 @@ jobs:
           if [ -d build/xcframework/PVlibDolphin-ios.framework ]; then
             echo "  cached slices present, letting the script confirm incrementally"
           fi
-          python3 BuildiOSXCFramework.py --platforms OS64 SIMULATORARM64
+          python3 BuildiOSXCFramework.py --platforms OS64 SIMULATORARM64 TVOS SIMULATOR_TVOS
           echo "--- produced ---"
           ls -d build/xcframework/* 2>/dev/null || { echo "::error::BuildiOSXCFramework.py produced no xcframework output"; exit 1; }
 
