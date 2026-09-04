@@ -216,6 +216,25 @@
 		B9FCB7E12898D1E80020E233 /* SwiftLocalizationUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7E02898D1E80020E233 /* SwiftLocalizationUtil.swift */; };
 		B9FCB7E42898F4D60020E233 /* JitManager+JitStreamer.m in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7E32898F4D60020E233 /* JitManager+JitStreamer.m */; };
 		B9FCB7E62898FAC10020E233 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9FCB7E52898FAC10020E233 /* GameController.framework */; };
+		C0C0BEEF0000000000000000 /* StikDebugLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000000 /* StikDebugLauncher.swift */; };
+		C0C0BEEF0001000000000000 /* PGOFlush.c in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0001000000000000 /* PGOFlush.c */; };
+		C0C0BEEF0003000000000000 /* EmulationPerfSessionRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0003000000000000 /* EmulationPerfSessionRecorder.swift */; };
+		C0C0BEEF0004000000000000 /* SentryTelemetryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0004000000000000 /* SentryTelemetryService.swift */; };
+		C0C0BEEF0005000000000000 /* WebUploadImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0005000000000000 /* WebUploadImportService.swift */; };
+		C0C0BEEF0006000000000000 /* DebugAPIRoutes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0006000000000000 /* DebugAPIRoutes.swift */; };
+		C0C0BEEF0007000000000000 /* DebugBenchmarkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0007000000000000 /* DebugBenchmarkManager.swift */; };
+		C0C0BEEF0008000000000000 /* DebugServerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0008000000000000 /* DebugServerManager.swift */; };
+		C0C0BEEF0009000000000000 /* FrameTimeStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0009000000000000 /* FrameTimeStats.swift */; };
+		C0C0BEEF0010000000000000 /* NativeWebServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0010000000000000 /* NativeWebServer.swift */; };
+		C0C0BEEF0011000000000000 /* ImportableFileTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0011000000000000 /* ImportableFileTypes.swift */; };
+		C0C0BEEF0012000000000000 /* LibraryAddedDateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0012000000000000 /* LibraryAddedDateStore.swift */; };
+		C0C0BEEF0013000000000000 /* LibraryWebImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0013000000000000 /* LibraryWebImportView.swift */; };
+		C0C0BEEF0014000000000000 /* SaveStateMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0014000000000000 /* SaveStateMetadata.swift */; };
+		C0C0BEEF0015000000000000 /* SaveStateMetadataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0015000000000000 /* SaveStateMetadataStore.swift */; };
+		C0C0BEEF0016000000000000 /* SaveStateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0016000000000000 /* SaveStateService.swift */; };
+		C0C0BEEF0017000000000000 /* WebDAVFileOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0017000000000000 /* WebDAVFileOperations.swift */; };
+		C0C0BEEF0018000000000000 /* ImportFileManager+BatchImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0018000000000000 /* ImportFileManager+BatchImport.swift */; };
+		C0C0BEEF0019000000000000 /* ZipImportHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0019000000000000 /* ZipImportHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -572,6 +591,26 @@
 		B9FF01E72977DCBE00B49B00 /* TrollStore.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = TrollStore.xcconfig; sourceTree = "<group>"; };
 		B9FF01E82977DCF700B49B00 /* Release (TrollStore).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Release (TrollStore).xcconfig"; sourceTree = "<group>"; };
 		B9FF01E92977DD0000B49B00 /* Release (Beta, TrollStore).xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Release (Beta, TrollStore).xcconfig"; sourceTree = "<group>"; };
+		C0C0CAFE0000000000000000 /* StikDebugLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "StikDebugLauncher.swift"; path = "Common/Jit/StikDebugLauncher.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0001000000000000 /* PGOFlush.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = "PGOFlush.c"; path = "Common/PGOFlush.c"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0002000000000000 /* PGOFlush.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "PGOFlush.h"; path = "Common/PGOFlush.h"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0003000000000000 /* EmulationPerfSessionRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "EmulationPerfSessionRecorder.swift"; path = "Common/Services/EmulationPerfSessionRecorder.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0004000000000000 /* SentryTelemetryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SentryTelemetryService.swift"; path = "Common/Services/SentryTelemetryService.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0005000000000000 /* WebUploadImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WebUploadImportService.swift"; path = "Common/Services/WebUploadImportService.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0006000000000000 /* DebugAPIRoutes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DebugAPIRoutes.swift"; path = "Common/Swift/Debug/DebugAPIRoutes.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0007000000000000 /* DebugBenchmarkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DebugBenchmarkManager.swift"; path = "Common/Swift/Debug/DebugBenchmarkManager.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0008000000000000 /* DebugServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DebugServerManager.swift"; path = "Common/Swift/Debug/DebugServerManager.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0009000000000000 /* FrameTimeStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FrameTimeStats.swift"; path = "Common/Swift/Debug/FrameTimeStats.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0010000000000000 /* NativeWebServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "NativeWebServer.swift"; path = "Common/Swift/Debug/NativeWebServer.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0011000000000000 /* ImportableFileTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ImportableFileTypes.swift"; path = "Common/Swift/Import/ImportableFileTypes.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0012000000000000 /* LibraryAddedDateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LibraryAddedDateStore.swift"; path = "Common/Swift/LibraryAddedDateStore.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0013000000000000 /* LibraryWebImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LibraryWebImportView.swift"; path = "Common/Swift/LibraryWebImportView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0014000000000000 /* SaveStateMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateMetadata.swift"; path = "Common/Swift/SaveStateMetadata.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0015000000000000 /* SaveStateMetadataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateMetadataStore.swift"; path = "Common/Swift/SaveStateMetadataStore.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0016000000000000 /* SaveStateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateService.swift"; path = "Common/Swift/SaveStateService.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0017000000000000 /* WebDAVFileOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WebDAVFileOperations.swift"; path = "Common/Swift/WebDAVFileOperations.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0018000000000000 /* ImportFileManager+BatchImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ImportFileManager+BatchImport.swift"; path = "DolphiniOS/UI/Import/ImportFileManager+BatchImport.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0019000000000000 /* ZipImportHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ZipImportHelper.swift"; path = "DolphiniOS/UI/Import/ZipImportHelper.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -1711,6 +1750,26 @@
 		B9DC3DED27EFBD2C0084DAA4 = {
 			isa = PBXGroup;
 			children = (
+				C0C0CAFE0000000000000000 /* StikDebugLauncher.swift */,
+				C0C0CAFE0001000000000000 /* PGOFlush.c */,
+				C0C0CAFE0002000000000000 /* PGOFlush.h */,
+				C0C0CAFE0003000000000000 /* EmulationPerfSessionRecorder.swift */,
+				C0C0CAFE0004000000000000 /* SentryTelemetryService.swift */,
+				C0C0CAFE0005000000000000 /* WebUploadImportService.swift */,
+				C0C0CAFE0006000000000000 /* DebugAPIRoutes.swift */,
+				C0C0CAFE0007000000000000 /* DebugBenchmarkManager.swift */,
+				C0C0CAFE0008000000000000 /* DebugServerManager.swift */,
+				C0C0CAFE0009000000000000 /* FrameTimeStats.swift */,
+				C0C0CAFE0010000000000000 /* NativeWebServer.swift */,
+				C0C0CAFE0011000000000000 /* ImportableFileTypes.swift */,
+				C0C0CAFE0012000000000000 /* LibraryAddedDateStore.swift */,
+				C0C0CAFE0013000000000000 /* LibraryWebImportView.swift */,
+				C0C0CAFE0014000000000000 /* SaveStateMetadata.swift */,
+				C0C0CAFE0015000000000000 /* SaveStateMetadataStore.swift */,
+				C0C0CAFE0016000000000000 /* SaveStateService.swift */,
+				C0C0CAFE0017000000000000 /* WebDAVFileOperations.swift */,
+				C0C0CAFE0018000000000000 /* ImportFileManager+BatchImport.swift */,
+				C0C0CAFE0019000000000000 /* ZipImportHelper.swift */,
 				B31E807A2E6563550036EE31 /* Live ActivityExtension.entitlements */,
 				B3F216792E5F7F5C00AF38F3 /* TODO.md */,
 				B3ABB24B2E53A18600BCDAC5 /* Core */,
@@ -2156,6 +2215,25 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0C0BEEF0000000000000000 /* StikDebugLauncher.swift in Sources */,
+				C0C0BEEF0001000000000000 /* PGOFlush.c in Sources */,
+				C0C0BEEF0003000000000000 /* EmulationPerfSessionRecorder.swift in Sources */,
+				C0C0BEEF0004000000000000 /* SentryTelemetryService.swift in Sources */,
+				C0C0BEEF0005000000000000 /* WebUploadImportService.swift in Sources */,
+				C0C0BEEF0006000000000000 /* DebugAPIRoutes.swift in Sources */,
+				C0C0BEEF0007000000000000 /* DebugBenchmarkManager.swift in Sources */,
+				C0C0BEEF0008000000000000 /* DebugServerManager.swift in Sources */,
+				C0C0BEEF0009000000000000 /* FrameTimeStats.swift in Sources */,
+				C0C0BEEF0010000000000000 /* NativeWebServer.swift in Sources */,
+				C0C0BEEF0011000000000000 /* ImportableFileTypes.swift in Sources */,
+				C0C0BEEF0012000000000000 /* LibraryAddedDateStore.swift in Sources */,
+				C0C0BEEF0013000000000000 /* LibraryWebImportView.swift in Sources */,
+				C0C0BEEF0014000000000000 /* SaveStateMetadata.swift in Sources */,
+				C0C0BEEF0015000000000000 /* SaveStateMetadataStore.swift in Sources */,
+				C0C0BEEF0016000000000000 /* SaveStateService.swift in Sources */,
+				C0C0BEEF0017000000000000 /* WebDAVFileOperations.swift in Sources */,
+				C0C0BEEF0018000000000000 /* ImportFileManager+BatchImport.swift in Sources */,
+				C0C0BEEF0019000000000000 /* ZipImportHelper.swift in Sources */,
 				B950CFAA29616B4F00197719 /* MainSceneCoordinator.m in Sources */,
 				B9B2C64D288E170600CB6569 /* ServiceManager.swift in Sources */,
 				B904ACF82886AC58008B6BE9 /* MappingRootViewController.mm in Sources */,
