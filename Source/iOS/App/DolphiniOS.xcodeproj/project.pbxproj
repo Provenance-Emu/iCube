@@ -107,7 +107,6 @@
 		B900A7BA27F4CB80000361DD /* DefaultsInitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7B927F4CB80000361DD /* DefaultsInitService.swift */; };
 		B900A7BD27F4CDD3000361DD /* SwiftStringUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7BC27F4CDD3000361DD /* SwiftStringUtil.swift */; };
 		B900A7CA27F4DA97000361DD /* SoftwareListViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7C927F4DA97000361DD /* SoftwareListViewController.mm */; };
-		B900A7CF27F4DB9A000361DD /* SoftwareListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7CE27F4DB9A000361DD /* SoftwareListCell.swift */; };
 		B900A7D227F5228B000361DD /* UICollectionViewLeftAlignedLayout in Frameworks */ = {isa = PBXBuildFile; productRef = B900A7D127F5228B000361DD /* UICollectionViewLeftAlignedLayout */; };
 		B900A7D527F61F3A000361DD /* GameFileCacheManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7D427F61F3A000361DD /* GameFileCacheManager.mm */; };
 		B904ACBE28851C5C008B6BE9 /* GraphicsBackendCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904ACBD28851C5C008B6BE9 /* GraphicsBackendCell.m */; };
@@ -199,7 +198,6 @@
 		B97492492960F64300794509 /* DefaultPreferences.plist in Resources */ = {isa = PBXBuildFile; fileRef = B97492482960F64300794509 /* DefaultPreferences.plist */; };
 		B97C49AF297E6CFF00E30877 /* AboutSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B97C49AE297E6CFF00E30877 /* AboutSettings.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B97C49B2297E717D00E30877 /* AboutViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B97C49B1297E717C00E30877 /* AboutViewController.m */; };
-		B97C49B4297E7DB600E30877 /* AnalyticsNoticeViewControllerDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97C49B3297E7DB600E30877 /* AnalyticsNoticeViewControllerDelegate.swift */; };
 		B97C49B6297F8B0D00E30877 /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B97C49B5297F8B0D00E30877 /* UniformTypeIdentifiers.framework */; };
 		B97E4B4B2964CBA100B3EE9C /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = B97E4B4A2964CBA100B3EE9C /* FirebaseCrashlytics */; };
 		B97E4B532965011C00B3EE9C /* FirebaseService.mm in Sources */ = {isa = PBXBuildFile; fileRef = B97E4B522965011C00B3EE9C /* FirebaseService.mm */; };
@@ -274,10 +272,7 @@
 		B9FCB7BC289672830020E233 /* JitManager+Debugger.m in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7BB289672830020E233 /* JitManager+Debugger.m */; };
 		B9FCB7BE28967C130020E233 /* JitAcquisitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7BD28967C130020E233 /* JitAcquisitionService.swift */; };
 		B9FCB7C828976CE60020E233 /* JitWait.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9FCB7C728976CE60020E233 /* JitWait.xib */; platformFilters = (ios, maccatalyst, ); };
-		B9FCB7CC2897700C0020E233 /* JitWaitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7CB2897700C0020E233 /* JitWaitViewController.swift */; };
-		B9FCB7CE2897998B0020E233 /* JitWaitViewControllerDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7CD2897998B0020E233 /* JitWaitViewControllerDelegate.swift */; };
 		B9FCB7D22897B9D60020E233 /* NKitWarningViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7D12897B9D60020E233 /* NKitWarningViewController.mm */; };
-		B9FCB7D42897C7D80020E233 /* NKitWarningViewControllerDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7D32897C7D80020E233 /* NKitWarningViewControllerDelegate.swift */; };
 		B9FCB7D8289841730020E233 /* MsgAlertManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7D7289841730020E233 /* MsgAlertManager.mm */; };
 		B9FCB7DB28988E4C0020E233 /* JitManager+AltServer.m in Sources */ = {isa = PBXBuildFile; fileRef = B9FCB7DA28988E4B0020E233 /* JitManager+AltServer.m */; };
 		B9FCB7DE28988E7E0020E233 /* AltKit in Frameworks */ = {isa = PBXBuildFile; productRef = B9FCB7DD28988E7E0020E233 /* AltKit */; };
@@ -436,7 +431,6 @@
 		B900A7BC27F4CDD3000361DD /* SwiftStringUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftStringUtil.swift; sourceTree = "<group>"; };
 		B900A7C827F4DA97000361DD /* SoftwareListViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SoftwareListViewController.h; sourceTree = "<group>"; };
 		B900A7C927F4DA97000361DD /* SoftwareListViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SoftwareListViewController.mm; sourceTree = "<group>"; };
-		B900A7CE27F4DB9A000361DD /* SoftwareListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareListCell.swift; sourceTree = "<group>"; };
 		B900A7D327F61F3A000361DD /* GameFileCacheManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GameFileCacheManager.h; sourceTree = "<group>"; };
 		B900A7D427F61F3A000361DD /* GameFileCacheManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = GameFileCacheManager.mm; sourceTree = "<group>"; };
 		B904ACBC28851C5C008B6BE9 /* GraphicsBackendCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GraphicsBackendCell.h; sourceTree = "<group>"; };
@@ -617,7 +611,6 @@
 		B97C49AE297E6CFF00E30877 /* AboutSettings.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = AboutSettings.storyboard; sourceTree = "<group>"; };
 		B97C49B0297E717C00E30877 /* AboutViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AboutViewController.h; sourceTree = "<group>"; };
 		B97C49B1297E717C00E30877 /* AboutViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AboutViewController.m; sourceTree = "<group>"; };
-		B97C49B3297E7DB600E30877 /* AnalyticsNoticeViewControllerDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsNoticeViewControllerDelegate.swift; sourceTree = "<group>"; };
 		B97C49B5297F8B0D00E30877 /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
 		B97E4B512965011C00B3EE9C /* FirebaseService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FirebaseService.h; sourceTree = "<group>"; };
 		B97E4B522965011C00B3EE9C /* FirebaseService.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = FirebaseService.mm; sourceTree = "<group>"; };
@@ -759,11 +752,8 @@
 		B9FCB7BB289672830020E233 /* JitManager+Debugger.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "JitManager+Debugger.m"; sourceTree = "<group>"; };
 		B9FCB7BD28967C130020E233 /* JitAcquisitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JitAcquisitionService.swift; sourceTree = "<group>"; };
 		B9FCB7C728976CE60020E233 /* JitWait.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = JitWait.xib; sourceTree = "<group>"; };
-		B9FCB7CB2897700C0020E233 /* JitWaitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JitWaitViewController.swift; sourceTree = "<group>"; };
-		B9FCB7CD2897998B0020E233 /* JitWaitViewControllerDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JitWaitViewControllerDelegate.swift; sourceTree = "<group>"; };
 		B9FCB7D02897B9D60020E233 /* NKitWarningViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NKitWarningViewController.h; sourceTree = "<group>"; };
 		B9FCB7D12897B9D60020E233 /* NKitWarningViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = NKitWarningViewController.mm; sourceTree = "<group>"; };
-		B9FCB7D32897C7D80020E233 /* NKitWarningViewControllerDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NKitWarningViewControllerDelegate.swift; sourceTree = "<group>"; };
 		B9FCB7D6289841730020E233 /* MsgAlertManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MsgAlertManager.h; sourceTree = "<group>"; };
 		B9FCB7D7289841730020E233 /* MsgAlertManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MsgAlertManager.mm; sourceTree = "<group>"; };
 		B9FCB7D928988E4B0020E233 /* JitManager+AltServer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "JitManager+AltServer.h"; sourceTree = "<group>"; };
@@ -1031,7 +1021,6 @@
 				B900A7D427F61F3A000361DD /* GameFileCacheManager.mm */,
 				B933EDBF27F77D1E004D7DD7 /* GameFilePtrWrapper.h */,
 				B933EDC027F77D1E004D7DD7 /* GameFilePtrWrapper.mm */,
-				B900A7CE27F4DB9A000361DD /* SoftwareListCell.swift */,
 				B900A7C827F4DA97000361DD /* SoftwareListViewController.h */,
 				B900A7C927F4DA97000361DD /* SoftwareListViewController.mm */,
 				B34ECCF62E56A2EB00301907 /* TVGameItem.h */,
@@ -1713,7 +1702,6 @@
 			children = (
 				B97E4B5F2965FA1B00B3EE9C /* AnalyticsNoticeViewController.h */,
 				B97E4B602965FA1B00B3EE9C /* AnalyticsNoticeViewController.mm */,
-				B97C49B3297E7DB600E30877 /* AnalyticsNoticeViewControllerDelegate.swift */,
 			);
 			path = Analytics;
 			sourceTree = "<group>";
@@ -2126,8 +2114,6 @@
 		B9FCB7C328976C340020E233 /* JitWait */ = {
 			isa = PBXGroup;
 			children = (
-				B9FCB7CB2897700C0020E233 /* JitWaitViewController.swift */,
-				B9FCB7CD2897998B0020E233 /* JitWaitViewControllerDelegate.swift */,
 			);
 			path = JitWait;
 			sourceTree = "<group>";
@@ -2137,7 +2123,6 @@
 			children = (
 				B9FCB7D02897B9D60020E233 /* NKitWarningViewController.h */,
 				B9FCB7D12897B9D60020E233 /* NKitWarningViewController.mm */,
-				B9FCB7D32897C7D80020E233 /* NKitWarningViewControllerDelegate.swift */,
 			);
 			path = NKitWarning;
 			sourceTree = "<group>";
@@ -2515,7 +2500,6 @@
 				B346BBF62E73C27000B3C00B /* DolphinBlogView.swift in Sources */,
 				B3F216672E5F6DEC00AF38F3 /* RemoteSourceFactory.swift in Sources */,
 				B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */,
-				B900A7CF27F4DB9A000361DD /* SoftwareListCell.swift in Sources */,
 				B3B147762E583977009C7049 /* EmuEventVC.m in Sources */,
 				B939872A28800BA2008E8E47 /* AudioBackendCell.m in Sources */,
 				B9B2C620288DB62D00CB6569 /* TCClassicWiiPad.swift in Sources */,
@@ -2526,7 +2510,6 @@
 				B9B2C61A288D3A7F00CB6569 /* EmulationiOSViewController.mm in Sources */,
 				B346C4EE2E7421FB00B3C00B /* DSUPingBridge.mm in Sources */,
 				B904AD082887DAEE008B6BE9 /* ControllersTypeCell.m in Sources */,
-				B97C49B4297E7DB600E30877 /* AnalyticsNoticeViewControllerDelegate.swift in Sources */,
 				B9809C6F2A49707900877579 /* CheatCell.swift in Sources */,
 				B991378B288149F100588446 /* WiiSoundViewController.mm in Sources */,
 				B950CFBF29620C8900197719 /* UpdateCheckService.swift in Sources */,
@@ -2534,7 +2517,6 @@
 				B904AD322888FF17008B6BE9 /* MappingGroupEditViewController.mm in Sources */,
 				B991377C28808D9000588446 /* GameCubeSystemLanguageViewController.mm in Sources */,
 				B95AC52C2D29BA7F0048E48B /* AudioMuteSwitchMode.swift in Sources */,
-				B9FCB7CC2897700C0020E233 /* JitWaitViewController.swift in Sources */,
 				B9809C802A4A190C00877579 /* ActionReplayCodeViewController.mm in Sources */,
 				B34ECCF92E56A2EB00301907 /* TVGameItem.mm in Sources */,
 				B9913781288096A300588446 /* ConfigWiiViewController.mm in Sources */,
@@ -2545,7 +2527,6 @@
 				B939871A287FF135008E8E47 /* ConfigInterfaceViewController.mm in Sources */,
 				B900A7A727F26F61000361DD /* AppDelegate.swift in Sources */,
 				B974924429603A8A00794509 /* LegacyInputConfigMigrationService.mm in Sources */,
-				B9FCB7CE2897998B0020E233 /* JitWaitViewControllerDelegate.swift in Sources */,
 				B9447AFF28418EA100BC9110 /* TCDirectionalPad.swift in Sources */,
 				B950CFCC2962590600197719 /* JitManager+PTrace.m in Sources */,
 				B9398710287FBB80008E8E47 /* SpeedLimitCell.m in Sources */,
@@ -2569,7 +2550,6 @@
 				B9FCB7D22897B9D60020E233 /* NKitWarningViewController.mm in Sources */,
 				B904ACBE28851C5C008B6BE9 /* GraphicsBackendCell.m in Sources */,
 				B950CFC92962562200197719 /* main.m in Sources */,
-				B9FCB7D42897C7D80020E233 /* NKitWarningViewControllerDelegate.swift in Sources */,
 				B960AFF1295FB45500A246F0 /* TCDeviceMotion.swift in Sources */,
 				B382061C2E58008800D4853F /* ShaderParameter.swift in Sources */,
 				B97C49B2297E717D00E30877 /* AboutViewController.m in Sources */,
