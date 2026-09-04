@@ -27,7 +27,10 @@ jobs:
       # com.joemattiello, so letting it win yields com.joemattiello.iCube
       # (and com.joemattiello.iCube-ts for TrollStore), which is what the
       # sideload feed lists.
-      XCODE_COMMON_BUILD_ARGS: -project Source/iOS/App/DolphiniOS.xcodeproj -derivedDataPath "${{ github.workspace }}/build-Xcode" -sdk iphoneos -destination generic/platform=iOS DOL_BUILD_SOURCE="development" CODE_SIGNING_ALLOWED="NO" CODE_SIGNING_REQUIRED="NO"
+      # Pinned deliberately: nothing in the repo pins Tuist, so an unpinned
+      # install tracks latest and any Tuist release could break generation.
+      TUIST_VERSION: '4.200.0'
+      XCODE_COMMON_BUILD_ARGS: -workspace Source/iOS/App/iCube.xcworkspace -derivedDataPath "${{ github.workspace }}/build-Xcode" -sdk iphoneos -destination generic/platform=iOS DOL_BUILD_SOURCE="development" CODE_SIGNING_ALLOWED="NO" CODE_SIGNING_REQUIRED="NO"
     steps:
       - uses: actions/checkout@v2
         with:
@@ -91,6 +94,48 @@ jobs:
         with:
           path: build
           key: dolphin-xcf-${{ runner.os }}-${{ github.sha }}
+
+      # Generate the Xcode project from Project.swift instead of building the
+      # checked-in DolphiniOS.xcodeproj.
+      #
+      # Those two had drifted badly: repairing the checked-in project by hand
+      # took 131 stale file-reference removals, 20 missing-source additions and
+      # one cross-repo absolute-path group deletion in a single session, and
+      # every one was drift from Project.swift rather than an independent
+      # mistake. Generating removes the drift class rather than repairing it
+      # repeatedly.
+      #
+      # It also fixes the PGOFlush.h failure structurally: Tuist emits no file
+      # references for headers and sets HEADER_SEARCH_PATHS to $(SRCROOT)/Common/**
+      # recursively, which is how the bridging header's basename-only imports
+      # resolve. That bug was only reachable because CI built the hand-maintained
+      # project.
+      #
+      # ORDER MATTERS: `tuist generate` resolves the .xcframework binary target
+      # eagerly, so it must run AFTER the PVlibDolphin build above. Reversed, it
+      # fails with "Couldn't find xcframework at .../PVlibDolphin.xcframework".
+      #
+      # The checked-in DolphiniOS.xcodeproj is deliberately left in place for now
+      # as a local-dev fallback; remove it once this path has proven itself.
+      - name: Install Tuist
+        run: |
+          set -euo pipefail
+          curl -fsSL https://mise.run | sh
+          MISE="$HOME/.local/bin/mise"
+          # Pinned: nothing in the repo pins a Tuist version, so an unpinned
+          # install would silently track latest and could break generation on
+          # any Tuist release. 4.200.0 is the version this was verified against.
+          "$MISE" use -g "tuist@${TUIST_VERSION}"
+          echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
+          "$HOME/.local/share/mise/shims/tuist" version
+
+      - name: Generate Xcode project
+        working-directory: Source/iOS/App
+        run: |
+          set -euo pipefail
+          tuist install
+          tuist generate --no-open
+          ls -d iCube.xcworkspace iCube.xcodeproj
 
       - name: Build Application
         run: |
