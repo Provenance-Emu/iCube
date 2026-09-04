@@ -667,12 +667,6 @@
 			path = Controllers;
 			sourceTree = "<group>";
 		};
-		B3ABB24B2E53A18600BCDAC5 /* Core */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			name = Core;
-			path = "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/Source/Core";
-			sourceTree = "<absolute>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1772,7 +1766,6 @@
 				C0C0CAFE0019000000000000 /* ZipImportHelper.swift */,
 				B31E807A2E6563550036EE31 /* Live ActivityExtension.entitlements */,
 				B3F216792E5F7F5C00AF38F3 /* TODO.md */,
-				B3ABB24B2E53A18600BCDAC5 /* Core */,
 				B96F72CC27F0E6A00024BA7D /* Project */,
 				B900A7A327F260EF000361DD /* Libraries */,
 				B900A7A427F26F17000361DD /* Common */,
