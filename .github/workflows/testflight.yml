@@ -121,9 +121,23 @@ jobs:
           for v in ASC_API_KEY_ID ASC_API_ISSUER_ID ASC_API_KEY_CONTENT; do
             [ -n "${!v}" ] || { echo "::error::$v is not set"; exit 1; }
           done
+          # ASC_API_KEY_CONTENT may hold either a raw .p8 or a base64 blob, so
+          # sniff before writing. Decoding first is a trap: macOS base64 --decode
+          # skips characters it cannot parse and still exits 0, so feeding it a raw
+          # PEM yields a garbage file and no error, and xcodebuild then fails with
+          #   Invalid authentication key credential specified
+          #   (DVTFoundation.JWT.Error.keyPathInvalid)
+          # after the archive has already run. Same order release.sh uses.
           KEY="$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8"
-          printf '%s' "$ASC_API_KEY_CONTENT" | base64 --decode -o "$KEY" 2>/dev/null \
-            || printf '%s' "$ASC_API_KEY_CONTENT" > "$KEY"
+          if printf '%s' "$ASC_API_KEY_CONTENT" | grep -q "BEGIN PRIVATE KEY"; then
+            ( umask 077; printf '%s' "$ASC_API_KEY_CONTENT" > "$KEY" )
+          else
+            ( umask 077; printf '%s' "$ASC_API_KEY_CONTENT" | base64 --decode > "$KEY" ) 2>/dev/null \
+              || { echo "::error::ASC_API_KEY_CONTENT is neither a valid .p8 nor base64"; exit 1; }
+          fi
+          # Fail here rather than 90 minutes later at export.
+          grep -q "BEGIN PRIVATE KEY" "$KEY" \
+            || { echo "::error::materialised key is not a PEM private key"; exit 1; }
           # Epoch seconds: unique and strictly increasing, so App Store Connect
           # never rejects the upload as a redundant binary.
           BUILD=$(date +%s)
