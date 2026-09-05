@@ -1,0 +1,150 @@
+name: TestFlight
+
+# Signed App Store Connect uploads for iCube. Separate from build.yml, which
+# produces the UNSIGNED sideload IPAs that feed the AltStore/SideStore source —
+# TestFlight needs real signing, so the two cannot share a job.
+#
+# NOT on every develop push: each run consumes an App Store Connect build number
+# and a processing slot. Nightly, plus explicit dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform(s) to archive and upload'
+        required: true
+        default: all
+        type: choice
+        options: [all, ios, tvos]
+  schedule:
+    - cron: '0 10 * * *'   # 10:00 UTC, an hour after Provenance's
+
+concurrency:
+  group: testflight-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a half-finished upload
+
+jobs:
+  plan:
+    name: Select platforms
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        run: |
+          case "${{ inputs.platform || 'all' }}" in
+            ios)  M='["ios"]' ;;
+            tvos) M='["tvos"]' ;;
+            *)    M='["ios","tvos"]' ;;
+          esac
+          echo "matrix=$M" >> "$GITHUB_OUTPUT"
+
+  testflight:
+    name: Archive and upload (${{ matrix.platform }})
+    needs: plan
+    runs-on: macos-15
+    # One platform per job. Two cold archives in a single job is what made
+    # Provenance's tvOS leg fail intermittently with no diagnostic.
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    timeout-minutes: 300
+    env:
+      DEST: ${{ matrix.platform == 'tvos' && 'generic/platform=tvOS' || 'generic/platform=iOS' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      # tuist generate resolves the binary target eagerly, so the xcframework
+      # must exist BEFORE the project is generated, not after.
+      - name: Build PVlibDolphin xcframework
+        run: |
+          set -euo pipefail
+          python3 BuildiOSXCFramework.py --platforms OS64 SIMULATORARM64 TVOS SIMULATOR_TVOS
+          ls -d build/xcframework/* >/dev/null || { echo "::error::no xcframework produced"; exit 1; }
+
+      - name: Install Tuist
+        run: curl -Ls https://install.tuist.io | bash
+
+      - name: Generate Xcode project
+        working-directory: Source/iOS/App
+        run: tuist generate --no-open
+
+      # Automatic signing needs a distribution certificate in a keychain. The
+      # profiles come from -allowProvisioningUpdates using the ASC API key, so
+      # only the cert is imported here.
+      - name: Import signing certificate
+        env:
+          CERT_P12: ${{ secrets.CERT_P12 }}
+          P12_PASS: ${{ secrets.P12_PASS }}
+        run: |
+          set -euo pipefail
+          [ -n "${CERT_P12}" ] || { echo "::error::CERT_P12 is not set — cannot sign."; exit 1; }
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          echo -n "$CERT_P12" | base64 --decode -o "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/dist.p12" -P "$P12_PASS" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/dist.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Archive and upload
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+        run: |
+          set -euo pipefail
+          for v in ASC_API_KEY_ID ASC_API_ISSUER_ID ASC_API_KEY_CONTENT; do
+            [ -n "${!v}" ] || { echo "::error::$v is not set"; exit 1; }
+          done
+          KEY="$RUNNER_TEMP/AuthKey_${ASC_API_KEY_ID}.p8"
+          printf '%s' "$ASC_API_KEY_CONTENT" | base64 --decode -o "$KEY" 2>/dev/null \
+            || printf '%s' "$ASC_API_KEY_CONTENT" > "$KEY"
+          # Epoch seconds: unique and strictly increasing, so App Store Connect
+          # never rejects the upload as a redundant binary.
+          BUILD=$(date +%s)
+          ARCHIVE="$RUNNER_TEMP/iCube-${{ matrix.platform }}.xcarchive"
+          AUTH=(-authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID")
+
+          set -o pipefail
+          xcodebuild archive \
+            -workspace Source/iOS/App/iCube.xcworkspace \
+            -scheme "iCube (AppStore)" \
+            -configuration "Release (AppStore)" \
+            -destination "$DEST" \
+            -archivePath "$ARCHIVE" \
+            CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$BUILD" \
+            -allowProvisioningUpdates "${AUTH[@]}" 2>&1 | tee /tmp/testflight.log
+
+          # -allowProvisioningUpdates is required on export too, not just archive:
+          # the API key authenticates but does not authorise xcodebuild to create
+          # or download profiles, and a fresh runner has none installed.
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist ExportOptions/ExportOptions-AppStore.plist \
+            -allowProvisioningUpdates "${AUTH[@]}" \
+            CURRENT_PROJECT_VERSION="$BUILD" 2>&1 | tee -a /tmp/testflight.log
+
+      # xcbeautify-style filtering hides Run Script output, so the raw log is the
+      # only place some failures appear.
+      - name: Upload raw log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-log-${{ matrix.platform }}
+          path: /tmp/testflight.log
+          retention-days: 3
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true

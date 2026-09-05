@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- destination=upload hands the build straight to App Store Connect; without
+	     it exportArchive only writes an .ipa and nothing reaches TestFlight. -->
+	<key>destination</key>
+	<string>upload</string>
+	<key>method</key>
+	<string>app-store</string>
+	<key>teamID</key>
+	<string>S32Z3HMYVQ</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<!-- The workflow forces CURRENT_PROJECT_VERSION, because the CLI exporter does
+	     not honour this the way Xcode's Organizer does. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+	<key>uploadSymbols</key>
+	<true/>
+</dict>
+</plist>
