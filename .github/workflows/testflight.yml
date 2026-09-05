@@ -66,8 +66,23 @@ jobs:
           python3 BuildiOSXCFramework.py --platforms OS64 SIMULATORARM64 TVOS SIMULATOR_TVOS
           ls -d build/xcframework/* >/dev/null || { echo "::error::no xcframework produced"; exit 1; }
 
+      # Installed via mise, matching build.yml. `curl -Ls https://install.tuist.io | bash`
+      # is not usable from CI: the host sits behind a Cloudflare challenge, so curl
+      # returns an HTML interstitial and bash tries to execute it —
+      #   bash: line 1: syntax error near unexpected token `<'
+      # Pinned for the same reason build.yml pins it: nothing in the repo fixes a
+      # Tuist version, so an unpinned install tracks latest and can break generation
+      # on any release.
       - name: Install Tuist
-        run: curl -Ls https://install.tuist.io | bash
+        env:
+          TUIST_VERSION: '4.200.0'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://mise.run | sh
+          MISE="$HOME/.local/bin/mise"
+          "$MISE" use -g "tuist@${TUIST_VERSION}"
+          echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
+          "$HOME/.local/share/mise/shims/tuist" version
 
       - name: Generate Xcode project
         working-directory: Source/iOS/App
