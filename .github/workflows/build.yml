@@ -137,14 +137,29 @@ jobs:
           tuist generate --no-open
           ls -d iCube.xcworkspace iCube.xcodeproj
 
+      # Tee the raw xcodebuild output. Run Script phase failures (this build has
+      # 'Update Storyboard Strings', 'Build Dolphin Core', 'Setup Python') emit
+      # NO `error:` line and their stderr does not reach the Actions console —
+      # a failure shows only "(2 failures)" with the phase name and nothing
+      # actionable. The raw log is the only place the script's own output lives.
       - name: Build Application
         run: |
+          set -o pipefail
           rm -rf "${{ github.workspace }}/archives" || true
           mkdir "${{ github.workspace }}/archives"
           xcodebuild archive -archivePath "${{ github.workspace }}/archives/NonJailbroken.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_NJB }}" -scheme "iCube (NJB)" ${{ env.XCODE_COMMON_BUILD_ARGS }}
           xcodebuild archive -archivePath "${{ github.workspace }}/archives/Jailbroken.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_JB }}" -scheme "iCube (JB)" ${{ env.XCODE_COMMON_BUILD_ARGS }}
           xcodebuild archive -archivePath "${{ github.workspace }}/archives/TrollStore.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_TS }}" -scheme "iCube (JB)" ${{ env.XCODE_COMMON_BUILD_ARGS }}
       
+      - name: Upload raw xcodebuild log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-icube-log
+          path: ${{ runner.temp }}/xcodebuild-icube.log
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Build IPA Files
         run: |
           mkdir "${{ github.workspace }}/products"
