@@ -8,6 +8,8 @@
 	<string>NotSet</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIAppSupportsHDR</key>
 	<true/>
 	<key>CFBundleDocumentTypes</key>
