@@ -42,7 +42,12 @@ jobs:
   testflight:
     name: Archive and upload (${{ matrix.platform }})
     needs: plan
-    runs-on: macos-15
+    # macos-26 + Xcode 26.3, matching build.yml. On macos-15 the runner default is
+    # the iOS 18.5 SDK, and the app uses iOS 26 APIs (glassEffect,
+    # searchToolbarBehavior, navigationSubtitle) behind `if #available(iOS 26.0,
+    # tvOS 26.0, *)`. An availability guard cannot conjure a symbol the SDK does
+    # not ship, so both legs failed to compile until this was pinned.
+    runs-on: macos-26
     # One platform per job. Two cold archives in a single job is what made
     # Provenance's tvOS leg fail intermittently with no diagnostic.
     strategy:
@@ -52,11 +57,18 @@ jobs:
     timeout-minutes: 300
     env:
       DEST: ${{ matrix.platform == 'tvos' && 'generic/platform=tvOS' || 'generic/platform=iOS' }}
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      XCODE_VERSION: '26.3'
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1.6.0
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
 
       # tuist generate resolves the binary target eagerly, so the xcframework
       # must exist BEFORE the project is generated, not after.
