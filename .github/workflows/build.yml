@@ -54,6 +54,23 @@ jobs:
       #     brew install cmake ninja bartycrouch
       #     /usr/bin/python3 -m pip install polib
 
+      # dpkg provides dpkg-deb, which CreateDeb.sh needs:
+      #   Scripts/CreateDeb.sh: line 42: dpkg-deb: command not found
+      # It was in the commented-out "Install Build Utilities" step and only ever
+      # existed on the retired self-hosted runner.
+      #
+      # Installed rather than skipped-when-absent, which is how bartycrouch was
+      # handled. That was right there -- UpdateStoryboardStrings.sh regenerates
+      # committed .strings and the archive is identical either way -- but the
+      # DEB is a real artifact for jailbroken distribution, so skipping it would
+      # silently stop shipping the JB package instead of failing loudly.
+      #
+      # cmake and ninja from that old step are NOT installed here: the runner
+      # already has them at /opt/homebrew/bin, and BuildiOSXCFramework.py has
+      # been succeeding with them.
+      - name: Install dpkg
+        run: brew install dpkg
+
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1.6.0
         with:
