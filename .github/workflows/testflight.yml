@@ -151,6 +151,7 @@ jobs:
           done
 
       - name: Archive and upload
+        id: archive
         env:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
@@ -180,6 +181,7 @@ jobs:
           # Epoch seconds: unique and strictly increasing, so App Store Connect
           # never rejects the upload as a redundant binary.
           BUILD=$(date +%s)
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           ARCHIVE="$RUNNER_TEMP/iCube-${{ matrix.platform }}.xcarchive"
           AUTH=(-authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_API_KEY_ID" -authenticationKeyIssuerID "$ASC_API_ISSUER_ID")
 
@@ -229,6 +231,24 @@ jobs:
           chmod +x "$RUNNER_TEMP/sentry-cli"
           "$RUNNER_TEMP/sentry-cli" debug-files upload --include-sources \
             "$RUNNER_TEMP/iCube-${{ matrix.platform }}.xcarchive/dSYMs"
+
+      # Uploading only reaches the Internal group. Without this step the public
+      # TestFlight links kept serving whichever build was last assigned by hand
+      # until it expired 90 days later (the June builds expired 2026-09-08 and
+      # users reported "TestFlight expired"). Waits for processing, adds the
+      # build to every external group with a public link, submits for Beta App
+      # Review. Shared with Provenance and iFly.
+      - name: Distribute to external TestFlight groups
+        if: success()
+        uses: Provenance-Emu/Provenance/.github/actions/testflight-distribute@develop
+        with:
+          api-key-id: ${{ secrets.ASC_API_KEY_ID }}
+          api-issuer-id: ${{ secrets.ASC_API_ISSUER_ID }}
+          api-key-content: ${{ secrets.ASC_API_KEY_CONTENT }}
+          bundle-id: com.joemattiello.iCube
+          build-number: ${{ steps.archive.outputs.build }}
+          platform: ${{ matrix.platform == 'tvos' && 'TV_OS' || 'IOS' }}
+          whats-new: "Nightly build ${{ steps.archive.outputs.build }} from ${{ github.ref_name }} @ ${{ github.sha }}."
 
       # xcbeautify-style filtering hides Run Script output, so the raw log is the
       # only place some failures appear.
