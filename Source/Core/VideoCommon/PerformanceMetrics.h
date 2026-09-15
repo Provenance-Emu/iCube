@@ -106,11 +106,20 @@ public:
   u32 GetEFBHeight() const;
   // Call from any thread.
   void SetLatestFramePresentationOffset(DT offset);
+  void SetLatestFrameBufferSize(u32 width, u32 height);
 
   // ImGui Functions
   void DrawImGuiStats(const float backbuffer_scale);
 
 private:
+  struct FrameBufferSize
+  {
+    FrameBufferSize() : width(0), height(0) {}
+    FrameBufferSize(u32 w, u32 h) : width(w), height(h) {}
+    u32 width;
+    u32 height;
+  };
+
   PerformanceTracker m_fps_counter{"render_times.txt"};
   PerformanceTracker m_vps_counter{"vblank_times.txt"};
 
@@ -120,6 +129,7 @@ private:
   std::atomic<double> m_max_speed{};
 
   std::atomic<DT> m_frame_presentation_offset{};
+  std::atomic<FrameBufferSize> m_frame_buffer_size{};
 
   struct PerfSample
   {

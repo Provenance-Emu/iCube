@@ -28,6 +28,7 @@
 #include "Common/IOFile.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
+#include "Common/StringUtil.h"
 #include "Common/Thread.h"
 #include "Common/TimeUtil.h"
 #include "Common/TransferableSharedMutex.h"
@@ -96,9 +97,9 @@ struct CompressAndDumpStateArgs
 static Common::WorkQueueThreadSP<CompressAndDumpStateArgs> s_compress_and_dump_thread;
 
 // Don't forget to increase this after doing changes on the savestate system
-// iCube: upstream is 191 (PR 14668); +1 for the bounded Auto VISkip gating state in
+// iCube: upstream is 192 (PR 14646); +1 for the bounded Auto VISkip gating state in
 // VideoInterface::DoState. Keep this strictly above upstream's value at every merge.
-constexpr u32 STATE_VERSION = 192;
+constexpr u32 STATE_VERSION = 193;
 
 // Increase this if the StateExtendedHeader definition changes
 constexpr u32 EXTENDED_HEADER_VERSION = 1;  // Last changed in PR 12217
@@ -264,15 +265,15 @@ namespace
 struct SlotWithTimestamp
 {
   // 1-based indexing.
-  int slot;
+  u32 slot;
   double timestamp;
 };
 }  // namespace
 
 // Returns first slot number (1-based indexing) not in the vector.
-static std::optional<int> GetEmptySlot(std::span<const SlotWithTimestamp> used_slots)
+static std::optional<u32> GetEmptySlot(std::span<const SlotWithTimestamp> used_slots)
 {
-  for (int i = 1; i <= int(NUM_STATES); ++i)
+  for (u32 i = 1; i <= NUM_STATES; ++i)
   {
     if (!Common::Contains(used_slots, i, &SlotWithTimestamp::slot))
       return i;
@@ -304,7 +305,7 @@ static std::string SystemTimeAsDoubleToString(double time)
   return fmt::format(std::locale{""}, "{:%x %X}", *local_time);
 }
 
-static std::string MakeStateFilename(int number)
+static std::string MakeStateFilename(u32 number)
 {
   return fmt::format("{}{}.s{:02d}", File::GetUserPath(D_STATESAVES_IDX),
                      SConfig::GetInstance().GetGameID(), number);
@@ -314,7 +315,7 @@ static std::vector<SlotWithTimestamp> GetUsedSlotsWithTimestamp()
 {
   std::vector<SlotWithTimestamp> result;
   StateHeader header;
-  for (int i = 1; i <= int(NUM_STATES); ++i)
+  for (u32 i = 1; i <= NUM_STATES; ++i)
   {
     std::string filename = MakeStateFilename(i);
     if (!File::Exists(filename) || !ReadHeader(filename, header))
@@ -338,7 +339,7 @@ static void CompressBufferToFile(std::span<const u8> raw_buffer, File::IOFile& f
     Common::UniqueBuffer<char> compressed_buffer(LZ4_compressBound(bytes_to_compress));
     const int compressed_len = LZ4_compress_default(
         reinterpret_cast<const char*>(raw_buffer.data()) + total_bytes_compressed,
-        compressed_buffer.get(), bytes_to_compress, int(compressed_buffer.size()));
+        compressed_buffer.get(), bytes_to_compress, static_cast<int>(compressed_buffer.size()));
 
     if (compressed_len == 0)
     {
@@ -465,8 +466,9 @@ static void CompressAndDumpState(Core::System& system, const CompressAndDumpStat
   }
   else
   {
-    const std::filesystem::path temp_path(filename);
-    Core::DisplayMessage(fmt::format("Saved State to {}", temp_path.filename()), 2000);
+    const std::filesystem::path temp_path(StringToPath(filename));
+    Core::DisplayMessage(fmt::format("Saved State to {}", PathToString(temp_path.filename())),
+                         2000);
   }
 }
 
@@ -474,7 +476,7 @@ static void SaveAsFromCore(Core::System& system, std::string filename)
 {
   // Try with a buffer a bit larger than the previous state.
   // This will often avoid the "Measure" step.
-  const auto buffer_size_estimate = std::size_t(s_last_state_size) * 110 / 100;
+  const auto buffer_size_estimate = static_cast<std::size_t>(s_last_state_size) * 110 / 100;
   Common::UniqueBuffer<u8> buffer{buffer_size_estimate};
 
   if (const auto actual_size = SaveToBuffer(system, buffer))
@@ -608,7 +610,7 @@ static bool ReadHeader(const std::string& filename, StateHeader& header)
   return ReadStateHeaderFromFile(header, f, get_version_header);
 }
 
-std::string GetInfoStringOfSlot(int slot, bool translate)
+std::string GetInfoStringOfSlot(u32 slot, bool translate)
 {
   std::lock_guard lk{s_state_saves_in_progress};
 
@@ -623,7 +625,7 @@ std::string GetInfoStringOfSlot(int slot, bool translate)
   return SystemTimeAsDoubleToString(header.legacy_header.time);
 }
 
-u64 GetUnixTimeOfSlot(int slot)
+u64 GetUnixTimeOfSlot(u32 slot)
 {
   std::lock_guard lk{s_state_saves_in_progress};
 
@@ -843,8 +845,9 @@ static void LoadAsFromCore(Core::System& system, std::string filename)
   {
     if (loaded_successfully)
     {
-      const std::filesystem::path temp_filename(filename);
-      Core::DisplayMessage(fmt::format("Loaded State from {}", temp_filename.filename()), 2000);
+      const std::filesystem::path temp_filename(StringToPath(filename));
+      Core::DisplayMessage(
+          fmt::format("Loaded State from {}", PathToString(temp_filename.filename())), 2000);
       if (File::Exists(filename + ".dtm"))
       {
         movie.LoadInput(filename + ".dtm");
@@ -901,12 +904,12 @@ void Shutdown()
   s_flush_unsaved_data_hook.reset();
 }
 
-void Save(Core::System& system, int slot)
+void Save(Core::System& system, u32 slot)
 {
   SaveAs(system, MakeStateFilename(slot));
 }
 
-void Load(Core::System& system, int slot)
+void Load(Core::System& system, u32 slot)
 {
   LoadAs(system, MakeStateFilename(slot));
 }
@@ -921,7 +924,7 @@ void LoadLastSaved(Core::System& system, int i)
     s_compress_and_dump_thread.WaitForCompletion();
 
     std::vector<SlotWithTimestamp> used_slots = GetUsedSlotsWithTimestamp();
-    if (std::size_t(i) > used_slots.size())
+    if (static_cast<std::size_t>(i) > used_slots.size())
     {
       Core::DisplayMessage("State doesn't exist", 2000);
       return;

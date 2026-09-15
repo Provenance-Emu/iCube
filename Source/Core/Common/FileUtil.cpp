@@ -29,13 +29,13 @@
 #include "Common/StringUtil.h"
 
 #ifdef _WIN32
-#include <Windows.h>
-#include <Shlwapi.h>
+#include <windows.h>
 #include <commdlg.h>  // for GetSaveFileName
 #include <direct.h>   // getcwd
 #include <io.h>
 #include <objbase.h>  // guid stuff
 #include <shellapi.h>
+#include <shlwapi.h>
 #else
 #include <libgen.h>
 #include <stdlib.h>
@@ -761,29 +761,30 @@ std::string GetExeDirectory()
 
 static std::string CreateSysDirectoryPath()
 {
-  std::string sysDir;
-
+#define SYS_FOLDER_NAME "Sys"
+// iCube: the app bundles Data/Sys as a top-level "Sys" folder reference, not under Contents/Resources.
 #if defined(_WIN32) || defined(LINUX_LOCAL_DEV) || defined(IPHONEOS)
-#define SYSDATA_DIR "Sys"
+#define SYSDATA_DIR SYS_FOLDER_NAME
 #elif defined __APPLE__
-#define SYSDATA_DIR "Contents/Resources/Sys"
+#define SYSDATA_DIR "Contents/Resources/" SYS_FOLDER_NAME
 #else
-#ifdef DATA_DIR
-#define SYSDATA_DIR DATA_DIR "sys"
-#else
-#define SYSDATA_DIR "sys"
+#define SYSDATA_DIR DATA_DIR SYS_FOLDER_NAME
 #endif
-#endif
+
+  std::string sys_directory;
 
 #if defined(__APPLE__)
-  const std::string sys_directory = GetBundleDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;
-#elif defined(_WIN32) || defined(LINUX_LOCAL_DEV)
-  const std::string sys_directory = GetExeDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;
+  sys_directory = GetBundleDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;
 #elif defined ANDROID
-  const std::string sys_directory = s_android_sys_directory + DIR_SEP;
+  sys_directory = s_android_sys_directory + DIR_SEP;
   ASSERT_MSG(COMMON, !s_android_sys_directory.empty(), "Sys directory has not been set");
 #else
-  const std::string sys_directory = SYSDATA_DIR DIR_SEP;
+  const std::string local_sys_directory = GetExeDirectory() + DIR_SEP SYS_FOLDER_NAME DIR_SEP;
+  if (IsDirectory(local_sys_directory))
+    sys_directory = local_sys_directory;
+  else
+    sys_directory = SYSDATA_DIR DIR_SEP;
+
 #endif
 
   INFO_LOG_FMT(COMMON, "CreateSysDirectoryPath: Setting to {}", sys_directory);
