@@ -73,6 +73,7 @@ void Reset();
 #import "VirtualMFiControllerManager.h"
 #import "iCube-Swift.h"
 #include "Core/Config/WiimoteSettings.h"
+#include "Core/System.h"  // 2606: PerformanceMetrics lives on Core::System
 
 static inline bool _EndsWith(const std::string& s, const char* suf)
 {
@@ -827,10 +828,10 @@ static bool s_backgroundAutoPaused = false;
       if (self->_acCpuYielded && self->_acViYielded) return;
 
       // --- Sample the sensors. ---
-      const double vps = g_perf_metrics.GetVPS();   // emulated field rate
+      const double vps = Core::System::GetInstance().GetPerfMetrics().GetVPS();   // emulated field rate
       if (vps <= 0.0) return;  // metrics not warmed up (warmup guard only)
-      const double speed = g_perf_metrics.GetSpeed();  // achieved emulation speed vs realtime
-      const double maxSpeed = g_perf_metrics.GetMaxSpeed();  // speed with throttle sleep removed
+      const double speed = Core::System::GetInstance().GetPerfMetrics().GetSpeed();  // achieved emulation speed vs realtime
+      const double maxSpeed = Core::System::GetInstance().GetPerfMetrics().GetMaxSpeed();  // speed with throttle sleep removed
       const unsigned long long underruns = PerformanceMetrics::GetAudioUnderrunCount();
       const unsigned long long dups = PerformanceMetrics::GetDuplicatePresentCount();
       const unsigned long long total = PerformanceMetrics::GetTotalPresentCount();
@@ -1264,12 +1265,12 @@ static bool s_backgroundAutoPaused = false;
   b += "=== LIVE PERF ===\n";
   {
     char buf[96];
-    snprintf(buf, sizeof(buf), "%.2f", g_perf_metrics.GetFPS());        b += "  fps=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.2f", g_perf_metrics.GetVPS());        b += "  vps=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.1f%%", g_perf_metrics.GetSpeed() * 100.0);     b += "  speed=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.1f%%", g_perf_metrics.GetMaxSpeed() * 100.0);  b += "  max_speed=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.3f", g_perf_metrics.GetFrameDtAvgSeconds() * 1000.0); b += "  frame_dt_avg_ms=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.3f", g_perf_metrics.GetFrameDtStdSeconds() * 1000.0); b += "  frame_dt_std_ms=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.2f", Core::System::GetInstance().GetPerfMetrics().GetFPS());        b += "  fps=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.2f", Core::System::GetInstance().GetPerfMetrics().GetVPS());        b += "  vps=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.1f%%", Core::System::GetInstance().GetPerfMetrics().GetSpeed() * 100.0);     b += "  speed=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.1f%%", Core::System::GetInstance().GetPerfMetrics().GetMaxSpeed() * 100.0);  b += "  max_speed=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.3f", Core::System::GetInstance().GetPerfMetrics().GetFrameDtAvgSeconds() * 1000.0); b += "  frame_dt_avg_ms=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.3f", Core::System::GetInstance().GetPerfMetrics().GetFrameDtStdSeconds() * 1000.0); b += "  frame_dt_std_ms=" + std::string(buf) + "\n";
 
     // Present decimation: duplicate VI presents vs total (explains FPS << VPS when hacks skip dup XFBs).
     {
@@ -1829,7 +1830,7 @@ after_set:
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidStartNotification object:self userInfo:nil];
 
   // Perf test-bench: start the loopback HTTP/JSON server once emulation is live
-  // (g_perf_metrics meaningful). DebugServerManager self-gates — it always starts
+  // (System::GetPerfMetrics() meaningful). DebugServerManager self-gates — it always starts
   // in DEBUG, and in Release only when the user has flipped the "Perf Test Bench
   // (HTTP)" toggle (UserDefaults "ICubeBenchServerEnabled", default OFF). It is
   // @MainActor and idempotent (guards !isRunning). We are on the emulation

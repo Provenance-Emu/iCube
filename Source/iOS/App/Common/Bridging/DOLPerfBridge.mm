@@ -10,17 +10,18 @@
 
 // C++ includes
 #include "VideoCommon/PerformanceMetrics.h"
+#include "Core/System.h"  // 2606: PerformanceMetrics lives on Core::System
 
 @implementation DOLPerfBridge
 
 + (NSDictionary<NSString*, NSNumber*>*)snapshot {
-  // g_perf_metrics is the global instance declared at the bottom of
+  // System::GetPerfMetrics() is the global instance declared at the bottom of
   // PerformanceMetrics.h. Its getters are atomic / any-thread-safe, so no
   // locking or main-thread hop is needed here.
-  const double fps = g_perf_metrics.GetFPS();
-  const double vps = g_perf_metrics.GetVPS();
-  const double speed = g_perf_metrics.GetSpeed();
-  const double maxSpeed = g_perf_metrics.GetMaxSpeed();
+  const double fps = Core::System::GetInstance().GetPerfMetrics().GetFPS();
+  const double vps = Core::System::GetInstance().GetPerfMetrics().GetVPS();
+  const double speed = Core::System::GetInstance().GetPerfMetrics().GetSpeed();
+  const double maxSpeed = Core::System::GetInstance().GetPerfMetrics().GetMaxSpeed();
 
   // frameTimeMs is *derived* from the smoothed FPS — average frame time, not a
   // per-frame dt. Kept for backwards compatibility / a quick smoothed read.
@@ -29,7 +30,7 @@
   // rawFrameTimeMs is the last raw per-frame delta (PerformanceMetrics core
   // accessor added for this bench). The benchmark samples THIS at display rate
   // and de-dups on change to build a true frame-time distribution / 1%-low.
-  const double rawFrameTimeMs = g_perf_metrics.GetLastRawFrameTimeMs();
+  const double rawFrameTimeMs = Core::System::GetInstance().GetPerfMetrics().GetLastRawFrameTimeMs();
 
   return @{
     @"fps" : @(fps),

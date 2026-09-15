@@ -8,7 +8,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// Read-only bridge surfacing Dolphin's global `g_perf_metrics`
+/// Read-only bridge surfacing Dolphin's global `System::GetPerfMetrics()`
 /// (`VideoCommon/PerformanceMetrics.h`) to Swift/ObjC.
 ///
 /// All underlying getters are documented as callable from any thread

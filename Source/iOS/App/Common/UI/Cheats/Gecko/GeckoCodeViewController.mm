@@ -110,8 +110,11 @@
             });
           };
 
-          bool success;
-          std::vector<Gecko::GeckoCode> downloadedCodes = Gecko::DownloadCodes(self.gametdbId, &success);
+          // 2606: DownloadCodes returns std::expected<codes, http status>.
+          auto downloadResult = Gecko::DownloadCodes(self.gametdbId);
+          const bool success = downloadResult.has_value();
+          std::vector<Gecko::GeckoCode> downloadedCodes =
+              success ? std::move(*downloadResult) : std::vector<Gecko::GeckoCode>{};
 
           if (!success) {
             showResult(DOLCoreLocalizedString(@"Error"), DOLCoreLocalizedString(@"Failed to download codes."));
