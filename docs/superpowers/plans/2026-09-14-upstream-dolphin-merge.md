@@ -103,7 +103,7 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 
 ## Stage 4 — Merge `upstream/master`, then keep current
 
-- [ ] `git merge upstream/master`; the 32 GameSettings conflicts resolve with upstream's side; `FileUtil.cpp` by hand.
+- [x] (2026-09-15, merge `515a2b8a67` of upstream 9611279be5 / 2026-09-13) `git merge upstream/master`: 5 conflicts (CMake options union, FileUtil Sys macro with the IPHONEOS branch, STATE_VERSION 193, PerformanceMetrics fork sensors). Core and signed device app built with no further ports. Boot set on this build so far: NSMBW, F-Zero GX, Lego Star Wars II (title renders), Rogue Squadron II.
 - [ ] Set `DOLPHIN_VERSION_MAJOR` / scmrev so `build_sha` in `/api/health` reports the new base.
 - [ ] Full CI + device soak, then the single end-of-ladder bench at nominal thermal vs the 2026-09-15 baseline, then one week of nightly TestFlight from `feature/upstream-merge` (the distribute action pushes it to the public groups automatically) with the soak set re-run mid-week.
 - [ ] Merge to `develop`, bump the Provenance gitlink, rebuild the tracked `PVlibDolphin.xcframework`, confirm Provenance's `build.yml` passes against it.
