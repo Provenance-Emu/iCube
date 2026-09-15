@@ -61,11 +61,23 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 
 ## Stage 0 — Preparation (no upstream code yet)
 
-- [ ] Tag `develop` as `pre-upstream-merge`; cut `feature/upstream-merge`.
-- [ ] Write `docs/dev/fork-patches.md`: one section per subsystem in the footprint list above, each with the reason the patch exists, the files, and the owner test (which soak item proves it still works). Generated from `git diff 2509..HEAD --stat -- Source/Core`, then curated. This is the checklist every stage is reviewed against.
+- [x] Tag `develop` as `pre-upstream-merge` (→ 6a86139de1); cut `feature/upstream-merge` (pushed 2026-09-15).
+- [x] (2026-09-15, 273 lines) Write `docs/dev/fork-patches.md`: one section per subsystem in the footprint list above, each with the reason the patch exists, the files, and the owner test (which soak item proves it still works). Generated from `git diff 2509..HEAD --stat -- Source/Core`, then curated. This is the checklist every stage is reviewed against.
 - [ ] Take the "merge-baseline" settings snapshot and the perf/screenshot baselines on the current `develop` TestFlight build.
-- [ ] Add the 7 new upstream submodules to the iOS build plan (decide per submodule: build, or exclude with a CMake option) so Stage 3 does not discover them cold.
-- [ ] Confirm `BuildiOSXCFramework.py` runs locally end to end on `develop` (it is the first thing every stage breaks).
+- [x] Add the 7 new upstream submodules to the iOS build plan (decided 2026-09-15, see table) so Stage 3 does not discover them cold.
+
+  | Submodule (upstream path) | Fork today | Decision |
+  |---|---|---|
+  | `Externals/glslang/glslang` | vendored at `Externals/glslang` | follow upstream: vendored tree deletes, gitlink replaces it; built through upstream's `Externals/glslang/CMakeLists.txt` wrapper. Needed (MoltenVK/Vulkan shader path). |
+  | `Externals/pugixml/pugixml` | vendored | follow upstream. Keep `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` in `BuildiOSXCFramework.py` until the new wrapper proves it unnecessary. |
+  | `Externals/bzip2/bzip2` | vendored | follow upstream. Needed (compressed blob readers). |
+  | `Externals/imgui/imgui` | vendored | follow upstream. Needed (OSD). Heavy-TU note in `BuildiOSXCFramework.py` still applies. |
+  | `Externals/cpp-optparse/cpp-optparse` | vendored | follow upstream; only DolphinNoGUI/DolphinTool link it, iOS builds neither. |
+  | `Externals/wil` | vendored (82 files) | follow upstream; Windows-only, upstream CMake excludes it off-Windows. |
+  | `Externals/cpp-ipc/cpp-ipc` | absent | genuinely new. Build it only if `Source/Core` links it on Apple platforms after 2606; otherwise gate it off in the iOS CMake invocation. Check at Stage 3 with `git grep cpp-ipc -- 'Source/Core/**/CMakeLists.txt'`. |
+
+  Consequences: `.gitmodules` will conflict at 2606 (fork adds `MoltenVK-iOS`, `ios-cmake`, `lwmem`; upstream adds the seven above) — union both. CI and `BuildiOSXCFramework.py` must run `git submodule update --init --recursive` before configuring, and the xcframework cache key must include the new submodule SHAs.
+- [x] Confirm `BuildiOSXCFramework.py` runs locally end to end on `develop` (2026-09-15: `-p OS64` incremental run, rc=0, xcframework re-created; a clean `-c` build is left to Stage 1 since CI compiles the core daily).
 
 ## Stage 1 — Merge `2512`
 
