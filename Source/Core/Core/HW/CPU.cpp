@@ -8,7 +8,6 @@
 #include <queue>
 
 #include "AudioCommon/AudioCommon.h"
-#include "Common/CommonTypes.h"
 #include "Common/Event.h"
 #include "Common/Thread.h"
 #include "Common/Timer.h"
@@ -308,16 +307,18 @@ void CPUManager::SetStepping(bool stepping)
   {
     SetStateLocked(State::Stepping);
 
-    while (m_state_cpu_thread_active)
+    if (!Core::IsCPUThread())
     {
-      m_state_cpu_idle_cvar.wait(state_lock);
+      while (m_state_cpu_thread_active)
+        m_state_cpu_idle_cvar.wait(state_lock);
     }
 
     RunAdjacentSystems(false);
   }
   else if (SetStateLocked(State::Running))
   {
-    m_state_cpu_cvar.notify_one();
+    if (!Core::IsCPUThread())
+      m_state_cpu_cvar.notify_one();
     m_time_played_finish_sync.Set();
     RunAdjacentSystems(true);
   }

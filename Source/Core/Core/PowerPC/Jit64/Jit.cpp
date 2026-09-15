@@ -7,6 +7,7 @@
 #include <span>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -17,12 +18,10 @@
 #endif
 
 #include "Common/CommonTypes.h"
-#include "Common/EnumUtils.h"
 #include "Common/GekkoDisassembler.h"
 #include "Common/HostDisassembler.h"
 #include "Common/IOFile.h"
 #include "Common/Logging/Log.h"
-#include "Common/StringUtil.h"
 #include "Common/Swap.h"
 #include "Common/x64ABI.h"
 #include "Core/Core.h"
@@ -514,6 +513,8 @@ void Jit64::MSRUpdated(const OpArg& msr, X64Reg scratch_reg)
 {
   ASSERT(!msr.IsSimpleReg(scratch_reg));
 
+  constexpr u32 dr_bit = 1 << UReg_MSR{}.DR.StartBit();
+
   // Update mem_ptr
   auto& memory = m_system.GetMemory();
   if (msr.IsImm())
@@ -525,7 +526,7 @@ void Jit64::MSRUpdated(const OpArg& msr, X64Reg scratch_reg)
   {
     MOV(64, R(RMEM), ImmPtr(memory.GetLogicalBase()));
     MOV(64, R(scratch_reg), ImmPtr(memory.GetPhysicalBase()));
-    TEST(32, msr, Imm32(1 << (31 - 27)));
+    TEST(32, msr, Imm32(dr_bit));
     CMOVcc(64, RMEM, R(scratch_reg), CC_Z);
   }
   MOV(64, PPCSTATE(mem_ptr), R(RMEM));
@@ -548,6 +549,25 @@ void Jit64::MSRUpdated(const OpArg& msr, X64Reg scratch_reg)
     if (other_feature_flags != 0)
       OR(32, R(scratch_reg), Imm32(other_feature_flags));
     MOV(32, PPCSTATE(feature_flags), R(scratch_reg));
+  }
+
+  // Call PageTableUpdatedFromJit if needed
+  if (!msr.IsImm() || UReg_MSR(msr.Imm32()).DR)
+  {
+    gpr.Flush();
+    fpr.Flush();
+    FixupBranch dr_unset;
+    if (!msr.IsImm())
+    {
+      TEST(32, msr, Imm32(dr_bit));
+      dr_unset = J_CC(CC_Z);
+    }
+    CMP(8, PPCSTATE(pagetable_update_pending), Imm8(0));
+    FixupBranch update_not_pending = J_CC(CC_E);
+    ABI_CallFunctionP(&PowerPC::MMU::PageTableUpdatedFromJit, &m_system.GetMMU());
+    SetJumpTarget(update_not_pending);
+    if (!msr.IsImm())
+      SetJumpTarget(dr_unset);
   }
 }
 
@@ -1047,13 +1067,12 @@ bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
     if (op.skip)
     {
-      if (IsDebuggingEnabled())
+      if (IsBranchWatchEnabled())
       {
         // The only thing that currently sets op.skip is the BLR following optimization.
         // If any non-branch instruction starts setting that too, this will need to be changed.
         ASSERT(op.inst.hex == 0x4e800020);
-        WriteBranchWatch<true>(op.address, op.branchTo, op.inst, RSCRATCH, RSCRATCH2,
-                               CallerSavedRegistersInUse());
+        WriteBranchWatch<true>(op.address, op.branchTo, op.inst, CallerSavedRegistersInUse());
       }
     }
     else
@@ -1071,7 +1090,7 @@ bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         ABI_CallFunctionP(PowerPC::CheckAndHandleBreakPointsFromJIT, &power_pc);
         ABI_PopRegistersAndAdjustStack({}, 0);
         MOV(64, R(RSCRATCH), ImmPtr(cpu.GetStatePtr()));
-        CMP(32, MatR(RSCRATCH), Imm32(Common::ToUnderlying(CPU::State::Running)));
+        CMP(32, MatR(RSCRATCH), Imm32(std::to_underlying(CPU::State::Running)));
         FixupBranch noBreakpoint = J_CC(CC_E);
 
         Cleanup();
@@ -1284,9 +1303,9 @@ BitSet8 Jit64::ComputeStaticGQRs(const PPCAnalyst::CodeBlock& cb) const
   return cb.m_gqr_used & ~cb.m_gqr_modified;
 }
 
-BitSet32 Jit64::CallerSavedRegistersInUse() const
+BitSet32 Jit64::CallerSavedRegistersInUse(BitSet32 additional_registers) const
 {
-  BitSet32 in_use = gpr.RegistersInUse() | (fpr.RegistersInUse() << 16);
+  BitSet32 in_use = gpr.RegistersInUse() | (fpr.RegistersInUse() << 16) | additional_registers;
   return in_use & ABI_ALL_CALLER_SAVED;
 }
 

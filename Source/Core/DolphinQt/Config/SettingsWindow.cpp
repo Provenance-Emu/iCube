@@ -3,6 +3,8 @@
 
 #include "DolphinQt/Config/SettingsWindow.h"
 
+#include <utility>
+
 #include <QApplication>
 #include <QColor>
 #include <QDialogButtonBox>
@@ -13,8 +15,6 @@
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <QVBoxLayout>
-
-#include "Common/EnumUtils.h"
 
 #include "DolphinQt/Config/ControllersPane.h"
 #include "DolphinQt/Config/Graphics/GraphicsPane.h"
@@ -29,6 +29,7 @@
 #include "DolphinQt/Settings/InterfacePane.h"
 #include "DolphinQt/Settings/OnScreenDisplayPane.h"
 #include "DolphinQt/Settings/PathPane.h"
+#include "DolphinQt/Settings/TriforcePane.h"
 #include "DolphinQt/Settings/WiiPane.h"
 
 StackedSettingsWindow::StackedSettingsWindow(QWidget* parent) : QDialog{parent}
@@ -197,8 +198,9 @@ SettingsWindow::SettingsWindow(MainWindow* parent) : StackedSettingsWindow{paren
   AddWrappedPane(new OnScreenDisplayPane, tr("On-Screen Display"));
   AddWrappedPane(new AudioPane, tr("Audio"));
   AddWrappedPane(new PathPane, tr("Paths"));
-  AddWrappedPane(new GameCubePane, tr("GameCube"));
+  AddWrappedPane(new GameCubePane{parent}, tr("GameCube"));
   AddWrappedPane(new WiiPane, tr("Wii"));
+  AddWrappedPane(new TriforcePane, tr("Triforce"));
   AddWrappedPane(new AdvancedPane, tr("Advanced"));
 
   OnDoneCreatingPanes();
@@ -206,5 +208,10 @@ SettingsWindow::SettingsWindow(MainWindow* parent) : StackedSettingsWindow{paren
 
 void SettingsWindow::SelectPane(SettingsWindowPaneIndex index)
 {
-  ActivatePane(Common::ToUnderlying(index));
+  ActivatePane(std::to_underlying(index));
+}
+
+void SettingsWindow::closeEvent(QCloseEvent*)
+{
+  Config::Save();
 }

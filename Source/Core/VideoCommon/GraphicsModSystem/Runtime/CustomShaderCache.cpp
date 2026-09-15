@@ -5,6 +5,7 @@
 
 #include "VideoCommon/AbstractGfx.h"
 #include "VideoCommon/VideoConfig.h"
+#include "VideoCommon/VideoEvents.h"
 
 CustomShaderCache::CustomShaderCache()
 {
@@ -24,10 +25,16 @@ CustomShaderCache::CustomShaderCache()
 CustomShaderCache::~CustomShaderCache()
 {
   if (m_async_shader_compiler)
+  {
     m_async_shader_compiler->StopWorkerThreads();
+    m_async_shader_compiler->ClearAllWork();
+  }
 
   if (m_async_uber_shader_compiler)
+  {
     m_async_uber_shader_compiler->StopWorkerThreads();
+    m_async_uber_shader_compiler->ClearAllWork();
+  }
 }
 
 void CustomShaderCache::RetrieveAsyncShaders()

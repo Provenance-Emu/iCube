@@ -5,7 +5,6 @@
 
 #include <cstddef>
 #include <fmt/format.h>
-#include <string_view>
 #include "Common/FormatUtil.h"
 
 namespace Common::Log
@@ -28,6 +27,8 @@ enum class LogType : int
   DSP_MAIL,
   DSPINTERFACE,
   DVDINTERFACE,
+  AMMEDIABOARD,
+  AMMEDIABOARD_NET,
   DYNA_REC,
   EXPANSIONINTERFACE,
   FILEMON,
@@ -59,6 +60,9 @@ enum class LogType : int
   PROCESSORINTERFACE,
   POWERPC,
   SERIALINTERFACE,
+  SERIALINTERFACE_AMBB,
+  SERIALINTERFACE_CARD,
+  SERIALINTERFACE_JVSIO,
   SP1,
   SYMBOLS,
   VIDEO,

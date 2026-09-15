@@ -31,13 +31,18 @@
 #include "Core/Core.h"
 #include "Core/HW/EXI/EXI.h"
 #include "Core/HW/GCMemcard/GCMemcard.h"
+#include "DolphinQt/Config/SettingsWindow.h"
+#ifdef HAS_LIBMGBA
 #include "Core/NetPlayServer.h"
+#endif
 #include "Core/System.h"
 
 #include "DolphinQt/Config/ConfigControls/ConfigBool.h"
 #include "DolphinQt/Config/ConfigControls/ConfigChoice.h"
+#ifdef HAS_LIBMGBA
 #include "DolphinQt/Config/ConfigControls/ConfigText.h"
 #include "DolphinQt/Config/ConfigControls/ConfigUserPath.h"
+#endif
 #include "DolphinQt/Config/Mapping/MappingWindow.h"
 #include "DolphinQt/GCMemcardManager.h"
 #include "DolphinQt/QtUtils/DolphinFileDialog.h"
@@ -46,15 +51,18 @@
 #include "DolphinQt/QtUtils/SignalBlocking.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/Settings/BroadbandAdapterSettingsDialog.h"
+#include "DolphinQt/Settings/TriforcePane.h"
 
 constexpr std::initializer_list<ExpansionInterface::Slot> GUI_SLOTS = {
     ExpansionInterface::Slot::A, ExpansionInterface::Slot::B, ExpansionInterface::Slot::SP1};
 
-GameCubePane::GameCubePane()
+GameCubePane::GameCubePane(MainWindow* main_window)
 {
   CreateWidgets();
   LoadSettings();
   ConnectWidgets();
+
+  connect(this, &GameCubePane::ShowTriforceWindow, main_window, &MainWindow::ShowTriforceWindow);
 }
 
 void GameCubePane::CreateWidgets()
@@ -143,10 +151,11 @@ void GameCubePane::CreateWidgets()
            EXIDeviceType::EthernetXLink,
            EXIDeviceType::EthernetTapServer,
            EXIDeviceType::EthernetBuiltIn,
-#if defined(WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+#ifdef HAVE_CPPIPC
            EXIDeviceType::EthernetIPC,
 #endif
            EXIDeviceType::ModemTapServer,
+           EXIDeviceType::Baseboard,
        })
   {
     m_slot_combos[ExpansionInterface::Slot::SP1]->addItem(tr(fmt::format("{:n}", device).c_str()),
@@ -346,11 +355,12 @@ void GameCubePane::UpdateButton(ExpansionInterface::Slot slot)
     break;
   }
   case ExpansionInterface::Slot::SP1:
-    has_config = (device == ExpansionInterface::EXIDeviceType::Ethernet ||
-                  device == ExpansionInterface::EXIDeviceType::EthernetXLink ||
-                  device == ExpansionInterface::EXIDeviceType::EthernetTapServer ||
-                  device == ExpansionInterface::EXIDeviceType::EthernetBuiltIn ||
-                  device == ExpansionInterface::EXIDeviceType::ModemTapServer);
+    has_config = device == ExpansionInterface::EXIDeviceType::Ethernet ||
+                 device == ExpansionInterface::EXIDeviceType::EthernetXLink ||
+                 device == ExpansionInterface::EXIDeviceType::EthernetTapServer ||
+                 device == ExpansionInterface::EXIDeviceType::EthernetBuiltIn ||
+                 device == ExpansionInterface::EXIDeviceType::ModemTapServer ||
+                 device == ExpansionInterface::EXIDeviceType::Baseboard;
     break;
   case ExpansionInterface::Slot::SP2:
     has_config = false;
@@ -414,6 +424,11 @@ void GameCubePane::OnConfigPressed(ExpansionInterface::Slot slot)
     dialog.exec();
     return;
   }
+  case ExpansionInterface::EXIDeviceType::Baseboard:
+  {
+    ShowTriforceWindow();
+    return;
+  }
   default:
     PanicAlertFmt("Unknown settings pressed for {}", device);
     return;
@@ -448,19 +463,23 @@ bool GameCubePane::SetMemcard(ExpansionInterface::Slot slot, const QString& file
   const std::string jp_path = Config::GetMemcardPath(raw_path, slot, DiscIO::Region::NTSC_J);
   const std::string us_path = Config::GetMemcardPath(raw_path, slot, DiscIO::Region::NTSC_U);
   const std::string eu_path = Config::GetMemcardPath(raw_path, slot, DiscIO::Region::PAL);
-  const bool raw_path_valid = raw_path == jp_path || raw_path == us_path || raw_path == eu_path;
+  const std::string dv_path = Config::GetMemcardPath(raw_path, slot, DiscIO::Region::DEV);
+  const bool raw_path_valid =
+      raw_path == jp_path || raw_path == us_path || raw_path == eu_path || raw_path == dv_path;
 
   if (!raw_path_valid)
   {
     // TODO: We could try to autodetect the card region here and offer automatic renaming.
-    ModalMessageBox::critical(this, tr("Error"),
-                              tr("The filename %1 does not conform to Dolphin's region code format "
-                                 "for memory cards. Please rename this file to either %2, %3, or "
-                                 "%4, matching the region of the save files that are on it.")
-                                  .arg(QString::fromStdString(PathToFileName(raw_path)))
-                                  .arg(QString::fromStdString(PathToFileName(us_path)))
-                                  .arg(QString::fromStdString(PathToFileName(eu_path)))
-                                  .arg(QString::fromStdString(PathToFileName(jp_path))));
+    ModalMessageBox::critical(
+        this, tr("Error"),
+        tr("The filename %1 does not conform to Dolphin's region code format "
+           "for memory cards. Please rename this file to either %2, %3, %4, or "
+           "%5, matching the region of the save files that are on it.")
+            .arg(QString::fromStdString(PathToFileName(raw_path)))
+            .arg(QString::fromStdString(PathToFileName(us_path)))
+            .arg(QString::fromStdString(PathToFileName(eu_path)))
+            .arg(QString::fromStdString(PathToFileName(jp_path)))
+            .arg(QString::fromStdString(PathToFileName(dv_path))));
     return false;
   }
 
@@ -552,8 +571,9 @@ bool GameCubePane::SetGCIFolder(ExpansionInterface::Slot slot, const QString& pa
   const std::string default_jp_path = Config::GetGCIFolderPath("", slot, DiscIO::Region::NTSC_J);
   const std::string default_us_path = Config::GetGCIFolderPath("", slot, DiscIO::Region::NTSC_U);
   const std::string default_eu_path = Config::GetGCIFolderPath("", slot, DiscIO::Region::PAL);
-  const bool is_default_path =
-      raw_path == default_jp_path || raw_path == default_us_path || raw_path == default_eu_path;
+  const std::string default_dv_path = Config::GetGCIFolderPath("", slot, DiscIO::Region::DEV);
+  const bool is_default_path = raw_path == default_jp_path || raw_path == default_us_path ||
+                               raw_path == default_eu_path || raw_path == default_dv_path;
 
   bool path_changed;
   if (is_default_path)
@@ -570,7 +590,9 @@ bool GameCubePane::SetGCIFolder(ExpansionInterface::Slot slot, const QString& pa
     const std::string jp_path = Config::GetGCIFolderPath(raw_path, slot, DiscIO::Region::NTSC_J);
     const std::string us_path = Config::GetGCIFolderPath(raw_path, slot, DiscIO::Region::NTSC_U);
     const std::string eu_path = Config::GetGCIFolderPath(raw_path, slot, DiscIO::Region::PAL);
-    const bool raw_path_valid = raw_path == jp_path || raw_path == us_path || raw_path == eu_path;
+    const std::string dv_path = Config::GetGCIFolderPath(raw_path, slot, DiscIO::Region::DEV);
+    const bool raw_path_valid =
+        raw_path == jp_path || raw_path == us_path || raw_path == eu_path || raw_path == dv_path;
 
     if (!raw_path_valid)
     {
@@ -578,12 +600,13 @@ bool GameCubePane::SetGCIFolder(ExpansionInterface::Slot slot, const QString& pa
       ModalMessageBox::critical(
           this, tr("Error"),
           tr("The folder %1 does not conform to Dolphin's region code format "
-             "for GCI folders. Please rename this folder to either %2, %3, or "
-             "%4, matching the region of the save files that are in it.")
+             "for GCI folders. Please rename this folder to either %2, %3, %4, or "
+             "%5, matching the region of the save files that are in it.")
               .arg(QString::fromStdString(PathToFileName(raw_path)))
               .arg(QString::fromStdString(PathToFileName(us_path)))
               .arg(QString::fromStdString(PathToFileName(eu_path)))
-              .arg(QString::fromStdString(PathToFileName(jp_path))));
+              .arg(QString::fromStdString(PathToFileName(jp_path)))
+              .arg(QString::fromStdString(PathToFileName(dv_path))));
       return false;
     }
 

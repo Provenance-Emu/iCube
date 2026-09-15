@@ -10,7 +10,6 @@
 #include <map>
 #include <memory>
 #include <mutex>
-#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -19,7 +18,6 @@
 #include "Common/Assert.h"
 #include "Common/Config/Config.h"
 #include "Common/Logging/Log.h"
-#include "Common/StringUtil.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/HW/Memmap.h"
 #include "Core/IOS/Device.h"
@@ -163,13 +161,13 @@ bool LibusbDevice::Attach()
   return true;
 }
 
-bool LibusbDevice::AttachAndChangeInterface(const u8 interface)
+bool LibusbDevice::AttachAndChangeInterface(const u8 iface)
 {
   if (!Attach())
     return false;
 
-  if (interface != m_active_interface)
-    return ChangeInterface(interface) == LIBUSB_SUCCESS;
+  if (iface != m_active_interface)
+    return ChangeInterface(iface) == LIBUSB_SUCCESS;
 
   return true;
 }
@@ -185,11 +183,11 @@ int LibusbDevice::CancelTransfer(const u8 endpoint)
   return IPC_SUCCESS;
 }
 
-int LibusbDevice::ChangeInterface(const u8 interface)
+int LibusbDevice::ChangeInterface(const u8 iface)
 {
   INFO_LOG_FMT(IOS_USB, "[{:04x}:{:04x} {}] Changing interface to {}", m_vid, m_pid,
-               m_active_interface, interface);
-  m_active_interface = interface;
+               m_active_interface, iface);
+  m_active_interface = iface;
   return LIBUSB_SUCCESS;
 }
 

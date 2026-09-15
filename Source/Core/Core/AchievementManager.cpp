@@ -5,20 +5,17 @@
 
 #include "Core/AchievementManager.h"
 
-#include <cctype>
 #include <memory>
 
 #include <fmt/format.h>
 
-#include <rcheevos/include/rc_api_info.h>
-
-#include "Common/Assert.h"
 #include "Common/BitUtils.h"
 #include "Common/CommonPaths.h"
 #include "Common/Config/Config.h"
 #include "Common/FileUtil.h"
+#include "Common/HttpRequest.h"
 #include "Common/IOFile.h"
-#include "Common/Image.h"
+#include "Common/JsonUtil.h"
 #include "Common/Logging/Log.h"
 #include "Common/ScopeGuard.h"
 #include "Common/StringUtil.h"
@@ -33,7 +30,6 @@
 #include "Core/GeckoCode.h"
 #include "Core/HW/Memmap.h"
 #include "Core/HW/VideoInterface.h"
-#include "Core/Host.h"
 #include "Core/PatchEngine.h"
 #include "Core/PowerPC/MMU.h"
 #include "Core/System.h"
@@ -171,7 +167,7 @@ void AchievementManager::LoadGame(const DiscIO::Volume* volume)
     WARN_LOG_FMT(ACHIEVEMENTS, "Software format unsupported by AchievementManager.");
     if (rc_client_get_game_info(m_client))
     {
-      rc_client_begin_change_media_from_hash(m_client, "", ChangeMediaCallback, NULL);
+      CloseGame();
     }
     else
     {
@@ -414,7 +410,7 @@ bool AchievementManager::IsHardcoreModeActive() const
 }
 
 template <typename T>
-void AchievementManager::FilterApprovedIni(std::vector<T>& codes, const std::string& game_id,
+void AchievementManager::FilterApprovedIni(std::vector<T>& codes, std::string_view game_id,
                                            u16 revision) const
 {
   if (codes.empty())
@@ -443,7 +439,7 @@ void AchievementManager::FilterApprovedIni(std::vector<T>& codes, const std::str
 }
 
 template <typename T>
-bool AchievementManager::ShouldCodeBeActivated(const T& code, const std::string& game_id,
+bool AchievementManager::ShouldCodeBeActivated(const T& code, std::string_view game_id,
                                                u16 revision) const
 {
   if (!code.enabled)
@@ -470,8 +466,7 @@ bool AchievementManager::ShouldCodeBeActivated(const T& code, const std::string&
 }
 
 template <typename T>
-bool AchievementManager::IsApprovedCode(const T& code, const std::string& game_id,
-                                        u16 revision) const
+bool AchievementManager::IsApprovedCode(const T& code, std::string_view game_id, u16 revision) const
 {
   // Approved codes list failed to hash
   if (!m_ini_root->is<picojson::value::object>())
@@ -536,42 +531,42 @@ Common::SHA1::Digest AchievementManager::GetCodeHash(const ActionReplay::ARCode&
 }
 
 void AchievementManager::FilterApprovedPatches(std::vector<PatchEngine::Patch>& patches,
-                                               const std::string& game_id, u16 revision) const
+                                               std::string_view game_id, u16 revision) const
 {
   FilterApprovedIni(patches, game_id, revision);
 }
 
 void AchievementManager::FilterApprovedGeckoCodes(std::vector<Gecko::GeckoCode>& codes,
-                                                  const std::string& game_id, u16 revision) const
+                                                  std::string_view game_id, u16 revision) const
 {
   FilterApprovedIni(codes, game_id, revision);
 }
 
 void AchievementManager::FilterApprovedARCodes(std::vector<ActionReplay::ARCode>& codes,
-                                               const std::string& game_id, u16 revision) const
+                                               std::string_view game_id, u16 revision) const
 {
   FilterApprovedIni(codes, game_id, revision);
 }
 
 bool AchievementManager::ShouldGeckoCodeBeActivated(const Gecko::GeckoCode& code,
-                                                    const std::string& game_id, u16 revision) const
+                                                    std::string_view game_id, u16 revision) const
 {
   return ShouldCodeBeActivated(code, game_id, revision);
 }
 
 bool AchievementManager::ShouldARCodeBeActivated(const ActionReplay::ARCode& code,
-                                                 const std::string& game_id, u16 revision) const
+                                                 std::string_view game_id, u16 revision) const
 {
   return ShouldCodeBeActivated(code, game_id, revision);
 }
 
-bool AchievementManager::IsApprovedGeckoCode(const Gecko::GeckoCode& code,
-                                             const std::string& game_id, u16 revision) const
+bool AchievementManager::IsApprovedGeckoCode(const Gecko::GeckoCode& code, std::string_view game_id,
+                                             u16 revision) const
 {
   return IsApprovedCode(code, game_id, revision);
 }
 bool AchievementManager::IsApprovedARCode(const ActionReplay::ARCode& code,
-                                          const std::string& game_id, u16 revision) const
+                                          std::string_view game_id, u16 revision) const
 {
   return IsApprovedCode(code, game_id, revision);
 }
@@ -936,22 +931,8 @@ void AchievementManager::LoginCallback(int result, const char* error_message, rc
   std::string config_username = Config::Get(Config::RA_USERNAME);
   if (config_username != user->username)
   {
-    if (Common::CaseInsensitiveEquals(config_username, user->username))
-    {
-      INFO_LOG_FMT(ACHIEVEMENTS,
-                   "Case mismatch between site {} and local {}; updating local config.",
-                   user->username, Config::Get(Config::RA_USERNAME));
-      Config::SetBaseOrCurrent(Config::RA_USERNAME, user->username);
-    }
-    else
-    {
-      INFO_LOG_FMT(ACHIEVEMENTS, "Attempted to login prior user {}; current user is {}.",
-                   user->username, Config::Get(Config::RA_USERNAME));
-      rc_client_logout(client);
-      instance.update_event.Trigger({.failed_login_code = RC_INVALID_STATE});
-      instance.login_event.Trigger(RC_INVALID_STATE);
-      return;
-    }
+    INFO_LOG_FMT(ACHIEVEMENTS, "Username alias {} -> {}.", config_username, user->username);
+    Config::SetBaseOrCurrent(Config::RA_USERNAME, user->username);
   }
   instance.login_event.Trigger(RC_OK);
 
@@ -1334,8 +1315,6 @@ u32 AchievementManager::MemoryPeeker(u32 address, u8* buffer, u32 num_bytes, rc_
     return 0u;
   auto& system = Core::System::GetInstance();
   Core::CPUThreadGuard thread_guard(system);
-  if (address > MEM1_SIZE)
-    address += (MEM2_START - MEM1_SIZE);
   for (u32 num_read = 0; num_read < num_bytes; num_read++)
   {
     auto value = system.GetMMU().HostTryRead<u8>(thread_guard, address + num_read,
@@ -1505,6 +1484,7 @@ void AchievementManager::LoadIntegrationCallback(int result, const char* error_m
   case RC_OK:
     INFO_LOG_FMT(ACHIEVEMENTS, "RAIntegration.dll found.");
     instance.m_dll_found = true;
+    rc_client_set_allow_background_memory_reads(instance.m_client, 0);
     rc_client_raintegration_set_event_handler(instance.m_client, RAIntegrationEventHandler);
     rc_client_raintegration_set_write_memory_function(instance.m_client, MemoryPoker);
     rc_client_raintegration_set_get_game_name_function(instance.m_client, GameTitleEstimateHandler);
@@ -1561,10 +1541,7 @@ void AchievementManager::MemoryPoker(u32 address, u8* buffer, u32 num_bytes, rc_
   if (!system)
     return;
   Core::CPUThreadGuard thread_guard(*system);
-  if (address < MEM1_SIZE)
-    system->GetMemory().CopyToEmu(address, buffer, num_bytes);
-  else
-    system->GetMemory().CopyToEmu(address - MEM1_SIZE + MEM2_START, buffer, num_bytes);
+  system->GetMemory().CopyToEmu(address, buffer, num_bytes);
 }
 
 void AchievementManager::GameTitleEstimateHandler(char* buffer, u32 buffer_size,

@@ -4,11 +4,10 @@
 #include "Core/PowerPC/PowerPC.h"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstdlib>
 #include <cstring>
-#include <type_traits>
-#include <vector>
 
 #include "Common/Assert.h"
 #include "Common/ChunkFile.h"
@@ -81,6 +80,8 @@ void PowerPCManager::DoState(PointerWrap& p)
   // *((u64 *)&TL(m_ppc_state)) = SystemTimers::GetFakeTimeBase(); //works since we are little
   // endian and TL comes first :)
 
+  const std::array<u32, 16> old_sr = m_ppc_state.sr;
+
   p.DoArray(m_ppc_state.gpr);
   p.Do(m_ppc_state.pc);
   p.Do(m_ppc_state.npc);
@@ -97,7 +98,8 @@ void PowerPCManager::DoState(PointerWrap& p)
   p.DoArray(m_ppc_state.spr);
   p.DoArray(m_ppc_state.tlb);
   p.Do(m_ppc_state.pagetable_base);
-  p.Do(m_ppc_state.pagetable_hashmask);
+  p.Do(m_ppc_state.pagetable_mask);
+  p.Do(m_ppc_state.pagetable_update_pending);
 
   p.Do(m_ppc_state.reserve);
   p.Do(m_ppc_state.reserve_address);
@@ -106,8 +108,11 @@ void PowerPCManager::DoState(PointerWrap& p)
   m_ppc_state.iCache.DoState(memory, p);
   m_ppc_state.dCache.DoState(memory, p);
 
+  auto& mmu = m_system.GetMMU();
   if (p.IsReadMode())
   {
+    mmu.DoState(p, old_sr != m_ppc_state.sr);
+
     if (!m_ppc_state.m_enable_dcache)
     {
       INFO_LOG_FMT(POWERPC, "Flushing data cache");
@@ -117,9 +122,12 @@ void PowerPCManager::DoState(PointerWrap& p)
     RoundingModeUpdated(m_ppc_state);
     RecalculateAllFeatureFlags(m_ppc_state);
 
-    auto& mmu = m_system.GetMMU();
     mmu.IBATUpdated();
     mmu.DBATUpdated();
+  }
+  else
+  {
+    mmu.DoState(p, false);
   }
 
   // SystemTimers::DecrementerSet();
@@ -306,12 +314,14 @@ void PowerPCManager::Init(CPUCore cpu_core)
 void PowerPCManager::Reset()
 {
   m_ppc_state.pagetable_base = 0;
-  m_ppc_state.pagetable_hashmask = 0;
+  m_ppc_state.pagetable_mask = 0;
+  m_ppc_state.pagetable_update_pending = false;
   m_ppc_state.tlb = {};
 
   ResetRegisters();
   m_ppc_state.iCache.Reset(m_system.GetJitInterface());
   m_ppc_state.dCache.Reset();
+  m_system.GetMMU().Reset();
 }
 
 void PowerPCManager::ScheduleInvalidateCacheThreadSafe(u32 address)
@@ -659,7 +669,8 @@ bool PowerPCManager::CheckBreakPoints()
 {
   const TBreakPoint* bp = m_breakpoints.GetBreakpoint(m_ppc_state.pc);
 
-  if (!bp || !bp->is_enabled || !EvaluateCondition(m_system, bp->condition))
+  if (!m_breakpoints.IsBreakingEnabled() || !bp || !bp->is_enabled ||
+      !EvaluateCondition(m_system, bp->condition))
     return false;
 
   if (bp->log_on_hit)
@@ -699,13 +710,10 @@ void PowerPCManager::MSRUpdated()
   m_ppc_state.feature_flags = static_cast<CPUEmuFeatureFlags>(
       (m_ppc_state.feature_flags & FEATURE_FLAG_PERFMON) | ((m_ppc_state.msr.Hex >> 4) & 0x3));
 
-  m_system.GetJitInterface().UpdateMembase();
-}
+  if (m_ppc_state.msr.DR && m_ppc_state.pagetable_update_pending)
+    m_system.GetMMU().PageTableUpdated();
 
-void PowerPCState::SetSR(u32 index, u32 value)
-{
-  DEBUG_LOG_FMT(POWERPC, "{:08x}: MMU: Segment register {} set to {:08x}", pc, index, value);
-  sr[index] = value;
+  m_system.GetJitInterface().UpdateMembase();
 }
 
 // FPSCR update functions

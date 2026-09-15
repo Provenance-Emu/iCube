@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cstring>
 #include <functional>
 #include <future>
 #include <mutex>
@@ -27,7 +26,6 @@
 #include "Common/CPUDetect.h"
 #include "Common/CommonPaths.h"
 #include "Common/CommonTypes.h"
-#include "Common/FPURoundMode.h"
 #include "Common/FatFsUtil.h"
 #include "Common/FileUtil.h"
 #include "Common/Logging/Log.h"
@@ -331,16 +329,12 @@ void UndeclareAsGPUThread()
 }
 
 // For the CPU Thread only.
-static void CPUSetInitialExecutionState(bool force_paused = false)
+static void CPUSetInitialExecutionState(Core::System& system, bool force_paused = false)
 {
   // The CPU starts in stepping state, and will wait until a new state is set before executing.
-  // SetState isn't safe to call from the CPU thread, so we ask the host thread to call it.
-  QueueHostJob([force_paused](Core::System& system) {
-    bool paused = SConfig::GetInstance().bBootToPause || force_paused;
-    SetState(system, paused ? State::Paused : State::Running, true, true);
-    Host_UpdateDisasmDialog();
-    Host_Message(HostMessageID::WMUserCreate);
-  });
+  const bool paused = SConfig::GetInstance().bBootToPause || force_paused;
+  SetState(system, paused ? State::Paused : State::Running, true, true);
+  Host_UpdateDisasmDialog();
 }
 
 // Create the CPU thread, which is a CPU + Video thread in Single Core mode.
@@ -393,7 +387,7 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
     if (!gdb_socket.empty() && !AchievementManager::GetInstance().IsHardcoreModeActive())
     {
       GDBStub::InitLocal(gdb_socket.data());
-      CPUSetInitialExecutionState(true);
+      CPUSetInitialExecutionState(system, true);
     }
     else
 #endif
@@ -402,11 +396,11 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
       if (gdb_port > 0 && !AchievementManager::GetInstance().IsHardcoreModeActive())
       {
         GDBStub::Init(gdb_port);
-        CPUSetInitialExecutionState(true);
+        CPUSetInitialExecutionState(system, true);
       }
       else
       {
-        CPUSetInitialExecutionState();
+        CPUSetInitialExecutionState(system);
       }
     }
   }
@@ -452,7 +446,7 @@ static void FifoPlayerThread(Core::System& system, const std::optional<std::stri
       s_state.compare_exchange_strong(expected, State::Running);
     }
 
-    CPUSetInitialExecutionState();
+    CPUSetInitialExecutionState(system);
 
     system.GetCPU().Run();
 
@@ -854,16 +848,13 @@ static void RestoreStateAndUnlock(Core::System& system, const bool unpause_on_un
   system.GetCPU().RestoreStateAndUnlock(unpause_on_unlock);
 }
 
-void RunOnCPUThread(Core::System& system, Common::MoveOnlyFunction<void()> function,
-                    bool wait_for_completion)
+void RunOnCPUThread(Core::System& system, Common::MoveOnlyFunction<void()> function)
 {
   if (IsCPUThread())
   {
     function();
     return;
   }
-
-  Common::OneShotEvent cpu_thread_job_finished;
 
   // Pause the CPU (set it to stepping mode).
   const bool was_running = PauseAndLock(system);
@@ -872,15 +863,6 @@ void RunOnCPUThread(Core::System& system, Common::MoveOnlyFunction<void()> funct
   {
     // If the core hasn't been started, there is no active CPU thread we can race against.
     function();
-    wait_for_completion = false;
-  }
-  else if (wait_for_completion)
-  {
-    // Queue the job function followed by triggering the event.
-    system.GetCPU().AddCPUThreadJob([&function, &cpu_thread_job_finished] {
-      function();
-      cpu_thread_job_finished.Set();
-    });
   }
   else
   {
@@ -890,14 +872,6 @@ void RunOnCPUThread(Core::System& system, Common::MoveOnlyFunction<void()> funct
 
   // Release the CPU thread, and let it execute the callback.
   RestoreStateAndUnlock(system, was_running);
-
-  // If we're waiting for completion, block until the event fires.
-  if (wait_for_completion)
-  {
-    // Periodically yield to the UI thread, so we don't deadlock.
-    while (!cpu_thread_job_finished.WaitFor(std::chrono::milliseconds(10)))
-      Host_YieldToUI();
-  }
 }
 
 // --- Callbacks for backends / engine ---

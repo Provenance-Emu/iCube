@@ -11,6 +11,7 @@
 #include <initializer_list>
 #include <span>
 #include <type_traits>
+#include <utility>
 
 #include "Common/CommonTypes.h"
 
@@ -188,7 +189,7 @@ template <typename ValueType, typename From>
 }
 
 template <typename T>
-void SetBit(T& value, size_t bit_number, bool bit_value)
+constexpr void SetBit(T& value, size_t bit_number, bool bit_value)
 {
   static_assert(std::is_unsigned<T>(), "SetBit is only sane on unsigned types.");
 
@@ -199,7 +200,7 @@ void SetBit(T& value, size_t bit_number, bool bit_value)
 }
 
 template <size_t bit_number, typename T>
-void SetBit(T& value, bool bit_value)
+constexpr void SetBit(T& value, bool bit_value)
 {
   SetBit(value, bit_number, bit_value);
 }
@@ -208,23 +209,20 @@ template <typename T>
 class FlagBit
 {
 public:
-  FlagBit(std::underlying_type_t<T>& bits, T bit) : m_bits(bits), m_bit(bit) {}
-  explicit operator bool() const
-  {
-    return (m_bits & static_cast<std::underlying_type_t<T>>(m_bit)) != 0;
-  }
-  FlagBit& operator=(const bool rhs)
+  FlagBit(T* bits, std::type_identity_t<T> bit) : m_bits(*bits), m_bit(bit) {}
+  explicit operator bool() const { return (m_bits & m_bit) != 0; }
+  FlagBit& operator=(const bool rhs) requires(!std::is_const_v<T>)
   {
     if (rhs)
-      m_bits |= static_cast<std::underlying_type_t<T>>(m_bit);
+      m_bits |= m_bit;
     else
-      m_bits &= ~static_cast<std::underlying_type_t<T>>(m_bit);
+      m_bits &= ~m_bit;
     return *this;
   }
 
 private:
-  std::underlying_type_t<T>& m_bits;
-  T m_bit;
+  T& m_bits;
+  const T m_bit;
 };
 
 template <typename T>
@@ -239,7 +237,8 @@ public:
       m_hex |= static_cast<std::underlying_type_t<T>>(bit);
     }
   }
-  FlagBit<T> operator[](T bit) { return FlagBit(m_hex, bit); }
+  auto operator[](T bit) { return FlagBit(&m_hex, std::to_underlying(bit)); }
+  auto operator[](T bit) const { return FlagBit(&m_hex, std::to_underlying(bit)); }
 
   std::underlying_type_t<T> m_hex = 0;
 };

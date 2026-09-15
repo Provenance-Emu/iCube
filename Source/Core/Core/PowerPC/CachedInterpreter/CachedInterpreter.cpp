@@ -13,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include <fmt/format.h>
 #include <fmt/ostream.h>
 
 #include "Common/Assert.h"
@@ -1379,12 +1378,12 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
     const u8* payload = normal_entry + sizeof(callback);
     // Direct dispatch to the most commonly used callbacks for better performance
-    if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<false>))) [[likely]]
+    if (callback == AnyCallbackCast(Interpret<false>)) [[likely]]
     {
       Interpret<false>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);
     }
-    else if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<true>)))
+    else if (callback == AnyCallbackCast(Interpret<true>))
     {
       Interpret<true>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);

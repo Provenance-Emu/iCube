@@ -18,7 +18,7 @@
 #include "Core/PowerPC/Expression.h"
 #include "Core/PowerPC/JitInterface.h"
 #include "Core/PowerPC/MMU.h"
-#include "Core/PowerPC/PowerPC.h"
+#include "Core/PowerPC/PPCSymbolDB.h"
 #include "Core/System.h"
 
 BreakPoints::BreakPoints(Core::System& system) : m_system(system)
@@ -34,6 +34,9 @@ bool BreakPoints::IsAddressBreakPoint(u32 address) const
 
 bool BreakPoints::IsBreakPointEnable(u32 address) const
 {
+  if (!m_breaking_enabled)
+    return false;
+
   const TBreakPoint* bp = GetBreakpoint(address);
   return bp != nullptr && bp->is_enabled;
 }
@@ -184,6 +187,11 @@ bool BreakPoints::ToggleEnable(u32 address)
   return true;
 }
 
+void BreakPoints::EnableBreaking(bool enable)
+{
+  m_breaking_enabled = enable;
+}
+
 bool BreakPoints::Remove(u32 address)
 {
   const auto iter = std::ranges::find(m_breakpoints, address, &TBreakPoint::address);
@@ -316,6 +324,12 @@ bool MemChecks::ToggleEnable(u32 address)
 
   iter->is_enabled = !iter->is_enabled;
   return true;
+}
+
+void MemChecks::EnableBreaking(bool enabled)
+{
+  m_breaking_enabled = enabled;
+  Update();
 }
 
 DelayedMemCheckUpdate MemChecks::Remove(u32 address)

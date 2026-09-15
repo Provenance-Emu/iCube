@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <expected>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -12,7 +13,6 @@
 #include <vector>
 
 #include "Common/CommonTypes.h"
-#include "Common/Result.h"
 #include "Core/PowerPC/MMU.h"
 
 namespace Core
@@ -116,7 +116,7 @@ std::vector<u8> GetValueAsByteVector(const SearchValue& value);
 // Do a new search across the given memory region in the given address space, only keeping values
 // for which the given validator returns true.
 template <typename T>
-Common::Result<SearchErrorCode, std::vector<SearchResult<T>>>
+std::expected<std::vector<SearchResult<T>>, SearchErrorCode>
 NewSearch(const Core::CPUThreadGuard& guard, const std::vector<MemoryRange>& memory_ranges,
           PowerPC::RequestedAddressSpace address_space, bool aligned,
           const std::function<bool(const T& value)>& validator);
@@ -124,7 +124,7 @@ NewSearch(const Core::CPUThreadGuard& guard, const std::vector<MemoryRange>& mem
 // Refresh the values for the given results in the given address space, only keeping values for
 // which the given validator returns true.
 template <typename T>
-Common::Result<SearchErrorCode, std::vector<SearchResult<T>>>
+std::expected<std::vector<SearchResult<T>>, SearchErrorCode>
 NextSearch(const Core::CPUThreadGuard& guard, const std::vector<SearchResult<T>>& previous_results,
            PowerPC::RequestedAddressSpace address_space,
            const std::function<bool(const T& new_value, const T& old_value)>& validator);
@@ -168,6 +168,9 @@ public:
 
   virtual bool WriteValue(const Core::CPUThreadGuard& guard, std::span<u32> addresses) const = 0;
 
+  // User can delete a search result.
+  virtual void RemoveResult(size_t index) = 0;
+
   // Create a complete copy of this search session.
   virtual std::unique_ptr<CheatSearchSessionBase> Clone() const = 0;
 
@@ -195,6 +198,7 @@ public:
   bool SetValueFromString(const std::string& value_as_string, bool force_parse_as_hex) override;
 
   void ResetResults() override;
+  void RemoveResult(size_t index) override;
   SearchErrorCode RunSearch(const Core::CPUThreadGuard& guard) override;
 
   size_t GetMemoryRangeCount() const override;

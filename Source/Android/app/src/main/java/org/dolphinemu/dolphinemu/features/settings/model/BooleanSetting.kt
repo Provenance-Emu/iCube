@@ -31,6 +31,7 @@ enum class BooleanSetting(
         false
     ),
     MAIN_AUDIO_FILL_GAPS(Settings.FILE_DOLPHIN, Settings.SECTION_INI_CORE, "AudioFillGaps", true),
+    MAIN_AUDIO_PRESERVE_PITCH(Settings.FILE_DOLPHIN, Settings.SECTION_INI_CORE, "AudioPreservePitch", false),
     MAIN_BBA_XLINK_CHAT_OSD(
         Settings.FILE_DOLPHIN,
         Settings.SECTION_INI_CORE,
@@ -894,7 +895,7 @@ enum class BooleanSetting(
         Settings.FILE_ACHIEVEMENTS,
         Settings.SECTION_ACHIEVEMENTS,
         "HardcoreEnabled",
-        false
+        true
     ),
     ACHIEVEMENTS_UNOFFICIAL_ENABLED(
         Settings.FILE_ACHIEVEMENTS,
@@ -930,7 +931,7 @@ enum class BooleanSetting(
         Settings.FILE_ACHIEVEMENTS,
         Settings.SECTION_ACHIEVEMENTS,
         "ProgressEnabled",
-        true
+        false
     );
 
     override val isOverridden: Boolean

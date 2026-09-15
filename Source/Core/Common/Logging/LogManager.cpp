@@ -6,18 +6,15 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cstdarg>
 #include <cstring>
-#include <locale>
+#include <fstream>
 #include <memory>
 #include <mutex>
-#include <ostream>
 #include <string>
 
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 
-#include "Common/CommonPaths.h"
 #include "Common/Config/Config.h"
 #include "Common/FileUtil.h"
 #include "Common/Logging/ConsoleListener.h"
@@ -114,6 +111,8 @@ LogManager::LogManager()
   m_log[LogType::DSP_MAIL] = {"DSPMails", "DSP Mails"};
   m_log[LogType::DSPINTERFACE] = {"DSP", "DSP Interface"};
   m_log[LogType::DVDINTERFACE] = {"DVD", "DVD Interface"};
+  m_log[LogType::AMMEDIABOARD] = {"AMMB", "AMMB Interface"};
+  m_log[LogType::AMMEDIABOARD_NET] = {"AMMB_NET", "AMMB - Network"};
   m_log[LogType::DYNA_REC] = {"JIT", "JIT Dynamic Recompiler"};
   m_log[LogType::EXPANSIONINTERFACE] = {"EXI", "Expansion Interface"};
   m_log[LogType::FILEMON] = {"FileMon", "File Monitor"};
@@ -145,6 +144,9 @@ LogManager::LogManager()
   m_log[LogType::PROCESSORINTERFACE] = {"PI", "Processor Interface"};
   m_log[LogType::POWERPC] = {"PowerPC", "PowerPC IBM CPU"};
   m_log[LogType::SERIALINTERFACE] = {"SI", "Serial Interface"};
+  m_log[LogType::SERIALINTERFACE_AMBB] = {"SI_AMBB", "AMBB Interface"};
+  m_log[LogType::SERIALINTERFACE_CARD] = {"SI_CARD", "CARD Interface"};
+  m_log[LogType::SERIALINTERFACE_JVSIO] = {"SI_JVS", "JVS-I/O"};
   m_log[LogType::SP1] = {"SP1", "Serial Port 1"};
   m_log[LogType::SYMBOLS] = {"SYMBOLS", "Symbols"};
   m_log[LogType::VIDEO] = {"Video", "Video Backend"};

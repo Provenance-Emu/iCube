@@ -279,7 +279,9 @@ void VideoInterfaceManager::Preset(bool _bNTSC)
 
   // Say component cable is plugged
   m_dtv_status.component_plugged = Config::Get(Config::SYSCONF_PROGRESSIVE_SCAN);
-  m_dtv_status.ntsc_j = region == DiscIO::Region::NTSC_J;
+
+  // Triforce IPL requires the DTV NTSC-J flag to be set.
+  m_dtv_status.ntsc_j = m_system.IsTriforce() || region == DiscIO::Region::NTSC_J;
 
   m_fb_width.Hex = 0;
   m_border_hblank.Hex = 0;
@@ -621,7 +623,7 @@ float VideoInterfaceManager::GetAspectRatio() const
   // but it's only 4:3 if the picture fill the entire active area.
   // All games configure VideoInterface to add padding in both the horizontal and vertical
   // directions and most games also do a slight horizontal scale.
-  // This means that XFB never fills the entire active area and is therefor almost never 4:3
+  // This means that XFB never fills the entire active area and is therefore almost never 4:3
 
   // To work out the correct aspect ratio of the XFB, we need to know how VideoInterface's
   // currently configured active area compares to the active area of a stock PAL or NTSC
@@ -1114,7 +1116,7 @@ void VideoInterfaceManager::Update(u64 ticks)
     m_ticks_last_line_start = ticks;
   }
 
-  // TODO: Findout why skipping interrupts acts as a frameskip
+  // TODO: Find out why skipping interrupts acts as a frameskip
   if (core_timing.GetVISkip())
   {
     // Instruments marker: a dropped vblank IRQ (catch-up frameskip). Correlate against the clock.

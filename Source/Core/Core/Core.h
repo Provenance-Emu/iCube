@@ -149,8 +149,7 @@ bool IsGPUThread();
 
 bool WantsDeterminism();
 
-// SetState can't be called by the CPU thread, but can be called by any thread that isn't launched
-// by the emulator core.
+// SetState can be called from any thread.
 void SetState(Core::System& system, State state, bool report_state_change = true,
               bool override_achievement_restrictions = false);
 State GetState(Core::System& system);
@@ -165,8 +164,7 @@ void FrameUpdateOnCPUThread();
 void OnFrameEnd(Core::System& system);
 
 // Run a function on the CPU thread, asynchronously.
-void RunOnCPUThread(Core::System& system, Common::MoveOnlyFunction<void()> function,
-                    bool wait_for_completion);
+void RunOnCPUThread(Core::System& system, Common::MoveOnlyFunction<void()> function);
 
 // for calling back into UI code without introducing a dependency on it in core
 using StateChangedCallbackFunc = std::function<void(Core::State)>;

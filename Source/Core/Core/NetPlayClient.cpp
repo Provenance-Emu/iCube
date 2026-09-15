@@ -7,7 +7,6 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <fstream>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -31,7 +30,6 @@
 #include "Common/NandPaths.h"
 #include "Common/QoSSession.h"
 #include "Common/SFMLHelper.h"
-#include "Common/StringUtil.h"
 #include "Common/Timer.h"
 #include "Common/Version.h"
 
@@ -54,30 +52,25 @@
 #include "Core/HW/GCPad.h"
 #include "Core/HW/SI/SI.h"
 #include "Core/HW/SI/SI_Device.h"
+#include "Core/HW/SI/SI_DeviceAMBaseboard.h"
 #include "Core/HW/SI/SI_DeviceGCController.h"
 #include "Core/HW/Sram.h"
 #include "Core/HW/WiiSave.h"
 #include "Core/HW/WiiSaveStructs.h"
+#include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/DesiredWiimoteState.h"
-#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
-#include "Core/HW/WiimoteReal/WiimoteReal.h"
 #include "Core/IOS/FS/FileSystem.h"
 #include "Core/IOS/FS/HostBackend/FS.h"
-#include "Core/IOS/USB/Bluetooth/BTEmu.h"
 #include "Core/IOS/Uids.h"
 #include "Core/Movie.h"
 #include "Core/NetPlayCommon.h"
-#include "Core/PowerPC/PowerPC.h"
 #include "Core/SyncIdentifier.h"
 #include "Core/System.h"
 #include "DiscIO/Blob.h"
 
-#include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
 #include "InputCommon/GCAdapter.h"
-#include "InputCommon/InputConfig.h"
 #include "UICommon/GameFile.h"
 #include "VideoCommon/OnScreenDisplay.h"
-#include "VideoCommon/VideoConfig.h"
 
 namespace NetPlay
 {
@@ -1891,6 +1884,8 @@ void NetPlayClient::UpdateDevices()
   auto& si = Core::System::GetInstance().GetSerialInterface();
   for (auto player_id : m_pad_map)
   {
+    const SerialInterface::SIDevices si_device = Config::Get(Config::GetInfoForSIDevice(local_pad));
+
     if (m_gba_config[pad].enabled && player_id > 0)
     {
       si.ChangeDevice(SerialInterface::SIDEVICE_GC_GBA_EMULATED, pad);
@@ -1898,8 +1893,6 @@ void NetPlayClient::UpdateDevices()
     else if (player_id == m_local_player->pid)
     {
       // Use local controller types for local controllers if they are compatible
-      const SerialInterface::SIDevices si_device =
-          Config::Get(Config::GetInfoForSIDevice(local_pad));
       if (SerialInterface::SIDevice_IsGCController(si_device))
       {
         si.ChangeDevice(si_device, pad);
@@ -1917,7 +1910,8 @@ void NetPlayClient::UpdateDevices()
     }
     else if (player_id > 0)
     {
-      si.ChangeDevice(SerialInterface::SIDEVICE_GC_CONTROLLER, pad);
+      if (si_device != SerialInterface::SIDEVICE_AM_BASEBOARD)
+        si.ChangeDevice(SerialInterface::SIDEVICE_GC_CONTROLLER, pad);
     }
     else
     {
@@ -2780,6 +2774,16 @@ bool SerialInterface::CSIDevice_GCController::NetPlay_GetInput(int pad_num, GCPa
   return false;
 }
 
+bool SerialInterface::CSIDevice_AMBaseboard::NetPlay_GetInput(int pad_num, GCPadStatus* status)
+{
+  std::lock_guard lk(NetPlay::crit_netplay_client);
+
+  if (NetPlay::netplay_client)
+    return NetPlay::netplay_client->GetNetPads(pad_num, NetPlay::s_si_poll_batching, status);
+
+  return false;
+}
+
 bool NetPlay::NetPlay_GetWiimoteData(const std::span<NetPlayClient::WiimoteDataBatchEntry>& entries)
 {
   std::lock_guard lk(crit_netplay_client);
@@ -2843,12 +2847,21 @@ u64 ExpansionInterface::CEXIIPL::NetPlay_GetEmulatedTime()
 
 // called from ---CPU--- thread
 // return the local pad num that should rumble given a ingame pad num
-int SerialInterface::CSIDevice_GCController::NetPlay_InGamePadToLocalPad(int numPAD)
+int SerialInterface::CSIDevice_GCController::NetPlay_InGamePadToLocalPad(int pad_num)
 {
   std::lock_guard lk(NetPlay::crit_netplay_client);
 
   if (NetPlay::netplay_client)
-    return NetPlay::netplay_client->InGamePadToLocalPad(numPAD);
+    return NetPlay::netplay_client->InGamePadToLocalPad(pad_num);
 
-  return numPAD;
+  return pad_num;
+}
+int SerialInterface::CSIDevice_AMBaseboard::NetPlay_InGamePadToLocalPad(int pad_num)
+{
+  std::lock_guard lk(NetPlay::crit_netplay_client);
+
+  if (NetPlay::netplay_client)
+    return NetPlay::netplay_client->InGamePadToLocalPad(pad_num);
+
+  return pad_num;
 }

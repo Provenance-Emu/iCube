@@ -15,7 +15,6 @@
 
 #include "Core/ConfigManager.h"
 
-#include "DiscIO/Blob.h"
 #include "DiscIO/Enums.h"
 #include "DiscIO/Volume.h"
 #include "DiscIO/WiiSaveBanner.h"
@@ -123,12 +122,6 @@ QGroupBox* InfoWidget::CreateGameDetails()
                          m_game.GetMakerID() + ")");
 
   layout->addRow(tr("Name:"), internal_name);
-  if (m_game.GetPlatform() == DiscIO::Platform::Triforce)
-  {
-    const auto triforce_id_string = QString::fromStdString(m_game.GetTriforceID());
-    auto* const triforce_id = CreateValueDisplay(triforce_id_string);
-    layout->addRow(tr("Triforce ID:"), triforce_id);
-  }
   layout->addRow(tr("Game ID:"), game_id);
   layout->addRow(tr("Country:"), country);
   layout->addRow(tr("Maker:"), maker);

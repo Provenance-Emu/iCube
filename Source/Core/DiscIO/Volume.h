@@ -3,17 +3,16 @@
 
 #pragma once
 
-#include <cstring>
 #include <limits>
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
 #include "Common/CommonTypes.h"
 #include "Common/Crypto/SHA1.h"
-#include "Common/StringUtil.h"
 #include "Common/Swap.h"
 #include "Core/IOS/ES/Formats.h"
 #include "DiscIO/Enums.h"
@@ -96,7 +95,6 @@ public:
   }
   virtual std::string GetGameID(const Partition& partition = PARTITION_NONE) const = 0;
   virtual std::string GetGameTDBID(const Partition& partition = PARTITION_NONE) const = 0;
-  virtual std::string GetTriforceID() const { return ""; }
   virtual std::string GetMakerID(const Partition& partition = PARTITION_NONE) const = 0;
   virtual std::optional<u16> GetRevision(const Partition& partition = PARTITION_NONE) const = 0;
   virtual std::string GetInternalName(const Partition& partition = PARTITION_NONE) const = 0;
@@ -144,17 +142,8 @@ public:
   virtual std::array<u8, 20> GetSyncHash() const = 0;
 
 protected:
-  template <u32 N>
-  std::string DecodeString(const char (&data)[N]) const
-  {
-    // strnlen to trim NULLs
-    std::string string(data, strnlen(data, sizeof(data)));
-
-    if (GetRegion() == Region::NTSC_J)
-      return SHIFTJISToUTF8(string);
-    else
-      return CP1252ToUTF8(string);
-  }
+  std::string DecodeString(std::span<const char> data) const;
+  static std::string FilterGameID(std::span<const char> data);
 
   void ReadAndAddToSyncHash(Common::SHA1::Context* context, u64 offset, u64 length,
                             const Partition& partition) const;
@@ -176,6 +165,9 @@ protected:
 
 std::unique_ptr<VolumeDisc> CreateDisc(std::unique_ptr<BlobReader> reader);
 std::unique_ptr<VolumeDisc> CreateDisc(const std::string& path);
+// This version enables caching when the "Load Games into Memory" setting is enabled.
+std::unique_ptr<VolumeDisc> CreateDiscForCore(const std::string& path);
+
 std::unique_ptr<VolumeWAD> CreateWAD(std::unique_ptr<BlobReader> reader);
 std::unique_ptr<VolumeWAD> CreateWAD(const std::string& path);
 std::unique_ptr<Volume> CreateVolume(std::unique_ptr<BlobReader> reader);
