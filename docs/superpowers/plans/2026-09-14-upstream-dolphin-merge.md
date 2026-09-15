@@ -63,7 +63,7 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 
 - [x] Tag `develop` as `pre-upstream-merge` (→ 6a86139de1); cut `feature/upstream-merge` (pushed 2026-09-15).
 - [x] (2026-09-15, 273 lines) Write `docs/dev/fork-patches.md`: one section per subsystem in the footprint list above, each with the reason the patch exists, the files, and the owner test (which soak item proves it still works). Generated from `git diff 2509..HEAD --stat -- Source/Core`, then curated. This is the checklist every stage is reviewed against.
-- [ ] Take the "merge-baseline" settings snapshot and the perf/screenshot baselines on the current `develop` TestFlight build.
+- [x] (2026-09-15) Take the "merge-baseline" settings snapshot and the perf/screenshot baselines on the current `develop` TestFlight build. Captured on iPhone17,2 against `Dolphin [develop] 2509-1286` (release), NSMBW, into `~/.icube-debug/baselines/2026-09-15-merge-baseline/` (health, build-info, render-state, settings-all, 43 running screenshots, `bench-slot1-20s.json`); device snapshot `merge-baseline` and save-state slot 1 hold the bench start point. Headline: meanFps 40.35, p95 26.6 ms, 1 % low 75.1 ms, meanSpeed 0.98, thermal nominal; settings in effect: CPU core 5 (CachedInterpreter), dual core on, 1× EFB, fast math on, VI skip mode 2. Later stages compare against these with the same slot and snapshot.
 - [x] Add the 7 new upstream submodules to the iOS build plan (decided 2026-09-15, see table) so Stage 3 does not discover them cold.
 
   | Submodule (upstream path) | Fork today | Decision |
