@@ -29,7 +29,9 @@ jobs:
 
       - name: Install tools
         run: |
-          # swiftlint ships preinstalled on the macos-latest image.
+          # Neither tool ships preinstalled on the current macos-latest (macos-26)
+          # image; swiftlint was dropped from it, so install both via brew.
+          brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
           brew list swiftformat >/dev/null 2>&1 || brew install swiftformat
           swiftlint version
           swiftformat --version
