@@ -309,8 +309,8 @@ void VideoInterfaceManager::Init()
 
   // Detect when an EFB->XFB copy occurs (host starts processing the XFB copy). We use this as a
   // guard so the bounded Auto VISkip gating won't skip VI on fields with in-place XFB updates.
-  m_after_frame_hook = AfterFrameEvent::Register(
-      [this](Core::System&) { m_viskip_efb_to_xfb_copied_this_field = true; }, "VI-NoCopyGuard");
+  m_after_frame_hook = GetVideoEvents().after_frame_event.Register(
+      [this](Core::System&) { m_viskip_efb_to_xfb_copied_this_field = true; });
 }
 
 void VideoInterfaceManager::RefreshConfig()

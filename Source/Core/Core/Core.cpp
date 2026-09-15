@@ -293,6 +293,23 @@ void Stop(Core::System& system)  // - Hammertime!
   system.GetCPU().Stop();
 }
 
+// iCube: see Core.h -- host-thread marker kept for the iOS host queue.
+static thread_local bool tls_is_host_thread = false;
+bool IsHostThread()
+{
+  return tls_is_host_thread;
+}
+
+void DeclareAsHostThread()
+{
+  tls_is_host_thread = true;
+}
+
+void UndeclareAsHostThread()
+{
+  tls_is_host_thread = false;
+}
+
 void DeclareAsCPUThread()
 {
   tls_is_cpu_thread = true;

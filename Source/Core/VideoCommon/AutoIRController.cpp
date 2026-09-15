@@ -3,6 +3,8 @@
 
 #include "VideoCommon/AutoIRController.h"
 
+#include "VideoCommon/VideoEvents.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -40,23 +42,19 @@ AutoIRController& AutoIRController::Get()
     s_instance.RefreshSettings();
 
     // Hook AfterPresent to run per presented frame
-    s_instance.m_after_present_hook = AfterPresentEvent::Register(
-        [](PresentInfo& info) {
-          AutoIRController::Get().OnAfterPresent(info);
-        },
-        "AutoIRController");
+    // 2512: hookable events live on GetVideoEvents() and Register() no longer takes a name.
+    s_instance.m_after_present_hook = GetVideoEvents().after_present_event.Register(
+        [](PresentInfo& info) { AutoIRController::Get().OnAfterPresent(info); });
 
     // Sync enabled state from config at startup
     EnsureEnabledFromConfig(s_instance);
 
     // Also refresh settings when any config changes
-    static Common::EventHook s_cfg_changed = ConfigChangedEvent::Register(
-        [](u32) {
-          auto& inst = AutoIRController::Get();
-          inst.RefreshSettings();
-          EnsureEnabledFromConfig(inst);
-        },
-        "AutoIRController_ConfigChanged");
+    static Common::EventHook s_cfg_changed = GetVideoEvents().config_changed_event.Register([](u32) {
+      auto& inst = AutoIRController::Get();
+      inst.RefreshSettings();
+      EnsureEnabledFromConfig(inst);
+    });
   }
   return s_instance;
 }

@@ -128,6 +128,12 @@ void DeclareAsCPUThread();
 void UndeclareAsCPUThread();
 void DeclareAsGPUThread();
 void UndeclareAsGPUThread();
+// iCube: upstream removed the host-thread marker (068947e2b6); the iOS app keeps it because
+// DOLHostQueue serialises every Core call onto one dispatch queue and needs to know whether the
+// caller is already on it (HostQueue.mm, EmulationCoordinator.mm, DolphinCoreService.mm).
+void DeclareAsHostThread();
+void UndeclareAsHostThread();
+bool IsHostThread();
 
 std::string StopMessage(bool main_thread, std::string_view message);
 

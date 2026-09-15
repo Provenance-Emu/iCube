@@ -3858,7 +3858,7 @@ s32 CachedInterpreter::StoreLoopFill(PowerPC::PowerPCState& ppc_state,
     for (u32 it = 0; it < bulk_count; ++it)
     {
       for (u32 k = 0; k < stride; ++k)
-        mmu->Write_U8(value, ref_b + k);
+        mmu->Write<u8>(value, ref_b + k);  // 2512: Write_U8 became Write<u8>
       ref_b += stride;
     }
     std::vector<u8> ref_range(total);
