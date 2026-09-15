@@ -216,7 +216,7 @@ class RingListener : public Common::Log::LogListener {
 + (BOOL)saveStateSlot:(NSInteger)slot {
   if (!Core::IsRunning(Core::System::GetInstance())) return NO;
   DOLHostQueueRunSync(^{
-    State::Save(Core::System::GetInstance(), (int)slot, /*wait=*/true);
+    State::Save(Core::System::GetInstance(), (int)slot);  // 2603: Save is synchronous, no wait flag
   });
   return YES;
 }
