@@ -1816,8 +1816,8 @@ after_set:
 
   // Wait for state changes instead of polling
   dispatch_semaphore_t stateSemaphore = dispatch_semaphore_create(0);
-  __block int callbackHandle = -1;
-  callbackHandle = Core::AddOnStateChangedCallback([stateSemaphore](Core::State state) {
+  // 2512: AddOnStateChangedCallback returns a Common::EventHook; dropping it unregisters.
+  Common::EventHook callbackHandle = Core::AddOnStateChangedCallback([stateSemaphore](Core::State state) {
     if (state == Core::State::Running || state == Core::State::Paused || state == Core::State::Uninitialized)
       dispatch_semaphore_signal(stateSemaphore);
   });
@@ -1852,7 +1852,7 @@ after_set:
 
   _ICubeDumpPerfSettings("EXIT");
 
-  Core::RemoveOnStateChangedCallback(&callbackHandle);
+  callbackHandle.reset();
 
   dispatch_sync(dispatch_get_main_queue(), ^{
     Core::DeclareAsHostThread();

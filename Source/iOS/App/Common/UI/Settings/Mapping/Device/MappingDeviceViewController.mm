@@ -32,7 +32,7 @@ struct Device {
   std::vector<std::string> _devices;
   NSMutableArray<NSString*>* _deviceNames;
   std::mutex _devicesMutex;
-  ControllerInterface::HotplugCallbackHandle _hotplugHandle;
+  Common::EventHook _hotplugHandle;  // 2512: dropping the hook unregisters
   BOOL _hotplugRegistered;
 }
 
@@ -63,7 +63,7 @@ struct Device {
 - (void)viewWillDisappear:(BOOL)animated {
   [super viewWillDisappear:animated];
   if (_hotplugRegistered) {
-    g_controller_interface.UnregisterDevicesChangedCallback(_hotplugHandle);
+    _hotplugHandle.reset();
     _hotplugRegistered = NO;
   }
 }

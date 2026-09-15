@@ -307,8 +307,11 @@ class RingListener : public Common::Log::LogListener {
     g_state_handler = handler;
   }
   static dispatch_once_t once;
+  // 2512: the registration returns a Common::EventHook that unregisters on destruction, so it
+  // has to be kept alive for the process lifetime or core.state events silently stop.
+  static Common::EventHook s_stateHook;
   dispatch_once(&once, ^{
-    Core::AddOnStateChangedCallback([](Core::State s) {
+    s_stateHook = Core::AddOnStateChangedCallback([](Core::State s) {
       void (^handler)(NSString*) = nil;
       {
         std::lock_guard<std::mutex> lk(g_handler_mutex);

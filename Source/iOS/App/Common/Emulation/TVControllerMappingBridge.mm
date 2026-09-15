@@ -25,7 +25,8 @@ NSString* const TVControllerDevicesChangedNotification = @"TVControllerDevicesCh
 
 @implementation TVControllerMappingBridge
 
-static ControllerInterface::HotplugCallbackHandle s_hotplugHandle;
+// 2512: RegisterDevicesChangedCallback returns a Common::EventHook; dropping it unregisters.
+static Common::EventHook s_hotplugHandle;
 static BOOL s_posting = NO;
 
 static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core::Device>& dev)
@@ -67,7 +68,7 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
 {
   if (!s_posting) return;
   if (g_controller_interface.IsInit()) {
-    g_controller_interface.UnregisterDevicesChangedCallback(s_hotplugHandle);
+    s_hotplugHandle.reset();
   }
   s_posting = NO;
 }
