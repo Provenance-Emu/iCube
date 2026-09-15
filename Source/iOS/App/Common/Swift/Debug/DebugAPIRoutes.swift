@@ -84,7 +84,8 @@ final class DebugAPIRoutes {
 
     // GET /api/perf/live — perf getters are any-thread-safe, no MainActor hop.
     server.addCustomHandler(forMethod: "GET", path: "/api/perf/live") { _, _, _, _ in
-      let snap = DOLPerfBridge.snapshot()
+      var snap = DOLPerfBridge.snapshot() as [String: Any]
+      snap["thermal_state"] = DebugBenchmarkManager.thermalStateName()
       return ["ok": true, "data": snap]
     }
 
@@ -297,6 +298,7 @@ final class DebugAPIRoutes {
         "build_sha": build["scm_rev"] ?? "", "config": build["configuration"] ?? "",
         "game_id": gameID, "core_state": DOLDebugBridge.coreState(),
         "fps": perf["fps"] ?? 0, "vps": perf["vps"] ?? 0,
+        "thermal_state": DebugBenchmarkManager.thermalStateName(),
       ] as [String: Any]]
     }
 

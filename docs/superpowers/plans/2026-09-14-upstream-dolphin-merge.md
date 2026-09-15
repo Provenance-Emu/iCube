@@ -84,7 +84,7 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 - [x] (2026-09-15, merge `b325452208`) `git merge 2512`; resolve the 14 conflicts (`Externals/fmt` pointer, `ApprovedInis.json`, `Core.cpp`, `CoreTiming.cpp`, `CachedInterpreter.cpp`, `Blob.cpp`, `AsyncRequests.h`, `FramebufferManager.cpp`, `PerformanceMetrics.{cpp,h}`, `TextureCacheBase.cpp`, 3 inis). API ports in `64a4977f6e`: VideoEvents registration (AutoIRController, VideoInterface), `MMU::Write<u8>`, FileUtil include in Blob.cpp, host-thread helpers restored (upstream removed them in 068947e2b6; the iOS host queue needs them). Draft PR: Provenance-Emu/iCube#9.
 - [x] Fix the CMake output/sys directory changes in the xcframework script and the app's resource copy phase. Not needed at 2512: the unify commits only touch desktop output dirs and `FileUtil.cpp`'s static Sys path, which still resolves to the app bundle's `Sys` folder on Apple; `BuildiOSXCFramework.py -p OS64 -c` and `ninja -k 0` are clean.
 - [ ] Build xcframework, build the app (all three schemes), run lint + mcp tests.
-- [ ] Device soak. Record results in the PR description.
+- [ ] Device soak. Record results in the PR description. 2026-09-15 first pass on the user's local build of `5416effea4` (`2512-1293`): F-Zero GX boots and runs (ranking screen renders); NSMBW boots, world map renders, 42 screenshots/10 s, settings diff vs `merge-baseline` empty, skinned-mesh bug unchanged. Bench slot 1: meanFps 35.0 vs 40.35 (−13 %), p95 30.0 vs 26.6 ms — **not comparable yet**: device thermal state was `serious` (baseline `nominal`); re-bench once `thermal_state` in `/api/health` reads `nominal`. Remaining boot set: Melee, Luigi's Mansion, Star Fox Assault, Chibi-Robo, Skylanders.
 
 ## Stage 2 — Merge `2603`
 

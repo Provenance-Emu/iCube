@@ -117,7 +117,7 @@ key. `"PerGame"` is the user-editable Local GameSettings INI layer;
 | `GET` | `/api/debug/screenshot` | — | **raw `image/png` bytes**, not the JSON envelope; `504` if no screenshot lands within 3s. Screenshots land on the next *presented* frame, so when the core is paused this route steps exactly one frame to capture it (the image is the frame after your last `frame-advance`; advance `N-1` for frame `N`) |
 | `GET` | `/api/debug/build-info` | — | SCM revision/branch, app version/build, configuration |
 | `GET` | `/api/debug/render-state` | — | mix of runtime and configured state, distinguished by field name. Runtime (actually observed): backend, internal resolution, active hacks, and `vi_skip_active` (from `Core::System::GetInstance().GetCoreTiming().GetVISkip()`). Configured (from `Config`, NOT verified against the running core — suffixed `_configured`): `cpu_core_configured`, `dual_core_configured`, `vi_skip_mode_configured`, `overclock_enable_configured`, `overclock_configured`, `vi_overclock_configured` |
-| `GET` | `/api/health` | — | `{build_sha, config, game_id, core_state, fps, vps}` |
+| `GET` | `/api/health` | — | `{build_sha, config, game_id, core_state, fps, vps, thermal_state}` — `thermal_state` is `ProcessInfo.thermalState` (`nominal`/`fair`/`serious`/`critical`); benches are only comparable at the same state |
 | `GET` | `/api/logs?tail=N` | — | `{lines: [...]}` — last `N` log lines (`N` defaults to `200`; must be a non-negative integer if given) |
 
 ## Perf and benchmark routes

@@ -232,7 +232,9 @@ final class DebugBenchmarkManager {
     #endif
   }
 
-  private static func thermalStateName() -> String {
+  // Also surfaced by /api/health and /api/perf/live (server queue) so a soak can wait for a cool
+  // device. nonisolated: ProcessInfo.thermalState is safe from any thread.
+  nonisolated static func thermalStateName() -> String {
     switch ProcessInfo.processInfo.thermalState {
     case .nominal: return "nominal"
     case .fair: return "fair"
