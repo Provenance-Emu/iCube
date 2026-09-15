@@ -54,7 +54,7 @@ Toolchain is not a blocker: local CMake 4.4.3 and Apple clang 21 clear every new
 Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone, same settings snapshot (`/api/settings/snapshots` "merge-baseline" taken on `develop` first).
 
 - Boot set: NSMBW (SMNE01), Melee, F-Zero GX, Luigi's Mansion, Star Fox Assault, Chibi-Robo, one Wii Skylanders title (deReeperJosh portal path). Each: `/api/health` reaches `running`, 60 s without crash, screenshot at a fixed point.
-- Perf: `/api/bench/start` sweep on the same set; fps/vps within 5 % of the `develop` baseline. Regressions are stage blockers, not follow-ups.
+- Perf: no per-stage bench (decided 2026-09-15: thermal noise swamps a stage-sized regression, and the merge is expected to be perf-neutral). Per stage the gate is: boots, runs a minute without a crash, renders the same, feels the same. One bench at the END of the ladder (Stage 4), on a device reporting `thermal_state: nominal`, against the 2026-09-15 baseline; if the whole 2509→master jump costs more than ~10 %, bisect by stage.
 - Known-bug baseline: NSMBW intro cutscene screenshot (skinned meshes, see `icube-known-broken-games`). Record whether the merge changes it; a fix or a change in symptom is a finding worth its own issue.
 - Save states: create at each stage, confirm the new build loads its own; note the STATE_VERSION break points.
 - Settings: `snapshot_diff` against "merge-baseline" shows only keys upstream added.
@@ -91,7 +91,7 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 - [ ] `git merge 2603`; measured conflicts (on top of the 2512 merge): `CMakeLists.txt`, `Common/Thread.cpp`, `Config/MainSettings.cpp`, `Core/MemTools.cpp`, `Interpreter_Paired.cpp`, `Core/State.cpp`, `DualShockUDPProto.h`, `MTLStateTracker.mm`, plus 15 GameSettings inis. The `PerformanceMetrics`→`System` and `System.h` forward-declaration changes merge textually clean, so they will surface as compile errors in fork code (`g_perf_metrics` users in `Source/iOS` and `StallMetrics`), not as conflicts.
 - [ ] Port the fork's perf sensors (`StallMetrics`, adaptive controller, `/api/perf/live`, bench server) onto `system.GetPerformanceMetrics()`; remove `g_perf_metrics` uses.
 - [ ] Sweep `Source/iOS/**/*.mm` for missing includes exposed by the forward-declaration change (build once, fix by the compiler's list; do not add `#include "Core/System.h"` blindly).
-- [ ] Build, lint, tests, device soak.
+- [ ] Build, lint, tests, device soak (boot/run/render gate, no bench).
 
 ## Stage 3 — Merge `2606`
 
@@ -99,13 +99,13 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 - [ ] Wire the new submodules per the Stage 0 decision; `git submodule update --init` in CI must stay green.
 - [ ] Reconcile "Adjust emulated memory size automatically" with the iOS reservation strategy: the iOS path must win on device, upstream's path must still compile.
 - [ ] Note the STATE_VERSION break in `CHANGELOG`/release notes.
-- [ ] Build, lint, tests, device soak.
+- [ ] Build, lint, tests, device soak (boot/run/render gate, no bench).
 
 ## Stage 4 — Merge `upstream/master`, then keep current
 
 - [ ] `git merge upstream/master`; the 32 GameSettings conflicts resolve with upstream's side; `FileUtil.cpp` by hand.
 - [ ] Set `DOLPHIN_VERSION_MAJOR` / scmrev so `build_sha` in `/api/health` reports the new base.
-- [ ] Full CI + device soak, then one week of nightly TestFlight from `feature/upstream-merge` (the distribute action pushes it to the public groups automatically) with the soak set re-run mid-week.
+- [ ] Full CI + device soak, then the single end-of-ladder bench at nominal thermal vs the 2026-09-15 baseline, then one week of nightly TestFlight from `feature/upstream-merge` (the distribute action pushes it to the public groups automatically) with the soak set re-run mid-week.
 - [ ] Merge to `develop`, bump the Provenance gitlink, rebuild the tracked `PVlibDolphin.xcframework`, confirm Provenance's `build.yml` passes against it.
 - [ ] Afterwards: a `chore(upstream): merge dolphin master` task on a monthly cadence while conflicts stay in the tens of files. If a month's merge exceeds ~30 non-ini conflicts, split by tag again.
 
