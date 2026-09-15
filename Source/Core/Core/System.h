@@ -5,6 +5,8 @@
 
 #include <memory>
 
+#include "VideoCommon/VideoEvents.h"
+
 class GeometryShaderManager;
 class Interpreter;
 class JitInterface;
@@ -194,6 +196,7 @@ public:
   XFStateManager& GetXFStateManager() const;
   VideoInterface::VideoInterfaceManager& GetVideoInterface() const;
   VideoCommon::CustomResourceManager& GetCustomResourceManager() const;
+  VideoEvents& GetVideoEvents() const;
 
 private:
   System();

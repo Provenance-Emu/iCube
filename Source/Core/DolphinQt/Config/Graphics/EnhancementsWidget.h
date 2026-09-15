@@ -9,9 +9,10 @@ class ConfigBool;
 class ConfigChoice;
 class ConfigComplexChoice;
 class ConfigStringChoice;
-class ConfigSlider;
+class ConfigFloatSlider;
 class GraphicsPane;
 class QPushButton;
+class QLabel;
 class ToolTipPushButton;
 
 namespace Config
@@ -36,8 +37,8 @@ private:
   void AddDescriptions();
 
   void OnBackendChanged();
-  void UpdateAAOptions();
-  void LoadPPShaders();
+  void UpdateAntialiasingOptions();
+  void LoadPostProcessingShaders();
   void ShaderChanged();
   void OnConfigChanged();
 
@@ -46,12 +47,12 @@ private:
 
   // Enhancements
   ConfigChoice* m_ir_combo;
-  ConfigComplexChoice* m_aa_combo;
+  ConfigComplexChoice* m_antialiasing_combo;
   ConfigComplexChoice* m_texture_filtering_combo;
   ConfigChoice* m_output_resampling_combo;
-  ConfigStringChoice* m_pp_effect;
+  ConfigStringChoice* m_post_processing_effect;
   ToolTipPushButton* m_configure_color_correction;
-  QPushButton* m_configure_pp_effect;
+  QPushButton* m_configure_post_processing_effect;
   ConfigBool* m_scaled_efb_copy;
   ConfigBool* m_per_pixel_lighting;
   ConfigBool* m_widescreen_hack;
@@ -63,8 +64,10 @@ private:
 
   // Stereoscopy
   ConfigChoice* m_3d_mode;
-  ConfigSlider* m_3d_depth;
-  ConfigSlider* m_3d_convergence;
+  ConfigFloatSlider* m_3d_depth;
+  QLabel* m_3d_depth_value;
+  ConfigFloatSlider* m_3d_convergence;
+  QLabel* m_3d_convergence_value;
   ConfigBool* m_3d_swap_eyes;
   ConfigBool* m_3d_per_eye_resolution;
 

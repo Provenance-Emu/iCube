@@ -26,7 +26,6 @@ static jclass s_game_file_cache_class;
 static jfieldID s_game_file_cache_pointer;
 
 static jclass s_analytics_class;
-static jmethodID s_send_analytics_report;
 static jmethodID s_get_analytics_value;
 
 static jclass s_pair_class;
@@ -189,11 +188,6 @@ jmethodID GetFinishEmulationActivity()
 jclass GetAnalyticsClass()
 {
   return s_analytics_class;
-}
-
-jmethodID GetSendAnalyticsReport()
-{
-  return s_send_analytics_report;
 }
 
 jmethodID GetAnalyticsValue()
@@ -623,8 +617,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved)
 
   const jclass analytics_class = env->FindClass("org/dolphinemu/dolphinemu/utils/Analytics");
   s_analytics_class = reinterpret_cast<jclass>(env->NewGlobalRef(analytics_class));
-  s_send_analytics_report =
-      env->GetStaticMethodID(s_analytics_class, "sendReport", "(Ljava/lang/String;[B)V");
   s_get_analytics_value = env->GetStaticMethodID(s_analytics_class, "getValue",
                                                  "(Ljava/lang/String;)Ljava/lang/String;");
   env->DeleteLocalRef(analytics_class);
@@ -670,11 +662,11 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved)
       env->FindClass("org/dolphinemu/dolphinemu/utils/NetworkHelper");
   s_network_helper_class = reinterpret_cast<jclass>(env->NewGlobalRef(network_helper_class));
   s_network_helper_get_network_ip_address =
-      env->GetStaticMethodID(s_network_helper_class, "GetNetworkIpAddress", "()I");
+      env->GetStaticMethodID(s_network_helper_class, "getNetworkIpAddress", "()I");
   s_network_helper_get_network_prefix_length =
-      env->GetStaticMethodID(s_network_helper_class, "GetNetworkPrefixLength", "()I");
+      env->GetStaticMethodID(s_network_helper_class, "getNetworkPrefixLength", "()I");
   s_network_helper_get_network_gateway =
-      env->GetStaticMethodID(s_network_helper_class, "GetNetworkGateway", "()I");
+      env->GetStaticMethodID(s_network_helper_class, "getNetworkGateway", "()I");
   env->DeleteLocalRef(network_helper_class);
 
   const jclass boolean_supplier_class =

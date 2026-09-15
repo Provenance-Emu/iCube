@@ -3,11 +3,14 @@
 
 #include "VideoCommon/OnScreenUI.h"
 
+#include "Common/CommonPaths.h"
 #include "Common/EnumMap.h"
+#include "Common/FileUtil.h"
 #include "Common/Profiler.h"
 #include "Common/Timer.h"
 
 #include "Core/AchievementManager.h"
+#include "Core/Config/AchievementSettings.h"
 #include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Config/NetplaySettings.h"
@@ -73,11 +76,28 @@ bool OnScreenUI::Initialize(u32 width, u32 height, float scale)
   }
 
   // Font defaults
+  ImGuiIO& io = ImGui::GetIO();
   m_imgui_textures.clear();
 
-  // Setup new font management behavior.
-  ImGui::GetIO().BackendFlags |=
-      ImGuiBackendFlags_RendererHasTextures | ImGuiBackendFlags_RendererHasVtxOffset;
+  // User supplied font
+  std::string file = File::GetUserPath(D_LOAD_IDX) + "OSD_Font.ttf";
+
+  bool font_exists = File::Exists(file);
+  if (!font_exists)
+  {
+    // Default supplied font
+    file = File::GetSysDirectory() + DIR_SEP + RESOURCES_DIR + DIR_SEP + "OSD_Font.ttf";
+    font_exists = File::Exists(file);
+  }
+
+  if (font_exists)
+  {
+    io.Fonts->Clear();
+    io.Fonts->AddFontFromFileTTF(file.c_str());
+  }
+
+  // Setup new font management behavior
+  io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures | ImGuiBackendFlags_RendererHasVtxOffset;
 
   if (!RecompileImGuiPipeline())
     return false;
@@ -112,11 +132,11 @@ bool OnScreenUI::RecompileImGuiPipeline()
       g_presenter->GetBackbufferFormat() == AbstractTextureFormat::RGBA16F;
 
   std::unique_ptr<AbstractShader> vertex_shader = g_gfx->CreateShaderFromSource(
-      ShaderStage::Vertex, FramebufferShaderGen::GenerateImGuiVertexShader(),
+      ShaderStage::Vertex, FramebufferShaderGen::GenerateImGuiVertexShader(), nullptr,
       "ImGui vertex shader");
   std::unique_ptr<AbstractShader> pixel_shader = g_gfx->CreateShaderFromSource(
       ShaderStage::Pixel, FramebufferShaderGen::GenerateImGuiPixelShader(linear_space_output),
-      "ImGui pixel shader");
+      nullptr, "ImGui pixel shader");
   if (!vertex_shader || !pixel_shader)
   {
     PanicAlertFmt("Failed to compile ImGui shaders");
@@ -129,7 +149,7 @@ bool OnScreenUI::RecompileImGuiPipeline()
   {
     geometry_shader = g_gfx->CreateShaderFromSource(
         ShaderStage::Geometry, FramebufferShaderGen::GeneratePassthroughGeometryShader(1, 1),
-        "ImGui passthrough geometry shader");
+        nullptr, "ImGui passthrough geometry shader");
     if (!geometry_shader)
     {
       PanicAlertFmt("Failed to compile ImGui geometry shader");
@@ -255,19 +275,16 @@ void OnScreenUI::DrawImGui()
 // Create On-Screen-Messages
 void OnScreenUI::DrawDebugText()
 {
-  const bool show_movie_window =
-      Config::Get(Config::MAIN_SHOW_FRAME_COUNT) || Config::Get(Config::MAIN_SHOW_LAG) ||
-      Config::Get(Config::MAIN_MOVIE_SHOW_INPUT_DISPLAY) ||
-      Config::Get(Config::MAIN_MOVIE_SHOW_RTC) || Config::Get(Config::MAIN_MOVIE_SHOW_RERECORD);
-  if (show_movie_window)
+  if (Config::Get(Config::MAIN_MOVIE_SHOW_OSD))
   {
     // Position under the FPS display.
     ImGui::SetNextWindowPos(
-        ImVec2(ImGui::GetIO().DisplaySize.x - 10.f * m_backbuffer_scale, 80.f * m_backbuffer_scale),
+        ImVec2(ImGui::GetIO().DisplaySize.x - ImGui::GetFontSize() * m_backbuffer_scale,
+               80.f * m_backbuffer_scale),
         ImGuiCond_FirstUseEver, ImVec2(1.0f, 0.0f));
-    ImGui::SetNextWindowSizeConstraints(
-        ImVec2(150.0f * m_backbuffer_scale, 20.0f * m_backbuffer_scale),
-        ImGui::GetIO().DisplaySize);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(5.0f * ImGui::GetFontSize() * m_backbuffer_scale,
+                                               2.1f * ImGui::GetFontSize() * m_backbuffer_scale),
+                                        ImGui::GetIO().DisplaySize);
     if (ImGui::Begin("Movie", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
       auto& movie = Core::System::GetInstance().GetMovie();
@@ -323,10 +340,21 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
 #ifdef USE_RETRO_ACHIEVEMENTS
   auto& instance = AchievementManager::GetInstance();
   std::lock_guard lg{instance.GetLock()};
-  if (instance.AreChallengesUpdated())
+  const bool challenge_indicators_enabled = Config::Get(Config::RA_CHALLENGE_INDICATORS_ENABLED);
+  const bool challenges_updated = instance.AreChallengesUpdated();
+  const auto& challenges = instance.GetActiveChallenges();
+
+  if (!challenge_indicators_enabled)
   {
-    instance.ResetChallengesUpdated();
-    const auto& challenges = instance.GetActiveChallenges();
+    if (challenges_updated)
+      instance.ResetChallengesUpdated();
+    if (!m_challenge_texture_map.empty())
+      m_challenge_texture_map.clear();
+  }
+  else if (challenges_updated || m_challenge_texture_map.size() != challenges.size())
+  {
+    if (challenges_updated)
+      instance.ResetChallengesUpdated();
     m_challenge_texture_map.clear();
     for (const auto& name : challenges)
     {
@@ -342,7 +370,7 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
   }
 
   float leaderboard_y = ImGui::GetIO().DisplaySize.y;
-  if (!m_challenge_texture_map.empty())
+  if (challenge_indicators_enabled && !m_challenge_texture_map.empty())
   {
     float scale = ImGui::GetIO().DisplaySize.y / 1024.0;
     ImGui::SetNextWindowSize(ImVec2(0, 0));
@@ -366,7 +394,7 @@ void OnScreenUI::DrawChallengesAndLeaderboards()
   }
 
   const auto& leaderboard_progress = instance.GetActiveLeaderboards();
-  if (!leaderboard_progress.empty())
+  if (Config::Get(Config::RA_LEADERBOARD_TRACKER_ENABLED) && !leaderboard_progress.empty())
   {
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x, leaderboard_y), 0,
                             ImVec2(1.0, 1.0));
@@ -394,6 +422,12 @@ void OnScreenUI::Finalize()
   OSD::DrawMessages();
   DrawChallengesAndLeaderboards();
   ImGui::Render();
+
+  // Check for font changes
+  ImGuiStyle& style = ImGui::GetStyle();
+  const int size = Config::Get(Config::MAIN_OSD_FONT_SIZE);
+  if (size != style.FontSizeBase)
+    style.FontSizeBase = static_cast<float>(size);
 
   // Create or update fonts.
   ImDrawData* draw_data = ImGui::GetDrawData();
@@ -428,7 +462,6 @@ void OnScreenUI::UpdateImguiTexture(ImTextureData* tex)
     tex->SetTexID(static_cast<ImTextureID>(*font_tex.get()));
     // Keeps the texture alive.
     m_imgui_textures.push_back(std::move(font_tex));
-
     tex->SetStatus(ImTextureStatus_OK);
   }
   else if (tex->Status == ImTextureStatus_WantUpdates)

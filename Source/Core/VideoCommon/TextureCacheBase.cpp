@@ -2912,6 +2912,7 @@ void TextureCacheBase::CopyEFBToCacheEntry(RcTcacheEntry& entry, bool is_depth_c
     }
   }
   g_gfx->BeginUtilityDrawing();
+  src_texture->FinishedRendering();
 
   // Compute fast-path for RGBA8 2x downscale when requested via scale_by_half and simple settings.
   if (Config::Get(Config::GFX_USE_COMPUTE_EFBXFB) && !is_depth_copy && !is_intensity &&
@@ -3002,8 +3003,8 @@ void TextureCacheBase::CopyEFB(AbstractStagingTexture* dst, const EFBCopyParams&
       params.depth ? g_framebuffer_manager->ResolveEFBDepthTexture(framebuffer_rect) :
                      g_framebuffer_manager->ResolveEFBColorTexture(framebuffer_rect);
 
-  src_texture->FinishedRendering();
   g_gfx->BeginUtilityDrawing();
+  src_texture->FinishedRendering();
 
   // Fill uniform buffer.
   struct Uniforms

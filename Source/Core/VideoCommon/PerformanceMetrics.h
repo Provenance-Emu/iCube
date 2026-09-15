@@ -103,6 +103,9 @@ public:
   static bool GetAdaptiveClockActive();
   static void SetAdaptiveClockActive(bool active);
 
+  // Call from any thread.
+  void SetLatestFramePresentationOffset(DT offset);
+
   // ImGui Functions
   void DrawImGuiStats(const float backbuffer_scale);
 
@@ -114,6 +117,8 @@ private:
 
   std::atomic<double> m_speed{};
   std::atomic<double> m_max_speed{};
+
+  std::atomic<DT> m_frame_presentation_offset{};
 
   struct PerfSample
   {
