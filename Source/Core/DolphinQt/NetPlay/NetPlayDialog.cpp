@@ -23,6 +23,7 @@
 #include <QTextBrowser>
 
 #include <algorithm>
+#include <utility>
 
 #ifdef HAS_LIBMGBA
 #include <fmt/ranges.h>
@@ -500,7 +501,7 @@ void NetPlayDialog::reject()
 
 void NetPlayDialog::show(std::string nickname, bool use_traversal)
 {
-  m_nickname = nickname;
+  m_nickname = std::move(nickname);
   m_use_traversal = use_traversal;
   m_buffer_size = 0;
   m_old_player_count = 0;
@@ -1248,7 +1249,7 @@ void NetPlayDialog::AbortGameDigest()
 }
 
 void NetPlayDialog::ShowChunkedProgressDialog(const std::string& title, const u64 data_size,
-                                              const std::vector<int>& players)
+                                              std::span<const int> players)
 {
   QueueOnObject(this, [this, title, data_size, players] {
     if (m_chunked_progress_dialog->isVisible())

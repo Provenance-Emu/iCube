@@ -7,7 +7,7 @@
 #include <deque>
 
 #include "Common/CommonTypes.h"
-#include "Core/Core.h"
+#include "Common/HookableEvent.h"
 #include "VideoCommon/PerformanceTracker.h"
 
 namespace Core
@@ -18,7 +18,7 @@ class System;
 class PerformanceMetrics
 {
 public:
-  PerformanceMetrics() = default;
+  PerformanceMetrics();
   ~PerformanceMetrics() = default;
 
   PerformanceMetrics(const PerformanceMetrics&) = delete;
@@ -30,7 +30,6 @@ public:
 
   void CountFrame();
   void CountVBlank();
-  void OnEmulationStateChanged(Core::State state);
 
   // Call from CPU thread.
   void CountThrottleSleep(DT sleep);
@@ -103,6 +102,8 @@ public:
   static bool GetAdaptiveClockActive();
   static void SetAdaptiveClockActive(bool active);
 
+  u32 GetEFBWidth() const;
+  u32 GetEFBHeight() const;
   // Call from any thread.
   void SetLatestFramePresentationOffset(DT offset);
 
@@ -138,6 +139,6 @@ private:
   TimePoint m_stall_window_last_time{};
   DT m_stall_window_last_sleeping{};
   bool m_stall_window_primed = false;
-};
 
-extern PerformanceMetrics g_perf_metrics;
+  Common::EventHook m_state_change_hook;
+};

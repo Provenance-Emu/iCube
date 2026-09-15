@@ -14,6 +14,7 @@
 #include <thread>
 #include <tuple>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -123,8 +124,8 @@ NetPlayClient::~NetPlayClient()
 
 // called from ---GUI--- thread
 NetPlayClient::NetPlayClient(const std::string& address, const u16 port, NetPlayUI* dialog,
-                             const std::string& name, const NetTraversalConfig& traversal_config)
-    : m_dialog(dialog), m_player_name(name)
+                             std::string name, const NetTraversalConfig& traversal_config)
+    : m_dialog(dialog), m_player_name(std::move(name))
 {
   ClearBuffers();
 
@@ -679,16 +680,17 @@ void NetPlayClient::OnPadData(sf::Packet& packet)
 
     GCPadStatus pad;
     packet >> pad.button;
-    if (!m_gba_config.at(map).enabled)
+    if (static_cast<size_t>(map) < m_gba_config.size() && !m_gba_config.at(map).enabled)
     {
       packet >> pad.analogA >> pad.analogB >> pad.stickX >> pad.stickY >> pad.substickX >>
           pad.substickY >> pad.triggerLeft >> pad.triggerRight >> pad.isConnected;
     }
 
-    // Trusting server for good map value (>=0 && <4)
-    // add to pad buffer
-    m_pad_buffer.at(map).Push(pad);
-    m_gc_pad_event.Set();
+    if (static_cast<size_t>(map) < m_pad_buffer.size())
+    {
+      m_pad_buffer.at(map).Push(pad);
+      m_gc_pad_event.Set();
+    }
   }
 }
 
@@ -701,20 +703,22 @@ void NetPlayClient::OnPadHostData(sf::Packet& packet)
 
     GCPadStatus pad;
     packet >> pad.button;
-    if (!m_gba_config.at(map).enabled)
+    if (static_cast<size_t>(map) < m_gba_config.size() && !m_gba_config.at(map).enabled)
     {
       packet >> pad.analogA >> pad.analogB >> pad.stickX >> pad.stickY >> pad.substickX >>
           pad.substickY >> pad.triggerLeft >> pad.triggerRight >> pad.isConnected;
     }
 
-    // Trusting server for good map value (>=0 && <4)
-    // write to last status
-    m_last_pad_status[map] = pad;
+    if (static_cast<size_t>(map) < m_last_pad_status.size())
+      m_last_pad_status[map] = pad;
 
-    if (!m_first_pad_status_received[map])
+    if (static_cast<size_t>(map) < m_first_pad_status_received.size())
     {
-      m_first_pad_status_received[map] = true;
-      m_first_pad_status_received_event.Set();
+      if (!m_first_pad_status_received[map])
+      {
+        m_first_pad_status_received[map] = true;
+        m_first_pad_status_received_event.Set();
+      }
     }
   }
 }
@@ -739,10 +743,11 @@ void NetPlayClient::OnWiimoteData(sf::Packet& packet)
       pad.length = 0;
     }
 
-    // Trusting server for good map value (>=0 && <4)
-    // add to pad buffer
-    m_wiimote_buffer.at(map).Push(pad);
-    m_wii_pad_event.Set();
+    if (static_cast<size_t>(map) < m_wiimote_buffer.size())
+    {
+      m_wiimote_buffer.at(map).Push(pad);
+      m_wii_pad_event.Set();
+    }
   }
 }
 
@@ -1206,7 +1211,7 @@ void NetPlayClient::OnSyncSaveDataWii(sf::Packet& packet)
     for (u8& byte : header.md5)
       packet >> byte;
     packet >> header.unk2;
-    for (size_t i = 0; i < header.banner_size; i++)
+    for (size_t i = 0; i < std::min<size_t>(header.banner_size, sizeof(header.banner)); i++)
       packet >> header.banner[i];
 
     // BkHeader
@@ -2504,7 +2509,7 @@ void NetPlayClient::SendGameStatus()
     }
   }
 
-  packet << static_cast<u32>(result);
+  packet << result;
   Send(packet);
 }
 
@@ -2536,7 +2541,8 @@ bool NetPlayClient::DoAllPlayersHaveGame()
   });
 }
 
-static std::string SHA1Sum(const std::string& file_path, std::function<bool(int)> report_progress)
+static std::string SHA1Sum(const std::string& file_path,
+                           const std::function<bool(int)>& report_progress)
 {
   std::vector<u8> data(8 * 1024 * 1024);
   u64 read_offset = 0;
@@ -2774,16 +2780,6 @@ bool SerialInterface::CSIDevice_GCController::NetPlay_GetInput(int pad_num, GCPa
   return false;
 }
 
-bool SerialInterface::CSIDevice_AMBaseboard::NetPlay_GetInput(int pad_num, GCPadStatus* status)
-{
-  std::lock_guard lk(NetPlay::crit_netplay_client);
-
-  if (NetPlay::netplay_client)
-    return NetPlay::netplay_client->GetNetPads(pad_num, NetPlay::s_si_poll_batching, status);
-
-  return false;
-}
-
 bool NetPlay::NetPlay_GetWiimoteData(const std::span<NetPlayClient::WiimoteDataBatchEntry>& entries)
 {
   std::lock_guard lk(crit_netplay_client);
@@ -2848,15 +2844,6 @@ u64 ExpansionInterface::CEXIIPL::NetPlay_GetEmulatedTime()
 // called from ---CPU--- thread
 // return the local pad num that should rumble given a ingame pad num
 int SerialInterface::CSIDevice_GCController::NetPlay_InGamePadToLocalPad(int pad_num)
-{
-  std::lock_guard lk(NetPlay::crit_netplay_client);
-
-  if (NetPlay::netplay_client)
-    return NetPlay::netplay_client->InGamePadToLocalPad(pad_num);
-
-  return pad_num;
-}
-int SerialInterface::CSIDevice_AMBaseboard::NetPlay_InGamePadToLocalPad(int pad_num)
 {
   std::lock_guard lk(NetPlay::crit_netplay_client);
 

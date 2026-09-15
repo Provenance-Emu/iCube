@@ -73,3 +73,6 @@ __pycache__/
 
 # subagent-driven-development scratch
 .superpowers/
+
+# clangd cache for Neovim
+.cache/clangd

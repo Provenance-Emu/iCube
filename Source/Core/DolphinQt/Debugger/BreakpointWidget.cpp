@@ -119,6 +119,8 @@ BreakpointWidget::BreakpointWidget(QWidget* parent)
   });
 
   connect(m_table, &QTableWidget::itemChanged, this, &BreakpointWidget::OnItemChanged);
+  connect(&Settings::Instance(), &Settings::DebugFontChanged, this,
+          &BreakpointWidget::OnDebugFontChanged);
 
   connect(&Settings::Instance(), &Settings::BreakpointsVisibilityChanged, this,
           [this](bool visible) { setHidden(!visible); });
@@ -159,6 +161,8 @@ void BreakpointWidget::CreateWidgets()
   m_table->setColumnCount(10);
   m_table->setSelectionMode(QAbstractItemView::NoSelection);
   m_table->verticalHeader()->hide();
+
+  OnDebugFontChanged(Settings::Instance().GetDebugFont());
 
   connect(m_table, &QTableWidget::itemClicked, this, &BreakpointWidget::OnClicked);
   connect(m_table, &QTableWidget::customContextMenuRequested, this,
@@ -306,9 +310,14 @@ void BreakpointWidget::Update()
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::transparent);
-    // Center and radius
-    painter.drawEllipse(QPoint(downscale / 2, downscale / 2), downscale / 4, downscale / 4);
+
+    const float icon_radius = static_cast<float>(image.height()) / 2.0f;
+    const float gap_radius = icon_radius / 2.0f;
+    const QPointF center(icon_radius, icon_radius);
+
+    painter.drawEllipse(center, gap_radius, gap_radius);
     painter.end();
+
     enabled_icon = QPixmap::fromImage(image);
   }
 
@@ -644,6 +653,13 @@ void BreakpointWidget::OnItemChanged(QTableWidgetItem* item)
       Update();
     }
   }
+}
+
+void BreakpointWidget::OnDebugFontChanged(const QFont& font)
+{
+  m_table->setFont(font);
+  m_table->verticalHeader()->setDefaultSectionSize(m_table->fontMetrics().height());
+  Update();
 }
 
 void BreakpointWidget::AddBP(u32 addr)

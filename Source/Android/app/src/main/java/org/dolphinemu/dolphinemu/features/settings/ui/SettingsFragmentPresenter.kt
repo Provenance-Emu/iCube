@@ -702,6 +702,38 @@ class SettingsFragmentPresenter(
                 MenuTag.CONFIG_SERIALPORT1
             )
         )
+
+        sl.add(HeaderSetting(context, R.string.gba_settings, 0))
+        sl.add(
+            FilePicker(
+                context,
+                StringSetting.MAIN_GBA_BIOS_PATH,
+                R.string.gba_bios_path,
+                0,
+                fragmentView.activityResultLaunchers.requestBinFile,
+                "/GBA/gba_bios.bin"
+            )
+        )
+        sl.add(
+            FilePicker(
+                context,
+                StringSetting.MAIN_GB_PLAYER_ROM,
+                R.string.gb_player_rom,
+                0,
+                fragmentView.activityResultLaunchers.requestGbaRomFile,
+                null
+            )
+        )
+        sl.add(
+            DirectoryPicker(
+                context,
+                StringSetting.MAIN_GBA_SAVES_PATH,
+                R.string.gba_saves_path,
+                0,
+                fragmentView.activityResultLaunchers.requestDirectory,
+                "/GBA/Saves/"
+            )
+        )
     }
 
     private fun addWiiSettings(sl: ArrayList<SettingsItem>) {
@@ -1974,15 +2006,73 @@ class SettingsFragmentPresenter(
             )
         )
 
-        sl.add(HeaderSetting(context, R.string.misc, 0))
+        sl.add(HeaderSetting(context, R.string.crop, 0))
         sl.add(
             SwitchSetting(
                 context,
-                BooleanSetting.GFX_CROP,
-                R.string.crop,
-                R.string.crop_description
+                BooleanSetting.GFX_CROP_TO_ASPECT_RATIO,
+                R.string.crop_to_aspect_ratio,
+                R.string.crop_to_aspect_ratio_description
             )
         )
+        sl.add(
+            SwitchSetting(
+                context,
+                BooleanSetting.GFX_CROP_CUSTOM,
+                R.string.crop_custom,
+                R.string.crop_custom_description
+            )
+        )
+        sl.add(
+            IntSliderSetting(
+                context,
+                IntSetting.GFX_CROP_CUSTOM_TOP,
+                R.string.crop_custom_top,
+                R.string.crop_custom_top_description,
+                0,
+                528,
+                "px",
+                1,
+            )
+        )
+        sl.add(
+            IntSliderSetting(
+                context,
+                IntSetting.GFX_CROP_CUSTOM_BOTTOM,
+                R.string.crop_custom_bottom,
+                R.string.crop_custom_bottom_description,
+                0,
+                528,
+                "px",
+                1,
+            )
+        )
+        sl.add(
+            IntSliderSetting(
+                context,
+                IntSetting.GFX_CROP_CUSTOM_LEFT,
+                R.string.crop_custom_left,
+                R.string.crop_custom_left_description,
+                min=0,
+                max=640,
+                units="px",
+                stepSize=1,
+            )
+        )
+        sl.add(
+            IntSliderSetting(
+                context,
+                IntSetting.GFX_CROP_CUSTOM_RIGHT,
+                R.string.crop_custom_right,
+                R.string.crop_custom_right_description,
+                0,
+                640,
+                "px",
+                1,
+            )
+        )
+
+        sl.add(HeaderSetting(context, R.string.misc, 0))
         sl.add(
             SwitchSetting(
                 context,
@@ -2180,6 +2270,14 @@ class SettingsFragmentPresenter(
                 context,
                 BooleanSetting.MAIN_FASTMEM,
                 R.string.debug_fastmem,
+                0
+            )
+        )
+        sl.add(
+            InvertedSwitchSetting(
+                context,
+                BooleanSetting.MAIN_PAGE_TABLE_FASTMEM,
+                R.string.debug_page_table_fastmem,
                 0
             )
         )

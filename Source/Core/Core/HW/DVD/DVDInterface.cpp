@@ -133,7 +133,7 @@ void DVDInterface::DoState(PointerWrap& p)
 }
 
 size_t DVDInterface::ProcessDTKSamples(s16* target_samples, size_t target_block_count,
-                                       const std::vector<u8>& audio_data)
+                                       std::span<const u8> audio_data)
 {
   const size_t block_count_to_process =
       std::min(target_block_count, audio_data.size() / StreamADPCM::ONE_BLOCK_SIZE);
@@ -192,7 +192,7 @@ u32 DVDInterface::AdvanceDTK(u32 maximum_blocks, u32* blocks_to_process)
 }
 
 void DVDInterface::DTKStreamingCallback(DIInterruptType interrupt_type,
-                                        const std::vector<u8>& audio_data, s64 cycles_late)
+                                        std::span<const u8> audio_data, s64 cycles_late)
 {
   auto& ai = m_system.GetAudioInterface();
 
@@ -420,8 +420,6 @@ void DVDInterface::SetDisc(std::unique_ptr<DiscIO::VolumeDisc> disc,
     m_auto_disc_change_index = 0;
   }
 
-  AchievementManager::GetInstance().LoadGame(disc.get());
-
   // Assume that inserting a disc requires having an empty disc before
   if (had_disc != has_disc)
     ExpansionInterface::g_rtc_flags[ExpansionInterface::RTCFlag::DiscChanged] = true;
@@ -454,9 +452,14 @@ void DVDInterface::InsertDiscCallback(Core::System& system, u64 userdata, s64 cy
       DiscIO::CreateDiscForCore(di.m_disc_path_to_insert);
 
   if (new_disc)
+  {
+    AchievementManager::GetInstance().ChangeDisc(new_disc.get());
     di.SetDisc(std::move(new_disc), {});
+  }
   else
+  {
     PanicAlertFmtT("The disc that was about to be inserted couldn't be found.");
+  }
 
   di.m_disc_path_to_insert.clear();
 }
@@ -1301,7 +1304,7 @@ void DVDInterface::SetDriveError(DriveError error)
 }
 
 void DVDInterface::FinishExecutingCommand(ReplyType reply_type, DIInterruptType interrupt_type,
-                                          s64 cycles_late, const std::vector<u8>& data)
+                                          s64 cycles_late, std::span<const u8> data)
 {
   // The data parameter contains the requested data iff this was called from DVDThread, and is
   // empty otherwise. DVDThread is the only source of ReplyType::NoReply and ReplyType::DTK.

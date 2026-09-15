@@ -192,6 +192,12 @@ static void ClearPeerPlayerId(ENetPeer* peer)
   }
 }
 
+template <typename T>
+static bool IsValidPadIndex(const T& map_array, PadIndex index)
+{
+  return index >= 0 && static_cast<size_t>(index) < map_array.size();
+}
+
 void NetPlayServer::SetupIndex()
 {
   if (!Config::Get(Config::NETPLAY_USE_INDEX) || Config::Get(Config::NETPLAY_INDEX_NAME).empty() ||
@@ -533,6 +539,21 @@ unsigned int NetPlayServer::OnDisconnect(const Client& player)
         break;
       }
     }
+
+    for (PlayerId& mapping : m_wiimote_map)
+    {
+      if (m_is_running && mapping == pid && pid != 1)
+      {
+        std::lock_guard lkg(m_crit.game);
+        m_is_running = false;
+
+        sf::Packet spac;
+        spac << MessageID::DisableGame;
+        // this thread doesn't need players lock
+        SendToClients(spac);
+        break;
+      }
+    }
   }
 
   if (m_start_pending)
@@ -814,7 +835,7 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
 
       // If the data is not from the correct player,
       // then disconnect them.
-      if (m_pad_map.at(map) != player.pid)
+      if (!IsValidPadIndex(m_pad_map, map) || m_pad_map.at(map) != player.pid)
       {
         return 1;
       }
@@ -862,6 +883,9 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
       PadIndex map;
       packet >> map;
 
+      if (!IsValidPadIndex(m_pad_map, map))
+        return 1;
+
       GCPadStatus pad;
       packet >> pad.button;
       spac << map << pad.button;
@@ -895,7 +919,7 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
 
       // If the data is not from the correct player,
       // then disconnect them.
-      if (m_wiimote_map.at(map) != player.pid)
+      if (!IsValidPadIndex(m_wiimote_map, map) || m_wiimote_map.at(map) != player.pid)
       {
         return 1;
       }
@@ -1952,7 +1976,7 @@ bool NetPlayServer::SyncSaveData(const SaveSyncInfo& sync_info)
         for (u8 byte : header->md5)
           pac << byte;
         pac << header->unk2;
-        for (size_t i = 0; i < header->banner_size; i++)
+        for (size_t i = 0; i < std::min<size_t>(header->banner_size, sizeof(header->banner)); i++)
           pac << header->banner[i];
 
         // BkHeader

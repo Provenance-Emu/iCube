@@ -58,6 +58,7 @@ extern const Info<bool> MAIN_SKIP_IPL;
 extern const Info<PowerPC::CPUCore> MAIN_CPU_CORE;
 extern const Info<bool> MAIN_JIT_FOLLOW_BRANCH;
 extern const Info<bool> MAIN_FASTMEM;
+extern const Info<bool> MAIN_PAGE_TABLE_FASTMEM;
 extern const Info<bool> MAIN_FASTMEM_ARENA;
 extern const Info<bool> MAIN_LARGE_ENTRY_POINTS_MAP;
 extern const Info<bool> MAIN_ACCURATE_CPU_CACHE;
@@ -219,16 +220,17 @@ extern const Info<int> MAIN_GDB_PORT;
 extern const Info<int> MAIN_ISO_PATH_COUNT;
 extern const Info<std::string> MAIN_SKYLANDERS_PATH;
 std::vector<std::string> GetIsoPaths();
-void SetIsoPaths(const std::vector<std::string>& paths);
+void SetIsoPaths(std::span<const std::string> paths);
 
 // Main.GBA
 
 #ifdef HAS_LIBMGBA
 extern const Info<std::string> MAIN_GBA_BIOS_PATH;
-extern const std::array<Info<std::string>, 4> MAIN_GBA_ROM_PATHS;
+extern const std::array<Info<std::string>, 5> MAIN_GBA_ROM_PATHS;
 extern const Info<std::string> MAIN_GBA_SAVES_PATH;
 extern const Info<bool> MAIN_GBA_SAVES_IN_ROM_PATH;
-extern const Info<bool> MAIN_GBA_THREADS;
+
+static constexpr std::size_t GBPLAYER_GBA_INDEX = 4;
 #endif
 
 // Main.Network
@@ -396,6 +398,14 @@ extern const std::array<Info<bool>, EMULATED_LOGITECH_MIC_COUNT> MAIN_LOGITECH_M
 extern const std::array<Info<s16>, EMULATED_LOGITECH_MIC_COUNT> MAIN_LOGITECH_MIC_VOLUME_MODIFIER;
 
 extern const Info<std::string> MAIN_TRIFORCE_IP_REDIRECTIONS;
+
+// Main.WiimoteAudioRouting
+
+static constexpr std::size_t WIIMOTE_SPEAKER_COUNT = 4;
+
+extern const Info<bool> MAIN_WIIMOTE_AUDIO_ROUTING_ENABLED;
+extern const std::array<Info<bool>, WIIMOTE_SPEAKER_COUNT> MAIN_WIIMOTE_AUDIO_OUTPUT_ENABLED;
+extern const std::array<Info<std::string>, WIIMOTE_SPEAKER_COUNT> MAIN_WIIMOTE_AUDIO_OUTPUT_DEVICE;
 
 // GameCube path utility functions
 

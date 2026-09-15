@@ -8,12 +8,22 @@
 #include <imgui.h>
 #include <implot.h>
 
+#include "Common/HookableEvent.h"
 #include "Core/Config/GraphicsSettings.h"
+#include "Core/Core.h"
+#include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/StallMetrics.h"
 #include "VideoCommon/VideoConfig.h"
 
-PerformanceMetrics g_perf_metrics;
+PerformanceMetrics::PerformanceMetrics()
+{
+  const auto invalidate_counters_last_time = [this](Core::State) {
+    m_fps_counter.InvalidateLastTime();
+    m_vps_counter.InvalidateLastTime();
+  };
+  m_state_change_hook = Core::AddOnStateChangedCallback(invalidate_counters_last_time);
+}
 
 // --- iCube adaptive-controller global sensors ---
 // File-scope atomics so they can be incremented from threads/TUs that don't hold a
@@ -52,12 +62,6 @@ void PerformanceMetrics::CountFrame()
 void PerformanceMetrics::CountVBlank()
 {
   m_vps_counter.Count();
-}
-
-void PerformanceMetrics::OnEmulationStateChanged([[maybe_unused]] Core::State state)
-{
-  m_fps_counter.InvalidateLastTime();
-  m_vps_counter.InvalidateLastTime();
 }
 
 void PerformanceMetrics::CountThrottleSleep(DT sleep)
@@ -121,6 +125,20 @@ void PerformanceMetrics::CountPerformanceMarker(s64 core_ticks, u32 ticks_per_se
 double PerformanceMetrics::GetFPS() const
 {
   return m_fps_counter.GetHzAvg();
+}
+
+u32 PerformanceMetrics::GetEFBWidth() const
+{
+  if (g_framebuffer_manager)
+    return g_framebuffer_manager->GetEFBWidth();
+  return 0;
+}
+
+u32 PerformanceMetrics::GetEFBHeight() const
+{
+  if (g_framebuffer_manager)
+    return g_framebuffer_manager->GetEFBHeight();
+  return 0;
 }
 
 double PerformanceMetrics::GetVPS() const
@@ -257,6 +275,8 @@ void PerformanceMetrics::DrawImGuiStats(const float backbuffer_scale)
   const double fps = GetFPS();
   const double vps = GetVPS();
   const double speed = GetSpeed();
+  const u32 width = GetEFBWidth();
+  const u32 height = GetEFBHeight();
 
   static ImVec2 last_display_size(-1.0f, -1.0f);
 
@@ -451,6 +471,26 @@ void PerformanceMetrics::DrawImGuiStats(const float backbuffer_scale)
             DT_ms(m_frame_presentation_offset.load(std::memory_order_relaxed)).count();
         ImGui::TextColored(ImVec4(r, g, b, 1.0f), "ofs:%5.1lfms", offset);
       }
+    }
+    ImGui::End();
+  }
+
+  if (g_ActiveConfig.bShowInternalResolution)
+  {
+    ImGui::SetNextWindowPos(ImVec2(window_x, window_y), set_next_position_condition,
+                            ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(bg_alpha);
+
+    if (ImGui::Begin("ResolutionStats", nullptr, imgui_flags))
+    {
+      if (stack_vertically)
+        window_y += ImGui::GetWindowHeight() + window_padding;
+      else
+        window_x -= ImGui::GetWindowWidth() + window_padding;
+
+      clamp_window_position();
+
+      ImGui::TextColored(ImVec4(r, g, b, 1.0f), "Res: %ux%u", width, height);
     }
     ImGui::End();
   }

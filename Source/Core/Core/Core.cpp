@@ -354,7 +354,7 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
   DolphinAnalytics::Instance().ReportGameStart();
 
   // Clear performance data collected from previous threads.
-  g_perf_metrics.Reset();
+  system.GetPerfMetrics().Reset();
 
   // The JIT need to be able to intercept faults, both for fastmem and for the BLR optimization.
   const bool exception_handler = EMM::IsExceptionHandlerSupported();
@@ -879,7 +879,8 @@ void RunOnCPUThread(Core::System& system, Common::MoveOnlyFunction<void()> funct
 // Called from Renderer::Swap (GPU thread) when a frame is presented to the host screen.
 void Callback_FramePresented(const PresentInfo& present_info)
 {
-  g_perf_metrics.CountFrame();
+  auto& perf_metrics = Core::System::GetInstance().GetPerfMetrics();
+  perf_metrics.CountFrame();
 
   // iCube adaptive-controller sensor: track total vs duplicate presents so the clock loop can
   // watch the duplicate-present ratio (the lower-bound / slow-motion signal). Counted before the
@@ -887,7 +888,7 @@ void Callback_FramePresented(const PresentInfo& present_info)
   PerformanceMetrics::CountAnyPresent();
   const auto presentation_offset =
       present_info.actual_present_time - present_info.intended_present_time;
-  g_perf_metrics.SetLatestFramePresentationOffset(presentation_offset);
+  perf_metrics.SetLatestFramePresentationOffset(presentation_offset);
 
   if (present_info.reason == PresentInfo::PresentReason::VideoInterfaceDuplicate)
   {
@@ -959,10 +960,9 @@ Common::EventHook AddOnStateChangedCallback(StateChangedCallbackFunc callback)
   return s_state_changed_event.Register(std::move(callback));
 }
 
-void NotifyStateChanged(Core::State state)
+void NotifyStateChanged(const Core::State state)
 {
   s_state_changed_event.Trigger(state);
-  g_perf_metrics.OnEmulationStateChanged(state);
 }
 
 void UpdateWantDeterminism(Core::System& system, bool initial)

@@ -81,12 +81,11 @@ private:
   Common::EnumMap<QLabel*, ExpansionInterface::MAX_MEMCARD_SLOT> m_gci_override_labels;
   Common::EnumMap<QLineEdit*, ExpansionInterface::MAX_MEMCARD_SLOT> m_gci_paths;
 
-  ConfigBool* m_gba_threads;
   ConfigBool* m_gba_save_rom_path;
   QPushButton* m_gba_browse_bios;
   ConfigUserPath* m_gba_bios_edit;
-  std::array<QPushButton*, 4> m_gba_browse_roms;
-  std::array<ConfigText*, 4> m_gba_rom_edits;
+  std::array<QPushButton*, 5> m_gba_browse_roms;
+  std::array<ConfigText*, 5> m_gba_rom_edits;
   QPushButton* m_gba_browse_saves;
   ConfigUserPath* m_gba_saves_edit;
 };

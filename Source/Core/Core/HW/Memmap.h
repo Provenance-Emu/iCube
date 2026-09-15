@@ -289,11 +289,11 @@ private:
   void TryAddLargePageTableMapping(u32 logical_address, u32 translated_address, bool writeable);
   bool TryAddLargePageTableMapping(u32 logical_address, u32 translated_address,
                                    std::map<u32, std::vector<u32>>& map);
-  bool CanCreateHostMappingForGuestPages(const std::vector<u32>& entries) const;
+  bool CanCreateHostMappingForGuestPages(std::span<const u32> entries) const;
   void AddHostPageTableMapping(u32 logical_address, u32 translated_address, bool writeable,
                                u32 logical_size);
   void RemoveLargePageTableMapping(u32 logical_address);
   void RemoveLargePageTableMapping(u32 logical_address, std::map<u32, std::vector<u32>>& map);
-  void RemoveHostPageTableMappings(const std::set<u32>& mappings);
+  void RemoveHostPageTableMapping(u32 logical_address);
 };
 }  // namespace Memory

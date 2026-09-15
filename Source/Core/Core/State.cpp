@@ -15,6 +15,7 @@
 
 #include <fmt/chrono.h>
 #include <fmt/format.h>
+#include <fmt/std.h>
 
 #include <lz4.h>
 #include <lzo/lzo1x.h>
@@ -79,7 +80,7 @@ static u32 s_last_state_size = 0;
 // Shared locks are acquired for each state save task.
 // Tasks generally transition from: Calling thread -> CPU thread -> Compress/Write thread.
 // Holding an "exclusive" lock will:
-// 1. Ensure all previous save tasks have been completely written to the file systen.
+// 1. Ensure all previous save tasks have been completely written to the file system.
 // 2. Prevent new tasks from starting.
 static Common::TransferableSharedMutex s_state_saves_in_progress;
 
@@ -95,9 +96,9 @@ struct CompressAndDumpStateArgs
 static Common::WorkQueueThreadSP<CompressAndDumpStateArgs> s_compress_and_dump_thread;
 
 // Don't forget to increase this after doing changes on the savestate system
-// iCube: upstream is 177 (PR 13844); +1 for the bounded Auto VISkip gating state in
+// iCube: upstream is 191 (PR 14668); +1 for the bounded Auto VISkip gating state in
 // VideoInterface::DoState. Keep this strictly above upstream's value at every merge.
-constexpr u32 STATE_VERSION = 178;
+constexpr u32 STATE_VERSION = 192;
 
 // Increase this if the StateExtendedHeader definition changes
 constexpr u32 EXTENDED_HEADER_VERSION = 1;  // Last changed in PR 12217
@@ -269,7 +270,7 @@ struct SlotWithTimestamp
 }  // namespace
 
 // Returns first slot number (1-based indexing) not in the vector.
-static std::optional<int> GetEmptySlot(const std::vector<SlotWithTimestamp>& used_slots)
+static std::optional<int> GetEmptySlot(std::span<const SlotWithTimestamp> used_slots)
 {
   for (int i = 1; i <= int(NUM_STATES); ++i)
   {
@@ -465,7 +466,7 @@ static void CompressAndDumpState(Core::System& system, const CompressAndDumpStat
   else
   {
     const std::filesystem::path temp_path(filename);
-    Core::DisplayMessage(fmt::format("Saved State to {}", temp_path.filename().string()), 2000);
+    Core::DisplayMessage(fmt::format("Saved State to {}", temp_path.filename()), 2000);
   }
 }
 
@@ -842,9 +843,8 @@ static void LoadAsFromCore(Core::System& system, std::string filename)
   {
     if (loaded_successfully)
     {
-      std::filesystem::path temp_filename(std::move(filename));
-      Core::DisplayMessage(fmt::format("Loaded State from {}", temp_filename.filename().string()),
-                           2000);
+      const std::filesystem::path temp_filename(filename);
+      Core::DisplayMessage(fmt::format("Loaded State from {}", temp_filename.filename()), 2000);
       if (File::Exists(filename + ".dtm"))
       {
         movie.LoadInput(filename + ".dtm");

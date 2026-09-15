@@ -597,11 +597,15 @@ void MagneticCardReader::SetSError(S error_code)
   FinishCommand();
 }
 
-void MagneticCardReader::Process(std::vector<u8>* read, std::vector<u8>* write)
+void MagneticCardReader::Update()
 {
-  while (!read->empty())
+  while (true)
   {
-    const u8 first_byte = read->front();
+    const auto read = GetRxByteSpan();
+    if (read.empty())
+      break;
+
+    const u8 first_byte = read.front();
     if (first_byte == ENQUIRY)
     {
       // ENQUIRY
@@ -617,16 +621,16 @@ void MagneticCardReader::Process(std::vector<u8>* read, std::vector<u8>* write)
       StepStateMachine(elapsed_time);
       StepStatePerson(elapsed_time);
 
-      BuildPacket(*write);
+      BuildPacket();
 
-      read->erase(read->begin());  // TODO: SLOW !
+      ConsumeRxBytes(1);
       continue;
     }
 
     if (first_byte != START_OF_TEXT)
     {
       ERROR_LOG_FMT(SERIALINTERFACE_CARD, "Process: Unexpected {:02x}", first_byte);
-      read->erase(read->begin());  // TODO: SLOW !
+      ConsumeRxBytes(1);
       continue;
     }
 
@@ -634,25 +638,25 @@ void MagneticCardReader::Process(std::vector<u8>* read, std::vector<u8>* write)
     // This is a command packet. The next byte provides the size.
     // Upon read they ACK or NACK and start processing of a command.
 
-    if (read->size() < 2)
+    if (read.size() < 2)
       break;  // Wait for more data.
 
-    const std::size_t packet_size = (*read)[1];
-    if (packet_size > read->size() - 2)
+    const std::size_t packet_size = read[1];
+    if (packet_size > read.size() - 2)
       break;  // Wait for more data.
 
-    if (ReceivePacket(std::span{*read}.subspan(2, packet_size)))
+    if (ReceivePacket(read.subspan(2, packet_size)))
     {
       DEBUG_LOG_FMT(SERIALINTERFACE_CARD, "Writing ACK");
-      write->emplace_back(ACK);
+      WriteTxByte(ACK);
     }
     else
     {
       WARN_LOG_FMT(SERIALINTERFACE_CARD, "Writing NACK");
-      write->emplace_back(NACK);
+      WriteTxByte(NACK);
     }
 
-    read->erase(read->begin(), read->begin() + packet_size + 2);  // TODO: SLOW !
+    ConsumeRxBytes(packet_size + 2);
   }
 }
 
@@ -672,18 +676,9 @@ bool MagneticCardReader::ReceivePacket(std::span<const u8> packet)
     return false;
   }
 
-  // Checksum is XOR of the previous bytes.
-  // This includes the count byte that we already chopped off.
-  const u8 read_checksum = packet.back();
-
-  // TODO C++23:
-  // std::ranges::fold_left(packet.first(packet.size() - 1), u8(packet.size()), std::bit_xor{});
-  const auto range_to_checksum = packet.first(packet.size() - 1);
-  const auto proper_checksum = std::accumulate(range_to_checksum.begin(), range_to_checksum.end(),
-                                               u8(packet.size()), std::bit_xor{});
-
-  // Verify checksum. Skip packet if invalid.
-  if (read_checksum != proper_checksum)
+  // The final byte is an XOR checksum of all previous bytes,
+  //  including the count byte that we already chopped off.
+  if (std::accumulate(packet.begin(), packet.end(), u8(packet.size()), std::bit_xor{}) != 0)
   {
     WARN_LOG_FMT(SERIALINTERFACE_CARD, "ReceivePacket: Bad checksum!");
     return false;
@@ -858,41 +853,31 @@ void MagneticCardReader::StepStateMachine(DT elapsed_time)
     ++m_current_step;
 }
 
-void MagneticCardReader::BuildPacket(std::vector<u8>& write_buffer)
+void MagneticCardReader::BuildPacket()
 {
   // Header and footer add 6 bytes.
   const u8 payload_size = u8(m_command_payload.size() + 6);
-  // + START_OF_TEXT + the count byte
-  const auto total_write_size = payload_size + 2;
 
-  const auto prev_buffer_size = write_buffer.size();
-  write_buffer.resize(prev_buffer_size + total_write_size);
+  WriteTxByte(START_OF_TEXT);  // Not included in the checksum.
 
-  auto* out_ptr = write_buffer.data() + prev_buffer_size;
-  u8 packet_checksum = 0;
+  const auto lead_in = std::to_array<u8>({
+      payload_size,
+      GetCurrentCommand(),
+      GetPositionValue(),
+      u8(m_status.p),
+      u8(m_status.s),
+  });
+  WriteTxBytes(lead_in);
 
-  const auto write_and_checksum = [&](u8 value) {
-    *(out_ptr++) = value;
-    packet_checksum ^= value;
-  };
+  WriteTxBytes(m_command_payload);
 
-  // Write the header.
-  *(out_ptr++) = START_OF_TEXT;
-  write_and_checksum(payload_size);
-  write_and_checksum(GetCurrentCommand());
-  write_and_checksum(GetPositionValue());
-  write_and_checksum(u8(m_status.p));
-  write_and_checksum(u8(m_status.s));
+  WriteTxByte(END_OF_TEXT);
 
-  // Write the payload.
-  std::ranges::for_each(m_command_payload, write_and_checksum);
-
-  // Write the footer.
-  write_and_checksum(END_OF_TEXT);
-  *(out_ptr++) = packet_checksum;
-
-  DEBUG_LOG_FMT(SERIALINTERFACE_CARD, "BuildPacket: {}",
-                HexDump(std::span{write_buffer}.subspan(write_buffer.size() - payload_size - 2)));
+  // Checksum is XOR of bytes after START_OF_TEXT.
+  const u8 packet_checksum = std::accumulate(lead_in.begin(), lead_in.end(), u8{}, std::bit_xor{}) ^
+                             std::accumulate(m_command_payload.begin(), m_command_payload.end(),
+                                             END_OF_TEXT, std::bit_xor{});
+  WriteTxByte(packet_checksum);
 }
 
 bool MagneticCardReader::IsRunningCommand() const
@@ -983,6 +968,8 @@ bool MagneticCardReader::IsReadyForCard()
 
 void MagneticCardReader::DoState(PointerWrap& p)
 {
+  SerialDevice::DoState(p);
+
   // Outgoing packet.
   p.Do(m_status);
   p.Do(m_current_command);

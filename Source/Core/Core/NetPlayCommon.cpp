@@ -116,7 +116,7 @@ bool CompressFolderIntoPacket(const std::string& folder_path, sf::Packet& packet
   return CompressFolderIntoPacketInternal(File::ScanDirectoryTree(folder_path, true), packet);
 }
 
-bool CompressBufferIntoPacket(const std::vector<u8>& in_buffer, sf::Packet& packet)
+bool CompressBufferIntoPacket(std::span<const u8> in_buffer, sf::Packet& packet)
 {
   const u64 size = in_buffer.size();
   packet << size;
@@ -197,6 +197,12 @@ bool DecompressPacketIntoFile(sf::Packet& packet, const std::string& file_path)
     if (!cur_len)
       break;  // We reached the end of the data stream
 
+    if (cur_len > in_buffer.size())
+    {
+      PanicAlertFmt("LZO error - input is too large");
+      return false;
+    }
+
     for (size_t j = 0; j < cur_len; j++)
     {
       packet >> in_buffer[j];
@@ -231,10 +237,10 @@ static bool DecompressPacketIntoFolderInternal(sf::Packet& packet, const std::st
     std::string name;
     packet >> name;
 
-    if (name.find('/') != std::string::npos)
+    if (name.contains('/'))
       return false;
 #ifdef _WIN32
-    if (name.find('\\') != std::string::npos)
+    if (name.contains('\\'))
       return false;
 #endif
     if (std::ranges::all_of(name, [](char c) { return c == '.'; }))
@@ -280,6 +286,12 @@ std::optional<std::vector<u8>> DecompressPacketIntoBuffer(sf::Packet& packet)
     packet >> cur_len;
     if (!cur_len)
       break;  // We reached the end of the data stream
+
+    if (cur_len > in_buffer.size())
+    {
+      PanicAlertFmt("LZO error - input is too large");
+      return {};
+    }
 
     for (size_t j = 0; j < cur_len; j++)
     {

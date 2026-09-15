@@ -136,7 +136,7 @@ void AutoIRController::Step()
     return;
   }
 
-  const double vps = g_perf_metrics.GetVPS();
+  const double vps = Core::System::GetInstance().GetPerfMetrics().GetVPS();
   if (vps <= 0.0)
     return;  // metrics not warmed up
 

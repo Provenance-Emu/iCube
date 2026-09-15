@@ -185,6 +185,7 @@
     <ClInclude Include="Common\WindowsRegistry.h" />
     <ClInclude Include="Common\WindowSystemInfo.h" />
     <ClInclude Include="Common\WorkQueueThread.h" />
+    <ClInclude Include="Core\AchievementApprovedHash.h" />
     <ClInclude Include="Core\AchievementManager.h" />
     <ClInclude Include="Core\ActionReplay.h" />
     <ClInclude Include="Core\ARDecrypt.h" />
@@ -317,6 +318,7 @@
     <ClInclude Include="Core\HW\HSP\HSP.h" />
     <ClInclude Include="Core\HW\HSP\HSP_Device.h" />
     <ClInclude Include="Core\HW\HSP\HSP_DeviceARAMExpansion.h" />
+    <ClInclude Include="Core\HW\HSP\HSP_DeviceGBPlayer.h" />
     <ClInclude Include="Core\HW\HSP\HSP_DeviceNull.h" />
     <ClInclude Include="Core\HW\HW.h" />
     <ClInclude Include="Core\HW\MagCard\C1231BR.h" />
@@ -341,6 +343,14 @@
     <ClInclude Include="Core\HW\Sram.h" />
     <ClInclude Include="Core\HW\StreamADPCM.h" />
     <ClInclude Include="Core\HW\SystemTimers.h" />
+    <ClInclude Include="Core\HW\Triforce\DeckReader.h" />
+    <ClInclude Include="Core\HW\Triforce\FZeroAX.h" />
+    <ClInclude Include="Core\HW\Triforce\ICCardReader.h" />
+    <ClInclude Include="Core\HW\Triforce\IOPorts.h" />
+    <ClInclude Include="Core\HW\Triforce\JVSIO.h" />
+    <ClInclude Include="Core\HW\Triforce\MarioKartGP.h" />
+    <ClInclude Include="Core\HW\Triforce\SerialDevice.h" />
+    <ClInclude Include="Core\HW\Triforce\Touchscreen.h" />
     <ClInclude Include="Core\HW\VideoInterface.h" />
     <ClInclude Include="Core\HW\WII_IPC.h" />
     <ClInclude Include="Core\HW\Wiimote.h" />
@@ -1018,6 +1028,7 @@
     <ClCompile Include="Core\HW\HSP\HSP.cpp" />
     <ClCompile Include="Core\HW\HSP\HSP_Device.cpp" />
     <ClCompile Include="Core\HW\HSP\HSP_DeviceARAMExpansion.cpp" />
+    <ClCompile Include="Core\HW\HSP\HSP_DeviceGBPlayer.cpp" />
     <ClCompile Include="Core\HW\HSP\HSP_DeviceNull.cpp" />
     <ClCompile Include="Core\HW\HW.cpp" />
     <ClCompile Include="Core\HW\MagCard\C1231BR.cpp" />
@@ -1041,6 +1052,14 @@
     <ClCompile Include="Core\HW\Sram.cpp" />
     <ClCompile Include="Core\HW\StreamADPCM.cpp" />
     <ClCompile Include="Core\HW\SystemTimers.cpp" />
+    <ClCompile Include="Core\HW\Triforce\DeckReader.cpp" />
+    <ClCompile Include="Core\HW\Triforce\FZeroAX.cpp" />
+    <ClCompile Include="Core\HW\Triforce\ICCardReader.cpp" />
+    <ClCompile Include="Core\HW\Triforce\IOPorts.cpp" />
+    <ClCompile Include="Core\HW\Triforce\JVSIO.cpp" />
+    <ClCompile Include="Core\HW\Triforce\MarioKartGP.cpp" />
+    <ClCompile Include="Core\HW\Triforce\SerialDevice.cpp" />
+    <ClCompile Include="Core\HW\Triforce\Touchscreen.cpp" />
     <ClCompile Include="Core\HW\VideoInterface.cpp" />
     <ClCompile Include="Core\HW\WII_IPC.cpp" />
     <ClCompile Include="Core\HW\Wiimote.cpp" />

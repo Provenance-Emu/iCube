@@ -68,6 +68,8 @@ public:
 
   u32 GetPollXLines();
 
+  static constexpr u32 BUFFER_SIZE = 128;
+
 private:
   // SI Interrupt Types
   enum SIInterruptType
@@ -86,8 +88,6 @@ private:
   void RunSIBuffer(u64 user_data, s64 cycles_late);
   static void GlobalRunSIBuffer(Core::System& system, u64 user_data, s64 cycles_late);
   static void ChangeDeviceCallback(Core::System& system, u64 user_data, s64 cycles_late);
-  template <int device_number>
-  static void DeviceEventCallback(Core::System& system, u64 userdata, s64 cyclesLate);
 
   // SI Channel Output
   union USIChannelOut
@@ -241,7 +241,7 @@ private:
   USIComCSR m_com_csr;
   USIStatusReg m_status_reg;
   USIEXIClockCount m_exi_clock_count;
-  std::array<u8, 128> m_si_buffer{};
+  std::array<u8, BUFFER_SIZE> m_si_buffer{};
 
   Core::System& m_system;
 };

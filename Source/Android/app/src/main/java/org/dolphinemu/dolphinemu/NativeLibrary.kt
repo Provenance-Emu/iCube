@@ -300,9 +300,6 @@ object NativeLibrary {
     @JvmStatic
     external fun ResetDolphinSettings()
 
-    @JvmStatic
-    external fun UpdateGCAdapterScanThread()
-
     /**
      * Initializes the native parts of the app.
      *
@@ -483,7 +480,6 @@ object NativeLibrary {
     fun displayAlertMsg(
         caption: String, text: String, yesNo: Boolean, isWarning: Boolean, nonBlocking: Boolean
     ): Boolean {
-        Log.error("[NativeLibrary] Alert: $text")
         val emulationActivity = emulationActivityRef.get()
         var result = false
 

@@ -328,12 +328,21 @@ T MMU::ReadFromHardware(u32 em_address)
     return bswap(value);
   }
 
-  PanicAlertFmt("Unable to resolve read address {:x} PC {:x}", em_address, m_ppc_state.pc);
-  if (m_system.IsPauseOnPanicMode())
+  // Memory access error. Game Boy Interface relies on this to confirm that MEM2 isn't present.
+  // TODO: This interrupt is supposed to have associated cause and address registers.
+  m_system.GetProcessorInterface().SetInterrupt(ProcessorInterface::INT_CAUSE_PI);
+
+  // Don't show a panic alert for the specific access Game Boy Interface does.
+  if (em_address != 0x10000000 || (m_ppc_state.pc >> 28) != 0)
   {
-    m_system.GetCPU().Break();
-    m_ppc_state.Exceptions |= EXCEPTION_DSI | EXCEPTION_FAKE_MEMCHECK_HIT;
+    PanicAlertFmt("Unable to resolve read address {:x} PC {:x}", em_address, m_ppc_state.pc);
+    if (m_system.IsPauseOnPanicMode())
+    {
+      m_system.GetCPU().Break();
+      m_ppc_state.Exceptions |= EXCEPTION_DSI | EXCEPTION_FAKE_MEMCHECK_HIT;
+    }
   }
+
   return 0;
 }
 
@@ -517,6 +526,10 @@ void MMU::WriteToHardware(u32 em_address, const u32 data, const u32 size)
                 size);
     return;
   }
+
+  // Memory access error.
+  // TODO: This interrupt is supposed to have associated cause and address registers.
+  m_system.GetProcessorInterface().SetInterrupt(ProcessorInterface::INT_CAUSE_PI);
 
   PanicAlertFmt("Unable to resolve write address {:x} PC {:x}", em_address, m_ppc_state.pc);
   if (m_system.IsPauseOnPanicMode())
@@ -1229,15 +1242,15 @@ void MMU::GenerateDSIException(u32 effective_address, bool write)
     if (write)
     {
       PanicAlertFmtT(
-          "Invalid write to {0:#010x}, PC = {1:#010x}; the game probably would have crashed on "
-          "real hardware.\n\nFor accurate emulation, enable MMU in advanced settings.",
+          "Invalid write to {0:#010x}, PC = {1:#010x}.\n\nThe game probably would have crashed on "
+          "real hardware. Enable MMU in advanced settings to accurately emulate game crashes.",
           effective_address, m_ppc_state.pc);
     }
     else
     {
       PanicAlertFmtT(
-          "Invalid read from {0:#010x}, PC = {1:#010x}; the game probably would have crashed on "
-          "real hardware.\n\nFor accurate emulation, enable MMU in advanced settings.",
+          "Invalid read from {0:#010x}, PC = {1:#010x}.\n\nThe game probably would have crashed on "
+          "real hardware. Enable MMU in advanced settings to accurately emulate game crashes.",
           effective_address, m_ppc_state.pc);
     }
     if (m_system.IsPauseOnPanicMode())

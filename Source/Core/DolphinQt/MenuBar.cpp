@@ -596,6 +596,13 @@ void MenuBar::AddViewMenu()
   AddShowRegionsMenu(view_menu);
 
   view_menu->addSeparator();
+  QAction* const show_game_count = view_menu->addAction(tr("Show Game Count"));
+  show_game_count->setCheckable(true);
+  show_game_count->setChecked(Settings::Instance().IsGameCountVisible());
+  connect(show_game_count, &QAction::toggled, &Settings::Instance(),
+          &Settings::SetGameCountVisible);
+
+  view_menu->addSeparator();
   QAction* const purge_action =
       view_menu->addAction(tr("Purge Game List Cache"), this, &MenuBar::PurgeGameListCache);
   purge_action->setEnabled(false);
@@ -918,6 +925,13 @@ void MenuBar::AddJITMenu()
   m_jit_disable_fastmem->setChecked(!Config::Get(Config::MAIN_FASTMEM));
   connect(m_jit_disable_fastmem, &QAction::toggled,
           [](bool enabled) { Config::SetBaseOrCurrent(Config::MAIN_FASTMEM, !enabled); });
+
+  m_jit_disable_page_table_fastmem = m_jit->addAction(tr("Disable Page Table Fastmem"));
+  m_jit_disable_page_table_fastmem->setCheckable(true);
+  m_jit_disable_page_table_fastmem->setChecked(!Config::Get(Config::MAIN_PAGE_TABLE_FASTMEM));
+  connect(m_jit_disable_page_table_fastmem, &QAction::toggled, [](bool enabled) {
+    Config::SetBaseOrCurrent(Config::MAIN_PAGE_TABLE_FASTMEM, !enabled);
+  });
 
   m_jit_disable_fastmem_arena = m_jit->addAction(tr("Disable Fastmem Arena"));
   m_jit_disable_fastmem_arena->setCheckable(true);
@@ -1412,7 +1426,7 @@ void MenuBar::NANDExtractCertificates()
   }
 }
 
-void MenuBar::OnSelectionChanged(std::shared_ptr<const UICommon::GameFile> game_file)
+void MenuBar::OnSelectionChanged(const std::shared_ptr<const UICommon::GameFile>& game_file)
 {
   m_game_selected = !!game_file;
 

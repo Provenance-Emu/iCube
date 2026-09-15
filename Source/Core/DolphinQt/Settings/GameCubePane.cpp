@@ -204,11 +204,6 @@ void GameCubePane::CreateWidgets()
   gba_box->setLayout(gba_layout);
   int gba_row = 0;
 
-  m_gba_threads =
-      new ConfigBool(tr("Run GBA Cores in Dedicated Threads"), Config::MAIN_GBA_THREADS);
-  gba_layout->addWidget(m_gba_threads, gba_row, 0, 1, -1);
-  gba_row++;
-
   m_gba_bios_edit = new ConfigUserPath(F_GBABIOS_IDX, Config::MAIN_GBA_BIOS_PATH);
   m_gba_browse_bios = new NonDefaultQPushButton(QStringLiteral("..."));
   gba_layout->addWidget(new QLabel(tr("BIOS:")), gba_row, 0);
@@ -220,7 +215,10 @@ void GameCubePane::CreateWidgets()
   {
     m_gba_rom_edits[i] = new ConfigText(Config::MAIN_GBA_ROM_PATHS[i]);
     m_gba_browse_roms[i] = new NonDefaultQPushButton(QStringLiteral("..."));
-    gba_layout->addWidget(new QLabel(tr("Port %1 ROM:").arg(i + 1)), gba_row, 0);
+    auto* const label =
+        new QLabel((i == Config::GBPLAYER_GBA_INDEX) ? tr("Game Boy Player ROM:") :
+                                                       tr("Port %1 ROM:").arg(i + 1));
+    gba_layout->addWidget(label, gba_row, 0);
     gba_layout->addWidget(m_gba_rom_edits[i], gba_row, 1);
     gba_layout->addWidget(m_gba_browse_roms[i], gba_row, 2);
     gba_row++;
@@ -304,7 +302,6 @@ void GameCubePane::OnEmulationStateChanged()
 {
 #ifdef HAS_LIBMGBA
   bool gba_enabled = !NetPlay::IsNetPlayRunning();
-  m_gba_threads->setEnabled(gba_enabled);
   m_gba_bios_edit->setEnabled(gba_enabled);
   m_gba_browse_bios->setEnabled(gba_enabled);
   m_gba_save_rom_path->setEnabled(gba_enabled);

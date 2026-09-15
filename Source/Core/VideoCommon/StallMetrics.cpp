@@ -15,6 +15,7 @@
 #include <mach/mach.h>
 #include <mach/mach_init.h>
 #include <mach/thread_act.h>
+#include "Core/System.h"  // 2606: PerformanceMetrics lives on Core::System
 #endif
 
 namespace StallMetrics
@@ -206,8 +207,8 @@ void OnWindowBoundary(u64 window_wall_ns, u64 throttle_sleep_ns)
   s_window.window_wall_ns = window_wall_ns;
   s_window.throttle_sleep_ns = throttle_sleep_ns;
   s_window.sites = sites;
-  s_window.speed = g_perf_metrics.GetSpeed();
-  s_window.max_speed = g_perf_metrics.GetMaxSpeed();
+  s_window.speed = Core::System::GetInstance().GetPerfMetrics().GetSpeed();
+  s_window.max_speed = Core::System::GetInstance().GetPerfMetrics().GetMaxSpeed();
   s_window.bound = PerformanceMetrics::GetBound();
   s_window.audio_underrun_delta = audio_delta;
   s_window.dual_core = Config::Get(Config::MAIN_CPU_THREAD);
