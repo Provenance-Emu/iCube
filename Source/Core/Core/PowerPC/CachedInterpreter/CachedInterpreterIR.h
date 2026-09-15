@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include <rangeset/rangesizeset.h>
+#include "Common/RangeSizeSet.h"  // 2603: RangeSet moved from Externals to Common
 
 #include "Common/CommonTypes.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
@@ -600,7 +600,7 @@ private:
   template <bool write_pc>
   static s32 SpecializedValidate(std::ostream& stream, const SpecializedValidateOperands& operands);
 
-  HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges;
+  Common::RangeSizeSet<u8*> m_free_ranges;
   CachedInterpreterIRBlockCache m_block_cache;
 };
 

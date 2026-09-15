@@ -76,6 +76,11 @@ def _safe_job_count():
         return max(2, cores // 2)
 
 
+def xcrun_find(tool: str) -> str:
+    """Absolute path of a tool in the active Xcode toolchain (xcrun --find)."""
+    import subprocess
+    return subprocess.check_output(["xcrun", "--find", tool], text=True).strip()
+
 class BuildError(Exception):
     """Exception raised for build errors."""
     pass
@@ -310,7 +315,11 @@ class DolphinBuilder:
             # "-funsafe-math-optimizations "
             "-funroll-loops "
             "-ftree-vectorize "
-            "-fsplit-lto-unit "
+            # -fsplit-lto-unit REMOVED (2603 merge): with CMake IPO (ThinLTO, -flto=thin) it makes
+            # clang emit raw LLVM IR instead of Mach-O-wrapped bitcode, and Xcode 26's ar/ranlib/
+            # libtool cannot archive raw bitcode -> every static lib was a 96-byte symbol table and
+            # libdolphin failed to link. The flag only matters for CFI / -fwhole-program-vtables,
+            # which this build does not use.
             # Value-affecting unsafe-math flags REMOVED: they corrupt the core's FP results.
             # -freciprocal-math (approximate 1/x division) and -ffinite-math-only (assume no
             # NaN/Inf, breaks ps_rsqrte / normalization) distort CPU-computed bone/skinning and
@@ -478,6 +487,15 @@ class DolphinBuilder:
             # LTO miscompile, so LTO-off bought nothing and cost perf. Geometry bug tracked via
             # the bisect plan, not by disabling LTO.)
             "-DENABLE_LTO=ON",
+            # 2603 moved LTO to CMAKE_INTERPROCEDURAL_OPTIMIZATION. Under IPO, CMake archives
+            # with CMAKE_<LANG>_COMPILER_AR (llvm-ar), which Xcode does not ship; left empty,
+            # the archive step silently produced 4 KB archives holding only a symbol table and
+            # the dylib link failed with thousands of undefined symbols. Xcode's cctools ar/ranlib
+            # understand LTO bitcode via libLTO, so point IPO at them explicitly.
+            f"-DCMAKE_C_COMPILER_AR={xcrun_find('ar')}",
+            f"-DCMAKE_CXX_COMPILER_AR={xcrun_find('ar')}",
+            f"-DCMAKE_C_COMPILER_RANLIB={xcrun_find('ranlib')}",
+            f"-DCMAKE_CXX_COMPILER_RANLIB={xcrun_find('ranlib')}",
         ])
 
         # Override deployment target at CMake level to ensure it's respected
@@ -505,6 +523,12 @@ class DolphinBuilder:
             "-DENABLE_BITCODE=OFF",
             "-DENABLE_ARC=ON",
             "-DUSE_SYSTEM_ZSTD=OFF",
+            # 2603 bumped curl and minizip-ng; both now auto-detect zstd through pkg-config and
+            # pull the HOST (Homebrew, macOS) libzstd into the iOS link ("building for iOS, but
+            # linking in dylib built for macOS"). Neither needs zstd on iOS.
+            "-DCURL_ZSTD=OFF",
+            "-DMZ_ZSTD=OFF",
+            "-DMZ_OPENSSL=OFF",  # same leak via minizip-ng's OpenSSL probe (Homebrew libssl)
             "-DUSE_SYSTEM_MINIZIP=OFF",
             "-DUSE_SYSTEM_LZMA=OFF",
             "-DUSE_SYSTEM_BZIP2=OFF",
