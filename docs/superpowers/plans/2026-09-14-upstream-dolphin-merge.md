@@ -11,7 +11,7 @@
 | Target | Upstream commits over base | Conflicted files | Of which `Data/Sys/GameSettings` |
 |---|---|---|---|
 | `2512` (2025-12-21) | 586 | 14 | 3 |
-| `2603` (2026-03-11) | 1,052 | not measured, between the rows above and below | — |
+| `2603` (2026-03-11) | 1,052 | 23 (measured 2026-09-15 on top of the 2512 merge) | 15 |
 | `2606` (2026-06-24) | 1,496 | 24 | 2 |
 | `master` (9611279be5, 2026-09-13) | 1,864 | 55 | 32 |
 
@@ -88,7 +88,7 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 
 ## Stage 2 — Merge `2603`
 
-- [ ] `git merge 2603`; expect conflicts around `PerformanceMetrics`→`System`, `System.h` forward declarations, root `CMakeLists.txt`, `MTLStateTracker.mm`.
+- [ ] `git merge 2603`; measured conflicts (on top of the 2512 merge): `CMakeLists.txt`, `Common/Thread.cpp`, `Config/MainSettings.cpp`, `Core/MemTools.cpp`, `Interpreter_Paired.cpp`, `Core/State.cpp`, `DualShockUDPProto.h`, `MTLStateTracker.mm`, plus 15 GameSettings inis. The `PerformanceMetrics`→`System` and `System.h` forward-declaration changes merge textually clean, so they will surface as compile errors in fork code (`g_perf_metrics` users in `Source/iOS` and `StallMetrics`), not as conflicts.
 - [ ] Port the fork's perf sensors (`StallMetrics`, adaptive controller, `/api/perf/live`, bench server) onto `system.GetPerformanceMetrics()`; remove `g_perf_metrics` uses.
 - [ ] Sweep `Source/iOS/**/*.mm` for missing includes exposed by the forward-declaration change (build once, fix by the compiler's list; do not add `#include "Core/System.h"` blindly).
 - [ ] Build, lint, tests, device soak.
