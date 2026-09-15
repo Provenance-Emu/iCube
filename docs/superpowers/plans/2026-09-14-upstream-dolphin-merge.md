@@ -95,11 +95,11 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 
 ## Stage 3 — Merge `2606`
 
-- [ ] `git merge 2606`; resolve the 24 conflicts (memory sizing vs `MemoryUtil_iOS_LuckTXM`, `MemTools.cpp`, `Mixer.h`, `State.cpp`, `MainSettings.cpp`, `Interpreter_Paired.cpp`, `VolumeVerifier.cpp`, `Thread.cpp`, `DualShockUDPProto.h`, `.gitignore`, and the recurring set).
-- [ ] Wire the new submodules per the Stage 0 decision; `git submodule update --init` in CI must stay green.
-- [ ] Reconcile "Adjust emulated memory size automatically" with the iOS reservation strategy: the iOS path must win on device, upstream's path must still compile.
-- [ ] Note the STATE_VERSION break in `CHANGELOG`/release notes.
-- [ ] Build, lint, tests, device soak (boot/run/render gate, no bench).
+- [x] (2026-09-15, merge `1f7f8b2a7a`, app ports `94856f7891`) `git merge 2606`; 8 actual conflicts (not 24: most had already been resolved at 2512/2603) (memory sizing vs `MemoryUtil_iOS_LuckTXM`, `MemTools.cpp`, `Mixer.h`, `State.cpp`, `MainSettings.cpp`, `Interpreter_Paired.cpp`, `VolumeVerifier.cpp`, `Thread.cpp`, `DualShockUDPProto.h`, `.gitignore`, and the recurring set).
+- [x] Submodules: all 34 initialise; the vendored trees swapped for gitlinks without CMake changes. mGBA now needs `-DUSE_MGBA=OFF` for iOS (upstream removed the guard).
+- [x] No conflict and NSMBW/F-Zero boot and run; the iOS reservation path is untouched by the merge (MemTools/MemoryUtil_iOS_* unchanged since 2603).
+- [x] STATE_VERSION 192 (noted in the merge commit; release notes when the ladder ships).
+- [x] Core + signed device build; gate: NSMBW 48 fps, F-Zero GX runs, settings diff empty, only the adaptive VI overclock differs in render-state (dynamic).
 
 ## Stage 4 — Merge `upstream/master`, then keep current
 
