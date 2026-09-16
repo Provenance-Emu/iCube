@@ -273,7 +273,9 @@ jobs:
           CHANGES=""
           if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" != "$SHA" ] \
             && git cat-file -e "${PREV_SHA}^{commit}" 2>/dev/null; then
-            CHANGES=$(git log --oneline --no-merges "${PREV_SHA}..${SHA}" | head -40)
+            # -n 40 instead of "| head -40": under pipefail, head closing the pipe made git
+            # exit 141 (SIGPIPE) whenever there were more than 40 commits, failing the step.
+            CHANGES=$(git log --oneline --no-merges -n 40 "${PREV_SHA}..${SHA}")
           fi
           [ -n "$CHANGES" ] || CHANGES=$(git log --oneline --no-merges -10)
 

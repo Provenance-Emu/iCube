@@ -2,9 +2,11 @@ name: TestFlight distribute
 description: >-
   Wait for an uploaded TestFlight build to finish processing, add it to the
   app's external beta groups (the public links) and submit it for Beta App
-  Review. Uploading alone only reaches Internal groups. Shared by Provenance,
-  iCube and iFly:
-    uses: Provenance-Emu/Provenance/.github/actions/testflight-distribute@develop
+  Review. Uploading alone only reaches Internal groups.
+  VENDORED COPY of Provenance-Emu/Provenance/.github/actions/testflight-distribute
+  (2026-09-16): referencing it cross-repo makes the runner download the whole
+  Provenance repo tarball, which timed out (100 s) on 2026-09-15 and failed the
+  nightly. Keep in sync with the Provenance copy when it changes.
 
 inputs:
   api-key-id:

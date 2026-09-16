@@ -240,7 +240,9 @@ jobs:
       # Review. Shared with Provenance and iFly.
       - name: Distribute to external TestFlight groups
         if: success()
-        uses: Provenance-Emu/Provenance/.github/actions/testflight-distribute@develop
+        # Local copy (see .github/actions/testflight-distribute/action.yml): the cross-repo
+        # reference downloaded the whole Provenance tarball and timed out on 2026-09-15.
+        uses: ./.github/actions/testflight-distribute
         with:
           api-key-id: ${{ secrets.ASC_API_KEY_ID }}
           api-issuer-id: ${{ secrets.ASC_API_ISSUER_ID }}
