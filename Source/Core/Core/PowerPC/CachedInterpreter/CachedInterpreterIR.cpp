@@ -3,6 +3,17 @@
 
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterIR.h"
 
+// iCube 2026-09-16: threaded (computed-goto) dispatch for ExecuteOneBlock. With the switch loop, the
+// on-device Time Profiler put the executor's self time on the switch's single indirect branch (samples
+// pile up on the case entry points and the jump-table load). Direct threading gives every handler its
+// own indirect branch, so the predictor sees per-handler history. GNU labels-as-values; the switch loop
+// stays as the fallback for other compilers.
+#if defined(__clang__) || defined(__GNUC__)
+#define ICUBE_IR_THREADED_DISPATCH 1
+#else
+#define ICUBE_IR_THREADED_DISPATCH 0
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -2014,6 +2025,147 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
   const std::vector<IRInst>* ir = anchor_ptr->ir;
   u32 linked_hops = 0;
 
+#if ICUBE_IR_THREADED_DISPATCH
+  // Table order MUST match the IROp enumerator order (static_assert'ed on the first and last entries).
+  static const void* const kDispatch[] = {
+      &&L_StartProfiledBlock, &&L_EndBlock,        &&L_EndBlockProfiled,
+      &&L_EndBlockLink,       &&L_Interpret,       &&L_InterpretPC,
+      &&L_InterpretChk,       &&L_InterpretChkPC,  &&L_HLEFunction,
+      &&L_WriteBrokenBlockNPC, &&L_CheckFPU,       &&L_CheckBreakpoint,
+      &&L_CheckIdle,          &&L_FastForwardCtrIdle, &&L_InterpretDeadFlagValidate,
+      &&L_SetRegConst,        &&L_SetRegConstValidate, &&L_FusedAluRun,
+      &&L_FusedAluRunValidate, &&L_LoadStorePIC,   &&L_LoadStorePICPC,
+      &&L_LoadStorePICValidate, &&L_Specialized,   &&L_SpecializedPC,
+      &&L_SpecializedValidate};
+  static_assert(static_cast<int>(IROp::StartProfiledBlock) == 0 &&
+                    static_cast<int>(IROp::SpecializedValidate) == 24 &&
+                    sizeof(kDispatch) / sizeof(kDispatch[0]) == 25,
+                "kDispatch must mirror the IROp enumerator order");
+
+  const IRInst* ip = ir->data();
+  const IRInst* inst;
+  // No end-of-vector check here on purpose: DoJit appends a sentinel EndBlock to every vector, so a
+  // block that runs off its real terminal exits through it. Keeping the dispatch to load-op /
+  // load-target / branch is what lets LLVM duplicate it into every handler (one indirect branch per
+  // handler, each with its own predictor history) instead of folding them into one shared tail.
+#define ICUBE_IR_NEXT()                                                                            \
+  do                                                                                               \
+  {                                                                                                \
+    inst = ip++;                                                                                   \
+    goto* kDispatch[static_cast<u8>(inst->op)];                                                    \
+  } while (0)
+
+  ICUBE_IR_NEXT();
+
+L_Interpret:
+  Interpret<false>(ppc_state, inst->u.interpret);
+  ICUBE_IR_NEXT();
+L_InterpretPC:
+  Interpret<true>(ppc_state, inst->u.interpret);
+  ICUBE_IR_NEXT();
+L_SetRegConst:
+  ppc_state.gpr[inst->u.set_reg_const.reg] = inst->u.set_reg_const.value;
+  ICUBE_IR_NEXT();
+L_FusedAluRun:
+{
+  const auto& run = inst->u.fused_alu_run;
+  const CachedInterpreterIRFusedOp* const ops = run.pool->data() + run.offset;
+  for (u32 k = 0; k < run.count; ++k)
+    ops[k].func(run.interpreter, ops[k].inst);
+  ICUBE_IR_NEXT();
+}
+L_LoadStorePIC:
+  LoadStorePIC<false>(ppc_state, inst->u.load_store_pic);
+  ICUBE_IR_NEXT();
+L_Specialized:
+  Specialized<false>(ppc_state, inst->u.specialized);
+  ICUBE_IR_NEXT();
+L_EndBlockLink:
+  // Same guards as the switch loop: accounting + link decision, Running re-check, hop cap.
+  if (EndBlockLink(ppc_state, inst->u.end_block_link) == 0)
+    return;
+  if (*state_ptr != CPU::State::Running) [[unlikely]]
+    return;
+  if (++linked_hops >= IR_MAX_LINKED_HOPS) [[unlikely]]
+    return;
+  ir = inst->u.end_block_link.link_target_ir;  // resolved non-null by EndBlockLink's guard
+  ip = ir->data();
+  ICUBE_IR_NEXT();
+L_StartProfiledBlock:
+  if (StartProfiledBlock(ppc_state, inst->u.start_profiled_block) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_EndBlock:
+  if (EndBlock<false>(ppc_state, inst->u.end_block) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_EndBlockProfiled:
+  if (EndBlock<true>(ppc_state, inst->u.end_block_profiled) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_InterpretChk:
+  if (InterpretAndCheckExceptions<false>(ppc_state, inst->u.interpret_chk) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_InterpretChkPC:
+  if (InterpretAndCheckExceptions<true>(ppc_state, inst->u.interpret_chk) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_HLEFunction:
+  if (HLEFunction(ppc_state, inst->u.hle) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_WriteBrokenBlockNPC:
+  if (WriteBrokenBlockNPC(ppc_state, inst->u.broken_npc) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_CheckFPU:
+  if (CheckFPU(ppc_state, inst->u.check_halt) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_CheckBreakpoint:
+  if (CheckBreakpoint(ppc_state, inst->u.check_halt) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_CheckIdle:
+  if (CheckIdle(ppc_state, inst->u.check_idle) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_FastForwardCtrIdle:
+  if (FastForwardCtrIdle(ppc_state, inst->u.ctr_idle) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_InterpretDeadFlagValidate:
+  if (InterpretDeadFlagValidate(ppc_state, inst->u.dead_flag_validate) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_SetRegConstValidate:
+  if (SetRegConstValidate(ppc_state, inst->u.set_reg_const_validate) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_FusedAluRunValidate:
+  if (FusedAluRunValidate(ppc_state, inst->u.fused_alu_run_validate) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_LoadStorePICPC:
+  if (LoadStorePIC<true>(ppc_state, inst->u.load_store_pic) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_LoadStorePICValidate:
+  if (((inst->cr_out & 0x80) ? LoadStorePICValidate<true>(ppc_state, inst->u.load_store_pic_validate) :
+                               LoadStorePICValidate<false>(ppc_state, inst->u.load_store_pic_validate)) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_SpecializedPC:
+  if (Specialized<true>(ppc_state, inst->u.specialized) == 0)
+    return;
+  ICUBE_IR_NEXT();
+L_SpecializedValidate:
+  if (SpecializedValidate<false>(ppc_state, inst->u.specialized_validate) == 0)
+    return;
+  ICUBE_IR_NEXT();
+#undef ICUBE_IR_NEXT
+#else
   while (true)
   {
     bool follow_link = false;
@@ -2172,6 +2324,7 @@ void CachedInterpreterIR::ExecuteOneBlock(const CPU::State* state_ptr)
       break;  // fell off the end of a vector without a followed link (shouldn't happen — blocks end in a
               // terminal — but treat as a clean block exit)
   }
+#endif  // ICUBE_IR_THREADED_DISPATCH
 }
 
 // DOLPHIN_IR_VALIDATE=1 self-check. The IR vector was lowered 1:1 in DoJit; in parallel, each Emit*
@@ -2743,6 +2896,13 @@ bool CachedInterpreterIR::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   if (s_ir_microop_fusion)
     fused_pool = std::make_unique<std::vector<CachedInterpreterIRFusedOp>>();
   RunIROptimizationPasses(*ir, fused_pool ? *fused_pool : unused_pool);
+  // iCube 2026-09-16: sentinel terminal. The threaded executor has no per-instruction end-of-vector
+  // check (it would sit in front of the indirect branch and stop LLVM from tail-duplicating the dispatch
+  // into each handler, collapsing it back to one shared branch). Every block already ends in a terminal
+  // that returns or links, so this EndBlock with zero downcount is only ever reached if a vector somehow
+  // runs off its end — it then exits the block cleanly, exactly like the switch loop's fall-off case.
+  // Appended AFTER the M1 self-check and the passes so neither sees it.
+  ir->push_back(IRInst{IROp::EndBlock, {.end_block = {0, 0, 0}}});
 
   // Write the single anchor record. This sets b->normalEntry/near_begin..near_end and is the key
   // the side table is indexed by. If the emitter is out of space, fail exactly like M0.
