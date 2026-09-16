@@ -6,9 +6,8 @@
 #include <cstddef>
 #include <string>
 
-#include <rangeset/rangesizeset.h>
-
 #include "Common/CommonTypes.h"
+#include "Common/RangeSizeSet.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
@@ -392,7 +391,7 @@ private:
                                 const CheckCtrIdleOperands& operands);
   static s32 FastForwardCtrIdle(std::ostream& stream, const CheckCtrIdleOperands& operands);
 
-  HyoutaUtilities::RangeSizeSet<u8*> m_free_ranges;
+  Common::RangeSizeSet<u8*> m_free_ranges;
   CachedInterpreterBlockCache m_block_cache;
 };
 

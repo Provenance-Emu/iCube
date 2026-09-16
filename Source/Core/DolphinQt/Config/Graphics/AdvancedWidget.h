@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QGroupBox>
 #include <QWidget>
 
 class ConfigBool;
@@ -30,18 +31,8 @@ private:
 
   // Debugging
   ConfigBool* m_enable_wireframe;
-  ConfigBool* m_show_statistics;
-  ConfigBool* m_show_proj_statistics;
   ConfigBool* m_enable_format_overlay;
   ConfigBool* m_enable_api_validation;
-  ConfigBool* m_show_fps;
-  ConfigBool* m_show_ftimes;
-  ConfigBool* m_show_vps;
-  ConfigBool* m_show_vtimes;
-  ConfigBool* m_show_graphs;
-  ConfigBool* m_show_speed;
-  ConfigBool* m_show_speed_colors;
-  ConfigInteger* m_perf_samp_window;
   ConfigBool* m_log_render_time;
 
   // Utility
@@ -64,12 +55,20 @@ private:
   ConfigInteger* m_png_compression_level;
 
   // Misc
-  ConfigBool* m_enable_cropping;
   ConfigBool* m_enable_prog_scan;
   ConfigBool* m_backend_multithreading;
   ConfigBool* m_prefer_vs_for_point_line_expansion;
   ConfigBool* m_cpu_cull;
   ConfigBool* m_borderless_fullscreen;
+
+  // Misc (Cropping)
+  ConfigBool* m_crop_to_aspect_ratio;
+  ConfigBool* m_crop_custom;
+  QGroupBox* m_crop_custom_box;
+  ConfigInteger* m_crop_custom_left;
+  ConfigInteger* m_crop_custom_top;
+  ConfigInteger* m_crop_custom_right;
+  ConfigInteger* m_crop_custom_bottom;
 
   // Experimental
   ConfigBool* m_defer_efb_access_invalidation;

@@ -49,14 +49,15 @@ void SetSIMDMode(RoundMode rounding_mode, bool non_ieee_mode)
   // "non-IEEE mode". Unfortunately, FEAT_AFP didn't exist until 2020, so we can't count on setting
   // AH actually doing anything. But flushing both inputs and outputs seems to cause less problems
   // than flushing nothing, so let's just set FZ and AH and roll with whatever behavior we get.
-  const u32 flush_to_zero_bits = (non_ieee_mode ? FZ | AH : 0);
-  static bool afp_warning_shown = false;
-  if (!afp_warning_shown && !cpu_info.bAFP && non_ieee_mode)
-  {
-    afp_warning_shown = true;
-    WARN_LOG_FMT(POWERPC,
-                 "Non-IEEE mode was requested, but host CPU is not known to support FEAT_AFP");
-  }
+  // iCube: do NOT set AH. On hosts with FEAT_AFP (Apple A17/A18/M4, Armv9.2 Android SoCs) the bit
+  // takes effect; on everything else it is RES0 and FZ alone flushes inputs and outputs. Measured
+  // 2026-09-16 with Core/PowerPC/Interpreter/FPUSelfTest.cpp: an A18 (FPCR reads back FZ|AH) and
+  // an M2 (reads back FZ) agree bit-for-bit on every normal-number primitive and differ only on
+  // subnormal inputs, which AH stops flushing. That difference is enough for NSMBW's CPU-side
+  // skinning to come out with 3x-9x row scales on the A18 while the M2 matches upstream from the
+  // same save state (FIFO recordings diffed byte for byte). FZ without AH reproduces the non-AFP
+  // behaviour on AFP hardware, so every ARM host computes the same thing.
+  const u32 flush_to_zero_bits = (non_ieee_mode ? FZ : 0);
 
   // lookup table for FPSCR.RN-to-FPCR.RMode translation
   constexpr u32 rounding_mode_table[] = {

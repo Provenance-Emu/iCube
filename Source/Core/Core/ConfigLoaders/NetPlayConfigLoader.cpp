@@ -4,11 +4,11 @@
 #include "Core/ConfigLoaders/NetPlayConfigLoader.h"
 
 #include <memory>
+#include <utility>
 
 #include <fmt/format.h>
 
 #include "Common/CommonPaths.h"
-#include "Common/Config/Config.h"
 #include "Common/FileUtil.h"
 
 #include "Core/Config/AchievementSettings.h"
@@ -16,16 +16,22 @@
 #include "Core/Config/MainSettings.h"
 #include "Core/Config/SYSCONFSettings.h"
 #include "Core/Config/SessionSettings.h"
+#include "Core/Config/WiimoteSettings.h"
 #include "Core/HW/EXI/EXI.h"
+#include "Core/HW/SI/SI.h"
+#include "Core/HW/SI/SI_Device.h"
+#include "Core/HW/Wiimote.h"
 #include "Core/NetPlayProto.h"
+
+#include "InputCommon/GCAdapter.h"
 
 namespace ConfigLoaders
 {
 class NetPlayConfigLayerLoader final : public Config::ConfigLayerLoader
 {
 public:
-  explicit NetPlayConfigLayerLoader(const NetPlay::NetSettings& settings)
-      : ConfigLayerLoader(Config::LayerType::Netplay), m_settings(settings)
+  explicit NetPlayConfigLayerLoader(NetPlay::NetSettings settings)
+      : ConfigLayerLoader(Config::LayerType::Netplay), m_settings(std::move(settings))
   {
   }
 
@@ -80,6 +86,7 @@ public:
     layer->Set(Config::MAIN_DIVIDE_BY_ZERO_EXCEPTIONS, m_settings.divide_by_zero_exceptions);
     layer->Set(Config::MAIN_FPRF, m_settings.fprf);
     layer->Set(Config::MAIN_ACCURATE_NANS, m_settings.accurate_nans);
+    layer->Set(Config::MAIN_ACCURATE_FMADDS, m_settings.accurate_fmadds);
     layer->Set(Config::MAIN_DISABLE_ICACHE, m_settings.disable_icache);
     layer->Set(Config::MAIN_SYNC_ON_SKIP_IDLE, m_settings.sync_on_skip_idle);
     layer->Set(Config::MAIN_SYNC_GPU, m_settings.sync_gpu);
@@ -124,6 +131,54 @@ public:
       // Disable AA as it isn't deterministic across GPUs
       layer->Set(Config::GFX_MSAA, 1);
       layer->Set(Config::GFX_SSAA, false);
+    }
+
+    u8 local_pad = 0;
+    for (int i = 0; i < SerialInterface::MAX_SI_CHANNELS; ++i)
+    {
+      const NetPlay::PlayerId player_id = m_settings.pad_map[i];
+      const SerialInterface::SIDevices si_device =
+          Config::Get(Config::GetInfoForSIDevice(local_pad));
+      const auto config_info = Config::GetInfoForSIDevice(i);
+
+      if (m_settings.gba_config[i].enabled && player_id > 0)
+      {
+        layer->Set(config_info, SerialInterface::SIDEVICE_GC_GBA_EMULATED);
+      }
+      else if (player_id == m_settings.local_player_id)
+      {
+        // Use local controller types for local controllers if they are compatible
+        if (SerialInterface::SIDevice_IsGCController(si_device))
+        {
+          layer->Set(config_info, si_device);
+
+          if (si_device == SerialInterface::SIDEVICE_WIIU_ADAPTER)
+          {
+            GCAdapter::ResetDeviceType(local_pad);
+          }
+        }
+        else
+        {
+          layer->Set(config_info, SerialInterface::SIDEVICE_GC_CONTROLLER);
+        }
+        local_pad++;
+      }
+      else if (player_id > 0)
+      {
+        if (si_device != SerialInterface::SIDEVICE_AM_BASEBOARD)
+          layer->Set(config_info, SerialInterface::SIDEVICE_GC_CONTROLLER);
+      }
+      else
+      {
+        layer->Set(config_info, SerialInterface::SIDEVICE_NONE);
+      }
+    }
+
+    for (int i = 0; i < MAX_WIIMOTES; ++i)
+    {
+      NetPlay::PlayerId player_id = m_settings.wiimote_map[i];
+      layer->Set(Config::GetInfoForWiimoteSource(i),
+                 player_id > 0 ? WiimoteSource::Emulated : WiimoteSource::None);
     }
 
     if (m_settings.savedata_load)

@@ -5,11 +5,9 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstring>
 #include <iterator>
 #include <locale>
-#include <mbedtls/config.h>
 #include <mbedtls/md.h>
 #include <mutex>
 #include <thread>
@@ -429,59 +427,16 @@ void MovieManager::ChangePads()
     else
       controllers[i] = ControllerType::None;
   }
-
-  if (m_controllers == controllers)
-    return;
-
-  auto& si = m_system.GetSerialInterface();
-  for (int i = 0; i < SerialInterface::MAX_SI_CHANNELS; ++i)
-  {
-    SerialInterface::SIDevices device = SerialInterface::SIDEVICE_NONE;
-    if (IsUsingGBA(i))
-    {
-      device = SerialInterface::SIDEVICE_GC_GBA_EMULATED;
-    }
-    else if (IsUsingPad(i))
-    {
-      const SerialInterface::SIDevices si_device = Config::Get(Config::GetInfoForSIDevice(i));
-      if (SerialInterface::SIDevice_IsGCController(si_device))
-      {
-        device = si_device;
-      }
-      else
-      {
-        device = IsUsingBongo(i) ? SerialInterface::SIDEVICE_GC_TARUKONGA :
-                                   SerialInterface::SIDEVICE_GC_CONTROLLER;
-      }
-    }
-
-    si.ChangeDevice(device, i);
-  }
 }
 
 // NOTE: Host / Emu Threads
-void MovieManager::ChangeWiiPads(bool instantly)
+void MovieManager::ChangeWiiPads()
 {
   WiimoteEnabledArray wiimotes{};
 
   for (int i = 0; i < MAX_WIIMOTES; ++i)
   {
     wiimotes[i] = Config::Get(Config::GetInfoForWiimoteSource(i)) != WiimoteSource::None;
-  }
-
-  // This is important for Wiimotes, because they can desync easily if they get re-activated
-  if (instantly && m_wiimotes == wiimotes)
-    return;
-
-  const auto bt = WiiUtils::GetBluetoothEmuDevice();
-  for (int i = 0; i < MAX_WIIMOTES; ++i)
-  {
-    const bool is_using_wiimote = IsUsingWiimote(i);
-
-    Config::SetCurrent(Config::GetInfoForWiimoteSource(i),
-                       is_using_wiimote ? WiimoteSource::Emulated : WiimoteSource::None);
-    if (bt != nullptr)
-      bt->AccessWiimoteByIndex(i)->Activate(is_using_wiimote);
   }
 }
 
@@ -493,80 +448,80 @@ bool MovieManager::BeginRecordingInput(const ControllerTypeArray& controllers,
       (controllers == ControllerTypeArray{} && wiimotes == WiimoteEnabledArray{}))
     return false;
 
-  const auto start_recording = [this, controllers, wiimotes] {
-    m_controllers = controllers;
-    m_wiimotes = wiimotes;
-    m_current_frame = m_total_frames = 0;
-    m_current_lag_count = m_total_lag_count = 0;
-    m_current_input_count = m_total_input_count = 0;
-    m_total_tick_count = m_tick_count_at_last_input = 0;
-    m_bongos = 0;
-    m_memcards = 0;
-    if (NetPlay::IsNetPlayRunning())
-    {
-      m_net_play = true;
-      m_recording_start_time = ExpansionInterface::CEXIIPL::NetPlay_GetEmulatedTime();
-    }
-    else if (Config::Get(Config::MAIN_CUSTOM_RTC_ENABLE))
-    {
-      m_recording_start_time = Config::Get(Config::MAIN_CUSTOM_RTC_VALUE);
-    }
-    else
-    {
-      m_recording_start_time = Common::Timer::GetLocalTimeSinceJan1970();
-    }
-
-    m_rerecords = 0;
-
-    for (int i = 0; i < SerialInterface::MAX_SI_CHANNELS; ++i)
-    {
-      const SerialInterface::SIDevices si_device = Config::Get(Config::GetInfoForSIDevice(i));
-      if (si_device == SerialInterface::SIDEVICE_GC_TARUKONGA)
-        m_bongos |= (1 << i);
-    }
-
-    if (Core::IsRunning(m_system))
-    {
-      const std::string save_path = File::GetUserPath(D_STATESAVES_IDX) + "dtm.sav";
-      if (File::Exists(save_path))
-        File::Delete(save_path);
-
-      State::SaveAs(m_system, save_path);
-      m_recording_from_save_state = true;
-
-      std::thread md5thread(&MovieManager::GetMD5, this);
-      md5thread.detach();
-      GetSettings();
-    }
-
-    // Wiimotes cause desync issues if they're not reset before launching the game
-    if (!Core::IsRunning(m_system))
-    {
-      // This will also reset the Wiimotes for GameCube games, but that shouldn't do anything
-      ::Wiimote::ResetAllWiimotes();
-    }
-
-    m_play_mode = PlayMode::Recording;
-    m_author = Config::Get(Config::MAIN_MOVIE_MOVIE_AUTHOR);
-    m_temp_input.clear();
-
-    m_current_byte = 0;
-
-    // This is a bit of a hack, SYSCONF movie code expects the movie layer active for both recording
-    // and playback. That layer is really only designed for playback, not recording. Also, we can't
-    // know if we're using a Wii at this point. So, we'll assume a Wii is used here. In practice,
-    // this shouldn't affect anything for GC (as its only unique setting is language, which will be
-    // taken from base settings as expected)
-    static DTMHeader header = {.bWii = true};
-    ConfigLoaders::SaveToDTM(&header);
-    Config::AddLayer(ConfigLoaders::GenerateMovieConfigLoader(&header));
-
-    if (Core::IsRunning(m_system))
-      Core::UpdateWantDeterminism(m_system);
-  };
-  Core::RunOnCPUThread(m_system, start_recording, true);
-
   Core::DisplayMessage("Starting movie recording", 2000);
+
+  Core::CPUThreadGuard cpu_thread_guard{m_system};
+
+  m_controllers = controllers;
+  m_wiimotes = wiimotes;
+  m_current_frame = m_total_frames = 0;
+  m_current_lag_count = m_total_lag_count = 0;
+  m_current_input_count = m_total_input_count = 0;
+  m_total_tick_count = m_tick_count_at_last_input = 0;
+  m_bongos = 0;
+  m_memcards = 0;
+  if (NetPlay::IsNetPlayRunning())
+  {
+    m_net_play = true;
+    m_recording_start_time = ExpansionInterface::CEXIIPL::NetPlay_GetEmulatedTime();
+  }
+  else if (Config::Get(Config::MAIN_CUSTOM_RTC_ENABLE))
+  {
+    m_recording_start_time = Config::Get(Config::MAIN_CUSTOM_RTC_VALUE);
+  }
+  else
+  {
+    m_recording_start_time = Common::Timer::GetLocalTimeSinceJan1970();
+  }
+
+  m_rerecords = 0;
+
+  for (int i = 0; i < SerialInterface::MAX_SI_CHANNELS; ++i)
+  {
+    const SerialInterface::SIDevices si_device = Config::Get(Config::GetInfoForSIDevice(i));
+    if (si_device == SerialInterface::SIDEVICE_GC_TARUKONGA)
+      m_bongos |= (1 << i);
+  }
+
+  if (Core::IsRunning(m_system))
+  {
+    const std::string save_path = File::GetUserPath(D_STATESAVES_IDX) + "dtm.sav";
+    if (File::Exists(save_path))
+      File::Delete(save_path);
+
+    State::SaveAs(m_system, save_path);
+    m_recording_from_save_state = true;
+
+    std::thread md5thread(&MovieManager::GetMD5, this);
+    md5thread.detach();
+    GetSettings();
+  }
+
+  // Wiimotes cause desync issues if they're not reset before launching the game
+  if (!Core::IsRunning(m_system))
+  {
+    // This will also reset the Wiimotes for GameCube games, but that shouldn't do anything
+    ::Wiimote::ResetAllWiimotes();
+  }
+
+  m_play_mode = PlayMode::Recording;
+  m_author = Config::Get(Config::MAIN_MOVIE_MOVIE_AUTHOR);
+  m_temp_input.clear();
+
+  m_current_byte = 0;
+
+  // This is a bit of a hack, SYSCONF movie code expects the movie layer active for both recording
+  // and playback. That layer is really only designed for playback, not recording. Also, we can't
+  // know if we're using a Wii at this point. So, we'll assume a Wii is used here. In practice,
+  // this shouldn't affect anything for GC (as its only unique setting is language, which will be
+  // taken from base settings as expected)
+  static DTMHeader header = {.bWii = true};
+  ConfigLoaders::SaveToDTM(&header);
+  Config::AddLayer(ConfigLoaders::GenerateMovieConfigLoader(&header));
+
+  if (Core::IsRunning(m_system))
+    Core::UpdateWantDeterminism(m_system);
+
   return true;
 }
 
@@ -1013,7 +968,7 @@ void MovieManager::LoadInput(const std::string& movie_path)
 
   ChangePads();
   if (m_system.IsWii())
-    ChangeWiiPads(true);
+    ChangeWiiPads();
 
   u64 totalSavedBytes = t_record.GetSize() - 256;
 
@@ -1271,8 +1226,8 @@ bool MovieManager::PlayWiimote(int wiimote, DesiredWiimoteState* desired_state)
 
   if (serialized.length > serialized.data.size())
   {
-    PanicAlertFmtT("Invalid serialized length:{0} in PlayWiimote. byte:{1}", int(serialized.length),
-                   m_current_byte);
+    PanicAlertFmtT("Invalid serialized length:{0} in PlayWiimote. byte:{1}",
+                   static_cast<int>(serialized.length), m_current_byte);
     EndPlayInput(!m_read_only);
     return false;
   }
@@ -1281,7 +1236,7 @@ bool MovieManager::PlayWiimote(int wiimote, DesiredWiimoteState* desired_state)
   if (m_current_byte + serialized.length > m_temp_input.size())
   {
     PanicAlertFmtT("Premature movie end in PlayWiimote. {0} + {1} > {2}", m_current_byte,
-                   int(serialized.length), m_temp_input.size());
+                   static_cast<int>(serialized.length), m_temp_input.size());
     EndPlayInput(!m_read_only);
     return false;
   }
@@ -1354,17 +1309,6 @@ void MovieManager::SaveRecording(const std::string& filename)
   header.filetype[3] = 0x1A;
   strncpy(header.gameID.data(), SConfig::GetInstance().GetGameID().c_str(), 6);
   header.bWii = m_system.IsWii();
-  header.controllers = 0;
-  header.GBAControllers = 0;
-  for (int i = 0; i < 4; ++i)
-  {
-    if (IsUsingGBA(i))
-      header.GBAControllers |= 1 << i;
-    if (IsUsingPad(i))
-      header.controllers |= 1 << i;
-    if (IsUsingWiimote(i) && m_system.IsWii())
-      header.controllers |= 1 << (i + 4);
-  }
 
   header.bFromSaveState = m_recording_from_save_state;
   header.frameCount = m_total_frames;
@@ -1381,7 +1325,6 @@ void MovieManager::SaveRecording(const std::string& filename)
   strncpy(header.discChange.data(), m_disc_change_filename.c_str(), header.discChange.size());
   strncpy(header.author.data(), m_author.c_str(), header.author.size());
   header.md5 = m_md5;
-  header.bongos = m_bongos;
   header.revision = m_revision;
   header.DSPiromHash = m_dsp_irom_hash;
   header.DSPcoefHash = m_dsp_coef_hash;

@@ -3,7 +3,6 @@
 
 #include "DolphinQt/MenuBar.h"
 
-#include <cinttypes>
 #include <future>
 
 #include <QAction>
@@ -14,7 +13,6 @@
 #include <QFontDialog>
 #include <QInputDialog>
 #include <QMap>
-#include <QSignalBlocker>
 #include <QUrl>
 
 #include <fmt/format.h>
@@ -23,11 +21,9 @@
 #include "Common/CommonPaths.h"
 #include "Common/FileUtil.h"
 #include "Common/IOFile.h"
-#include "Common/StringUtil.h"
 
 #include "Core/AchievementManager.h"
 #include "Core/CommonTitles.h"
-#include "Core/Config/AchievementSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
@@ -36,7 +32,6 @@
 #include "Core/HW/AddressSpace.h"
 #include "Core/HW/Memmap.h"
 #include "Core/HW/WiiSave.h"
-#include "Core/HW/Wiimote.h"
 #include "Core/IOS/ES/ES.h"
 #include "Core/IOS/FS/FileSystem.h"
 #include "Core/IOS/IOS.h"
@@ -51,21 +46,21 @@
 #include "Core/PowerPC/SignatureDB/SignatureDB.h"
 #include "Core/State.h"
 #include "Core/System.h"
-#include "Core/TitleDatabase.h"
 #include "Core/WiiUtils.h"
 
 #include "DiscIO/Enums.h"
 #include "DiscIO/NANDImporter.h"
-#include "DiscIO/WiiSaveBanner.h"
 
-#include "DolphinQt/AboutDialog.h"
 #include "DolphinQt/Host.h"
 #include "DolphinQt/NANDRepairDialog.h"
 #include "DolphinQt/QtUtils/DolphinFileDialog.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
 #include "DolphinQt/QtUtils/NonAutodismissibleMenu.h"
 #include "DolphinQt/QtUtils/ParallelProgressDialog.h"
+#ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
 #include "DolphinQt/QtUtils/QueueOnObject.h"
+#endif
+#include "DolphinQt/QtUtils/SignalBlocking.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/Updater.h"
 
@@ -176,8 +171,9 @@ void MenuBar::OnEmulationStateChanged(Core::State state)
 
 void MenuBar::OnConfigChanged()
 {
-  const QSignalBlocker blocker(m_jit_profile_blocks);
-  m_jit_profile_blocks->setChecked(Config::Get(Config::MAIN_DEBUG_JIT_ENABLE_PROFILING));
+  SignalBlocking(m_jit_profile_blocks)
+      ->setChecked(Config::Get(Config::MAIN_DEBUG_JIT_ENABLE_PROFILING));
+  SignalBlocking(m_movie_window)->setChecked(Config::Get(Config::MAIN_MOVIE_SHOW_OSD));
 }
 
 void MenuBar::OnDebugModeToggled(bool enabled)
@@ -259,6 +255,18 @@ void MenuBar::AddFileMenu()
   m_open_user_folder =
       file_menu->addAction(tr("Open &User Folder"), this, &MenuBar::OpenUserFolder);
 
+  const std::string user_path = File::GetUserPath(D_USER_IDX);
+  if (user_path + CONFIG_DIR DIR_SEP != File::GetUserPath(D_CONFIG_IDX))
+  {
+    m_open_config_folder =
+        file_menu->addAction(tr("Open &Config Folder"), this, &MenuBar::OpenConfigFolder);
+  }
+  if (user_path + CACHE_DIR DIR_SEP != File::GetUserPath(D_CACHE_IDX))
+  {
+    m_open_cache_folder =
+        file_menu->addAction(tr("Open C&ache Folder"), this, &MenuBar::OpenCacheFolder);
+  }
+
   file_menu->addSeparator();
 
   m_exit_action = file_menu->addAction(tr("E&xit"), this, &MenuBar::Exit);
@@ -274,12 +282,13 @@ void MenuBar::AddToolsMenu()
 
   tools_menu->addAction(tr("&Cheats Manager"), this, [this] { emit ShowCheatsManager(); });
 
-  tools_menu->addAction(tr("FIFO Player"), this, &MenuBar::ShowFIFOPlayer);
+  tools_menu->addAction(tr("&FIFO Player"), this, &MenuBar::ShowFIFOPlayer);
 
-  auto* usb_device_menu = new QMenu(tr("Emulated USB Devices"), tools_menu);
+  auto* usb_device_menu = new QMenu(tr("&Emulated USB Devices"), tools_menu);
   usb_device_menu->addAction(tr("&Skylanders Portal"), this, &MenuBar::ShowSkylanderPortal);
   usb_device_menu->addAction(tr("&Infinity Base"), this, &MenuBar::ShowInfinityBase);
   usb_device_menu->addAction(tr("&Wii Speak"), this, &MenuBar::ShowWiiSpeakWindow);
+  usb_device_menu->addAction(tr("&Logitech USB Microphone"), this, &MenuBar::ShowLogitechMicWindow);
   tools_menu->addMenu(usb_device_menu);
 
   tools_menu->addSeparator();
@@ -291,68 +300,71 @@ void MenuBar::AddToolsMenu()
 
 #ifdef USE_RETRO_ACHIEVEMENTS
   m_achievements_action =
-      tools_menu->addAction(tr("Achievements"), this, [this] { emit ShowAchievementsWindow(); });
+      tools_menu->addAction(tr("&Achievements"), this, [this] { emit ShowAchievementsWindow(); });
 #ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
   m_achievements_dev_menu = tools_menu->addMenu(tr("RetroAchievements Development"));
-  AchievementManager::GetInstance().SetDevMenuUpdateCallback(
-      [this] { QueueOnObject(this, [this] { this->UpdateAchievementDevelopmentMenu(); }); });
+  m_raintegration_event_hook = AchievementManager::GetInstance().dev_menu_update_event.Register(
+      [this] { QueueOnObject(this, [this] { UpdateAchievementDevelopmentMenu(); }); });
   m_achievements_dev_menu->menuAction()->setVisible(false);
 #endif  // RC_CLIENT_SUPPORTS_RAINTEGRATION
   tools_menu->addSeparator();
 #endif  // USE_RETRO_ACHIEVEMENTS
 
-  QMenu* gc_ipl = tools_menu->addMenu(tr("Load GameCube Main Menu"));
+  QMenu* gc_ipl = tools_menu->addMenu(tr("Load &GameCube Main Menu"));
 
-  m_ntscj_ipl = gc_ipl->addAction(tr("NTSC-J"), this,
+  m_ntscj_ipl = gc_ipl->addAction(tr("NTSC-&J"), this,
                                   [this] { emit BootGameCubeIPL(DiscIO::Region::NTSC_J); });
-  m_ntscu_ipl = gc_ipl->addAction(tr("NTSC-U"), this,
+  m_ntscu_ipl = gc_ipl->addAction(tr("NTSC-&U"), this,
                                   [this] { emit BootGameCubeIPL(DiscIO::Region::NTSC_U); });
   m_pal_ipl =
-      gc_ipl->addAction(tr("PAL"), this, [this] { emit BootGameCubeIPL(DiscIO::Region::PAL); });
+      gc_ipl->addAction(tr("&PAL"), this, [this] { emit BootGameCubeIPL(DiscIO::Region::PAL); });
 
-  tools_menu->addAction(tr("Memory Card Manager"), this, [this] { emit ShowMemcardManager(); });
+  m_dev_ipl = gc_ipl->addAction(tr("&Triforce"), this,
+                                [this] { emit BootGameCubeIPL(DiscIO::Region::Unknown); });
+
+  tools_menu->addAction(tr("&Memory Card Manager"), this, [this] { emit ShowMemcardManager(); });
 
   tools_menu->addSeparator();
 
   // Label will be set by a NANDRefresh later
   m_boot_sysmenu = tools_menu->addAction(QString{}, this, [this] { emit BootWiiSystemMenu(); });
-  m_wad_install_action = tools_menu->addAction(tr("Install WAD..."), this, &MenuBar::InstallWAD);
-  m_manage_nand_menu = tools_menu->addMenu(tr("Manage NAND"));
-  m_import_backup = m_manage_nand_menu->addAction(tr("Import BootMii NAND Backup..."), this,
+  m_wad_install_action = tools_menu->addAction(tr("Install &WAD..."), this, &MenuBar::InstallWAD);
+  m_manage_nand_menu = tools_menu->addMenu(tr("Manage &NAND"));
+  m_import_backup = m_manage_nand_menu->addAction(tr("Import &BootMii NAND Backup..."), this,
                                                   [this] { emit ImportNANDBackup(); });
-  m_check_nand = m_manage_nand_menu->addAction(tr("Check NAND..."), this, &MenuBar::CheckNAND);
-  m_extract_certificates = m_manage_nand_menu->addAction(tr("Extract Certificates from NAND"), this,
-                                                         &MenuBar::NANDExtractCertificates);
+  m_check_nand = m_manage_nand_menu->addAction(tr("Check &NAND..."), this, &MenuBar::CheckNAND);
+  m_extract_certificates = m_manage_nand_menu->addAction(tr("Extract &Certificates from NAND"),
+                                                         this, &MenuBar::NANDExtractCertificates);
 
   m_boot_sysmenu->setEnabled(false);
 
   connect(&Settings::Instance(), &Settings::NANDRefresh, this,
           [this] { UpdateToolsMenu(Core::State::Uninitialized); });
 
-  m_perform_online_update_menu = tools_menu->addMenu(tr("Perform Online System Update"));
+  m_perform_online_update_menu = tools_menu->addMenu(tr("Perform Online System &Update"));
   m_perform_online_update_for_current_region = m_perform_online_update_menu->addAction(
-      tr("Current Region"), this, [this] { emit PerformOnlineUpdate(""); });
+      tr("&Current Region"), this, [this] { emit PerformOnlineUpdate(""); });
   m_perform_online_update_menu->addSeparator();
-  m_perform_online_update_menu->addAction(tr("Europe"), this,
+  m_perform_online_update_menu->addAction(tr("&Europe"), this,
                                           [this] { emit PerformOnlineUpdate("EUR"); });
-  m_perform_online_update_menu->addAction(tr("Japan"), this,
+  m_perform_online_update_menu->addAction(tr("&Japan"), this,
                                           [this] { emit PerformOnlineUpdate("JPN"); });
-  m_perform_online_update_menu->addAction(tr("Korea"), this,
+  m_perform_online_update_menu->addAction(tr("&Korea"), this,
                                           [this] { emit PerformOnlineUpdate("KOR"); });
-  m_perform_online_update_menu->addAction(tr("United States"), this,
+  m_perform_online_update_menu->addAction(tr("&United States"), this,
                                           [this] { emit PerformOnlineUpdate("USA"); });
 
   tools_menu->addSeparator();
 
   m_import_wii_save =
-      tools_menu->addAction(tr("Import Wii Save..."), this, &MenuBar::ImportWiiSave);
+      tools_menu->addAction(tr("Import &Wii Save..."), this, &MenuBar::ImportWiiSave);
   m_import_wii_saves =
-      tools_menu->addAction(tr("Import Wii Saves..."), this, &MenuBar::ImportWiiSaves);
+      tools_menu->addAction(tr("Import &Wii Saves..."), this, &MenuBar::ImportWiiSaves);
   m_export_wii_saves =
-      tools_menu->addAction(tr("Export All Wii Saves"), this, &MenuBar::ExportWiiSaves);
+      tools_menu->addAction(tr("Export All &Wii Saves"), this, &MenuBar::ExportWiiSaves);
 
   auto* const connect_wii_remotes_menu{
-      new QtUtils::NonAutodismissibleMenu(tr("Connect Wii Remotes"), tools_menu)};
+      new QtUtils::NonAutodismissibleMenu(tr("&Connect Wii Remotes"), tools_menu)};
 
   tools_menu->addSeparator();
   tools_menu->addMenu(connect_wii_remotes_menu);
@@ -360,13 +372,13 @@ void MenuBar::AddToolsMenu()
   for (int i = 0; i < 4; i++)
   {
     m_wii_remotes[i] = connect_wii_remotes_menu->addAction(
-        tr("Connect Wii Remote %1").arg(i + 1), this, [this, i] { emit ConnectWiiRemote(i); });
+        tr("Connect Wii Remote &%1").arg(i + 1), this, [this, i] { emit ConnectWiiRemote(i); });
     m_wii_remotes[i]->setCheckable(true);
   }
 
   connect_wii_remotes_menu->addSeparator();
 
-  m_wii_remotes[4] = connect_wii_remotes_menu->addAction(tr("Connect Balance Board"), this,
+  m_wii_remotes[4] = connect_wii_remotes_menu->addAction(tr("Connect &Balance Board"), this,
                                                          [this] { emit ConnectWiiRemote(4); });
   m_wii_remotes[4]->setCheckable(true);
 }
@@ -582,6 +594,13 @@ void MenuBar::AddViewMenu()
   view_menu->addSeparator();
   AddShowPlatformsMenu(view_menu);
   AddShowRegionsMenu(view_menu);
+
+  view_menu->addSeparator();
+  QAction* const show_game_count = view_menu->addAction(tr("Show Game Count"));
+  show_game_count->setCheckable(true);
+  show_game_count->setChecked(Settings::Instance().IsGameCountVisible());
+  connect(show_game_count, &QAction::toggled, &Settings::Instance(),
+          &Settings::SetGameCountVisible);
 
   view_menu->addSeparator();
   QAction* const purge_action =
@@ -845,36 +864,13 @@ void MenuBar::AddMovieMenu()
   connect(pause_at_end, &QAction::toggled,
           [](bool value) { Config::SetBaseOrCurrent(Config::MAIN_MOVIE_PAUSE_MOVIE, value); });
 
-  auto* rerecord_counter = movie_menu->addAction(tr("Show Rerecord Counter"));
-  rerecord_counter->setCheckable(true);
-  rerecord_counter->setChecked(Config::Get(Config::MAIN_MOVIE_SHOW_RERECORD));
-  connect(rerecord_counter, &QAction::toggled,
-          [](bool value) { Config::SetBaseOrCurrent(Config::MAIN_MOVIE_SHOW_RERECORD, value); });
+  m_movie_window = movie_menu->addAction(tr("Enable Movie Window"));
+  m_movie_window->setCheckable(true);
+  m_movie_window->setChecked(Config::Get(Config::MAIN_MOVIE_SHOW_OSD));
+  connect(m_movie_window, &QAction::toggled,
+          [](bool value) { Config::SetBaseOrCurrent(Config::MAIN_MOVIE_SHOW_OSD, value); });
 
-  auto* lag_counter = movie_menu->addAction(tr("Show Lag Counter"));
-  lag_counter->setCheckable(true);
-  lag_counter->setChecked(Config::Get(Config::MAIN_SHOW_LAG));
-  connect(lag_counter, &QAction::toggled,
-          [](bool value) { Config::SetBaseOrCurrent(Config::MAIN_SHOW_LAG, value); });
-
-  auto* frame_counter = movie_menu->addAction(tr("Show Frame Counter"));
-  frame_counter->setCheckable(true);
-  frame_counter->setChecked(Config::Get(Config::MAIN_SHOW_FRAME_COUNT));
-  connect(frame_counter, &QAction::toggled,
-          [](bool value) { Config::SetBaseOrCurrent(Config::MAIN_SHOW_FRAME_COUNT, value); });
-
-  auto* input_display = movie_menu->addAction(tr("Show Input Display"));
-  input_display->setCheckable(true);
-  input_display->setChecked(Config::Get(Config::MAIN_MOVIE_SHOW_INPUT_DISPLAY));
-  connect(input_display, &QAction::toggled, [](bool value) {
-    Config::SetBaseOrCurrent(Config::MAIN_MOVIE_SHOW_INPUT_DISPLAY, value);
-  });
-
-  auto* system_clock = movie_menu->addAction(tr("Show System Clock"));
-  system_clock->setCheckable(true);
-  system_clock->setChecked(Config::Get(Config::MAIN_MOVIE_SHOW_RTC));
-  connect(system_clock, &QAction::toggled,
-          [](bool value) { Config::SetBaseOrCurrent(Config::MAIN_MOVIE_SHOW_RTC, value); });
+  movie_menu->addAction(tr("Customize Movie Window"), this, &MenuBar::ConfigureOSD);
 
   movie_menu->addSeparator();
 
@@ -929,6 +925,13 @@ void MenuBar::AddJITMenu()
   m_jit_disable_fastmem->setChecked(!Config::Get(Config::MAIN_FASTMEM));
   connect(m_jit_disable_fastmem, &QAction::toggled,
           [](bool enabled) { Config::SetBaseOrCurrent(Config::MAIN_FASTMEM, !enabled); });
+
+  m_jit_disable_page_table_fastmem = m_jit->addAction(tr("Disable Page Table Fastmem"));
+  m_jit_disable_page_table_fastmem->setCheckable(true);
+  m_jit_disable_page_table_fastmem->setChecked(!Config::Get(Config::MAIN_PAGE_TABLE_FASTMEM));
+  connect(m_jit_disable_page_table_fastmem, &QAction::toggled, [](bool enabled) {
+    Config::SetBaseOrCurrent(Config::MAIN_PAGE_TABLE_FASTMEM, !enabled);
+  });
 
   m_jit_disable_fastmem_arena = m_jit->addAction(tr("Disable Fastmem Arena"));
   m_jit_disable_fastmem_arena->setCheckable(true);
@@ -1070,6 +1073,7 @@ void MenuBar::AddSymbolsMenu()
   generate->addAction(tr("Address"), this, &MenuBar::GenerateSymbolsFromAddress);
   generate->addAction(tr("Signature Database"), this, &MenuBar::GenerateSymbolsFromSignatureDB);
   generate->addAction(tr("RSO Modules"), this, &MenuBar::GenerateSymbolsFromRSO);
+  m_debugger_show_demangled_names = m_symbols->addAction(tr("Show &Demangled Names"));
   m_symbols->addSeparator();
 
   m_symbols->addAction(tr("&Load Symbol Map"), this, &MenuBar::LoadSymbolMap);
@@ -1093,6 +1097,13 @@ void MenuBar::AddSymbolsMenu()
   m_symbols->addSeparator();
 
   m_symbols->addAction(tr("&Patch HLE Functions"), this, &MenuBar::PatchHLEFunctions);
+
+  m_debugger_show_demangled_names->setCheckable(true);
+  m_debugger_show_demangled_names->setChecked(Settings::Instance().IsShowDemangledNames());
+  connect(m_debugger_show_demangled_names, &QAction::toggled, &Settings::Instance(),
+          &Settings::SetShowDemangledNames);
+  connect(&Settings::Instance(), &Settings::ShowDemangledNamesChanged,
+          m_debugger_show_demangled_names, &QAction::setChecked);
 }
 
 void MenuBar::UpdateToolsMenu(const Core::State state)
@@ -1105,6 +1116,7 @@ void MenuBar::UpdateToolsMenu(const Core::State state)
   m_ntscj_ipl->setEnabled(is_uninitialized && File::Exists(Config::GetBootROMPath(JAP_DIR)));
   m_ntscu_ipl->setEnabled(is_uninitialized && File::Exists(Config::GetBootROMPath(USA_DIR)));
   m_pal_ipl->setEnabled(is_uninitialized && File::Exists(Config::GetBootROMPath(EUR_DIR)));
+  m_dev_ipl->setEnabled(is_uninitialized && File::Exists(Config::GetBootROMPath(DEV_DIR)));
   m_wad_install_action->setEnabled(is_uninitialized);
   m_import_backup->setEnabled(is_uninitialized);
   m_check_nand->setEnabled(is_uninitialized);
@@ -1122,8 +1134,8 @@ void MenuBar::UpdateToolsMenu(const Core::State state)
                             DiscIO::GetSysMenuVersionString(tmd.GetTitleVersion(), tmd.IsvWii())) :
                         QString{};
 
-    const QString sysmenu_text = (tmd.IsValid() && tmd.IsvWii()) ? tr("Load vWii System Menu %1") :
-                                                                   tr("Load Wii System Menu %1");
+    const QString sysmenu_text = (tmd.IsValid() && tmd.IsvWii()) ? tr("Load vWii &System Menu %1") :
+                                                                   tr("Load Wii &System Menu %1");
 
     m_boot_sysmenu->setText(sysmenu_text.arg(sysmenu_version));
 
@@ -1422,7 +1434,7 @@ void MenuBar::NANDExtractCertificates()
   }
 }
 
-void MenuBar::OnSelectionChanged(std::shared_ptr<const UICommon::GameFile> game_file)
+void MenuBar::OnSelectionChanged(const std::shared_ptr<const UICommon::GameFile>& game_file)
 {
   m_game_selected = !!game_file;
 
@@ -1644,7 +1656,7 @@ RSOVector MenuBar::DetectRSOModules(ParallelProgressDialog& progress)
 
         for (; len < MODULE_NAME_MAX_LENGTH; ++len)
         {
-          const auto res = PowerPC::MMU::HostRead_U8(guard, *found_addr - (len + 1));
+          const auto res = PowerPC::MMU::HostRead<u8>(guard, *found_addr - (len + 1));
           if (!std::isprint(res))
           {
             break;
@@ -1988,7 +2000,7 @@ void MenuBar::SearchInstruction()
   for (u32 addr = Memory::MEM1_BASE_ADDR; addr < Memory::MEM1_BASE_ADDR + memory.GetRamSizeReal();
        addr += 4)
   {
-    if (op_std == PPCTables::GetInstructionName(PowerPC::MMU::HostRead_U32(guard, addr), addr))
+    if (op_std == PPCTables::GetInstructionName(PowerPC::MMU::HostRead<u32>(guard, addr), addr))
     {
       NOTICE_LOG_FMT(POWERPC, "Found {} at {:08x}", op_std, addr);
       found = true;

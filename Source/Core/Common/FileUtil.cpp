@@ -3,28 +3,24 @@
 
 #include "Common/FileUtil.h"
 
-#include <algorithm>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
-#include <fstream>
 #include <limits.h>
 #include <stack>
 #include <string>
-#include <sys/stat.h>
 #include <system_error>
-#include <thread>
 #include <vector>
 
-#include "Common/Assert.h"
-#include "Common/Common.h"
 #include "Common/CommonFuncs.h"
 #include "Common/CommonPaths.h"
 #include "Common/CommonTypes.h"
+#ifdef ANDROID
+#include "Common/Assert.h"
+#endif
 #ifdef __APPLE__
 #include "Common/DynamicLibrary.h"
 #endif
@@ -33,16 +29,14 @@
 #include "Common/StringUtil.h"
 
 #ifdef _WIN32
-#include <Windows.h>
-#include <Shlwapi.h>
+#include <windows.h>
 #include <commdlg.h>  // for GetSaveFileName
 #include <direct.h>   // getcwd
 #include <io.h>
 #include <objbase.h>  // guid stuff
 #include <shellapi.h>
+#include <shlwapi.h>
 #else
-#include <dirent.h>
-#include <errno.h>
 #include <libgen.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -431,7 +425,7 @@ static FSTEntry ScanDirectoryTreeAndroidContent(std::string directory, bool recu
 #endif
 
 // Recursive or non-recursive list of files and directories under directory.
-FSTEntry ScanDirectoryTree(std::string directory, bool recursive)
+FSTEntry ScanDirectoryTree(const std::string& directory, bool recursive)
 {
   DEBUG_LOG_FMT(COMMON, "{}: directory {}", __func__, directory);
 
@@ -528,9 +522,9 @@ bool DeleteDirRecursively(const std::string& directory)
 
   std::error_code error;
   const std::uintmax_t num_removed = std::filesystem::remove_all(StringToPath(directory), error);
-  const bool success = num_removed != 0 && !error;
+  const bool success = num_removed != static_cast<std::uintmax_t>(-1) && !error;
   if (!success)
-    ERROR_LOG_FMT(COMMON, "{}: {} failed {}", __func__, directory, error.message());
+    ERROR_LOG_FMT(COMMON, "{}: {} failed. {}", __func__, directory, error.message());
   return success;
 }
 
@@ -767,29 +761,30 @@ std::string GetExeDirectory()
 
 static std::string CreateSysDirectoryPath()
 {
-  std::string sysDir;
-
+#define SYS_FOLDER_NAME "Sys"
+// iCube: the app bundles Data/Sys as a top-level "Sys" folder reference, not under Contents/Resources.
 #if defined(_WIN32) || defined(LINUX_LOCAL_DEV) || defined(IPHONEOS)
-#define SYSDATA_DIR "Sys"
+#define SYSDATA_DIR SYS_FOLDER_NAME
 #elif defined __APPLE__
-#define SYSDATA_DIR "Contents/Resources/Sys"
+#define SYSDATA_DIR "Contents/Resources/" SYS_FOLDER_NAME
 #else
-#ifdef DATA_DIR
-#define SYSDATA_DIR DATA_DIR "sys"
-#else
-#define SYSDATA_DIR "sys"
+#define SYSDATA_DIR DATA_DIR SYS_FOLDER_NAME
 #endif
-#endif
+
+  std::string sys_directory;
 
 #if defined(__APPLE__)
-  const std::string sys_directory = GetBundleDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;
-#elif defined(_WIN32) || defined(LINUX_LOCAL_DEV)
-  const std::string sys_directory = GetExeDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;
+  sys_directory = GetBundleDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;
 #elif defined ANDROID
-  const std::string sys_directory = s_android_sys_directory + DIR_SEP;
+  sys_directory = s_android_sys_directory + DIR_SEP;
   ASSERT_MSG(COMMON, !s_android_sys_directory.empty(), "Sys directory has not been set");
 #else
-  const std::string sys_directory = SYSDATA_DIR DIR_SEP;
+  const std::string local_sys_directory = GetExeDirectory() + DIR_SEP SYS_FOLDER_NAME DIR_SEP;
+  if (IsDirectory(local_sys_directory))
+    sys_directory = local_sys_directory;
+  else
+    sys_directory = SYSDATA_DIR DIR_SEP;
+
 #endif
 
   INFO_LOG_FMT(COMMON, "CreateSysDirectoryPath: Setting to {}", sys_directory);
@@ -848,6 +843,7 @@ static void RebuildUserDirectories(unsigned int dir_index)
   case D_USER_IDX:
     s_user_paths[D_GCUSER_IDX] = s_user_paths[D_USER_IDX] + GC_USER_DIR DIR_SEP;
     s_user_paths[D_WIIROOT_IDX] = s_user_paths[D_USER_IDX] + WII_USER_DIR DIR_SEP;
+    s_user_paths[D_TRIUSER_IDX] = s_user_paths[D_USER_IDX] + TRI_USER_DIR DIR_SEP;
     s_user_paths[D_CONFIG_IDX] = s_user_paths[D_USER_IDX] + CONFIG_DIR DIR_SEP;
     s_user_paths[D_GAMESETTINGS_IDX] = s_user_paths[D_USER_IDX] + GAMESETTINGS_DIR DIR_SEP;
     s_user_paths[D_MAPS_IDX] = s_user_paths[D_USER_IDX] + MAPS_DIR DIR_SEP;
@@ -876,7 +872,6 @@ static void RebuildUserDirectories(unsigned int dir_index)
     s_user_paths[D_DUMPDEBUG_JITBLOCKS_IDX] =
         s_user_paths[D_DUMPDEBUG_IDX] + DUMP_DEBUG_JITBLOCKS_DIR DIR_SEP;
     s_user_paths[D_LOGS_IDX] = s_user_paths[D_USER_IDX] + LOGS_DIR DIR_SEP;
-    s_user_paths[D_MAILLOGS_IDX] = s_user_paths[D_LOGS_IDX] + MAIL_LOGS_DIR DIR_SEP;
     s_user_paths[D_THEMES_IDX] = s_user_paths[D_USER_IDX] + THEMES_DIR DIR_SEP;
     s_user_paths[D_STYLES_IDX] = s_user_paths[D_USER_IDX] + STYLES_DIR DIR_SEP;
     s_user_paths[D_PIPES_IDX] = s_user_paths[D_USER_IDX] + PIPES_DIR DIR_SEP;
@@ -887,6 +882,7 @@ static void RebuildUserDirectories(unsigned int dir_index)
     s_user_paths[D_GRAPHICSMOD_IDX] = s_user_paths[D_LOAD_IDX] + GRAPHICSMOD_DIR DIR_SEP;
     s_user_paths[D_BANNERS_WIIROOT_IDX] = s_user_paths[D_LOAD_IDX] + WIIBANNERS_DIR DIR_SEP;
     s_user_paths[D_FIRMWARE_IDX] = s_user_paths[D_LOAD_IDX] + FIRMWARE_DIR DIR_SEP;
+    s_user_paths[D_WIISYSCONF_IDX] = s_user_paths[D_WIIROOT_IDX] + WII_SYSCONF_DIR DIR_SEP;
     s_user_paths[D_WIISDCARDSYNCFOLDER_IDX] = s_user_paths[D_LOAD_IDX] + WIISDSYNC_DIR DIR_SEP;
     s_user_paths[F_DOLPHINCONFIG_IDX] = s_user_paths[D_CONFIG_IDX] + DOLPHIN_CONFIG;
     s_user_paths[F_GCPADCONFIG_IDX] = s_user_paths[D_CONFIG_IDX] + GCPAD_CONFIG;
@@ -906,6 +902,7 @@ static void RebuildUserDirectories(unsigned int dir_index)
     s_user_paths[F_FAKEVMEMDUMP_IDX] = s_user_paths[D_DUMP_IDX] + FAKEVMEM_DUMP;
     s_user_paths[F_GCSRAM_IDX] = s_user_paths[D_GCUSER_IDX] + GC_SRAM;
     s_user_paths[F_WIISDCARDIMAGE_IDX] = s_user_paths[D_LOAD_IDX] + WII_SD_CARD_IMAGE;
+    s_user_paths[F_WIISYSCONF_IDX] = s_user_paths[D_WIISYSCONF_IDX] + WII_SYSCONF;
 
     s_user_paths[D_MEMORYWATCHER_IDX] = s_user_paths[D_USER_IDX] + MEMORYWATCHER_DIR DIR_SEP;
     s_user_paths[F_MEMORYWATCHERLOCATIONS_IDX] =
@@ -969,7 +966,6 @@ static void RebuildUserDirectories(unsigned int dir_index)
     break;
 
   case D_LOGS_IDX:
-    s_user_paths[D_MAILLOGS_IDX] = s_user_paths[D_LOGS_IDX] + MAIL_LOGS_DIR DIR_SEP;
     s_user_paths[F_MAINLOG_IDX] = s_user_paths[D_LOGS_IDX] + MAIN_LOG;
     break;
 

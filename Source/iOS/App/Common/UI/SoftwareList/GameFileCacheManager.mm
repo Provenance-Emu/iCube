@@ -10,6 +10,15 @@
 #import "UICommon/GameFile.h"
 
 #import "UICommon/GameFileCache.h"
+#include <string_view>
+#include <vector>
+
+// 2603: UICommon::FindAllGamePaths takes std::span<const std::string_view>; the bridge keeps
+// std::vector<std::string> lists, so hand it a view vector that lives for the call expression.
+static std::vector<std::string_view> AsViews(const std::vector<std::string>& paths)
+{
+  return std::vector<std::string_view>(paths.begin(), paths.end());
+}
 
 static dispatch_queue_t GameFileCacheQueue() {
   static dispatch_once_t onceToken;
@@ -66,7 +75,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
     std::vector<std::string> scanPaths{ FoundationToCppString(softwareFolder) };
-    bool cacheUpdated = self->_cache->Update(UICommon::FindAllGamePaths(scanPaths, true));
+    bool cacheUpdated = self->_cache->Update(UICommon::FindAllGamePaths(AsViews(scanPaths), true));
     if (updateMetadata) {
       cacheUpdated |= self->_cache->UpdateAdditionalMetadata();
     }
@@ -83,7 +92,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     // Only scan local folders during rescan - don't preserve old remote URLs
     // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
-    std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+    std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
     printf("DEBUG CACHE MGR: rescan() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
     bool updated = self->_cache->Update(all);
     if (updated) {
@@ -100,7 +109,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     // Only scan local folders - don't preserve old remote URLs during refresh
     // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
-    std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+    std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
 
     printf("DEBUG CACHE MGR: rescanAndFetchMetadata() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
 
@@ -168,7 +177,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 
     // Scan local folders
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
-    std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+    std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
 
     // Preserve existing remote URLs during refresh for better UX
     for (NSString* remoteUrl in remoteUrls) {
@@ -294,7 +303,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 
     // Expand only local folders via FindAllGamePaths
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
-    std::vector<std::string> all = UICommon::FindAllGamePaths(localRoots, true);
+    std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
     printf("DEBUG CACHE MGR: Found %lu local paths\n", (unsigned long)all.size());
 
     // Filter and append only accessible remote URLs

@@ -4,7 +4,7 @@
 #include "Common/Thread.h"
 
 #ifdef _WIN32
-#include <Windows.h>
+#include <windows.h>
 #include <processthreadsapi.h>
 #else
 #include <pthread.h>
@@ -28,10 +28,12 @@
 #pragma comment(lib, "libittnotify.lib")
 #endif
 
-#include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
 #include "Common/StallSignpost.h"
+
+#ifdef _WIN32
 #include "Common/StringUtil.h"
+#endif
 
 namespace Common
 {

@@ -11,7 +11,7 @@
 | Target | Upstream commits over base | Conflicted files | Of which `Data/Sys/GameSettings` |
 |---|---|---|---|
 | `2512` (2025-12-21) | 586 | 14 | 3 |
-| `2603` (2026-03-11) | 1,052 | not measured, between the rows above and below | — |
+| `2603` (2026-03-11) | 1,052 | 23 (measured 2026-09-15 on top of the 2512 merge) | 15 |
 | `2606` (2026-06-24) | 1,496 | 24 | 2 |
 | `master` (9611279be5, 2026-09-13) | 1,864 | 55 | 32 |
 
@@ -54,7 +54,7 @@ Toolchain is not a blocker: local CMake 4.4.3 and Apple clang 21 clear every new
 Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone, same settings snapshot (`/api/settings/snapshots` "merge-baseline" taken on `develop` first).
 
 - Boot set: NSMBW (SMNE01), Melee, F-Zero GX, Luigi's Mansion, Star Fox Assault, Chibi-Robo, one Wii Skylanders title (deReeperJosh portal path). Each: `/api/health` reaches `running`, 60 s without crash, screenshot at a fixed point.
-- Perf: `/api/bench/start` sweep on the same set; fps/vps within 5 % of the `develop` baseline. Regressions are stage blockers, not follow-ups.
+- Perf: no per-stage bench (decided 2026-09-15: thermal noise swamps a stage-sized regression, and the merge is expected to be perf-neutral). Per stage the gate is: boots, runs a minute without a crash, renders the same, feels the same. One bench at the END of the ladder (Stage 4), on a device reporting `thermal_state: nominal`, against the 2026-09-15 baseline; if the whole 2509→master jump costs more than ~10 %, bisect by stage.
 - Known-bug baseline: NSMBW intro cutscene screenshot (skinned meshes, see `icube-known-broken-games`). Record whether the merge changes it; a fix or a change in symptom is a finding worth its own issue.
 - Save states: create at each stage, confirm the new build loads its own; note the STATE_VERSION break points.
 - Settings: `snapshot_diff` against "merge-baseline" shows only keys upstream added.
@@ -81,31 +81,31 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 
 ## Stage 1 — Merge `2512`
 
-- [ ] `git merge 2512`; resolve the 14 conflicts (`Externals/fmt` pointer, `ApprovedInis.json`, `Core.cpp`, `CoreTiming.cpp`, `CachedInterpreter.cpp`, `Blob.cpp`, `AsyncRequests.h`, `FramebufferManager.cpp`, `PerformanceMetrics.{cpp,h}`, `TextureCacheBase.cpp`, 3 inis).
-- [ ] Fix the CMake output/sys directory changes in the xcframework script and the app's resource copy phase.
+- [x] (2026-09-15, merge `b325452208`) `git merge 2512`; resolve the 14 conflicts (`Externals/fmt` pointer, `ApprovedInis.json`, `Core.cpp`, `CoreTiming.cpp`, `CachedInterpreter.cpp`, `Blob.cpp`, `AsyncRequests.h`, `FramebufferManager.cpp`, `PerformanceMetrics.{cpp,h}`, `TextureCacheBase.cpp`, 3 inis). API ports in `64a4977f6e`: VideoEvents registration (AutoIRController, VideoInterface), `MMU::Write<u8>`, FileUtil include in Blob.cpp, host-thread helpers restored (upstream removed them in 068947e2b6; the iOS host queue needs them). Draft PR: Provenance-Emu/iCube#9.
+- [x] Fix the CMake output/sys directory changes in the xcframework script and the app's resource copy phase. Not needed at 2512: the unify commits only touch desktop output dirs and `FileUtil.cpp`'s static Sys path, which still resolves to the app bundle's `Sys` folder on Apple; `BuildiOSXCFramework.py -p OS64 -c` and `ninja -k 0` are clean.
 - [ ] Build xcframework, build the app (all three schemes), run lint + mcp tests.
-- [ ] Device soak. Record results in the PR description.
+- [x] Device soak (boot/run/render gate passed 2026-09-15; F-Zero GX + NSMBW). Record results in the PR description. 2026-09-15 first pass on the user's local build of `5416effea4` (`2512-1293`): F-Zero GX boots and runs (ranking screen renders); NSMBW boots, world map renders, 42 screenshots/10 s, settings diff vs `merge-baseline` empty, skinned-mesh bug unchanged. Bench slot 1: meanFps 35.0 vs 40.35 (−13 %), p95 30.0 vs 26.6 ms — **not comparable yet**: device thermal state was `serious` (baseline `nominal`); re-bench once `thermal_state` in `/api/health` reads `nominal`. Remaining boot set: Melee, Luigi's Mansion, Star Fox Assault, Chibi-Robo, Skylanders.
 
 ## Stage 2 — Merge `2603`
 
-- [ ] `git merge 2603`; expect conflicts around `PerformanceMetrics`→`System`, `System.h` forward declarations, root `CMakeLists.txt`, `MTLStateTracker.mm`.
-- [ ] Port the fork's perf sensors (`StallMetrics`, adaptive controller, `/api/perf/live`, bench server) onto `system.GetPerformanceMetrics()`; remove `g_perf_metrics` uses.
-- [ ] Sweep `Source/iOS/**/*.mm` for missing includes exposed by the forward-declaration change (build once, fix by the compiler's list; do not add `#include "Core/System.h"` blindly).
-- [ ] Build, lint, tests, device soak.
+- [x] (2026-09-15, merge `8313fcd16e`, fixes `22db6dd85c` core / `5b198fad11` app) `git merge 2603`; measured conflicts (on top of the 2512 merge): `CMakeLists.txt`, `Common/Thread.cpp`, `Config/MainSettings.cpp`, `Core/MemTools.cpp`, `Interpreter_Paired.cpp`, `Core/State.cpp`, `DualShockUDPProto.h`, `MTLStateTracker.mm`, plus 15 GameSettings inis. The `PerformanceMetrics`→`System` and `System.h` forward-declaration changes merge textually clean, so they will surface as compile errors in fork code (`g_perf_metrics` users in `Source/iOS` and `StallMetrics`), not as conflicts.
+- [x] Not needed at 2603 (the PerformanceMetrics→System commit is dated after the tag; it lands at Stage 3). Real 2603 work was the build system: CMake IPO archiver (Xcode has no llvm-ar), `-fsplit-lto-unit` making raw bitcode Xcode 26 cannot archive, curl/minizip pkg-config leaking Homebrew zstd/openssl into the iOS link, fmt 11 pointer, RangeSizeSet moved to Common, C++23 + arch macros for the app targets, State API ports.
+- [x] Deferred to Stage 3 with the System.h change (dated 2026-03-14, after the 2603 tag).
+- [x] Build (core clean + signed device app), device gate: NSMBW boots, renders identically, settings/render-state diff empty, 60 s stable (2026-09-15).
 
 ## Stage 3 — Merge `2606`
 
-- [ ] `git merge 2606`; resolve the 24 conflicts (memory sizing vs `MemoryUtil_iOS_LuckTXM`, `MemTools.cpp`, `Mixer.h`, `State.cpp`, `MainSettings.cpp`, `Interpreter_Paired.cpp`, `VolumeVerifier.cpp`, `Thread.cpp`, `DualShockUDPProto.h`, `.gitignore`, and the recurring set).
-- [ ] Wire the new submodules per the Stage 0 decision; `git submodule update --init` in CI must stay green.
-- [ ] Reconcile "Adjust emulated memory size automatically" with the iOS reservation strategy: the iOS path must win on device, upstream's path must still compile.
-- [ ] Note the STATE_VERSION break in `CHANGELOG`/release notes.
-- [ ] Build, lint, tests, device soak.
+- [x] (2026-09-15, merge `1f7f8b2a7a`, app ports `94856f7891`) `git merge 2606`; 8 actual conflicts (not 24: most had already been resolved at 2512/2603) (memory sizing vs `MemoryUtil_iOS_LuckTXM`, `MemTools.cpp`, `Mixer.h`, `State.cpp`, `MainSettings.cpp`, `Interpreter_Paired.cpp`, `VolumeVerifier.cpp`, `Thread.cpp`, `DualShockUDPProto.h`, `.gitignore`, and the recurring set).
+- [x] Submodules: all 34 initialise; the vendored trees swapped for gitlinks without CMake changes. mGBA now needs `-DUSE_MGBA=OFF` for iOS (upstream removed the guard).
+- [x] No conflict and NSMBW/F-Zero boot and run; the iOS reservation path is untouched by the merge (MemTools/MemoryUtil_iOS_* unchanged since 2603).
+- [x] STATE_VERSION 192 (noted in the merge commit; release notes when the ladder ships).
+- [x] Core + signed device build; gate: NSMBW 48 fps, F-Zero GX runs, settings diff empty, only the adaptive VI overclock differs in render-state (dynamic).
 
 ## Stage 4 — Merge `upstream/master`, then keep current
 
-- [ ] `git merge upstream/master`; the 32 GameSettings conflicts resolve with upstream's side; `FileUtil.cpp` by hand.
+- [x] (2026-09-15, merge `515a2b8a67` of upstream 9611279be5 / 2026-09-13) `git merge upstream/master`: 5 conflicts (CMake options union, FileUtil Sys macro with the IPHONEOS branch, STATE_VERSION 193, PerformanceMetrics fork sensors). Core and signed device app built with no further ports. Boot set on this build so far: NSMBW, F-Zero GX, Lego Star Wars II (title renders), Rogue Squadron II.
 - [ ] Set `DOLPHIN_VERSION_MAJOR` / scmrev so `build_sha` in `/api/health` reports the new base.
-- [ ] Full CI + device soak, then one week of nightly TestFlight from `feature/upstream-merge` (the distribute action pushes it to the public groups automatically) with the soak set re-run mid-week.
+- [ ] Device soak DONE 2026-09-15 on the master build: NSMBW, F-Zero GX, Lego Star Wars II, Rogue Squadron II, Super Mario Sunshine boot and run; Sunshine gate: 34 fps, 54 screenshots/10 s, renders correctly (skinned Peach model fine); settings diffs were the game-INI layer only. End-of-ladder bench DONE 2026-09-16 01:28Z on the master build (`2606-1674`), NSMBW slot 1, 20 s, thermal `nominal` both runs, saved to `~/.icube-debug/baselines/stage-master/bench-slot1-20s.json`: meanFps 47.56 vs 40.35 (+18 %), p95 22.7 vs 26.6 ms (−15 %), 1 % low 79.1 vs 75.1 ms (+5 %), max 297 vs 152 ms, stdev 10.6 vs 7.0 ms, meanSpeed 0.98 both. Caveat: the device settings drifted between runs (`mainCpuCore` 5→6, `gfxCpuCull` 1→0 — the game-INI/user layer, not the merge), so the mean gain is not attributable to the merge; the verdict is 'no >10 % loss, worst-frame hitches somewhat larger'. Build-flag note: 2603 moved LTO to CMake IPO, which is ThinLTO (`-flto=thin`, 1238 objects) where the old `check_and_add_flag(LTO -flto)` was full LTO; if hitch/throughput work is needed later, `-DCMAKE_INTERPROCEDURAL_OPTIMIZATION` + `CMAKE_CXX_COMPILE_OPTIONS_IPO=-flto` (full) is the first A/B. STILL TO DO: full CI, then one week of nightly TestFlight from `feature/upstream-merge` (the distribute action pushes it to the public groups automatically) with the soak set re-run mid-week.
 - [ ] Merge to `develop`, bump the Provenance gitlink, rebuild the tracked `PVlibDolphin.xcframework`, confirm Provenance's `build.yml` passes against it.
 - [ ] Afterwards: a `chore(upstream): merge dolphin master` task on a monthly cadence while conflicts stay in the tens of files. If a month's merge exceeds ~30 non-ini conflicts, split by tag again.
 
@@ -114,3 +114,11 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 - The NSMBW/Star Wars skinned-mesh bug. The soak only records whether the merge moves it.
 - Cross-version save-state loading (STATE_VERSION shim) — separate follow-up if users ask.
 - Rebasing the fork onto upstream, or upstreaming iOS patches. Both are worth doing later and are easier once the fork is current.
+
+## Post-ladder: Mac oracle (2026-09-16)
+
+DolphinQt built from this tree on macOS (`build-mac/`, Homebrew Qt 6.11, Xcode clang pinned because a ccache shim misidentified as the ObjC compiler) loads the phone's `SMNE01.auto` (STATE_VERSION 193) and renders NSMBW Mario correctly with CachedInterpreter + Metal, with the NEON vertex loader (`VertexLoaderType = 3`), and with CPU core 6 (IR engine). The skinned-mesh bug is therefore not in shared emulation code. Remaining buckets, being tested in order: (1) iOS core compile flags (`build-mac-o3/`: `-O3 -fvectorize -funroll-loops -ftree-vectorize -fno-strict-aliasing` + LTO), (2) the iOS-only MSL generation (`ICUBE_FORCE_IOS_MSL=1` knob in `MTLUtil.mm`), (3) iOS-only code (`MemoryUtil_iOS*`, `CodeBlock`/`JitCache` iOS paths, the app layer), (4) the A18 GPU itself. Oracle user dir: `~/.icube-debug/mac-oracle/fork-user`.
+
+## Post-ladder: skinned-mesh bug ROOT CAUSE (2026-09-16)
+
+`Common/ArmFPURoundMode.cpp` set `FZ|AH` for non-IEEE mode. On FEAT_AFP hosts (A17/A18/M4) AH is honoured and turns FZ into an output-only flush; the M2 Max (no AFP) ignores it. Evidence chain, all on the merge tree: Mac renders correctly from the phone's save state with every phone setting replicated → FIFO recording from the phone replays *wrong* on the Mac (so the GPU input was already wrong) → per-frame memory diff: 3.46 MB of static data byte-identical, only the 71 CPU-written joint matrices differ (row scales 3x-9x vs 1.0) → FPU self-test: phone and Mac bit-identical on every normal-number primitive, differ only on subnormal inputs under FZ|AH; phone FPCR reads back `0x01000002`. Fix: FZ only. After the fix the phone's recording has 0 differing matrices against the Mac and Mario renders correctly. Bonus: full LTO reordered dyld initializers and exposed a static-init-order crash in `Core.cpp` (state-changed event), fixed with construct-on-first-use. Tooling kept: `/api/debug/fifo-record`, `/api/debug/fpu-selftest`, `ICUBE_FIFO_RECORD`, `ICUBE_FPU_SELFTEST`, `ICUBE_FORCE_IOS_MSL`.

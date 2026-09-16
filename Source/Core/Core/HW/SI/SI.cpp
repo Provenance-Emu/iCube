@@ -3,13 +3,15 @@
 
 #include "Core/HW/SI/SI.h"
 
-#include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstring>
-#include <iomanip>
 #include <memory>
-#include <sstream>
+
+#if defined(_DEBUG)
+#include <vector>
+
+#include "Common/StringUtil.h"
+#endif
 
 #include "Common/BitField.h"
 #include "Common/ChunkFile.h"
@@ -147,9 +149,12 @@ void SerialInterfaceManager::RunSIBuffer(u64 user_data, s64 cycles_late)
   {
     const s32 request_length = ConvertSILengthField(m_com_csr.OUTLNGTH);
     const s32 expected_response_length = ConvertSILengthField(m_com_csr.INLNGTH);
-    const std::vector<u8> request_copy(m_si_buffer.data(), m_si_buffer.data() + request_length);
 
-    const std::unique_ptr<ISIDevice>& device = m_channel[m_com_csr.CHANNEL].device;
+#if defined(_DEBUG)
+    const std::vector<u8> request_copy(m_si_buffer.data(), m_si_buffer.data() + request_length);
+#endif
+
+    auto* const device = m_channel[m_com_csr.CHANNEL].device.get();
     const s32 actual_response_length = device->RunBuffer(m_si_buffer.data(), request_length);
 
     DEBUG_LOG_FMT(SERIALINTERFACE,
@@ -159,15 +164,16 @@ void SerialInterfaceManager::RunSIBuffer(u64 user_data, s64 cycles_late)
                   actual_response_length);
     if (actual_response_length > 0 && expected_response_length != actual_response_length)
     {
-      std::ostringstream ss;
-      for (const u8 b : request_copy)
-      {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)b << ' ';
-      }
-      DEBUG_LOG_FMT(
+#if defined(_DEBUG)
+      WARN_LOG_FMT(
           SERIALINTERFACE,
           "RunSIBuffer: expected_response_length({}) != actual_response_length({}): request: {}",
-          expected_response_length, actual_response_length, ss.str());
+          expected_response_length, actual_response_length, Common::BytesToHexString(request_copy));
+#else
+      WARN_LOG_FMT(SERIALINTERFACE,
+                   "RunSIBuffer: expected_response_length({}) != actual_response_length({})",
+                   expected_response_length, actual_response_length);
+#endif
     }
 
     // TODO:
@@ -222,29 +228,21 @@ void SerialInterfaceManager::DoState(PointerWrap& p)
   p.Do(m_si_buffer);
 }
 
-template <int device_number>
-void SerialInterfaceManager::DeviceEventCallback(Core::System& system, u64 userdata, s64 cyclesLate)
-{
-  const auto& si = system.GetSerialInterface();
-  si.m_channel[device_number].device->OnEvent(userdata, cyclesLate);
-}
-
 void SerialInterfaceManager::RegisterEvents()
 {
   auto& core_timing = m_system.GetCoreTiming();
+
   m_event_type_change_device = core_timing.RegisterEvent("ChangeSIDevice", ChangeDeviceCallback);
   m_event_type_tranfer_pending = core_timing.RegisterEvent("SITransferPending", GlobalRunSIBuffer);
 
-  constexpr std::array<CoreTiming::TimedCallback, MAX_SI_CHANNELS> event_callbacks = {
-      DeviceEventCallback<0>,
-      DeviceEventCallback<1>,
-      DeviceEventCallback<2>,
-      DeviceEventCallback<3>,
-  };
-  for (int i = 0; i < MAX_SI_CHANNELS; ++i)
+  for (u32 i = 0; i != MAX_SI_CHANNELS; ++i)
   {
+    auto& channel = m_channel[i];
     m_event_types_device[i] =
-        core_timing.RegisterEvent(fmt::format("SIEventChannel{}", i), event_callbacks[i]);
+        core_timing.RegisterEvent(fmt::format("SIEventChannel{}", i),
+                                  [&channel](Core::System&, u64 user_data, s64 cycles_late) {
+                                    channel.device->OnEvent(user_data, cycles_late);
+                                  });
   }
 }
 
@@ -271,33 +269,7 @@ void SerialInterfaceManager::Init()
     m_channel[i].in_lo.hex = 0;
     m_channel[i].has_recent_device_unplug = false;
 
-    auto& movie = m_system.GetMovie();
-    if (movie.IsMovieActive())
-    {
-      m_desired_device_types[i] = SIDEVICE_NONE;
-
-      if (movie.IsUsingGBA(i))
-      {
-        m_desired_device_types[i] = SIDEVICE_GC_GBA_EMULATED;
-      }
-      else if (movie.IsUsingPad(i))
-      {
-        const SIDevices current = Config::Get(Config::GetInfoForSIDevice(i));
-        // GC pad-compatible devices can be used for both playing and recording
-        if (movie.IsUsingBongo(i))
-          m_desired_device_types[i] = SIDEVICE_GC_TARUKONGA;
-        else if (SIDevice_IsGCController(current))
-          m_desired_device_types[i] = current;
-        else
-          m_desired_device_types[i] = SIDEVICE_GC_CONTROLLER;
-      }
-    }
-    else if (!NetPlay::IsNetPlayRunning())
-    {
-      m_desired_device_types[i] = Config::Get(Config::GetInfoForSIDevice(i));
-    }
-
-    AddDevice(m_desired_device_types[i], i);
+    AddDevice(Config::Get(Config::GetInfoForSIDevice(i)), i);
   }
 
   m_poll.hex = 0;
@@ -501,12 +473,6 @@ void SerialInterfaceManager::AddDevice(const SIDevices device, int device_number
   AddDevice(SIDevice_Create(m_system, device, device_number));
 }
 
-void SerialInterfaceManager::ChangeDevice(SIDevices device, int channel)
-{
-  // Actual device change will happen in UpdateDevices.
-  m_desired_device_types[channel] = device;
-}
-
 void SerialInterfaceManager::ChangeDeviceDeterministic(SIDevices device, int channel)
 {
   if (channel < 0 || channel >= MAX_SI_CHANNELS)
@@ -542,7 +508,7 @@ void SerialInterfaceManager::UpdateDevices()
   for (int i = 0; i != MAX_SI_CHANNELS; ++i)
   {
     const SIDevices current_type = GetDeviceType(i);
-    const SIDevices desired_type = m_desired_device_types[i];
+    const SIDevices desired_type = Config::Get(Config::GetInfoForSIDevice(i));
 
     if (current_type != desired_type)
     {

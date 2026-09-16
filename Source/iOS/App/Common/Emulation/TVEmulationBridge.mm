@@ -46,7 +46,7 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"resume_where_left_off"]) {
     NSString* autoPath = [self autoStateFilePath];
     if (autoPath.length > 0) {
-      State::SaveAs(Core::System::GetInstance(), std::string(autoPath.UTF8String), /*wait=*/true);
+      State::SaveAs(Core::System::GetInstance(), std::string(autoPath.UTF8String));  // 2603: no wait flag
     }
   }
   Host_Message(HostMessageID::WMUserStop);
@@ -84,7 +84,8 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 }
 
 + (void)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait {
-  State::Save(Core::System::GetInstance(), (int)slot, wait);
+  (void)wait;  // 2603: State::Save lost its wait flag (always synchronous now)
+  State::Save(Core::System::GetInstance(), (int)slot);
 }
 
 + (void)loadStateFromSlot:(NSInteger)slot {
@@ -121,7 +122,8 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 + (void)saveStateToPath:(NSString*)path wait:(BOOL)wait {
   if (path.length == 0)
     return;
-  State::SaveAs(Core::System::GetInstance(), std::string(path.UTF8String), wait);
+  (void)wait;  // 2603: SaveAs lost its wait flag
+  State::SaveAs(Core::System::GetInstance(), std::string(path.UTF8String));
 }
 
 + (void)loadStateFromPath:(NSString*)path {
@@ -136,9 +138,19 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 + (BOOL)stateFileIsCompatibleAtPath:(NSString*)path {
   if (path.length == 0)
     return NO;
+  // 2603 made State::ReadHeader file-local. Only the two fixed-size header structs at the start
+  // of the file are needed here, so read them directly instead of carrying a fork patch on State.
   State::StateHeader header;
-  if (!State::ReadHeader(std::string(path.UTF8String), header))
-    return NO;
+  {
+    FILE* f = fopen(path.UTF8String, "rb");
+    if (!f)
+      return NO;
+    const bool ok = fread(&header.legacy_header, sizeof(header.legacy_header), 1, f) == 1 &&
+                    fread(&header.version_header, sizeof(header.version_header), 1, f) == 1;
+    fclose(f);
+    if (!ok)
+      return NO;
+  }
   // Match the loader's ACTUAL acceptance test (State.cpp ValidateHeaders): a state loads iff its
   // version cookie decodes to the current STATE_VERSION. The old SCM-revision-string compare was far
   // stricter than the loader — the rev string churns on every rebaseline build, so every prior save

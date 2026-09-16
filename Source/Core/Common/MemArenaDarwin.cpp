@@ -3,6 +3,8 @@
 
 #include "Common/MemArena.h"
 
+#include <unistd.h>
+
 #include "Common/Assert.h"
 #include "Common/Logging/Log.h"
 
@@ -24,7 +26,11 @@ void MemArena::GrabSHMSegment(size_t size, std::string_view base_name)
   }
 
   memory_object_size_t entry_size = size;
-  constexpr vm_prot_t prot = VM_PROT_READ | VM_PROT_WRITE;
+  // Large anonymous mappings are split into 128 MB chunks. Without MAP_MEM_VM_SHARE,
+  // mach_make_memory_entry_64 will only return an entry spanning the first chunk.
+  // Attempting to map through that entry will fail if it extends beyond the 128 MB
+  // boundary, which can happen when the sizes of MEM1/MEM2 are overridden.
+  constexpr vm_prot_t prot = VM_PROT_READ | VM_PROT_WRITE | MAP_MEM_VM_SHARE;
 
   retval = mach_make_memory_entry_64(mach_task_self(), &entry_size, m_shm_address, prot,
                                      &m_shm_entry, MACH_PORT_NULL);
@@ -121,7 +127,7 @@ void MemArena::ReleaseMemoryRegion()
   m_region_size = 0;
 }
 
-void* MemArena::MapInMemoryRegion(s64 offset, size_t size, void* base)
+void* MemArena::MapInMemoryRegion(s64 offset, size_t size, void* base, bool writeable)
 {
   if (m_shm_address == 0)
   {
@@ -130,11 +136,13 @@ void* MemArena::MapInMemoryRegion(s64 offset, size_t size, void* base)
   }
 
   vm_address_t address = reinterpret_cast<vm_address_t>(base);
-  constexpr vm_prot_t prot = VM_PROT_READ | VM_PROT_WRITE;
+  vm_prot_t prot = VM_PROT_READ;
+  if (writeable)
+    prot |= VM_PROT_WRITE;
 
   kern_return_t retval =
       vm_map(mach_task_self(), &address, size, 0, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, m_shm_entry,
-             offset, false, prot, prot, VM_INHERIT_DEFAULT);
+             offset, false, prot, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_DEFAULT);
   if (retval != KERN_SUCCESS)
   {
     ERROR_LOG_FMT(MEMMAP, "MapInMemoryRegion failed: vm_map returned {0:#x}", retval);
@@ -142,6 +150,20 @@ void* MemArena::MapInMemoryRegion(s64 offset, size_t size, void* base)
   }
 
   return reinterpret_cast<void*>(address);
+}
+
+bool MemArena::ChangeMappingProtection(void* view, size_t size, bool writeable)
+{
+  vm_address_t address = reinterpret_cast<vm_address_t>(view);
+  vm_prot_t prot = VM_PROT_READ;
+  if (writeable)
+    prot |= VM_PROT_WRITE;
+
+  kern_return_t retval = vm_protect(mach_task_self(), address, size, false, prot);
+  if (retval != KERN_SUCCESS)
+    ERROR_LOG_FMT(MEMMAP, "ChangeMappingProtection failed: vm_protect returned {0:#x}", retval);
+
+  return retval == KERN_SUCCESS;
 }
 
 void MemArena::UnmapFromMemoryRegion(void* view, size_t size)
@@ -161,6 +183,11 @@ void MemArena::UnmapFromMemoryRegion(void* view, size_t size)
   {
     ERROR_LOG_FMT(MEMMAP, "UnmapFromMemoryRegion failed: vm_prot returned {0:#x}", retval);
   }
+}
+
+size_t MemArena::GetPageSize() const
+{
+  return getpagesize();
 }
 
 LazyMemoryRegion::LazyMemoryRegion() = default;

@@ -12,7 +12,6 @@
 
 #include <fmt/format.h>
 
-#include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/Thread.h"
@@ -137,7 +136,7 @@ void GeckoSockServer::ClientThread()
       {
         did_nothing = false;
 
-        recv_fifo.insert(recv_fifo.end(), buffer.data(), &buffer[got]);
+        recv_fifo.insert(recv_fifo.end(), buffer.data(), buffer.data() + got);
       }
 
       if (!send_fifo.empty())

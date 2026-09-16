@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include <Windows.h>
+#include <windows.h>
 #endif
 
 #ifdef __linux__
@@ -33,9 +33,12 @@
 
 #include "DolphinQt/Host.h"
 #include "DolphinQt/MainWindow.h"
+#include "DolphinQt/QtUtils/AnalyticsPrompt.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
 #include "DolphinQt/QtUtils/RunOnObject.h"
+#ifdef _WIN32
 #include "DolphinQt/QtUtils/SetWindowDecorations.h"
+#endif
 #include "DolphinQt/Resources.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/Translation.h"
@@ -117,16 +120,29 @@ static bool QtMsgAlertHandler(const char* caption, const char* text, bool yes_no
 int main(int argc, char* argv[])
 {
 #ifdef _WIN32
-  const bool console_attached = AttachConsole(ATTACH_PARENT_PROCESS) != FALSE;
-  HANDLE stdout_handle = ::GetStdHandle(STD_OUTPUT_HANDLE);
-  if (console_attached && stdout_handle)
+  const HANDLE stdout_handle = ::GetStdHandle(STD_OUTPUT_HANDLE);
+  const HANDLE stderr_handle = ::GetStdHandle(STD_ERROR_HANDLE);
+
+  const bool is_invalid_stdout_handle =
+      stdout_handle == nullptr || stdout_handle == INVALID_HANDLE_VALUE;
+  const bool is_invalid_stderr_handle =
+      stderr_handle == nullptr || stderr_handle == INVALID_HANDLE_VALUE;
+
+  // If we already have a console don't try to use one from our parent. This happens when running
+  // Dolphin using `Git Bash`.
+  if (is_invalid_stdout_handle && is_invalid_stderr_handle)
   {
-    freopen("CONOUT$", "w", stdout);
-    freopen("CONOUT$", "w", stderr);
+    // See if the parent process has a console we can use (which happens when Dolphin is launched
+    // via `Command Prompt` or `PowerShell`). If this fails Dolphin was probably launched via the
+    // GUI, in which case we don't want a console anyway.
+    const bool attached_to_parent_console = AttachConsole(ATTACH_PARENT_PROCESS) != FALSE;
+    if (attached_to_parent_console)
+    {
+      static_cast<void>(freopen("CONOUT$", "w", stdout));
+      static_cast<void>(freopen("CONOUT$", "w", stderr));
+    }
   }
 #endif
-
-  Core::DeclareAsHostThread();
 
 #ifdef __APPLE__
   // On macOS, a command line option matching the format "-psn_X_XXXXXX" is passed when
@@ -265,30 +281,20 @@ int main(int argc, char* argv[])
 #if defined(USE_ANALYTICS) && USE_ANALYTICS
     if (!Config::Get(Config::MAIN_ANALYTICS_PERMISSION_ASKED))
     {
-      ModalMessageBox analytics_prompt(&win);
+      // To ensure that the analytics prompt appears aligned with the center of the main window,
+      // the dialog is only shown after the application is ready, as only then it is guaranteed that
+      // the main window has been placed in its final position.
+      auto* const connection_context = new QObject(&win);
+      QObject::connect(qApp, &QGuiApplication::applicationStateChanged, connection_context,
+                       [connection_context, &win](const Qt::ApplicationState state) {
+                         if (state != Qt::ApplicationState::ApplicationActive)
+                           return;
 
-      analytics_prompt.setIcon(QMessageBox::Question);
-      analytics_prompt.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-      analytics_prompt.setWindowTitle(QObject::tr("Allow Usage Statistics Reporting"));
-      analytics_prompt.setText(
-          QObject::tr("Do you authorize Dolphin to report information to Dolphin's developers?"));
-      analytics_prompt.setInformativeText(
-          QObject::tr("If authorized, Dolphin can collect data on its performance, "
-                      "feature usage, and configuration, as well as data on your system's "
-                      "hardware and operating system.\n\n"
-                      "No private data is ever collected. This data helps us understand "
-                      "how people and emulated games use Dolphin and prioritize our "
-                      "efforts. It also helps us identify rare configurations that are "
-                      "causing bugs, performance and stability issues.\n"
-                      "This authorization can be revoked at any time through Dolphin's "
-                      "settings."));
+                         // Severe the connection after the first run.
+                         delete connection_context;
 
-      const int answer = analytics_prompt.exec();
-
-      Config::SetBase(Config::MAIN_ANALYTICS_PERMISSION_ASKED, true);
-      Settings::Instance().SetAnalyticsEnabled(answer == QMessageBox::Yes);
-
-      DolphinAnalytics::Instance().ReloadConfig();
+                         ShowAnalyticsPrompt(&win);
+                       });
     }
 #endif
 

@@ -279,7 +279,9 @@ void VideoInterfaceManager::Preset(bool _bNTSC)
 
   // Say component cable is plugged
   m_dtv_status.component_plugged = Config::Get(Config::SYSCONF_PROGRESSIVE_SCAN);
-  m_dtv_status.ntsc_j = region == DiscIO::Region::NTSC_J;
+
+  // Triforce IPL requires the DTV NTSC-J flag to be set.
+  m_dtv_status.ntsc_j = m_system.IsTriforce() || region == DiscIO::Region::NTSC_J;
 
   m_fb_width.Hex = 0;
   m_border_hblank.Hex = 0;
@@ -309,8 +311,8 @@ void VideoInterfaceManager::Init()
 
   // Detect when an EFB->XFB copy occurs (host starts processing the XFB copy). We use this as a
   // guard so the bounded Auto VISkip gating won't skip VI on fields with in-place XFB updates.
-  m_after_frame_hook = AfterFrameEvent::Register(
-      [this](Core::System&) { m_viskip_efb_to_xfb_copied_this_field = true; }, "VI-NoCopyGuard");
+  m_after_frame_hook = GetVideoEvents().after_frame_event.Register(
+      [this](Core::System&) { m_viskip_efb_to_xfb_copied_this_field = true; });
 }
 
 void VideoInterfaceManager::RefreshConfig()
@@ -621,7 +623,7 @@ float VideoInterfaceManager::GetAspectRatio() const
   // but it's only 4:3 if the picture fill the entire active area.
   // All games configure VideoInterface to add padding in both the horizontal and vertical
   // directions and most games also do a slight horizontal scale.
-  // This means that XFB never fills the entire active area and is therefor almost never 4:3
+  // This means that XFB never fills the entire active area and is therefore almost never 4:3
 
   // To work out the correct aspect ratio of the XFB, we need to know how VideoInterface's
   // currently configured active area compares to the active area of a stock PAL or NTSC
@@ -1016,15 +1018,15 @@ void VideoInterfaceManager::EndField(FieldType field, u64 ticks)
 
   // Note: OutputField above doesn't present when using GPU-on-Thread or Early/Immediate XFB,
   //  giving "VBlank" measurements here poor pacing without a Throttle call.
-  // If the user actually wants the data, we'll Throttle to make the numbers nice.
-  const bool is_vblank_data_wanted = g_ActiveConfig.bShowVPS || g_ActiveConfig.bShowVTimes ||
-                                     g_ActiveConfig.bLogRenderTimeToFile ||
-                                     g_ActiveConfig.bShowGraphs;
+  // We'll throttle so long as Immediate XFB isn't enabled.
+  // That setting intends to minimize input latency and throttling would be counterproductive.
+  // The Rush Frame Presentation setting is handled by Throttle itself.
+  const bool is_vblank_data_wanted = !g_ActiveConfig.bImmediateXFB;
   if (is_vblank_data_wanted)
     m_system.GetCoreTiming().Throttle(ticks);
 
-  g_perf_metrics.CountVBlank();
-  VIEndFieldEvent::Trigger();
+  m_system.GetPerfMetrics().CountVBlank();
+  m_system.GetVideoEvents().vi_end_field_event.Trigger();
   Core::OnFrameEnd(m_system);
 }
 
@@ -1084,9 +1086,6 @@ void VideoInterfaceManager::Update(u64 ticks)
     // Throttle before SI poll so user input is taken just before needed. (lower input latency)
     core_timing.Throttle(ticks);
 
-    // This is a nice place to measure performance so we don't have to Throttle elsewhere.
-    g_perf_metrics.CountPerformanceMarker(ticks, m_system.GetSystemTimers().GetTicksPerSecond());
-
     Core::UpdateInputGate(!Config::Get(Config::MAIN_INPUT_BACKGROUND_INPUT),
                           Config::Get(Config::MAIN_LOCK_CURSOR));
     auto& si = m_system.GetSerialInterface();
@@ -1117,7 +1116,7 @@ void VideoInterfaceManager::Update(u64 ticks)
     m_ticks_last_line_start = ticks;
   }
 
-  // TODO: Findout why skipping interrupts acts as a frameskip
+  // TODO: Find out why skipping interrupts acts as a frameskip
   if (core_timing.GetVISkip())
   {
     // Instruments marker: a dropped vblank IRQ (catch-up frameskip). Correlate against the clock.

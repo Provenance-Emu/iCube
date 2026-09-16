@@ -190,7 +190,7 @@ void UpdateSoundStream(Core::System& system)
 
   if (sound_stream)
   {
-    int const volume =
+    const int volume =
         Config::Get(Config::MAIN_AUDIO_MUTED) ? 0 : Config::Get(Config::MAIN_AUDIO_VOLUME);
     sound_stream->SetVolume(volume);
   }
@@ -239,7 +239,7 @@ void StartAudioDump(Core::System& system)
 {
   const SoundStream* const sound_stream = system.GetSoundStream();
 
-  std::time_t const start_time = std::time(nullptr);
+  const std::time_t start_time = std::time(nullptr);
 
   std::string path_prefix = File::GetUserPath(D_DUMPAUDIO_IDX) + SConfig::GetInstance().GetGameID();
 
@@ -293,7 +293,7 @@ void DecreaseVolume(Core::System& system, unsigned short offset)
 
 void ToggleMuteVolume(Core::System& system)
 {
-  bool const isMuted = Config::Get(Config::MAIN_AUDIO_MUTED);
+  const bool isMuted = Config::Get(Config::MAIN_AUDIO_MUTED);
   Config::SetBaseOrCurrent(Config::MAIN_AUDIO_MUTED, !isMuted);
   UpdateSoundStream(system);
 }

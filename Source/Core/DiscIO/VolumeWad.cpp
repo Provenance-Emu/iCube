@@ -4,11 +4,10 @@
 #include "DiscIO/VolumeWad.h"
 
 #include <algorithm>
-#include <cstddef>
-#include <cstring>
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,7 +18,6 @@
 #include "Common/Crypto/AES.h"
 #include "Common/Crypto/SHA1.h"
 #include "Common/Logging/Log.h"
-#include "Common/MsgHandler.h"
 #include "Common/StringUtil.h"
 #include "Core/IOS/IOSC.h"
 #include "DiscIO/Blob.h"
@@ -53,7 +51,7 @@ VolumeWAD::VolumeWAD(std::unique_ptr<BlobReader> reader) : m_reader(std::move(re
 
   if (!IOS::ES::IsValidTMDSize(m_tmd_size))
   {
-    ERROR_LOG_FMT(DISCIO, "TMD is too large: {} bytes", m_tmd_size);
+    ERROR_LOG_FMT(DISCIO, "TMD has an invalid size: {} bytes", m_tmd_size);
     return;
   }
 
@@ -152,7 +150,7 @@ std::vector<u64> VolumeWAD::GetContentOffsets() const
 }
 
 bool VolumeWAD::CheckContentIntegrity(const IOS::ES::Content& content,
-                                      const std::vector<u8>& encrypted_data,
+                                      std::span<const u8> encrypted_data,
                                       const IOS::ES::TicketReader& ticket) const
 {
   if (encrypted_data.size() != Common::AlignUp(content.size, 0x40))
@@ -232,11 +230,17 @@ IOS::ES::TicketReader VolumeWAD::GetTicketWithFixedCommonKey() const
 
 std::string VolumeWAD::GetGameID(const Partition& partition) const
 {
+  if (!m_tmd.IsValid())
+    return {};
+
   return m_tmd.GetGameID();
 }
 
 std::string VolumeWAD::GetGameTDBID(const Partition& partition) const
 {
+  if (!m_tmd.IsValid())
+    return {};
+
   return m_tmd.GetGameTDBID();
 }
 
@@ -250,7 +254,7 @@ std::string VolumeWAD::GetMakerID(const Partition& partition) const
   if (!Common::IsPrintableCharacter(temp[0]) || !Common::IsPrintableCharacter(temp[1]))
     return "00";
 
-  return DecodeString(temp);
+  return FilterGameID(temp);
 }
 
 std::optional<u64> VolumeWAD::GetTitleID(const Partition& partition) const

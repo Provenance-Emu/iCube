@@ -7,7 +7,7 @@
 #include <deque>
 
 #include "Common/CommonTypes.h"
-#include "Core/Core.h"
+#include "Common/HookableEvent.h"
 #include "VideoCommon/PerformanceTracker.h"
 
 namespace Core
@@ -18,7 +18,7 @@ class System;
 class PerformanceMetrics
 {
 public:
-  PerformanceMetrics() = default;
+  PerformanceMetrics();
   ~PerformanceMetrics() = default;
 
   PerformanceMetrics(const PerformanceMetrics&) = delete;
@@ -30,7 +30,6 @@ public:
 
   void CountFrame();
   void CountVBlank();
-  void OnEmulationStateChanged(Core::State state);
 
   // Call from CPU thread.
   void CountThrottleSleep(DT sleep);
@@ -103,10 +102,24 @@ public:
   static bool GetAdaptiveClockActive();
   static void SetAdaptiveClockActive(bool active);
 
+  u32 GetEFBWidth() const;
+  u32 GetEFBHeight() const;
+  // Call from any thread.
+  void SetLatestFramePresentationOffset(DT offset);
+  void SetLatestFrameBufferSize(u32 width, u32 height);
+
   // ImGui Functions
   void DrawImGuiStats(const float backbuffer_scale);
 
 private:
+  struct FrameBufferSize
+  {
+    FrameBufferSize() : width(0), height(0) {}
+    FrameBufferSize(u32 w, u32 h) : width(w), height(h) {}
+    u32 width;
+    u32 height;
+  };
+
   PerformanceTracker m_fps_counter{"render_times.txt"};
   PerformanceTracker m_vps_counter{"vblank_times.txt"};
 
@@ -114,6 +127,9 @@ private:
 
   std::atomic<double> m_speed{};
   std::atomic<double> m_max_speed{};
+
+  std::atomic<DT> m_frame_presentation_offset{};
+  std::atomic<FrameBufferSize> m_frame_buffer_size{};
 
   struct PerfSample
   {
@@ -133,6 +149,6 @@ private:
   TimePoint m_stall_window_last_time{};
   DT m_stall_window_last_sleeping{};
   bool m_stall_window_primed = false;
-};
 
-extern PerformanceMetrics g_perf_metrics;
+  Common::EventHook m_state_change_hook;
+};

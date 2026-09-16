@@ -41,8 +41,10 @@
 		gameIniLocal.Load(iniPath);
 		const Common::IniFile gameIniDefault = SConfig::LoadDefaultGameIni([gameId UTF8String], (int)revision);
 		std::vector<Gecko::GeckoCode> existing = Gecko::LoadCodes(gameIniDefault, gameIniLocal);
-		bool ok = false;
-		std::vector<Gecko::GeckoCode> downloaded = Gecko::DownloadCodes([gametdbId UTF8String], &ok);
+		// 2606: DownloadCodes returns std::expected<codes, http status>.
+		auto downloadResult = Gecko::DownloadCodes([gametdbId UTF8String]);
+		const bool ok = downloadResult.has_value();
+		std::vector<Gecko::GeckoCode> downloaded = ok ? std::move(*downloadResult) : std::vector<Gecko::GeckoCode>{};
 		if (!ok) {
 			dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, 0, 0); });
 			return;

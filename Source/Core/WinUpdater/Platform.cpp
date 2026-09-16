@@ -1,4 +1,4 @@
-#include <Windows.h>
+#include <windows.h>
 
 #include <filesystem>
 #include <map>
@@ -120,7 +120,7 @@ struct BuildInfos
 
 // This default value should be kept in sync with the value of VCToolsUpdateURL in
 // build_info.txt.in
-static const char* VCToolsUpdateURLDefault = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
+static const char* VCToolsUpdateURLDefault = "https://aka.ms/vc14/vc_redist.x64.exe";
 #define VC_RUNTIME_REGKEY R"(SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\)"
 
 static const char* VCRuntimeRegistrySubkey()
@@ -246,9 +246,9 @@ static VersionCheckResult OSVersionCheck(const BuildInfo& build_info)
   return result;
 }
 
-std::optional<BuildInfos> InitBuildInfos(const std::vector<TodoList::UpdateOp>& to_update,
-                                         const std::string& install_base_path,
-                                         const std::string& temp_dir)
+static std::optional<BuildInfos> InitBuildInfos(const std::vector<TodoList::UpdateOp>& to_update,
+                                                const std::string& install_base_path,
+                                                const std::string& temp_dir)
 {
   const auto op_it = std::ranges::find(to_update, "build_info.txt", &TodoList::UpdateOp::filename);
   if (op_it == to_update.cend())
@@ -278,7 +278,7 @@ std::optional<BuildInfos> InitBuildInfos(const std::vector<TodoList::UpdateOp>& 
   return build_infos;
 }
 
-bool CheckBuildInfo(const BuildInfos& build_infos)
+static bool CheckBuildInfo(const BuildInfos& build_infos)
 {
   // The existing BuildInfo may have been modified. Be careful not to overly trust its contents!
 

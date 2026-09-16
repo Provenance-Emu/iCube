@@ -227,8 +227,8 @@ void JitArm64::mtmsr(UGeckoInstruction inst)
   if (!imm_value)
     MSRUpdated(gpr.R(inst.RS));
 
-  gpr.Flush(FlushMode::All, ARM64Reg::INVALID_REG);
-  fpr.Flush(FlushMode::All, ARM64Reg::INVALID_REG);
+  gpr.Flush(FlushMode::Full, ARM64Reg::INVALID_REG);
+  fpr.Flush(FlushMode::Full, ARM64Reg::INVALID_REG);
 
   WriteExceptionExit(js.compilerPC + 4, true);
 }
@@ -291,14 +291,6 @@ void JitArm64::mfsr(UGeckoInstruction inst)
   LDR(IndexType::Unsigned, gpr.R(inst.RD), PPC_REG, PPCSTATE_OFF_SR(inst.SR));
 }
 
-void JitArm64::mtsr(UGeckoInstruction inst)
-{
-  INSTRUCTION_START
-  JITDISABLE(bJITSystemRegistersOff);
-
-  STR(IndexType::Unsigned, gpr.R(inst.RS), PPC_REG, PPCSTATE_OFF_SR(inst.SR));
-}
-
 void JitArm64::mfsrin(UGeckoInstruction inst)
 {
   INSTRUCTION_START
@@ -315,24 +307,6 @@ void JitArm64::mfsrin(UGeckoInstruction inst)
   UBFM(index, RB, 28, 31);
   ADDI2R(addr, PPC_REG, PPCSTATE_OFF_SR(0), addr);
   LDR(RD, addr, ArithOption(EncodeRegTo64(index), true));
-}
-
-void JitArm64::mtsrin(UGeckoInstruction inst)
-{
-  INSTRUCTION_START
-  JITDISABLE(bJITSystemRegistersOff);
-
-  u32 b = inst.RB, d = inst.RD;
-  gpr.BindToRegister(d, d == b);
-
-  ARM64Reg RB = gpr.R(b);
-  ARM64Reg RD = gpr.R(d);
-  auto index = gpr.GetScopedReg();
-  auto addr = gpr.GetScopedReg();
-
-  UBFM(index, RB, 28, 31);
-  ADDI2R(EncodeRegTo64(addr), PPC_REG, PPCSTATE_OFF_SR(0), EncodeRegTo64(addr));
-  STR(RD, EncodeRegTo64(addr), ArithOption(EncodeRegTo64(index), true));
 }
 
 void JitArm64::twx(UGeckoInstruction inst)
@@ -353,7 +327,7 @@ void JitArm64::twx(UGeckoInstruction inst)
     CMP(gpr.R(a), gpr.R(inst.RB));
   }
 
-  constexpr std::array<CCFlags, 5> conditions{{CC_LT, CC_GT, CC_EQ, CC_VC, CC_VS}};
+  constexpr std::array<CCFlags, 5> conditions{{CC_HI, CC_LO, CC_EQ, CC_GT, CC_LT}};
   Common::SmallVector<FixupBranch, conditions.size()> fixups;
 
   for (size_t i = 0; i < conditions.size(); i++)
@@ -393,8 +367,8 @@ void JitArm64::twx(UGeckoInstruction inst)
 
   if (!analyzer.HasOption(PPCAnalyst::PPCAnalyzer::OPTION_CONDITIONAL_CONTINUE))
   {
-    gpr.Flush(FlushMode::All, WA);
-    fpr.Flush(FlushMode::All, ARM64Reg::INVALID_REG);
+    gpr.Flush(FlushMode::Full, WA);
+    fpr.Flush(FlushMode::Full, ARM64Reg::INVALID_REG);
     WriteExit(js.compilerPC + 4);
   }
 }
@@ -740,15 +714,12 @@ void JitArm64::mfcr(UGeckoInstruction inst)
     CMP(CR, ARM64Reg::ZR);
     CSEL(WA, WC, WA, CC_GT);
 
-    // To reduce register pressure and to avoid getting a pipeline-unfriendly long run of stores
-    // after this instruction, flush registers that would be flushed after this instruction anyway.
-    //
-    // There's no point in ensuring we flush two registers at the same time, because the offset in
-    // ppcState for CRs is too large to be encoded into an STP instruction.
+    // To reduce register pressure, flush registers that would be flushed after this instruction
+    // anyway.
     if (js.op->crDiscardable[i])
       gpr.DiscardCRRegisters(BitSet8{i});
-    else if (!js.op->crInUse[i])
-      gpr.StoreCRRegisters(BitSet8{i}, WC);
+    else if (!(js.op->crWillBeRead | js.op->crWillBeWritten)[i])
+      gpr.FlushCRRegisters(BitSet8{i}, FlushMode::Full, WC);
   }
 }
 

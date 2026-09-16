@@ -41,6 +41,7 @@ namespace VideoCommon
 {
 class CustomTextureData;
 class GameTextureAsset;
+class MaterialResource;
 }  // namespace VideoCommon
 
 constexpr std::string_view EFB_DUMP_PREFIX = "efb1";
@@ -277,7 +278,7 @@ public:
   void Invalidate();
   void ReleaseToPool(TCacheEntry* entry);
 
-  TCacheEntry* Load(const TextureInfo& texture_info);
+  TCacheEntry* Load(u32 stage);
   RcTcacheEntry GetTexture(const int textureCacheSafetyColorSampleSize,
                            const TextureInfo& texture_info);
   RcTcacheEntry GetXFBTexture(u32 address, u32 width, u32 height, u32 stride,
@@ -313,6 +314,11 @@ public:
   static SamplerState GetSamplerState(u32 index, float custom_tex_scale, bool custom_tex,
                                       bool has_arbitrary_mips);
 
+  static void RenderPaletteEntry(u32 texel_buffer_offset, const RcTcacheEntry& entry,
+                                 AbstractTexture* texture, TLUTFormat tlutfmt);
+  static void RenderReinterpretEntry(const RcTcacheEntry& entry, AbstractTexture* texture,
+                                     TextureFormat old_format, TextureFormat new_format);
+
 protected:
   // Decodes the specified data to the GPU texture specified by entry.
   // Returns false if the configuration is not supported.
@@ -346,7 +352,7 @@ private:
 
   static bool DidLinkedAssetsChange(const TCacheEntry& entry);
 
-  TCacheEntry* LoadImpl(const TextureInfo& texture_info, bool force_reload);
+  TCacheEntry* LoadImpl(u32 stage, bool force_reload);
 
   bool CreateUtilityTextures();
 
@@ -359,9 +365,11 @@ private:
 
   RcTcacheEntry GetXFBFromCache(u32 address, u32 width, u32 height, u32 stride);
 
-  RcTcacheEntry ApplyPaletteToEntry(RcTcacheEntry& entry, const u8* palette, TLUTFormat tlutfmt);
+  std::pair<RcTcacheEntry, u32> CreatePaletteEntryWithOffset(const RcTcacheEntry& entry,
+                                                             const u8* palette);
 
-  RcTcacheEntry ReinterpretEntry(const RcTcacheEntry& existing_entry, TextureFormat new_format);
+  RcTcacheEntry CreateReinterpretEntry(const RcTcacheEntry& existing_entry,
+                                       TextureFormat new_format);
 
   RcTcacheEntry DoPartialTextureUpdates(RcTcacheEntry& entry_to_update, const u8* palette,
                                         TLUTFormat tlutfmt);
@@ -406,6 +414,8 @@ private:
   bool CheckReadbackTexture(u32 width, u32 height, AbstractTextureFormat format);
   void DoSaveState(PointerWrap& p);
   void DoLoadState(PointerWrap& p);
+
+  void ApplyMaterialToCacheEntry(const VideoCommon::MaterialResource& material, TCacheEntry* entry);
 
   // m_textures_by_address is the authoritive version of what's actually "in" the texture cache
   // but it's possible for invalidated TCache entries to live on elsewhere
@@ -464,7 +474,7 @@ private:
   void OnFrameEnd();
 
   Common::EventHook m_frame_event =
-      AfterFrameEvent::Register([this](Core::System&) { OnFrameEnd(); }, "TextureCache");
+      GetVideoEvents().after_frame_event.Register([this](Core::System&) { OnFrameEnd(); });
 
   VideoCommon::TextureUtils::TextureDumper m_texture_dumper;
 };

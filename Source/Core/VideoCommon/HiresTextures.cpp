@@ -3,30 +3,24 @@
 
 #include "VideoCommon/HiresTextures.h"
 
-#include <algorithm>
+#include <fmt/format.h>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 #include <xxhash.h>
-
-#include <fmt/format.h>
 
 #include "Common/CommonPaths.h"
 #include "Common/FileSearch.h"
 #include "Common/FileUtil.h"
 #include "Common/Logging/Log.h"
 #include "Common/StringUtil.h"
-#include "Core/Config/GraphicsSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/System.h"
-#include "VideoCommon/Assets/CustomAsset.h"
 #include "VideoCommon/Assets/DirectFilesystemAssetLibrary.h"
 #include "VideoCommon/OnScreenDisplay.h"
+#include "VideoCommon/Resources/CustomResourceManager.h"
 #include "VideoCommon/VideoConfig.h"
 
 constexpr std::string_view s_format_prefix{"tex1_"};
@@ -89,10 +83,10 @@ void HiresTexture::Update()
     return;
   }
 
-  const std::string& game_id = SConfig::GetInstance().GetGameID();
-  const std::set<std::string> texture_directories =
-      GetTextureDirectoriesWithGameId(File::GetUserPath(D_HIRESTEXTURES_IDX), game_id);
-  const std::vector<std::string> extensions{".png", ".dds"};
+  const std::set<std::string> texture_directories = GetTextureDirectoriesForFirstMatchingGameId(
+      File::GetUserPath(D_HIRESTEXTURES_IDX), SConfig::GetInstance().GetGameIDsForTextures());
+
+  constexpr auto extensions = std::to_array<std::string_view>({".png", ".dds"});
 
   for (const auto& texture_directory : texture_directories)
   {
@@ -100,7 +94,7 @@ void HiresTexture::Update()
     s_file_library->Watch(texture_directory);
 
     const auto texture_paths =
-        Common::DoFileSearch({texture_directory}, extensions, /*recursive*/ true);
+        Common::DoFileSearch(texture_directory, extensions, /*recursive*/ true);
 
     bool failed_insert = false;
     for (auto& path : texture_paths)
@@ -146,16 +140,22 @@ void HiresTexture::Update()
     }
   }
 
+  const std::vector<std::string> game_ids_for_textures =
+      SConfig::GetInstance().GetGameIDsForTextures();
+  const std::string game_id_display = fmt::format("{}", fmt::join(game_ids_for_textures, "' or '"));
+
+  std::string message;
   if (g_ActiveConfig.bCacheHiresTextures)
   {
-    OSD::AddMessage(fmt::format("Loading '{}' custom textures", s_hires_texture_cache.size()),
-                    10000);
+    message = fmt::format("Preloading '{}' custom textures for '{}'", s_hires_texture_cache.size(),
+                          game_id_display);
   }
   else
   {
-    OSD::AddMessage(
-        fmt::format("Found '{}' custom textures", s_hires_texture_id_to_arbmipmap.size()), 10000);
+    message = fmt::format("Found '{}' custom textures for '{}'",
+                          s_hires_texture_id_to_arbmipmap.size(), game_id_display);
   }
+  OSD::AddMessage(message, 10000);
 }
 
 void HiresTexture::Clear()
@@ -191,7 +191,7 @@ HiresTexture::HiresTexture(bool has_arbitrary_mipmaps, std::string id)
 {
 }
 
-VideoCommon::CustomResourceManager::TextureTimePair HiresTexture::LoadTexture() const
+VideoCommon::TextureDataResource* HiresTexture::LoadTexture() const
 {
   auto& system = Core::System::GetInstance();
   auto& custom_resource_manager = system.GetCustomResourceManager();
@@ -226,7 +226,7 @@ std::set<std::string> GetTextureDirectoriesWithGameId(const std::string& root_di
   };
 
   // Look for any other directories that might be specific to the given gameid
-  const auto files = Common::DoFileSearch({root_directory}, {".txt"}, true);
+  const auto files = Common::DoFileSearch(root_directory, ".txt", true);
   for (const auto& file : files)
   {
     if (match_gameid_or_all(file))
@@ -242,4 +242,17 @@ std::set<std::string> GetTextureDirectoriesWithGameId(const std::string& root_di
   }
 
   return result;
+}
+
+std::set<std::string>
+GetTextureDirectoriesForFirstMatchingGameId(const std::string& root_directory,
+                                            const std::vector<std::string>& game_ids)
+{
+  for (const auto& game_id : game_ids)
+  {
+    auto directories = GetTextureDirectoriesWithGameId(root_directory, game_id);
+    if (!directories.empty())
+      return directories;
+  }
+  return {};
 }

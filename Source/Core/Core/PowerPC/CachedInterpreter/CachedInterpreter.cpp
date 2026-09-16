@@ -13,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include <fmt/format.h>
 #include <fmt/ostream.h>
 
 #include "Common/Assert.h"
@@ -1379,12 +1378,12 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
     const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
     const u8* payload = normal_entry + sizeof(callback);
     // Direct dispatch to the most commonly used callbacks for better performance
-    if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<false>))) [[likely]]
+    if (callback == AnyCallbackCast(Interpret<false>)) [[likely]]
     {
       Interpret<false>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);
     }
-    else if (callback == reinterpret_cast<AnyCallback>(CallbackCast(Interpret<true>)))
+    else if (callback == AnyCallbackCast(Interpret<true>))
     {
       Interpret<true>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);
@@ -3858,7 +3857,7 @@ s32 CachedInterpreter::StoreLoopFill(PowerPC::PowerPCState& ppc_state,
     for (u32 it = 0; it < bulk_count; ++it)
     {
       for (u32 k = 0; k < stride; ++k)
-        mmu->Write_U8(value, ref_b + k);
+        mmu->Write<u8>(value, ref_b + k);  // 2512: Write_U8 became Write<u8>
       ref_b += stride;
     }
     std::vector<u8> ref_range(total);

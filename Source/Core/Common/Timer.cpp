@@ -8,10 +8,8 @@
 #include "Common/CommonFuncs.h"
 
 #ifdef _WIN32
-#include <Windows.h>
+#include <windows.h>
 #include <timeapi.h>
-#else
-#include <sys/time.h>
 #endif
 
 #include "Common/CommonTypes.h"

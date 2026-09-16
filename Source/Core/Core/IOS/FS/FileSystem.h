@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <expected>
 #include <memory>
 #include <optional>
 #include <string>
@@ -11,11 +12,11 @@
 
 #ifdef _WIN32
 // TODO: Horrible hack, remove ASAP!
-#include <Windows.h>
+#include <windows.h>
 #endif
 
 #include "Common/CommonTypes.h"
-#include "Common/Result.h"
+#include "Common/EnumFormatter.h"
 
 class PointerWrap;
 
@@ -49,7 +50,7 @@ enum class ResultCode
 };
 
 template <typename T>
-using Result = Common::Result<ResultCode, T>;
+using Result = std::expected<T, ResultCode>;
 
 using Uid = u32;
 using Gid = u16;
@@ -281,6 +282,10 @@ public:
   virtual Result<ExtendedDirectoryStats> GetExtendedDirectoryStats(const std::string& path) = 0;
 
   virtual void SetNandRedirects(std::vector<NandRedirect> nand_redirects) = 0;
+
+protected:
+  void DoStateWriteOrMeasure(PointerWrap& p, const std::string& directory_path);
+  void DoStateRead(PointerWrap& p, const std::string& directory_path);
 };
 
 template <typename T>
@@ -289,9 +294,9 @@ Result<size_t> FileHandle::Read(T* ptr, size_t count) const
   const Result<u32> bytes = m_fs->ReadBytesFromFile(*m_fd, reinterpret_cast<u8*>(ptr),
                                                     static_cast<u32>(sizeof(T) * count));
   if (!bytes)
-    return bytes.Error();
+    return bytes;
   if (*bytes != sizeof(T) * count)
-    return ResultCode::ShortRead;
+    return std::unexpected{ResultCode::ShortRead};
   return count;
 }
 
@@ -301,7 +306,7 @@ Result<size_t> FileHandle::Write(const T* ptr, size_t count) const
   const auto result = m_fs->WriteBytesToFile(*m_fd, reinterpret_cast<const u8*>(ptr),
                                              static_cast<u32>(sizeof(T) * count));
   if (!result)
-    return result.Error();
+    return result;
   return count;
 }
 
@@ -319,3 +324,16 @@ IOS::HLE::ReturnCode ConvertResult(ResultCode code);
 
 }  // namespace FS
 }  // namespace IOS::HLE
+
+template <>
+struct fmt::formatter<IOS::HLE::FS::ResultCode> : EnumFormatter<IOS::HLE::FS::ResultCode::ShortRead>
+{
+  constexpr formatter()
+      : EnumFormatter({"Success", "Invalid", "AccessDenied", "SuperblockWriteFailed",
+                       "SuperblockInitFailed", "AlreadyExists", "NotFound", "FstFull",
+                       "NoFreeSpace", "NoFreeHandle", "TooManyPathComponents", "InUse", "BadBlock",
+                       "EccError", "CriticalEccError", "FileNotEmpty", "CheckFailed",
+                       "UnknownError", "ShortRead"})
+  {
+  }
+};

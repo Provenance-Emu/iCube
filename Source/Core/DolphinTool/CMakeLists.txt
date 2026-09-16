@@ -11,7 +11,14 @@ add_executable(dolphin-tool
   ToolMain.cpp
 )
 
-set_target_properties(dolphin-tool PROPERTIES OUTPUT_NAME dolphin-tool)
+if (WIN32)
+  target_sources(dolphin-tool PRIVATE DolphinTool.exe.manifest DolphinTool.rc)
+
+  set_target_properties(dolphin-tool PROPERTIES
+    DEBUG_POSTFIX    D
+    OUTPUT_NAME      DolphinTool
+  )
+endif()
 
 target_link_libraries(dolphin-tool
 PRIVATE
@@ -27,4 +34,6 @@ if(MSVC)
 endif()
 
 set(CPACK_PACKAGE_EXECUTABLES ${CPACK_PACKAGE_EXECUTABLES} dolphin-tool)
-install(TARGETS dolphin-tool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if (NOT WIN32)
+  install(TARGETS dolphin-tool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()

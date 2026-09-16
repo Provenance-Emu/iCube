@@ -20,8 +20,11 @@ let APP_EMBEDS_APPEX = false
 // compile. Verified against `xcodebuild -showBuildSettings` of the original
 // "Release (AppStore)" config: c++20 + libc++.
 let projectBase: SettingsDictionary = [
-    "CLANG_CXX_LANGUAGE_STANDARD": "c++20",
+    "CLANG_CXX_LANGUAGE_STANDARD": "c++23",  // 2603: Dolphin headers use std::to_underlying / C++23 string_view,
     "CLANG_CXX_LIBRARY": "libc++",
+    // 2603: JitInterface.h now includes MachineContext.h, whose arch guards need the CMake-side
+    // architecture macros; the app's ObjC++ bridges include Dolphin headers without CMake.
+    "GCC_PREPROCESSOR_DEFINITIONS": "$(inherited) _M_ARM_64=1 _ARCH_64=1",
     "ENABLE_BITCODE": "NO",
     "EXCLUDED_ARCHS": "i386 armv7 x86_64",
     "GCC_C_LANGUAGE_STANDARD": "gnu11",
@@ -394,7 +397,7 @@ let liveActivity = Target.target(
     settings: .settings(
         base: [
             "SKIP_INSTALL": "YES",
-            "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20",
+            "CLANG_CXX_LANGUAGE_STANDARD": "gnu++23",
             "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
             "TARGETED_DEVICE_FAMILY": "1,2",
             "SWIFT_VERSION": "5.0",

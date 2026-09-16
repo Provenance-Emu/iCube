@@ -11,8 +11,10 @@
 #include <string>
 #include <utility>
 
+#include "Common/BitUtils.h"
 #include "Common/CommonTypes.h"
-#include "Common/IOFile.h"
+#include "Common/DirectIOFile.h"
+#include "Common/FileUtil.h"
 #include "Common/MsgHandler.h"
 #include "Common/StringUtil.h"
 
@@ -437,9 +439,9 @@ std::unique_ptr<BlobReader> CreateBlobReader(const std::string& filename)
     }
   }
 
-  File::IOFile file(filename, "rb");
+  File::DirectIOFile file(filename, File::AccessMode::Read);
   u32 magic;
-  if (!file.ReadArray(&magic, 1))
+  if (!file.Read(Common::AsWritableU8Span(magic)))
   {
     ERROR_LOG_FMT(DISCIO, "CreateBlobReader: failed to read magic number from {}", filename);
     return nullptr;

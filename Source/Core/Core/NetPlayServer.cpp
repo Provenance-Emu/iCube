@@ -12,8 +12,8 @@
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <thread>
-#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -24,7 +24,6 @@
 #include "Common/CommonPaths.h"
 #include "Common/ENet.h"
 #include "Common/FileUtil.h"
-#include "Common/HttpRequest.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 #include "Common/SFMLHelper.h"
@@ -51,13 +50,10 @@
 #endif
 #include "Core/HW/GCMemcard/GCMemcard.h"
 #include "Core/HW/GCMemcard/GCMemcardDirectory.h"
-#include "Core/HW/GCMemcard/GCMemcardRaw.h"
 #include "Core/HW/Sram.h"
 #include "Core/HW/WiiSave.h"
 #include "Core/HW/WiiSaveStructs.h"
 #include "Core/HW/WiimoteEmu/DesiredWiimoteState.h"
-#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
-#include "Core/HW/WiimoteReal/WiimoteReal.h"
 #include "Core/IOS/ES/ES.h"
 #include "Core/IOS/FS/FileSystem.h"
 #include "Core/IOS/IOS.h"
@@ -69,7 +65,6 @@
 #include "DiscIO/Enums.h"
 #include "DiscIO/RiivolutionPatcher.h"
 
-#include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
 #include "InputCommon/GCPadStatus.h"
 #include "InputCommon/InputConfig.h"
 
@@ -77,7 +72,6 @@
 
 #if !defined(_WIN32)
 #include <sys/socket.h>
-#include <sys/types.h>
 #ifdef __HAIKU__
 #define _BSD_SOURCE
 #include <bsd/ifaddrs.h>
@@ -197,6 +191,12 @@ static void ClearPeerPlayerId(ENetPeer* peer)
   }
 }
 
+template <typename T>
+static bool IsValidPadIndex(const T& map_array, PadIndex index)
+{
+  return index >= 0 && static_cast<size_t>(index) < map_array.size();
+}
+
 void NetPlayServer::SetupIndex()
 {
   if (!Config::Get(Config::NETPLAY_USE_INDEX) || Config::Get(Config::NETPLAY_INDEX_NAME).empty() ||
@@ -225,16 +225,9 @@ void NetPlayServer::SetupIndex()
   }
   else
   {
-    Common::HttpRequest request;
-    // ENet does not support IPv6, so IPv4 has to be used
-    request.UseIPv4();
-    Common::HttpRequest::Response response =
-        request.Get("https://ip.dolphin-emu.org/", {{"X-Is-Dolphin", "1"}});
-
-    if (!response.has_value())
+    session.server_id = GetExternalIPAddress();
+    if (session.server_id.empty())
       return;
-
-    session.server_id = std::string(response->begin(), response->end());
   }
 
   session.EncryptID(Config::Get(Config::NETPLAY_INDEX_PASSWORD));
@@ -333,7 +326,7 @@ void NetPlayServer::ThreadFunc()
 
           if (error != ConnectionError::NoError)
           {
-            INFO_LOG_FMT(NETPLAY, "Error {} initializing peer {:x}:{}", u8(error),
+            INFO_LOG_FMT(NETPLAY, "Error {} initializing peer {:x}:{}", static_cast<u8>(error),
                          netEvent.peer->address.host, netEvent.peer->address.port);
 
             sf::Packet spac;
@@ -398,7 +391,8 @@ void NetPlayServer::ThreadFunc()
         if (static_cast<int>(netEvent.type) == Common::ENet::SKIPPABLE_EVENT)
           INFO_LOG_FMT(NETPLAY, "enet_host_service: skippable packet event");
         else
-          ERROR_LOG_FMT(NETPLAY, "enet_host_service: unknown event type: {}", int(netEvent.type));
+          ERROR_LOG_FMT(NETPLAY, "enet_host_service: unknown event type: {}",
+                        static_cast<int>(netEvent.type));
         break;
       }
     }
@@ -527,6 +521,21 @@ unsigned int NetPlayServer::OnDisconnect(const Client& player)
     for (PlayerId& mapping : m_pad_map)
     {
       if (mapping == pid && pid != 1)
+      {
+        std::lock_guard lkg(m_crit.game);
+        m_is_running = false;
+
+        sf::Packet spac;
+        spac << MessageID::DisableGame;
+        // this thread doesn't need players lock
+        SendToClients(spac);
+        break;
+      }
+    }
+
+    for (PlayerId& mapping : m_wiimote_map)
+    {
+      if (m_is_running && mapping == pid && pid != 1)
       {
         std::lock_guard lkg(m_crit.game);
         m_is_running = false;
@@ -819,7 +828,7 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
 
       // If the data is not from the correct player,
       // then disconnect them.
-      if (m_pad_map.at(map) != player.pid)
+      if (!IsValidPadIndex(m_pad_map, map) || m_pad_map.at(map) != player.pid)
       {
         return 1;
       }
@@ -867,6 +876,9 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
       PadIndex map;
       packet >> map;
 
+      if (!IsValidPadIndex(m_pad_map, map))
+        return 1;
+
       GCPadStatus pad;
       packet >> pad.button;
       spac << map << pad.button;
@@ -900,7 +912,7 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
 
       // If the data is not from the correct player,
       // then disconnect them.
-      if (m_wiimote_map.at(map) != player.pid)
+      if (!IsValidPadIndex(m_wiimote_map, map) || m_wiimote_map.at(map) != player.pid)
       {
         return 1;
       }
@@ -1146,8 +1158,8 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
     SyncSaveDataID sub_id;
     packet >> sub_id;
 
-    INFO_LOG_FMT(NETPLAY, "Got client SyncSaveData message: {:x} from client {}", u8(sub_id),
-                 player.pid);
+    INFO_LOG_FMT(NETPLAY, "Got client SyncSaveData message: {:x} from client {}",
+                 static_cast<u8>(sub_id), player.pid);
 
     switch (sub_id)
     {
@@ -1203,8 +1215,8 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
     SyncCodeID sub_id;
     packet >> sub_id;
 
-    INFO_LOG_FMT(NETPLAY, "Got client SyncCodes message: {:x} from client {}", u8(sub_id),
-                 player.pid);
+    INFO_LOG_FMT(NETPLAY, "Got client SyncCodes message: {:x} from client {}",
+                 static_cast<u8>(sub_id), player.pid);
 
     // Check If Code Sync was successful or not
     switch (sub_id)
@@ -1425,6 +1437,7 @@ bool NetPlayServer::SetupNetSettings()
   settings.divide_by_zero_exceptions = Config::Get(Config::MAIN_DIVIDE_BY_ZERO_EXCEPTIONS);
   settings.fprf = Config::Get(Config::MAIN_FPRF);
   settings.accurate_nans = Config::Get(Config::MAIN_ACCURATE_NANS);
+  settings.accurate_fmadds = Config::Get(Config::MAIN_ACCURATE_FMADDS);
   settings.disable_icache = Config::Get(Config::MAIN_DISABLE_ICACHE);
   settings.sync_on_skip_idle = Config::Get(Config::MAIN_SYNC_ON_SKIP_IDLE);
   settings.sync_gpu = Config::Get(Config::MAIN_SYNC_GPU);
@@ -1956,7 +1969,7 @@ bool NetPlayServer::SyncSaveData(const SaveSyncInfo& sync_info)
         for (u8 byte : header->md5)
           pac << byte;
         pac << header->unk2;
-        for (size_t i = 0; i < header->banner_size; i++)
+        for (size_t i = 0; i < std::min<size_t>(header->banner_size, sizeof(header->banner)); i++)
           pac << header->banner[i];
 
         // BkHeader
@@ -2060,7 +2073,7 @@ bool NetPlayServer::SyncCodes()
   }
 
   // Find all INI files
-  const auto game_id = game->GetGameID();
+  const std::string_view game_id = game->GetGameID();
   const auto revision = game->GetRevision();
   Common::IniFile globalIni;
   for (const std::string& filename : ConfigLoaders::GetGameIniFilenames(game_id, revision))
@@ -2252,6 +2265,15 @@ bool NetPlayServer::PlayerHasControllerMapped(const PlayerId pid) const
 void NetPlayServer::AssignNewUserAPad(const Client& player)
 {
   for (PlayerId& mapping : m_pad_map)
+  {
+    // 0 means unmapped
+    if (mapping == 0)
+    {
+      mapping = player.pid;
+      break;
+    }
+  }
+  for (PlayerId& mapping : m_wiimote_map)
   {
     // 0 means unmapped
     if (mapping == 0)

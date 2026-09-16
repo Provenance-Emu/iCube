@@ -650,8 +650,9 @@ static bool ICubeEmulationActive() {
 + (void)setGfxModsEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_MODS_ENABLE, (bool)enabled); }
 
 // Misc
-+ (BOOL)gfxCrop { return Config::Get(Config::GFX_CROP); }
-+ (void)setGfxCrop:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_CROP, (bool)enabled); }
+// 2606: GFX_CROP became GFX_CROP_TO_ASPECT_RATIO (the new crop feature adds custom crop keys).
++ (BOOL)gfxCrop { return Config::Get(Config::GFX_CROP_TO_ASPECT_RATIO); }
++ (void)setGfxCrop:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_CROP_TO_ASPECT_RATIO, (bool)enabled); }
 + (BOOL)sysconfProgressiveScan { return Config::Get(Config::SYSCONF_PROGRESSIVE_SCAN); }
 + (void)setSysconfProgressiveScan:(BOOL)enabled { Config::SetBaseOrCurrent(Config::SYSCONF_PROGRESSIVE_SCAN, (bool)enabled); }
 
@@ -794,7 +795,7 @@ static bool ICubeEmulationActive() {
   del(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING);
   del(Config::GFX_SHADER_COMPILER_THREADS);
   del(Config::GFX_SHADER_PRECOMPILER_THREADS);
-  del(Config::GFX_CROP);
+  del(Config::GFX_CROP_TO_ASPECT_RATIO);
 
   // ---- Graphics: enhancements ----
   del(Config::GFX_ENHANCE_FORCE_TRUE_COLOR);

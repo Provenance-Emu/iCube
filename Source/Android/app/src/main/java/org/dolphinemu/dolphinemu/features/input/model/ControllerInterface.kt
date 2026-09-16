@@ -4,9 +4,12 @@ package org.dolphinemu.dolphinemu.features.input.model
 
 import android.content.Context
 import android.hardware.input.InputManager
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -17,7 +20,6 @@ import androidx.annotation.Keep
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import org.dolphinemu.dolphinemu.DolphinApplication
-import org.dolphinemu.dolphinemu.utils.LooperThread
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -26,9 +28,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object ControllerInterface {
     private var inputDeviceListener: InputDeviceListener? = null
-    private lateinit var looperThread: LooperThread
+    private var handlerThread: HandlerThread? = null
 
-    private var inputStateUpdatePending = AtomicBoolean(false)
+    private val inputStateUpdatePending = AtomicBoolean(false)
     private val inputStateVersion = MutableLiveData(0)
     private val devicesVersion = MutableLiveData(0)
 
@@ -81,9 +83,7 @@ object ControllerInterface {
     }
 
     private external fun dispatchSensorEventNative(
-        deviceQualifier: String,
-        axisName: String,
-        value: Float
+        deviceQualifier: String, axisName: String, value: Float
     ): Boolean
 
     /**
@@ -94,15 +94,8 @@ object ControllerInterface {
      * @param suspended       Whether the sensor is now suspended.
      */
     external fun notifySensorSuspendedState(
-        deviceQualifier: String,
-        axisNames: Array<String>,
-        suspended: Boolean
+        deviceQualifier: String, axisNames: Array<String>, suspended: Boolean
     )
-
-    /**
-     * Rescans for input devices.
-     */
-    external fun refreshDevices()
 
     external fun getAllDeviceStrings(): Array<String>
 
@@ -132,15 +125,18 @@ object ControllerInterface {
     @Keep
     @JvmStatic
     private fun registerInputDeviceListener() {
-        looperThread = LooperThread("Hotplug thread")
-        looperThread.start()
-
         if (inputDeviceListener == null) {
+            handlerThread = HandlerThread("Hotplug thread").apply { start() }
+            val thread = requireNotNull(handlerThread) { "HandlerThread is not available" }
+
             val im = DolphinApplication.getAppContext()
-                .getSystemService(Context.INPUT_SERVICE) as InputManager?
+                .getSystemService(Context.INPUT_SERVICE) as InputManager
+            val looper = requireNotNull(thread.looper) {
+                "HandlerThread looper is not available"
+            }
 
             inputDeviceListener = InputDeviceListener()
-            im!!.registerInputDeviceListener(inputDeviceListener, Handler(looperThread.looper))
+            im.registerInputDeviceListener(inputDeviceListener, Handler(looper))
         }
     }
 
@@ -149,10 +145,12 @@ object ControllerInterface {
     private fun unregisterInputDeviceListener() {
         if (inputDeviceListener != null) {
             val im = DolphinApplication.getAppContext()
-                .getSystemService(Context.INPUT_SERVICE) as InputManager?
+                .getSystemService(Context.INPUT_SERVICE) as InputManager
 
-            im!!.unregisterInputDeviceListener(inputDeviceListener)
+            im.unregisterInputDeviceListener(inputDeviceListener)
             inputDeviceListener = null
+            handlerThread?.quitSafely()
+            handlerThread = null
         }
     }
 
@@ -162,6 +160,7 @@ object ControllerInterface {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             DolphinVibratorManagerPassthrough(device.vibratorManager)
         } else {
+            @Suppress("DEPRECATION")
             DolphinVibratorManagerCompat(device.vibrator)
         }
     }
@@ -172,9 +171,11 @@ object ControllerInterface {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = DolphinApplication.getAppContext()
                 .getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager?
-            if (vibratorManager != null)
+            if (vibratorManager != null) {
                 return DolphinVibratorManagerPassthrough(vibratorManager)
+            }
         }
+        @Suppress("DEPRECATION")
         val vibrator = DolphinApplication.getAppContext()
             .getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         return DolphinVibratorManagerCompat(vibrator)
@@ -183,21 +184,37 @@ object ControllerInterface {
     @Keep
     @JvmStatic
     private fun vibrate(vibrator: Vibrator) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            vibrator.vibrate(
+                VibrationEffect.createOneShot(10000, VibrationEffect.DEFAULT_AMPLITUDE),
+                VibrationAttributes.Builder().setUsage(VibrationAttributes.USAGE_MEDIA).build()
+            )
         } else {
-            vibrator.vibrate(100)
+            val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(
+                    VibrationEffect.createOneShot(10000, VibrationEffect.DEFAULT_AMPLITUDE),
+                    attributes
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(10000, attributes)
+            }
         }
     }
 
+    @Keep
+    @JvmStatic
+    private fun cancelVibration(vibrator: Vibrator) {
+        vibrator.cancel()
+    }
+
     private class InputDeviceListener : InputManager.InputDeviceListener {
-        // Simple implementation for now. We could do something fancier if we wanted to.
-        override fun onInputDeviceAdded(deviceId: Int) = refreshDevices()
+        override external fun onInputDeviceAdded(deviceId: Int)
 
-        // Simple implementation for now. We could do something fancier if we wanted to.
-        override fun onInputDeviceRemoved(deviceId: Int) = refreshDevices()
+        override external fun onInputDeviceRemoved(deviceId: Int)
 
-        // Simple implementation for now. We could do something fancier if we wanted to.
-        override fun onInputDeviceChanged(deviceId: Int) = refreshDevices()
+        override external fun onInputDeviceChanged(deviceId: Int)
     }
 }

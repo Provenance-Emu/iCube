@@ -18,33 +18,28 @@
 #include "Common/Thread.h"
 
 #include "Core/AchievementManager.h"
-#include "Core/Config/AchievementSettings.h"
 #include "Core/Config/FreeLookSettings.h"
 #include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Config/UISettings.h"
 #include "Core/Core.h"
 #include "Core/FreeLookManager.h"
-#include "Core/Host.h"
 #include "Core/HotkeyManager.h"
 #include "Core/IOS/IOS.h"
-#include "Core/IOS/USB/Bluetooth/BTBase.h"
-#include "Core/IOS/USB/Bluetooth/BTReal.h"
 #include "Core/State.h"
 #include "Core/System.h"
 #include "Core/WiiUtils.h"
 
 #ifdef HAS_LIBMGBA
 #include "DolphinQt/GBAWidget.h"
-#endif
 #include "DolphinQt/QtUtils/QueueOnObject.h"
+#endif
 #include "DolphinQt/Settings.h"
 
 #include "InputCommon/ControlReference/ControlReference.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 
 #include "VideoCommon/OnScreenDisplay.h"
-#include "VideoCommon/VertexShaderManager.h"
 #include "VideoCommon/VideoConfig.h"
 
 constexpr const char* DUBOIS_ALGORITHM_SHADER = "dubois";
@@ -349,7 +344,7 @@ void HotkeyScheduler::Run()
         OSD::AddMessage(std::string("Volume: ") +
                         (Config::Get(Config::MAIN_AUDIO_MUTED) ?
                              "Muted" :
-                             std::to_string(Config::Get(Config::MAIN_AUDIO_VOLUME)) + "%"));
+                             fmt::format("{}%", Config::Get(Config::MAIN_AUDIO_VOLUME))));
       };
 
       // Volume
@@ -402,8 +397,14 @@ void HotkeyScheduler::Run()
         }
       }
 
-      if (IsHotkey(HK_TOGGLE_CROP))
-        Config::SetCurrent(Config::GFX_CROP, !Config::Get(Config::GFX_CROP));
+      if (IsHotkey(HK_TOGGLE_CROP_TO_ASPECT_RATIO))
+      {
+        Config::SetCurrent(Config::GFX_CROP_TO_ASPECT_RATIO,
+                           !Config::Get(Config::GFX_CROP_TO_ASPECT_RATIO));
+      }
+
+      if (IsHotkey(HK_TOGGLE_CROP_CUSTOM))
+        Config::SetCurrent(Config::GFX_CROP_CUSTOM, !Config::Get(Config::GFX_CROP_CUSTOM));
 
       if (IsHotkey(HK_TOGGLE_AR))
       {
@@ -556,15 +557,15 @@ void HotkeyScheduler::Run()
         emit DecrementSelectedStateSlotHotkey();
 
       // Stereoscopy
-      if (IsHotkey(HK_TOGGLE_STEREO_SBS))
+      if (IsHotkey(HK_TOGGLE_STEREO_SIDE_BY_SIDE))
       {
-        if (Config::Get(Config::GFX_STEREO_MODE) != StereoMode::SBS)
+        if (Config::Get(Config::GFX_STEREO_MODE) != StereoMode::SideBySide)
         {
           // Disable post-processing shader, as stereoscopy itself is currently a shader
           if (Config::Get(Config::GFX_ENHANCE_POST_SHADER) == DUBOIS_ALGORITHM_SHADER)
             Config::SetCurrent(Config::GFX_ENHANCE_POST_SHADER, "");
 
-          Config::SetCurrent(Config::GFX_STEREO_MODE, StereoMode::SBS);
+          Config::SetCurrent(Config::GFX_STEREO_MODE, StereoMode::SideBySide);
         }
         else
         {
@@ -572,15 +573,15 @@ void HotkeyScheduler::Run()
         }
       }
 
-      if (IsHotkey(HK_TOGGLE_STEREO_TAB))
+      if (IsHotkey(HK_TOGGLE_STEREO_TOP_AND_BOTTOM))
       {
-        if (Config::Get(Config::GFX_STEREO_MODE) != StereoMode::TAB)
+        if (Config::Get(Config::GFX_STEREO_MODE) != StereoMode::TopAndBottom)
         {
           // Disable post-processing shader, as stereoscopy itself is currently a shader
           if (Config::Get(Config::GFX_ENHANCE_POST_SHADER) == DUBOIS_ALGORITHM_SHADER)
             Config::SetCurrent(Config::GFX_ENHANCE_POST_SHADER, "");
 
-          Config::SetCurrent(Config::GFX_STEREO_MODE, StereoMode::TAB);
+          Config::SetCurrent(Config::GFX_STEREO_MODE, StereoMode::TopAndBottom);
         }
         else
         {
@@ -608,7 +609,7 @@ void HotkeyScheduler::Run()
     const auto stereo_depth = Config::Get(Config::GFX_STEREO_DEPTH);
 
     if (IsHotkey(HK_DECREASE_DEPTH, true))
-      Config::SetCurrent(Config::GFX_STEREO_DEPTH, std::max(stereo_depth - 1, 0));
+      Config::SetCurrent(Config::GFX_STEREO_DEPTH, std::max(stereo_depth - 1, 0.0f));
 
     if (IsHotkey(HK_INCREASE_DEPTH, true))
       Config::SetCurrent(Config::GFX_STEREO_DEPTH,
@@ -617,7 +618,7 @@ void HotkeyScheduler::Run()
     const auto stereo_convergence = Config::Get(Config::GFX_STEREO_CONVERGENCE);
 
     if (IsHotkey(HK_DECREASE_CONVERGENCE, true))
-      Config::SetCurrent(Config::GFX_STEREO_CONVERGENCE, std::max(stereo_convergence - 5, 0));
+      Config::SetCurrent(Config::GFX_STEREO_CONVERGENCE, std::max(stereo_convergence - 5, 0.0f));
 
     if (IsHotkey(HK_INCREASE_CONVERGENCE, true))
       Config::SetCurrent(Config::GFX_STEREO_CONVERGENCE,

@@ -5,14 +5,13 @@
 
 #include <algorithm>
 #include <array>
-#include <locale>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #ifdef _WIN32
-#include <Windows.h>
+#include <windows.h>
 #endif
 
 #include "Common/Assert.h"

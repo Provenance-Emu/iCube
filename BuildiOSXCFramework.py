@@ -76,6 +76,11 @@ def _safe_job_count():
         return max(2, cores // 2)
 
 
+def xcrun_find(tool: str) -> str:
+    """Absolute path of a tool in the active Xcode toolchain (xcrun --find)."""
+    import subprocess
+    return subprocess.check_output(["xcrun", "--find", tool], text=True).strip()
+
 class BuildError(Exception):
     """Exception raised for build errors."""
     pass
@@ -310,7 +315,11 @@ class DolphinBuilder:
             # "-funsafe-math-optimizations "
             "-funroll-loops "
             "-ftree-vectorize "
-            "-fsplit-lto-unit "
+            # -fsplit-lto-unit REMOVED (2603 merge): with CMake IPO (ThinLTO, -flto=thin) it makes
+            # clang emit raw LLVM IR instead of Mach-O-wrapped bitcode, and Xcode 26's ar/ranlib/
+            # libtool cannot archive raw bitcode -> every static lib was a 96-byte symbol table and
+            # libdolphin failed to link. The flag only matters for CFI / -fwhole-program-vtables,
+            # which this build does not use.
             # Value-affecting unsafe-math flags REMOVED: they corrupt the core's FP results.
             # -freciprocal-math (approximate 1/x division) and -ffinite-math-only (assume no
             # NaN/Inf, breaks ps_rsqrte / normalization) distort CPU-computed bone/skinning and
@@ -380,8 +389,14 @@ class DolphinBuilder:
 
         # Combine flags with ARM64-only enforcement
         arm64_defines = "-D_M_ARM_64 -U_M_X86_64 -U_M_IX86"  # ARM64 only, explicitly undefine x86 macros
-        c_flags = f"{base_optimization_flags} {pgo_cflags} -w {arm64_defines} {curl_fixes}".strip()
-        cxx_flags = f"{base_optimization_flags} {pgo_cflags} -w {arm64_defines} {curl_fixes}".strip()
+        # iCube: DOL_FULL_LTO=1 restores the pre-2603 FULL (monolithic) LTO. CMake IPO on Clang is
+        # ThinLTO (-flto=thin); the old fork build used check_and_add_flag(LTO -flto). Full LTO gives
+        # the whole-program view the jitless interpreter benefits from, at a much longer link. A/B knob
+        # for the post-merge perf work; ENABLE_LTO is turned OFF so the two do not stack.
+        full_lto = os.environ.get("DOL_FULL_LTO", "0") == "1"
+        lto_cflags = "-flto" if full_lto else ""
+        c_flags = f"{base_optimization_flags} {pgo_cflags} {lto_cflags} -w {arm64_defines} {curl_fixes}".strip()
+        cxx_flags = f"{base_optimization_flags} {pgo_cflags} {lto_cflags} -w {arm64_defines} {curl_fixes}".strip()
 
         # Add architecture-specific flags only for device builds (not simulators)
         if platform not in ["SIMULATORARM64", "SIMULATOR_TVOS"]:
@@ -421,7 +436,7 @@ class DolphinBuilder:
 
         # Additional linker optimizations
         # Use -noall_load to avoid force-loading every static lib member (conflicts with LTO/bitcode archives)
-        linker_flags = f"-Wl,-dead_strip -Wl,-noall_load {pgo_ldflags}".strip()
+        linker_flags = f"-Wl,-dead_strip -Wl,-noall_load {pgo_ldflags} {lto_cflags}".strip()
 
         # Configure CMake command
         cmake_cmd = [
@@ -477,7 +492,16 @@ class DolphinBuilder:
             # geometry-corruption A/B in 16d5cc8fdd; that bug is upstream-drift/source, not an
             # LTO miscompile, so LTO-off bought nothing and cost perf. Geometry bug tracked via
             # the bisect plan, not by disabling LTO.)
-            "-DENABLE_LTO=ON",
+            f"-DENABLE_LTO={'OFF' if full_lto else 'ON'}",
+            # 2603 moved LTO to CMAKE_INTERPROCEDURAL_OPTIMIZATION. Under IPO, CMake archives
+            # with CMAKE_<LANG>_COMPILER_AR (llvm-ar), which Xcode does not ship; left empty,
+            # the archive step silently produced 4 KB archives holding only a symbol table and
+            # the dylib link failed with thousands of undefined symbols. Xcode's cctools ar/ranlib
+            # understand LTO bitcode via libLTO, so point IPO at them explicitly.
+            f"-DCMAKE_C_COMPILER_AR={xcrun_find('ar')}",
+            f"-DCMAKE_CXX_COMPILER_AR={xcrun_find('ar')}",
+            f"-DCMAKE_C_COMPILER_RANLIB={xcrun_find('ranlib')}",
+            f"-DCMAKE_CXX_COMPILER_RANLIB={xcrun_find('ranlib')}",
         ])
 
         # Override deployment target at CMake level to ensure it's respected
@@ -505,6 +529,15 @@ class DolphinBuilder:
             "-DENABLE_BITCODE=OFF",
             "-DENABLE_ARC=ON",
             "-DUSE_SYSTEM_ZSTD=OFF",
+            # 2603 bumped curl and minizip-ng; both now auto-detect zstd through pkg-config and
+            # pull the HOST (Homebrew, macOS) libzstd into the iOS link ("building for iOS, but
+            # linking in dylib built for macOS"). Neither needs zstd on iOS.
+            "-DCURL_ZSTD=OFF",
+            "-DMZ_ZSTD=OFF",
+            "-DMZ_OPENSSL=OFF",
+            # 2606 enabled mGBA on Android and dropped the guard the fork used for iOS; mGBA does not
+            # build with Apple clang 21 (implicit popcount32) and GBA link cable is not a feature here.
+            "-DUSE_MGBA=OFF",  # same leak via minizip-ng's OpenSSL probe (Homebrew libssl)
             "-DUSE_SYSTEM_MINIZIP=OFF",
             "-DUSE_SYSTEM_LZMA=OFF",
             "-DUSE_SYSTEM_BZIP2=OFF",

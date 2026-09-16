@@ -3,14 +3,13 @@
 
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <map>
 #include <memory>
 #include <mutex>
 
 #ifdef _WIN32
-#include <WinSock2.h>
+#include <winsock2.h>
 using socklen_t = int;
 #else
 #include <netinet/in.h>

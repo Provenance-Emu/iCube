@@ -4,22 +4,30 @@
 #include "DolphinQt/Config/GeckoCodeWidget.h"
 
 #include <algorithm>
+#include <functional>
 #include <utility>
 
 #include <QCursor>
 #include <QFontDatabase>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#ifdef USE_RETRO_ACHIEVEMENTS
+#include <QIcon>
+#endif  // USE_RETRO_ACHIEVEMENTS
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
+#ifdef USE_RETRO_ACHIEVEMENTS
+#include <QStyle>
+#endif  // USE_RETRO_ACHIEVEMENTS
 #include <QTextEdit>
 #include <QVBoxLayout>
 
 #include "Common/FileUtil.h"
 #include "Common/IniFile.h"
 
+#include "Core/AchievementManager.h"
 #include "Core/ConfigManager.h"
 #include "Core/GeckoCode.h"
 #include "Core/GeckoCodeConfig.h"
@@ -31,6 +39,9 @@
 #include "DolphinQt/QtUtils/NonDefaultQPushButton.h"
 #include "DolphinQt/QtUtils/QtUtils.h"
 #include "DolphinQt/QtUtils/WrapInScrollArea.h"
+#ifdef USE_RETRO_ACHIEVEMENTS
+#include "DolphinQt/Settings.h"
+#endif  // USE_RETRO_ACHIEVEMENTS
 
 GeckoCodeWidget::GeckoCodeWidget(std::string game_id, std::string gametdb_id, u16 game_revision,
                                  bool restart_required)
@@ -98,6 +109,7 @@ void GeckoCodeWidget::CreateWidgets()
   m_edit_code = new NonDefaultQPushButton(tr("&Edit Code..."));
   m_remove_code = new NonDefaultQPushButton(tr("&Remove Code"));
   m_download_codes = new NonDefaultQPushButton(tr("Download Codes"));
+  m_toggle_all_codes = new NonDefaultQPushButton(tr("Disable All"));
 
   m_cheat_code_editor = new CheatCodeEditor(this);
 
@@ -135,6 +147,7 @@ void GeckoCodeWidget::CreateWidgets()
   btn_layout->addWidget(m_edit_code);
   btn_layout->addWidget(m_remove_code);
   btn_layout->addWidget(m_download_codes);
+  btn_layout->addWidget(m_toggle_all_codes);
 
   layout->addLayout(btn_layout);
 }
@@ -153,11 +166,14 @@ void GeckoCodeWidget::ConnectWidgets()
   connect(m_remove_code, &QPushButton::clicked, this, &GeckoCodeWidget::RemoveCode);
   connect(m_edit_code, &QPushButton::clicked, this, &GeckoCodeWidget::EditCode);
   connect(m_download_codes, &QPushButton::clicked, this, &GeckoCodeWidget::DownloadCodes);
+  connect(m_toggle_all_codes, &QPushButton::clicked, this, &GeckoCodeWidget::ToggleAllCodes);
   connect(m_warning, &CheatWarningWidget::OpenCheatEnableSettings, this,
           &GeckoCodeWidget::OpenGeneralSettings);
 #ifdef USE_RETRO_ACHIEVEMENTS
   connect(m_hc_warning, &HardcoreWarningWidget::OpenAchievementSettings, this,
           &GeckoCodeWidget::OpenAchievementSettings);
+  connect(&Settings::Instance(), &Settings::EmulationStateChanged, this,
+          &GeckoCodeWidget::UpdateList);
 #endif  // USE_RETRO_ACHIEVEMENTS
 }
 
@@ -200,13 +216,14 @@ void GeckoCodeWidget::OnItemChanged(QListWidgetItem* item)
   if (!m_restart_required)
     Gecko::SetActiveCodes(m_gecko_codes, m_game_id, m_game_revision);
 
+  UpdateToggleButton();
   SaveCodes();
 }
 
 void GeckoCodeWidget::AddCode()
 {
   Gecko::GeckoCode code;
-  code.enabled = true;
+  code.enabled = false;
 
   m_cheat_code_editor->SetGeckoCode(&code);
   if (m_cheat_code_editor->exec() == QDialog::Rejected)
@@ -224,6 +241,7 @@ void GeckoCodeWidget::EditCode()
     return;
 
   const int index = item->data(Qt::UserRole).toInt();
+  const bool enabled = item->checkState() == Qt::Checked;
 
   m_cheat_code_editor->SetGeckoCode(&m_gecko_codes[index]);
   if (m_cheat_code_editor->exec() == QDialog::Rejected)
@@ -231,6 +249,9 @@ void GeckoCodeWidget::EditCode()
 
   SaveCodes();
   UpdateList();
+
+  if (!m_restart_required && enabled)
+    Gecko::SetActiveCodes(m_gecko_codes, m_game_id, m_game_revision);
 }
 
 void GeckoCodeWidget::RemoveCode()
@@ -320,6 +341,21 @@ void GeckoCodeWidget::SortDisabledCodesFirst()
   SaveCodes();
 }
 
+bool GeckoCodeWidget::IsEveryCodeEnabled()
+{
+  return std::ranges::all_of(m_gecko_codes, &Gecko::GeckoCode::enabled);
+}
+
+void GeckoCodeWidget::UpdateToggleButton()
+{
+  if (IsEveryCodeEnabled())
+    m_toggle_all_codes->setText(tr("Disable All"));
+  else
+    m_toggle_all_codes->setText(tr("Enable All"));
+
+  m_toggle_all_codes->setDisabled(m_gecko_codes.empty());
+}
+
 void GeckoCodeWidget::OnListReordered()
 {
   // Reorder codes based on the indices of table item
@@ -356,24 +392,46 @@ void GeckoCodeWidget::UpdateList()
     item->setCheckState(code.enabled ? Qt::Checked : Qt::Unchecked);
     item->setData(Qt::UserRole, static_cast<int>(i));
 
+#ifdef USE_RETRO_ACHIEVEMENTS
+    const AchievementManager& achievement_manager = AchievementManager::GetInstance();
+
+    if (achievement_manager.IsHardcoreModeActive())
+    {
+      const QIcon approved_icon = style()->standardIcon(QStyle::SP_DialogYesButton);
+      const QIcon warning_icon = style()->standardIcon(QStyle::SP_MessageBoxWarning);
+
+      if (achievement_manager.IsApprovedGeckoCode(code, m_game_id, m_game_revision))
+        item->setIcon(approved_icon);
+      else
+        item->setIcon(warning_icon);
+    }
+#endif  // USE_RETRO_ACHIEVEMENTS
+
     m_code_list->addItem(item);
   }
 
   m_code_list->setDragDropMode(QAbstractItemView::InternalMove);
+  UpdateToggleButton();
 }
 
 void GeckoCodeWidget::DownloadCodes()
 {
-  bool success;
+  const auto codes_result = Gecko::DownloadCodes(m_gametdb_id);
 
-  std::vector<Gecko::GeckoCode> codes = Gecko::DownloadCodes(m_gametdb_id, &success);
-
-  if (!success)
+  if (!codes_result)
   {
-    ModalMessageBox::critical(this, tr("Error"), tr("Failed to download codes."));
+    QString message = tr("Failed to download Gecko codes. The code server may be temporarily "
+                         "unavailable. Please try again later.");
+
+    const int http_response_code = codes_result.error();
+    if (http_response_code > 0)
+      message += tr("\n\nServer response: HTTP %1.").arg(http_response_code);
+
+    ModalMessageBox::critical(this, tr("Download Failed"), message);
     return;
   }
 
+  const std::vector<Gecko::GeckoCode>& codes = *codes_result;
   if (codes.empty())
   {
     ModalMessageBox::critical(this, tr("Error"), tr("File contained no codes."));
@@ -400,4 +458,29 @@ void GeckoCodeWidget::DownloadCodes()
       this, tr("Download complete"),
       tr("Downloaded %1 codes. (added %2)")
           .arg(QString::number(codes.size()), QString::number(added_count)));
+}
+
+void GeckoCodeWidget::ToggleAllCodes()
+{
+  const bool new_state = !IsEveryCodeEnabled();
+  const Qt::CheckState new_check_state =
+      new_state ? Qt::CheckState::Checked : Qt::CheckState::Unchecked;
+
+  {
+    // Without this blocker, the call to setCheckState below would end up loading and saving the ini
+    // file once per code.
+    QSignalBlocker blocker(m_code_list);
+
+    for (int i = 0; i < static_cast<int>(m_gecko_codes.size()); ++i)
+    {
+      m_gecko_codes[i].enabled = new_state;
+      m_code_list->item(i)->setCheckState(new_check_state);
+    }
+  }
+
+  if (!m_restart_required)
+    Gecko::SetActiveCodes(m_gecko_codes, m_game_id, m_game_revision);
+
+  UpdateList();
+  SaveCodes();
 }

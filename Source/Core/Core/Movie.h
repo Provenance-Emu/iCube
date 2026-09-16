@@ -4,7 +4,6 @@
 #pragma once
 
 #include <array>
-#include <cstring>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -199,7 +198,7 @@ public:
   bool IsUsingBongo(int controller) const;
   bool IsUsingGBA(int controller) const;
   void ChangePads();
-  void ChangeWiiPads(bool instantly = false);
+  void ChangeWiiPads();
 
   void SetReadOnly(bool bEnabled);
 

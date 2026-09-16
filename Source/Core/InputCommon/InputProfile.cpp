@@ -15,8 +15,8 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/HW/Wiimote.h"
-#include "Core/HotkeyManager.h"
 
+#include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "InputCommon/InputConfig.h"
 
@@ -37,7 +37,7 @@ std::vector<std::string> GetProfilesFromSetting(const std::string& setting, cons
     const std::string path = root + std::string(StripWhitespace(setting_choice));
     if (File::IsDirectory(path))
     {
-      const auto files_under_directory = Common::DoFileSearch({path}, {".ini"}, true);
+      const auto files_under_directory = Common::DoFileSearch(path, ".ini", true);
       result.insert(result.end(), files_under_directory.begin(), files_under_directory.end());
     }
     else
@@ -57,7 +57,7 @@ std::vector<std::string> ProfileCycler::GetProfilesForDevice(InputConfig* device
 {
   const std::string device_profile_root_location(
       device_configuration->GetUserProfileDirectoryPath());
-  return Common::DoFileSearch({device_profile_root_location}, {".ini"}, true);
+  return Common::DoFileSearch(device_profile_root_location, ".ini", true);
 }
 
 std::string ProfileCycler::GetProfile(CycleDirection cycle_direction, int& profile_index,
@@ -133,7 +133,7 @@ void ProfileCycler::CycleProfile(CycleDirection cycle_direction, InputConfig* de
   }
   else
   {
-    Core::DisplayMessage("No controller found for index: " + std::to_string(controller_index),
+    Core::DisplayMessage(fmt::format("No controller found for index: {}", controller_index),
                          display_message_ms);
   }
 }
@@ -172,7 +172,7 @@ void ProfileCycler::CycleProfileForGame(CycleDirection cycle_direction,
   }
   else
   {
-    Core::DisplayMessage("No controller found for index: " + std::to_string(controller_index),
+    Core::DisplayMessage(fmt::format("No controller found for index: {}", controller_index),
                          display_message_ms);
   }
 }

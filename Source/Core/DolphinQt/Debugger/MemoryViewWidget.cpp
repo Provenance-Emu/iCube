@@ -19,11 +19,8 @@
 #include <QTableWidget>
 #include <QtGlobal>
 
-#include <fmt/printf.h>
-
 #include "Common/Align.h"
 #include "Common/BitUtils.h"
-#include "Common/FloatUtils.h"
 #include "Common/StringUtil.h"
 #include "Common/Swap.h"
 #include "Core/Core.h"
@@ -129,7 +126,9 @@ public:
       if (event->modifiers() == Qt::ControlModifier)
       {
         m_view->TriggerActivateSearch();
+        return;
       }
+      [[fallthrough]];
     default:
       QWidget::keyPressEvent(event);
       return;
@@ -359,6 +358,7 @@ void MemoryViewWidget::UpdateDispatcher(UpdateType type)
     // Values were captured on CPU thread while doing a callback.
     if (m_values.size() != 0)
       UpdateColumns();
+    break;
   default:
     break;
   }
@@ -935,7 +935,11 @@ std::vector<u8> MemoryViewWidget::ConvertTextToBytes(Type type, QStringView inpu
     // Confirm it is only hex bytes
     const QRegularExpression is_hex(QStringLiteral("^([0-9A-F]{2})*$"),
                                     QRegularExpression::CaseInsensitiveOption);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    const QRegularExpressionMatch match = is_hex.matchView(input_text);
+#else
     const QRegularExpressionMatch match = is_hex.match(input_text);
+#endif
     good = match.hasMatch();
     if (good)
     {
@@ -980,7 +984,7 @@ void MemoryViewWidget::ToggleHighlights(bool enabled)
   }
   else
   {
-    // Treated as being interchangable with Qt::transparent.
+    // Treated as being interchangeable with Qt::transparent.
     m_highlight_color.setAlpha(0);
 
     // Immediately remove highlights when paused.
@@ -1216,7 +1220,7 @@ void MemoryViewWidget::OnContextMenu(const QPoint& pos)
 
   auto* note = m_ppc_symbol_db.GetNoteFromAddr(addr);
   note_edit_action->setEnabled(note != nullptr);
-  // A note cannot be added ontop of the starting address of another note.
+  // A note cannot be added on top of the starting address of another note.
   if (note != nullptr && note->address == addr)
     note_add_action->setEnabled(false);
 
