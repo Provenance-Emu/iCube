@@ -7,6 +7,7 @@
 #include <string>
 
 #include "Common/CommonTypes.h"
+#include "Common/Visibility.h"
 #include "Common/RangeSizeSet.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterBlockCache.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
@@ -106,7 +107,7 @@ std::string BuildHotBlocksReport(u32 top_n = 40);
 void Reset();
 }  // namespace CIRProfiler
 
-class CachedInterpreter : public JitBase, public CachedInterpreterCodeBlock
+class DOLPHIN_HIDDEN CachedInterpreter : public JitBase, public CachedInterpreterCodeBlock
 {
 public:
   explicit CachedInterpreter(Core::System& system);

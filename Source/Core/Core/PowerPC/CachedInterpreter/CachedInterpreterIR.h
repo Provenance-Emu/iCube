@@ -12,6 +12,7 @@
 #include "Common/RangeSizeSet.h"  // 2603: RangeSet moved from Externals to Common
 
 #include "Common/CommonTypes.h"
+#include "Common/Visibility.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreterEmitter.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
 #include "Core/PowerPC/JitCommon/JitBase.h"
@@ -197,7 +198,7 @@ private:
   std::vector<std::pair<u8*, u8*>> m_ranges_to_free_on_next_codegen;
 };
 
-class CachedInterpreterIR : public JitBase, public CachedInterpreterCodeBlock
+class DOLPHIN_HIDDEN CachedInterpreterIR : public JitBase, public CachedInterpreterCodeBlock
 {
 public:
   explicit CachedInterpreterIR(Core::System& system);

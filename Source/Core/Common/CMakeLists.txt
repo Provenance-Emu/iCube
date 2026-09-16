@@ -163,6 +163,7 @@ add_library(common
   VariantUtil.h
   Version.cpp
   Version.h
+  Visibility.h
   WaitableFlag.h
   WindowSystemInfo.h
   WorkQueueThread.h
