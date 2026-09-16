@@ -225,7 +225,9 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 }
 
 - (void)applicationDidBecomeActive:(UIApplication*)application {
-  DOLHostQueueRunSync(^{
+  // Async: these scene callbacks run on the main thread on every activation (frequent under iPad
+  // multitasking) and must not wait behind a long host job. See ICUBE-7D.
+  DOLHostQueueRunAsync(^{
     auto& system = Core::System::GetInstance();
 
     if (Core::IsRunning(system) && ![EmulationCoordinator shared].userRequestedPause) {
@@ -235,7 +237,7 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 }
 
 - (void)applicationWillResignActive:(UIApplication*)application {
-  DOLHostQueueRunSync(^{
+  DOLHostQueueRunAsync(^{
     auto& system = Core::System::GetInstance();
 
     if (Core::IsRunning(system) && ![EmulationCoordinator shared].userRequestedPause) {

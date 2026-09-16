@@ -1882,11 +1882,14 @@ after_set:
     return;
   }
 
-  DOLHostQueueRunSync(^{
+  // Flag first, then an ASYNC hop: the host queue is serial and can be busy for seconds (a queued
+  // State::LoadAs at boot, the adaptive-clock job under thermal pressure). A synchronous hop from
+  // the main thread waited behind that and froze the UI while emulation kept running — Sentry
+  // ICUBE-7D ("App Hang Fully Blocked 4.0-4.8 s", iPad). Nothing here needs the result.
+  _userRequestedPause = userRequestedPause;
+  DOLHostQueueRunAsync(^{
     Core::SetState(Core::System::GetInstance(), userRequestedPause ? Core::State::Paused : Core::State::Running);
   });
-
-  _userRequestedPause = userRequestedPause;
 }
 
 - (void)pauseForBackground {
