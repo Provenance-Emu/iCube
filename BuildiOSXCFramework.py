@@ -389,8 +389,14 @@ class DolphinBuilder:
 
         # Combine flags with ARM64-only enforcement
         arm64_defines = "-D_M_ARM_64 -U_M_X86_64 -U_M_IX86"  # ARM64 only, explicitly undefine x86 macros
-        c_flags = f"{base_optimization_flags} {pgo_cflags} -w {arm64_defines} {curl_fixes}".strip()
-        cxx_flags = f"{base_optimization_flags} {pgo_cflags} -w {arm64_defines} {curl_fixes}".strip()
+        # iCube: DOL_FULL_LTO=1 restores the pre-2603 FULL (monolithic) LTO. CMake IPO on Clang is
+        # ThinLTO (-flto=thin); the old fork build used check_and_add_flag(LTO -flto). Full LTO gives
+        # the whole-program view the jitless interpreter benefits from, at a much longer link. A/B knob
+        # for the post-merge perf work; ENABLE_LTO is turned OFF so the two do not stack.
+        full_lto = os.environ.get("DOL_FULL_LTO", "0") == "1"
+        lto_cflags = "-flto" if full_lto else ""
+        c_flags = f"{base_optimization_flags} {pgo_cflags} {lto_cflags} -w {arm64_defines} {curl_fixes}".strip()
+        cxx_flags = f"{base_optimization_flags} {pgo_cflags} {lto_cflags} -w {arm64_defines} {curl_fixes}".strip()
 
         # Add architecture-specific flags only for device builds (not simulators)
         if platform not in ["SIMULATORARM64", "SIMULATOR_TVOS"]:
@@ -430,7 +436,7 @@ class DolphinBuilder:
 
         # Additional linker optimizations
         # Use -noall_load to avoid force-loading every static lib member (conflicts with LTO/bitcode archives)
-        linker_flags = f"-Wl,-dead_strip -Wl,-noall_load {pgo_ldflags}".strip()
+        linker_flags = f"-Wl,-dead_strip -Wl,-noall_load {pgo_ldflags} {lto_cflags}".strip()
 
         # Configure CMake command
         cmake_cmd = [
@@ -486,7 +492,7 @@ class DolphinBuilder:
             # geometry-corruption A/B in 16d5cc8fdd; that bug is upstream-drift/source, not an
             # LTO miscompile, so LTO-off bought nothing and cost perf. Geometry bug tracked via
             # the bisect plan, not by disabling LTO.)
-            "-DENABLE_LTO=ON",
+            f"-DENABLE_LTO={'OFF' if full_lto else 'ON'}",
             # 2603 moved LTO to CMAKE_INTERPROCEDURAL_OPTIMIZATION. Under IPO, CMake archives
             # with CMAKE_<LANG>_COMPILER_AR (llvm-ar), which Xcode does not ship; left empty,
             # the archive step silently produced 4 KB archives holding only a symbol table and
@@ -528,7 +534,10 @@ class DolphinBuilder:
             # linking in dylib built for macOS"). Neither needs zstd on iOS.
             "-DCURL_ZSTD=OFF",
             "-DMZ_ZSTD=OFF",
-            "-DMZ_OPENSSL=OFF",  # same leak via minizip-ng's OpenSSL probe (Homebrew libssl)
+            "-DMZ_OPENSSL=OFF",
+            # 2606 enabled mGBA on Android and dropped the guard the fork used for iOS; mGBA does not
+            # build with Apple clang 21 (implicit popcount32) and GBA link cable is not a feature here.
+            "-DUSE_MGBA=OFF",  # same leak via minizip-ng's OpenSSL probe (Homebrew libssl)
             "-DUSE_SYSTEM_MINIZIP=OFF",
             "-DUSE_SYSTEM_LZMA=OFF",
             "-DUSE_SYSTEM_BZIP2=OFF",
