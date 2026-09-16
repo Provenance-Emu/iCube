@@ -3487,12 +3487,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Discard" = "Discard";
 "Apply" = "Apply";
 "Restore Defaults" = "Restore Defaults";
-"All" = "All";
 "WiiWare" = "WiiWare";
 "games" = "games";
 "selected" = "selected";
 "Done" = "Done";
-"Platform" = "Platform";
 "Platform: Auto" = "Platform: Auto";
 "Controller" = "Controller";
 "Controller: Auto" = "Controller: Auto";

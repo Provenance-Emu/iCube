@@ -3511,12 +3511,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Discard" = "廃棄";
 "Apply" = "適用";
 "Restore Defaults" = "デフォルトの復元";
-"All" = "すべて";
 "WiiWare" = "Wiiウェア";
 "games" = "ゲーム";
 "selected" = "件選択中";
 "Done" = "完了";
-"Platform" = "プラットフォーム";
 "Platform: Auto" = "プラットフォーム: 自動";
 "Controller" = "コントローラー";
 "Controller: Auto" = "コントローラー: 自動";
