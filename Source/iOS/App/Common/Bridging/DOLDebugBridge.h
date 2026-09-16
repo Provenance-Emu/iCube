@@ -33,6 +33,17 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)loadStatePath:(NSString*)path;
 + (BOOL)saveStateSlot:(NSInteger)slot;
 
+/// FIFO recording (Dolphin FifoRecorder). Records `frames` frames of GPU commands + the memory
+/// they reference and saves a .dff to `path` when done; `fifoRecordStatus` reports progress.
+/// A .dff plays back in any Dolphin FIFO player, so a phone recording replayed on a Mac tells
+/// GPU-input bugs (recording already wrong) from GPU-output bugs (recording right, phone wrong).
++ (BOOL)fifoRecordStart:(NSInteger)frames path:(NSString*)path;
++ (NSDictionary<NSString*, id>*)fifoRecordStatus;
+
+/// Interpreter FP self-test (Core/PowerPC/Interpreter/FPUSelfTest.h): fixed inputs through the
+/// FP primitives under three host FPCR modes, one hex line per result. Runs on the calling thread.
++ (NSString*)fpuSelfTest;
+
 /// A snapshot of render-relevant config/state.
 + (NSDictionary<NSString*, id>*)renderState;
 /// Build/version info (SCM revision, branch, app version/build, configuration).

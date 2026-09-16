@@ -531,6 +531,8 @@ add_library(core
   PowerPC/Interpreter/Interpreter_Branch.cpp
   PowerPC/Interpreter/Interpreter_FloatingPoint.cpp
   PowerPC/Interpreter/Interpreter_FPUtils.h
+  PowerPC/Interpreter/FPUSelfTest.cpp
+  PowerPC/Interpreter/FPUSelfTest.h
   PowerPC/Interpreter/Interpreter_Integer.cpp
   PowerPC/Interpreter/Interpreter_LoadStore.cpp
   PowerPC/Interpreter/Interpreter_LoadStorePaired.cpp

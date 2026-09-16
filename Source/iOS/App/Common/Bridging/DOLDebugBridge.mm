@@ -6,6 +6,7 @@
 #import <Foundation/Foundation.h>
 
 // C++ includes
+#include <atomic>
 #include <mutex>
 #include <deque>
 #include "Common/CommonPaths.h"
@@ -18,6 +19,9 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
+#include "Core/FifoPlayer/FifoDataFile.h"
+#include "Core/FifoPlayer/FifoRecorder.h"
+#include "Core/PowerPC/Interpreter/FPUSelfTest.h"
 #include "Core/Movie.h"
 #include "Core/State.h"
 #include "Core/System.h"
@@ -219,6 +223,51 @@ class RingListener : public Common::Log::LogListener {
     State::Save(Core::System::GetInstance(), (int)slot);  // 2603: Save is synchronous, no wait flag
   });
   return YES;
+}
+
+// FIFO recording state: 0 idle, 1 recording, 2 saving, 3 saved, 4 save failed.
+static std::atomic<int> s_fifoState{0};
+static NSString* s_fifoPath = nil;
+static NSInteger s_fifoFrames = 0;
+
++ (BOOL)fifoRecordStart:(NSInteger)frames path:(NSString*)path {
+  auto& system = Core::System::GetInstance();
+  if (!Core::IsRunning(system) || frames < 1 || frames > 600 || path.length == 0) return NO;
+  auto& recorder = system.GetFifoRecorder();
+  if (recorder.IsRecording() || s_fifoState == 1 || s_fifoState == 2) return NO;
+  s_fifoPath = [path copy];
+  s_fifoFrames = frames;
+  s_fifoState = 1;
+  const std::string out = path.UTF8String;
+  // Same host-thread discipline as the state routes above. The finished callback fires on the
+  // video thread under the recorder's mutex, so the (slow) file write is pushed off to a
+  // utility queue instead of running inside it.
+  DOLHostQueueRunSync(^{
+    Core::System::GetInstance().GetFifoRecorder().StartRecording((s32)frames, [out] {
+      s_fifoState = 2;
+      dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        FifoDataFile* file = Core::System::GetInstance().GetFifoRecorder().GetRecordedFile();
+        s_fifoState = (file && file->Save(out)) ? 3 : 4;
+      });
+    });
+  });
+  return YES;
+}
+
++ (NSDictionary<NSString*, id>*)fifoRecordStatus {
+  static NSString* const names[] = {@"idle", @"recording", @"saving", @"saved", @"save_failed"};
+  const int state = s_fifoState.load();
+  NSMutableDictionary* d = [@{@"state": names[state], @"frames_requested": @(s_fifoFrames)} mutableCopy];
+  if (s_fifoPath) d[@"path"] = s_fifoPath;
+  if (state == 3) {
+    if (FifoDataFile* file = Core::System::GetInstance().GetFifoRecorder().GetRecordedFile())
+      d[@"frames_recorded"] = @(file->GetFrameCount());
+  }
+  return d;
+}
+
++ (NSString*)fpuSelfTest {
+  return [NSString stringWithUTF8String:PowerPC::RunFPUSelfTest().c_str()];
 }
 
 + (NSDictionary<NSString*, id>*)renderState {

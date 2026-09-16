@@ -580,6 +580,13 @@ Metal::Util::TranslateShaderToMSL(ShaderStage stage, std::string_view source,
   spirv_cross::CompilerMSL::Options options;
 #if TARGET_OS_OSX
   options.platform = spirv_cross::CompilerMSL::Options::macOS;
+  // iCube oracle knob: ICUBE_FORCE_IOS_MSL=1 makes the macOS build emit the iOS-flavoured MSL the
+  // phone runs, so the iOS shader path can be checked on a Mac GPU.
+  if (const char* force = getenv("ICUBE_FORCE_IOS_MSL"); force && force[0] == '1')
+  {
+    options.platform = spirv_cross::CompilerMSL::Options::iOS;
+    options.ios_use_simdgroup_functions = Metal::g_features.subgroup_ops;
+  }
 #elif TARGET_OS_IOS || TARGET_OS_TV
   // tvOS shares iOS's Metal feature set; SPIRV-Cross has no separate tvOS platform.
   options.platform = spirv_cross::CompilerMSL::Options::iOS;

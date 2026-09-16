@@ -370,6 +370,49 @@ final class DebugAPIRoutes {
                 : ["ok": false, "status": 409, "error": "core not running or state missing"]
     }
 
+    // POST /api/debug/fifo-record  body {"frames":N=1...600, default 1} -> start a Dolphin FIFO
+    // recording; the .dff lands in Dump/Frames/<game>-<utc>.dff when done (poll the GET).
+    server.addCustomHandler(forMethod: "POST", path: "/api/debug/fifo-record") { _, _, _, body in
+      guard let dict = parseOptionalBody(body) else {
+        return ["ok": false, "status": 400, "error": bodyMustBeJSONObjectError]
+      }
+      var frames = 1
+      if let raw = dict["frames"] {
+        guard let n = asJSONInt(raw), (1...600).contains(n) else {
+          return ["ok": false, "status": 400, "error": "frames must be an integer 1...600"]
+        }
+        frames = n
+      }
+      guard let cPath = DolphinGetStateSavesPathC() else {
+        return ["ok": false, "status": 500, "error": "user directory unavailable"]
+      }
+      // StateSaves is <user>/StateSaves; the FIFO logs go next to it in <user>/Dump/Frames.
+      let user = URL(fileURLWithPath: String(cString: cPath)).deletingLastPathComponent()
+      let dir = user.appendingPathComponent("Dump/Frames", isDirectory: true)
+      try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "")
+      let gameID: String = Thread.isMainThread
+        ? TVEmulationBridge.currentGameID()
+        : DispatchQueue.main.sync { TVEmulationBridge.currentGameID() }
+      let game = gameID.isEmpty ? "game" : gameID
+      let path = dir.appendingPathComponent("\(game)-\(stamp).dff").path
+      guard DOLDebugBridge.fifoRecordStart(frames, path: path) else {
+        return ["ok": false, "status": 409, "error": "core not running or a recording is in progress"]
+      }
+      return ["ok": true, "data": ["path": path, "frames": frames]]
+    }
+
+    // GET /api/debug/fifo-record -> {"state": idle|recording|saving|saved|save_failed, "path", ...}
+    server.addCustomHandler(forMethod: "GET", path: "/api/debug/fifo-record") { _, _, _, _ in
+      ["ok": true, "data": DOLDebugBridge.fifoRecordStatus()]
+    }
+
+    // GET /api/debug/fpu-selftest -> text/plain: interpreter FP primitives on fixed inputs, hex per line.
+    server.addRawHandler(forMethod: "GET", path: "/api/debug/fpu-selftest") { _, _ in
+      NativeWebServer.RawResponse(status: 200, contentType: "text/plain; charset=utf-8",
+                                  body: Data(DOLDebugBridge.fpuSelfTest().utf8))
+    }
+
     // GET /api/debug/screenshot — raw PNG bytes (not the JSON envelope).
     server.addRawHandler(forMethod: "GET", path: "/api/debug/screenshot") { _, _ in
       guard let png = DOLDebugBridge.screenshotPNG(withTimeout: 3) else {

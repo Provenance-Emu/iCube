@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
+#include <thread>
 #include <functional>
 #include <future>
 #include <mutex>
@@ -46,7 +48,10 @@
 #include "Core/CoreTiming.h"
 #include "Core/DSPEmulator.h"
 #include "Core/DolphinAnalytics.h"
+#include "Core/FifoPlayer/FifoDataFile.h"
 #include "Core/FifoPlayer/FifoPlayer.h"
+#include "Core/FifoPlayer/FifoRecorder.h"
+#include "Core/PowerPC/Interpreter/FPUSelfTest.h"
 #include "Core/FreeLookManager.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HW/CPU.h"
@@ -98,7 +103,15 @@ static bool s_wants_determinism;
 
 // Declarations and definitions
 static std::thread s_emu_thread;
-static Common::HookableEvent<Core::State> s_state_changed_event;
+// iCube: construct-on-first-use. PerformanceMetrics (a Core::System member) registers a callback
+// here from its constructor, and under full LTO the dyld initializer order across translation
+// units is not the source order: an A18 device build crashed at launch in pthread_mutex_lock with
+// this event's mutex still unconstructed. A function-local static is initialized on first call.
+static Common::HookableEvent<Core::State>& StateChangedEvent()
+{
+  static Common::HookableEvent<Core::State> event;
+  return event;
+}
 
 static bool s_is_throttler_temp_disabled = false;
 static bool s_frame_step = false;
@@ -335,6 +348,41 @@ static void CPUSetInitialExecutionState(Core::System& system, bool force_paused 
   Host_UpdateDisasmDialog();
 }
 
+// iCube oracle knob (no UI needed): ICUBE_FIFO_RECORD="<frames>,<delay_frames>,<path>" records a
+// Dolphin FIFO log starting `delay_frames` presented frames after boot (i.e. after the boot save
+// state above is applied) and saves it to `path`. Lets a headless DolphinQt produce the same .dff
+// the iCube debug API's /api/debug/fifo-record produces on a phone, for byte-level comparison.
+static Common::EventHook s_env_fifo_record_hook;
+static void StartEnvFifoRecording(Core::System& system, const std::string& spec)
+{
+  const auto c1 = spec.find(','), c2 = spec.find(',', c1 == std::string::npos ? 0 : c1 + 1);
+  if (c1 == std::string::npos || c2 == std::string::npos)
+    return;
+  const int frames = std::atoi(spec.substr(0, c1).c_str());
+  const int delay = std::atoi(spec.substr(c1 + 1, c2 - c1 - 1).c_str());
+  const std::string path = spec.substr(c2 + 1);
+  if (frames < 1 || delay < 0 || path.empty())
+    return;
+  auto counter = std::make_shared<int>(0);
+  s_env_fifo_record_hook = system.GetVideoEvents().after_frame_event.Register(
+      [counter, frames, delay, path](const Core::System& sys) {
+        if ((*counter)++ != delay)
+          return;
+        // Don't touch the recorder (which registers its own after_frame hook) from inside this
+        // hook's dispatch; hand it to a helper thread like the Qt window's button would.
+        std::thread([frames, path] {
+          auto& rec = Core::System::GetInstance().GetFifoRecorder();
+          rec.StartRecording(frames, [path] {
+            std::thread([path] {
+              FifoDataFile* file = Core::System::GetInstance().GetFifoRecorder().GetRecordedFile();
+              const bool ok = file && file->Save(path);
+              NOTICE_LOG_FMT(CORE, "ICUBE_FIFO_RECORD: {} -> {}", ok ? "saved" : "FAILED", path);
+            }).detach();
+          });
+        }).detach();
+      });
+}
+
 // Create the CPU thread, which is a CPU + Video thread in Single Core mode.
 static void CpuThread(Core::System& system, const std::optional<std::string>& savestate_path,
                       bool delete_savestate)
@@ -368,6 +416,20 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
     ::State::LoadAs(system, *savestate_path);
     if (delete_savestate)
       File::Delete(*savestate_path);
+  }
+
+  if (const char* fifo_spec = std::getenv("ICUBE_FIFO_RECORD"))
+    StartEnvFifoRecording(system, fifo_spec);
+
+  // iCube oracle knob: ICUBE_FPU_SELFTEST=<path> writes the interpreter FP self-test (see
+  // FPUSelfTest.h) from the CPU thread to that file, so a Mac build and a phone can be diffed.
+  if (const char* selftest_path = std::getenv("ICUBE_FPU_SELFTEST"))
+  {
+    if (File::IOFile f(selftest_path, "wb"); f)
+    {
+      const std::string text = PowerPC::RunFPUSelfTest();
+      f.WriteBytes(text.data(), text.size());
+    }
   }
 
   {
@@ -957,12 +1019,12 @@ void Shutdown(Core::System& system)
 
 Common::EventHook AddOnStateChangedCallback(StateChangedCallbackFunc callback)
 {
-  return s_state_changed_event.Register(std::move(callback));
+  return StateChangedEvent().Register(std::move(callback));
 }
 
 void NotifyStateChanged(const Core::State state)
 {
-  s_state_changed_event.Trigger(state);
+  StateChangedEvent().Trigger(state);
 }
 
 void UpdateWantDeterminism(Core::System& system, bool initial)
