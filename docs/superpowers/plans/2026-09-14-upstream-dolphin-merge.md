@@ -114,3 +114,7 @@ Uses the debug MCP (`docs/dev/debug-api.md`, `Tools/mcp`) over USB. Same iPhone,
 - The NSMBW/Star Wars skinned-mesh bug. The soak only records whether the merge moves it.
 - Cross-version save-state loading (STATE_VERSION shim) — separate follow-up if users ask.
 - Rebasing the fork onto upstream, or upstreaming iOS patches. Both are worth doing later and are easier once the fork is current.
+
+## Post-ladder: Mac oracle (2026-09-16)
+
+DolphinQt built from this tree on macOS (`build-mac/`, Homebrew Qt 6.11, Xcode clang pinned because a ccache shim misidentified as the ObjC compiler) loads the phone's `SMNE01.auto` (STATE_VERSION 193) and renders NSMBW Mario correctly with CachedInterpreter + Metal, with the NEON vertex loader (`VertexLoaderType = 3`), and with CPU core 6 (IR engine). The skinned-mesh bug is therefore not in shared emulation code. Remaining buckets, being tested in order: (1) iOS core compile flags (`build-mac-o3/`: `-O3 -fvectorize -funroll-loops -ftree-vectorize -fno-strict-aliasing` + LTO), (2) the iOS-only MSL generation (`ICUBE_FORCE_IOS_MSL=1` knob in `MTLUtil.mm`), (3) iOS-only code (`MemoryUtil_iOS*`, `CodeBlock`/`JitCache` iOS paths, the app layer), (4) the A18 GPU itself. Oracle user dir: `~/.icube-debug/mac-oracle/fork-user`.
