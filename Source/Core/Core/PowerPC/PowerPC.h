@@ -336,8 +336,36 @@ private:
   Core::System& m_system;
 };
 
-void UpdatePerformanceMonitor(u32 cycles, u32 num_load_stores, u32 num_fp_inst,
-                              PowerPCState& ppc_state);
+// iCube 2026-09-16: branchless and inline. Games that program the performance monitor (F-Zero GX
+// does) pay this once per block from every block terminal; the out-of-line four-switch version was
+// 4 % of the emulation thread on device (Time Profiler, core 5). Same semantics as the upstream
+// switches: PMCn += cycles when its SELECT is 1; PMC2 += loads/stores and PMC3 += FP instructions
+// when their SELECT is 11; overflow raises the PM exception when the matching INTCONTROL bit is set.
+// Field positions are the UReg_MMCR0/UReg_MMCR1 BitField layouts (Gekko.h), written as shifts so this
+// can live before the MMCR0()/MMCR1() macros below.
+inline void UpdatePerformanceMonitor(u32 cycles, u32 num_load_stores, u32 num_fp_inst,
+                                     PowerPCState& ppc_state)
+{
+  const u32 mmcr0 = ppc_state.spr[SPR_MMCR0];
+  const u32 mmcr1 = ppc_state.spr[SPR_MMCR1];
+  const u32 pmc2sel = mmcr0 & 0x3f;          // BitField<0, 6>
+  const u32 pmc1sel = (mmcr0 >> 6) & 0x7f;   // BitField<6, 7>
+  const u32 pmc4sel = (mmcr1 >> 22) & 0x1f;  // BitField<22, 5>
+  const u32 pmc3sel = (mmcr1 >> 27) & 0x1f;  // BitField<27, 5>
+  const auto mask = [](bool cond) { return 0u - static_cast<u32>(cond); };
+  ppc_state.spr[SPR_PMC1] += cycles & mask(pmc1sel == 1);
+  ppc_state.spr[SPR_PMC2] += (cycles & mask(pmc2sel == 1)) | (num_load_stores & mask(pmc2sel == 11));
+  ppc_state.spr[SPR_PMC3] += (cycles & mask(pmc3sel == 1)) | (num_fp_inst & mask(pmc3sel == 11));
+  ppc_state.spr[SPR_PMC4] += cycles & mask(pmc4sel == 1);
+  const u32 pmc1_int = (mmcr0 >> 15) & 1;  // PMC1INTCONTROL
+  const u32 pmcn_int = (mmcr0 >> 14) & 1;  // PMCINTCONTROL
+  const u32 overflow =
+      ((ppc_state.spr[SPR_PMC1] >> 31) & pmc1_int) |
+      (((ppc_state.spr[SPR_PMC2] | ppc_state.spr[SPR_PMC3] | ppc_state.spr[SPR_PMC4]) >> 31) &
+       pmcn_int);
+  if (overflow) [[unlikely]]
+    ppc_state.Exceptions |= EXCEPTION_PERFORMANCE_MONITOR;
+}
 
 // Fast query for hot paths to determine if UpdatePerformanceMonitor may do work.
 // Returns true if any PMCs are configured to increment or if performance monitor
