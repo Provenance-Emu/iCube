@@ -268,9 +268,14 @@ struct IR_RegionInfo
   bool is_fake;
 };
 
-static inline IR_RegionInfo IR_GetRegionInfo(u32 ea, bool dr, u8* mem1_base, u32 mem1_mask, u8* exram_base,
-                                             u32 exram_mask, u8* fakevmem_base, u32 fakevmem_mask)
+static inline IR_RegionInfo IR_GetRegionInfo(u32 ea, bool dr, const CachedInterpreterIR::IRMemBases& b)
 {
+  u8* const mem1_base = b.mem1_base;
+  const u32 mem1_mask = b.mem1_mask;
+  u8* const exram_base = b.exram_base;
+  const u32 exram_mask = b.exram_mask;
+  u8* const fakevmem_base = b.fakevmem_base;
+  const u32 fakevmem_mask = b.fakevmem_mask;
   IR_RegionInfo info{nullptr, 0, 0, false};
   if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
   {
@@ -1350,12 +1355,8 @@ void CachedInterpreterIR::PassPICLoadStore(std::vector<IRInst>& ir) const
     return;
 
   auto& memory = m_system.GetMemory();
-  u8* const mem1_base = memory.GetRAM();
-  const u32 mem1_mask = memory.GetRamMask();
-  u8* const exram_base = memory.GetEXRAM();
-  const u32 exram_mask = memory.GetExRamMask();
-  u8* const fakevmem_base = memory.GetFakeVMEM();
-  const u32 fakevmem_mask = memory.GetFakeVMemMask();
+  m_mem_bases = {memory.GetRAM(),      memory.GetRamMask(),      memory.GetEXRAM(),
+                 memory.GetExRamMask(), memory.GetFakeVMEM(),     memory.GetFakeVMemMask()};
   auto& power_pc = m_system.GetPowerPC();
 
   std::vector<IRInst> out;
@@ -1369,10 +1370,8 @@ void CachedInterpreterIR::PassPICLoadStore(std::vector<IRInst>& ir) const
       continue;
     }
     const InterpretOperands& src = inst.u.interpret;
-    const LoadStorePICOperands pic = {src.interpreter, src.func,    src.current_pc,
-                                      src.inst,        power_pc,     mem1_base,
-                                      mem1_mask,       exram_base,   exram_mask,
-                                      fakevmem_base,   fakevmem_mask};
+    const LoadStorePICOperands pic = {src.interpreter, src.func, src.current_pc,
+                                      src.inst,        power_pc, &m_mem_bases};
     const bool write_pc = (inst.op == IROp::InterpretPC);
     if (s_ir_pic_loadstore_validate)
     {
@@ -1430,9 +1429,7 @@ s32 CachedInterpreterIR::LoadStorePIC(PowerPC::PowerPCState& ppc_state,
     const u32 rb = inst.RB;
     const u32 ea = (ra ? ppc_state.gpr[ra] : 0) + ppc_state.gpr[rb];
 
-    const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
-                                         operands.exram_base, operands.exram_mask,
-                                         operands.fakevmem_base, operands.fakevmem_mask);
+    const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, *operands.bases);
     if (region.base) [[likely]]
     {
       u8* const base_ptr = region.base;
@@ -1563,9 +1560,7 @@ s32 CachedInterpreterIR::LoadStorePIC(PowerPC::PowerPCState& ppc_state,
   const u32 ea =
       ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16)) : static_cast<u32>(inst.SIMM_16);
 
-  const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
-                                       operands.exram_base, operands.exram_mask,
-                                       operands.fakevmem_base, operands.fakevmem_mask);
+  const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, *operands.bases);
   if (region.base) [[likely]]
   {
     u8* const base_ptr = region.base;
@@ -1694,9 +1689,7 @@ s32 CachedInterpreterIR::LoadStorePIC(PowerPC::PowerPCState& ppc_state,
       u32 addr = ea;
       for (u32 k = 0; k < count; ++k, addr += 4)
       {
-        const auto r = IR_GetRegionInfo(addr, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
-                                        operands.exram_base, operands.exram_mask,
-                                        operands.fakevmem_base, operands.fakevmem_mask);
+        const auto r = IR_GetRegionInfo(addr, ppc_state.msr.DR, *operands.bases);
         if (!r.base)
         {
           ok = false;
@@ -1741,9 +1734,7 @@ s32 CachedInterpreterIR::LoadStorePIC(PowerPC::PowerPCState& ppc_state,
       u32 addr = ea;
       for (u32 k = 0; k < count; ++k, addr += 4)
       {
-        const auto r = IR_GetRegionInfo(addr, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
-                                        operands.exram_base, operands.exram_mask,
-                                        operands.fakevmem_base, operands.fakevmem_mask);
+        const auto r = IR_GetRegionInfo(addr, ppc_state.msr.DR, *operands.bases);
         if (!r.base)
         {
           ok = false;
@@ -1817,9 +1808,7 @@ s32 CachedInterpreterIR::LoadStorePICValidate(PowerPC::PowerPCState& ppc_state,
   else
     ea = ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16)) : static_cast<u32>(inst.SIMM_16);
 
-  const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, operands.mem1_base, operands.mem1_mask,
-                                       operands.exram_base, operands.exram_mask,
-                                       operands.fakevmem_base, operands.fakevmem_mask);
+  const auto region = IR_GetRegionInfo(ea, ppc_state.msr.DR, *operands.bases);
 
   // iCube IR M6: if the EA resolves to NO fast region, this op does NOT take the PIC path — LoadStorePIC
   // delegates to the generic interpreter handler (MMIO, translation miss, fault). We must NOT dual-run such an
@@ -2472,7 +2461,9 @@ void CachedInterpreterIR::EmitInterpret(const InterpretOperands& operands)
   const PPCAnalyst::CodeOp& op = *js.op;
   inst.cr_out = static_cast<u8>(op.crOut.m_val);
   inst.cr_discardable = static_cast<u8>(op.crDiscardable.m_val);
-  inst.opinfo_flags = op.opinfo->flags;
+  static_assert((FL_RC_BIT | FL_RC_BIT_F | FL_LOADSTORE | FL_USE_FPU) < (1ull << 32),
+                "IRInst::opinfo_flags is u32; every flag the IR reads must fit");
+  inst.opinfo_flags = static_cast<u32>(op.opinfo->flags);
   m_current_ir->push_back(inst);
   if (m_validate) [[unlikely]]
     m_validate_emitter.Write(Interpret<write_pc>, operands);

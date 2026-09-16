@@ -311,12 +311,24 @@ public:
   // structs contain reference members, the union has no default constructor; an IRInst is always
   // constructed fully via designated-init of the active member (see DoJit's Emit* helpers).
   struct IRInst;
+  // Region bases shared by every LoadStorePIC node (public: IR_GetRegionInfo in the .cpp takes it).
+  struct IRMemBases
+  {
+    u8* mem1_base;
+    u32 mem1_mask;
+    u8* exram_base;
+    u32 exram_mask;
+    u8* fakevmem_base;
+    u32 fakevmem_mask;
+  };
 
 private:
   // Per-block IR storage. Owned by the engine, keyed by the block's normalEntry (the address of the
   // anchor record the emitter wrote for that block). Looked up O(1) in ExecuteOneBlock via the
   // pointer carried in the anchor; freed in ReleaseBlockIR / ClearCache.
   std::unordered_map<const u8*, std::unique_ptr<std::vector<IRInst>>> m_block_ir;
+  // Shared region bases for every LoadStorePIC node (see IRMemBases). Refreshed by PassPICLoadStore.
+  mutable IRMemBases m_mem_bases{};
 
   // Retired IR vectors awaiting release. A block can be destroyed WHILE ExecuteOneBlock is iterating
   // its vector (an interpreted dcbf/icbi/dcbst invalidates the running block -> DestroyBlock ->
@@ -717,6 +729,10 @@ struct CachedInterpreterIR::FusedAluRunValidateOperands : CachedInterpreterIR::F
 // the exception check inside the (Chk-style) fallback path; the six region base/mask pointers (captured at
 // pass time from m_system.GetMemory(), stable for the block's life) feed CI-style region resolution. Holds a
 // reference member (interpreter), so an IRInst is always constructed via designated-init of this member.
+// iCube 2026-09-16: the region bases used to be six inline fields (48 bytes) in EVERY PIC node, which made
+// IRInst 104 bytes and had the dispatcher stalling on node loads (Time Profiler: the hottest instructions in
+// ExecuteOneBlock/LoadStorePIC were operand loads). They are process-invariant for the life of the CIR, so
+// every node now points at one shared copy owned by the CachedInterpreterIR instance.
 struct CachedInterpreterIR::LoadStorePICOperands
 {
   Interpreter& interpreter;
@@ -724,12 +740,7 @@ struct CachedInterpreterIR::LoadStorePICOperands
   u32 current_pc;
   UGeckoInstruction inst;
   PowerPC::PowerPCManager& power_pc;
-  u8* mem1_base;
-  u32 mem1_mask;
-  u8* exram_base;
-  u32 exram_mask;
-  u8* fakevmem_base;
-  u32 fakevmem_mask;
+  const IRMemBases* bases;
 };
 
 // iCube IR M6: payload for the PIC load/store validate op (MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE). Same fields as
@@ -828,5 +839,10 @@ struct CachedInterpreterIR::IRInst
   // the M2 flags off these bytes are never read, so behavior is byte-identical to the M1 lowering.
   u8 cr_out = 0;          // BitSet8 op.crOut — CR fields this op writes
   u8 cr_discardable = 0;  // BitSet8 op.crDiscardable — CR fields proven dead (overwritten before any read)
-  u64 opinfo_flags = 0;   // op.opinfo->flags — for the FL_RC_BIT / FL_RC_BIT_F guard
+  // iCube 2026-09-16: u32, not u64 — only FL_RC_BIT / FL_RC_BIT_F / FL_LOADSTORE / FL_USE_FPU are ever
+  // read from it (all below bit 32, static_assert'd at the stamp site), and the u64 pushed IRInst to 72 bytes.
+  u32 opinfo_flags = 0;   // low 32 bits of op.opinfo->flags
 };
+// iCube 2026-09-16: keep the node dense — the dispatcher's self time is dominated by node loads. 104 bytes
+// before the shared-bases change, 64 (one cache line) after; anything above means a fat operand struct crept back.
+static_assert(sizeof(CachedInterpreterIR::IRInst) == 64, "IRInst grew past one cache line; keep operand structs small");
