@@ -1825,6 +1825,61 @@ s32 CachedInterpreter::InterpretAndCheckExceptions(
 // not handle delegates to Cold_LoadStoreFallback, which runs the exact generic interpreter handler, so
 // DSI/alignment/MMIO semantics are preserved for everything PIC does not specialize. write_pc mirrors
 // Interpret<write_pc>. Ported (integer subset, scalar lmw/stmw) from feature/icube-testflight.
+// iCube 2026-09-16: lmw/stmw outlined from LoadStoreDFormPIC. Their two loops (per-word region pre-scan,
+// then the copy) were the only high-register-pressure region in the handler, and LLVM answered by saving
+// six callee-saved pairs right after the EA computation — on the path EVERY D-form load/store takes (about a
+// sixth of the handler's self time on device was that prologue/epilogue, NSMBW + F-Zero Time Profiler).
+// This is reached by a TAIL call (the case is `return LoadStoreMultiplePIC<...>(...)`), so nothing stays
+// live across it and the hot handler needs no prologue at all. Pre-scans the whole range before writing,
+// exactly as before; a failed scan falls back with no partial effect.
+template <bool store>
+[[gnu::noinline]] s32 CachedInterpreter::LoadStoreMultiplePIC(PowerPC::PowerPCState& ppc_state, u32 ea,
+                                                              const LoadStoreDFormPICOperands& operands)
+{
+  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
+               exram_mask, fakevmem_base, fakevmem_mask] = operands;
+  if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
+    return Cold_LoadStoreFallback(ppc_state, operands);
+  const u32 first = store ? static_cast<u32>(inst.RS) : static_cast<u32>(inst.RD);
+  const u32 count = 32u - first;
+  u8* region_base = nullptr;
+  u32 region_mask = 0;
+  u32 region_sub = 0;
+  bool region_is_fake = false;
+  u32 addr = ea;
+  for (u32 k = 0; k < count; ++k, addr += 4)
+  {
+    const auto r = CI_GetRegionInfo(addr, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
+                                    exram_mask, fakevmem_base, fakevmem_mask);
+    if (!r.base)
+      return Cold_LoadStoreFallback(ppc_state, operands);
+    if (!region_base)
+    {
+      region_base = r.base;
+      region_mask = r.mask;
+      region_sub = r.sub;
+      region_is_fake = r.is_fake;
+    }
+    else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
+             region_is_fake != r.is_fake)
+    {
+      return Cold_LoadStoreFallback(ppc_state, operands);
+    }
+  }
+  if (!region_base)
+    return Cold_LoadStoreFallback(ppc_state, operands);
+  addr = ea;
+  for (u32 r = first; r <= 31u; ++r, addr += 4)
+  {
+    const u32 roff = region_is_fake ? (addr & region_mask) : ((addr - region_sub) & region_mask);
+    if constexpr (store)
+      *reinterpret_cast<u32*>(region_base + roff) = Common::swap32(ppc_state.gpr[r]);
+    else
+      ppc_state.gpr[r] = Common::FromBigEndian(*reinterpret_cast<const u32*>(region_base + roff));
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 template <bool write_pc>
 s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
                                          const LoadStoreDFormPICOperands& operands)
@@ -1976,98 +2031,10 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
-    case 46:  // lmw
-    {
-      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
-        break;
-      const u32 count = 32u - static_cast<u32>(inst.RD);
-      // Pre-scan: the entire range must lie in a single fast region, else fall back.
-      u8* region_base = nullptr;
-      u32 region_mask = 0;
-      u32 region_sub = 0;
-      bool region_is_fake = false;
-      bool ok = true;
-      u32 addr = ea;
-      for (u32 k = 0; k < count; ++k, addr += 4)
-      {
-        const auto r = CI_GetRegionInfo(addr, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
-                                        exram_mask, fakevmem_base, fakevmem_mask);
-        if (!r.base)
-        {
-          ok = false;
-          break;
-        }
-        if (!region_base)
-        {
-          region_base = r.base;
-          region_mask = r.mask;
-          region_sub = r.sub;
-          region_is_fake = r.is_fake;
-        }
-        else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
-                 region_is_fake != r.is_fake)
-        {
-          ok = false;
-          break;
-        }
-      }
-      if (!ok || !region_base)
-        break;
-      addr = ea;
-      for (u32 r = static_cast<u32>(inst.RD); r <= 31u; ++r, addr += 4)
-      {
-        const u32 roff =
-            region_is_fake ? (addr & region_mask) : ((addr - region_sub) & region_mask);
-        const u32 raw = *reinterpret_cast<const u32*>(region_base + roff);
-        ppc_state.gpr[r] = Common::FromBigEndian(raw);
-      }
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 47:  // stmw
-    {
-      if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
-        break;
-      const u32 count = 32u - static_cast<u32>(inst.RS);
-      u8* region_base = nullptr;
-      u32 region_mask = 0;
-      u32 region_sub = 0;
-      bool region_is_fake = false;
-      bool ok = true;
-      u32 addr = ea;
-      for (u32 k = 0; k < count; ++k, addr += 4)
-      {
-        const auto r = CI_GetRegionInfo(addr, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
-                                        exram_mask, fakevmem_base, fakevmem_mask);
-        if (!r.base)
-        {
-          ok = false;
-          break;
-        }
-        if (!region_base)
-        {
-          region_base = r.base;
-          region_mask = r.mask;
-          region_sub = r.sub;
-          region_is_fake = r.is_fake;
-        }
-        else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
-                 region_is_fake != r.is_fake)
-        {
-          ok = false;
-          break;
-        }
-      }
-      if (!ok || !region_base)
-        break;
-      addr = ea;
-      for (u32 r = static_cast<u32>(inst.RS); r <= 31u; ++r, addr += 4)
-      {
-        const u32 roff =
-            region_is_fake ? (addr & region_mask) : ((addr - region_sub) & region_mask);
-        *reinterpret_cast<u32*>(region_base + roff) = Common::swap32(ppc_state.gpr[r]);
-      }
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
+    case 46:  // lmw — multi-word path outlined (tail call keeps this handler prologue-free)
+      return LoadStoreMultiplePIC<false>(ppc_state, ea, operands);
+    case 47:  // stmw — multi-word path outlined (tail call keeps this handler prologue-free)
+      return LoadStoreMultiplePIC<true>(ppc_state, ea, operands);
     default:
       break;  // FP or unsupported D-form -> fallback
     }

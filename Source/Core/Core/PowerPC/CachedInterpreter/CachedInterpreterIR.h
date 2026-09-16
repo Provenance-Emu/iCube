@@ -576,6 +576,11 @@ private:
   // handler exactly as a plain Interpret op would (the IR engine's plain loads were never InterpretChk).
   template <bool write_pc>
   static s32 LoadStorePIC(PowerPC::PowerPCState& ppc_state, const LoadStorePICOperands& operands);
+  // iCube 2026-09-16: lmw/stmw outlined so the hot handler stays prologue-free; reached by a tail call,
+  // does the alignment check + whole-range pre-scan + copy and falls back itself (see .cpp).
+  template <bool store>
+  static s32 LoadStoreMultiplePIC(PowerPC::PowerPCState& ppc_state, u32 ea,
+                                  const LoadStorePICOperands& operands);
   template <bool write_pc>
   static s32 LoadStorePIC(std::ostream& stream, const LoadStorePICOperands& operands);
   // iCube IR M6: cold fallback — runs the exact generic interpreter handler captured at pass time, preserving

@@ -282,6 +282,12 @@ private:
   template <bool write_pc>
   static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
                                const LoadStoreDFormPICOperands& operands);
+  // iCube 2026-09-16: lmw/stmw outlined so the hot D-form handler stays prologue-free (see .cpp).
+  // Reached by a tail call; does the alignment check, the whole-range pre-scan, the copy, and falls
+  // back itself, returning the record size exactly like LoadStoreDFormPIC would.
+  template <bool store>
+  static s32 LoadStoreMultiplePIC(PowerPC::PowerPCState& ppc_state, u32 ea,
+                                  const LoadStoreDFormPICOperands& operands);
   template <bool write_pc>
   static s32 LoadStoreDFormPIC(std::ostream& stream, const LoadStoreDFormPICOperands& operands);
   template <bool write_pc>
