@@ -4,6 +4,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <optional>
 
@@ -121,6 +122,13 @@ private:
 
   std::atomic<int> m_sync_ticks = 0;
   bool m_syncing_suspended = false;
+
+  // iCube: idle-poll backoff for the dual-core video thread (see RunGpuLoop). After
+  // GPU_IDLE_SPIN_POLLS consecutive payload iterations that drained nothing, each further idle
+  // iteration naps for GPU_IDLE_NAP before polling again. Only touched on the video thread.
+  static constexpr u32 GPU_IDLE_SPIN_POLLS = 16;
+  static constexpr std::chrono::microseconds GPU_IDLE_NAP{100};
+  u32 m_gpu_idle_polls = 0;
   Common::Event m_sync_wakeup_event;
 
   std::optional<Config::ConfigChangedCallbackID> m_config_callback_id = std::nullopt;

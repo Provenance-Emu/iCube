@@ -4,7 +4,9 @@
 #include "VideoCommon/Fifo.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstring>
+#include <thread>
 
 #include "Common/Assert.h"
 #include "Common/BlockingLoop.h"
@@ -318,6 +320,17 @@ void FifoManager::RunGpuLoop()
           auto& fifo = command_processor.GetFifo();
           command_processor.SetCPStatusFromGPU();
 
+          // iCube: track whether this payload iteration drained any FIFO data. BlockingLoop
+          // re-runs the payload back-to-back until the CPU thread's 1 kHz GPUSleepCallback
+          // arms m_may_sleep, so after every burst of work the video thread hot-spins the whole
+          // payload (PullEvents, SetCPStatusFromGPU, Flush, RefreshPeekCache) for up to ~1 ms.
+          // On device that spin was ~75 % of the video thread's samples (NSMBW, 2026-09-16
+          // Time Profiler) — a third of a performance core burned while the CPU thread is the
+          // bottleneck, which is heat, which is throttling. When an iteration does no work we
+          // nap briefly instead; RunGpu() -> Wakeup() from the CPU thread still cuts a real
+          // sleep short, and a nap only delays the next poll by its own length.
+          bool did_work = false;
+
           // check if we are able to run this buffer
           while (!command_processor.IsInterruptWaiting() &&
                  fifo.bFF_GPReadEnable.load(std::memory_order_relaxed) &&
@@ -327,6 +340,7 @@ void FifoManager::RunGpuLoop()
             if (m_config_sync_gpu && m_sync_ticks.load() < m_config_sync_gpu_min_distance)
               break;
 
+            did_work = true;
             u32 cyclesExecuted = 0;
             u32 readPtr = fifo.CPReadPointer.load(std::memory_order_relaxed);
             ReadDataFromFifo(readPtr);
@@ -386,8 +400,21 @@ void FifoManager::RunGpuLoop()
 
           // The fifo is empty and it's unlikely we will get any more work in the near future.
           // Make sure VertexManager finishes drawing any primitives it has stored in it's buffer.
-          g_vertex_manager->Flush();
-          g_framebuffer_manager->RefreshPeekCache();
+          // iCube: only once per drain — the first idle iteration after work — not every spin.
+          if (did_work || m_gpu_idle_polls == 0)
+          {
+            g_vertex_manager->Flush();
+            g_framebuffer_manager->RefreshPeekCache();
+          }
+
+          if (did_work)
+          {
+            m_gpu_idle_polls = 0;
+          }
+          else if (++m_gpu_idle_polls > GPU_IDLE_SPIN_POLLS)
+          {
+            std::this_thread::sleep_for(GPU_IDLE_NAP);
+          }
         }
       },
       100);
