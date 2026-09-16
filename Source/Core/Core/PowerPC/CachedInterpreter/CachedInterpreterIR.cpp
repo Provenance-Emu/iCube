@@ -43,6 +43,7 @@
 #include "Core/Host.h"
 #include "Core/PowerPC/Gekko.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
+#include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/PowerPC/Jit64Common/Jit64Constants.h"  // CODE_SIZE
 #include "Core/PowerPC/PPCAnalyst.h"
 #include "Core/PowerPC/PowerPC.h"
@@ -1345,7 +1346,14 @@ bool CachedInterpreterIR::PICLoadStoreApplies(const IRInst& inst)
 {
   if (inst.op != IROp::Interpret && inst.op != IROp::InterpretPC)
     return false;
-  return (inst.opinfo_flags & FL_LOADSTORE) != 0 && (inst.opinfo_flags & FL_USE_FPU) == 0;
+  if ((inst.opinfo_flags & FL_LOADSTORE) == 0)
+    return false;
+  if ((inst.opinfo_flags & FL_USE_FPU) == 0)
+    return true;
+  // iCube 2026-09-16: FP D-form loads/stores (opcodes 48-55) have exact LoadStorePIC cases now; X-form FP
+  // and the quantized psq_* forms stay on the generic path (no PIC case for them).
+  const u32 opcd = inst.u.interpret.inst.OPCD;
+  return opcd >= 48 && opcd <= 55;
 }
 
 // iCube IR M6: PIC direct-pointer load/store pass. IRInst is NOT move-assignable (operand union holds a
@@ -1738,6 +1746,59 @@ s32 CachedInterpreterIR::LoadStorePIC(PowerPC::PowerPCState& ppc_state,
       *reinterpret_cast<u16*>(base_ptr + offset) =
           Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
       ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    // iCube 2026-09-16: FP D-form loads/stores. Bit-identical to Interpreter_LoadStore.cpp: lfs fills both
+    // halves with ConvertToDouble(single), lfd sets PS0 only, stfs stores ConvertToSingle(PS0), stfd stores
+    // PS0; all four require 4-byte alignment (else the generic handler raises the alignment exception),
+    // update forms need rA != 0. FPU availability is the block-level CheckFPU's job, exactly as for the
+    // generic Interpret path these replace. In FP-heavy titles (F-Zero GX) the generic path put ~10 % of the
+    // emulation thread into the MMU slow paths (Time Profiler, core 5).
+    case 48:  // lfs
+    case 49:  // lfsu (update)
+    {
+      const bool update = (inst.OPCD == 49);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      ppc_state.ps[inst.FD].Fill(ConvertToDouble(Common::FromBigEndian(raw)));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 50:  // lfd
+    case 51:  // lfdu (update)
+    {
+      const bool update = (inst.OPCD == 51);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      const u64 raw = *reinterpret_cast<const u64*>(base_ptr + offset);
+      ppc_state.ps[inst.FD].SetPS0(Common::FromBigEndian(raw));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 52:  // stfs
+    case 53:  // stfsu (update)
+    {
+      const bool update = (inst.OPCD == 53);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      *reinterpret_cast<u32*>(base_ptr + offset) =
+          Common::swap32(ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64()));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 54:  // stfd
+    case 55:  // stfdu (update)
+    {
+      const bool update = (inst.OPCD == 55);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      *reinterpret_cast<u64*>(base_ptr + offset) = Common::swap64(ppc_state.ps[inst.FS].PS0AsU64());
+      if (update)
+        ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 46:  // lmw — multi-word path outlined (tail call keeps this handler prologue-free)

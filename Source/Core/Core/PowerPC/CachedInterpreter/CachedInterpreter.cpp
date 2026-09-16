@@ -31,6 +31,7 @@
 #include "Core/Host.h"
 #include "Core/PowerPC/Gekko.h"
 #include "Core/PowerPC/Interpreter/Interpreter.h"
+#include "Core/PowerPC/Interpreter/Interpreter_FPUtils.h"
 #include "Core/PowerPC/Jit64Common/Jit64Constants.h"
 #include "Core/PowerPC/JitInterface.h"
 #include "Core/PowerPC/MMU.h"
@@ -2029,6 +2030,59 @@ s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
       *reinterpret_cast<u16*>(base_ptr + offset) =
           Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
       ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    // iCube 2026-09-16: FP D-form loads/stores. Bit-identical to Interpreter_LoadStore.cpp: lfs fills both
+    // halves with ConvertToDouble(single), lfd sets PS0 only, stfs stores ConvertToSingle(PS0), stfd stores
+    // PS0; all four require 4-byte alignment (else the generic handler raises the alignment exception),
+    // update forms need rA != 0. FPU availability is the block-level CheckFPU's job, exactly as for the
+    // generic Interpret path these replace. In FP-heavy titles (F-Zero GX) the generic path put ~10 % of the
+    // emulation thread into the MMU slow paths (Time Profiler, core 5).
+    case 48:  // lfs
+    case 49:  // lfsu (update)
+    {
+      const bool update = (inst.OPCD == 49);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
+      ppc_state.ps[inst.FD].Fill(ConvertToDouble(Common::FromBigEndian(raw)));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 50:  // lfd
+    case 51:  // lfdu (update)
+    {
+      const bool update = (inst.OPCD == 51);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      const u64 raw = *reinterpret_cast<const u64*>(base_ptr + offset);
+      ppc_state.ps[inst.FD].SetPS0(Common::FromBigEndian(raw));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 52:  // stfs
+    case 53:  // stfsu (update)
+    {
+      const bool update = (inst.OPCD == 53);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      *reinterpret_cast<u32*>(base_ptr + offset) =
+          Common::swap32(ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64()));
+      if (update)
+        ppc_state.gpr[ra] = ea;
+      return sizeof(AnyCallback) + sizeof(operands);
+    }
+    case 54:  // stfd
+    case 55:  // stfdu (update)
+    {
+      const bool update = (inst.OPCD == 55);
+      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
+        break;
+      *reinterpret_cast<u64*>(base_ptr + offset) = Common::swap64(ppc_state.ps[inst.FS].PS0AsU64());
+      if (update)
+        ppc_state.gpr[ra] = ea;
       return sizeof(AnyCallback) + sizeof(operands);
     }
     case 46:  // lmw — multi-word path outlined (tail call keeps this handler prologue-free)
@@ -5150,8 +5204,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // The PIC body still null-checks the resolved region at runtime and delegates anything it does
         // not handle to Cold_LoadStoreFallback (exact generic handler), so correctness holds regardless.
         const u32 ls_flags = op.opinfo->flags;
+        // iCube 2026-09-16: FP D-form loads/stores (lfs/lfsu/lfd/lfdu/stfs/stfsu/stfd/stfdu, primary
+        // opcodes 48-55) are admitted too — LoadStoreDFormPIC now has exact cases for them. X-form FP
+        // (opcode 31) is still excluded: LoadStoreXFormPIC has no FP cases and would cold-fallback.
+        const bool fp_dform = (ls_flags & FL_USE_FPU) != 0 && op.inst.OPCD >= 48 && op.inst.OPCD <= 55;
         if (!emitted && s_pic_loadstore && !jo.memcheck && jo.fastmem &&
-            (ls_flags & FL_LOADSTORE) != 0 && (ls_flags & FL_USE_FPU) == 0)
+            (ls_flags & FL_LOADSTORE) != 0 && ((ls_flags & FL_USE_FPU) == 0 || fp_dform))
         {
           auto& memory = m_system.GetMemory();
           const LoadStoreDFormPICOperands pic_operands = {interpreter,
