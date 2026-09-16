@@ -333,7 +333,12 @@ private:
   void GenerateDSIException(u32 effective_address, bool write);
   void GenerateISIException(u32 effective_address);
 
+  // iCube: Memcheck is called on every guest load/store from the interpreter paths. The
+  // no-memchecks case is the only one that matters for speed, so it is an always-inline
+  // HasAny() test in MMU.cpp that falls through to MemcheckSlow(); LTO was leaving the
+  // whole function out of line (~1 % of the CPU thread, NSMBW 2026-09-16 Time Profiler).
   void Memcheck(u32 address, u64 var, bool write, size_t size);
+  void MemcheckSlow(u32 address, u64 var, bool write, size_t size);
 
   void ClearPageTable();
   void ReloadPageTable();

@@ -42,6 +42,7 @@
 #include "Common/BitUtils.h"
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
+#include "Common/Inline.h"
 #include "Common/Logging/Log.h"
 
 #include "Core/Core.h"
@@ -625,7 +626,14 @@ std::optional<ReadResult<u32>> MMU::HostTryReadInstruction(const Core::CPUThread
   return std::nullopt;
 }
 
-void MMU::Memcheck(u32 address, u64 var, bool write, size_t size)
+DOLPHIN_FORCE_INLINE void MMU::Memcheck(u32 address, u64 var, bool write, size_t size)
+{
+  if (!m_power_pc.GetMemChecks().HasAny()) [[likely]]
+    return;
+  MemcheckSlow(address, var, write, size);
+}
+
+void MMU::MemcheckSlow(u32 address, u64 var, bool write, size_t size)
 {
   if (!m_power_pc.GetMemChecks().HasAny())
     return;
