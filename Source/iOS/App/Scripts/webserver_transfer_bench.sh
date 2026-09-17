@@ -96,8 +96,8 @@ normalize_url() {
 
 discover_bonjour_url() {
   local browse_tmp resolve_tmp
-  browse_tmp=$(mktemp "${TMPDIR:-/tmp}/ifly-bench-browse.XXXXXX")
-  resolve_tmp=$(mktemp "${TMPDIR:-/tmp}/ifly-bench-resolve.XXXXXX")
+  browse_tmp=$(mktemp "${TMPDIR:-/tmp}/icube-bench-browse.XXXXXX")
+  resolve_tmp=$(mktemp "${TMPDIR:-/tmp}/icube-bench-resolve.XXXXXX")
 
   local stype found=0
   for stype in _http._tcp _webdav._tcp; do
@@ -216,7 +216,7 @@ run_upload() {
         curl -sS -o /dev/null \
           -w '%{http_code} %{time_total} %{size_upload}' \
           -X PUT -T "$file" \
-          -H 'User-Agent: iFly-bench/rclone/' \
+          -H 'User-Agent: iCube-bench/rclone/' \
           -H 'Overwrite: T' \
           --connect-timeout 10 --max-time 600 \
           "${base}${BENCH_SUBDIR}/${bench_name}"
@@ -228,7 +228,7 @@ run_upload() {
         curl -sS -o /dev/null \
           -w '%{http_code} %{time_total} %{size_upload}' \
           -X PUT -T "$file" \
-          -H 'User-Agent: Mozilla/5.0 (iFly-bench)' \
+          -H 'User-Agent: Mozilla/5.0 (iCube-bench)' \
           -H 'Overwrite: T' \
           --connect-timeout 10 --max-time 600 \
           "${base}files/${BENCH_SUBDIR}/${bench_name}"
@@ -270,7 +270,7 @@ run_download() {
     curl -sS -o /dev/null \
       -w '%{http_code} %{time_total} %{size_download}' \
       --connect-timeout 10 --max-time 600 \
-      "${base}files/${BENCH_SUBDIR}/${label}.bin"
+      "${base}files/${BENCH_SUBDIR}/${label}.http_put.bin"
   )
   [[ "$code" == "200" ]] || die "HTTP GET download failed: HTTP $code for ${label} run $run_num"
 
@@ -296,7 +296,7 @@ cleanup_file() {
     "${base}files/${BENCH_SUBDIR}/${label}${suffix}.bin" 2>/dev/null \
     || curl -sS -o /dev/null -X DELETE \
       --connect-timeout 5 --max-time 30 \
-      -H 'User-Agent: iFly-bench/rclone/' \
+      -H 'User-Agent: iCube-bench/rclone/' \
       "${base}${BENCH_SUBDIR}/${label}${suffix}.bin" 2>/dev/null \
     || true
 }
@@ -415,15 +415,15 @@ require_cmd dd
 require_cmd awk
 
 if [[ -z "$URL" ]]; then
-  URL=$(discover_bonjour_url) || die "Bonjour discovery failed — start iFly web server, stay on the same Wi‑Fi, or pass --url http://host:port/"
+  URL=$(discover_bonjour_url) || die "Bonjour discovery failed — start the iCube web server (open Settings on the device), stay on the same Wi‑Fi, or pass --url http://host:port/"
 fi
 URL=$(normalize_url "$URL")
 
 preflight "$URL"
 
-WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ifly-bench.XXXXXX")
-RESULTS_FILE=$(mktemp "${TMPDIR:-/tmp}/ifly-bench-results.XXXXXX")
-trap 'rm -rf "$WORK_DIR"' EXIT
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/icube-bench.XXXXXX")
+RESULTS_FILE=$(mktemp "${TMPDIR:-/tmp}/icube-bench-results.XXXXXX")
+trap 'rm -rf "$WORK_DIR" "$RESULTS_FILE"' EXIT
 
 IFS=',' read -ra SIZE_SPECS <<<"$SIZES_SPEC"
 declare -a SIZE_BYTES=()
@@ -475,7 +475,6 @@ if [[ "$DO_CLEANUP" -eq 1 ]]; then
     for method in webdav http_put http_post; do
       cleanup_file "$label" "$URL" "$method"
     done
-    cleanup_file "$label" "$URL"
   done
 fi
 
