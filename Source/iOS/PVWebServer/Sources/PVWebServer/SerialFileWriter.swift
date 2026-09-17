@@ -66,6 +66,6 @@ final class SerialFileWriter: @unchecked Sendable {
         let ns = error as NSError
         let underlying = (ns.userInfo[NSUnderlyingErrorKey] as? NSError)?.code
         if ns.code == Int(ENOSPC) || underlying == Int(ENOSPC) { diskFull = true }
-        NSLog("[ROMUploadServer] upload \(context) failed\(diskFull ? " (disk full)" : ""): \(error)")
+        NSLog("%@", "[ROMUploadServer] upload \(context) failed\(diskFull ? " (disk full)" : ""): \(error)")
     }
 }

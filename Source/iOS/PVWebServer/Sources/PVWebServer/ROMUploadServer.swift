@@ -2041,10 +2041,10 @@ final class ROMUploadServer: @unchecked Sendable {
         case .ok(let url):
             return url
         case .lexicalEscape:
-            NSLog("[ROMUploadServer] rejected path (lexical escape): \(rawPath)")
+            NSLog("%@", "[ROMUploadServer] rejected path (lexical escape): \(rawPath)")
             return nil
         case .symlinkEscape:
-            NSLog("[ROMUploadServer] rejected path (symlink escape): \(rawPath)")
+            NSLog("%@", "[ROMUploadServer] rejected path (symlink escape): \(rawPath)")
             return nil
         }
     }
