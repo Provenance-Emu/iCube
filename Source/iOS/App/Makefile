@@ -7,7 +7,7 @@
 #   cd Source/iOS/App && make testflight
 #
 .PHONY: help xcframework generate dev open lint format testflight testflight-tvos \
-	testflight-all release-dry clean mcp-install mcp-test mcp-smoke
+	testflight-all release-dry clean mcp-install mcp-test mcp-smoke webserver-bench
 
 # Repo root — BuildiOSXCFramework.py and ExportOptions/ live there, not here.
 ROOT := $(shell git rev-parse --show-toplevel)
@@ -41,6 +41,7 @@ help:
 	@echo "  make mcp-install  — uv sync the Tools/mcp debug MCP project"
 	@echo "  make mcp-test     — run Tools/mcp's pytest suite"
 	@echo "  make mcp-smoke    — live smoke test against a device on iproxy (needs a game booted)"
+	@echo "  make webserver-bench — WebDAV vs browser PUT vs multipart upload throughput (Bonjour or URL=http://ip/)"
 	@echo ""
 	@echo "First run on a fresh clone:"
 	@echo "  make xcframework && make generate && make testflight"
@@ -100,3 +101,8 @@ mcp-test:
 # Needs a device on `iproxy 8723 8723` with a game booted.
 mcp-smoke:
 	cd "$(ROOT)/Tools/mcp" && uv run python -m icube_debug.smoke
+
+# --- Upload server benchmark ----------------------------------------------
+# Open Settings on the device first so the server is up. URL=http://ip/ skips Bonjour.
+webserver-bench:
+	./Scripts/webserver_transfer_bench.sh $(if $(URL),--url $(URL),)
