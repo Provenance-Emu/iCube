@@ -2037,10 +2037,16 @@ final class ROMUploadServer: @unchecked Sendable {
     // MARK: - Path Safety
 
     private func resolvedPath(_ rawPath: String, within baseDir: URL) -> URL? {
-        let resolved = baseDir.appendingPathComponent(rawPath).standardized
-        let basePath = baseDir.standardized.path
-        guard resolved.path == basePath || resolved.path.hasPrefix(basePath + "/") else { return nil }
-        return resolved
+        switch WebServerPathSafety.resolve(rawPath, within: baseDir) {
+        case .ok(let url):
+            return url
+        case .lexicalEscape:
+            NSLog("[ROMUploadServer] rejected path (lexical escape): \(rawPath)")
+            return nil
+        case .symlinkEscape:
+            NSLog("[ROMUploadServer] rejected path (symlink escape): \(rawPath)")
+            return nil
+        }
     }
 
     // MARK: - IP Address
