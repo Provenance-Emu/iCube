@@ -1250,6 +1250,10 @@ final class ROMUploadServer: @unchecked Sendable {
             if let data, !data.isEmpty { parser.feed(data) }
             let newRemaining = remaining - (data?.count ?? 0)
             if newRemaining <= 0 || isComplete || error != nil {
+                // EOF or error with bytes still owed: the body is truncated, so the parts on
+                // disk are partial. Mark the parser before finalizing so it deletes them and
+                // `finishMultipartUpload` answers 500 instead of 200.
+                if newRemaining > 0 { parser.abort() }
                 parser.finalize {
                     self.finishMultipartUpload(on: connection, request: request, parser: parser)
                 }
@@ -2440,6 +2444,7 @@ final class StreamingMultipartParser {
     private(set) var hadWriteError = false
     private var pendingCloses = 0
     private var finalizeCompletion: (() -> Void)?
+    private var truncated = false
 
     private let headerEndMarker = Data([0x0D, 0x0A, 0x0D, 0x0A])
 
@@ -2453,6 +2458,15 @@ final class StreamingMultipartParser {
     }
 
     func feed(_ data: Data) { buffer.append(data); process() }
+
+    /// The transport ended before the closing boundary. Anything still open is a partial file:
+    /// `finalize` must delete it and report failure rather than announce a completed upload.
+    /// Sets `hadWriteError` directly so a truncation with no part open is still a 500 and not a
+    /// 400 "no files uploaded".
+    func abort() {
+        truncated = true
+        hadWriteError = true
+    }
 
     func finalize(completion: @escaping () -> Void) {
         if state == .readingBody { flushBodyBuffer(isFinal: true) }
@@ -2561,7 +2575,7 @@ final class StreamingMultipartParser {
         pendingCloses += 1
         writer.finalize { [weak self] in
             guard let self else { return }
-            if writer.failed {
+            if writer.failed || self.truncated {
                 self.hadWriteError = true
                 if let path { try? FileManager.default.removeItem(atPath: path) }
             } else if let path, filename != nil {
