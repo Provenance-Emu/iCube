@@ -1,0 +1,13 @@
+<!--
+  Shared navigation for the upload page served by the in-app web server.
+
+  The Live Stats link carries `debug-stats-nav` and starts hidden: iCube has
+  no /stats page today, so upload-page.js's syncDebugStatsNav() (gated on
+  /api/health reporting features.stats) keeps it hidden. The element stays in
+  the markup so that toggle has something to show/hide if a stats page is
+  added later.
+-->
+<nav class="site-nav" aria-label="Primary">
+  <a href="/" class="site-nav-link{{ACTIVE_FILES}}">Files</a>
+  <a href="/stats" class="site-nav-link debug-stats-nav" style="display:none">Live Stats</a>
+</nav>

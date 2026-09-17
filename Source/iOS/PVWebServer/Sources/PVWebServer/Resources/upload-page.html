@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{APP_NAME}} - File Upload</title>
+  <style>
+{{STYLESHEET}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">&#x1F3AE;</div>
+    <div class="header-main">
+      <h1>{{APP_NAME}} &mdash; File Upload</h1>
+      <p class="sub">Transfer GameCube and Wii games, saves, and texture packs from any device on your network.</p>
+    </div>
+  </header>
+
+{{NAV}}
+
+  <div class="card">
+    <h2>Server Info</h2>
+    <div class="info-row">
+      <div><label>URL:</label> <code>http://{{IP_ADDRESS}}{{PORT_SUFFIX}}/</code></div>
+    </div>
+    <div class="info-box">
+      <div class="info-box-title">
+        &#x1F4C1; Connect via Finder or Cyberduck
+      </div>
+      <ul>
+        <li>
+          <a href="https://support.apple.com/guide/mac-help/connect-mac-shared-computers-servers-mchlp1140/mac" target="_blank" rel="noopener noreferrer">Finder</a> (macOS): Use <strong>Go &gt; Connect to Server…</strong> and enter the URL above.<br/>
+          Choose “Guest” (no username or password).
+        </li>
+        <li>
+          <a href="https://trac.cyberduck.io/wiki/help/en/howto/webdav" target="_blank" rel="noopener noreferrer">Cyberduck</a>: Open “Open Connection”, select <strong>WebDAV (HTTP)</strong>, and enter the URL.<br/>
+          Login as “Anonymous” (no password needed).
+        </li>
+      </ul>
+      <div class="info-box-note">
+        The share is fully writable for anonymous login.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Upload Files &mdash; {{LOCATION_LABEL}}</h2>
+    <div class="drop-zone" id="drop-zone">
+      <p class="lead">Drop files here to upload</p>
+      <p>Uploading to: <code>{{LOCATION_LABEL}}</code></p>
+    </div>
+    <div class="toolbar">
+      <button class="btn btn-primary" id="upload-btn">Upload Files</button>
+      <input type="file" id="file-input" multiple style="display:none">
+    </div>
+    <div id="transfer-panel" class="transfer-panel" style="display:none">
+      <div class="transfer-header">
+        <div class="transfer-bar-wrap">
+          <div class="transfer-bar"><div id="transfer-fill" class="transfer-fill"></div></div>
+        </div>
+        <div class="transfer-stats">
+          <span><label>Speed</label> <strong id="transfer-speed">—</strong></span>
+          <span><label>ETA</label> <strong id="transfer-eta">—</strong></span>
+          <span><label>Files</label> <strong id="transfer-files">0/0</strong></span>
+          <span><label>Data</label> <strong id="transfer-bytes">0 B / 0 B</strong></span>
+        </div>
+      </div>
+      <div id="transfer-queue" class="transfer-queue"></div>
+      <div class="speed-chart-wrap">
+        <canvas id="speed-chart" width="280" height="64"></canvas>
+      </div>
+      <div id="transfer-summary" class="transfer-summary"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Files &mdash; {{LOCATION_LABEL}}</h2>
+    <div class="toolbar">
+      <button class="btn btn-sm" id="new-folder-btn">&#x1F4C1; New Folder</button>
+      <span style="color:var(--text-muted);font-size:12px;">Right-click a row for actions &middot; drag a row onto a folder to move it</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Size</th><th></th></tr>
+      </thead>
+      <tbody id="file-list">
+{{FILE_ROWS}}
+      </tbody>
+    </table>
+  </div>
+
+  <div id="context-menu"></div>
+
+  <script>
+{{CLIENT_SCRIPT}}
+  </script>
+  <footer style="text-align:center;margin:28px 0 12px;font-size:13px;opacity:0.75;">
+    Need help? <a href="https://icube-emu.com/help/web-import" target="_blank" rel="noopener" style="color:inherit;">icube-emu.com/help/web-import</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://discord.gg/provenance" target="_blank" rel="noopener" style="color:inherit;">Join the Discord</a>
+  </footer>
+</body>
+</html>

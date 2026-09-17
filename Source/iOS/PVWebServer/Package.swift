@@ -44,6 +44,9 @@ let package = Package(
             name: "PVWebServer",
             dependencies: [
 			],
+            resources: [
+                .process("Resources")
+            ],
             linkerSettings: [
                 .linkedFramework("Network"),
                 .linkedFramework("UIKit", .when(platforms: [.iOS, .tvOS, .macCatalyst, .visionOS])),

@@ -849,7 +849,6 @@ final class ROMUploadServer: @unchecked Sendable {
     private func serveHTML(on connection: NWConnection, request: HTTPRequest, subpath: String = "") {
         let ip = getLocalIPAddress() ?? "unknown"
         let portSuffix = httpPort == 80 ? "" : ":\(httpPort)"
-        let davPortStr = "\(webDAVPort)"
         let ctx = listDirectoryContext(subpath: subpath)
         let listDir = ctx.listDir
         let currentSub = ctx.currentSub
@@ -866,9 +865,8 @@ final class ROMUploadServer: @unchecked Sendable {
                     : ""
                 let parentQuery = parent.isEmpty ? "/" : "/?path=\(parent.urlPathEscaped)"
                 rows.append("""
-                <tr>
+                <tr class="dir-row uprow" data-dir="1" data-path="\(parent.htmlAttrEscaped)">
                   <td><a href="\(parentQuery)">&#x2B05;&#xFE0F; ..</a></td>
-                  <td></td>
                   <td></td>
                   <td></td>
                 </tr>
@@ -878,30 +876,13 @@ final class ROMUploadServer: @unchecked Sendable {
             rows += files.map { self.fileRowHTML(entry: $0, currentSub: currentSub) }
 
             let emptyMessage = (rows.isEmpty)
-                ? "<tr><td colspan=\"4\" class=\"empty\">No files yet. Drag and drop above to upload!</td></tr>"
+                ? "<tr><td colspan=\"3\" class=\"empty\">No files yet. Drag and drop above to upload!</td></tr>"
                 : ""
 
-            let entriesPayload: [[String: Any]] = files.map { entry in
-                var dict: [String: Any] = [
-                    "name": entry.name,
-                    "size": entry.size,
-                    "isDirectory": entry.isDirectory,
-                    "modified": entry.modified.timeIntervalSince1970
-                ]
-                if let created = entry.created {
-                    dict["created"] = created.timeIntervalSince1970
-                }
-                return dict
-            }
-            let initialEntriesJSON = (try? JSONSerialization.data(withJSONObject: entriesPayload))
-                .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
-
-            let html = Self.uploadPageHTML(
-                title: self.pageTitle,
-                ipAddress: ip, httpPort: portSuffix, davPort: davPortStr,
+            let html = WebServerPageRenderer.uploadPage(
+                appName: self.pageTitle, ipAddress: ip, portSuffix: portSuffix,
                 fileRows: rows.isEmpty ? emptyMessage : rows.joined(separator: "\n"),
-                currentPath: currentSub,
-                initialEntriesJSON: initialEntriesJSON
+                currentPath: currentSub
             )
             let data = Data(html.utf8)
 
@@ -972,37 +953,34 @@ final class ROMUploadServer: @unchecked Sendable {
         }
     }
 
-    private func formatFileDate(_ date: Date?) -> String {
-        guard let date else { return "&mdash;" }
-        let fmt = DateFormatter()
-        fmt.dateStyle = .medium
-        fmt.timeStyle = .short
-        return fmt.string(from: date).htmlEscaped
-    }
-
     private func fileRowHTML(entry: FileEntry, currentSub: String) -> String {
         let childSub = currentSub.isEmpty ? entry.name : "\(currentSub)/\(entry.name)"
         let escapedName = entry.name.htmlEscaped
-        let dateStr = entry.isDirectory ? "&mdash;" : formatFileDate(entry.modified)
+        let pathAttr = childSub.htmlAttrEscaped
+        let nameAttr = entry.name.htmlAttrEscaped
         if entry.isDirectory {
             return """
-            <tr>
+            <tr class="dir-row" draggable="true" data-dir="1" data-path="\(pathAttr)" data-name="\(nameAttr)">
               <td><a href="/?path=\(childSub.urlPathEscaped)">&#x1F4C1; \(escapedName)</a></td>
-              <td>\(dateStr)</td>
               <td>&mdash;</td>
-              <td></td>
+              <td class="actions">
+                <button onclick="renameItem(this)" class="btn btn-sm">Rename</button>
+                <button onclick="moveItem(this)" class="btn btn-sm">Move</button>
+                <button onclick="deleteItem(this)" class="btn btn-sm btn-danger">Delete</button>
+              </td>
             </tr>
             """
         }
         let sizeStr = ByteCountFormatter.string(fromByteCount: entry.size, countStyle: .file)
         return """
-        <tr>
+        <tr class="file-row" draggable="true" data-dir="0" data-path="\(pathAttr)" data-name="\(nameAttr)">
           <td><a href="/files/\(childSub.urlPathEscaped)" download>\(escapedName)</a></td>
-          <td>\(dateStr)</td>
           <td>\(sizeStr)</td>
-          <td>
+          <td class="actions">
             <a href="/files/\(childSub.urlPathEscaped)" download class="btn btn-sm">Download</a>
-            <button onclick="deleteFile('\(childSub.jsEscaped)')" class="btn btn-sm btn-danger">Delete</button>
+            <button onclick="renameItem(this)" class="btn btn-sm">Rename</button>
+            <button onclick="moveItem(this)" class="btn btn-sm">Move</button>
+            <button onclick="deleteItem(this)" class="btn btn-sm btn-danger">Delete</button>
           </td>
         </tr>
         """
@@ -2438,7 +2416,7 @@ private extension Data {
 
 // MARK: - String Extensions
 
-private extension String {
+extension String {
     var htmlEscaped: String {
         replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
@@ -2459,448 +2437,5 @@ private extension String {
             .replacingOccurrences(of: "'", with: "\\'")
             .replacingOccurrences(of: "\"", with: "\\\"")
     }
-}
-
-// MARK: - HTML Upload Page
-
-extension ROMUploadServer {
-    static func uploadPageHTML(title: String, ipAddress: String, httpPort: String,
-                               davPort: String, fileRows: String,
-                               currentPath: String = "",
-                               initialEntriesJSON: String = "[]") -> String {
-        let uploadTarget = currentPath.isEmpty
-            ? "/upload"
-            : "/upload?path=\(currentPath.urlPathEscaped)"
-        let locationLabel = currentPath.isEmpty ? "base folder" : currentPath.htmlEscaped
-        return """
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>\(title) - File Upload</title>
-          <style>
-            :root {
-              color-scheme: dark;
-              --bg: #0f0f1a; --surface: #1a1a2e; --border: #2a2a4a;
-              --text: #e0e0e0; --text-muted: #8899aa;
-              --accent: #4a90d9; --accent-hover: #5ba3ec;
-              --success: #27ae60; --danger: #c0392b;
-            }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-              max-width: 900px; margin: 0 auto; padding: 24px;
-              background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
-            header { display: flex; align-items: center; gap: 16px;
-              padding-bottom: 20px; margin-bottom: 24px; border-bottom: 2px solid var(--accent); }
-            header .logo { font-size: 36px; }
-            header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
-            header .sub { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
-            .card { background: var(--surface); border: 1px solid var(--border);
-              border-radius: 12px; padding: 20px; margin-bottom: 20px;
-              box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
-            .card h2 { font-size: 12px; font-weight: 600; color: var(--text-muted);
-              text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
-            .info-row { display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); }
-            .info-row code { background: var(--bg); border: 1px solid var(--border);
-              padding: 3px 8px; border-radius: 4px; color: var(--accent); }
-            .info-row label { font-weight: 500; }
-            .drop-zone { border: 2px dashed var(--border); border-radius: 12px;
-              padding: 32px 20px; text-align: center; transition: all 0.2s; cursor: pointer;
-              background: rgba(74,144,217,0.03); }
-            .drop-zone.hover { border-color: var(--accent); background: rgba(74,144,217,0.12);
-              box-shadow: 0 0 20px rgba(74,144,217,0.15); }
-            .drop-zone .lead { font-weight: 600; font-size: 16px; margin-bottom: 8px; }
-            .drop-zone p { color: var(--text-muted); font-size: 13px; }
-            .btn { display: inline-block; padding: 8px 16px; border-radius: 6px;
-              font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid transparent;
-              transition: all 0.15s; text-decoration: none; color: inherit; }
-            .btn-primary { background: var(--accent); color: #fff; }
-            .btn-primary:hover { background: var(--accent-hover); }
-            .btn-sm { padding: 4px 10px; font-size: 13px; }
-            .btn-danger { background: var(--danger); color: #fff; }
-            .btn-danger:hover { filter: brightness(1.15); }
-            .toolbar { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
-            #progress-container { margin-top: 16px; display: none; }
-            #progress-bar { width: 100%; height: 8px; background: var(--bg);
-              border-radius: 4px; overflow: hidden; }
-            #progress-fill { height: 100%;
-              background: linear-gradient(90deg, var(--accent), var(--success));
-              width: 0%; transition: width 0.15s; }
-            #status { margin-top: 6px; font-size: 13px; color: var(--text-muted); }
-            #status-detail { margin-top: 4px; font-size: 12px; color: var(--success); min-height: 1.2em; }
-            #toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999;
-              display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-            .toast { background: var(--surface); border: 1px solid var(--border);
-              border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 14px;
-              font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-              animation: toast-in 0.2s ease; max-width: 320px; word-break: break-word; }
-            .toast-success { border-left-color: var(--success); }
-            .toast-error { border-left-color: var(--danger); }
-            .toast.fade { opacity: 0; transition: opacity 0.3s; }
-            @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); }
-              to { opacity: 1; transform: translateY(0); } }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            thead th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 600;
-              color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
-              border-bottom: 1px solid var(--border); user-select: none; }
-            thead th.sortable { cursor: pointer; }
-            thead th.sortable:hover { color: var(--text); }
-            thead th.sort-active { color: var(--accent); }
-            .sort-indicator { margin-left: 4px; opacity: 0.85; }
-            tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
-            tbody tr:hover { background: rgba(74,144,217,0.06); }
-            td { padding: 10px; font-size: 14px; vertical-align: middle; }
-            td a { color: var(--accent); text-decoration: none; }
-            td a:hover { text-decoration: underline; }
-            .empty { color: var(--text-muted); text-align: center; padding: 28px 16px; font-size: 14px; }
-            td:last-child { text-align: right; white-space: nowrap; }
-            @media (max-width: 600px) { body { padding: 12px; } .info-row { flex-direction: column; gap: 6px; } }
-          </style>
-        </head>
-        <body>
-          <header>
-            <div class="logo">&#x1F3AE;</div>
-            <div>
-              <h1>\(title) &mdash; File Upload</h1>
-              <p class="sub">Transfer ROMs, disc images, BIOS files, and saves from any device on your network.</p>
-            </div>
-          </header>
-
-          <div class="card">
-            <h2>Server Info</h2>
-            <div class="info-row">
-              <div><label>HTTP:</label> <code>http://\(ipAddress)\(httpPort)/</code></div>
-              <div><label>WebDAV:</label> <code>http://\(ipAddress):\(davPort)/</code></div>
-            </div>
-          </div>
-
-          <div class="card">
-            <h2>Upload Files &mdash; \(locationLabel)</h2>
-            <div class="drop-zone" id="drop-zone">
-              <p class="lead">Drop files here to upload</p>
-              <p>Uploading to: <code>\(locationLabel)</code></p>
-            </div>
-            <div class="toolbar">
-              <button class="btn btn-primary" id="upload-btn">Upload Files</button>
-              <input type="file" id="file-input" multiple style="display:none">
-            </div>
-            <div id="progress-container">
-              <div id="progress-bar"><div id="progress-fill"></div></div>
-              <div id="status"></div>
-              <div id="status-detail"></div>
-            </div>
-          </div>
-
-          <div id="toast-container"></div>
-
-          <div class="card">
-            <h2>Files &mdash; \(locationLabel)</h2>
-            <table>
-              <thead><tr>
-                <th class="sortable" data-sort="name" id="sort-name">Name<span class="sort-indicator"></span></th>
-                <th class="sortable sort-active" data-sort="modified" id="sort-modified">Modified<span class="sort-indicator"></span></th>
-                <th class="sortable" data-sort="size" id="sort-size">Size<span class="sort-indicator"></span></th>
-                <th></th>
-              </tr></thead>
-              <tbody id="file-list">
-                \(fileRows)
-              </tbody>
-            </table>
-          </div>
-
-          <script>
-            const zone = document.getElementById('drop-zone');
-            const currentPath = '\(currentPath.jsEscaped)';
-            const uploadTarget = '\(uploadTarget)';
-            const maxConcurrent = 3;
-
-            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('hover'); });
-            zone.addEventListener('dragleave', () => zone.classList.remove('hover'));
-            zone.addEventListener('drop', e => {
-              e.preventDefault(); zone.classList.remove('hover');
-              enqueueFiles(e.dataTransfer.files);
-            });
-            document.getElementById('upload-btn').addEventListener('click', () => {
-              document.getElementById('file-input').click();
-            });
-            document.getElementById('file-input').addEventListener('change', e => {
-              enqueueFiles(e.target.files);
-              e.target.value = '';
-            });
-
-            let cachedEntries = \(initialEntriesJSON);
-            let sortColumn = 'modified';
-            let sortAsc = false;
-            const uploadQueue = [];
-            let activeWorkers = 0;
-            let batchTotal = 0;
-            let batchCompleted = 0;
-            let nextUploadId = 0;
-            const activeUploads = new Map();
-            const recentCompleted = [];
-            let reloadTimer = null;
-            let refreshTimer = null;
-
-            document.querySelectorAll('thead th.sortable').forEach(th => {
-              th.addEventListener('click', () => setSort(th.dataset.sort));
-            });
-            updateSortHeaders();
-            renderFileRows(cachedEntries);
-
-            function formatSize(bytes) {
-              if (!bytes || bytes === 0) return '0 B';
-              const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-              const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
-              return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
-            }
-
-            function formatDate(ts) {
-              if (!ts) return '—';
-              return new Date(ts * 1000).toLocaleString(undefined, {
-                year: 'numeric', month: 'short', day: 'numeric',
-                hour: 'numeric', minute: '2-digit'
-              });
-            }
-
-            function setSort(column) {
-              if (sortColumn === column) {
-                sortAsc = !sortAsc;
-              } else {
-                sortColumn = column;
-                sortAsc = column === 'name';
-              }
-              updateSortHeaders();
-              renderFileRows(cachedEntries);
-            }
-
-            function updateSortHeaders() {
-              document.querySelectorAll('thead th.sortable').forEach(th => {
-                const col = th.dataset.sort;
-                const active = col === sortColumn;
-                th.classList.toggle('sort-active', active);
-                const indicator = th.querySelector('.sort-indicator');
-                if (indicator) indicator.textContent = active ? (sortAsc ? '▲' : '▼') : '';
-              });
-            }
-
-            function sortEntries(entries) {
-              const dirs = entries.filter(e => e.isDirectory);
-              const files = entries.filter(e => !e.isDirectory);
-              const cmp = (a, b) => {
-                let n = 0;
-                if (sortColumn === 'name') {
-                  n = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-                } else if (sortColumn === 'size') {
-                  n = (a.size || 0) - (b.size || 0);
-                } else {
-                  n = (a.modified || 0) - (b.modified || 0);
-                }
-                if (n === 0) n = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-                return sortAsc ? n : -n;
-              };
-              dirs.sort(cmp);
-              files.sort(cmp);
-              return [...dirs, ...files];
-            }
-
-            function renderFileRows(entries) {
-              const tbody = document.getElementById('file-list');
-              const sorted = sortEntries(entries || []);
-              let html = '';
-              if (currentPath) {
-                const parts = currentPath.split('/');
-                parts.pop();
-                const parent = parts.join('/');
-                const parentHref = parent ? '/?path=' + encodeURIComponent(parent) : '/';
-                html += '<tr><td><a href="' + parentHref + '">&#x2B05;&#xFE0F; ..</a></td><td></td><td></td><td></td></tr>';
-              }
-              if (!sorted.length) {
-                html += '<tr><td colspan="4" class="empty">No files yet. Drag and drop above to upload!</td></tr>';
-              } else {
-                for (const entry of sorted) {
-                  const childSub = currentPath ? currentPath + '/' + entry.name : entry.name;
-                  const enc = encodeURIComponent(childSub);
-                  const escapedName = entry.name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                  if (entry.isDirectory) {
-                    html += '<tr><td><a href="/?path=' + enc + '">&#x1F4C1; ' + escapedName + '</a></td>';
-                    html += '<td>—</td><td>—</td><td></td></tr>';
-                  } else {
-                    html += '<tr><td><a href="/files/' + enc + '" download>' + escapedName + '</a></td>';
-                    html += '<td>' + formatDate(entry.modified) + '</td>';
-                    html += '<td>' + formatSize(entry.size) + '</td>';
-                    html += '<td><a href="/files/' + enc + '" download class="btn btn-sm">Download</a> ';
-                    html += '<button onclick="deleteFile(\\'' + childSub.replace(/'/g, "\\\\'") + '\\')" class="btn btn-sm btn-danger">Delete</button></td></tr>';
-                  }
-                }
-              }
-              tbody.innerHTML = html;
-            }
-
-            function showToast(message, isSuccess) {
-              const container = document.getElementById('toast-container');
-              const el = document.createElement('div');
-              el.className = 'toast ' + (isSuccess ? 'toast-success' : 'toast-error');
-              el.textContent = message;
-              container.appendChild(el);
-              setTimeout(() => {
-                el.classList.add('fade');
-                setTimeout(() => el.remove(), 300);
-              }, 2800);
-            }
-
-            function updateStatusDetail() {
-              const detail = document.getElementById('status-detail');
-              if (!detail) return;
-              if (recentCompleted.length === 0) {
-                detail.textContent = '';
-                return;
-              }
-              const shown = recentCompleted.slice(0, 3);
-              const suffix = recentCompleted.length > 3 ? ' +' + (recentCompleted.length - 3) + ' more' : '';
-              detail.textContent = 'Finished: ' + shown.join(', ') + suffix;
-            }
-
-            function refreshFileList() {
-              const pathQuery = currentPath ? '?path=' + encodeURIComponent(currentPath) : '';
-              fetch('/api/list' + pathQuery)
-                .then(r => r.ok ? r.json() : Promise.reject())
-                .then(data => {
-                  cachedEntries = data.entries || [];
-                  renderFileRows(cachedEntries);
-                })
-                .catch(() => {});
-            }
-
-            function scheduleRefresh() {
-              if (refreshTimer) return;
-              refreshTimer = setTimeout(() => {
-                refreshTimer = null;
-                refreshFileList();
-              }, 2500);
-            }
-
-            function enqueueFiles(files) {
-              if (!files || !files.length) return;
-              if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
-              const wasIdle = activeWorkers === 0 && uploadQueue.length === 0;
-              for (let k = 0; k < files.length; k++) uploadQueue.push(files[k]);
-              if (wasIdle) {
-                batchCompleted = 0;
-                batchTotal = uploadQueue.length;
-                activeUploads.clear();
-                recentCompleted.length = 0;
-                updateStatusDetail();
-              } else {
-                batchTotal += files.length;
-              }
-              const container = document.getElementById('progress-container');
-              container.style.display = 'block';
-              pumpQueue();
-            }
-
-            function updateProgress() {
-              const fill = document.getElementById('progress-fill');
-              const status = document.getElementById('status');
-              let inFlightFraction = 0;
-              const activeNames = [];
-              for (const upload of activeUploads.values()) {
-                if (upload.total > 0) inFlightFraction += upload.loaded / upload.total;
-                activeNames.push(upload.name);
-              }
-              const inFlightCount = activeUploads.size;
-              const queued = Math.max(0, batchTotal - batchCompleted - inFlightCount);
-              const pct = batchTotal > 0
-                ? ((batchCompleted + inFlightFraction) / batchTotal * 100)
-                : 0;
-              const pctRounded = Math.round(Math.min(100, pct));
-              fill.style.width = pctRounded + '%';
-
-              if (batchTotal === 0) {
-                status.textContent = '';
-              } else if (inFlightCount === 0 && batchCompleted === batchTotal) {
-                status.textContent = 'All ' + batchTotal + ' files uploaded';
-              } else if (inFlightCount === 0) {
-                status.textContent = batchCompleted + '/' + batchTotal + ' complete · ' + queued + ' queued';
-              } else {
-                const parts = [inFlightCount + ' uploading'];
-                if (queued > 0) parts.push(queued + ' queued');
-                parts.push(batchCompleted + '/' + batchTotal + ' complete');
-                parts.push(pctRounded + '%');
-                status.textContent = parts.join(' · ');
-              }
-              updateStatusDetail();
-            }
-
-            function pumpQueue() {
-              while (activeWorkers < maxConcurrent && uploadQueue.length) {
-                const file = uploadQueue.shift();
-                activeWorkers++;
-                const uploadId = nextUploadId++;
-                activeUploads.set(uploadId, { name: file.name, loaded: 0, total: file.size || 0 });
-                const fd = new FormData();
-                fd.append('files[]', file, file.name);
-                const xhr = new XMLHttpRequest();
-                xhr.upload.onprogress = (e) => {
-                  if (e.lengthComputable) {
-                    activeUploads.set(uploadId, { name: file.name, loaded: e.loaded, total: e.total });
-                    updateProgress();
-                  }
-                };
-                xhr.onload = xhr.onerror = () => {
-                  activeUploads.delete(uploadId);
-                  activeWorkers--;
-                  const ok = xhr.status >= 200 && xhr.status < 300;
-                  if (ok) {
-                    batchCompleted++;
-                    recentCompleted.unshift(file.name);
-                    if (recentCompleted.length > 8) recentCompleted.pop();
-                    showToast('Uploaded ' + file.name, true);
-                  } else {
-                    showToast('Failed: ' + file.name, false);
-                  }
-                  updateProgress();
-                  scheduleRefresh();
-                  pumpQueue();
-                  if (activeWorkers === 0 && uploadQueue.length === 0) {
-                    finishBatch();
-                  }
-                };
-                xhr.open('POST', uploadTarget);
-                xhr.send(fd);
-                updateProgress();
-              }
-            }
-
-            function finishBatch() {
-              const container = document.getElementById('progress-container');
-              const fill = document.getElementById('progress-fill');
-              const status = document.getElementById('status');
-              fill.style.width = '100%';
-              status.textContent = 'Done — ' + batchCompleted + ' of ' + batchTotal + ' uploaded';
-              updateStatusDetail();
-              reloadTimer = setTimeout(() => {
-                container.style.display = 'none';
-                fill.style.width = '0%';
-                status.textContent = '';
-                document.getElementById('status-detail').textContent = '';
-                batchTotal = 0;
-                batchCompleted = 0;
-                activeUploads.clear();
-                recentCompleted.length = 0;
-                location.reload();
-              }, 2000);
-            }
-
-            function deleteFile(name) {
-              if (!confirm('Delete "' + name + '"?')) return;
-              fetch('/files/' + encodeURIComponent(name), { method: 'DELETE' })
-                .then(r => { if (r.ok) refreshFileList(); else alert('Delete failed'); })
-                .catch(() => alert('Delete failed'));
-            }
-          </script>
-        </body>
-        </html>
-        """
-    }
+    var htmlAttrEscaped: String { htmlEscaped }
 }
