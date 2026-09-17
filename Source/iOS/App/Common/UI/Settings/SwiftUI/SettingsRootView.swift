@@ -2634,8 +2634,10 @@ private enum CpuEngine: Int, CaseIterable {
   var label: String {
     switch self {
     case .interpreter: return L("Interpreter (slowest)")
-    case .cachedInterpreter: return L("Cached Interpreter (slower)")
-    case .cachedInterpreterIR: return L("Cached Interpreter (IR, experimental)")
+    // "(slower)" was upstream's wording relative to the JIT, which non-jailbroken iOS never gets;
+    // on device this engine measured ~1.7x faster than the IR one (2026-09-16 A/B).
+    case .cachedInterpreter: return L("Cached Interpreter (recommended)")
+    case .cachedInterpreterIR: return L("Cached Interpreter IR (experimental, usually slower)")
     case .jit64: return L("JIT Recompiler for x86-64 (recommended)")
     case .jitARM64: return L("JIT Recompiler for ARM64 (recommended)")
     }
