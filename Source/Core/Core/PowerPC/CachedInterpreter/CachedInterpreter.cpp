@@ -1394,6 +1394,16 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
       InterpretBcx(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);
     }
+    else if (callback == AnyCallbackCast(InterpretBclr))
+    {
+      InterpretBclr(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
+      normal_entry = payload + sizeof(InterpretOperands);
+    }
+    else if (callback == AnyCallbackCast(InterpretBx))
+    {
+      InterpretBx(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
+      normal_entry = payload + sizeof(InterpretOperands);
+    }
     // iCube: specialized hot-op dispatch (only emitted when MAIN_CIR_SPECIALIZED_OPS is on; when off
     // neither marker callback value is ever written into the stream, so these two branches are dead
     // and the path below is never taken — flag-off behavior is byte-identical to stock 2509). We
@@ -1643,6 +1653,60 @@ s32 CachedInterpreter::InterpretBcx(PowerPC::PowerPCState& ppc_state,
 s32 CachedInterpreter::InterpretBcx(std::ostream& stream, const InterpretOperands& operands)
 {
   stream << "InterpretBcx(pc=0x" << std::hex << operands.current_pc << ", inst=0x"
+         << operands.inst.hex << std::dec << ")\n";
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube 2026-09-17: unconditional branch terminal (bx). Same as Interpreter::bx minus branch watch;
+// Interpreter::m_end_block is the plain interpreter's loop flag and is never read by this tier.
+s32 CachedInterpreter::InterpretBx(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands)
+{
+  const UGeckoInstruction inst = operands.inst;
+  ppc_state.pc = operands.current_pc;
+  ppc_state.npc = operands.current_pc + 4;
+  if (inst.LK)
+    LR(ppc_state) = ppc_state.pc + 4;
+  // LI is 24 bits; (LI << 2) sign-extended from 26 bits.
+  u32 destination_addr = static_cast<u32>(static_cast<s32>(inst.LI << 8) >> 6);
+  if (!inst.AA)
+    destination_addr += ppc_state.pc;
+  ppc_state.npc = destination_addr;
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreter::InterpretBx(std::ostream& stream, const InterpretOperands& operands)
+{
+  stream << "InterpretBx(pc=0x" << std::hex << operands.current_pc << ", inst=0x" << operands.inst.hex
+         << std::dec << ")\n";
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube 2026-09-17: branch-to-link-register terminal (bclr/bclrl). Same as Interpreter::bclrx minus
+// branch watch: XL-form BO_2/BI_2/LK_3 fields, CTR decrement per BO, counter/condition tests.
+s32 CachedInterpreter::InterpretBclr(PowerPC::PowerPCState& ppc_state,
+                                     const InterpretOperands& operands)
+{
+  const UGeckoInstruction inst = operands.inst;
+  ppc_state.pc = operands.current_pc;
+  ppc_state.npc = operands.current_pc + 4;
+  if ((inst.BO_2 & BO_DONT_DECREMENT_FLAG) == 0)
+    CTR(ppc_state)--;
+  const u32 counter = ((inst.BO_2 >> 2) | ((CTR(ppc_state) != 0) ^ (inst.BO_2 >> 1))) & 1;
+  const u32 condition =
+      ((inst.BO_2 >> 4) | (ppc_state.cr.GetBit(inst.BI_2) == ((inst.BO_2 >> 3) & 1))) & 1;
+  if ((counter & condition) != 0)
+  {
+    const u32 destination_addr = LR(ppc_state) & (~3);
+    ppc_state.npc = destination_addr;
+    if (inst.LK_3)
+      LR(ppc_state) = ppc_state.pc + 4;
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreter::InterpretBclr(std::ostream& stream, const InterpretOperands& operands)
+{
+  stream << "InterpretBclr(pc=0x" << std::hex << operands.current_pc << ", inst=0x"
          << operands.inst.hex << std::dec << ")\n";
   return sizeof(AnyCallback) + sizeof(operands);
 }
@@ -5367,6 +5431,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           // handler unless debugging is on (branch watch needs the generic Interpreter::bcx).
           if (op.canEndBlock && op.inst.OPCD == 16 && !IsDebuggingEnabled())
             Write(CallbackCast(InterpretBcx), operands);
+          else if (op.canEndBlock && op.inst.OPCD == 18 && !IsDebuggingEnabled())
+            Write(CallbackCast(InterpretBx), operands);
+          else if (op.canEndBlock && op.inst.OPCD == 19 && op.inst.SUBOP10 == 16 &&
+                   !IsDebuggingEnabled())
+            Write(CallbackCast(InterpretBclr), operands);
           else
             Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
                   operands);

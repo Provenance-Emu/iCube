@@ -43,6 +43,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// Interpreter FP self-test (Core/PowerPC/Interpreter/FPUSelfTest.h): fixed inputs through the
 /// FP primitives under three host FPCR modes, one hex line per result. Runs on the calling thread.
 + (NSString*)fpuSelfTest;
+/// Top-N guest hot blocks from the cached interpreter's block profiler (needs Main.Core.CIRProfile=true at boot).
++ (NSString*)hotBlocksReport:(NSInteger)topN;
 
 /// A snapshot of render-relevant config/state.
 + (NSDictionary<NSString*, id>*)renderState;

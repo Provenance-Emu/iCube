@@ -19,6 +19,7 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
+#include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
 #include "Core/FifoPlayer/FifoDataFile.h"
 #include "Core/FifoPlayer/FifoRecorder.h"
 #include "Core/PowerPC/Interpreter/FPUSelfTest.h"
@@ -268,6 +269,10 @@ static NSInteger s_fifoFrames = 0;
 
 + (NSString*)fpuSelfTest {
   return [NSString stringWithUTF8String:PowerPC::RunFPUSelfTest().c_str()];
+}
+
++ (NSString*)hotBlocksReport:(NSInteger)topN {
+  return [NSString stringWithUTF8String:CIRProfiler::BuildHotBlocksReport((u32)MAX(1, topN)).c_str()];
 }
 
 + (NSDictionary<NSString*, id>*)renderState {

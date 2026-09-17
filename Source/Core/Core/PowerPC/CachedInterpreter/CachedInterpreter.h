@@ -354,6 +354,12 @@ private:
   // when debugging is off (branch watch needs the generic handler). See .cpp.
   static s32 InterpretBcx(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   static s32 InterpretBcx(std::ostream& stream, const InterpretOperands& operands);
+  // iCube 2026-09-17: same treatment for the other two block terminals seen in call-heavy titles
+  // (Wind Waker: bclr returns + bx calls ≈ 3 % of the CPU thread through the generic handlers).
+  static s32 InterpretBx(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  static s32 InterpretBx(std::ostream& stream, const InterpretOperands& operands);
+  static s32 InterpretBclr(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  static s32 InterpretBclr(std::ostream& stream, const InterpretOperands& operands);
   // iCube: dead-FPRF elimination VALIDATE harness (MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE). Double-runs the
   // SAME op (the reference with the hint OFF -> FPRF computed; then, committed last, the eliminated form
   // with the hint ON -> FPRF skipped) and asserts the FPRs and every FPSCR bit OUTSIDE the FPRF field
