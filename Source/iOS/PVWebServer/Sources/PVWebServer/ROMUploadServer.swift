@@ -721,8 +721,13 @@ final class ROMUploadServer: @unchecked Sendable {
                     finishSuccess(trailing)
                     return true
                 case .invalid:
-                    sendWebDAVResponse(on: connection, status: 400, statusText: "Bad Request",
-                                       body: "Invalid chunked body", request: request, forceClose: true)
+                    writer.finalize { [weak self] in
+                        guard let self else { return }
+                        NSLog("%@", "[ROMUploadServer] upload FAILED for \(target.lastPathComponent): invalid chunked body after \(writer.bytesWritten) bytes — deleting partial file")
+                        try? FileManager.default.removeItem(at: target)
+                        self.sendWebDAVResponse(on: connection, status: 400, statusText: "Bad Request",
+                                                body: "Invalid chunked body", request: request, forceClose: true)
+                    }
                     return true
                 }
             }
