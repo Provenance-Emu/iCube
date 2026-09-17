@@ -2429,7 +2429,15 @@ struct HTTPRequest {
 
 // MARK: - Streaming Multipart Parser
 
-final class StreamingMultipartParser {
+final class StreamingMultipartParser: @unchecked Sendable {
+    /// Every field below is confined to this serial queue. `feed`/`finalize`/`abort` hop onto
+    /// it (async — never sync, the writer completion runs here too and would deadlock), and
+    /// `SerialFileWriter.finalize`'s completion, which lands on a global queue, hops back onto
+    /// it before touching `completedFiles` / `hadWriteError` / `pendingCloses`.
+    private let queue = DispatchQueue(
+        label: "org.dolphin.iCube.uploadserver.multipart.\(UUID().uuidString)",
+        qos: .utility
+    )
     private let boundary: Data
     private let endBoundary: Data
     private let outputDirectory: URL
@@ -2439,8 +2447,10 @@ final class StreamingMultipartParser {
     private var currentFilename: String?
     private var currentWriter: SerialFileWriter?
     private var currentFilePath: URL?
+    /// Read only from inside `finalize`'s completion, which runs on `queue`.
     private(set) var completedFiles: [String] = []
-    /// True once any part failed to open or write. The caller must answer 5xx.
+    /// True once any part failed to open or write, or the body was truncated. The caller must
+    /// answer 5xx. Read only from inside `finalize`'s completion, which runs on `queue`.
     private(set) var hadWriteError = false
     private var pendingCloses = 0
     private var finalizeCompletion: (() -> Void)?
@@ -2457,24 +2467,35 @@ final class StreamingMultipartParser {
         self.onFileCompleted = onFileCompleted
     }
 
-    func feed(_ data: Data) { buffer.append(data); process() }
+    func feed(_ data: Data) {
+        queue.async { [self] in
+            buffer.append(data)
+            process()
+        }
+    }
 
     /// The transport ended before the closing boundary. Anything still open is a partial file:
     /// `finalize` must delete it and report failure rather than announce a completed upload.
     /// Sets `hadWriteError` directly so a truncation with no part open is still a 500 and not a
     /// 400 "no files uploaded".
     func abort() {
-        truncated = true
-        hadWriteError = true
+        queue.async { [self] in
+            truncated = true
+            hadWriteError = true
+        }
     }
 
+    /// `completion` runs on `queue`, after every part's writer has closed, so the caller sees a
+    /// settled `completedFiles` / `hadWriteError`.
     func finalize(completion: @escaping () -> Void) {
-        if state == .readingBody { flushBodyBuffer(isFinal: true) }
-        closeCurrentFile()
-        if pendingCloses == 0 {
-            completion()
-        } else {
-            finalizeCompletion = completion
+        queue.async { [self] in
+            if state == .readingBody { flushBodyBuffer(isFinal: true) }
+            closeCurrentFile()
+            if pendingCloses == 0 {
+                completion()
+            } else {
+                finalizeCompletion = completion
+            }
         }
     }
 
@@ -2575,17 +2596,21 @@ final class StreamingMultipartParser {
         pendingCloses += 1
         writer.finalize { [weak self] in
             guard let self else { return }
-            if writer.failed || self.truncated {
-                self.hadWriteError = true
-                if let path { try? FileManager.default.removeItem(atPath: path) }
-            } else if let path, filename != nil {
-                self.completedFiles.append(path)
-                self.onFileCompleted?(path)
-            }
-            self.pendingCloses -= 1
-            if self.pendingCloses == 0, let completion = self.finalizeCompletion {
-                self.finalizeCompletion = nil
-                completion()
+            // Hops back onto the parser queue: `SerialFileWriter` calls this on a global queue,
+            // and the fields below are also touched by `feed`/`finalize`.
+            self.queue.async {
+                if writer.failed || self.truncated {
+                    self.hadWriteError = true
+                    if let path { try? FileManager.default.removeItem(atPath: path) }
+                } else if let path, filename != nil {
+                    self.completedFiles.append(path)
+                    self.onFileCompleted?(path)
+                }
+                self.pendingCloses -= 1
+                if self.pendingCloses == 0, let completion = self.finalizeCompletion {
+                    self.finalizeCompletion = nil
+                    completion()
+                }
             }
         }
     }
