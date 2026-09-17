@@ -245,9 +245,7 @@ static bool ICubeEmulationActive() {
 
 // Config > Advanced
 + (NSInteger)mainCpuCore {
-  int v = (int)Config::Get(Config::MAIN_CPU_CORE);
-  INFO_LOG_FMT(POWERPC, "DOLConfigBridge.mainCpuCore -> {}", v);
-  return (NSInteger)v;
+  return (NSInteger)Config::Get(Config::MAIN_CPU_CORE);
 }
 + (void)setMainCpuCore:(NSInteger)core {
   INFO_LOG_FMT(POWERPC, "DOLConfigBridge.setMainCpuCore({})", (int)core);
