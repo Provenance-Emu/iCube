@@ -780,11 +780,7 @@ final class ROMUploadServer: @unchecked Sendable {
             return
         }
 
-        guard let writer = openPutTarget(target) else {
-            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
-                               body: "Cannot create file", request: request, forceClose: true)
-            return
-        }
+        guard let writer = openWebDAVPutTarget(target, on: connection, request: request) else { return }
         postUploadStarted(path: target.path)
         let reader = ChunkedBodyReader()
 
@@ -1321,13 +1317,15 @@ final class ROMUploadServer: @unchecked Sendable {
                      request: request, isWebDAV: false, forceClose: true)
             return
         }
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: target.path, isDirectory: &isDir), isDir.boolValue {
+        let writer: SerialFileWriter
+        switch openPutTarget(target) {
+        case .writer(let opened):
+            writer = opened
+        case .isDirectory:
             sendJSON(on: connection, status: 405, json: ["ok": false, "error": "Target is a folder"],
                      request: request, isWebDAV: false, forceClose: true)
             return
-        }
-        guard let writer = openPutTarget(target) else {
+        case .failed:
             sendJSON(on: connection, status: 500, json: ["ok": false, "error": "Cannot create file"],
                      request: request, isWebDAV: false, forceClose: true)
             return
@@ -1462,33 +1460,62 @@ final class ROMUploadServer: @unchecked Sendable {
                          request: request, isWebDAV: true, forceClose: true)
             return
         }
-        guard let writer = openPutTarget(target) else {
-            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
-                               body: "Cannot create file", request: request, forceClose: true)
-            return
-        }
+        guard let writer = openWebDAVPutTarget(target, on: connection, request: request) else { return }
         postUploadStarted(path: target.path)
         writer.write(initialBody)
         streamPutChunks(on: connection, writer: writer, target: target, remaining: remaining,
                         finish: webDAVPutFinish(on: connection, request: request))
     }
 
-    /// Creates the parent directory, replaces any existing file (createFile does not truncate,
+    private enum PutTargetOpen {
+        case writer(SerialFileWriter)
+        /// The target exists and is a directory. RFC 4918 §9.7.2: answer 405, never clobber it.
+        case isDirectory
+        case failed
+    }
+
+    /// Creates the parent directory, replaces any existing FILE (createFile does not truncate,
     /// and preallocating over an existing file is slow on APFS), and opens the writer.
-    private func openPutTarget(_ target: URL) -> SerialFileWriter? {
+    ///
+    /// The directory check happens before any filesystem mutation: this used to remove whatever
+    /// sat at the target, so a `PUT` onto an existing folder recursively deleted it and every
+    /// ROM inside. A rejected request now leaves the filesystem untouched.
+    private func openPutTarget(_ target: URL) -> PutTargetOpen {
         let fm = FileManager.default
+        var isDir: ObjCBool = false
+        if fm.fileExists(atPath: target.path, isDirectory: &isDir), isDir.boolValue {
+            NSLog("%@", "[ROMUploadServer] PUT: refusing to overwrite the directory \(target.lastPathComponent)")
+            return .isDirectory
+        }
         do {
             try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         } catch {
             NSLog("%@", "[ROMUploadServer] PUT: cannot create parent for \(target.lastPathComponent): \(error)")
-            return nil
+            return .failed
         }
         if fm.fileExists(atPath: target.path) { try? fm.removeItem(at: target) }
         guard let writer = SerialFileWriter(at: target) else {
             NSLog("%@", "[ROMUploadServer] PUT: cannot open \(target.path) for writing")
+            return .failed
+        }
+        return .writer(writer)
+    }
+
+    /// Open + canned error answer shared by the three WebDAV PUT paths.
+    private func openWebDAVPutTarget(_ target: URL, on connection: NWConnection,
+                                     request: HTTPRequest) -> SerialFileWriter? {
+        switch openPutTarget(target) {
+        case .writer(let writer):
+            return writer
+        case .isDirectory:
+            sendWebDAVResponse(on: connection, status: 405, statusText: "Method Not Allowed",
+                               body: "Target is a collection", request: request, forceClose: true)
+            return nil
+        case .failed:
+            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
+                               body: "Cannot create file", request: request, forceClose: true)
             return nil
         }
-        return writer
     }
 
     private func streamPutChunks(on connection: NWConnection, writer: SerialFileWriter,
@@ -2027,11 +2054,7 @@ final class ROMUploadServer: @unchecked Sendable {
                                request: request, forceClose: true)
             return
         }
-        guard let writer = openPutTarget(target) else {
-            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
-                               body: "Cannot create file", request: request, forceClose: true)
-            return
-        }
+        guard let writer = openWebDAVPutTarget(target, on: connection, request: request) else { return }
         postUploadStarted(path: target.path)
         writer.write(body)
         completeStreamingPut(writer: writer, target: target, truncated: false,
