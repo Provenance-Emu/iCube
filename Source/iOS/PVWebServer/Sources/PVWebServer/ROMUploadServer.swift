@@ -25,9 +25,6 @@
 
 import Foundation
 import Network
-#if canImport(UIKit)
-import UIKit
-#endif
 
 // MARK: - ROMUploadServer
 
@@ -1149,14 +1146,13 @@ final class ROMUploadServer: @unchecked Sendable {
 
             let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path)
             let fileSize = (attrs?[.size] as? Int64) ?? 0
-            let filename = resolved.lastPathComponent
-            let escapedName = filename.replacingOccurrences(of: "\"", with: "")
+            let disposition = Self.contentDisposition(filename: resolved.lastPathComponent)
 
             let header = """
             HTTP/1.1 200 OK\r\n\
             Content-Type: application/octet-stream\r\n\
             Content-Length: \(fileSize)\r\n\
-            Content-Disposition: attachment; filename="\(escapedName)"\r\n\
+            Content-Disposition: \(disposition)\r\n\
             Connection: close\r\n\
             \r\n
             """
@@ -1169,6 +1165,19 @@ final class ROMUploadServer: @unchecked Sendable {
             }
             if let ioQueue { ioQueue.async(execute: beginStream) } else { beginStream() }
         }
+    }
+
+    /// The file name comes from a client-supplied path, so it must not be able to inject a
+    /// header line or close the quoted-string. CR, LF and `"` are stripped from the plain form,
+    /// and RFC 6266's `filename*` carries the real (possibly non-ASCII) name percent-encoded.
+    private static func contentDisposition(filename: String) -> String {
+        let plain = filename
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\"", with: "")
+        let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        let encoded = filename.addingPercentEncoding(withAllowedCharacters: unreserved) ?? plain
+        return "attachment; filename=\"\(plain)\"; filename*=UTF-8''\(encoded)"
     }
 
     private func streamFileData(handle: FileHandle, on connection: NWConnection,
@@ -1994,11 +2003,9 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func performWebDAVFilesystemTransfer(copy: Bool, source: URL, destination: URL,
                                                  overwrite: Bool) -> Result<Void, WebDAVTransferFailure> {
+        // `destination` already came through `resolvedPath`, which rejects both lexical and
+        // symlink escapes; a raw `hasPrefix` here was weaker than that guard, not a backstop.
         let fm = FileManager.default
-        guard destination.path.hasPrefix(romsDirectory.standardized.path) else {
-            return .failure(.forbidden)
-        }
-
         if fm.fileExists(atPath: destination.path) {
             if !overwrite { return .failure(.preconditionFailed) }
             do {
@@ -2754,10 +2761,19 @@ extension String {
     var urlPathEscaped: String {
         addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self
     }
+    /// Safe to interpolate into a JS string literal inside an inline `<script>` block.
+    /// Backslash first, then the quotes; `</` because the HTML parser closes the script element
+    /// on that sequence even inside a string literal; then the line terminators, which end a
+    /// string literal in ES5 (U+2028/U+2029 included).
     var jsEscaped: String {
         replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
             .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "</", with: "<\\/")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
     }
     var htmlAttrEscaped: String { htmlEscaped }
 }
