@@ -1167,16 +1167,24 @@ final class ROMUploadServer: @unchecked Sendable {
         }
     }
 
+    /// RFC 8187 attr-char, spelled out in ASCII rather than built from `.alphanumerics` (which
+    /// is the Unicode L/M/N categories, so its meaning here depends on Foundation's
+    /// percent-encoding internals rather than on the grammar we actually need).
+    private static let rfc8187AttrChars = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+
     /// The file name comes from a client-supplied path, so it must not be able to inject a
-    /// header line or close the quoted-string. CR, LF and `"` are stripped from the plain form,
-    /// and RFC 6266's `filename*` carries the real (possibly non-ASCII) name percent-encoded.
+    /// header line or break out of the quoted-string. CR, LF, `"` and `\` (the quoted-string
+    /// escape character — a trailing one would swallow the closing quote) are stripped from the
+    /// plain form, and RFC 6266's `filename*` carries the real, possibly non-ASCII, name
+    /// percent-encoded.
     private static func contentDisposition(filename: String) -> String {
         let plain = filename
             .replacingOccurrences(of: "\r", with: "")
             .replacingOccurrences(of: "\n", with: "")
             .replacingOccurrences(of: "\"", with: "")
-        let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
-        let encoded = filename.addingPercentEncoding(withAllowedCharacters: unreserved) ?? plain
+            .replacingOccurrences(of: "\\", with: "")
+        let encoded = filename.addingPercentEncoding(withAllowedCharacters: rfc8187AttrChars) ?? plain
         return "attachment; filename=\"\(plain)\"; filename*=UTF-8''\(encoded)"
     }
 
