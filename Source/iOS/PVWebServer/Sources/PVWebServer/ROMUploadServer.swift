@@ -105,6 +105,9 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private var listener: NWListener?
     private var bonjourWebDAV: NetService?
+    private let bonjourDelegate = WebDAVBonjourDelegate()
+    /// Guards `start()` against a second concurrent call while the port-fallback loop is running.
+    private var isStarting = false
     private var activeConnections = [ObjectIdentifier: NWConnection]()
     private var connectionContexts = [ObjectIdentifier: ConnectionContext]()
     /// Serial queue for listener accept/state only — each connection gets its own `ioQueue`.
@@ -133,6 +136,21 @@ final class ROMUploadServer: @unchecked Sendable {
     var isRunning: Bool {
         lock.lock(); defer { lock.unlock() }
         return isRunningUnlocked
+    }
+
+    /// Synchronous helpers so `start()` (an `async` function) never calls `NSLock.lock()`/
+    /// `unlock()` directly from its own body — those are `noasync` and warn (error in Swift 6
+    /// mode) when called straight from an async context, even in a `defer`.
+    private func beginStartingIfNeeded() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard !isRunningUnlocked, !isStarting else { return false }
+        isStarting = true
+        return true
+    }
+
+    private func endStarting() {
+        lock.lock(); defer { lock.unlock() }
+        isStarting = false
     }
 
     var serverURL: URL? {
@@ -168,12 +186,13 @@ final class ROMUploadServer: @unchecked Sendable {
     /// Advertises `_http._tcp` through the listener and `_webdav._tcp` through NetService on
     /// the same name and port; mDNSResponder coalesces them.
     func start() async throws {
-        guard !isRunning else { return }
+        guard beginStartingIfNeeded() else { return }
+        defer { endStarting() }
+
         var lastError: Error?
         for candidate in Self.preferredPorts {
             do {
                 try await startListener(on: candidate)
-                port = candidate
                 advertiseWebDAV(on: candidate)
                 let root = romsDirectory
                 Self.diskIOQueue.async {
@@ -186,12 +205,14 @@ final class ROMUploadServer: @unchecked Sendable {
             } catch {
                 lastError = error
                 NSLog("[ROMUploadServer] port \(candidate) unavailable (\(error)), trying next")
-                stop()
             }
         }
         throw lastError ?? ROMUploadServerError.initializationFailed
     }
 
+    /// Binds and waits for `.ready` on `candidate`. On failure the listener that failed is
+    /// cancelled here and the error is thrown; nothing global (`stop()`) is touched so a later
+    /// candidate's listener, or an already-running server, is left alone.
     private func startListener(on candidate: UInt16) async throws {
         let listener = try NWListener(using: Self.makeTCPParameters(), on: NWEndpoint.Port(rawValue: candidate)!)
         listener.newConnectionHandler = { [weak self] conn in self?.handleNewConnection(conn) }
@@ -211,13 +232,13 @@ final class ROMUploadServer: @unchecked Sendable {
         }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             nonisolated(unsafe) var resumed = false
-            listener.stateUpdateHandler = { [weak self] state in
+            listener.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
                     if !resumed { resumed = true; continuation.resume() }
                 case .failed(let error):
                     NSLog("[ROMUploadServer] listener failed on :\(candidate): \(error)")
-                    self?.stop()
+                    listener.cancel()
                     if !resumed { resumed = true; continuation.resume(throwing: error) }
                 case .cancelled:
                     if !resumed { resumed = true; continuation.resume(throwing: ROMUploadServerError.initializationFailed) }
@@ -227,30 +248,39 @@ final class ROMUploadServer: @unchecked Sendable {
             }
             listener.start(queue: self.listenerQueue)
         }
+        port = candidate
         self.listener = listener
     }
 
     private func advertiseWebDAV(on candidate: UInt16) {
-        let service = NetService(domain: "", type: "_webdav._tcp.", name: pageTitle, port: Int32(candidate))
-        service.publish()
-        bonjourWebDAV = service
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let service = NetService(domain: "", type: "_webdav._tcp.", name: self.pageTitle, port: Int32(candidate))
+            service.delegate = self.bonjourDelegate
+            service.schedule(in: .main, forMode: .common)
+            service.publish()
+            self.lock.lock(); self.bonjourWebDAV = service; self.lock.unlock()
+        }
     }
 
     func stop() {
         lock.lock()
         let conns = activeConnections
         let contexts = connectionContexts
+        let webDAVService = bonjourWebDAV
         activeConnections.removeAll()
         connectionContexts.removeAll()
         _bonjourServerURL = nil
+        bonjourWebDAV = nil
         lock.unlock()
 
         for ctx in contexts.values { ctx.watchdog?.cancel() }
         for conn in conns.values { conn.cancel() }
         listener?.cancel()
         listener = nil
-        bonjourWebDAV?.stop()
-        bonjourWebDAV = nil
+        if let webDAVService {
+            DispatchQueue.main.async { webDAVService.stop() }
+        }
         port = 0
         cachedIPAddress = nil
         NSLog("[ROMUploadServer] stopped")
@@ -1688,8 +1718,7 @@ final class ROMUploadServer: @unchecked Sendable {
                 let respond = {
                     self.sendRawHeaders(on: connection, status: 200, statusText: "OK", headers: [
                         "Content-Type": self.mimeType(for: resolved),
-                        "Content-Length": "\(fileSize)",
-                        "Connection": keepAlive ? "keep-alive" : "close"
+                        "Content-Length": "\(fileSize)"
                     ], body: Data(), request: request, isWebDAV: true)
                 }
                 if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
@@ -2252,6 +2281,19 @@ final class ROMUploadServer: @unchecked Sendable {
                 if lhs.modified != rhs.modified { return lhs.modified > rhs.modified }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
+    }
+}
+
+// MARK: - Bonjour Delegate
+
+/// `NetService.publish()` fails silently without a delegate. This just logs.
+private final class WebDAVBonjourDelegate: NSObject, NetServiceDelegate {
+    func netServiceDidPublish(_ sender: NetService) {
+        NSLog("[ROMUploadServer] _webdav._tcp published on port \(sender.port)")
+    }
+
+    func netService(_ sender: NetService, didNotPublish errorDict: [String: NSNumber]) {
+        NSLog("%@", "[ROMUploadServer] _webdav._tcp publish failed: \(errorDict)")
     }
 }
 

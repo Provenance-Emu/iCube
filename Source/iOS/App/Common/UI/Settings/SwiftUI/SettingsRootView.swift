@@ -297,7 +297,7 @@ struct SettingsRootView<Background: View>: View {
 #endif
               }
               HStack {
-                Text("WebDAV")
+                Text(L("Finder / WebDAV"))
                   .font(.system(size: 16, weight: .medium))
                   .foregroundColor(.white.opacity(0.8))
                 Spacer()
@@ -324,7 +324,7 @@ struct SettingsRootView<Background: View>: View {
               }
               // Web-import help: short description + link (plain text on tvOS — no browser).
               VStack(alignment: .leading, spacing: 4) {
-                Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi: open the Web UI address in a browser, or connect to the WebDAV address from a file manager."))
+                Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi. Open the address in a browser, or in Finder choose Go › Connect to Server and enter the same address as Guest."))
                   .font(.system(size: 12))
                   .foregroundColor(.white.opacity(0.5))
 #if os(iOS)
@@ -484,7 +484,7 @@ struct SettingsRootView<Background: View>: View {
 #endif
           }
           HStack {
-            Text(L("WebDAV"))
+            Text(L("Finder / WebDAV"))
             Spacer()
             let s = webDavDisplay
 #if os(iOS)
