@@ -82,10 +82,13 @@ Each `ConnectionContext` gains `clientMode: ClientMode` with cases `unknown`,
 iFly's `resolveClientMode`:
 
 1. Definitely browser: `PUT /files/…`, `POST /upload`, `POST /move`,
-   `POST /mkdir`, `GET /`, `GET /api/…`, `GET /files/…`, `DELETE /files/…`
-   with a browser user agent.
+   `POST /mkdir`, `GET /`, `GET /api/…`, `GET /files/…`, `DELETE /files/…`.
+   These are upload-UI routes, so they are browser whatever the User-Agent
+   says — a `curl -T` to `/files/…` is still the browser upload route.
 2. Definitely WebDAV: method is `PROPFIND`, `PROPPATCH`, `MKCOL`, `MOVE`,
-   `COPY`, `LOCK`, or `UNLOCK`.
+   `COPY`, `LOCK`, `UNLOCK`, or `PUT`. `PUT /files/…` never reaches this
+   rule — rule 1 catches it first — so a bare `PUT /Game.rvz` is WebDAV and
+   `PUT /files/Game.rvz` is the browser uploader.
 3. Sticky: if the connection already has a mode, reuse it. Keep-alive
    sockets from Finder pipeline many requests and must not flip mode.
 4. WebDAV signal headers: `Depth`, `Translate`, `Destination`, `Lock-Token`,
@@ -170,7 +173,7 @@ server routes:
 | `GET /api/health` | `{"ok":true,"app":"iCube","version":…,"features":{"move":true,"mkdir":true,"stats":false}}` |
 | `PUT /files/<path>` | New. Streams body to disk like WebDAV PUT. Answers `Expect: 100-continue`. Replaces an existing target before writing. Creates intermediate folders |
 | `POST /upload` | Multipart fallback, kept for old bookmarks and curl `-F` |
-| `POST /move` | JSON `{from, to}` inside the sandbox |
+| `POST /move` | JSON `{src, dst}` inside the sandbox |
 | `POST /mkdir` | JSON `{path}` |
 | `DELETE /files/<path>` | Unchanged |
 
@@ -242,8 +245,11 @@ multipart POST at 256 KB, 8 MB, and 64 MB. `Source/iOS/App/Makefile` gains
 
 ## 5. Error handling
 
-- Port in use: fall through the port list. If every port fails, `startServers`
-  returns false and logs the last error. The facade already returns `Bool`.
+- Port in use: fall through the port list. `startServers` cannot report a bind
+  failure synchronously — it kicks off the async `start()` in a `Task` and
+  returns true immediately. If every port fails, the error is logged from that
+  task and `urlString` / `serverURL` stay nil, which is what the settings
+  surfaces show.
 - Disk full or write failure: see 4.2. The client sees 507 or 500 and the
   partial file is gone.
 - Path escape: 403 with a logged reason. No file system access happens before
