@@ -653,368 +653,346 @@ struct EmulationScreen: View {
     .onPlayPauseCommand {}
     .navigationBarBackButtonHidden(true)
     #else // os(iOS)
-    NavigationStack {
-      ZStack {
-        Color.black.ignoresSafeArea()
-        GeometryReader { proxy in
-          let isPortrait = proxy.size.height > proxy.size.width
-          let gameAR = stableAR ?? (proxy.size.width / max(proxy.size.height, 1))
-          if isPortrait {
-            VStack(spacing: 0) {
-              let topInset = proxy.safeAreaInsets.top
-              if topInset > 0 {
-                Color.clear.frame(height: topInset)
-              }
-              let availableHeight = proxy.size.height - topInset
-              let desiredHeight = min(availableHeight * 0.66, proxy.size.width / max(gameAR, 0.0001))
-              EmulationSurfaceController(gamePath: game.filePath)
-                .frame(width: proxy.size.width, height: desiredHeight)
-                .onTapGesture { toggleTopBar() }
-              Spacer()
-            }
-          } else {
-            let targetHeight = min(proxy.size.height, proxy.size.width / max(gameAR, 0.0001))
-            VStack(spacing: 0) {
-              Spacer()
-              EmulationSurfaceController(gamePath: game.filePath)
-                .frame(width: proxy.size.width, height: targetHeight)
-                .onTapGesture { toggleTopBar() }
-              Spacer()
-            }
-          }
-        }
-        .onChange(of: UIDevice.current.orientation) { _ in
-          TVEmulationBridge.resizeSurfaceNow()
-          scheduleARPoll()
-        }
-        .onAppear {
-          // Resume where I left off (iOS): the tvOS branch wires this via its
-          // start observer; iOS had none, so .auto auto-saved on quit but never
-          // reloaded. Register once (guarded) so it loads on emulation start.
-          guard resumeObserver == nil else { return }
-          resumeObserver = NotificationCenter.default.addObserver(
-            forName: Notification.Name("DOLEmulationDidStartNotification"),
-            object: nil, queue: .main) { _ in
-            SaveStateService.resumeIfAvailable()
-          }
-        }
-
-        // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
-        // pause menu is open; the disconnect banner (zIndex 5) sits above it.
-        if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
-          PausedPill(onResume: {
-            TVEmulationBridge.resume()
-            isPaused = false
-          })
-          .zIndex(3)
-        }
-
-        // Banner shown while a disconnect-induced pause is active (reconnect resumes).
-        if controllerManager.disconnectPause != nil {
-          ControllerDisconnectBanner()
-            .zIndex(5)
-        }
-
-        // Top hit area: tap near status bar to reveal overlay (active only when hidden)
-        if !showTopBar {
+    ZStack {
+      Color.black.ignoresSafeArea()
+      GeometryReader { proxy in
+        let isPortrait = proxy.size.height > proxy.size.width
+        let gameAR = stableAR ?? (proxy.size.width / max(proxy.size.height, 1))
+        if isPortrait {
           VStack(spacing: 0) {
-            Color.clear
-              .frame(height: 80)
-              .contentShape(Rectangle())
+            let topInset = proxy.safeAreaInsets.top
+            if topInset > 0 {
+              Color.clear.frame(height: topInset)
+            }
+            let availableHeight = proxy.size.height - topInset
+            let desiredHeight = min(availableHeight * 0.66, proxy.size.width / max(gameAR, 0.0001))
+            EmulationSurfaceController(gamePath: game.filePath)
+              .frame(width: proxy.size.width, height: desiredHeight)
               .onTapGesture { toggleTopBar() }
             Spacer()
           }
-          .ignoresSafeArea(edges: .top)
-          .zIndex(1)
+        } else {
+          let targetHeight = min(proxy.size.height, proxy.size.width / max(gameAR, 0.0001))
+          VStack(spacing: 0) {
+            Spacer()
+            EmulationSurfaceController(gamePath: game.filePath)
+              .frame(width: proxy.size.width, height: targetHeight)
+              .onTapGesture { toggleTopBar() }
+            Spacer()
+          }
+        }
+      }
+      .onChange(of: UIDevice.current.orientation) { _ in
+        TVEmulationBridge.resizeSurfaceNow()
+        scheduleARPoll()
+      }
+      .onAppear {
+        // Resume where I left off (iOS): the tvOS branch wires this via its
+        // start observer; iOS had none, so .auto auto-saved on quit but never
+        // reloaded. Register once (guarded) so it loads on emulation start.
+        guard resumeObserver == nil else { return }
+        resumeObserver = NotificationCenter.default.addObserver(
+          forName: Notification.Name("DOLEmulationDidStartNotification"),
+          object: nil, queue: .main) { _ in
+          SaveStateService.resumeIfAvailable()
+        }
+      }
+
+      // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
+      // pause menu is open; the disconnect banner (zIndex 5) sits above it.
+      if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
+        PausedPill(onResume: {
+          TVEmulationBridge.resume()
+          isPaused = false
+        })
+        .zIndex(3)
+      }
+
+      // Banner shown while a disconnect-induced pause is active (reconnect resumes).
+      if controllerManager.disconnectPause != nil {
+        ControllerDisconnectBanner()
+          .zIndex(5)
+      }
+
+      // Top hit area: tap near status bar to reveal overlay (active only when hidden)
+      if !showTopBar {
+        VStack(spacing: 0) {
+          Color.clear
+            .frame(height: 80)
+            .contentShape(Rectangle())
+            .onTapGesture { toggleTopBar() }
+          Spacer()
+        }
+        .ignoresSafeArea(edges: .top)
+        .zIndex(1)
+        .allowsHitTesting(true)
+      }
+
+      if showDSUDebugHUD {
+        DSUDebugHUD()
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+          .padding(.top, 96)
+          .zIndex(1000)
           .allowsHitTesting(true)
-        }
+      }
 
-        if showDSUDebugHUD {
-          DSUDebugHUD()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.top, 96)
-            .zIndex(1000)
-            .allowsHitTesting(true)
-        }
+      if showTopBar {
+        emulationTopBar
+          .transition(.move(edge: .top).combined(with: .opacity))
+          .zIndex(2)
+      }
 
-        if showTopBar {
-          emulationTopBar
-            .transition(.move(edge: .top).combined(with: .opacity))
-            .zIndex(2)
-        }
-
-        // Semi-transparent overlay with quick performance controls (iOS)
-        if showPerfOverlay {
-          Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
-          GeometryReader { geometry in
-            let isLandscape = geometry.size.width > geometry.size.height
-            ScrollView {
-              if isLandscape {
-                // Two-column layout for landscape
-                VStack(alignment: .leading, spacing: 12) {
-                  HStack {
-                    Text("Performance Controls").font(.headline).foregroundColor(.white)
-                    Spacer()
-                    Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
-                      .buttonStyle(.plain)
-                  }
-                  Divider().background(.white.opacity(0.2))
-
-                  HStack(alignment: .top, spacing: 20) {
-                    // Left column
-                    VStack(alignment: .leading, spacing: 12) {
-                      HStack {
-                        Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-                          ocEnabled = v
-                          DOLConfigBridge.setMainOverclockEnable(v)
-                          // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
-                          if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
-                        }))
-                        .tint(.blue)
-                        .foregroundColor(.white)
-                        .disabled(ocAutoOverridden)
-                        autoBadge(ocAutoOverridden)
-                      }
-                      HStack {
-                        Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
-                          .disabled(!ocEnabled || ocAutoOverridden)
-                          .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
-                        Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-                      }
-
-                      HStack {
-                        Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-                          vbiEnabledQuick = v
-                          DOLConfigBridge.setMainViOverclockEnable(v)
-                          if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
-                        }))
-                        .tint(.blue)
-                        .foregroundColor(.white)
-                        .disabled(vbiAutoOverridden)
-                        autoBadge(vbiAutoOverridden)
-                      }
-                      HStack {
-                        Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
-                          .disabled(!vbiEnabledQuick || vbiAutoOverridden)
-                          .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
-                        Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-                      }
-
-                      // Graphics controls
-                      HStack {
-                        Text(L("Internal Resolution"))
-                          .foregroundColor(.white.opacity(0.8))
-                          .font(.caption)
-                        autoBadge(efbAutoOverridden)
-                        Spacer()
-                        Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
-                          .disabled(efbAutoOverridden)
-                          .onChange(of: efbScaleQuick) { newScale in
-                            DOLConfigBridge.setGfxEfbScale(newScale)
-                            // Manual IR pick disables Auto-IR so the choice sticks (step #6).
-                            if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
-                          }
-                        Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
-                      }
-                      HStack {
-                        Text(L("Anisotropic Filtering"))
-                          .foregroundColor(.white.opacity(0.8))
-                          .font(.caption)
-                        Spacer()
-                        Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
-                          .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
-                        Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
-                      }
-                      if overscanApplicable {
-                        Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
-                          .tint(.blue)
-                          .foregroundColor(.white)
-                      }
-
-                      // Adaptive clock (auto) + VI-skip mode
-                      adaptiveControls()
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    // Right column - Overlay toggles + diagnostics grid
-                    VStack(alignment: .leading, spacing: 12) {
-                      Text("Display Overlays").font(.subheadline).foregroundColor(.white.opacity(0.8))
-                      overlayToggleGrid()
-                    }
-                    .frame(maxWidth: .infinity)
-                  }
+      // Semi-transparent overlay with quick performance controls (iOS)
+      if showPerfOverlay {
+        Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
+        GeometryReader { geometry in
+          let isLandscape = geometry.size.width > geometry.size.height
+          ScrollView {
+            if isLandscape {
+              // Two-column layout for landscape
+              VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                  Text("Performance Controls").font(.headline).foregroundColor(.white)
+                  Spacer()
+                  Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
+                    .buttonStyle(.plain)
                 }
-              } else {
-                // Single column layout for portrait
-                VStack(alignment: .leading, spacing: 16) {
-                  HStack {
-                    Text("Performance Controls").font(.headline).foregroundColor(.white)
-                    Spacer()
-                    Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
-                      .buttonStyle(.plain)
-                  }
-                  Divider().background(.white.opacity(0.2))
-                  HStack {
-                    Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-                      ocEnabled = v
-                      DOLConfigBridge.setMainOverclockEnable(v)
-                      // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
-                      if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
-                    }))
-                    .tint(.blue)
-                    .foregroundColor(.white)
-                    .disabled(ocAutoOverridden)
-                    autoBadge(ocAutoOverridden)
-                  }
-                  HStack {
-                    Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
-                      .disabled(!ocEnabled || ocAutoOverridden)
-                      .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
-                    Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-                  }
-                  HStack {
-                    Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-                      vbiEnabledQuick = v
-                      DOLConfigBridge.setMainViOverclockEnable(v)
-                      if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
-                    }))
-                    .tint(.blue)
-                    .foregroundColor(.white)
-                    .disabled(vbiAutoOverridden)
-                    autoBadge(vbiAutoOverridden)
-                  }
-                  HStack {
-                    Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
-                      .disabled(!vbiEnabledQuick || vbiAutoOverridden)
-                      .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
-                    Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-                  }
+                Divider().background(.white.opacity(0.2))
 
-                  // Adaptive clock (auto) + VI-skip mode
-                  adaptiveControls()
-
-                  Divider().background(.white.opacity(0.2))
-                  // Overlays + diagnostics, as a scannable icon grid.
-                  overlayToggleGrid()
-
-                  // Quick graphics controls
-                  HStack {
-                    Text(L("Internal Resolution"))
-                      .foregroundColor(.white.opacity(0.8))
-                    autoBadge(efbAutoOverridden)
-                    Spacer()
-                    Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
-                      .disabled(efbAutoOverridden)
-                      .onChange(of: efbScaleQuick) { newScale in
-                        DOLConfigBridge.setGfxEfbScale(newScale)
-                        // Manual IR pick disables Auto-IR so the choice sticks (step #6).
-                        if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
-                      }
-                    Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
-                  }
-                  HStack {
-                    Text(L("Anisotropic Filtering"))
-                      .foregroundColor(.white.opacity(0.8))
-                    Spacer()
-                    Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
-                      .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
-                    Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
-                  }
-                  if overscanApplicable {
-                    Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
+                HStack(alignment: .top, spacing: 20) {
+                  // Left column
+                  VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                      Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+                        ocEnabled = v
+                        DOLConfigBridge.setMainOverclockEnable(v)
+                        // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
+                        if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+                      }))
                       .tint(.blue)
                       .foregroundColor(.white)
-                  }
-                }
-              }
-            }
-            .padding(20)
-            .frame(maxWidth: isLandscape ? min(geometry.size.width * 0.9, 720) : 420)
-            .frame(maxHeight: isLandscape ? min(geometry.size.height * 0.8, 400) : .infinity)
-            .background(.black.opacity(0.6))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
-            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-          }
-          .zIndex(5)
-        }
+                      .disabled(ocAutoOverridden)
+                      autoBadge(ocAutoOverridden)
+                    }
+                    HStack {
+                      Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
+                        .disabled(!ocEnabled || ocAutoOverridden)
+                        .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
+                      Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                    }
 
-        // Legacy touch pads
-        if isTouchControlsActive {
-          let isWiiToShow: Bool = {
-            switch controllerManager.overlayMode {
-            case .auto: return isWiiSystem
-            case .gamecube: return false
-            case .wii: return true
-            }
-          }()
-          TouchPadsContainer(forceVisible: true, isWii: isWiiToShow)
-            .id(touchPadsRefreshToken)
-            .ignoresSafeArea()
-            .transition(.opacity)
-            .onAppear {
-              TVEmulationBridge.setWiiIMUPointEnabled(false)
-              // Ensure touch input is always a valid IR source
-              TCDeviceMotion.shared.setMotionEnabled(true)
-              TCDeviceMotion.shared.setPort(4)
-              TCDeviceMotion.shared.statusBarOrientationChanged()
-            }
-            .onDisappear {
-              TVEmulationBridge.setWiiIMUPointEnabled(true)
-            }
-        }
-      }
-      .modifier(SettingsNavigationFallback(showSettings: $showSettings))
-      .fullScreenCover(isPresented: $showPauseMenu) {
-        PauseMenuView(
-          selectedSlot: $selectedSlot,
-          onClose: { showPauseMenu = false },
-          onShowSettings: { showSettings = true },
-          platform: .ios,
-          game: game
-        )
-      }
-      .toolbar {
-        ToolbarItem(placement: .navigationBarLeading) {
-          HStack(spacing: 12) {
-            Button { showPauseMenu = true } label: { Image(systemName: "line.3.horizontal") }
-            #if os(iOS)
-            if DOLConfigBridge.mainEmulateSkylanderPortal() && isWiiSystem {
-              Menu {
-                Button("Load Skylander…") { showSkyImporter = true }
-                Button("Clear Slot…") { showSkyClearPicker = true }
-                Button("Clear All") {
-                  DOLConfigBridge.skylanderClearAll()
+                    HStack {
+                      Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+                        vbiEnabledQuick = v
+                        DOLConfigBridge.setMainViOverclockEnable(v)
+                        if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+                      }))
+                      .tint(.blue)
+                      .foregroundColor(.white)
+                      .disabled(vbiAutoOverridden)
+                      autoBadge(vbiAutoOverridden)
+                    }
+                    HStack {
+                      Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
+                        .disabled(!vbiEnabledQuick || vbiAutoOverridden)
+                        .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
+                      Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                    }
+
+                    // Graphics controls
+                    HStack {
+                      Text(L("Internal Resolution"))
+                        .foregroundColor(.white.opacity(0.8))
+                        .font(.caption)
+                      autoBadge(efbAutoOverridden)
+                      Spacer()
+                      Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
+                        .disabled(efbAutoOverridden)
+                        .onChange(of: efbScaleQuick) { newScale in
+                          DOLConfigBridge.setGfxEfbScale(newScale)
+                          // Manual IR pick disables Auto-IR so the choice sticks (step #6).
+                          if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
+                        }
+                      Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
+                    }
+                    HStack {
+                      Text(L("Anisotropic Filtering"))
+                        .foregroundColor(.white.opacity(0.8))
+                        .font(.caption)
+                      Spacer()
+                      Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
+                        .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+                      Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
+                    }
+                    if overscanApplicable {
+                      Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
+                        .tint(.blue)
+                        .foregroundColor(.white)
+                    }
+
+                    // Adaptive clock (auto) + VI-skip mode
+                    adaptiveControls()
+                  }
+                  .frame(maxWidth: .infinity)
+
+                  // Right column - Overlay toggles + diagnostics grid
+                  VStack(alignment: .leading, spacing: 12) {
+                    Text("Display Overlays").font(.subheadline).foregroundColor(.white.opacity(0.8))
+                    overlayToggleGrid()
+                  }
+                  .frame(maxWidth: .infinity)
                 }
-              } label: {
-                Image(systemName: "externaldrive")
+              }
+            } else {
+              // Single column layout for portrait
+              VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                  Text("Performance Controls").font(.headline).foregroundColor(.white)
+                  Spacer()
+                  Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
+                    .buttonStyle(.plain)
+                }
+                Divider().background(.white.opacity(0.2))
+                HStack {
+                  Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+                    ocEnabled = v
+                    DOLConfigBridge.setMainOverclockEnable(v)
+                    // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
+                    if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+                  }))
+                  .tint(.blue)
+                  .foregroundColor(.white)
+                  .disabled(ocAutoOverridden)
+                  autoBadge(ocAutoOverridden)
+                }
+                HStack {
+                  Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
+                    .disabled(!ocEnabled || ocAutoOverridden)
+                    .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
+                  Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                }
+                HStack {
+                  Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+                    vbiEnabledQuick = v
+                    DOLConfigBridge.setMainViOverclockEnable(v)
+                    if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+                  }))
+                  .tint(.blue)
+                  .foregroundColor(.white)
+                  .disabled(vbiAutoOverridden)
+                  autoBadge(vbiAutoOverridden)
+                }
+                HStack {
+                  Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
+                    .disabled(!vbiEnabledQuick || vbiAutoOverridden)
+                    .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
+                  Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+                }
+
+                // Adaptive clock (auto) + VI-skip mode
+                adaptiveControls()
+
+                Divider().background(.white.opacity(0.2))
+                // Overlays + diagnostics, as a scannable icon grid.
+                overlayToggleGrid()
+
+                // Quick graphics controls
+                HStack {
+                  Text(L("Internal Resolution"))
+                    .foregroundColor(.white.opacity(0.8))
+                  autoBadge(efbAutoOverridden)
+                  Spacer()
+                  Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
+                    .disabled(efbAutoOverridden)
+                    .onChange(of: efbScaleQuick) { newScale in
+                      DOLConfigBridge.setGfxEfbScale(newScale)
+                      // Manual IR pick disables Auto-IR so the choice sticks (step #6).
+                      if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
+                    }
+                  Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+                }
+                HStack {
+                  Text(L("Anisotropic Filtering"))
+                    .foregroundColor(.white.opacity(0.8))
+                  Spacer()
+                  Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
+                    .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+                  Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+                }
+                if overscanApplicable {
+                  Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
+                    .tint(.blue)
+                    .foregroundColor(.white)
+                }
               }
             }
-            #endif // os(iOS)
           }
+          .padding(20)
+          .frame(maxWidth: isLandscape ? min(geometry.size.width * 0.9, 720) : 420)
+          .frame(maxHeight: isLandscape ? min(geometry.size.height * 0.8, 400) : .infinity)
+          .background(.black.opacity(0.6))
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+          .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
+          .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+        }
+        .zIndex(5)
+      }
+
+      // Legacy touch pads
+      if isTouchControlsActive {
+        let isWiiToShow: Bool = {
+          switch controllerManager.overlayMode {
+          case .auto: return isWiiSystem
+          case .gamecube: return false
+          case .wii: return true
+          }
+        }()
+        TouchPadsContainer(forceVisible: true, isWii: isWiiToShow)
+          .id(touchPadsRefreshToken)
+          .ignoresSafeArea()
+          .transition(.opacity)
+          .onAppear {
+            TVEmulationBridge.setWiiIMUPointEnabled(false)
+            // Ensure touch input is always a valid IR source
+            TCDeviceMotion.shared.setMotionEnabled(true)
+            TCDeviceMotion.shared.setPort(4)
+            TCDeviceMotion.shared.statusBarOrientationChanged()
+          }
+          .onDisappear {
+            TVEmulationBridge.setWiiIMUPointEnabled(true)
+          }
+      }
+    }
+    .modifier(SettingsNavigationFallback(showSettings: $showSettings))
+    .fullScreenCover(isPresented: $showPauseMenu) {
+      PauseMenuView(
+        selectedSlot: $selectedSlot,
+        onClose: { showPauseMenu = false },
+        onShowSettings: { showSettings = true },
+        platform: .ios,
+        game: game
+      )
+    }
+    .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+      if case .success(let urls) = result {
+        for url in urls {
+          let started = url.startAccessingSecurityScopedResource()
+          defer { if started { url.stopAccessingSecurityScopedResource() } }
+          let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
+          if slot > 0 { skyLastLoadedSlot = slot }
         }
       }
-      .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
-        if case .success(let urls) = result {
-          for url in urls {
-            let started = url.startAccessingSecurityScopedResource()
-            defer { if started { url.stopAccessingSecurityScopedResource() } }
-            let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
-            if slot > 0 { skyLastLoadedSlot = slot }
-          }
+    }
+    .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {
+      ForEach(1 ... 16, id: \.self) { slot in
+        Button("Slot \(slot)") { _ = DOLConfigBridge.skylanderRemove(atSlot: slot) }
+      }
+      if skyLastLoadedSlot > 0 {
+        Button("Clear Last Loaded (Slot \(skyLastLoadedSlot))", role: .destructive) {
+          _ = DOLConfigBridge.skylanderRemove(atSlot: skyLastLoadedSlot)
         }
       }
-      .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {
-        ForEach(1 ... 16, id: \.self) { slot in
-          Button("Slot \(slot)") { _ = DOLConfigBridge.skylanderRemove(atSlot: slot) }
-        }
-        if skyLastLoadedSlot > 0 {
-          Button("Clear Last Loaded (Slot \(skyLastLoadedSlot))", role: .destructive) {
-            _ = DOLConfigBridge.skylanderRemove(atSlot: skyLastLoadedSlot)
-          }
-        }
-        Button(L("Cancel"), role: .cancel) {}
-      }
+      Button(L("Cancel"), role: .cancel) {}
     }
     .onAppear {
       NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
@@ -1213,7 +1191,10 @@ struct EmulationScreen: View {
     .onChange(of: showPauseMenu) { _ in
       isPaused = TVEmulationBridge.isPaused()
     }
-    .navigationBarHidden(true)
+    // The library stack pushes this screen; hide its bar (iOS 26 renders leftover
+    // toolbar items as floating glass buttons that also swallow the top-edge tap).
+    .toolbar(.hidden, for: .navigationBar)
+    .navigationBarBackButtonHidden(true)
     .statusBar(hidden: true)
     .animation(.spring(response: 0.3, dampingFraction: 0.9), value: showTopBar)
     .sheet(isPresented: $showShaderSheet) {
@@ -1459,6 +1440,18 @@ struct EmulationScreen: View {
               topBarIconLabel("square.stack.3d.up")
             }
             .buttonStyle(.plain)
+
+            if DOLConfigBridge.mainEmulateSkylanderPortal() && isWiiSystem {
+              Menu {
+                Button(L("Load Skylander…")) { hasTopBarInteraction = true; showSkyImporter = true }
+                Button(L("Clear Slot…")) { hasTopBarInteraction = true; showSkyClearPicker = true }
+                Button(L("Clear All")) { hasTopBarInteraction = true; DOLConfigBridge.skylanderClearAll() }
+              } label: {
+                topBarIconLabel("externaldrive")
+              }
+              .buttonStyle(.plain)
+              .accessibilityLabel(L("Skylanders"))
+            }
 
             topBarIconButton("list.bullet.rectangle") {
               hasTopBarInteraction = true
