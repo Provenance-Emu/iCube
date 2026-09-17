@@ -1858,23 +1858,20 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func handleWebDAVPutBuffered(on connection: NWConnection, request: HTTPRequest,
                                          path: String, body: Data) {
-        guard !path.isEmpty, let resolved = resolvedPath(path, within: romsDirectory) else {
-            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
+        guard !path.isEmpty, let target = resolvedPath(path, within: romsDirectory) else {
+            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden",
+                               request: request, forceClose: true)
             return
         }
-        let parent = resolved.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-
-        postUploadStarted(path: resolved.path)
-        guard let writer = SerialFileWriter(at: resolved) else {
-            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error", request: request)
+        guard let writer = openPutTarget(target) else {
+            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
+                               body: "Cannot create file", request: request, forceClose: true)
             return
         }
+        postUploadStarted(path: target.path)
         writer.write(body)
-        writer.finalize { [weak self] in
-            self?.postUploadCompleted(filePath: resolved.path)
-            self?.sendWebDAVResponse(on: connection, status: 201, statusText: "Created", request: request)
-        }
+        completeStreamingPut(writer: writer, target: target, truncated: false,
+                            finish: webDAVPutFinish(on: connection, request: request))
     }
 
     // MARK: - Upload Notifications
