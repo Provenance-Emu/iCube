@@ -573,7 +573,7 @@ final class ROMUploadServer: @unchecked Sendable {
     }
 
     /// Incremental `Transfer-Encoding: chunked` decoder (RFC 9112 §7.1).
-    private final class ChunkedBodyReader: @unchecked Sendable {
+    final class ChunkedBodyReader: @unchecked Sendable {
         enum Event {
             case payload(Data)
             case complete(trailing: Data)
@@ -1179,6 +1179,11 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func finishMultipartUpload(on connection: NWConnection, request: HTTPRequest,
                                        parser: StreamingMultipartParser) {
+        if parser.hadWriteError {
+            sendJSON(on: connection, status: 500, json: ["ok": false, "error": "Upload failed"],
+                     request: request, isWebDAV: false, forceClose: true)
+            return
+        }
         let files = parser.completedFiles
         if files.isEmpty {
             sendJSON(on: connection, status: 400, json: ["ok": false, "error": "No files uploaded"],
@@ -2134,7 +2139,7 @@ enum ROMUploadServerError: Error, LocalizedError {
 
 // MARK: - HTTP Request Parsing
 
-private struct HTTPRequest {
+struct HTTPRequest {
     let method: String
     let path: String
     let queryString: String?
@@ -2223,7 +2228,7 @@ private struct HTTPRequest {
 
 // MARK: - Streaming Multipart Parser
 
-private final class StreamingMultipartParser {
+final class StreamingMultipartParser {
     private let boundary: Data
     private let endBoundary: Data
     private let outputDirectory: URL
@@ -2234,6 +2239,8 @@ private final class StreamingMultipartParser {
     private var currentWriter: SerialFileWriter?
     private var currentFilePath: URL?
     private(set) var completedFiles: [String] = []
+    /// True once any part failed to open or write. The caller must answer 5xx.
+    private(set) var hadWriteError = false
     private var pendingCloses = 0
     private var finalizeCompletion: (() -> Void)?
 
@@ -2291,6 +2298,12 @@ private final class StreamingMultipartParser {
                     let filePath = outputDirectory.appendingPathComponent(sanitized)
                     currentFilePath = filePath
                     currentWriter = SerialFileWriter(at: filePath)
+                    if currentWriter == nil {
+                        NSLog("%@", "[ROMUploadServer] multipart: cannot open \(filePath.path) for writing")
+                        hadWriteError = true
+                        currentFilename = nil
+                        currentFilePath = nil
+                    }
                     NotificationCenter.default.post(
                         name: Notification.Name(PVWebServerFileUploadStartedNotificationName),
                         object: nil, userInfo: ["path": filePath.path]
@@ -2351,7 +2364,10 @@ private final class StreamingMultipartParser {
         pendingCloses += 1
         writer.finalize { [weak self] in
             guard let self else { return }
-            if let path, filename != nil {
+            if writer.failed {
+                self.hadWriteError = true
+                if let path { try? FileManager.default.removeItem(atPath: path) }
+            } else if let path, filename != nil {
                 self.completedFiles.append(path)
                 self.onFileCompleted?(path)
             }
