@@ -552,13 +552,16 @@ async function uploadFilesTo(files, folderPath) {
   if (!navs.length) return;
 
   async function refresh() {
-    let available = false;
+    let visible = false;
     try {
       const response = await fetch('/api/health', { cache: 'no-store' });
-      available = response.ok;
+      visible = response.ok;
+      if (visible) {
+        try { const j = await response.json(); visible = !!(j && j.features && j.features.stats); } catch (_) { visible = false; }
+      }
     } catch (_) { /* offline or debug API disabled */ }
     navs.forEach(function(el) {
-      el.style.display = available ? '' : 'none';
+      el.style.display = visible ? '' : 'none';
     });
   }
 

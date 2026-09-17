@@ -498,6 +498,19 @@ final class ROMUploadServer: @unchecked Sendable {
             }
         }
 
+        if !isWebDAV && request.method == "PUT" && request.path.hasPrefix("/files/") {
+            let beginPut: () -> Void = { [weak self] in
+                self?.streamBrowserFilePut(on: connection, request: request,
+                                           initialBody: initialBody, remaining: remaining)
+            }
+            if request.expectsContinue {
+                sendContinue(on: connection, isWebDAV: false, request: request, then: beginPut)
+            } else {
+                beginPut()
+            }
+            return
+        }
+
         if isWebDAV && request.method == "PUT" {
             let beginPut: () -> Void = { [weak self] in
                 self?.streamWebDAVPut(on: connection, request: request,
@@ -832,6 +845,15 @@ final class ROMUploadServer: @unchecked Sendable {
                        path: String(path.dropFirst("/files/".count)))
         case ("POST", "/upload"):
             handleBufferedUpload(on: connection, request: request, body: body)
+        case ("GET", "/api/health"):
+            serveHealth(on: connection, request: request)
+        case ("PUT", _) where path.hasPrefix("/files/"):
+            // Small bodies that arrived fully buffered; large ones streamed in handleRequestWithBody.
+            streamBrowserFilePut(on: connection, request: request, initialBody: body, remaining: 0)
+        case ("POST", "/move"):
+            handleHTTPMove(on: connection, request: request, body: body)
+        case ("POST", "/mkdir"):
+            handleHTTPMkdir(on: connection, request: request, body: body)
         default:
             sendResponse(on: connection, status: 404, statusText: "Not Found", body: "Not Found",
                            request: request, isWebDAV: false)
@@ -1197,6 +1219,116 @@ final class ROMUploadServer: @unchecked Sendable {
         }
         try? FileManager.default.createDirectory(at: resolved, withIntermediateDirectories: true)
         return resolved
+    }
+
+    // MARK: - Browser PUT /files/<path>
+
+    private func streamBrowserFilePut(on connection: NWConnection, request: HTTPRequest,
+                                      initialBody: Data, remaining: Int) {
+        let rel = String(request.path.dropFirst("/files/".count))
+        let decoded = (rel.removingPercentEncoding ?? rel)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !decoded.isEmpty, let target = resolvedPath(decoded, within: romsDirectory) else {
+            sendJSON(on: connection, status: 403, json: ["ok": false, "error": "Path traversal denied"],
+                     request: request, isWebDAV: false, forceClose: true)
+            return
+        }
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: target.path, isDirectory: &isDir), isDir.boolValue {
+            sendJSON(on: connection, status: 405, json: ["ok": false, "error": "Target is a folder"],
+                     request: request, isWebDAV: false, forceClose: true)
+            return
+        }
+        guard let writer = openPutTarget(target) else {
+            sendJSON(on: connection, status: 500, json: ["ok": false, "error": "Cannot create file"],
+                     request: request, isWebDAV: false, forceClose: true)
+            return
+        }
+        postUploadStarted(path: target.path)
+        writer.write(initialBody)
+        let finish: PutFinish = { [weak self] failure in
+            guard let self else { return }
+            if let failure {
+                self.sendJSON(on: connection, status: failure.httpStatus,
+                              json: ["ok": false, "error": failure.logReason],
+                              request: request, isWebDAV: false, forceClose: true)
+            } else {
+                self.sendResponse(on: connection, status: 204, statusText: "No Content", body: "",
+                                  request: request, isWebDAV: false)
+            }
+        }
+        streamPutChunks(on: connection, writer: writer, target: target, remaining: remaining, finish: finish)
+    }
+
+    // MARK: - Browser move / mkdir / health
+
+    private func handleHTTPMove(on connection: NWConnection, request: HTTPRequest, body: Data) {
+        guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let src = obj["src"] as? String, let dst = obj["dst"] as? String,
+              !src.isEmpty, !dst.isEmpty else {
+            sendJSON(on: connection, status: 400, json: ["ok": false, "error": "Missing src/dst"],
+                     request: request, isWebDAV: false)
+            return
+        }
+        let cleanSrc = src.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let cleanDst = dst.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let source = resolvedPath(cleanSrc, within: romsDirectory),
+              let target = resolvedPath(cleanDst, within: romsDirectory) else {
+            sendJSON(on: connection, status: 403, json: ["ok": false, "error": "Path traversal denied"],
+                     request: request, isWebDAV: false)
+            return
+        }
+        if target.path == source.path || target.path.hasPrefix(source.path + "/") {
+            sendJSON(on: connection, status: 409, json: ["ok": false, "error": "Cannot move into itself"],
+                     request: request, isWebDAV: false)
+            return
+        }
+        let fm = FileManager.default
+        do {
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: target.path) {
+                sendJSON(on: connection, status: 409, json: ["ok": false, "error": "Destination already exists"],
+                         request: request, isWebDAV: false)
+                return
+            }
+            try fm.moveItem(at: source, to: target)
+            sendJSON(on: connection, status: 200, json: ["ok": true], request: request, isWebDAV: false)
+        } catch {
+            sendJSON(on: connection, status: 500, json: ["ok": false, "error": error.localizedDescription],
+                     request: request, isWebDAV: false)
+        }
+    }
+
+    private func handleHTTPMkdir(on connection: NWConnection, request: HTTPRequest, body: Data) {
+        guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let path = obj["path"] as? String, !path.isEmpty else {
+            sendJSON(on: connection, status: 400, json: ["ok": false, "error": "Missing path"],
+                     request: request, isWebDAV: false)
+            return
+        }
+        let clean = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let resolved = resolvedPath(clean, within: romsDirectory) else {
+            sendJSON(on: connection, status: 403, json: ["ok": false, "error": "Path traversal denied"],
+                     request: request, isWebDAV: false)
+            return
+        }
+        do {
+            try FileManager.default.createDirectory(at: resolved, withIntermediateDirectories: true)
+            sendJSON(on: connection, status: 200, json: ["ok": true], request: request, isWebDAV: false)
+        } catch {
+            sendJSON(on: connection, status: 500, json: ["ok": false, "error": error.localizedDescription],
+                     request: request, isWebDAV: false)
+        }
+    }
+
+    private func serveHealth(on connection: NWConnection, request: HTTPRequest) {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        sendJSON(on: connection, status: 200, json: [
+            "ok": true,
+            "app": pageTitle,
+            "version": version,
+            "features": ["move": true, "mkdir": true, "stats": false]
+        ], request: request, isWebDAV: false)
     }
 
     private typealias PutFinish = (_ failure: UploadFailure?) -> Void
