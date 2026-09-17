@@ -21,10 +21,8 @@ enum WebServerPageRenderer {
               let nav = loadResource(name: "nav-fragment", ext: "html") else {
             return errorPage(missing: "upload-page.html/css/js or nav-fragment.html")
         }
-        let uploadTarget = currentPath.isEmpty ? "/upload" : "/upload?path=\(currentPath.urlPathEscaped)"
         let locationLabel = currentPath.isEmpty ? "base folder" : currentPath.htmlEscaped
         let clientScript = render(js, variables: [
-            "UPLOAD_TARGET": uploadTarget,
             "CURRENT_PATH": currentPath.jsEscaped
         ])
         return render(html, variables: [
