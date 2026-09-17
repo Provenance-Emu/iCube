@@ -29,45 +29,6 @@ import Network
 import UIKit
 #endif
 
-// MARK: - SerialFileWriter
-
-/// Offloads `FileHandle` writes to a per-file serial queue so `NWConnection.receive`
-/// can schedule the next socket read without waiting on flash I/O.
-private final class SerialFileWriter: @unchecked Sendable {
-    private let handle: FileHandle
-    private let queue: DispatchQueue
-
-    init?(at url: URL) {
-        FileManager.default.createFile(atPath: url.path, contents: nil)
-        guard let handle = FileHandle(forWritingAtPath: url.path) else { return nil }
-        self.handle = handle
-        self.queue = DispatchQueue(
-            label: "org.dolphin.iCube.uploadserver.disk.\(UUID().uuidString)",
-            qos: .utility
-        )
-    }
-
-    init(handle: FileHandle) {
-        self.handle = handle
-        self.queue = DispatchQueue(
-            label: "org.dolphin.iCube.uploadserver.disk.\(UUID().uuidString)",
-            qos: .utility
-        )
-    }
-
-    func write(_ data: Data) {
-        guard !data.isEmpty else { return }
-        queue.async { self.handle.write(data) }
-    }
-
-    func finalize(completion: @escaping @Sendable () -> Void) {
-        queue.async {
-            self.handle.closeFile()
-            DispatchQueue.global(qos: .userInitiated).async(execute: completion)
-        }
-    }
-}
-
 // MARK: - ROMUploadServer
 
 /// A lightweight HTTP + WebDAV server built on `NWListener` for receiving ROM /
