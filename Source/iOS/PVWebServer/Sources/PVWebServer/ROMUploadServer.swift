@@ -88,6 +88,10 @@ final class ROMUploadServer: @unchecked Sendable {
     // MARK: - State
 
     private static let readChunkSize = 1_048_576
+    /// Hard cap on any request body we hold in RAM (everything that is not a streamed PUT or a
+    /// streamed multipart upload). Over this we answer 413 instead of letting a client grow the
+    /// process until the watchdog kills it.
+    private static let maxBufferedBodyBytes = 8 * 1024 * 1024
     /// Stream PROPFIND / file bodies above this size instead of one giant `send`.
     private static let streamBodyThreshold = 256 * 1024
 
@@ -584,6 +588,15 @@ final class ROMUploadServer: @unchecked Sendable {
             return
         }
 
+        // Everything past this point is buffered whole in RAM, so it needs a ceiling.
+        guard request.contentLength <= Self.maxBufferedBodyBytes else {
+            NSLog("%@", "[ROMUploadServer] \(request.method) \(request.path): Content-Length \(request.contentLength) exceeds the buffered-body cap; answering 413")
+            sendResponse(on: connection, status: 413, statusText: "Request Entity Too Large",
+                         body: "Request body too large", request: request,
+                         isWebDAV: isWebDAV, forceClose: true)
+            return
+        }
+
         bufferRemainingBody(on: connection, initial: initialBody,
                             remaining: remaining) { [weak self] fullBody in
             self?.routeRequest(on: connection, request: request, body: fullBody, isWebDAV: isWebDAV)
@@ -618,9 +631,14 @@ final class ROMUploadServer: @unchecked Sendable {
                                   request: HTTPRequest,
                                   isWebDAV: Bool,
                                   initial: Data) {
-        if isWebDAV && request.method == "PUT" {
+        // Both PUT shapes stream to disk. A browser `PUT /files/…` with a stream body used to
+        // fall through to `accumulateChunkedBody`, which holds the whole disc image in RAM.
+        let isPut = request.method == "PUT"
+            && (isWebDAV || request.path.hasPrefix("/files/"))
+        if isPut {
             let beginPut: () -> Void = { [weak self] in
-                self?.streamChunkedWebDAVPut(on: connection, request: request, initial: initial)
+                self?.streamChunkedPut(on: connection, request: request, isWebDAV: isWebDAV,
+                                       initial: initial)
             }
             if request.expectsContinue {
                 sendContinue(on: connection, isWebDAV: isWebDAV, request: request, then: beginPut)
@@ -630,8 +648,14 @@ final class ROMUploadServer: @unchecked Sendable {
             return
         }
 
-        accumulateChunkedBody(on: connection, initial: initial) { [weak self] body, trailing in
+        accumulateChunkedBody(on: connection, initial: initial) { [weak self] body, trailing, overflowed in
             guard let self else { return }
+            guard !overflowed else {
+                self.sendResponse(on: connection, status: 413, statusText: "Request Entity Too Large",
+                                  body: "Request body too large", request: request,
+                                  isWebDAV: isWebDAV, forceClose: true)
+                return
+            }
             if !trailing.isEmpty {
                 let connID = ObjectIdentifier(connection)
                 self.lock.lock()
@@ -726,9 +750,12 @@ final class ROMUploadServer: @unchecked Sendable {
         }
     }
 
+    /// Buffers a chunked body in RAM for the non-PUT routes (`/move`, `/mkdir`, PROPPATCH, a
+    /// custom handler). `completion`'s third argument is true when the body blew past
+    /// `maxBufferedBodyBytes`, in which case the body is discarded and the caller answers 413.
     private func accumulateChunkedBody(on connection: NWConnection,
                                        initial: Data,
-                                       completion: @escaping (Data, Data) -> Void) {
+                                       completion: @escaping (Data, Data, Bool) -> Void) {
         let reader = ChunkedBodyReader()
         var body = Data()
 
@@ -737,11 +764,16 @@ final class ROMUploadServer: @unchecked Sendable {
                 switch event {
                 case .payload(let chunk):
                     body.append(chunk)
+                    if body.count > Self.maxBufferedBodyBytes {
+                        NSLog("[ROMUploadServer] chunked body exceeded the buffered-body cap; answering 413")
+                        completion(Data(), Data(), true)
+                        return true
+                    }
                 case .complete(let trailing):
-                    completion(body, trailing)
+                    completion(body, trailing, false)
                     return true
                 case .invalid:
-                    completion(body, Data())
+                    completion(body, Data(), false)
                     return true
                 }
             }
@@ -754,13 +786,13 @@ final class ROMUploadServer: @unchecked Sendable {
             connection.receive(minimumIncompleteLength: 1, maximumLength: Self.readChunkSize) {
                 data, _, isComplete, error in
                 if error != nil {
-                    completion(body, Data())
+                    completion(body, Data(), false)
                     return
                 }
                 let events = reader.feed(data ?? Data())
                 if process(events) { return }
                 if isComplete {
-                    completion(body, Data())
+                    completion(body, Data(), false)
                     return
                 }
                 readMore()
@@ -769,20 +801,19 @@ final class ROMUploadServer: @unchecked Sendable {
         readMore()
     }
 
-    private func streamChunkedWebDAVPut(on connection: NWConnection,
-                                       request: HTTPRequest,
-                                       initial: Data) {
-        let rawPath = String(request.path.dropFirst())
-        let decoded = rawPath.removingPercentEncoding ?? rawPath
-        guard let target = resolvedPath(decoded, within: romsDirectory) else {
-            sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden",
-                               request: request, forceClose: true)
-            return
-        }
-
-        guard let writer = openWebDAVPutTarget(target, on: connection, request: request) else { return }
+    /// Streams a `Transfer-Encoding: chunked` PUT body straight to disk, for either client
+    /// mode. Finder omits `Content-Length` on WebDAV PUT; a browser `fetch` with a stream body
+    /// does the same on `PUT /files/…`.
+    private func streamChunkedPut(on connection: NWConnection,
+                                  request: HTTPRequest,
+                                  isWebDAV: Bool,
+                                  initial: Data) {
+        guard let target = resolvePutTarget(on: connection, request: request, isWebDAV: isWebDAV),
+              let writer = openPutTarget(target, on: connection, request: request, isWebDAV: isWebDAV)
+        else { return }
         postUploadStarted(path: target.path)
         let reader = ChunkedBodyReader()
+        let finish = putFinish(on: connection, request: request, isWebDAV: isWebDAV)
 
         let finishSuccess: (Data) -> Void = { [weak self] trailing in
             guard let self else { return }
@@ -795,8 +826,7 @@ final class ROMUploadServer: @unchecked Sendable {
                 }
                 self.lock.unlock()
             }
-            self.completeStreamingPut(writer: writer, target: target, truncated: false,
-                                      finish: self.webDAVPutFinish(on: connection, request: request))
+            self.completeStreamingPut(writer: writer, target: target, truncated: false, finish: finish)
         }
 
         func handleEvents(_ events: [ChunkedBodyReader.Event]) -> Bool {
@@ -812,8 +842,8 @@ final class ROMUploadServer: @unchecked Sendable {
                         guard let self else { return }
                         NSLog("%@", "[ROMUploadServer] upload FAILED for \(target.lastPathComponent): invalid chunked body after \(writer.bytesWritten) bytes — deleting partial file")
                         try? FileManager.default.removeItem(at: target)
-                        self.sendWebDAVResponse(on: connection, status: 400, statusText: "Bad Request",
-                                                body: "Invalid chunked body", request: request, forceClose: true)
+                        self.sendPutBadRequest(on: connection, request: request, isWebDAV: isWebDAV,
+                                               reason: "Invalid chunked body")
                     }
                     return true
                 }
@@ -828,15 +858,13 @@ final class ROMUploadServer: @unchecked Sendable {
                 [weak self] data, _, isComplete, error in
                 guard let self else { return }
                 if error != nil {
-                    self.completeStreamingPut(writer: writer, target: target, truncated: true,
-                                              finish: self.webDAVPutFinish(on: connection, request: request))
+                    self.completeStreamingPut(writer: writer, target: target, truncated: true, finish: finish)
                     return
                 }
                 let events = reader.feed(data ?? Data())
                 if handleEvents(events) { return }
                 if isComplete {
-                    self.completeStreamingPut(writer: writer, target: target, truncated: true,
-                                              finish: self.webDAVPutFinish(on: connection, request: request))
+                    self.completeStreamingPut(writer: writer, target: target, truncated: true, finish: finish)
                     return
                 }
                 readMore()
@@ -1309,41 +1337,8 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func streamBrowserFilePut(on connection: NWConnection, request: HTTPRequest,
                                       initialBody: Data, remaining: Int) {
-        let rel = String(request.path.dropFirst("/files/".count))
-        let decoded = (rel.removingPercentEncoding ?? rel)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !decoded.isEmpty, let target = resolvedPath(decoded, within: romsDirectory) else {
-            sendJSON(on: connection, status: 403, json: ["ok": false, "error": "Path traversal denied"],
-                     request: request, isWebDAV: false, forceClose: true)
-            return
-        }
-        let writer: SerialFileWriter
-        switch openPutTarget(target) {
-        case .writer(let opened):
-            writer = opened
-        case .isDirectory:
-            sendJSON(on: connection, status: 405, json: ["ok": false, "error": "Target is a folder"],
-                     request: request, isWebDAV: false, forceClose: true)
-            return
-        case .failed:
-            sendJSON(on: connection, status: 500, json: ["ok": false, "error": "Cannot create file"],
-                     request: request, isWebDAV: false, forceClose: true)
-            return
-        }
-        postUploadStarted(path: target.path)
-        writer.write(initialBody)
-        let finish: PutFinish = { [weak self] failure in
-            guard let self else { return }
-            if let failure {
-                self.sendJSON(on: connection, status: failure.httpStatus,
-                              json: ["ok": false, "error": failure.logReason],
-                              request: request, isWebDAV: false, forceClose: true)
-            } else {
-                self.sendResponse(on: connection, status: 204, statusText: "No Content", body: "",
-                                  request: request, isWebDAV: false)
-            }
-        }
-        streamPutChunks(on: connection, writer: writer, target: target, remaining: remaining, finish: finish)
+        streamPut(on: connection, request: request, isWebDAV: false,
+                  initialBody: initialBody, remaining: remaining)
     }
 
     // MARK: - Browser move / mkdir / health
@@ -1436,6 +1431,20 @@ final class ROMUploadServer: @unchecked Sendable {
         }
     }
 
+    private func browserPutFinish(on connection: NWConnection, request: HTTPRequest) -> PutFinish {
+        return { [weak self] failure in
+            guard let self else { return }
+            if let failure {
+                self.sendJSON(on: connection, status: failure.httpStatus,
+                              json: ["ok": false, "error": failure.logReason],
+                              request: request, isWebDAV: false, forceClose: true)
+            } else {
+                self.sendResponse(on: connection, status: 204, statusText: "No Content", body: "",
+                                  request: request, isWebDAV: false)
+            }
+        }
+    }
+
     private func webDAVPutFinish(on connection: NWConnection, request: HTTPRequest) -> PutFinish {
         return { [weak self] failure in
             guard let self else { return }
@@ -1453,18 +1462,20 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func streamWebDAVPut(on connection: NWConnection, request: HTTPRequest,
                                  initialBody: Data, remaining: Int) {
-        let rawPath = String(request.path.dropFirst())
-        let decoded = rawPath.removingPercentEncoding ?? rawPath
-        guard let target = resolvedPath(decoded, within: romsDirectory) else {
-            sendResponse(on: connection, status: 403, statusText: "Forbidden", body: "Path traversal denied",
-                         request: request, isWebDAV: true, forceClose: true)
-            return
-        }
-        guard let writer = openWebDAVPutTarget(target, on: connection, request: request) else { return }
+        streamPut(on: connection, request: request, isWebDAV: true,
+                  initialBody: initialBody, remaining: remaining)
+    }
+
+    /// Streams a `Content-Length` PUT body straight to disk, for either client mode.
+    private func streamPut(on connection: NWConnection, request: HTTPRequest, isWebDAV: Bool,
+                           initialBody: Data, remaining: Int) {
+        guard let target = resolvePutTarget(on: connection, request: request, isWebDAV: isWebDAV),
+              let writer = openPutTarget(target, on: connection, request: request, isWebDAV: isWebDAV)
+        else { return }
         postUploadStarted(path: target.path)
         writer.write(initialBody)
         streamPutChunks(on: connection, writer: writer, target: target, remaining: remaining,
-                        finish: webDAVPutFinish(on: connection, request: request))
+                        finish: putFinish(on: connection, request: request, isWebDAV: isWebDAV))
     }
 
     private enum PutTargetOpen {
@@ -1501,20 +1512,72 @@ final class ROMUploadServer: @unchecked Sendable {
         return .writer(writer)
     }
 
-    /// Open + canned error answer shared by the three WebDAV PUT paths.
-    private func openWebDAVPutTarget(_ target: URL, on connection: NWConnection,
-                                     request: HTTPRequest) -> SerialFileWriter? {
+    /// Open + canned error answer, in the shape this client expects, shared by all four PUT
+    /// paths (WebDAV streamed / chunked / buffered, and the browser's `PUT /files/…`).
+    private func openPutTarget(_ target: URL, on connection: NWConnection,
+                               request: HTTPRequest, isWebDAV: Bool) -> SerialFileWriter? {
         switch openPutTarget(target) {
         case .writer(let writer):
             return writer
         case .isDirectory:
-            sendWebDAVResponse(on: connection, status: 405, statusText: "Method Not Allowed",
-                               body: "Target is a collection", request: request, forceClose: true)
+            if isWebDAV {
+                sendWebDAVResponse(on: connection, status: 405, statusText: "Method Not Allowed",
+                                   body: "Target is a collection", request: request, forceClose: true)
+            } else {
+                sendJSON(on: connection, status: 405, json: ["ok": false, "error": "Target is a folder"],
+                         request: request, isWebDAV: false, forceClose: true)
+            }
             return nil
         case .failed:
-            sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
-                               body: "Cannot create file", request: request, forceClose: true)
+            if isWebDAV {
+                sendWebDAVResponse(on: connection, status: 500, statusText: "Internal Server Error",
+                                   body: "Cannot create file", request: request, forceClose: true)
+            } else {
+                sendJSON(on: connection, status: 500, json: ["ok": false, "error": "Cannot create file"],
+                         request: request, isWebDAV: false, forceClose: true)
+            }
             return nil
+        }
+    }
+
+    /// Resolves a PUT request line to a sandbox path for the connection's mode — WebDAV paths
+    /// are rooted at `/`, browser uploads at `/files/` — and answers the mode-shaped 403 itself.
+    /// Returns nil once the request has been answered.
+    private func resolvePutTarget(on connection: NWConnection, request: HTTPRequest,
+                                  isWebDAV: Bool) -> URL? {
+        let raw = isWebDAV
+            ? String(request.path.dropFirst())
+            : String(request.path.dropFirst("/files/".count))
+        let decoded = (raw.removingPercentEncoding ?? raw)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !decoded.isEmpty, let target = resolvedPath(decoded, within: romsDirectory) else {
+            if isWebDAV {
+                sendResponse(on: connection, status: 403, statusText: "Forbidden",
+                             body: "Path traversal denied",
+                             request: request, isWebDAV: true, forceClose: true)
+            } else {
+                sendJSON(on: connection, status: 403, json: ["ok": false, "error": "Path traversal denied"],
+                         request: request, isWebDAV: false, forceClose: true)
+            }
+            return nil
+        }
+        return target
+    }
+
+    private func putFinish(on connection: NWConnection, request: HTTPRequest,
+                           isWebDAV: Bool) -> PutFinish {
+        isWebDAV ? webDAVPutFinish(on: connection, request: request)
+                 : browserPutFinish(on: connection, request: request)
+    }
+
+    private func sendPutBadRequest(on connection: NWConnection, request: HTTPRequest,
+                                   isWebDAV: Bool, reason: String) {
+        if isWebDAV {
+            sendWebDAVResponse(on: connection, status: 400, statusText: "Bad Request",
+                               body: reason, request: request, forceClose: true)
+        } else {
+            sendJSON(on: connection, status: 400, json: ["ok": false, "error": reason],
+                     request: request, isWebDAV: false, forceClose: true)
         }
     }
 
@@ -2054,7 +2117,7 @@ final class ROMUploadServer: @unchecked Sendable {
                                request: request, forceClose: true)
             return
         }
-        guard let writer = openWebDAVPutTarget(target, on: connection, request: request) else { return }
+        guard let writer = openPutTarget(target, on: connection, request: request, isWebDAV: true) else { return }
         postUploadStarted(path: target.path)
         writer.write(body)
         completeStreamingPut(writer: writer, target: target, truncated: false,
