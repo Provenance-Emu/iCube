@@ -54,7 +54,10 @@ final class ROMUploadServer: @unchecked Sendable {
     }
 
     private struct ConnectionContext {
-        let isWebDAV: Bool
+        var clientMode: WebServerClientMode = .unknown
+        var firstRequestSeen = false
+        var didArmInitialReceive = false
+        var watchdog: DispatchSourceTimer?
         /// Serializes receive/send callbacks for this socket (Finder pipelines on keep-alive).
         let ioQueue: DispatchQueue
         var activeRequest: HTTPRequest?
@@ -66,8 +69,17 @@ final class ROMUploadServer: @unchecked Sendable {
 
     // MARK: - Configuration
 
-    let httpPort: UInt16
-    let webDAVPort: UInt16
+    /// Ports tried in order until one binds. Port 80 keeps the URL short on device.
+    #if targetEnvironment(simulator)
+    static let preferredPorts: [UInt16] = [8080, 8000, 8888, 9000]
+    #else
+    static let preferredPorts: [UInt16] = [80, 8080, 8000, 8888, 9000]
+    #endif
+    /// The port the listener bound, 0 while stopped.
+    private(set) var port: UInt16 = 0
+    /// A socket that connects but never delivers a request within this window is cancelled
+    /// so `mount_webdav` retries on a fresh connection instead of hanging.
+    private static let firstRequestGraceSeconds: TimeInterval = 12
     let romsDirectory: URL
 
     /// Title shown in the upload page header (set by the facade).
@@ -91,8 +103,8 @@ final class ROMUploadServer: @unchecked Sendable {
         return fmt
     }()
 
-    private var httpListener: NWListener?
-    private var webdavListener: NWListener?
+    private var listener: NWListener?
+    private var bonjourWebDAV: NetService?
     private var activeConnections = [ObjectIdentifier: NWConnection]()
     private var connectionContexts = [ObjectIdentifier: ConnectionContext]()
     /// Serial queue for listener accept/state only — each connection gets its own `ioQueue`.
@@ -110,34 +122,25 @@ final class ROMUploadServer: @unchecked Sendable {
     var bonjourServerURL: URL? {
         lock.lock(); defer { lock.unlock() }
         if let u = _bonjourServerURL { return u }
-        guard isWebDAVRunningUnlocked, let ip = getLocalIPAddress() else { return nil }
-        return URL(string: "http://\(ip):\(webDAVPort)/")
+        guard isRunningUnlocked, let ip = getLocalIPAddress() else { return nil }
+        return URL(string: "http://\(ip)\(Self.portSuffix(for: port))/")
     }
 
-    private var isWebDAVRunningUnlocked: Bool { webdavListener?.state == .ready }
+    private var isRunningUnlocked: Bool { listener?.state == .ready }
 
     // MARK: - Public API
 
-    var isHTTPRunning: Bool {
+    var isRunning: Bool {
         lock.lock(); defer { lock.unlock() }
-        return httpListener?.state == .ready
-    }
-
-    var isWebDAVRunning: Bool {
-        lock.lock(); defer { lock.unlock() }
-        return webdavListener?.state == .ready
+        return isRunningUnlocked
     }
 
     var serverURL: URL? {
-        guard isHTTPRunning, let ip = getLocalIPAddress() else { return nil }
-        let portSuffix = httpPort == 80 ? "" : ":\(httpPort)"
-        return URL(string: "http://\(ip)\(portSuffix)/")
+        guard isRunning, let ip = getLocalIPAddress() else { return nil }
+        return URL(string: "http://\(ip)\(Self.portSuffix(for: port))/")
     }
 
-    var webDAVURL: URL? {
-        guard isWebDAVRunning, let ip = getLocalIPAddress() else { return nil }
-        return URL(string: "http://\(ip):\(webDAVPort)/")
-    }
+    static func portSuffix(for port: UInt16) -> String { port == 80 ? "" : ":\(port)" }
 
     var ipAddress: String? { getLocalIPAddress() }
 
@@ -145,14 +148,6 @@ final class ROMUploadServer: @unchecked Sendable {
 
     init(romsDirectory: URL) {
         self.romsDirectory = romsDirectory
-
-        #if targetEnvironment(simulator)
-        self.httpPort = 8080
-        self.webDAVPort = 8081
-        #else
-        self.httpPort = 80
-        self.webDAVPort = 81
-        #endif
 
         try? FileManager.default.createDirectory(at: romsDirectory,
                                                   withIntermediateDirectories: true)
@@ -169,120 +164,95 @@ final class ROMUploadServer: @unchecked Sendable {
 
     // MARK: - Start / Stop
 
-    /// Start both HTTP and WebDAV listeners. Waits until both reach `.ready`
-    /// (or throws if either fails to bind). Also publishes a `_webdav._tcp`
-    /// Bonjour record so other instances / NAS browsers can discover it.
+    /// Bind one listener on the first free port in `preferredPorts` and wait for `.ready`.
+    /// Advertises `_http._tcp` through the listener and `_webdav._tcp` through NetService on
+    /// the same name and port; mDNSResponder coalesces them.
     func start() async throws {
-        guard !isHTTPRunning else { return }
-
-        let httpListener = try NWListener(using: Self.makeTCPParameters(), on: NWEndpoint.Port(rawValue: httpPort)!)
-        httpListener.newConnectionHandler = { [weak self] conn in
-            self?.handleNewConnection(conn, isWebDAV: false)
-        }
-
-        let davListener = try NWListener(using: Self.makeTCPParameters(), on: NWEndpoint.Port(rawValue: webDAVPort)!)
-        davListener.newConnectionHandler = { [weak self] conn in
-            self?.handleNewConnection(conn, isWebDAV: true)
-        }
-        // Advertise WebDAV over Bonjour (parity with the old GCDWebServer
-        // registration that SourcesView's self-filter relies on).
-        davListener.service = NWListener.Service(name: pageTitle, type: "_webdav._tcp")
-        davListener.serviceRegistrationUpdateHandler = { [weak self] change in
-            guard let self else { return }
-            // Best-effort host refinement: an advertised service usually reports
-            // an `.service(...)` endpoint (no host:port), in which case we keep
-            // the IP-derived fallback in `bonjourServerURL`. If it happens to
-            // report a concrete `.hostPort`, prefer that.
-            if case let .add(endpoint) = change,
-               case let .hostPort(host, port) = endpoint {
-                let hostStr: String
-                switch host {
-                case .name(let n, _): hostStr = n
-                case .ipv4(let a): hostStr = "\(a)"
-                case .ipv6(let a): hostStr = "\(a)"
-                @unknown default: return
+        guard !isRunning else { return }
+        var lastError: Error?
+        for candidate in Self.preferredPorts {
+            do {
+                try await startListener(on: candidate)
+                port = candidate
+                advertiseWebDAV(on: candidate)
+                let root = romsDirectory
+                Self.diskIOQueue.async {
+                    _ = try? FileManager.default.contentsOfDirectory(
+                        at: root, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+                        options: [.skipsHiddenFiles])
                 }
-                self.lock.lock()
-                self._bonjourServerURL = URL(string: "http://\(hostStr):\(port.rawValue)/")
-                self.lock.unlock()
+                NSLog("[ROMUploadServer] started on :\(candidate)")
+                return
+            } catch {
+                lastError = error
+                NSLog("[ROMUploadServer] port \(candidate) unavailable (\(error)), trying next")
+                stop()
             }
         }
+        throw lastError ?? ROMUploadServerError.initializationFailed
+    }
 
-        // Start HTTP listener and wait for .ready
+    private func startListener(on candidate: UInt16) async throws {
+        let listener = try NWListener(using: Self.makeTCPParameters(), on: NWEndpoint.Port(rawValue: candidate)!)
+        listener.newConnectionHandler = { [weak self] conn in self?.handleNewConnection(conn) }
+        listener.service = NWListener.Service(name: pageTitle, type: "_http._tcp")
+        listener.serviceRegistrationUpdateHandler = { [weak self] change in
+            guard let self, case let .add(endpoint) = change, case let .hostPort(host, port) = endpoint else { return }
+            let hostStr: String
+            switch host {
+            case .name(let n, _): hostStr = n
+            case .ipv4(let a): hostStr = "\(a)"
+            case .ipv6(let a): hostStr = "\(a)"
+            @unknown default: return
+            }
+            self.lock.lock()
+            self._bonjourServerURL = URL(string: "http://\(hostStr)\(Self.portSuffix(for: port.rawValue))/")
+            self.lock.unlock()
+        }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             nonisolated(unsafe) var resumed = false
-            httpListener.stateUpdateHandler = { [weak self] state in
+            listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
                     if !resumed { resumed = true; continuation.resume() }
                 case .failed(let error):
-                    NSLog("[ROMUploadServer] HTTP listener failed: \(error)")
+                    NSLog("[ROMUploadServer] listener failed on :\(candidate): \(error)")
                     self?.stop()
                     if !resumed { resumed = true; continuation.resume(throwing: error) }
                 case .cancelled:
-                    if !resumed { resumed = true
-                        continuation.resume(throwing: ROMUploadServerError.initializationFailed)
-                    }
+                    if !resumed { resumed = true; continuation.resume(throwing: ROMUploadServerError.initializationFailed) }
                 default:
                     break
                 }
             }
-            httpListener.start(queue: self.listenerQueue)
+            listener.start(queue: self.listenerQueue)
         }
-        self.httpListener = httpListener
+        self.listener = listener
+    }
 
-        // Start WebDAV listener and wait for .ready
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            nonisolated(unsafe) var resumed = false
-            davListener.stateUpdateHandler = { [weak self] state in
-                switch state {
-                case .ready:
-                    if !resumed { resumed = true; continuation.resume() }
-                case .failed(let error):
-                    NSLog("[ROMUploadServer] WebDAV listener failed: \(error)")
-                    self?.stop()
-                    if !resumed { resumed = true; continuation.resume(throwing: error) }
-                case .cancelled:
-                    if !resumed { resumed = true
-                        continuation.resume(throwing: ROMUploadServerError.initializationFailed)
-                    }
-                default:
-                    break
-                }
-            }
-            davListener.start(queue: self.listenerQueue)
-        }
-        self.webdavListener = davListener
-
-        let root = romsDirectory
-        Self.diskIOQueue.async {
-            _ = try? FileManager.default.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
-                options: [.skipsHiddenFiles]
-            )
-        }
-
-        NSLog("[ROMUploadServer] started — HTTP :\(httpPort), WebDAV :\(webDAVPort)")
+    private func advertiseWebDAV(on candidate: UInt16) {
+        let service = NetService(domain: "", type: "_webdav._tcp.", name: pageTitle, port: Int32(candidate))
+        service.publish()
+        bonjourWebDAV = service
     }
 
     func stop() {
         lock.lock()
         let conns = activeConnections
+        let contexts = connectionContexts
         activeConnections.removeAll()
         connectionContexts.removeAll()
-        lock.unlock()
-
-        for conn in conns.values { conn.cancel() }
-        httpListener?.cancel()
-        webdavListener?.cancel()
-        httpListener = nil
-        webdavListener = nil
-        cachedIPAddress = nil
-        lock.lock()
         _bonjourServerURL = nil
         lock.unlock()
 
+        for ctx in contexts.values { ctx.watchdog?.cancel() }
+        for conn in conns.values { conn.cancel() }
+        listener?.cancel()
+        listener = nil
+        bonjourWebDAV?.stop()
+        bonjourWebDAV = nil
+        port = 0
+        cachedIPAddress = nil
         NSLog("[ROMUploadServer] stopped")
     }
 
@@ -305,37 +275,92 @@ final class ROMUploadServer: @unchecked Sendable {
 
     // MARK: - Connection Handling
 
-    private func handleNewConnection(_ connection: NWConnection, isWebDAV: Bool) {
+    private func handleNewConnection(_ connection: NWConnection) {
         let connID = ObjectIdentifier(connection)
         let ioQueue = DispatchQueue(label: "org.dolphin.iCube.uploadserver.conn.\(connID)")
+
+        let watchdog = DispatchSource.makeTimerSource(queue: ioQueue)
+        watchdog.schedule(deadline: .now() + Self.firstRequestGraceSeconds)
+        watchdog.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let seen = self.connectionContexts[connID]?.firstRequestSeen ?? true
+            self.lock.unlock()
+            guard !seen else { return }
+            NSLog("[ROMUploadServer] connection stalled at establishment; cancelling so the client retries")
+            connection.cancel()
+        }
+
         lock.lock()
         activeConnections[connID] = connection
-        connectionContexts[connID] = ConnectionContext(isWebDAV: isWebDAV, ioQueue: ioQueue, activeRequest: nil)
+        var ctx = ConnectionContext(ioQueue: ioQueue, activeRequest: nil)
+        ctx.watchdog = watchdog
+        connectionContexts[connID] = ctx
         lock.unlock()
+        watchdog.resume()
 
         connection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
             switch state {
+            case .ready:
+                self.armInitialReceiveIfNeeded(on: connection)
+            case .waiting(let error):
+                NSLog("[ROMUploadServer] inbound connection waiting: \(error)")
             case .cancelled, .failed:
-                self?.lock.lock()
-                self?.activeConnections.removeValue(forKey: connID)
-                self?.connectionContexts.removeValue(forKey: connID)
-                self?.lock.unlock()
+                self.lock.lock()
+                self.activeConnections.removeValue(forKey: connID)
+                let dead = self.connectionContexts.removeValue(forKey: connID)
+                self.lock.unlock()
+                dead?.watchdog?.cancel()
             default:
                 break
             }
         }
         connection.start(queue: ioQueue)
-        ioQueue.async { [weak self] in
-            self?.scheduleReceive(on: connection, isWebDAV: isWebDAV, accumulated: Data())
+    }
+
+    private func armInitialReceiveIfNeeded(on connection: NWConnection) {
+        let connID = ObjectIdentifier(connection)
+        lock.lock()
+        guard var ctx = connectionContexts[connID], !ctx.didArmInitialReceive else { lock.unlock(); return }
+        ctx.didArmInitialReceive = true
+        let ioQueue = ctx.ioQueue
+        connectionContexts[connID] = ctx
+        lock.unlock()
+        ioQueue.async { [weak self] in self?.scheduleReceive(on: connection, accumulated: Data()) }
+    }
+
+    private func noteFirstRequest(on connection: NWConnection) {
+        let connID = ObjectIdentifier(connection)
+        lock.lock()
+        guard var ctx = connectionContexts[connID], !ctx.firstRequestSeen else { lock.unlock(); return }
+        ctx.firstRequestSeen = true
+        let watchdog = ctx.watchdog
+        ctx.watchdog = nil
+        connectionContexts[connID] = ctx
+        lock.unlock()
+        watchdog?.cancel()
+    }
+
+    /// Classify and remember this connection's mode.
+    private func isWebDAVRequest(_ request: HTTPRequest, connection: NWConnection) -> Bool {
+        let connID = ObjectIdentifier(connection)
+        lock.lock()
+        let stored = connectionContexts[connID]?.clientMode ?? .unknown
+        let mode = WebServerClientMode.resolve(request, stored: stored)
+        if var ctx = connectionContexts[connID] {
+            ctx.clientMode = mode
+            connectionContexts[connID] = ctx
         }
+        lock.unlock()
+        return mode == .webDAV
     }
 
     /// Arm a single `receive` or process bytes already buffered (pipelined keep-alive).
     private func scheduleReceive(on connection: NWConnection,
-                                   isWebDAV: Bool,
                                    accumulated: Data) {
         if !accumulated.isEmpty {
-            processIncomingBuffer(on: connection, isWebDAV: isWebDAV, buffer: accumulated)
+            processIncomingBuffer(on: connection, buffer: accumulated)
             return
         }
 
@@ -349,7 +374,7 @@ final class ROMUploadServer: @unchecked Sendable {
         if ctx.isReceiving {
             lock.unlock()
             ctx.ioQueue.asyncAfter(deadline: .now() + 0.01) { [weak self] in
-                self?.scheduleReceive(on: connection, isWebDAV: isWebDAV, accumulated: accumulated)
+                self?.scheduleReceive(on: connection, accumulated: accumulated)
             }
             return
         }
@@ -383,13 +408,12 @@ final class ROMUploadServer: @unchecked Sendable {
 
             var buffer = Data()
             if let data { buffer.append(data) }
-            self.processIncomingBuffer(on: connection, isWebDAV: isWebDAV, buffer: buffer)
+            self.processIncomingBuffer(on: connection, buffer: buffer)
         }
     }
 
     /// Parse buffered bytes into HTTP requests; may leave pipelined tail for keep-alive.
     private func processIncomingBuffer(on connection: NWConnection,
-                                       isWebDAV: Bool,
                                        buffer: Data) {
         let headerEnd = buffer.findRange(of: Data([0x0D, 0x0A, 0x0D, 0x0A]))
         if let headerEnd {
@@ -399,9 +423,12 @@ final class ROMUploadServer: @unchecked Sendable {
             guard let headersStr = String(data: headersData, encoding: .utf8),
                   let request = HTTPRequest.parse(headersStr) else {
                 sendResponse(on: connection, status: 400, statusText: "Bad Request", body: "Bad Request",
-                             isWebDAV: isWebDAV, forceClose: true)
+                             isWebDAV: false, forceClose: true)
                 return
             }
+
+            noteFirstRequest(on: connection)
+            let isWebDAV = isWebDAVRequest(request, connection: connection)
 
             let connID = ObjectIdentifier(connection)
             let contentLength = request.contentLength
@@ -444,7 +471,7 @@ final class ROMUploadServer: @unchecked Sendable {
             }
         } else if buffer.count > 64 * 1024 {
             sendResponse(on: connection, status: 413, statusText: "Request Entity Too Large",
-                         body: "Headers too large", isWebDAV: isWebDAV, forceClose: true)
+                         body: "Headers too large", isWebDAV: false, forceClose: true)
         } else if buffer.isEmpty {
             connection.cancel()
         } else {
@@ -477,7 +504,7 @@ final class ROMUploadServer: @unchecked Sendable {
                     }
                     var grown = buffer
                     if let data { grown.append(data) }
-                    self.processIncomingBuffer(on: connection, isWebDAV: isWebDAV, buffer: grown)
+                    self.processIncomingBuffer(on: connection, buffer: grown)
                 }
             }
         }
@@ -870,7 +897,7 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func serveHTML(on connection: NWConnection, request: HTTPRequest, subpath: String = "") {
         let ip = getLocalIPAddress() ?? "unknown"
-        let portSuffix = httpPort == 80 ? "" : ":\(httpPort)"
+        let portSuffix = Self.portSuffix(for: port)
         let ctx = listDirectoryContext(subpath: subpath)
         let listDir = ctx.listDir
         let currentSub = ctx.currentSub
@@ -1070,9 +1097,14 @@ final class ROMUploadServer: @unchecked Sendable {
     }
 
     private func streamFileData(handle: FileHandle, on connection: NWConnection,
-                                remaining: Int, ioQueue: DispatchQueue? = nil) {
+                                remaining: Int, ioQueue: DispatchQueue? = nil,
+                                forceClose: Bool = true) {
         let chunkSize = 256 * 1024
-        guard remaining > 0 else { handle.closeFile(); connection.cancel(); return }
+        guard remaining > 0 else {
+            handle.closeFile()
+            finishResponse(on: connection, request: nil, isWebDAV: true, forceClose: forceClose)
+            return
+        }
 
         let toRead = min(chunkSize, remaining)
         Self.diskIOQueue.async {
@@ -1091,7 +1123,8 @@ final class ROMUploadServer: @unchecked Sendable {
                 connection.send(content: data, completion: .contentProcessed { [weak self] error in
                     if error != nil { handle.closeFile(); connection.cancel(); return }
                     self?.streamFileData(handle: handle, on: connection,
-                                         remaining: remaining - data.count, ioQueue: ioQueue)
+                                         remaining: remaining - data.count, ioQueue: ioQueue,
+                                         forceClose: forceClose)
                 })
             }
             if let ioQueue { ioQueue.async(execute: sendChunk) } else { sendChunk() }
@@ -1647,15 +1680,16 @@ final class ROMUploadServer: @unchecked Sendable {
 
             let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path)
             let fileSize = (attrs?[.size] as? Int64) ?? 0
-            let keepAlive = request.wantsKeepAlive
-            let connHeader = keepAlive ? "keep-alive" : "close"
+            self.lock.lock()
+            let keepAlive = self.connectionContexts[ObjectIdentifier(connection)]?.activeRequest?.wantsKeepAlive == true
+            self.lock.unlock()
 
             if !includeBody {
                 let respond = {
                     self.sendRawHeaders(on: connection, status: 200, statusText: "OK", headers: [
                         "Content-Type": self.mimeType(for: resolved),
                         "Content-Length": "\(fileSize)",
-                        "Connection": connHeader
+                        "Connection": keepAlive ? "keep-alive" : "close"
                     ], body: Data(), request: request, isWebDAV: true)
                 }
                 if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
@@ -1668,56 +1702,22 @@ final class ROMUploadServer: @unchecked Sendable {
                 return
             }
 
-            let header = """
+            var header = """
             HTTP/1.1 200 OK\r\n\
             Content-Type: \(self.mimeType(for: resolved))\r\n\
-            Content-Length: \(fileSize)\r\n\
-            Connection: \(connHeader)\r\n\
-            \r\n
+            Content-Length: \(fileSize)\r\n
             """
+            header += keepAlive ? "Connection: keep-alive\r\n" : "Connection: close\r\n"
+            header += "\r\n"
 
             let beginStream = {
                 connection.send(content: Data(header.utf8), completion: .contentProcessed { error in
                     if error != nil { handle.closeFile(); connection.cancel(); return }
-                    self.streamWebDAVFileData(handle: handle, on: connection, request: request,
-                                              remaining: Int(fileSize), ioQueue: ioQueue)
+                    self.streamFileData(handle: handle, on: connection, remaining: Int(fileSize),
+                                        ioQueue: ioQueue, forceClose: !keepAlive)
                 })
             }
             if let ioQueue { ioQueue.async(execute: beginStream) } else { beginStream() }
-        }
-    }
-
-    private func streamWebDAVFileData(handle: FileHandle, on connection: NWConnection,
-                                      request: HTTPRequest, remaining: Int,
-                                      ioQueue: DispatchQueue?) {
-        let chunkSize = 256 * 1024
-        guard remaining > 0 else {
-            handle.closeFile()
-            finishResponse(on: connection, request: request, isWebDAV: true, forceClose: !request.wantsKeepAlive)
-            return
-        }
-
-        let toRead = min(chunkSize, remaining)
-        Self.diskIOQueue.async { [weak self] in
-            let data = handle.readData(ofLength: toRead)
-            guard !data.isEmpty else {
-                handle.closeFile()
-                if let ioQueue {
-                    ioQueue.async { connection.cancel() }
-                } else {
-                    connection.cancel()
-                }
-                return
-            }
-
-            let sendChunk = {
-                connection.send(content: data, completion: .contentProcessed { error in
-                    if error != nil { handle.closeFile(); connection.cancel(); return }
-                    self?.streamWebDAVFileData(handle: handle, on: connection, request: request,
-                                               remaining: remaining - data.count, ioQueue: ioQueue)
-                })
-            }
-            if let ioQueue { ioQueue.async(execute: sendChunk) } else { sendChunk() }
         }
     }
 
@@ -2044,7 +2044,7 @@ final class ROMUploadServer: @unchecked Sendable {
 
         if !pipelined.isEmpty {
             ctx.ioQueue.async { [weak self] in
-                self?.processIncomingBuffer(on: connection, isWebDAV: ctx.isWebDAV, buffer: pipelined)
+                self?.processIncomingBuffer(on: connection, buffer: pipelined)
             }
             return
         }
@@ -2054,7 +2054,7 @@ final class ROMUploadServer: @unchecked Sendable {
             connection.cancel()
             return
         }
-        scheduleReceive(on: connection, isWebDAV: isWebDAV, accumulated: Data())
+        scheduleReceive(on: connection, accumulated: Data())
     }
 
     private func sendRawThenStreamBody(on connection: NWConnection, status: Int, statusText: String,

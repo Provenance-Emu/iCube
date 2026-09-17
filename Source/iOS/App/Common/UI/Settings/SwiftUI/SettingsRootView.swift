@@ -80,7 +80,7 @@ struct SettingsRootView<Background: View>: View {
   @ViewBuilder
   private var webImportFooter: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi: open the Web UI address in a browser, or connect to the WebDAV address from a file manager."))
+      Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi. Open the address in a browser, or in Finder choose Go › Connect to Server and enter the same address as Guest."))
 #if os(iOS)
       Button(L("Learn more")) {
         if let url = URL(string: "https://icube-emu.com/help/web-import") { openURL(url) }

@@ -110,12 +110,12 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
 
     @discardableResult
     @objc public func startServers() -> Bool {
-        guard !server.isHTTPRunning else { return true }
+        guard !server.isRunning else { return true }
         Task { [weak self] in
             guard let self else { return }
             do {
                 try await self.server.start()
-                NSLog("[PVWebServer] Started web server at \(self.server.serverURL?.absoluteString ?? "?") (WebDAV: \(self.server.webDAVURL?.absoluteString ?? "?"))")
+                NSLog("[PVWebServer] Started web server at \(self.server.serverURL?.absoluteString ?? "?") (HTTP + WebDAV on one port)")
             } catch {
                 NSLog("[PVWebServer] Failed to start web server: \(error.localizedDescription)")
             }
@@ -137,8 +137,8 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
 
     @objc public func stopWebDavServer() { stopServers() }
 
-    @objc public var isWWWUploadServerRunning: Bool { server.isHTTPRunning }
-    @objc public var isWebDavServerRunning: Bool { server.isWebDAVRunning }
+    @objc public var isWWWUploadServerRunning: Bool { server.isRunning }
+    @objc public var isWebDavServerRunning: Bool { server.isRunning }
 
     /// Local IPv4 address of the device (en0/en1), or nil.
     @objc(IPAddress)
@@ -148,9 +148,10 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
     @objc(URLString)
     public var urlString: String? { server.serverURL?.absoluteString }
 
-    /// WebDAV URL string (e.g. `http://192.168.1.5:81/`), or nil if down.
+    /// WebDAV URL string (e.g. `http://192.168.1.5/`), or nil if down. HTTP and WebDAV
+    /// now share one listener/port, so this is the same URL as `urlString`.
     @objc(WebDavURLString)
-    public var webDavURLString: String? { server.webDAVURL?.absoluteString }
+    public var webDavURLString: String? { server.serverURL?.absoluteString }
 
     /// HTTP upload-UI URL, or nil if down.
     @objc(URL)

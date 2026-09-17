@@ -20,7 +20,7 @@ struct LibraryWebImportView: View {
       List {
         Section {
           urlRow(title: L("Web UI"), url: webURL)
-          urlRow(title: L("WebDAV"), url: webDavURL)
+          urlRow(title: L("Finder / WebDAV"), url: webDavURL)
           if !ipAddress.isEmpty {
             HStack {
               Text(L("Device IP"))
@@ -33,7 +33,7 @@ struct LibraryWebImportView: View {
             }
           }
         } footer: {
-          Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi: open the Web UI address in a browser, or connect to the WebDAV address from a file manager."))
+          Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi. Open the address in a browser, or in Finder choose Go › Connect to Server and enter the same address as Guest."))
         }
 
 #if os(iOS)
