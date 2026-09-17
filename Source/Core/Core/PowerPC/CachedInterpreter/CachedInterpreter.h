@@ -348,6 +348,12 @@ private:
   static s32 InterpretFPRFElim(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   template <bool write_pc>
   static s32 InterpretFPRFElim(std::ostream& stream, const InterpretOperands& operands);
+  // iCube 2026-09-17: bcx terminal specialization. Same InterpretOperands payload as the generic
+  // Interpret<true> record it replaces (so the stream layout is unchanged); the handler does the
+  // conditional-branch math inline instead of an indirect call into Interpreter::bcx. Emitted only
+  // when debugging is off (branch watch needs the generic handler). See .cpp.
+  static s32 InterpretBcx(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  static s32 InterpretBcx(std::ostream& stream, const InterpretOperands& operands);
   // iCube: dead-FPRF elimination VALIDATE harness (MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE). Double-runs the
   // SAME op (the reference with the hint OFF -> FPRF computed; then, committed last, the eliminated form
   // with the hint ON -> FPRF skipped) and asserts the FPRs and every FPSCR bit OUTSIDE the FPRF field

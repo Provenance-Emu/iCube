@@ -1389,6 +1389,11 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
       Interpret<true>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);
     }
+    else if (callback == AnyCallbackCast(InterpretBcx))
+    {
+      InterpretBcx(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
+      normal_entry = payload + sizeof(InterpretOperands);
+    }
     // iCube: specialized hot-op dispatch (only emitted when MAIN_CIR_SPECIALIZED_OPS is on; when off
     // neither marker callback value is ever written into the stream, so these two branches are dead
     // and the path below is never taken — flag-off behavior is byte-identical to stock 2509). We
@@ -1602,6 +1607,44 @@ void CachedInterpreter::PatchLinkBlockRel(u8* exit_ptrs, s32 rel)
   // core the patch happens during codegen (Jit), with the CPU thread not executing this block.
   auto* operands = reinterpret_cast<LinkBlockOperands*>(exit_ptrs + sizeof(AnyCallback));
   operands->rel = rel;
+}
+
+// iCube 2026-09-17: conditional branch terminal. Chibi-Robo (core 5, Time Profiler) spent 8.2 % of the
+// emulation thread inside Interpreter::bcx reached through the generic Interpret<true> record's
+// indirect call. Same math as Interpreter::bcx (CTR decrement per BO, counter/condition tests, LK,
+// AA/relative target) with the branch-watch hooks omitted — only emitted when debugging is off, so
+// branch watch can never be recording. Payload and return are identical to Interpret<true>.
+s32 CachedInterpreter::InterpretBcx(PowerPC::PowerPCState& ppc_state,
+                                    const InterpretOperands& operands)
+{
+  const UGeckoInstruction inst = operands.inst;
+  ppc_state.pc = operands.current_pc;
+  ppc_state.npc = operands.current_pc + 4;
+  if ((inst.BO & BO_DONT_DECREMENT_FLAG) == 0)
+    CTR(ppc_state)--;
+  const bool true_false = ((inst.BO >> 3) & 1) != 0;
+  const bool only_counter_check = ((inst.BO >> 4) & 1) != 0;
+  const bool only_condition_check = ((inst.BO >> 2) & 1) != 0;
+  const u32 ctr_check = ((CTR(ppc_state) != 0) ^ (inst.BO >> 1)) & 1;
+  const bool counter = only_condition_check || ctr_check != 0;
+  const bool condition = only_counter_check || (ppc_state.cr.GetBit(inst.BI) == u32(true_false));
+  if (counter && condition)
+  {
+    if (inst.LK)
+      LR(ppc_state) = ppc_state.pc + 4;
+    u32 destination_addr = static_cast<u32>(static_cast<s32>(static_cast<s16>(inst.BD << 2)));
+    if (!inst.AA)
+      destination_addr += ppc_state.pc;
+    ppc_state.npc = destination_addr;
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreter::InterpretBcx(std::ostream& stream, const InterpretOperands& operands)
+{
+  stream << "InterpretBcx(pc=0x" << std::hex << operands.current_pc << ", inst=0x"
+         << operands.inst.hex << std::dec << ")\n";
+  return sizeof(AnyCallback) + sizeof(operands);
 }
 
 template <bool write_pc>
@@ -5320,8 +5363,13 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         }
         if (!emitted)
         {
-          Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
-                operands);
+          // iCube 2026-09-17: bcx (primary opcode 16) terminals take the inline conditional-branch
+          // handler unless debugging is on (branch watch needs the generic Interpreter::bcx).
+          if (op.canEndBlock && op.inst.OPCD == 16 && !IsDebuggingEnabled())
+            Write(CallbackCast(InterpretBcx), operands);
+          else
+            Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
+                  operands);
         }
       }
 
