@@ -43,22 +43,26 @@ function toItems(fileList) {
   return out;
 }
 
-zone.addEventListener('drop', e => {
-  e.preventDefault(); zone.classList.remove('hover');
-  const items = e.dataTransfer.items;
+// Collect {file, path} items from a drop. webkitGetAsEntry() must be called
+// synchronously inside the event handler — dataTransfer is neutered after it
+// returns — so the entries are grabbed first and walked in the promise.
+function itemsFromDataTransfer(dt) {
+  const dtItems = dt.items;
   let entries = null;
-  if (items && items.length && items[0].webkitGetAsEntry) {
+  if (dtItems && dtItems.length && dtItems[0].webkitGetAsEntry) {
     entries = [];
-    for (let i = 0; i < items.length; i++) {
-      const en = items[i].webkitGetAsEntry();
+    for (let i = 0; i < dtItems.length; i++) {
+      const en = dtItems[i].webkitGetAsEntry();
       if (en) entries.push(en);
     }
   }
-  if (entries && entries.length) {
-    collectEntries(entries).then(uploadFiles);
-  } else {
-    uploadFiles(toItems(e.dataTransfer.files));
-  }
+  if (entries && entries.length) return collectEntries(entries);
+  return Promise.resolve(toItems(dt.files));
+}
+
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('hover');
+  itemsFromDataTransfer(e.dataTransfer).then(uploadFiles);
 });
 
 document.getElementById('upload-btn').addEventListener('click', () => {
@@ -292,7 +296,7 @@ function uploadOneFile() {
     if (batchItem) batchItem.state = 'uploading';
     inFlight.set(id, { loaded: 0, total: f.size || 0, name: relPath });
 
-    const url = uploadPutUrl(relPath);
+    const url = uploadPutUrl(relPath, it.base);
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = (e) => {
       const entry = inFlight.get(id);
@@ -383,15 +387,18 @@ function joinPath(dir, name) {
   return dir ? dir + '/' + name : name;
 }
 
-// Full path relative to ROM root (respects subfolder browse via CURRENT_PATH).
-function relativeUploadPath(relPath) {
+// Full path relative to ROM root. `base` is the folder the item was dropped on,
+// already root-relative (a row's data-path); it defaults to the folder being
+// browsed. Passing a row's data-path AND prefixing CURRENT_PATH would double it.
+function relativeUploadPath(relPath, base) {
   const clean = String(relPath || '').replace(/^\/+/, '');
-  return joinPath(CURRENT_PATH, clean);
+  const root = (base === undefined || base === null) ? CURRENT_PATH : base;
+  return joinPath(root, clean);
 }
 
 // Raw PUT target — same /files/ prefix as DELETE; hits the fast stream path on the server.
-function uploadPutUrl(relPath) {
-  const full = relativeUploadPath(relPath);
+function uploadPutUrl(relPath, base) {
+  const full = relativeUploadPath(relPath, base);
   return '/files/' + full.split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 
@@ -520,9 +527,13 @@ document.querySelectorAll('tr.dir-row').forEach(folder => {
   folder.addEventListener('drop', async e => {
     e.preventDefault();
     folder.classList.remove('drag-target');
-    // External files → upload into this folder.
+    // External files → upload into this folder, through the same PUT queue as
+    // everything else: transfer panel, parallel uploads, real error reporting.
+    // `base` is the row's data-path, which is already relative to the ROM root.
     if (e.dataTransfer.files && e.dataTransfer.files.length) {
-      await uploadFilesTo(e.dataTransfer.files, folderPath);
+      const items = await itemsFromDataTransfer(e.dataTransfer);
+      for (let k = 0; k < items.length; k++) items[k].base = folderPath;
+      uploadFiles(items);
       return;
     }
     // Internal row → move into this folder.
@@ -532,19 +543,6 @@ document.querySelectorAll('tr.dir-row').forEach(folder => {
     }
   });
 });
-
-// Upload helper that targets an arbitrary folder (used by folder drops).
-async function uploadFilesTo(files, folderPath) {
-  const target = folderPath
-    ? '/upload?path=' + folderPath.split('/').map(encodeURIComponent).join('/')
-    : '/upload';
-  for (let k = 0; k < files.length; k++) {
-    const fd = new FormData();
-    fd.append('files[]', files[k], files[k].name);
-    await fetch(target, { method: 'POST', body: fd });
-  }
-  location.reload();
-}
 
 // Show Live Stats links on every upload page URL (including /?path=…) when Debug API is up.
 (function syncDebugStatsNav() {
