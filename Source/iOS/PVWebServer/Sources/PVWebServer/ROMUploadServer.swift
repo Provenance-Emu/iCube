@@ -232,13 +232,13 @@ final class ROMUploadServer: @unchecked Sendable {
         }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             nonisolated(unsafe) var resumed = false
-            listener.stateUpdateHandler = { state in
+            listener.stateUpdateHandler = { [weak listener] state in
                 switch state {
                 case .ready:
                     if !resumed { resumed = true; continuation.resume() }
                 case .failed(let error):
                     NSLog("[ROMUploadServer] listener failed on :\(candidate): \(error)")
-                    listener.cancel()
+                    listener?.cancel()
                     if !resumed { resumed = true; continuation.resume(throwing: error) }
                 case .cancelled:
                     if !resumed { resumed = true; continuation.resume(throwing: ROMUploadServerError.initializationFailed) }
@@ -255,6 +255,9 @@ final class ROMUploadServer: @unchecked Sendable {
     private func advertiseWebDAV(on candidate: UInt16) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            // `stop()` may have run (and torn the listener down) before this hop lands on the
+            // main queue; publishing here would orphan a Bonjour record for a dead port.
+            guard self.isRunning, self.port == candidate else { return }
             let service = NetService(domain: "", type: "_webdav._tcp.", name: self.pageTitle, port: Int32(candidate))
             service.delegate = self.bonjourDelegate
             service.schedule(in: .main, forMode: .common)
