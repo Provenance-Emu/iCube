@@ -46,6 +46,33 @@ final class ChunkedBodyReaderTests: XCTestCase {
         XCTAssertEqual(trailing, Data("NEXT".utf8))
     }
 
+    /// The terminating CRLF after the `0` chunk can land in the next TCP segment. The reader
+    /// must hold off `.complete` until it has actually consumed the terminator.
+    func testTerminatorSplitAcrossFeeds() {
+        let reader = ROMUploadServer.ChunkedBodyReader()
+        let first = reader.feed(Data("5\r\nhello\r\n0\r\n".utf8))
+        XCTAssertEqual(payloads(first), Data("hello".utf8))
+        XCTAssertFalse(isComplete(first), "must not complete before the terminator arrives")
+        XCTAssertFalse(first.contains { if case .invalid = $0 { return true } else { return false } })
+
+        let second = reader.feed(Data("\r\nNEXT".utf8))
+        XCTAssertTrue(isComplete(second))
+        var trailing = Data()
+        for e in second { if case .complete(let t) = e { trailing = t } }
+        XCTAssertEqual(trailing, Data("NEXT".utf8))
+    }
+
+    /// Same split, but with a trailer section instead of a bare CRLF.
+    func testTrailerSplitAcrossFeeds() {
+        let reader = ROMUploadServer.ChunkedBodyReader()
+        _ = reader.feed(Data("3\r\nabc\r\n0\r\nX-Sum: 1".utf8))
+        let events = reader.feed(Data("\r\n\r\nTAIL".utf8))
+        XCTAssertTrue(isComplete(events))
+        var trailing = Data()
+        for e in events { if case .complete(let t) = e { trailing = t } }
+        XCTAssertEqual(trailing, Data("TAIL".utf8))
+    }
+
     func testInvalidSizeEmitsInvalid() {
         let reader = ROMUploadServer.ChunkedBodyReader()
         let events = reader.feed(Data("XYZ\r\n".utf8))

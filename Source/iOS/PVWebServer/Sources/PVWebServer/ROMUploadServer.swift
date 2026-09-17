@@ -656,6 +656,10 @@ final class ROMUploadServer: @unchecked Sendable {
         private var buffer = Data()
         private var chunkRemaining = 0
         private var finished = false
+        /// The `0` chunk has been read but its terminating CRLF (and any trailer fields) have
+        /// not arrived yet. The body is NOT complete until they are consumed — a terminator
+        /// split across TCP segments used to emit a premature `.complete` on the first feed.
+        private var awaitingTerminator = false
 
         func feed(_ incoming: Data) -> [Event] {
             guard !finished else { return [] }
@@ -663,6 +667,13 @@ final class ROMUploadServer: @unchecked Sendable {
             var events: [Event] = []
 
             parsing: while !finished {
+                if awaitingTerminator {
+                    guard let trailing = consumeTerminator() else { break parsing }
+                    finished = true
+                    events.append(.complete(trailing: trailing))
+                    break
+                }
+
                 if chunkRemaining > 0 {
                     guard buffer.count >= chunkRemaining + 2 else { break parsing }
                     let payload = Data(buffer.prefix(chunkRemaining))
@@ -690,21 +701,28 @@ final class ROMUploadServer: @unchecked Sendable {
                 }
 
                 if size == 0 {
-                    finished = true
-                    if buffer.starts(with: Data([0x0D, 0x0A])) {
-                        buffer.removeFirst(2)
-                    } else if let trailerEnd = buffer.findRange(of: Data([0x0D, 0x0A, 0x0D, 0x0A])) {
-                        buffer.removeSubrange(buffer.startIndex..<trailerEnd.upperBound)
-                    } else if !buffer.isEmpty {
-                        break parsing
-                    }
-                    events.append(.complete(trailing: buffer))
-                    buffer = Data()
-                    break
+                    awaitingTerminator = true
+                    continue
                 }
                 chunkRemaining = size
             }
             return events
+        }
+
+        /// RFC 9112 §7.1.2: the last-chunk line is followed by optional trailer fields and a
+        /// final CRLF. Consumes them and returns whatever bytes follow (a pipelined request),
+        /// or `nil` when the terminator has not fully arrived yet.
+        private func consumeTerminator() -> Data? {
+            if buffer.starts(with: Data([0x0D, 0x0A])) {
+                buffer.removeFirst(2)
+            } else if let trailerEnd = buffer.findRange(of: Data([0x0D, 0x0A, 0x0D, 0x0A])) {
+                buffer.removeSubrange(buffer.startIndex..<trailerEnd.upperBound)
+            } else {
+                return nil
+            }
+            let trailing = buffer
+            buffer = Data()
+            return trailing
         }
     }
 
@@ -2323,7 +2341,9 @@ struct HTTPRequest {
     let httpVersion: String
     let headers: [String: String]
 
-    var contentLength: Int { Int(headers["content-length"] ?? "") ?? 0 }
+    /// Clamped at zero: a negative `Content-Length` from a hostile client used to reach
+    /// `Data.dropFirst(_:)`, which traps on a negative count and kills the app remotely.
+    var contentLength: Int { max(0, Int(headers["content-length"] ?? "") ?? 0) }
 
     /// Finder WebDAV PUT uses `Transfer-Encoding: chunked` instead of Content-Length.
     var isChunked: Bool {

@@ -47,6 +47,17 @@ final class HTTPRequestParseTests: XCTestCase {
         XCTAssertNil(HTTPRequest.parse("POST /x HTTP/1.1\r\nContent-Type: application/json")?.multipartBoundary)
     }
 
+    /// A negative `Content-Length` used to reach `Data.dropFirst(negative)`, which traps.
+    /// Any LAN client could crash the app with one request line.
+    func testNegativeContentLengthClampsToZero() {
+        let req = HTTPRequest.parse("POST /upload HTTP/1.1\r\nContent-Length: -99999")
+        XCTAssertEqual(req?.contentLength, 0)
+    }
+
+    func testGarbageContentLengthIsZero() {
+        XCTAssertEqual(HTTPRequest.parse("POST /x HTTP/1.1\r\nContent-Length: banana")?.contentLength, 0)
+    }
+
     func testQueryParametersPercentDecoded() {
         let req = HTTPRequest.parse("GET /?path=Wii%2FGames&flag HTTP/1.1")
         XCTAssertEqual(req?.queryParameters["path"], "Wii/Games")
