@@ -113,8 +113,19 @@ call-heavy titles (Chibi-Robo is branch-heavy the same way).
    is attached exactly while a boot can brk; an unanswered brk is caught by the SIGTRAP net
    in `MemoryUtil_iOS_LuckTXM.cpp`. The phone's StikJIT 1.1 had no script support; StikDebug
    3.1.10 was rebuilt under the project team as com.joemattiello.StikJIT (keeps the pairing
-   file) and installed. Remaining: on-device proof with engine 4 (needs the phone unlocked,
-   StosVPN on, and a tap to confirm StikDebug's external-request prompt).
+   file) and installed. The StikDebug route did not come up on the phone (no device
+   tunnel), so the second broker is **Xcode / any lldb** — RetroArch's
+   `pkg/apple/lldb_jit_bless.py` insight: on TXM a page mapped R-X becomes executable once
+   a *debugger has written to it*; `prepare_memory_region` is nothing more than one
+   debugger write per 16 KB page. `Project/Scripts/dolphin_jit_lldb.py` is now that bless
+   hook (stop hook on `brk #0x69` / `brk #0xf00d`: bless x0..x0+x1, leave x0 = address,
+   pc += 4, stay attached on the universal detach). `SetUpPython.sh` writes
+   `Derived/lldbinit` (absolute `command script import`; LLDB resolves relative paths
+   against its cwd) and the NJB/JB schemes set it as `customLLDBInitFile` via Tuist. The
+   repo-root `.lldbinit` is the same import with a repo-relative path for command-line
+   lldb started from the repo root. `JitManager` therefore treats Xcode as a valid broker
+   (the old "cannot enable JIT under Xcode" early-return is gone). 512 MiB region = 32768
+   one-byte writes over USB, `DOL_BLESS_PAGES_PER_WRITE` trades bytes for round-trips.
 
 ## Method (non-negotiable, it found everything above)
 Same-session A/B on the phone: check `cpu_core_configured` before AND after

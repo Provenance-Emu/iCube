@@ -1,171 +1,147 @@
 """
-dolphin_jit_lldb.py — LLDB helper for Dolphin iOS JIT debugging on iOS 26 TXM devices.
+dolphin_jit_lldb.py — LLDB JIT page-blessing broker for iCube on iOS 26 TXM devices.
 
-The LuckTXM path in AllocateExecutableMemoryRegion_LuckTXM issues sentinel
-breakpoints (`brk #0x69` legacy and/or `brk #0xf00d` universal) that StikDebug
-intercepts to authorize TXM.  Under Xcode's LLDB those same brks cause
-EXC_BREAKPOINT instead.
+On iOS 26+ TXM devices a page mapped R-X cannot be executed until a debugger has
+WRITTEN to it; the debugger write itself is what blesses the page, so every 16 KB
+page of the JIT region must be dirtied individually. StikDebug does this from its
+JavaScript broker (icube.js / universal.js); this script does the same from LLDB,
+so Xcode (or a command-line lldb attached through any debugserver) can stand in
+for StikDebug. The approach is RetroArch's pkg/apple/lldb_jit_bless.py.
 
-This script installs a breakpoint on each sentinel brk that:
-  1. Skips the brk by advancing PC by 4 bytes.
-  2. Writes 0 to `dolphin_txm_auth_status` to signal "Xcode mode, TXM not authorized".
-     AllocateExecutableMemoryRegion_LuckTXM checks this flag and returns early
-     (skipping vm_remap) so IsTXMAvailable() returns false and EmulationCoordinator
-     falls back to CachedInterpreter + Software VertexLoader.
+Protocol serviced (see MemoryUtil_iOS_LuckTXM.cpp):
+  * legacy    brk #0x69            x0 = region address, x1 = size   (icube.js)
+  * universal brk #0xf00d, x16=1   x0 = region address, x1 = size   (universal.js)
+  * universal brk #0xf00d, x16=0   detach request — acknowledged, we stay attached
+                                   (DOL_BLESS_HONOR_DETACH=1 detaches for real)
+After blessing, x0 is left as the region address (a 0xE0000069 in x0 would tell
+the C++ side the legacy sentinel was rejected) and pc advances past the brk, so
+AllocateExecutableMemoryRegion_LuckTXM continues into vm_remap with the region
+authorized and IsTXMAvailable() reports true.
 
-Under StikDebug the brks are intercepted by StikDebug before LLDB sees them, so
-this script's callback never fires — dolphin_txm_auth_status stays 1 and the full
-LuckTXM JIT path proceeds normally.
+Matching is on the trapping instruction, not on a symbol, so it works in release
+builds and for every call site.
 
-Usage (in Xcode scheme → Run → "LLDB Init File", or in ~/.lldbinit):
-    command script import /path/to/dolphin_jit_lldb.py
+Usage:
+  * Xcode: scheme > Run > Options > "LLDB Init File" = the repo's .lldbinit
+    (Project.swift sets this on the iCube schemes), or ~/.lldbinit:
+        command script import <repo>/Source/iOS/App/Project/Scripts/dolphin_jit_lldb.py
+  * command-line lldb attached to the app: same `command script import`.
 
-Or add this to the Xcode scheme's "LLDB Init File":
-    command script import $(SOURCE_ROOT)/Source/iOS/App/Project/Scripts/dolphin_jit_lldb.py
+Tuning:
+  DOL_BLESS_PAGES_PER_WRITE (default 1): pages dirtied per debugger write. A write
+  spanning k pages blesses all k but transfers (k-1)*16 KB + 1 bytes, so >1 trades
+  bytes for round-trips; 1 is what StikDebug does.
 """
 
+import os
+import time
+
 import lldb
-import struct
 
-# ARM64 brk encodings:  0xD4200000 | (imm16 << 5)
-#   brk #0x69   -> 0xD4200D20  (legacy sentinel)
-#   brk #0xf00d -> 0xD43E01A0  (universal sentinel: prepare x16=1 / detach x16=0)
-_BRK_SENTINELS = (
-    struct.pack("<I", 0xD4200D20),
-    struct.pack("<I", 0xD43E01A0),
-)
+BRK_0069 = 0xD4200D20   # brk #0x69   (legacy sentinel, icube.js)
+BRK_F00D = 0xD43E01A0   # brk #0xf00d (universal sentinel)
+CMD_DETACH = 0
+CMD_PREPARE_REGION = 1
 
-_FUNC_NAME = "Common::AllocateExecutableMemoryRegion_LuckTXM"
-_AUTH_FLAG = "dolphin_txm_auth_status"
-_MAX_SCAN_BYTES = 512  # scan at most this many bytes looking for the brks
+PAGE_SIZE = 0x4000      # arm64 iOS
+FILL_BYTE = 0x69        # the byte StikDebug writes
+
+PAGES_PER_WRITE = max(1, int(os.environ.get("DOL_BLESS_PAGES_PER_WRITE", "1")))
+HONOR_DETACH = os.environ.get("DOL_BLESS_HONOR_DETACH") == "1"
 
 
-def _find_brks_in_function(target: lldb.SBTarget, process: lldb.SBProcess) -> list:
-    """Return load addresses of every sentinel brk inside the LuckTXM function."""
-    sym_ctxs = target.FindSymbols(_FUNC_NAME)
-    if sym_ctxs.GetSize() == 0:
-        return []
-
-    sym = sym_ctxs.GetContextAtIndex(0).GetSymbol()
-    start = sym.GetStartAddress().GetLoadAddress(target)
-    if start == lldb.LLDB_INVALID_ADDRESS:
-        return []
-
+def _read_u32(process, addr):
     err = lldb.SBError()
-    data = process.ReadMemory(start, _MAX_SCAN_BYTES, err)
-    if err.Fail() or not data:
-        return []
-
-    addrs = []
-    for offset in range(0, len(data) - 3, 4):
-        if data[offset : offset + 4] in _BRK_SENTINELS:
-            addrs.append(start + offset)
-
-    return addrs
+    data = process.ReadMemory(addr, 4, err)
+    if not err.Success() or data is None or len(data) != 4:
+        return None
+    return int.from_bytes(data, "little")
 
 
-def _write_auth_flag_zero(target: lldb.SBTarget, process: lldb.SBProcess):
-    """Write 0 to dolphin_txm_auth_status so the C++ code detects Xcode mode."""
-    sym_ctxs = target.FindSymbols(_AUTH_FLAG)
-    if sym_ctxs.GetSize() == 0:
-        print(f"[DolphinJIT] WARNING: symbol '{_AUTH_FLAG}' not found; "
-              "interpreter fallback may not trigger automatically")
-        return
+def _bless(process, ptr, size, log):
+    """Dirty every page in [ptr, ptr+size) with debugger writes."""
+    if size == 0:
+        return True, 0
 
-    addr = sym_ctxs.GetContextAtIndex(0).GetSymbol().GetStartAddress().GetLoadAddress(target)
-    if addr == lldb.LLDB_INVALID_ADDRESS:
-        print(f"[DolphinJIT] WARNING: '{_AUTH_FLAG}' has invalid load address")
-        return
+    first = ptr & ~(PAGE_SIZE - 1)
+    last = (ptr + size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)
+    pages = (last - first) // PAGE_SIZE
 
-    err = lldb.SBError()
-    # Write int 0 (4 bytes, little-endian) — matches `volatile int dolphin_txm_auth_status`
-    process.WriteMemory(addr, b'\x00\x00\x00\x00', err)
-    if err.Fail():
-        print(f"[DolphinJIT] WARNING: failed to clear auth flag: {err.GetCString()}")
-    else:
-        print(f"[DolphinJIT] Cleared {_AUTH_FLAG} → interpreter fallback will activate")
+    started = time.monotonic()
+    done = 0
+    while done < pages:
+        group = min(PAGES_PER_WRITE, pages - done)
+        buf = bytes([FILL_BYTE]) * ((group - 1) * PAGE_SIZE + 1)
+        err = lldb.SBError()
+        addr = first + done * PAGE_SIZE
+        process.WriteMemory(addr, buf, err)
+        if not err.Success():
+            log("[DolphinJIT] bless write failed at 0x%x after %d/%d pages: %s"
+                % (addr, done, pages, err.GetCString()))
+            return False, done
+        done += group
 
-
-def _skip_brk_handler(frame: lldb.SBFrame, bp_loc, extra_args, internal_dict) -> bool:
-    """Breakpoint callback: advance PC past the sentinel brk and signal Xcode mode."""
-    thread = frame.GetThread()
-    process = thread.GetProcess()
-    target = process.GetTarget()
-    pc = frame.GetPC()
-
-    err = lldb.SBError()
-    for reg_set in frame.GetRegisters():
-        for reg in reg_set:
-            if reg.GetName() == "pc":
-                reg.SetValueFromCString(hex(pc + 4), err)
-                break
-
-    if err.Fail():
-        print(f"[DolphinJIT] WARNING: failed to advance PC: {err.GetCString()}")
-    else:
-        print(f"[DolphinJIT] Skipped sentinel brk at {hex(pc)}, resuming at {hex(pc + 4)}")
-
-    # Signal Xcode mode so AllocateExecutableMemoryRegion_LuckTXM bails out early
-    # and EmulationCoordinator falls back to interpreter + software vertex loader.
-    _write_auth_flag_zero(target, process)
-
-    # Return False = don't stop the debugger; auto-continue handles the resume.
-    return False
+    log("[DolphinJIT] blessed %d pages (%.1f MB) at 0x%x in %.2fs"
+        % (pages, pages * PAGE_SIZE / (1024.0 * 1024.0), ptr,
+           time.monotonic() - started))
+    return True, pages
 
 
-def _install(target: lldb.SBTarget, process: lldb.SBProcess) -> bool:
-    brk_addrs = _find_brks_in_function(target, process)
-    if not brk_addrs:
-        return False
+class JITBlessHook:
+    """Stop hook that services the sentinel brks wherever they are executed."""
 
-    for brk_addr in brk_addrs:
-        bp = target.BreakpointCreateByAddress(brk_addr)
-        bp.SetAutoContinue(True)
-        bp.SetScriptCallbackFunction("dolphin_jit_lldb._skip_brk_handler")
-        print(f"[DolphinJIT] Installed sentinel-brk skip-handler at {hex(brk_addr)}")
-    return True
+    def __init__(self, target, extra_args, internal_dict):
+        pass
 
+    def handle_stop(self, exe_ctx, stream):
+        def log(msg):
+            stream.Print(msg + "\n")
 
-# --- stop-hook so we can (re-)install after a fresh library load ---------------
-
-class _LoadHook:
-    """SBTarget stop-hook: install the breakpoint once the symbol is visible."""
-
-    def __init__(self):
-        self._installed = False
-
-    def handle_stop(self, exe_ctx: lldb.SBExecutionContext, stream: lldb.SBStream) -> bool:
-        if self._installed:
-            return False  # nothing more to do
-
-        target = exe_ctx.GetTarget()
         process = exe_ctx.GetProcess()
-        if not target.IsValid() or not process.IsValid():
-            return False
+        frame = exe_ctx.GetFrame()
+        if not frame.IsValid():
+            return True
 
-        if _install(target, process):
-            self._installed = True
+        pc = frame.GetPC()
+        instr = _read_u32(process, pc)
+        if instr == BRK_0069:
+            cmd = CMD_PREPARE_REGION
+        elif instr == BRK_F00D:
+            cmd = frame.FindRegister("x16").GetValueAsUnsigned()
+        else:
+            return True                  # not ours; stop normally
 
-        return False  # don't stop the process
+        if cmd == CMD_PREPARE_REGION:
+            ptr = frame.FindRegister("x0").GetValueAsUnsigned()
+            size = frame.FindRegister("x1").GetValueAsUnsigned()
+            if ptr == 0:
+                log("[DolphinJIT] x0=0 asks the debugger to allocate the region; not implemented")
+                return True
+            ok, _ = _bless(process, ptr, size, log)
+            if not ok:
+                # Stay stopped at the brk: continuing would report success for
+                # pages that were never blessed.
+                return True
+            frame.FindRegister("x0").SetValueFromCString("0x%x" % ptr)
+        elif cmd == CMD_DETACH:
+            if HONOR_DETACH:
+                log("[DolphinJIT] detaching")
+                frame.SetPC(pc + 4)
+                process.Detach()
+                return False
+            log("[DolphinJIT] detach requested; staying attached")
+        else:
+            log("[DolphinJIT] unknown command x16=%d at 0x%x" % (cmd, pc))
+            return True
+
+        if not frame.SetPC(pc + 4):
+            log("[DolphinJIT] could not advance pc past brk at 0x%x" % pc)
+            return True
+        return False                     # handled; auto-continue
 
 
-_hook_instance = _LoadHook()
-
-
-def __lldb_init_module(debugger: lldb.SBDebugger, internal_dict: dict):
-    """Entry point called by `command script import`."""
-    # Try immediate install if a target/process already exists.
-    target = debugger.GetSelectedTarget()
-    if target and target.IsValid():
-        process = target.GetProcess()
-        if process and process.IsValid():
-            _install(target, process)
-
-    # Register a stop-hook so we catch the symbol after dylib load.
-    target = debugger.GetSelectedTarget()
-    if target and target.IsValid():
-        target.SetStopHookScriptCode("dolphin_jit_lldb._hook_instance.handle_stop")
-
-    print("[DolphinJIT] Loaded. Sentinel brks (0x69 / 0xf00d) in "
-          "AllocateExecutableMemoryRegion_LuckTXM will be skipped automatically under "
-          "Xcode's LLDB; interpreter fallback activates when TXM is not authorized by StikDebug.")
+def __lldb_init_module(debugger, internal_dict):
+    debugger.HandleCommand(
+        "target stop-hook add -P %s.JITBlessHook" % __name__)
+    print("[DolphinJIT] TXM JIT bless hook installed: brk #0x69 / #0xf00d will be "
+          "answered by blessing the region's pages (%d page(s) per write)." % PAGES_PER_WRITE)

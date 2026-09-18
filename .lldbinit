@@ -1,8 +1,9 @@
-# .lldbinit — loaded automatically by Xcode's LLDB when the working directory
-# is the DolphiniOS project root (i.e. when opening DolphiniOS.xcodeproj).
+# .lldbinit — loaded by LLDB when this file is set as the scheme's "LLDB Init File"
+# (Project.swift does that for the iCube schemes) or imported from ~/.lldbinit.
 #
-# Installs a skip-handler for the `brk #0x69` instruction in
-# AllocateExecutableMemoryRegion_LuckTXM so that Xcode's LLDB doesn't trap it
-# as EXC_BREAKPOINT.  Under CS_DEBUGGED, the subsequent vm_remap succeeds
-# without StikDebug's explicit TXM authorisation.
+# Installs the TXM JIT bless hook: on iOS 26 TXM devices the `brk #0x69` /
+# `brk #0xf00d` handshake in AllocateExecutableMemoryRegion_LuckTXM is answered by
+# LLDB writing one byte into every 16 KB page of the JIT region (the debugger write
+# is what authorizes execution), exactly what StikDebug's broker script does. So
+# Xcode — or any lldb attached through a debugserver — enables JIT by itself.
 command script import Source/iOS/App/Project/Scripts/dolphin_jit_lldb.py

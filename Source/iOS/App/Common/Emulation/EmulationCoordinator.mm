@@ -1718,13 +1718,14 @@ after_set:
         {
           // TXM device + CS_DEBUGGED.
           //
-          // The LuckTXM brk #0x69 handshake is answered by a StikDebug broker script
-          // that stays attached until it has prepared the region. CS_DEBUGGED alone
-          // cannot tell that broker apart from an old-style enabler (which detaches
-          // immediately) or from Xcode (whose LLDB traps the brk), so the decision is
-          // made by -[JitManager shouldAttemptTXMHandshake]: a debugger attached right
-          // now (P_TRACED) that is not Xcode. Once authorized, the region survives the
-          // broker's detach, so later boots in this process reuse it without a brk.
+          // The LuckTXM brk #0x69 handshake is answered by whichever debugger is
+          // attached: StikDebug's broker script (stays attached until it has blessed
+          // the region) or Xcode / lldb running dolphin_jit_lldb.py. CS_DEBUGGED alone
+          // cannot tell an attached broker from an old-style enabler (which detaches
+          // immediately), so the decision is made by -[JitManager
+          // shouldAttemptTXMHandshake]: a debugger attached right now (P_TRACED). Once
+          // authorized, the region survives the broker's detach, so later boots in this
+          // process reuse it without a brk.
           // An unanswered brk is caught by the SIGTRAP net inside
           // AllocateExecutableMemoryRegion_LuckTXM and degrades to the interpreter.
           const bool regionAlreadyAuthorized = Common::IsTXMJITAvailable_LuckTXM();

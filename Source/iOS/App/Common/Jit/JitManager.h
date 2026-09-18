@@ -32,10 +32,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)recheckIfJitIsAcquired;
 
-/// iOS 26 TXM auto-detection. True when the boot path should issue the StikDebug
-/// brk #0x69 handshake: TXM device, JIT acquired, a debugger attached right now, and that
-/// debugger is not Xcode (LLDB would trap the brk). `DOL_JIT_TXM=1` in the environment
-/// forces true, `DOL_JIT_TXM=0` forces false (test/debug overrides).
+/// iOS 26 TXM auto-detection. True when the boot path should issue the brk #0x69
+/// handshake: TXM device, JIT acquired, and a debugger attached right now (StikDebug's
+/// script, or Xcode / any lldb running the dolphin_jit_lldb.py bless hook).
+/// `DOL_JIT_TXM=1` in the environment forces true, `DOL_JIT_TXM=0` forces false.
 - (bool)shouldAttemptTXMHandshake;
 
 /// Records the outcome of the TXM handshake (see txmAuthorized).

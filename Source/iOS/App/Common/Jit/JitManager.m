@@ -89,26 +89,19 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   self.debuggerAttached = [self checkIfDebuggerAttachedNow];
 
   if (_jitType == DOLJitTypeDebugger) {
-    if (self.deviceHasTxm) {
-      if ([self checkIfRunningUnderXcode]) {
-        static dispatch_once_t onceToken;
-
-        dispatch_once(&onceToken, ^{
-          self.acquisitionError = @"JIT cannot be enabled while running within Xcode on iOS 26. "
-                                   "To debug with JIT, use StikDebug instead. "
-                                   "If you intentionally want to suppress this, add XCODE=1 to your scheme's environment variables.";
-        });
-
-        return;
-      }
-    }
-    
     self.acquiredJit = [self checkIfProcessIsDebugged];
     
     if (self.deviceHasTxm && self.acquiredJit && !self.txmAuthorized) {
-      self.acquisitionError = self.debuggerAttached
-          ? @"A debugger is attached. On iOS 26 TXM devices the JIT region is authorized by StikDebug's script when a game boots; other debuggers fall back to Cached Interpreter."
-          : @"JIT was acquired but no debugger is attached now. On iOS 26 TXM devices, launch iCube through StikDebug (Enable JIT via StikDebug) so its script can authorize the JIT region; otherwise games use the Cached Interpreter.";
+      if ([self checkIfRunningUnderXcode]) {
+        // Xcode's LLDB answers the handshake when the repo's .lldbinit (the
+        // dolphin_jit_lldb.py bless hook) is the scheme's LLDB Init File; without
+        // it LLDB simply stops at the brk and the developer sees EXC_BREAKPOINT.
+        self.acquisitionError = @"Running under Xcode on an iOS 26 TXM device. The JIT region is authorized by the LLDB bless hook (dolphin_jit_lldb.py via the scheme's LLDB Init File) when a game boots.";
+      } else {
+        self.acquisitionError = self.debuggerAttached
+            ? @"A debugger is attached. On iOS 26 TXM devices the JIT region is authorized by the attached broker (StikDebug's script or an lldb running dolphin_jit_lldb.py) when a game boots; other debuggers fall back to Cached Interpreter."
+            : @"JIT was acquired but no debugger is attached now. On iOS 26 TXM devices, launch iCube through StikDebug (Enable JIT via StikDebug) or attach lldb with dolphin_jit_lldb.py so the JIT region can be authorized; otherwise games use the Cached Interpreter.";
+      }
     }
   } else if (_jitType == DOLJitTypeUnrestricted) {
     self.acquiredJit = true;
@@ -132,9 +125,12 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   }
 
   // Auto-detect: a broker can only answer the brk if a debugger is attached right
-  // now, and LLDB (Xcode) would trap it instead of answering. CS_DEBUGGED alone is
-  // not enough — old-style JIT enablers set it and detach immediately.
-  return [self checkIfDebuggerAttachedNow] && ![self checkIfRunningUnderXcode];
+  // now. CS_DEBUGGED alone is not enough — old-style JIT enablers set it and detach
+  // immediately. Xcode counts: its LLDB answers the brk through the bless hook in
+  // dolphin_jit_lldb.py (the repo .lldbinit), and without that hook it just stops
+  // at the brk (EXC_BREAKPOINT in the debugger, no crash), which is a developer's
+  // problem to notice, not a user's.
+  return [self checkIfDebuggerAttachedNow];
 }
 
 - (void)noteTXMHandshakeResult:(bool)authorized {
