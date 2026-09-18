@@ -198,6 +198,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)
 + (void)setCirBlockLinkingValidate:(BOOL)enabled;
++ (BOOL)cirDynLinking;            // dynamic inline-cached links for blr/bctr/bcx-fallthrough (default ON)
++ (void)setCirDynLinking:(BOOL)enabled;
 + (BOOL)stallMetrics;             // CPU-thread stall instrumentation (default ON, <0.5% overhead)
 + (void)setStallMetrics:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;

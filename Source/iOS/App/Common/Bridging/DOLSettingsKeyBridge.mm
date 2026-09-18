@@ -220,6 +220,22 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
       ^(id v){ [DOLConfigBridge setMainMMU:CoerceBool(v)]; },
       MakeLayerGetter(Config::MAIN_MMU), MakeResetBlock(Config::MAIN_MMU.GetLocation()));
 
+    // iCube: CachedInterpreter link flags (boot-time; A/B over the debug API without touching the UI).
+    t[@"cirBlockLinking"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirBlockLinking]); },
+      ^(id v){ [DOLConfigBridge setCirBlockLinking:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_BLOCK_LINKING), MakeResetBlock(Config::MAIN_CIR_BLOCK_LINKING.GetLocation()));
+
+    t[@"cirBlockLinkingValidate"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirBlockLinkingValidate]); },
+      ^(id v){ [DOLConfigBridge setCirBlockLinkingValidate:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE), MakeResetBlock(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE.GetLocation()));
+
+    t[@"cirDynLinking"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirDynLinking]); },
+      ^(id v){ [DOLConfigBridge setCirDynLinking:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_DYN_LINKING), MakeResetBlock(Config::MAIN_CIR_DYN_LINKING.GetLocation()));
+
     t[@"mainFastmem"] = mk(DOLSettingTypeBool, NO,
       ^id{ return @([DOLConfigBridge mainFastmem]); },
       ^(id v){ [DOLConfigBridge setMainFastmem:CoerceBool(v)]; },

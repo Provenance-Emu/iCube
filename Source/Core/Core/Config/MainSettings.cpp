@@ -1062,6 +1062,14 @@ const Info<bool> MAIN_CIR_BLOCK_LINKING{{System::Main, "Core", "CIRBlockLinking"
 // device correctness passes only. Default false.
 const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE{
     {System::Main, "Core", "CIRBlockLinkingValidate"}, false};
+// iCube 2026-09-17: dynamic-link inline cache on top of CIRBlockLinking. Static links only cover
+// bx and the taken edge of bcx; blr/bctr returns and bcx fallthrough round-tripped the dispatcher
+// every time (Wind Waker's process-list search: 6 of its 9 block transitions per node). Each link
+// trampoline now also remembers the last DYNAMIC successor and hops straight into it on a repeat,
+// validated by a block-cache generation counter (bumped on every DestroyBlock) plus pc and
+// feature_flags. Same per-hop guards as the static path (downcount, Running, 256-hop cap). Requires
+// CIRBlockLinking. Flip OFF to A/B.
+const Info<bool> MAIN_CIR_DYN_LINKING{{System::Main, "Core", "CIRDynLinking"}, true};
 // iCube WIN#1: PIC (position-independent-code) direct-pointer load/store on the CachedInterpreter.
 // Integer D-form/X-form load/stores resolve the host RAM pointer directly and do the access with the
 // correct endian swap, bypassing the per-access MMU/region lookup (~15% on memory-bound titles).

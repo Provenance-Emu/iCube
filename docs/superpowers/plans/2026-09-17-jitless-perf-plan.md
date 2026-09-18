@@ -15,27 +15,34 @@ Main.Core.CIRProfile=true at boot; the profiler costs ~85 % of the CPU thread �
 capture then turn it off), `/api/debug/fifo-record`, `/api/debug/fpu-selftest`,
 on-device Time Profiler workflow (see memory: icube-perf-phase).
 
-## The finding that changes the plan (Wind Waker, engine 5)
-~20 % of ALL emulated cycles are one six-block spin loop:
-0x80245640 (stwu/mflr/… lwz r12; mtctr; bctrl) → 0x80244f78 (mr/mr/mtctr/bctrl) →
-0x80040068 (`lwz r5,4(r3); lwz r0,0(r4); cmplw r5,r0; beqlr`) → epilogue blr →
-0x80244f94 (cmplwi r31,0; beq) → 0x80244fac. 11.27 M iterations / 20 s, 2–10
-emulated cycles per block, no work: a wait-until-two-words-are-equal poll through
-a virtual call. Dolphin's idle detection only sees single-block `b .`/load-compare
-loops, so this burns the interpreter (and the phone's thermal budget) and, worse,
-the adaptive clock counts it as game work and lowers the clock. Report saved at
-~/.icube-debug/captures/2026-09-17-ww/hot-blocks.txt. Expect the same class of loop
-in other "simple-looking but slow" titles (Chibi-Robo is branch-heavy the same way).
+## The finding that changes the plan (Wind Waker, engine 5) — CORRECTED 2026-09-17
+~20 % of ALL emulated cycles are one nine-block loop:
+0x80244f78 (mr/mr/mtctr/bctrl) → 0x80245640 (stwu/mflr/… lwz r12,0(r5); mtctr; bctrl) →
+0x80040068 (`lwz r5,4(r3); lwz r0,0(r4); cmplw r5,r0; beqlr`) → 0x80040078 (`li r3,0; blr`)
+→ 0x80245664 epilogue blr → 0x80244f88 (cmplwi r3,0; beq) → 0x80244f94 (mr r3,r31;
+cmplwi r31,0; beq) → 0x80244fa0 (`lwz r31,8(r31); b`) → 0x80244fac (cmplwi r3,0; bne).
+23.5 M node visits / 20 s. It is NOT an idle wait: r31 walks a linked list (`next` at +8)
+and the predicate returns 0 for ~190 nodes per call, ~6000 calls/s. Reconstructed from
+the bytes this is the game's process-list search — fpcLnIt_JudgeOnlyHere calling
+fpcSch_JudgeByID (proc->id == *key) through fpcLnIt_Judge (data->method(node->subject,
+data->arg)) — i.e. fopAcM_SearchByID, which Wind Waker actors call every frame. The
+loop terminates on its own; CoreTiming::Idle would not shorten it and an HLE idle hint
+would be wrong. (totaldb.dsy has no entry for either function: it only carries SDK
+symbols, verified by hashing the bytes with the SignatureDB checksum.) Real hardware
+runs it in ~4 % of a Gekko; the interpreter pays 9 block transitions per node, 6 of them
+through the dispatcher (2 bctrl, 2 blr, beqlr fallthrough, beq fallthrough). Report at
+~/.icube-debug/captures/2026-09-17-ww/hot-blocks.txt. Expect the same class in other
+call-heavy titles (Chibi-Robo is branch-heavy the same way).
 
 ## Ranked opportunities (each one build + one boot to verify)
-1. **Call-chain idle detection (biggest, generic).** Runtime detector in the block
-   profiler path: a block whose run count explodes with no memory/register side
-   effects besides stack/LR, whose successors form a cycle of ≤ 8 tiny blocks, gets
-   marked idle → treat like CheckIdle (CoreTiming::Idle / advance to next event).
-   Start static: identify 0x80040068 via the WW symbol map (`Data/Sys/totaldb.dsy`,
-   `PPCSymbolDB`), then HLE-hook that SDK function (Core/HLE) as an idle hint — a
-   per-game proof in one boot. Then generalise. Upside: ~20 % of guest cycles in WW
-   plus less heat plus a truer adaptive clock.
+1. **Dynamic block links (LANDED 2026-09-17, `CIRDynLinking`).** Every LinkBlock
+   trampoline carries a single-entry inline cache of the last dynamic successor
+   (blr/bctr target, bcx fallthrough); a repeat hops without the dispatcher, validated
+   by pc + feature_flags + a generation bumped on every DestroyBlock. bcctr got an
+   inline terminal too. Hot-blocks report prints dyn_link_hits/misses. Idle detection
+   for this loop is OFF the table (see above); a genuine multi-block idle detector is
+   still worth having for other titles but must prove the loop is side-effect-free
+   AND non-terminating (memory operand unchanged across iterations), which this one is not.
 2. **Block transitions (call-heavy games).** `bclr` returns can't be linked →
    Dispatch + GetBlockFromStartAddress + LinkBlock ≈ 8–11 % on WW/Chibi. Ideas: a
    return-address cache (predict LR → block pointer) checked before Dispatch;

@@ -2033,6 +2033,7 @@ struct PerformanceTuningView: View {
   @State private var cirIrSpecializedOpsValidate: Bool = false
   @State private var cirBlockLinking: Bool = false
   @State private var cirBlockLinkingValidate: Bool = false
+  @State private var cirDynLinking: Bool = false
   // CPU idle detection toggles
   @State private var relaxedIdleDetection: Bool = false
   @State private var fastForwardCtrIdle: Bool = false
@@ -2144,6 +2145,9 @@ struct PerformanceTuningView: View {
           optRow("Block Linking", recommended: true, isOn: $cirBlockLinking,
                  set: { DOLConfigBridge.setCirBlockLinking($0) },
                  caption: "Chains hot blocks directly to cut per-block dispatcher overhead — the biggest dispatch win. Any mismatch deopts safely to the dispatcher. Applies on next game launch.")
+          optRow("Dynamic Links", recommended: true, isOn: $cirDynLinking,
+                 set: { DOLConfigBridge.setCirDynLinking($0) },
+                 caption: "Extends Block Linking to function returns and virtual calls (blr/bctr) and to the not-taken side of conditional branches: each exit remembers the last block it went to and jumps straight there when it repeats. Big win on call-heavy games (Wind Waker, Chibi-Robo). Requires Block Linking. Applies on next game launch.")
           optRow("NEON Paired-Single Math", isOn: $cirPsNeon,
                  set: { DOLConfigBridge.setCirPsNeon($0) },
                  caption: "Computes GameCube paired-single FP ops (ps_mul/add/madd/…) both lanes at once with ARM NEON instead of two scalar ops — the trick the JIT uses. Only fires for finite/normal values in IEEE mode; otherwise falls back to scalar. Experimental. Applies on next game launch.")
@@ -2411,6 +2415,7 @@ struct PerformanceTuningView: View {
   private func resetOptimizationsToRecommended() {
     // Shared + CIR proven wins -> ON.
     cirBlockLinking = true; DOLConfigBridge.setCirBlockLinking(true)
+    cirDynLinking = true; DOLConfigBridge.setCirDynLinking(true)
     cirPicLoadStore = true; DOLConfigBridge.setCirPicLoadStore(true)
     cirSpecializedOps = true; DOLConfigBridge.setCirSpecializedOps(true)
     cirMicroOpFusion = true; DOLConfigBridge.setCirMicroOpFusion(true)
@@ -2484,6 +2489,7 @@ struct PerformanceTuningView: View {
     cirIrPicLoadStoreValidate = DOLConfigBridge.cirIrPicLoadStoreValidate()
     cirIrSpecializedOpsValidate = DOLConfigBridge.cirIrSpecializedOpsValidate()
     cirBlockLinking = DOLConfigBridge.cirBlockLinking()
+    cirDynLinking = DOLConfigBridge.cirDynLinking()
     cirBlockLinkingValidate = DOLConfigBridge.cirBlockLinkingValidate()
     // Ensure idle detection toggles persist
     relaxedIdleDetection = DOLConfigBridge.mainRelaxedIdleDetection()
@@ -2707,6 +2713,7 @@ enum PerfAB {
   struct Flag { let key: String; let get: () -> Bool; let set: (Bool) -> Void }
   static let flags: [Flag] = [
     Flag(key: "blockLinking", get: { DOLConfigBridge.cirBlockLinking() }, set: { DOLConfigBridge.setCirBlockLinking($0) }),
+    Flag(key: "dynLinking", get: { DOLConfigBridge.cirDynLinking() }, set: { DOLConfigBridge.setCirDynLinking($0) }),
     Flag(key: "picLoadStore", get: { DOLConfigBridge.cirPicLoadStore() }, set: { DOLConfigBridge.setCirPicLoadStore($0) }),
     Flag(key: "specializedOps", get: { DOLConfigBridge.cirSpecializedOps() }, set: { DOLConfigBridge.setCirSpecializedOps($0) }),
     Flag(key: "specializedFpLs", get: { DOLConfigBridge.cirSpecializedFpLs() }, set: { DOLConfigBridge.setCirSpecializedFpLs($0) }),

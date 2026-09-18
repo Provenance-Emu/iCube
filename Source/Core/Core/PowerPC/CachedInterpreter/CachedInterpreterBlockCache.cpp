@@ -19,6 +19,8 @@ void CachedInterpreterBlockCache::Init()
 
 void CachedInterpreterBlockCache::DestroyBlock(JitBlock& block)
 {
+  // iCube: every dynamic inline-cache entry may reference this block's tape; kill them all.
+  CachedInterpreter::BumpDynLinkGeneration();
   JitBaseBlockCache::DestroyBlock(block);
 
   if (block.near_begin != block.near_end)

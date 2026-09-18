@@ -242,6 +242,21 @@ static bool s_block_linking_validate = false;
 // `this`, but needs the block cache to re-resolve the dispatcher target). Set in Init while validate
 // is on; never dereferenced on the fast path. The CIR is one-per-System, so this is unambiguous.
 static CachedInterpreter* s_validate_instance = nullptr;
+// iCube 2026-09-17: dynamic-link inline cache (MAIN_CIR_DYN_LINKING, default ON; needs block
+// linking). Static linking covers bx and bcx-taken only; blr/bctr returns and bcx fallthrough
+// round-tripped the dispatcher every time (Wind Waker's process-list search: 6 of the 9 block
+// transitions per list node). Each LinkBlock trampoline now also remembers the LAST dynamic
+// successor (pc, feature_flags, rel) plus the generation it was recorded under; a repeat hops
+// straight into that block under the same guards as a static link. s_dyn_generation is bumped on
+// every DestroyBlock (CachedInterpreterBlockCache), so an entry that could point into freed or
+// reused tape is dead by construction. s_dyn_fill_slot is the miss protocol: LinkBlock publishes
+// its own operands slot, ExecuteOneBlock fills it right after the dispatcher resolves the real
+// successor. All CPU-thread only (void* because LinkBlockOperands is a private nested type).
+static bool s_dyn_linking = false;
+static u32 s_dyn_generation = 1;
+static void* s_dyn_fill_slot = nullptr;
+static u64 s_dyn_hits = 0;    // profiler-gated (MAIN_CIR_PROFILE)
+static u64 s_dyn_misses = 0;  // profiler-gated
 
 // iCube: whitelist of hot ops eligible for specialized dispatch. Defined once as X-macros so the
 // emission site, the ExecuteOneBlock dispatch switch, the op-id enum, and the eligibility check all
@@ -904,6 +919,8 @@ std::string BuildHotBlocksReport(u32 top_n)
   std::ostringstream out;
   out << "  unique_blocks=" << entries.size() << " total_block_runs="
       << s_block_profile.grand_total_runs << " total_cycles=" << grand_cycles << "\n";
+  out << "  dyn_link_hits=" << s_dyn_hits << " dyn_link_misses=" << s_dyn_misses
+      << " (blr/bctr/bcx-fallthrough exits served from the inline cache vs dispatcher)\n";
 
   // iCube: DISPATCH CLASS DENSITY — the dynamic instruction mix, weighted by each block's run-count, so
   // it reflects what the CPU actually EXECUTES (not static code size). The FP load/store, FP arithmetic,
@@ -1229,6 +1246,11 @@ void CachedInterpreter::Init()
   s_block_linking = Config::Get(Config::MAIN_CIR_BLOCK_LINKING);
   s_block_linking_validate = Config::Get(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE);
   s_validate_instance = s_block_linking_validate ? this : nullptr;
+  s_dyn_linking = s_block_linking && Config::Get(Config::MAIN_CIR_DYN_LINKING);
+  s_dyn_fill_slot = nullptr;
+  ++s_dyn_generation;
+  s_dyn_hits = 0;
+  s_dyn_misses = 0;
   // iCube: default false (no hints; the fast state). Flip ON only to A/B the +33%-by-removal finding.
   s_prefetch_enabled = Config::Get(Config::MAIN_CACHED_INTERPRETER_PREFETCH);
   // iCube Phase-0 gate-0 secondary knobs (default 0 = inert). Lazily allocate the thrash scratch only
@@ -1345,6 +1367,21 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
   }
 
   auto& ppc_state = m_ppc_state;
+  // iCube: dynamic-link fill. If the previous block's LinkBlock missed its inline cache it published
+  // its slot; the dispatcher has just resolved the successor for the CURRENT pc/feature_flags, so
+  // record exactly that pairing. Self-consistent even if an exception moved pc in between: a wrong
+  // guess costs one future miss, never a wrong stream. Any DestroyBlock since the miss cleared the
+  // slot (BumpDynLinkGeneration), so this can never write into freed tape.
+  if (s_dyn_fill_slot != nullptr) [[unlikely]]
+  {
+    auto* slot = static_cast<LinkBlockOperands*>(s_dyn_fill_slot);
+    s_dyn_fill_slot = nullptr;
+    const u8* site = reinterpret_cast<const u8*>(slot) - sizeof(AnyCallback);
+    slot->dyn_pc = ppc_state.pc;
+    slot->dyn_flags = static_cast<u32>(ppc_state.feature_flags);
+    slot->dyn_generation = s_dyn_generation;
+    slot->dyn_rel = static_cast<s32>(normal_entry - site);
+  }
   // iCube: block-linking safety guard — consecutive-linked-hop counter, reset on each dispatcher entry
   // (this function). Only ever touched on the LinkBlock-followed branch below, so it is a no-op when
   // block linking is off (no LinkBlock callbacks are emitted, so that branch never executes).
@@ -1402,6 +1439,11 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
     else if (callback == AnyCallbackCast(InterpretBx))
     {
       InterpretBx(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
+      normal_entry = payload + sizeof(InterpretOperands);
+    }
+    else if (callback == AnyCallbackCast(InterpretBcctr))
+    {
+      InterpretBcctr(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);
     }
     // iCube: specialized hot-op dispatch (only emitted when MAIN_CIR_SPECIALIZED_OPS is on; when off
@@ -1560,17 +1602,43 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const LinkBlo
   // bcx it holds only on the taken edge — the not-taken edge has npc == fallthrough != expected_pc
   // and correctly deopts to the dispatcher. Any computed/indirect divergence also deopts. Fail-safe:
   // a mismatch NEVER executes the wrong stream, it just costs one dispatcher round-trip.
-  if (ppc_state.npc != operands.expected_pc) [[unlikely]]
-    return 0;
-
+  //
   // (4) Linkage. rel == 0 means the target is not (yet) compiled or has been unlinked/destroyed; the
   // upstream machinery sets it via WriteLinkBlock and clears it back to 0 on UnlinkBlock/DestroyBlock.
-  // (No explicit zero-downcount/infinite-chain guard like the old rollback impl: a linkable terminal
-  // is always a bx/bcx, which the analyzer always charges >=1 cycle, so a linked block's per-iteration
+  // (No explicit zero-downcount/infinite-chain guard like the old rollback impl: every terminal that
+  // reaches here is a branch the analyzer charges >=1 cycle, so a linked block's per-iteration
   // downcount is always >=1 and the slice bail in (2) terminates every chain in bounded steps.)
+  //
+  // iCube: when the static edge does not apply (blr/bctr exits carry expected_pc == UINT32_MAX, a
+  // bcx fell through, or the static link is unpatched) consult the dynamic inline cache instead:
+  // the last successor resolved by the dispatcher from THIS exit. Followed only when its pc,
+  // feature_flags and generation all match the live state; a miss publishes the slot so the very
+  // next dispatcher round-trip fills it. Fail-safe like the static path: a mismatch never executes
+  // the wrong stream, it costs one dispatcher round-trip.
   const s32 rel = operands.rel;
-  if (rel == 0) [[unlikely]]
+  if (ppc_state.pc != operands.expected_pc || rel == 0) [[unlikely]]
+  {
+    if (operands.dyn_rel != 0 && operands.dyn_pc == ppc_state.pc &&
+        operands.dyn_generation == s_dyn_generation &&
+        operands.dyn_flags == static_cast<u32>(ppc_state.feature_flags))
+    {
+      if (s_cir_profile) [[unlikely]]
+        ++s_dyn_hits;
+      if (s_block_linking_validate && s_validate_instance) [[unlikely]]
+      {
+        ValidateLinkTarget(ppc_state, reinterpret_cast<const u8*>(&operands) - sizeof(AnyCallback),
+                           operands.dyn_rel);
+      }
+      return operands.dyn_rel;
+    }
+    if (s_dyn_linking)
+    {
+      if (s_cir_profile) [[unlikely]]
+        ++s_dyn_misses;
+      s_dyn_fill_slot = const_cast<LinkBlockOperands*>(&operands);
+    }
     return 0;
+  }
 
   // (5) Optional self-validation. The strongest check (resolving GetBlockFromStartAddress(npc,
   // feature_flags) and asserting normalEntry == callback_site + rel) needs the block cache, which a
@@ -1580,25 +1648,34 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const LinkBlo
   // off-by-one), and (c) the target's feature_flags equal the running context's flags (no MSR/IR/DR
   // divergence across the link). Equivalent emit-time invariants are also asserted in WriteLinkBlock.
   if (s_block_linking_validate && s_validate_instance) [[unlikely]]
-  {
-    const u8* callback_site = reinterpret_cast<const u8*>(&operands) - sizeof(AnyCallback);
-    JitBlock* expected = s_validate_instance->m_block_cache.GetBlockFromStartAddress(
-        ppc_state.pc, ppc_state.feature_flags);
-    ASSERT_MSG(DYNA_REC, expected != nullptr,
-               "CIR link: dispatcher would NOT have resolved a block at pc {:#010x}", ppc_state.pc);
-    if (expected)
-    {
-      ASSERT_MSG(DYNA_REC, expected->normalEntry == callback_site + rel,
-                 "CIR link: stale/wrong rel at pc {:#010x} (rel={}, target entry {} != {})",
-                 ppc_state.pc, rel, fmt::ptr(expected->normalEntry), fmt::ptr(callback_site + rel));
-      ASSERT_MSG(DYNA_REC, expected->feature_flags == ppc_state.feature_flags,
-                 "CIR link: feature_flags divergence at pc {:#010x} (block {:#x} vs ctx {:#x})",
-                 ppc_state.pc, static_cast<u32>(expected->feature_flags),
-                 static_cast<u32>(ppc_state.feature_flags));
-    }
-  }
+    ValidateLinkTarget(ppc_state, reinterpret_cast<const u8*>(&operands) - sizeof(AnyCallback), rel);
 
   return rel;
+}
+
+void CachedInterpreter::ValidateLinkTarget(const PowerPC::PowerPCState& ppc_state,
+                                           const u8* callback_site, s32 rel)
+{
+  JitBlock* expected = s_validate_instance->m_block_cache.GetBlockFromStartAddress(
+      ppc_state.pc, ppc_state.feature_flags);
+  ASSERT_MSG(DYNA_REC, expected != nullptr,
+             "CIR link: dispatcher would NOT have resolved a block at pc {:#010x}", ppc_state.pc);
+  if (expected)
+  {
+    ASSERT_MSG(DYNA_REC, expected->normalEntry == callback_site + rel,
+               "CIR link: stale/wrong rel at pc {:#010x} (rel={}, target entry {} != {})",
+               ppc_state.pc, rel, fmt::ptr(expected->normalEntry), fmt::ptr(callback_site + rel));
+    ASSERT_MSG(DYNA_REC, expected->feature_flags == ppc_state.feature_flags,
+               "CIR link: feature_flags divergence at pc {:#010x} (block {:#x} vs ctx {:#x})",
+               ppc_state.pc, static_cast<u32>(expected->feature_flags),
+               static_cast<u32>(ppc_state.feature_flags));
+  }
+}
+
+void CachedInterpreter::BumpDynLinkGeneration()
+{
+  ++s_dyn_generation;
+  s_dyn_fill_slot = nullptr;
 }
 
 s32 CachedInterpreter::LinkBlock(std::ostream& stream, const LinkBlockOperands& operands)
@@ -1701,6 +1778,34 @@ s32 CachedInterpreter::InterpretBclr(PowerPC::PowerPCState& ppc_state,
     if (inst.LK_3)
       LR(ppc_state) = ppc_state.pc + 4;
   }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube 2026-09-17: bcctr terminal (bctr/bctrl: virtual calls, switch tables). Same math as
+// Interpreter::bcctrx minus the branch-watch hooks; only emitted when debugging is off. bcctr with
+// the decrement-CTR BO form is architecturally invalid and the generic handler only asserts on it,
+// so no CTR update here either.
+s32 CachedInterpreter::InterpretBcctr(PowerPC::PowerPCState& ppc_state,
+                                      const InterpretOperands& operands)
+{
+  const UGeckoInstruction inst = operands.inst;
+  ppc_state.pc = operands.current_pc;
+  ppc_state.npc = operands.current_pc + 4;
+  const u32 condition =
+      ((inst.BO_2 >> 4) | (ppc_state.cr.GetBit(inst.BI_2) == ((inst.BO_2 >> 3) & 1))) & 1;
+  if (condition != 0)
+  {
+    ppc_state.npc = CTR(ppc_state) & (~3);
+    if (inst.LK_3)
+      LR(ppc_state) = ppc_state.pc + 4;
+  }
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreter::InterpretBcctr(std::ostream& stream, const InterpretOperands& operands)
+{
+  stream << "InterpretBcctr(pc=0x" << std::hex << operands.current_pc << ", inst=0x"
+         << operands.inst.hex << std::dec << ")\n";
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -4165,7 +4270,7 @@ bool CachedInterpreter::HandleFunctionHooking(u32 address)
   return true;
 }
 
-void CachedInterpreter::WriteEndBlock(u32 link_target)
+void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable)
 {
   // iCube: linkable IFF all hold: feature on; not profiling (the link trampoline is unprofiled);
   // not debugging (breakpoints/stepping must round-trip the dispatcher so a single ExecuteOneBlock
@@ -4174,10 +4279,14 @@ void CachedInterpreter::WriteEndBlock(u32 link_target)
   // op.branchTo (PPCAnalyst.cpp), so sc/rfi/bclr/bcctr/broken-block/HLE-replace (all UINT32_MAX or
   // never passing a target) are excluded and keep their plain EndBlock — we never link past a terminal
   // that can change MSR/feature_flags or toggle EE without the dispatcher getting a turn.
-  const bool linkable = s_block_linking && !IsProfilingEnabled() && !IsDebuggingEnabled() &&
-                        link_target != 0xFFFFFFFF;
+  // iCube: a blr/bctr terminal (dyn_linkable) gets the same trampoline with expected_pc = UINT32_MAX
+  // (the static edge never matches) purely for its dynamic inline cache; no LinkData is recorded
+  // for it, so the upstream linker never sees it.
+  const bool link_ok = s_block_linking && !IsProfilingEnabled() && !IsDebuggingEnabled();
+  const bool linkable = link_ok && link_target != 0xFFFFFFFF;
+  const bool dyn_only = link_ok && s_dyn_linking && dyn_linkable && !linkable;
 
-  if (!linkable)
+  if (!linkable && !dyn_only)
   {
     // iCube: 4th field is the block ENTRY PC (js.blockStart) for the hot-block profiler. Written
     // unconditionally (the slot was formerly anonymous padding); zero layout/size delta.
@@ -4205,11 +4314,17 @@ void CachedInterpreter::WriteEndBlock(u32 link_target)
                                       link_target,
                                       static_cast<u32>(js.curBlock->feature_flags),
                                       0,
-                                      js.blockStart};  // iCube: entry PC for the hot-block profiler
+                                      js.blockStart,  // iCube: entry PC for the hot-block profiler
+                                      0,
+                                      0,
+                                      0,
+                                      0};  // iCube: dynamic inline cache starts empty
   // exitPtrs must point at the AnyCallback slot (start of this callback), so WriteLinkBlock can
   // compute rel = dest->normalEntry - exitPtrs and LinkBlock recovers the same callback_site.
   u8* const callback_site = GetWritableCodePtr();
   Write(LinkBlock, operands);
+  if (dyn_only)
+    return;
 
   // Record the exit so the upstream linker (FinalizeBlock(block_link) -> LinkBlock -> LinkBlockExits)
   // resolves and patches it, and so DestroyBlock -> UnlinkBlock unpatches it on invalidation. One
@@ -5436,6 +5551,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           else if (op.canEndBlock && op.inst.OPCD == 19 && op.inst.SUBOP10 == 16 &&
                    !IsDebuggingEnabled())
             Write(CallbackCast(InterpretBclr), operands);
+          else if (op.canEndBlock && op.inst.OPCD == 19 && op.inst.SUBOP10 == 528 &&
+                   !IsDebuggingEnabled())
+            Write(CallbackCast(InterpretBcctr), operands);
           else
             Write(op.canEndBlock ? CallbackCast(Interpret<true>) : CallbackCast(Interpret<false>),
                   operands);
@@ -5457,7 +5575,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // link would bail anyway — keep them on the plain EndBlock path for clarity. Non-static
         // terminals carry branchTo==UINT32_MAX and so are not linkable inside WriteEndBlock.
         const bool idle_terminal = op.branchIsIdleLoop || op.branchIsCtrIdleLoop;
-        WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo);
+        // iCube: blr/bctr (bclr/bcctr: primary 19, sub 16/528) never touch MSR, so their computed
+        // successor may be followed through the dynamic inline cache. sc/rfi/mtmsr/isync and broken
+        // blocks stay on the plain EndBlock path.
+        const bool dyn_terminal = !idle_terminal && op.inst.OPCD == 19 &&
+                                  (op.inst.SUBOP10 == 16 || op.inst.SUBOP10 == 528);
+        WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo, dyn_terminal);
       }
     }
   }

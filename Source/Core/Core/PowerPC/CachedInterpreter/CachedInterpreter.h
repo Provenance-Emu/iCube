@@ -149,6 +149,11 @@ public:
   // layout (a single trailing s32 rel field) is owned here so the block cache need not see the
   // private operand struct.
   static void PatchLinkBlockRel(u8* exit_ptrs, s32 rel);
+  // iCube: dynamic-link inline cache (MAIN_CIR_DYN_LINKING). Every LinkBlock trampoline carries a
+  // single-entry cache of the last DYNAMIC successor it fell through to (blr/bctr target, bcx
+  // fallthrough). Entries are validated against a process-wide generation that the block cache
+  // bumps on every DestroyBlock, so a freed/reused tape range can never be followed. See LinkBlock.
+  static void BumpDynLinkGeneration();
 
 private:
   // iCube: state_ptr is the CPU run-state pointer (CPU::State*, from CPUManager::GetStatePtr). It is
@@ -163,7 +168,7 @@ private:
   // When block linking is enabled and the terminal is a linkable static branch, emits a LinkBlock
   // trampoline (and records the LinkData for upstream patching) instead of a plain EndBlock. Default
   // UINT32_MAX preserves the stock behavior for all the non-static call sites.
-  void WriteEndBlock(u32 link_target = 0xFFFFFFFF);
+  void WriteEndBlock(u32 link_target = 0xFFFFFFFF, bool dyn_linkable = false);
 
   // Finds a free memory region and sets the code emitter to point at that region.
   // Returns false if no free memory region can be found.
@@ -249,6 +254,9 @@ private:
   // the target block is destroyed/recompiled, so a stale link can never be followed.
   static s32 LinkBlock(PowerPC::PowerPCState& ppc_state, const LinkBlockOperands& operands);
   static s32 LinkBlock(std::ostream& stream, const LinkBlockOperands& operands);
+  // iCube: MAIN_CIR_BLOCK_LINKING_VALIDATE check shared by the static and dynamic link paths.
+  static void ValidateLinkTarget(const PowerPC::PowerPCState& ppc_state, const u8* callback_site,
+                                 s32 rel);
   template <bool write_pc>
   static s32 Interpret(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   template <bool write_pc>
@@ -360,6 +368,8 @@ private:
   static s32 InterpretBx(std::ostream& stream, const InterpretOperands& operands);
   static s32 InterpretBclr(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
   static s32 InterpretBclr(std::ostream& stream, const InterpretOperands& operands);
+  static s32 InterpretBcctr(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  static s32 InterpretBcctr(std::ostream& stream, const InterpretOperands& operands);
   // iCube: dead-FPRF elimination VALIDATE harness (MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE). Double-runs the
   // SAME op (the reference with the hint OFF -> FPRF computed; then, committed last, the eliminated form
   // with the hint ON -> FPRF skipped) and asserts the FPRs and every FPSCR bit OUTSIDE the FPRF field
@@ -462,6 +472,15 @@ struct CachedInterpreter::LinkBlockOperands
   // fast path. Grows the trampoline 24->32B (still alignof-multiple; passes the emitter static_assert)
   // only on the default-ON block-linking path; harmless when profiling is off.
   u32 entry_pc;
+  // iCube: dynamic-link inline cache (MAIN_CIR_DYN_LINKING). The last dynamic successor seen from
+  // this exit: its guest pc, the feature_flags it was resolved under, the generation it was
+  // recorded in, and the relative distance from this callback's AnyCallback slot to its
+  // normalEntry (0 = empty). Written ONLY by ExecuteOneBlock's fill step right after a dispatcher
+  // round-trip; read by LinkBlock when the static edge does not apply. Trampoline grows 32->48 B.
+  u32 dyn_pc;
+  u32 dyn_flags;
+  u32 dyn_generation;
+  s32 dyn_rel;
   u32 : 32;
 };
 
