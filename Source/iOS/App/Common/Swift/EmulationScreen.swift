@@ -39,6 +39,10 @@ private final class EmuContainerViewController: UIViewController {
   }
 
   override func viewDidAppear(_ animated: Bool) {
+    // iCube: keep the device awake while a game is on screen. Without this the phone auto-locks
+    // mid-game when playing on a controller (no touches), suspends the app, and tears down the
+    // perf test-bench listener. Cleared in deinit (exit to library) and on backgrounding by iOS.
+    UIApplication.shared.isIdleTimerDisabled = true
     super.viewDidAppear(animated)
     // Tear down any previous child to ensure a fresh setup each time
     if let existing = emuVC {
@@ -152,6 +156,7 @@ private final class EmuContainerViewController: UIViewController {
   }
 
   deinit {
+    UIApplication.shared.isIdleTimerDisabled = false
     if let token = exitObserver {
       NotificationCenter.default.removeObserver(token)
     }

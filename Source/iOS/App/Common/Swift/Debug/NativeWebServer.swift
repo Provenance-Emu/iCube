@@ -70,6 +70,10 @@ final class NativeWebServer: @unchecked Sendable {
 
   private var listener: NWListener?
   private var activeConnections = [ObjectIdentifier: NWConnection]()
+  /// Called (on the server queue) when the listener fails AFTER it was ready. The owner should
+  /// restart the server; the listener does not recover by itself and every later connection is
+  /// reset by usbmuxd with nothing to show for it in the log.
+  var onListenerLost: ((Error) -> Void)?
   private let queue = DispatchQueue(label: "com.icube.debugserver", qos: .userInitiated)
   private let lock = NSLock()
   private var customRoutes: [CustomRoute] = []
@@ -138,6 +142,9 @@ final class NativeWebServer: @unchecked Sendable {
           self?.stop()
           if !resumed { resumed = true
             continuation.resume(throwing: error)
+          } else {
+            NSLog("[DebugServer] listener failed after ready: \(error)")
+            self?.onListenerLost?(error)
           }
         case .cancelled:
           if !resumed {

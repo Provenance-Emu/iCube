@@ -34,6 +34,7 @@ final class DebugServerManager: NSObject {
   static var skipJITPromptOnce = false
 
   private(set) var isRunning = false
+  private var routesRegistered = false
   private(set) var serverURL: String = ""
 
   /// Port for the loopback debug API. Reach it over USB with:
@@ -62,13 +63,26 @@ final class DebugServerManager: NSObject {
   @objc func start() {
     guard isEnabled else { return }
     guard !isRunning else { return }
-    server.webSocketHandler = { path, socket in
-      guard path == "/ws/events" else { return false }
-      DebugEventBus.shared.attach(socket)
-      return true
+    if !routesRegistered {
+      routesRegistered = true
+      server.webSocketHandler = { path, socket in
+        guard path == "/ws/events" else { return false }
+        DebugEventBus.shared.attach(socket)
+        return true
+      }
+      DebugEventBus.shared.startProducers()
+      routes.registerRoutes(on: server)
+      // Listener died after it was up (seen after ~100 loopback connections on iOS 26): mark
+      // stopped and bring it back, otherwise every later request is reset with no log line.
+      server.onListenerLost = { [weak self] _ in
+        Task { @MainActor in
+          guard let self else { return }
+          self.isRunning = false
+          try? await Task.sleep(for: .seconds(1))
+          self.start()
+        }
+      }
     }
-    DebugEventBus.shared.startProducers()
-    routes.registerRoutes(on: server)
     Task {
       do {
         try await server.start()
