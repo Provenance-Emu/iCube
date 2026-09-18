@@ -1705,26 +1705,31 @@ after_set:
     // CachedInterpreter + Software VertexLoader so nothing ever executes from JIT pages.
     bool txmInterpreterFallback = false;
 
-    if ([JitManager shared].acquiredJit)
+    // Fresh CS_DEBUGGED / P_TRACED read: StikDebug attaches after launch (URL hand-off)
+    // and detaches once the handshake below has been answered.
+    JitManager* jitManager = [JitManager shared];
+    [jitManager recheckIfJitIsAcquired];
+
+    if (jitManager.acquiredJit)
     {
       if (@available(iOS 26, tvOS 26, *))
       {
-        if ([JitManager shared].deviceHasTxm)
+        if (jitManager.deviceHasTxm)
         {
           // TXM device + CS_DEBUGGED.
           //
-          // Opt-in ONLY (default OFF). The LuckTXM brk #0x69 handshake is answered
-          // exclusively by a real StikDebug broker, and CS_DEBUGGED cannot tell a
-          // broker apart from Xcode (or any debugger attached to a dev-signed build) —
-          // both set the same flag. So auto-attempting the brk raises an uncatchable
-          // EXC_BREAKPOINT whenever no broker is actually present (Xcode, dev testing).
-          // We therefore require an explicit DOL_JIT_TXM=1 to attempt it; unset or any
-          // other value drops straight to CachedInterpreter (no brk, no crash). A
-          // StikDebug user who wants the experimental JIT path opts in via that env var.
-          NSDictionary* env = [[NSProcessInfo processInfo] environment];
-          BOOL enableTXM = [env[@"DOL_JIT_TXM"] isEqualToString:@"1"];
+          // The LuckTXM brk #0x69 handshake is answered by a StikDebug broker script
+          // that stays attached until it has prepared the region. CS_DEBUGGED alone
+          // cannot tell that broker apart from an old-style enabler (which detaches
+          // immediately) or from Xcode (whose LLDB traps the brk), so the decision is
+          // made by -[JitManager shouldAttemptTXMHandshake]: a debugger attached right
+          // now (P_TRACED) that is not Xcode. Once authorized, the region survives the
+          // broker's detach, so later boots in this process reuse it without a brk.
+          // An unanswered brk is caught by the SIGTRAP net inside
+          // AllocateExecutableMemoryRegion_LuckTXM and degrades to the interpreter.
+          const bool regionAlreadyAuthorized = Common::IsTXMJITAvailable_LuckTXM();
 
-          if (enableTXM)
+          if (regionAlreadyAuthorized || [jitManager shouldAttemptTXMHandshake])
           {
             Common::SetJitType(Common::JitType::LuckTXM);
             Common::AllocateExecutableMemoryRegion();
@@ -1740,6 +1745,11 @@ after_set:
             Common::SetJitType(Common::JitType::LuckNoTXM);
             txmInterpreterFallback = true;
           }
+
+          [jitManager noteTXMHandshakeResult:!txmInterpreterFallback];
+          NSLog(@"[JitManager] TXM boot: attached=%d authorized=%d fallback=%d",
+                (int)jitManager.debuggerAttached, (int)jitManager.txmAuthorized,
+                (int)txmInterpreterFallback);
         }
         else
         {
@@ -1773,7 +1783,7 @@ after_set:
     {
       const PowerPC::CPUCore current_core = Config::Get(Config::MAIN_CPU_CORE);
       const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter || current_core == PowerPC::CPUCore::CachedInterpreterIR;
-      if ((![JitManager shared].acquiredJit || txmInterpreterFallback) && !is_interpreter_core)
+      if ((!jitManager.acquiredJit || txmInterpreterFallback) && !is_interpreter_core)
       {
         Config::SetCurrent(Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
       }

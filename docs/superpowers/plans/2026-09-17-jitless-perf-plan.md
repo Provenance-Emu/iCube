@@ -94,6 +94,27 @@ call-heavy titles (Chibi-Robo is branch-heavy the same way).
      adopt the same brk-request protocol so one attached session serves every JIT region
      (Dolphin allocates its code space once, so this may be a single request at boot).
    Applies to tvOS 26 too (same TXM). Keep engine 5 as the default for non-JIT users.
+   **Status 2026-09-18 — auto-detection implemented (DolphiniOS method).** Nothing had to be
+   ported: develop is a strict superset of OatmealDome master on `Jit/`, `JitArm64/` and
+   `MemoryUtil*` (their e271625b TXM refactor is already in 7bbdd9c67a). What was missing
+   was activation: the boot path only issued the brk #0x69 handshake behind an env opt-in
+   (`DOL_JIT_TXM=1`) nobody could set, and Info.plist baked `DOL_JIT_TXM_NOBRK=1`, an
+   unproven brk-free experiment that would have replaced the real handshake. Now:
+   `JitManager.debuggerAttached` (live P_TRACED via sysctl, unlike CS_DEBUGGED which
+   persists after detach) drives `-shouldAttemptTXMHandshake` = TXM && acquired && attached
+   now && not Xcode (`DOL_JIT_TXM` 1/0 still overrides for tests); `txmAuthorized` keeps a
+   successful handshake for later boots in the same process; acquisition is re-read on every
+   foreground and at boot; the "Waiting for JIT" prompt also fires on TXM devices that have
+   CS_DEBUGGED but no broker; Settings > Debug shows Debugger / TXM JIT Region rows;
+   `GET /api/debug/jit` and `POST /api/debug/jit/stikdebug` drive it remotely
+   (`~/.icube-debug/jit_test.sh`). Why P_TRACED is the right signal: StikDebug's
+   `debugApp` launches the app suspended, runs the script (icube.js waits in `c` for the
+   brk, calls prepare_memory_region, advances pc) and only detaches afterwards, so the broker
+   is attached exactly while a boot can brk; an unanswered brk is caught by the SIGTRAP net
+   in `MemoryUtil_iOS_LuckTXM.cpp`. The phone's StikJIT 1.1 had no script support; StikDebug
+   3.1.10 was rebuilt under the project team as com.joemattiello.StikJIT (keeps the pairing
+   file) and installed. Remaining: on-device proof with engine 4 (needs the phone unlocked,
+   StosVPN on, and a tap to confirm StikDebug's external-request prompt).
 
 ## Method (non-negotiable, it found everything above)
 Same-session A/B on the phone: check `cpu_core_configured` before AND after

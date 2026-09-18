@@ -505,6 +505,33 @@ final class DebugAPIRoutes {
       ["ok": true, "data": DOLDebugBridge.buildInfo()]
     }
 
+    // GET /api/debug/jit — JitManager state (fresh CS_DEBUGGED / P_TRACED read)
+    server.addCustomHandler(forMethod: "GET", path: "/api/debug/jit") { _, _, _, _ in
+      // Handlers run on the server queue; canOpenURL (StikDebug probe) is main-thread only.
+      let data: [String: Any] = DispatchQueue.main.sync {
+        let manager = JitManager.shared()
+        manager.recheckIfJitIsAcquired()
+        return [
+          "jit_supported": manager.jitSupported,
+          "jit_acquired": manager.acquiredJit,
+          "device_has_txm": manager.deviceHasTxm,
+          "debugger_attached": manager.debuggerAttached,
+          "txm_authorized": manager.txmAuthorized,
+          "txm_handshake_would_run": manager.shouldAttemptTXMHandshake(),
+          "acquisition_error": manager.acquisitionError ?? "",
+          "stikdebug_installed": StikDebugLauncher.isStikDebugInstalled,
+        ]
+      }
+      return ["ok": true, "data": data]
+    }
+
+    // POST /api/debug/jit/stikdebug — hand iCube's broker script to StikDebug (iOS only)
+    server.addCustomHandler(forMethod: "POST", path: "/api/debug/jit/stikdebug") { _, _, _, _ in
+      var launched = false
+      DispatchQueue.main.sync { launched = StikDebugLauncher.enableJIT() }
+      return ["ok": launched, "data": ["launched": launched]]
+    }
+
     // GET /api/debug/render-state
     server.addCustomHandler(forMethod: "GET", path: "/api/debug/render-state") { _, _, _, _ in
       ["ok": true, "data": DOLDebugBridge.renderState()]

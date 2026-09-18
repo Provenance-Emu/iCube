@@ -15,6 +15,8 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 @property (readwrite, assign) bool acquiredJit;
 @property (readwrite, assign) bool deviceHasTxm;
 @property (readwrite, assign) bool jitSupported;
+@property (readwrite, assign) bool debuggerAttached;
+@property (readwrite, assign) bool txmAuthorized;
 
 @end
 
@@ -82,21 +84,13 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
     return;
   }
 
+  // Live P_TRACED read: StikDebug may attach AFTER launch (URL hand-off), and it
+  // detaches again once the TXM handshake is answered.
+  self.debuggerAttached = [self checkIfDebuggerAttachedNow];
+
   if (_jitType == DOLJitTypeDebugger) {
     if (self.deviceHasTxm) {
-      NSDictionary* environment = [[NSProcessInfo processInfo] environment];
-
-      // Detect Xcode's debugger automatically:
-      //   XCODE         — manually added to the Xcode scheme's environment variables
-      //   OS_ACTIVITY_DT_MODE — set automatically by Xcode when debugging on a real device
-      //                          (routes os_log to Xcode console; not set by StikDebug)
-      // On a TXM device the LuckTXM brk #0x69 handshake is only handled by StikDebug;
-      // LLDB will intercept it and raise EXC_BREAKPOINT instead.
-      BOOL isXcodeDebugger =
-          [environment objectForKey:@"XCODE"] != nil ||
-          [environment objectForKey:@"OS_ACTIVITY_DT_MODE"] != nil;
-
-      if (isXcodeDebugger) {
+      if ([self checkIfRunningUnderXcode]) {
         static dispatch_once_t onceToken;
 
         dispatch_once(&onceToken, ^{
@@ -111,11 +105,42 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
     
     self.acquiredJit = [self checkIfProcessIsDebugged];
     
-    if (self.deviceHasTxm && self.acquiredJit) {
-      self.acquisitionError = @"A debugger is attached. On iOS 26 TXM devices, StikDebug 2.3.0+ is required for full JIT. Other enablers fall back to Cached Interpreter.";
+    if (self.deviceHasTxm && self.acquiredJit && !self.txmAuthorized) {
+      self.acquisitionError = self.debuggerAttached
+          ? @"A debugger is attached. On iOS 26 TXM devices the JIT region is authorized by StikDebug's script when a game boots; other debuggers fall back to Cached Interpreter."
+          : @"JIT was acquired but no debugger is attached now. On iOS 26 TXM devices, launch iCube through StikDebug (Enable JIT via StikDebug) so its script can authorize the JIT region; otherwise games use the Cached Interpreter.";
     }
   } else if (_jitType == DOLJitTypeUnrestricted) {
     self.acquiredJit = true;
+  }
+}
+
+- (bool)shouldAttemptTXMHandshake {
+  if (!self.deviceHasTxm || !self.acquiredJit) {
+    return false;
+  }
+
+  // Test/debug override. "1" forces the handshake even without a live debugger
+  // (the SIGTRAP net in AllocateExecutableMemoryRegion_LuckTXM then turns an
+  // unanswered brk into a clean interpreter fallback); "0" disables it outright.
+  NSString* override = [[NSProcessInfo processInfo] environment][@"DOL_JIT_TXM"];
+  if ([override isEqualToString:@"1"]) {
+    return true;
+  }
+  if ([override isEqualToString:@"0"]) {
+    return false;
+  }
+
+  // Auto-detect: a broker can only answer the brk if a debugger is attached right
+  // now, and LLDB (Xcode) would trap it instead of answering. CS_DEBUGGED alone is
+  // not enough — old-style JIT enablers set it and detach immediately.
+  return [self checkIfDebuggerAttachedNow] && ![self checkIfRunningUnderXcode];
+}
+
+- (void)noteTXMHandshakeResult:(bool)authorized {
+  self.txmAuthorized = authorized;
+  if (authorized) {
+    self.acquisitionError = nil;
   }
 }
 

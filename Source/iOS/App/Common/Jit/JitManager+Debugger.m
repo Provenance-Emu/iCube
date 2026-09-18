@@ -4,6 +4,7 @@
 #import "JitManager+Debugger.h"
 
 #import <math.h>
+#import <sys/sysctl.h>
 #import <sys/utsname.h>
 #import <unistd.h>
 
@@ -40,6 +41,33 @@ extern int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
   }
 
   return (flags & CS_GET_TASK_ALLOW) != 0;
+}
+
+// True while a debugger is attached to this process (kinfo_proc P_TRACED). Unlike
+// CS_DEBUGGED this clears when the debugger detaches, so it distinguishes "a JIT
+// enabler once poked us" from "a broker is listening right now". Used for the iOS 26
+// TXM handshake decision: StikDebug launches the app, runs its script (which waits
+// for brk #0x69), and only detaches after answering it.
+- (bool)checkIfDebuggerAttachedNow {
+  int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
+  struct kinfo_proc info;
+  size_t size = sizeof(info);
+  memset(&info, 0, sizeof(info));
+  if (sysctl(mib, 4, &info, &size, NULL, 0) != 0) {
+    return false;
+  }
+  return (info.kp_proc.p_flag & P_TRACED) != 0;
+}
+
+// Xcode's debugger. Two independent tells:
+//   XCODE               — added by hand to the scheme's environment variables
+//   OS_ACTIVITY_DT_MODE — set automatically by Xcode when it launches on a device
+//                         (routes os_log to the Xcode console; StikDebug never sets it)
+// On a TXM device the brk #0x69 handshake is only answered by a StikDebug broker; LLDB
+// intercepts it and raises EXC_BREAKPOINT instead.
+- (bool)checkIfRunningUnderXcode {
+  NSDictionary* environment = [[NSProcessInfo processInfo] environment];
+  return environment[@"XCODE"] != nil || environment[@"OS_ACTIVITY_DT_MODE"] != nil;
 }
 
 #pragma mark - TXM detection

@@ -1375,6 +1375,8 @@ struct DebugRootView: View {
   @State private var userFolder: String = ""
   @State private var jitAcquired: Bool = false
   @State private var jitError: String = ""
+  @State private var debuggerAttached: Bool = false
+  @State private var txmAuthorized: Bool = false
   @State private var fastmemAvailable: Bool = false
   @State private var launchTimes: Int = 0
   @State private var loggingEnabled: Bool = false
@@ -1409,11 +1411,17 @@ struct DebugRootView: View {
       Section(header: Text(L("Environment"))) {
         HStack { Text(L("User Folder")); Spacer(); Text(userFolder).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
         HStack { Text(L("JIT")); Spacer(); Text(jitAcquired ? L("Acquired") : L("Not Acquired")).foregroundStyle(.secondary) }
+        HStack { Text(L("Debugger")); Spacer(); Text(debuggerAttached ? L("Attached") : L("Not Attached")).foregroundStyle(.secondary) }
+        if JitManager.shared().deviceHasTxm {
+          HStack { Text(L("TXM JIT Region")); Spacer(); Text(txmAuthorized ? L("Authorized") : L("Not Authorized")).foregroundStyle(.secondary) }
+        }
         HStack { Text(L("JIT Error")); Spacer(); Text(jitError.isEmpty ? "(none)" : jitError).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
         #if os(iOS)
         /// iOS 26 TXM hand-off: ship iCube's own broker script to StikDebug inline so JIT can be
-        /// authorized without the user pre-assigning a script. Shown only when actionable.
-        if !jitAcquired, JitManager.shared().jitSupported, JitManager.shared().deviceHasTxm, StikDebugLauncher.isStikDebugInstalled {
+        /// authorized without the user pre-assigning a script. Shown only when actionable: JIT
+        /// not acquired, or acquired on a TXM device with no broker attached and no region yet.
+        if !jitAcquired || (JitManager.shared().deviceHasTxm && !txmAuthorized && !debuggerAttached),
+           JitManager.shared().jitSupported, JitManager.shared().deviceHasTxm, StikDebugLauncher.isStikDebugInstalled {
           settingsCaption(
             Button(L("Enable JIT via StikDebug")) { StikDebugLauncher.enableJIT() },
             L("Hands iCube's bundled JIT script to StikDebug and enables JIT for this app. StikDebug will relaunch iCube; reopen a game afterward to run with JIT."))
@@ -1517,11 +1525,17 @@ struct DebugRootView: View {
   }
 
   private func syncDebugChunk3() async {
-    let acquired = JitManager.shared().acquiredJit
-    let error = JitManager.shared().acquisitionError ?? ""
+    let manager = JitManager.shared()
+    manager.recheckIfJitIsAcquired()
+    let acquired = manager.acquiredJit
+    let error = manager.acquisitionError ?? ""
+    let attached = manager.debuggerAttached
+    let authorized = manager.txmAuthorized
     await MainActor.run {
       jitAcquired = acquired
       jitError = error
+      debuggerAttached = attached
+      txmAuthorized = authorized
     }
   }
 

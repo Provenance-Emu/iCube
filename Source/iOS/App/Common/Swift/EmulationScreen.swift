@@ -91,13 +91,21 @@ private final class EmuContainerViewController: UIViewController {
     // (buggy) CpuEngine raw value. Any interpreter core suppresses the prompt;
     // when JIT is unavailable the core silently falls back to Cached Interpreter.
     let manager = JitManager.shared()
+    manager.recheckIfJitIsAcquired()
     let currentCore = DOLConfigBridge.mainCpuCore()
     let isJitCoreSelected = (currentCore == 4 || currentCore == 3) // JITARM64 (4) + legacy 3
     // iCube: a remote boot (POST /api/debug/boot) pre-answers the prompt with "Use No JIT Mode".
     let skipPrompt = DebugServerManager.skipJITPromptOnce
     DebugServerManager.skipJITPromptOnce = false
-    if manager.jitSupported, !manager.acquiredJit, isJitCoreSelected, !skipPrompt {
-      let alert = UIAlertController(title: "Waiting for JIT", message: "iCube may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode.", preferredStyle: .alert)
+    // iOS 26 TXM: CS_DEBUGGED alone is not enough — the region must be authorized by a
+    // broker attached right now (or already authorized earlier in this process).
+    let txmNeedsBroker = manager.deviceHasTxm && manager.acquiredJit
+      && !manager.txmAuthorized && !manager.debuggerAttached
+    if manager.jitSupported, !manager.acquiredJit || txmNeedsBroker, isJitCoreSelected, !skipPrompt {
+      let message = txmNeedsBroker
+        ? "This device uses TXM, so JIT needs StikDebug attached when a game boots. You can continue with a slower, no-JIT mode."
+        : "iCube may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode."
+      let alert = UIAlertController(title: "Waiting for JIT", message: message, preferredStyle: .alert)
       #if os(iOS)
       // iOS 26 TXM devices: offer a one-tap hand-off to StikDebug. iCube ships its own broker
       // script (icube.js) and passes it inline via the stikdebug:// URL scheme, so the user need

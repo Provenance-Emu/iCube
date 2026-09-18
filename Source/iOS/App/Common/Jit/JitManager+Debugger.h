@@ -9,6 +9,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (bool)checkIfProcessIsDebugged;
 - (bool)checkIfProcessIsJitCapable;
+- (bool)checkIfDebuggerAttachedNow;
+- (bool)checkIfRunningUnderXcode;
 - (bool)checkIfDeviceUsesTXM;
 
 @end
