@@ -47,6 +47,7 @@ call-heavy titles (Chibi-Robo is branch-heavy the same way).
    |---|---|---|---|
    | Wind Waker (GZLE01) intro | 0.607, 0.608, 0.591 | 0.578, 0.577, 0.563 | **+5 %** |
    | Chibi-Robo (GGTE01) intro | 0.477, 0.473 | 0.442 | **+8 %** |
+   | Chibi-Robo, later scene, drift-controlled | 0.528 | 0.488 | **+8 %** |
    Wind Waker inline-cache hit rate 92 % (67.2 M hits / 5.6 M misses); ~half of all block
    exits are dynamic. The gain is smaller than the 20 % the "idle loop" story promised
    because the search loop is real work: the cache only removes the dispatcher round-trip,
