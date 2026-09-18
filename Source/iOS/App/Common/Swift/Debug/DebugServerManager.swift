@@ -28,6 +28,11 @@ import Foundation
 final class DebugServerManager: NSObject {
   @objc(sharedManager) static let shared = DebugServerManager()
 
+  /// Set by POST /api/debug/boot (default true) and consumed once by EmulationScreen: skip the
+  /// "Waiting for JIT" prompt and go straight to the no-JIT path, exactly as tapping
+  /// "Use No JIT Mode (Slow)" would. Main-thread only. Never set by any user-facing path.
+  static var skipJITPromptOnce = false
+
   private(set) var isRunning = false
   private(set) var serverURL: String = ""
 

@@ -14,6 +14,10 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
     MainSceneCoordinator.shared().mainScene = scene as? UIWindowScene
+    // iCube: bring the perf test-bench server up at scene connect (not only at the first game boot)
+    // so a Mac-side script can drive POST /api/debug/boot on a freshly launched app. Self-gated on
+    // the "Perf Test Bench (HTTP)" toggle and idempotent, so this is a no-op for everyone else.
+    DebugServerManager.shared.start()
 
     // On tvOS, we do not use storyboards. Create the window and root UI programmatically using SwiftUI.
     if AppConsts.useSwiftUI {

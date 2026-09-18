@@ -16,6 +16,8 @@
 //   GET  /api/bench/result           -> last finished benchmark result
 //   POST /api/bench/sweep            body {"key":K,"values":[...],"slot":N,"seconds":S}
 //   GET  /api/health                 -> build/game/core-state/perf summary
+//   POST /api/debug/boot             body {"gameID":"GZLE01"} -> boot a library title (library must be on screen)
+//   POST /api/debug/stop             -> quit the running game back to the library (server stays up)
 //   POST /api/debug/pause            -> pause the running core
 //   POST /api/debug/resume           -> resume the paused core
 //   POST /api/debug/frame-advance    body {"n":N} (required, 1...600) -> step N frames while paused
@@ -37,6 +39,8 @@ import Foundation
 /// The error message every `parseBody` caller returns (as a 400) when the
 /// request body is missing, empty, or not a JSON object.
 private let bodyMustBeJSONObjectError = "body must be a JSON object"
+/// Settings captured by the first POST /api/bench/preset benchmarkBase, for "restore". Server queue only.
+nonisolated(unsafe) private var presetRestoreSnapshot: PerfSnapshot?
 
 /// Parses a request body as a JSON object, or nil for a missing, empty, or
 /// non-object body — callers should turn a nil into a 400 with
@@ -351,6 +355,73 @@ final class DebugAPIRoutes {
       }
       return DOLDebugBridge.saveStateSlot(slot) ? ["ok": true, "data": ["slot": slot]]
                                                  : ["ok": false, "status": 409, "error": "core not running"]
+    }
+
+    // POST /api/bench/preset  body {"preset":"benchmarkBase"} -> adaptive clock OFF + 100 % CPU/VI clocks
+    // (PerfAB.applyBenchmarkBase: the "honest benchmark" preset) so /api/perf/live `speed` measures
+    // raw interpreter throughput; the pre-preset state is captured once. {"preset":"restore"} puts
+    // it back. Boot-time: reboot the game after either call.
+    server.addCustomHandler(forMethod: "POST", path: "/api/bench/preset") { _, _, _, body in
+      guard let dict = parseBody(body), let preset = dict["preset"] as? String else {
+        return ["ok": false, "status": 400, "error": "body must contain a string 'preset' (benchmarkBase|restore)"]
+      }
+      switch preset {
+      case "benchmarkBase":
+        DispatchQueue.main.sync {
+          if presetRestoreSnapshot == nil { presetRestoreSnapshot = PerfAB.capture(name: "pre-benchmark") }
+          PerfAB.applyBenchmarkBase()
+        }
+        return ["ok": true, "data": ["preset": preset, "applied": true] as [String: Any]]
+      case "restore":
+        guard let snap = presetRestoreSnapshot else {
+          return ["ok": false, "status": 404, "error": "no pre-preset snapshot to restore"]
+        }
+        DispatchQueue.main.sync { PerfAB.apply(snap) }
+        presetRestoreSnapshot = nil
+        return ["ok": true, "data": ["preset": preset, "restored": true] as [String: Any]]
+      default:
+        return ["ok": false, "status": 400, "error": "unknown preset '\(preset)'"]
+      }
+    }
+
+    // POST /api/debug/boot  body {"gameID":"GZLE01"} — boots a library title exactly like the
+    // Spotlight deep link (DOLLaunchGameByGameID -> TVLibraryView.spotlightLaunchByGameID), so it
+    // needs the library to be on screen: stop a running game first (POST /api/debug/stop). Lets a
+    // Mac-side script run settings-A/B legs (set flag -> boot -> sample -> stop) with nobody at the
+    // phone. Boot-time flags read at CachedInterpreter::Init apply to the new boot.
+    server.addCustomHandler(forMethod: "POST", path: "/api/debug/boot") { _, _, _, body in
+      guard let dict = parseBody(body) else {
+        return ["ok": false, "status": 400, "error": bodyMustBeJSONObjectError]
+      }
+      guard let gameID = dict["gameID"] as? String, !gameID.isEmpty else {
+        return ["ok": false, "status": 400, "error": "body must contain a string 'gameID'"]
+      }
+      let state = DOLDebugBridge.coreState()
+      if state != "uninitialized" && state != "unknown" {
+        return ["ok": false, "status": 409, "error": "a game is \(state); POST /api/debug/stop first"]
+      }
+      // "noJIT" (default true): answer the "Waiting for JIT" prompt with "Use No JIT Mode" so the
+      // boot never blocks on a dialog nobody is there to tap.
+      let noJIT = (dict["noJIT"] as? Bool) ?? true
+      DispatchQueue.main.async {
+        DebugServerManager.skipJITPromptOnce = noJIT
+        NotificationCenter.default.post(name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil,
+                                        userInfo: ["gameID": gameID])
+      }
+      return ["ok": true, "data": ["gameID": gameID, "requested": true] as [String: Any]]
+    }
+
+    // POST /api/debug/stop — quit the running game and return to the library (the pause menu's
+    // "Quit" path: TVEmulationBridge.stop + DOLEmulationRequestExitToLibrary). The server itself
+    // stays up, so /api/debug/boot can follow. Poll GET /api/health until core_state leaves
+    // running/stopping.
+    server.addCustomHandler(forMethod: "POST", path: "/api/debug/stop") { _, _, _, _ in
+      let state = DOLDebugBridge.coreState()
+      DispatchQueue.main.async {
+        TVEmulationBridge.stop()
+        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+      }
+      return ["ok": true, "data": ["was": state, "requested": true] as [String: Any]]
     }
 
     // POST /api/debug/loadstate  body {"slot":N} or {"path":P}; one of the two is required

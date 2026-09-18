@@ -89,7 +89,10 @@ private final class EmuContainerViewController: UIViewController {
     let manager = JitManager.shared()
     let currentCore = DOLConfigBridge.mainCpuCore()
     let isJitCoreSelected = (currentCore == 4 || currentCore == 3) // JITARM64 (4) + legacy 3
-    if manager.jitSupported, !manager.acquiredJit, isJitCoreSelected {
+    // iCube: a remote boot (POST /api/debug/boot) pre-answers the prompt with "Use No JIT Mode".
+    let skipPrompt = DebugServerManager.skipJITPromptOnce
+    DebugServerManager.skipJITPromptOnce = false
+    if manager.jitSupported, !manager.acquiredJit, isJitCoreSelected, !skipPrompt {
       let alert = UIAlertController(title: "Waiting for JIT", message: "iCube may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode.", preferredStyle: .alert)
       #if os(iOS)
       // iOS 26 TXM devices: offer a one-tap hand-off to StikDebug. iCube ships its own broker
