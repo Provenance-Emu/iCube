@@ -35,14 +35,29 @@ through the dispatcher (2 bctrl, 2 blr, beqlr fallthrough, beq fallthrough). Rep
 call-heavy titles (Chibi-Robo is branch-heavy the same way).
 
 ## Ranked opportunities (each one build + one boot to verify)
-1. **Dynamic block links (LANDED 2026-09-17, `CIRDynLinking`).** Every LinkBlock
-   trampoline carries a single-entry inline cache of the last dynamic successor
-   (blr/bctr target, bcx fallthrough); a repeat hops without the dispatcher, validated
-   by pc + feature_flags + a generation bumped on every DestroyBlock. bcctr got an
-   inline terminal too. Hot-blocks report prints dyn_link_hits/misses. Idle detection
-   for this loop is OFF the table (see above); a genuine multi-block idle detector is
-   still worth having for other titles but must prove the loop is side-effect-free
-   AND non-terminating (memory operand unchanged across iterations), which this one is not.
+1. **Dynamic block links (LANDED 2026-09-17, `CIRDynLinking`, iCube 378d06cc33).** Every
+   LinkBlock trampoline carries a single-entry inline cache of the last dynamic successor
+   (blr/bctr target, bcx fallthrough); a repeat hops without the dispatcher, validated by
+   pc + feature_flags + a generation bumped on every DestroyBlock. bcctr got an inline
+   terminal too. Hot-blocks report prints dyn_link_hits/misses.
+   **Measured (core 5, honest preset = adaptive clock OFF + 100 % clocks, thermal nominal,
+   `speed` = fraction of real time, alternating on/off legs with a throttled cool-down
+   before each, 30 s same-scene samples):**
+   | game | dyn ON | dyn OFF | gain |
+   |---|---|---|---|
+   | Wind Waker (GZLE01) intro | 0.607, 0.608, 0.591 | 0.578, 0.577, 0.563 | **+5 %** |
+   | Chibi-Robo (GGTE01) intro | 0.477, 0.473 | 0.442 | **+8 %** |
+   Wind Waker inline-cache hit rate 92 % (67.2 M hits / 5.6 M misses); ~half of all block
+   exits are dynamic. The gain is smaller than the 20 % the "idle loop" story promised
+   because the search loop is real work: the cache only removes the dispatcher round-trip,
+   not the 9 blocks per node. Idle detection for this loop is OFF the table (it terminates
+   on its own); a genuine multi-block idle detector must prove the loop is side-effect-free
+   AND non-terminating, which this one is not.
+   **Measurement method that finally worked (everything else lied):** `~/.icube-debug/ab.py`
+   over the debug API (`/api/debug/boot|stop`, `/api/bench/preset`), see memory
+   `icube-remote-ab`. Adaptive-clock fps numbers are meaningless (the clock persists across
+   boots); 3 consecutive legs drift with heat even at "nominal" (WW .653/.576/.517); the
+   phone auto-locks mid-game unless the app disables the idle timer (fixed 40fc5e427b).
 2. **Block transitions (call-heavy games).** `bclr` returns can't be linked →
    Dispatch + GetBlockFromStartAddress + LinkBlock ≈ 8–11 % on WW/Chibi. Ideas: a
    return-address cache (predict LR → block pointer) checked before Dispatch;
@@ -61,8 +76,23 @@ call-heavy titles (Chibi-Robo is branch-heavy the same way).
    chain (compare→jump table), LoadStore*PIC entry stalls (fp/lr pair remains),
    psq_l/psq_st quantized loads via Helper_Dequantize (flag PSQ_FASTPATH exists),
    X-form FP loads/stores (only D-form is on the direct path).
-5. **JIT for sideloaders**: engine 4 (JITARM64) exists; verify it still works with
-   the TXM writable-region plumbing on iOS 26 for users who can get JIT.
+5. **JIT for iOS/tvOS 26+ (TXM) — NEXT after the jit-less work stops paying.** Engine 4
+   (JITARM64) exists and the StikDebug hand-off is wired (`Jit/StikDebugLauncher.swift`,
+   `JitManager`, inline `icube.js` via the stikdebug:// scheme; the "Waiting for JIT" prompt
+   in EmulationScreen). Two reference implementations to (re)base on:
+   - **DolphiniOS method**: debugserver attach (StikDebug/SideStore) + `prepare_memory_region`
+     on the JIT buffer; verify the TXM writable-region plumbing still works on iOS 26 and
+     that engine 4 boots NSMBW/WW with it.
+   - **RetroArch script method**: warmenhoven/RetroArch 79ba6a9a36 ("WIP - PIW") adds
+     `RETRO_ENVIRONMENT_EXEC_MEM_ALLOC/FREE` with modes UNRESTRICTED / RWX / WX_TOGGLE /
+     DUAL_MAP and Apple `exec_mem_alloc(size, mode, rx, rw)` in `pkg/apple/JITSupport.m`;
+     StikDebug/StikDebug cf10cca409 adds `StikJIT/Scripts/retroarch.js`: stays attached,
+     `QSetIgnoredExceptions:EXC_BAD_ACCESS|EXC_SOFTWARE` so faults cost nothing, and on a
+     `brk #0x69` reads x0/x1 (addr/size) -> `prepare_memory_region`, 16 KB page rounding,
+     16 MB granules to avoid debugger deadlock, then advances pc. iCube's `icube.js` should
+     adopt the same brk-request protocol so one attached session serves every JIT region
+     (Dolphin allocates its code space once, so this may be a single request at boot).
+   Applies to tvOS 26 too (same TXM). Keep engine 5 as the default for non-JIT users.
 
 ## Method (non-negotiable, it found everything above)
 Same-session A/B on the phone: check `cpu_core_configured` before AND after
