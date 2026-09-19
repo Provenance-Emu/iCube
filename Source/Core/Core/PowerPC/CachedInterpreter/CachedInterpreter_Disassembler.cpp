@@ -139,12 +139,13 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
   // clang-format on
 
   // Function addresses aren't known at compile-time, so this array is sorted at run-time.
+  // Only records the emitter still writes with a typed callback. The chain-capable forms (which
+  // replaced EndBlock<false>, Interpret<false>, ExecuteFusedPsqSeq<false>, ...) are added below;
+  // naming a template here that nothing emits would leave it uninstantiated at link time.
   static auto base_lookup = std::to_array<LookupKV>({
       LOOKUP_KV(CachedInterpreter::PoisonCallback),
       LOOKUP_KV(CachedInterpreter::StartProfiledBlock),
-      LOOKUP_KV(CachedInterpreter::EndBlock<false>),
       LOOKUP_KV(CachedInterpreter::EndBlock<true>),
-      LOOKUP_KV(CachedInterpreter::Interpret<false>),
       LOOKUP_KV(CachedInterpreter::Interpret<true>),
       LOOKUP_KV(CachedInterpreter::InterpretAndCheckExceptions<false>),
       LOOKUP_KV(CachedInterpreter::InterpretAndCheckExceptions<true>),
@@ -154,7 +155,6 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
       LOOKUP_KV(CachedInterpreter::CheckBreakpoint),
       LOOKUP_KV(CachedInterpreter::CheckIdle),
       LOOKUP_KV(CachedInterpreter::FastForwardCtrIdle),
-      LOOKUP_KV(CachedInterpreter::ExecuteFusedPsqSeq<false>),
   });
 
 #undef LOOKUP_KV
