@@ -105,6 +105,12 @@ static inline bool CI_IsGatherPipeWrite(const PowerPC::PowerPCState& ppc_state, 
 #define CI_MUSTTAIL
 #endif
 static const u8* s_chain_base = nullptr;
+// MAIN_CIR_RECORD_CHAINING, for the one chain hop decided at run time (LinkBlock -> successor block).
+static bool s_chain_links = true;
+// Per-dispatcher-entry link guards, owned by ExecuteOneBlock and consumed by LinkBlock (which may
+// follow many links without the executor seeing any of them).
+static const CPU::State* s_state_ptr = nullptr;
+static u32 s_linked_hops = 0;
 // The one Interpreter of this System, for cold paths that have no record field to carry it.
 static Interpreter* s_interpreter = nullptr;
 
@@ -1349,7 +1355,8 @@ void CachedInterpreter::Init()
     s_interpreter = &m_system.GetInterpreter();
   }
   s_mem_microops = Config::Get(Config::MAIN_CIR_MEM_MICROOPS);
-  SetChainingEnabled(Config::Get(Config::MAIN_CIR_RECORD_CHAINING));
+  s_chain_links = Config::Get(Config::MAIN_CIR_RECORD_CHAINING);
+  SetChainingEnabled(s_chain_links);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_specialized_ops_validate = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
   // iCube: FP load/store specialization (default OFF; independent A/B toggle). Read once at codegen time.
@@ -1507,10 +1514,10 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
     slot->dyn_generation = s_dyn_generation;
     slot->dyn_rel = static_cast<s32>(normal_entry - site);
   }
-  // iCube: block-linking safety guard — consecutive-linked-hop counter, reset on each dispatcher entry
-  // (this function). Only ever touched on the LinkBlock-followed branch below, so it is a no-op when
-  // block linking is off (no LinkBlock callbacks are emitted, so that branch never executes).
-  u32 linked_hops = 0;
+  // iCube: block-linking safety guards, reset on each dispatcher entry (this function) and consumed by
+  // LinkBlock, which follows links with tail calls the loop below never sees.
+  s_state_ptr = state_ptr;
+  s_linked_hops = 0;
   // iCube: optional register-file prefetch hints (MAIN_CACHED_INTERPRETER_PREFETCH, default OFF). When
   // the flag is off NOTHING is emitted here and the loop is byte-identical to the current fast state.
   // ON re-adds the hints to A/B the "remove-prefetch = +33% on Apple Silicon" finding (expected slower).
@@ -1545,8 +1552,12 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
     if ((slot & CHAIN_TAG) != 0) [[likely]]
     {
       s_chain_base = normal_entry;
-      normal_entry += reinterpret_cast<AnyCallback>(slot - CHAIN_TAG)(
+      const s32 distance = reinterpret_cast<AnyCallback>(slot - CHAIN_TAG)(
           ppc_state, normal_entry + sizeof(AnyCallback));
+      // 0: the chain reached a LinkBlock that did not follow (slice over, unlinked, guard tripped).
+      if (distance == 0)
+        break;
+      normal_entry += distance;
       continue;
     }
     const auto callback = reinterpret_cast<AnyCallback>(slot);
@@ -1557,26 +1568,6 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
     if (callback == AnyCallbackCast(Interpret<true>))
     {
       Interpret<true>(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
-      normal_entry = payload + sizeof(InterpretOperands);
-    }
-    else if (callback == AnyCallbackCast(InterpretBcx))
-    {
-      InterpretBcx(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
-      normal_entry = payload + sizeof(InterpretOperands);
-    }
-    else if (callback == AnyCallbackCast(InterpretBclr))
-    {
-      InterpretBclr(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
-      normal_entry = payload + sizeof(InterpretOperands);
-    }
-    else if (callback == AnyCallbackCast(InterpretBx))
-    {
-      InterpretBx(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
-      normal_entry = payload + sizeof(InterpretOperands);
-    }
-    else if (callback == AnyCallbackCast(InterpretBcctr))
-    {
-      InterpretBcctr(ppc_state, *reinterpret_cast<const InterpretOperands*>(payload));
       normal_entry = payload + sizeof(InterpretOperands);
     }
     // iCube: specialized hot-op dispatch (only emitted when MAIN_CIR_SPECIALIZED_OPS is on; when off
@@ -1602,39 +1593,6 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
       const auto id = static_cast<CirSpecOp>(ops.op_id);
       CIR_SPEC_SWITCH(id, ops);
       normal_entry = payload + sizeof(SpecializedInterpretOperands);
-    }
-    // iCube: block-linking safety guard. LinkBlock is the ONLY callback whose nonzero return jumps to
-    // ANOTHER block's entry (every other positive distance just advances within the current block), so
-    // a linked hop is exactly "the followed callback was LinkBlock". We give it a dedicated branch (this
-    // is the same callback-identity discrimination the hot branches above already use) so the guard's
-    // cost — one state load + compare + one counter increment + compare — is paid ONLY per real linked
-    // hop, never per instruction and never per intra-block callback. The stored value comes from
-    // Write(LinkBlock, ...) -> AnyCallbackCast(reinterpret_cast<AnyCallback>) of the runtime overload;
-    // we reconstruct the identical value here. The LinkBlock name is overloaded (runtime + ostream
-    // debug), so we disambiguate to the runtime overload via the Callback<LinkBlockOperands> cast.
-    // When block linking is OFF no LinkBlock callback is ever emitted, so this branch never matches and
-    // the guard is dead — the only off-path delta is one extra failed pointer-compare at block-terminal
-    // callbacks (once per block), never on the per-instruction Interpret<> fast path.
-    else if (callback ==
-             reinterpret_cast<AnyCallback>(CallbackCast<LinkBlockOperands>(LinkBlock))) [[unlikely]]
-    {
-      const auto distance = callback(ppc_state, payload);
-      if (distance == 0)
-        break;  // LinkBlock's own guards (downcount<=0 / npc!=expected_pc / rel==0) -> dispatcher.
-      normal_entry += distance;
-      // (1) Per-iteration running check: a stop/pause/state-change request would otherwise not be
-      // observed until the slice ends (the linked loop has no downcount<=0 exit of its own). Mirror
-      // Run()'s `*state_ptr == CPU::State::Running` test — a single non-atomic load + compare, no new
-      // atomics. Bails to the dispatcher (Run's inner do/while re-checks the same condition).
-      if (*state_ptr != CPU::State::Running) [[unlikely]]
-        break;
-      // (2) Bounded hop cap: force a dispatcher round-trip after CIR_MAX_LINKED_HOPS consecutive links
-      // regardless of downcount, bounding the worst-case wake-race spin. Reset is implicit (linked_hops
-      // is a fresh local on the next ExecuteOneBlock entry). This does NOT touch downcount or call
-      // CoreTiming::Advance(), so interrupt/decrementer cadence is byte-for-byte unchanged — a cap-hit
-      // only costs one extra Dispatch() of the same target on the opt-in linked path.
-      if (++linked_hops >= CIR_MAX_LINKED_HOPS) [[unlikely]]
-        break;
     }
     else
     {
@@ -1706,22 +1664,41 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
 // flags only change which per-INSTRUCTION callback is emitted; this changes only the block TERMINAL.
 // They never touch the same operand and ExecuteOneBlock dispatches LinkBlock through the unchanged
 // generic indirect tail, so the two features are orthogonal and may be enabled together.
-s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const LinkBlockOperands& operands)
+template <bool instrumented>
+s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
+  const auto& operands = *static_cast<const LinkBlockOperands*>(payload);
+  const u8* const callback_site = static_cast<const u8*>(payload) - sizeof(AnyCallback);
+  // Everything that needs a call lives in the instrumented variant, so the variant on the tape is a
+  // leaf with no prologue. Decided before any state is touched.
+  if constexpr (!instrumented)
+  {
+    if (PowerPC::PerformanceMonitorActive(ppc_state) || s_cir_profile ||
+        s_block_linking_validate) [[unlikely]]
+    {
+      CI_MUSTTAIL return LinkBlock<true>(ppc_state, payload);
+    }
+  }
   // (1) End-of-block accounting — IDENTICAL to EndBlock<false>. Must run on EVERY exit (linked or
   // not) so pc/downcount/PMC bookkeeping is exactly what the unlinked path would have produced.
   ppc_state.pc = ppc_state.npc;
   ppc_state.downcount -= operands.downcount;
   // iCube WIN#3: PMC update gated on the game having configured the performance monitor (see EndBlock).
-  if (PowerPC::PerformanceMonitorActive(ppc_state))
-    PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
-                                      operands.num_fp_inst, ppc_state);
+  if constexpr (instrumented)
+  {
+    if (PowerPC::PerformanceMonitorActive(ppc_state))
+      PowerPC::UpdatePerformanceMonitor(operands.downcount, operands.num_load_stores,
+                                        operands.num_fp_inst, ppc_state);
+  }
 
   // iCube: hot-block profiler (MAIN_CIR_PROFILE, default OFF). This block executed regardless of
   // whether the link is followed below, so record here — once per block exit, mirroring EndBlock.
   // Gated on a single predicted-not-taken bool; never touches the per-instruction fast path.
-  if (s_cir_profile) [[unlikely]]
-    s_block_profile.Record(operands.entry_pc, operands.downcount);
+  if constexpr (instrumented)
+  {
+    if (s_cir_profile) [[unlikely]]
+      s_block_profile.Record(operands.entry_pc, operands.downcount);
+  }
 
   // (2) Slice-boundary guard. If the timing slice is exhausted we MUST return to the dispatcher / Run
   // loop so CoreTiming::Advance() runs and services the decrementer + external interrupts (delivered
@@ -1748,42 +1725,65 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const LinkBlo
   // feature_flags and generation all match the live state; a miss publishes the slot so the very
   // next dispatcher round-trip fills it. Fail-safe like the static path: a mismatch never executes
   // the wrong stream, it costs one dispatcher round-trip.
-  const s32 rel = operands.rel;
+  s32 rel = operands.rel;
   if (ppc_state.pc != operands.expected_pc || rel == 0) [[unlikely]]
   {
-    if (operands.dyn_rel != 0 && operands.dyn_pc == ppc_state.pc &&
-        operands.dyn_generation == s_dyn_generation &&
-        operands.dyn_flags == static_cast<u32>(ppc_state.feature_flags))
+    if (operands.dyn_rel == 0 || operands.dyn_pc != ppc_state.pc ||
+        operands.dyn_generation != s_dyn_generation ||
+        operands.dyn_flags != static_cast<u32>(ppc_state.feature_flags))
+    {
+      if (s_dyn_linking)
+      {
+        if constexpr (instrumented)
+        {
+          if (s_cir_profile) [[unlikely]]
+            ++s_dyn_misses;
+        }
+        s_dyn_fill_slot = const_cast<LinkBlockOperands*>(&operands);
+      }
+      return 0;
+    }
+    if constexpr (instrumented)
     {
       if (s_cir_profile) [[unlikely]]
         ++s_dyn_hits;
-      if (s_block_linking_validate && s_validate_instance) [[unlikely]]
-      {
-        ValidateLinkTarget(ppc_state, reinterpret_cast<const u8*>(&operands) - sizeof(AnyCallback),
-                           operands.dyn_rel);
-      }
-      return operands.dyn_rel;
     }
-    if (s_dyn_linking)
-    {
-      if (s_cir_profile) [[unlikely]]
-        ++s_dyn_misses;
-      s_dyn_fill_slot = const_cast<LinkBlockOperands*>(&operands);
-    }
-    return 0;
+    rel = operands.dyn_rel;
   }
 
   // (5) Optional self-validation. The strongest check (resolving GetBlockFromStartAddress(npc,
   // feature_flags) and asserting normalEntry == callback_site + rel) needs the block cache, which a
-  // static callback can reach only through the singleton instance pointer recorded in Init. We use it
-  // here, gated and [[unlikely]], so the fast path is untouched. This proves: (a) the dispatcher would
-  // resolve a block right now, (b) its entry is exactly where rel points (rel is not stale and not
-  // off-by-one), and (c) the target's feature_flags equal the running context's flags (no MSR/IR/DR
-  // divergence across the link). Equivalent emit-time invariants are also asserted in WriteLinkBlock.
-  if (s_block_linking_validate && s_validate_instance) [[unlikely]]
-    ValidateLinkTarget(ppc_state, reinterpret_cast<const u8*>(&operands) - sizeof(AnyCallback), rel);
+  // static callback can reach only through the singleton instance pointer recorded in Init. Gated and
+  // [[unlikely]], so the fast path is untouched. This proves: (a) the dispatcher would resolve a block
+  // right now, (b) its entry is exactly where rel points (rel is not stale and not off-by-one), and
+  // (c) the target's feature_flags equal the running context's flags (no MSR/IR/DR divergence across
+  // the link). Equivalent emit-time invariants are also asserted in WriteLinkBlock.
+  if constexpr (instrumented)
+  {
+    if (s_block_linking_validate && s_validate_instance) [[unlikely]]
+      ValidateLinkTarget(ppc_state, callback_site, rel);
+  }
 
-  return rel;
+  // (6) Per-hop guards, formerly ExecuteOneBlock's (it no longer sees a followed link). A stop/pause/
+  // state-change request must be observed without waiting for the slice to end, and the hop cap
+  // bounds the worst-case wake-race spin between CoreTiming::Advance() round-trips. Returning 0 sends
+  // us to the dispatcher, which resolves the same target from pc; downcount is untouched, so
+  // interrupt/decrementer cadence is unchanged.
+  if (*s_state_ptr != CPU::State::Running || ++s_linked_hops >= CIR_MAX_LINKED_HOPS) [[unlikely]]
+    return 0;
+
+  // (7) Follow. The successor's first record is normally chain-capable: enter it with a tail call.
+  // s_chain_base still names the head record ExecuteOneBlock entered, and the distance a chain
+  // finally returns is measured from it, so a chain may span any number of linked blocks.
+  const u8* const target = callback_site + rel;
+  std::uintptr_t slot;
+  std::memcpy(&slot, target, sizeof(slot));
+  if (s_chain_links && (slot & CHAIN_TAG) != 0) [[likely]]
+  {
+    CI_MUSTTAIL return reinterpret_cast<AnyCallback>(slot - CHAIN_TAG)(
+        ppc_state, target + sizeof(AnyCallback));
+  }
+  return static_cast<s32>(target - s_chain_base);
 }
 
 void CachedInterpreter::ValidateLinkTarget(const PowerPC::PowerPCState& ppc_state,
@@ -1811,8 +1811,9 @@ void CachedInterpreter::BumpDynLinkGeneration()
   s_dyn_fill_slot = nullptr;
 }
 
-s32 CachedInterpreter::LinkBlock(std::ostream& stream, const LinkBlockOperands& operands)
+s32 CachedInterpreter::LinkBlock(std::ostream& stream, const void* payload)
 {
+  const auto& operands = *static_cast<const LinkBlockOperands*>(payload);
   fmt::print(stream, "LinkBlock(downcount={}, expected_pc={:#010x}, rel={})\n", operands.downcount,
              operands.expected_pc, operands.rel);
   return sizeof(AnyCallback) + sizeof(operands);
@@ -1834,9 +1835,10 @@ void CachedInterpreter::PatchLinkBlockRel(u8* exit_ptrs, s32 rel)
 // indirect call. Same math as Interpreter::bcx (CTR decrement per BO, counter/condition tests, LK,
 // AA/relative target) with the branch-watch hooks omitted — only emitted when debugging is off, so
 // branch watch can never be recording. Payload and return are identical to Interpret<true>.
-s32 CachedInterpreter::InterpretBcx(PowerPC::PowerPCState& ppc_state,
-                                    const InterpretOperands& operands)
+template <bool chain>
+s32 CachedInterpreter::InterpretBcx(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
   const UGeckoInstruction inst = operands.inst;
   ppc_state.pc = operands.current_pc;
   ppc_state.npc = operands.current_pc + 4;
@@ -1857,11 +1859,12 @@ s32 CachedInterpreter::InterpretBcx(PowerPC::PowerPCState& ppc_state,
       destination_addr += ppc_state.pc;
     ppc_state.npc = destination_addr;
   }
-  return sizeof(AnyCallback) + sizeof(operands);
+  CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
 }
 
-s32 CachedInterpreter::InterpretBcx(std::ostream& stream, const InterpretOperands& operands)
+s32 CachedInterpreter::InterpretBcx(std::ostream& stream, const void* payload)
 {
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
   stream << "InterpretBcx(pc=0x" << std::hex << operands.current_pc << ", inst=0x"
          << operands.inst.hex << std::dec << ")\n";
   return sizeof(AnyCallback) + sizeof(operands);
@@ -1869,8 +1872,10 @@ s32 CachedInterpreter::InterpretBcx(std::ostream& stream, const InterpretOperand
 
 // iCube 2026-09-17: unconditional branch terminal (bx). Same as Interpreter::bx minus branch watch;
 // Interpreter::m_end_block is the plain interpreter's loop flag and is never read by this tier.
-s32 CachedInterpreter::InterpretBx(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands)
+template <bool chain>
+s32 CachedInterpreter::InterpretBx(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
   const UGeckoInstruction inst = operands.inst;
   ppc_state.pc = operands.current_pc;
   ppc_state.npc = operands.current_pc + 4;
@@ -1881,11 +1886,12 @@ s32 CachedInterpreter::InterpretBx(PowerPC::PowerPCState& ppc_state, const Inter
   if (!inst.AA)
     destination_addr += ppc_state.pc;
   ppc_state.npc = destination_addr;
-  return sizeof(AnyCallback) + sizeof(operands);
+  CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
 }
 
-s32 CachedInterpreter::InterpretBx(std::ostream& stream, const InterpretOperands& operands)
+s32 CachedInterpreter::InterpretBx(std::ostream& stream, const void* payload)
 {
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
   stream << "InterpretBx(pc=0x" << std::hex << operands.current_pc << ", inst=0x" << operands.inst.hex
          << std::dec << ")\n";
   return sizeof(AnyCallback) + sizeof(operands);
@@ -1893,9 +1899,10 @@ s32 CachedInterpreter::InterpretBx(std::ostream& stream, const InterpretOperands
 
 // iCube 2026-09-17: branch-to-link-register terminal (bclr/bclrl). Same as Interpreter::bclrx minus
 // branch watch: XL-form BO_2/BI_2/LK_3 fields, CTR decrement per BO, counter/condition tests.
-s32 CachedInterpreter::InterpretBclr(PowerPC::PowerPCState& ppc_state,
-                                     const InterpretOperands& operands)
+template <bool chain>
+s32 CachedInterpreter::InterpretBclr(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
   const UGeckoInstruction inst = operands.inst;
   ppc_state.pc = operands.current_pc;
   ppc_state.npc = operands.current_pc + 4;
@@ -1911,16 +1918,17 @@ s32 CachedInterpreter::InterpretBclr(PowerPC::PowerPCState& ppc_state,
     if (inst.LK_3)
       LR(ppc_state) = ppc_state.pc + 4;
   }
-  return sizeof(AnyCallback) + sizeof(operands);
+  CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
 }
 
 // iCube 2026-09-17: bcctr terminal (bctr/bctrl: virtual calls, switch tables). Same math as
 // Interpreter::bcctrx minus the branch-watch hooks; only emitted when debugging is off. bcctr with
 // the decrement-CTR BO form is architecturally invalid and the generic handler only asserts on it,
 // so no CTR update here either.
-s32 CachedInterpreter::InterpretBcctr(PowerPC::PowerPCState& ppc_state,
-                                      const InterpretOperands& operands)
+template <bool chain>
+s32 CachedInterpreter::InterpretBcctr(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
   const UGeckoInstruction inst = operands.inst;
   ppc_state.pc = operands.current_pc;
   ppc_state.npc = operands.current_pc + 4;
@@ -1932,18 +1940,20 @@ s32 CachedInterpreter::InterpretBcctr(PowerPC::PowerPCState& ppc_state,
     if (inst.LK_3)
       LR(ppc_state) = ppc_state.pc + 4;
   }
-  return sizeof(AnyCallback) + sizeof(operands);
+  CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
 }
 
-s32 CachedInterpreter::InterpretBcctr(std::ostream& stream, const InterpretOperands& operands)
+s32 CachedInterpreter::InterpretBcctr(std::ostream& stream, const void* payload)
 {
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
   stream << "InterpretBcctr(pc=0x" << std::hex << operands.current_pc << ", inst=0x"
          << operands.inst.hex << std::dec << ")\n";
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-s32 CachedInterpreter::InterpretBclr(std::ostream& stream, const InterpretOperands& operands)
+s32 CachedInterpreter::InterpretBclr(std::ostream& stream, const void* payload)
 {
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
   stream << "InterpretBclr(pc=0x" << std::hex << operands.current_pc << ", inst=0x"
          << operands.inst.hex << std::dec << ")\n";
   return sizeof(AnyCallback) + sizeof(operands);
@@ -4114,7 +4124,9 @@ void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable)
   // exitPtrs must point at the AnyCallback slot (start of this callback), so WriteLinkBlock can
   // compute rel = dest->normalEntry - exitPtrs and LinkBlock recovers the same callback_site.
   u8* const callback_site = GetWritableCodePtr();
-  Write(LinkBlock, operands);
+  // Chain-capable so the terminal before it falls straight in; it has no chaining variant of its own
+  // (its successor is chosen at run time), hence the empty patch.
+  WriteChainable(AnyCallback{LinkBlock<false>}, &operands, sizeof(operands), 0, 0, 0);
   if (dyn_only)
     return;
 
@@ -5399,15 +5411,19 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           // iCube 2026-09-17: bcx (primary opcode 16) terminals take the inline conditional-branch
           // handler unless debugging is on (branch watch needs the generic Interpreter::bcx).
           if (op.canEndBlock && op.inst.OPCD == 16 && !IsDebuggingEnabled())
-            Write(CallbackCast(InterpretBcx), operands);
+            WriteChainable(AnyCallback{InterpretBcx<false>}, AnyCallback{InterpretBcx<true>}, &operands,
+                           sizeof(operands));
           else if (op.canEndBlock && op.inst.OPCD == 18 && !IsDebuggingEnabled())
-            Write(CallbackCast(InterpretBx), operands);
+            WriteChainable(AnyCallback{InterpretBx<false>}, AnyCallback{InterpretBx<true>}, &operands,
+                           sizeof(operands));
           else if (op.canEndBlock && op.inst.OPCD == 19 && op.inst.SUBOP10 == 16 &&
                    !IsDebuggingEnabled())
-            Write(CallbackCast(InterpretBclr), operands);
+            WriteChainable(AnyCallback{InterpretBclr<false>}, AnyCallback{InterpretBclr<true>}, &operands,
+                           sizeof(operands));
           else if (op.canEndBlock && op.inst.OPCD == 19 && op.inst.SUBOP10 == 528 &&
                    !IsDebuggingEnabled())
-            Write(CallbackCast(InterpretBcctr), operands);
+            WriteChainable(AnyCallback{InterpretBcctr<false>}, AnyCallback{InterpretBcctr<true>}, &operands,
+                           sizeof(operands));
           else if (op.canEndBlock)
             Write(CallbackCast(Interpret<true>), operands);
           else

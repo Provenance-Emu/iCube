@@ -295,8 +295,13 @@ private:
   // dispatcher / Run loop) — fail-safe. rel is patched by CachedInterpreterBlockCache::WriteLinkBlock
   // through the upstream JitBaseBlockCache link/unlink machinery and is cleared (back to 0) whenever
   // the target block is destroyed/recompiled, so a stale link can never be followed.
-  static s32 LinkBlock(PowerPC::PowerPCState& ppc_state, const LinkBlockOperands& operands);
-  static s32 LinkBlock(std::ostream& stream, const LinkBlockOperands& operands);
+  // Chain-capable (erased signature): a followed link tail-calls the successor block's first record
+  // when that record is chain-capable, so a linked transition never returns to the executor.
+  // <false> is what the tape holds: a leaf that tail-calls <true> (same logic plus the performance
+  // monitor update, the hot-block profiler and link validation) when any of those is active.
+  template <bool instrumented>
+  static s32 LinkBlock(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 LinkBlock(std::ostream& stream, const void* payload);
   // iCube: MAIN_CIR_BLOCK_LINKING_VALIDATE check shared by the static and dynamic link paths.
   static void ValidateLinkTarget(const PowerPC::PowerPCState& ppc_state, const u8* callback_site,
                                  s32 rel);
@@ -403,16 +408,20 @@ private:
   // Interpret<true> record it replaces (so the stream layout is unchanged); the handler does the
   // conditional-branch math inline instead of an indirect call into Interpreter::bcx. Emitted only
   // when debugging is off (branch watch needs the generic handler). See .cpp.
-  static s32 InterpretBcx(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
-  static s32 InterpretBcx(std::ostream& stream, const InterpretOperands& operands);
+  template <bool chain>
+  static s32 InterpretBcx(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 InterpretBcx(std::ostream& stream, const void* payload);
   // iCube 2026-09-17: same treatment for the other two block terminals seen in call-heavy titles
   // (Wind Waker: bclr returns + bx calls ≈ 3 % of the CPU thread through the generic handlers).
-  static s32 InterpretBx(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
-  static s32 InterpretBx(std::ostream& stream, const InterpretOperands& operands);
-  static s32 InterpretBclr(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
-  static s32 InterpretBclr(std::ostream& stream, const InterpretOperands& operands);
-  static s32 InterpretBcctr(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
-  static s32 InterpretBcctr(std::ostream& stream, const InterpretOperands& operands);
+  template <bool chain>
+  static s32 InterpretBx(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 InterpretBx(std::ostream& stream, const void* payload);
+  template <bool chain>
+  static s32 InterpretBclr(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 InterpretBclr(std::ostream& stream, const void* payload);
+  template <bool chain>
+  static s32 InterpretBcctr(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 InterpretBcctr(std::ostream& stream, const void* payload);
   // iCube: dead-FPRF elimination VALIDATE harness (MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE). Double-runs the
   // SAME op (the reference with the hint OFF -> FPRF computed; then, committed last, the eliminated form
   // with the hint ON -> FPRF skipped) and asserts the FPRs and every FPSCR bit OUTSIDE the FPRF field

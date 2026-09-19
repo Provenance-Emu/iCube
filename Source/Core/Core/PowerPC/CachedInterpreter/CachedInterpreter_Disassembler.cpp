@@ -144,11 +144,6 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
       LOOKUP_KV(CachedInterpreter::StartProfiledBlock),
       LOOKUP_KV(CachedInterpreter::EndBlock<false>),
       LOOKUP_KV(CachedInterpreter::EndBlock<true>),
-      LOOKUP_KV(CachedInterpreter::LinkBlock),
-      LOOKUP_KV(CachedInterpreter::InterpretBcx),
-      LOOKUP_KV(CachedInterpreter::InterpretBx),
-      LOOKUP_KV(CachedInterpreter::InterpretBclr),
-      LOOKUP_KV(CachedInterpreter::InterpretBcctr),
       LOOKUP_KV(CachedInterpreter::Interpret<false>),
       LOOKUP_KV(CachedInterpreter::Interpret<true>),
       LOOKUP_KV(CachedInterpreter::InterpretAndCheckExceptions<false>),
@@ -185,6 +180,15 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
     }
     add(AnyCallback{ExecuteMicroOps<false>},
         static_cast<ErasedDisassemble>(CachedInterpreter::ExecuteMicroOps));
+    add(AnyCallback{LinkBlock<false>}, static_cast<ErasedDisassemble>(CachedInterpreter::LinkBlock));
+    add(AnyCallback{InterpretBcx<false>}, static_cast<ErasedDisassemble>(InterpretBcx));
+    add(AnyCallback{InterpretBcx<true>}, static_cast<ErasedDisassemble>(InterpretBcx));
+    add(AnyCallback{InterpretBx<false>}, static_cast<ErasedDisassemble>(InterpretBx));
+    add(AnyCallback{InterpretBx<true>}, static_cast<ErasedDisassemble>(InterpretBx));
+    add(AnyCallback{InterpretBclr<false>}, static_cast<ErasedDisassemble>(InterpretBclr));
+    add(AnyCallback{InterpretBclr<true>}, static_cast<ErasedDisassemble>(InterpretBclr));
+    add(AnyCallback{InterpretBcctr<false>}, static_cast<ErasedDisassemble>(InterpretBcctr));
+    add(AnyCallback{InterpretBcctr<true>}, static_cast<ErasedDisassemble>(InterpretBcctr));
     add(AnyCallback{InterpretChained<false>},
         static_cast<ErasedDisassemble>(CachedInterpreter::InterpretChained));
     add(AnyCallback{InterpretChained<true>},
