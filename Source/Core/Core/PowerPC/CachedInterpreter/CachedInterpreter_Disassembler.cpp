@@ -98,14 +98,25 @@ s32 CachedInterpreter::FastForwardCtrIdle(std::ostream& stream, const CheckCtrId
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-template <bool write_pc>
-s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream,
-                                       const ExecuteMicroOpsOperands& operands)
+s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream, const void* payload)
 {
+  const auto& operands = *static_cast<const ExecuteMicroOpsOperands*>(payload);
   fmt::print(stream, "MicroOps (count={}) at PC={:#010x}\n", operands.count,
              operands.current_pc);
   return static_cast<s32>(sizeof(AnyCallback) +
                           ExecuteMicroOpsOperands::TapeSize(operands.count + 1));
+}
+
+s32 CachedInterpreter::InterpretChained(std::ostream& stream, const void* payload)
+{
+  return Interpret<false>(stream, *static_cast<const InterpretOperands*>(payload));
+}
+
+s32 CachedInterpreter::InterpretSpecializedChained(std::ostream& stream, const void* payload)
+{
+  const auto& operands = *static_cast<const SpecializedInterpretOperands*>(payload);
+  fmt::println(stream, "InterpretSpecialized(op_id={})", operands.op_id);
+  return sizeof(AnyCallback) + sizeof(operands);
 }
 
 template <bool write_pc>
@@ -148,32 +159,40 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
       LOOKUP_KV(CachedInterpreter::CheckBreakpoint),
       LOOKUP_KV(CachedInterpreter::CheckIdle),
       LOOKUP_KV(CachedInterpreter::FastForwardCtrIdle),
-      LOOKUP_KV(CachedInterpreter::ExecuteMicroOps<false>),
       LOOKUP_KV(CachedInterpreter::ExecuteFusedPsqSeq<false>),
   });
 
 #undef LOOKUP_KV
 
-  // iCube: the direct-pointer load/store handlers are one instantiation per (kind, form, write_pc);
-  // they all share one record type and one disassembler.
+  // iCube: chain-capable records (erased signature; one disassembler per record type whichever
+  // variant is on the tape). Their callback slot carries CHAIN_TAG, stripped in the loop below.
   static std::vector<LookupKV> sorted_lookup(base_lookup.begin(), base_lookup.end());
 
   std::call_once(s_sorted_lookup_flag, [] {
+    using ErasedDisassemble = s32 (*)(std::ostream&, const void*);
+    const auto add = [](AnyCallback callback, ErasedDisassemble disassemble) {
+      if (callback != nullptr)
+        sorted_lookup.emplace_back(callback, disassemble);
+    };
     for (u32 kind = 0; kind < CI_MEM_KIND_COUNT; ++kind)
     {
       for (u32 form = 0; form < 8; ++form)
       {
-        const AnyCallback callback = GetLoadStoreFastCallback(
-            static_cast<CIMemKind>(kind), (form & 1) != 0, (form & 2) != 0, (form & 4) != 0);
-        if (callback != nullptr)
-        {
-          using LoadStoreDisassemble = s32 (*)(std::ostream&, const InterpretOperands&);
-          sorted_lookup.emplace_back(
-              callback, AnyDisassembleCast(
-                            static_cast<LoadStoreDisassemble>(CachedInterpreter::LoadStoreFast)));
-        }
+        add(GetLoadStoreFastCallback(static_cast<CIMemKind>(kind), (form & 1) != 0, (form & 2) != 0,
+                                     (form & 4) != 0),
+            static_cast<ErasedDisassemble>(CachedInterpreter::LoadStoreFast));
       }
     }
+    add(AnyCallback{ExecuteMicroOps<false>},
+        static_cast<ErasedDisassemble>(CachedInterpreter::ExecuteMicroOps));
+    add(AnyCallback{InterpretChained<false>},
+        static_cast<ErasedDisassemble>(CachedInterpreter::InterpretChained));
+    add(AnyCallback{InterpretChained<true>},
+        static_cast<ErasedDisassemble>(CachedInterpreter::InterpretChained));
+    add(AnyCallback{InterpretSpecializedChained<false>},
+        static_cast<ErasedDisassemble>(CachedInterpreter::InterpretSpecializedChained));
+    add(AnyCallback{InterpretSpecializedChained<true>},
+        static_cast<ErasedDisassemble>(CachedInterpreter::InterpretSpecializedChained));
     const auto end = std::ranges::sort(sorted_lookup, {}, &LookupKV::first);
     ASSERT_MSG(DYNA_REC, std::ranges::adjacent_find(sorted_lookup, {}, &LookupKV::first) == end,
                "Sorted lookup should not contain duplicate keys.");
@@ -183,7 +202,8 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
   for (const u8* normal_entry = block.normalEntry; normal_entry != block.near_end;
        ++instruction_count)
   {
-    const auto callback = *reinterpret_cast<const AnyCallback*>(normal_entry);
+    const auto slot = *reinterpret_cast<const std::uintptr_t*>(normal_entry);
+    const auto callback = reinterpret_cast<AnyCallback>(slot & ~CHAIN_TAG);
     const auto kv = std::ranges::lower_bound(sorted_lookup, callback, {}, &LookupKV::first);
     if (kv != sorted_lookup.end() && kv->first == callback)
     {

@@ -1070,6 +1070,13 @@ const Info<bool> MAIN_CIR_BLOCK_LINKING_VALIDATE{
 // feature_flags. Same per-hop guards as the static path (downcount, Running, 256-hop cap). Requires
 // CIRBlockLinking. Flip OFF to A/B.
 const Info<bool> MAIN_CIR_DYN_LINKING{{System::Main, "Core", "CIRDynLinking"}, true};
+// iCube: pack integer load/stores into fused micro-op runs (needs CIRPICLoadStore and
+// CIRMicroOpFusion). Flip OFF to A/B: they then get a direct-pointer record of their own.
+const Info<bool> MAIN_CIR_MEM_MICROOPS{{System::Main, "Core", "CIRMemMicroOps"}, true};
+// iCube: record chaining. Consecutive chain-capable tape records (fused runs, direct-pointer
+// load/stores, generic and specialized non-terminal ops) tail-call each other instead of returning
+// to the executor loop between every record. Flip OFF to A/B.
+const Info<bool> MAIN_CIR_RECORD_CHAINING{{System::Main, "Core", "CIRRecordChaining"}, true};
 // iCube WIN#1: PIC (position-independent-code) direct-pointer load/store on the CachedInterpreter.
 // Integer D-form/X-form load/stores resolve the host RAM pointer directly and do the access with the
 // correct endian swap, bypassing the per-access MMU/region lookup (~15% on memory-bound titles).

@@ -236,6 +236,16 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
       ^(id v){ [DOLConfigBridge setCirDynLinking:CoerceBool(v)]; },
       MakeLayerGetter(Config::MAIN_CIR_DYN_LINKING), MakeResetBlock(Config::MAIN_CIR_DYN_LINKING.GetLocation()));
 
+    t[@"cirMemMicroOps"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirMemMicroOps]); },
+      ^(id v){ [DOLConfigBridge setCirMemMicroOps:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_MEM_MICROOPS), MakeResetBlock(Config::MAIN_CIR_MEM_MICROOPS.GetLocation()));
+
+    t[@"cirRecordChaining"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirRecordChaining]); },
+      ^(id v){ [DOLConfigBridge setCirRecordChaining:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_RECORD_CHAINING), MakeResetBlock(Config::MAIN_CIR_RECORD_CHAINING.GetLocation()));
+
     t[@"mainFastmem"] = mk(DOLSettingTypeBool, NO,
       ^id{ return @([DOLConfigBridge mainFastmem]); },
       ^(id v){ [DOLConfigBridge setMainFastmem:CoerceBool(v)]; },

@@ -200,6 +200,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirBlockLinkingValidate:(BOOL)enabled;
 + (BOOL)cirDynLinking;            // dynamic inline-cached links for blr/bctr/bcx-fallthrough (default ON)
 + (void)setCirDynLinking:(BOOL)enabled;
++ (BOOL)cirMemMicroOps;           // integer load/stores packed into fused micro-op runs (default ON)
++ (void)setCirMemMicroOps:(BOOL)enabled;
++ (BOOL)cirRecordChaining;        // tape records tail-call each other instead of returning to the executor (default ON)
++ (void)setCirRecordChaining:(BOOL)enabled;
 + (BOOL)stallMetrics;             // CPU-thread stall instrumentation (default ON, <0.5% overhead)
 + (void)setStallMetrics:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;

@@ -95,6 +95,7 @@ enum class MicroOpCode : u8
   MEM_STHX,
   NOP,
   END,  // sentinel the packer appends after the last op of every run; closes the threaded dispatch
+  END_CHAIN,  // same, but continues into the chain-capable record that follows (see WriteChainable)
   COUNT,
 };
 
@@ -330,15 +331,24 @@ private:
   // cache-inhibited sub-word store) tail-calls LoadStoreFastCold, which serves gather-pipe stores
   // directly and otherwise runs the exact generic interpreter handler. Emitted only when !jo.memcheck
   // and the accurate d-cache is off. The payload is a plain InterpretOperands.
-  template <CIMemKind kind, bool indexed, bool update, bool write_pc>
-  static s32 LoadStoreFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
-  template <CIMemKind kind, bool try_gather_pipe>
-  static s32 LoadStoreFastCold(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands,
-                               u32 ea);
-  static s32 LoadStoreFast(std::ostream& stream, const InterpretOperands& operands);
+  // All of these are CHAIN-CAPABLE records (see CachedInterpreterEmitter::WriteChainable): erased
+  // (ppc_state, payload) signature so one record can tail-call the next, and a `chain` variant that
+  // does. Load/stores that can end a block never take this path, so there is no write_pc variant.
+  template <CIMemKind kind, bool indexed, bool update, bool chain>
+  static s32 LoadStoreFast(PowerPC::PowerPCState& ppc_state, const void* payload);
+  template <CIMemKind kind, bool chain>
+  static s32 LoadStoreFastCold(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 LoadStoreFast(std::ostream& stream, const void* payload);
   // Null when the (kind, indexed, update) combination does not exist.
   static AnyCallback GetLoadStoreFastCallback(CIMemKind kind, bool indexed, bool update,
-                                              bool write_pc);
+                                              bool chain);
+  // iCube: chain-capable forms of the generic and the specialized non-terminal records.
+  template <bool chain>
+  static s32 InterpretChained(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 InterpretChained(std::ostream& stream, const void* payload);
+  template <bool chain>
+  static s32 InterpretSpecializedChained(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 InterpretSpecializedChained(std::ostream& stream, const void* payload);
   // iCube WIN#2: execute a fused run of pure-register integer/immediate micro-ops via a computed-goto
   // dispatch over the packed MicroOp array (MAIN_CIR_MICROOP_FUSION). Each handler reproduces the
   // corresponding interpreter op's GPR/CR0/XER side-effects byte-exactly (CR/XER via the same
@@ -346,12 +356,10 @@ private:
   // arithmetic ops use). write_pc mirrors Interpret<write_pc>. ONLY emitted when the flag is on;
   // dispatched through the existing generic indirect tail in ExecuteOneBlock (no hot-path branch).
   template <bool write_pc>
-  static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
-                             const ExecuteMicroOpsOperands& operands);
+  static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state, const void* payload);
   // One tail-called handler per MicroOpCode plus their dispatch table (defined in the .cpp).
   struct MicroOpHandlers;
-  template <bool write_pc>
-  static s32 ExecuteMicroOps(std::ostream& stream, const ExecuteMicroOpsOperands& operands);
+  static s32 ExecuteMicroOps(std::ostream& stream, const void* payload);
   // iCube WIN#2 validate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Self-validating analogue of
   // InterpretSpecialized's double-run: run the real generic Interpreter:: handlers for the original
   // consumed instructions on the live state, snapshot GPR/CR/XER(ca,so_ov)/pc/npc/Exceptions, restore,
@@ -555,12 +563,11 @@ struct CachedInterpreter::InterpretAndCheckExceptionsOperands : InterpretOperand
 // iCube WIN#2: payload for one fused micro-op run (MAIN_CIR_MICROOP_FUSION). Only written into the
 // callback stream when the flag is on, so the generic path never sees it. The record on the tape is
 // VARIABLE length: the emitter writes TapeSize(count + 1) bytes (header + the used ops + the END
-// sentinel, rounded up to the callback alignment) and the handler returns the same distance, so a
-// two-op run costs 56 bytes of tape instead of the full 64-op array. interpreter serves the memory micro-ops' cold path.
+// sentinel, rounded up to the callback alignment), so a two-op run costs 48 bytes of tape instead of
+// the full 64-op array. The END handler finds the end of the record from its own position.
 struct CachedInterpreter::ExecuteMicroOpsOperands
 {
   static constexpr u32 kMaxOps = 64;  // including the END sentinel
-  Interpreter* interpreter;
   u32 current_pc;
   u32 count;
   MicroOp ops[kMaxOps];

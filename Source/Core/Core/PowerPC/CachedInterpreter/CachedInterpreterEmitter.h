@@ -5,6 +5,7 @@
 
 #include <bit>
 #include <cstddef>
+#include <cstdint>
 #include <iosfwd>
 #include <type_traits>
 
@@ -94,6 +95,26 @@ public:
     Write(AnyCallbackCast(callback), &operands, size);
   }
 
+  // iCube: record chaining. A chain-capable record has CHAIN_TAG set in its callback slot and comes in
+  // two variants: `unchained` returns to the executor, `chained` tail-calls the record that follows it.
+  // A record is written unchained; when the NEXT record written is chain-capable too and nothing was
+  // emitted in between, the previous one is patched to continue into it, so a whole run of records
+  // executes without coming back to the executor loop. The patch is `patch_size` bytes of
+  // `patch_value` at `patch_offset` from the start of the record (its callback slot); a fused micro-op
+  // run chains by swapping its END sentinel instead of its entry callback.
+  static constexpr std::uintptr_t CHAIN_TAG = 1;
+  void WriteChainable(AnyCallback unchained, const void* operands, std::size_t size,
+                      std::size_t patch_offset, u64 patch_value, std::size_t patch_size);
+  void WriteChainable(AnyCallback unchained, AnyCallback chained, const void* operands,
+                      std::size_t size)
+  {
+    WriteChainable(unchained, operands, size, 0, reinterpret_cast<std::uintptr_t>(chained) | CHAIN_TAG,
+                   sizeof(AnyCallback));
+  }
+  void SetChainingEnabled(bool enabled) { m_chaining_enabled = enabled; }
+  // Forget the previous record, e.g. at the start of a block.
+  void ResetChain() { m_chain_prev_end = nullptr; }
+
   const u8* GetCodePtr() const { return m_code; }
   u8* GetWritableCodePtr() { return m_code; }
   const u8* GetCodeEnd() const { return m_code_end; }
@@ -107,6 +128,7 @@ public:
     m_code = begin;
     m_code_end = end;
     m_write_failed = false;
+    ResetChain();
   }
 
   ptrdiff_t GetWritableRegionDiff() { return 0; }
@@ -126,6 +148,13 @@ private:
   // Set to true when a write request happens that would write past m_code_end.
   // Must be cleared with SetCodePtr() afterwards.
   bool m_write_failed = false;
+
+  // iCube: the last chain-capable record written, and how to make it continue into a successor.
+  bool m_chaining_enabled = false;
+  u8* m_chain_prev_end = nullptr;
+  u8* m_chain_patch_addr = nullptr;
+  u64 m_chain_patch_value = 0;
+  std::size_t m_chain_patch_size = 0;
 };
 
 class CachedInterpreterCodeBlock : public Common::CodeBlock<CachedInterpreterEmitter, false>

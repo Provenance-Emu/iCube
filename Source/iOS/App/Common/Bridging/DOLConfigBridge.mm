@@ -348,6 +348,10 @@ static bool ICubeEmulationActive() {
 + (void)setCirBlockLinkingValidate:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE, (bool)enabled); }
 + (BOOL)cirDynLinking { return Config::Get(Config::MAIN_CIR_DYN_LINKING); }
 + (void)setCirDynLinking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_DYN_LINKING, (bool)enabled); }
++ (BOOL)cirMemMicroOps { return Config::Get(Config::MAIN_CIR_MEM_MICROOPS); }
++ (void)setCirMemMicroOps:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_MEM_MICROOPS, (bool)enabled); }
++ (BOOL)cirRecordChaining { return Config::Get(Config::MAIN_CIR_RECORD_CHAINING); }
++ (void)setCirRecordChaining:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_RECORD_CHAINING, (bool)enabled); }
 // Stall instrumentation: measures where the CPU thread waits (default ON; <0.5% overhead).
 + (BOOL)stallMetrics { return Config::Get(Config::MAIN_STALL_METRICS); }
 + (void)setStallMetrics:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_STALL_METRICS, (bool)enabled); }
