@@ -7,6 +7,7 @@
 #include <array>
 #include <mutex>
 #include <utility>
+#include <vector>
 
 #include <fmt/ostream.h>
 
@@ -103,7 +104,8 @@ s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream,
 {
   fmt::print(stream, "MicroOps (count={}) at PC={:#010x}\n", operands.count,
              operands.current_pc);
-  return sizeof(AnyCallback) + sizeof(operands);
+  return static_cast<s32>(sizeof(AnyCallback) +
+                          ExecuteMicroOpsOperands::TapeSize(operands.count + 1));
 }
 
 template <bool write_pc>
@@ -126,7 +128,7 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
   // clang-format on
 
   // Function addresses aren't known at compile-time, so this array is sorted at run-time.
-  static auto sorted_lookup = std::to_array<LookupKV>({
+  static auto base_lookup = std::to_array<LookupKV>({
       LOOKUP_KV(CachedInterpreter::PoisonCallback),
       LOOKUP_KV(CachedInterpreter::StartProfiledBlock),
       LOOKUP_KV(CachedInterpreter::EndBlock<false>),
@@ -152,7 +154,26 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
 
 #undef LOOKUP_KV
 
+  // iCube: the direct-pointer load/store handlers are one instantiation per (kind, form, write_pc);
+  // they all share one record type and one disassembler.
+  static std::vector<LookupKV> sorted_lookup(base_lookup.begin(), base_lookup.end());
+
   std::call_once(s_sorted_lookup_flag, [] {
+    for (u32 kind = 0; kind < CI_MEM_KIND_COUNT; ++kind)
+    {
+      for (u32 form = 0; form < 8; ++form)
+      {
+        const AnyCallback callback = GetLoadStoreFastCallback(
+            static_cast<CIMemKind>(kind), (form & 1) != 0, (form & 2) != 0, (form & 4) != 0);
+        if (callback != nullptr)
+        {
+          using LoadStoreDisassemble = s32 (*)(std::ostream&, const InterpretOperands&);
+          sorted_lookup.emplace_back(
+              callback, AnyDisassembleCast(
+                            static_cast<LoadStoreDisassemble>(CachedInterpreter::LoadStoreFast)));
+        }
+      }
+    }
     const auto end = std::ranges::sort(sorted_lookup, {}, &LookupKV::first);
     ASSERT_MSG(DYNA_REC, std::ranges::adjacent_find(sorted_lookup, {}, &LookupKV::first) == end,
                "Sorted lookup should not contain duplicate keys.");

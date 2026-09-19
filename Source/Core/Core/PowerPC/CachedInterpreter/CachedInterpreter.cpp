@@ -8,6 +8,7 @@
 #include <bit>
 #include <cstdio>
 #include <cstring>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <utility>
@@ -27,6 +28,7 @@
 #include "Core/CoreTiming.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HW/CPU.h"
+#include "Core/HW/GPFifo.h"
 #include "Core/HW/Memmap.h"
 #include "Core/Host.h"
 #include "Core/PowerPC/Gekko.h"
@@ -45,68 +47,47 @@ CachedInterpreter::CachedInterpreter(Core::System& system) : JitBase(system), m_
 
 CachedInterpreter::~CachedInterpreter() = default;
 
-// iCube WIN#1: PIC (position-independent-code) direct-pointer load/store region resolution. Resolves
-// an effective address to a host RAM base pointer + offset, bypassing the per-access MMU/region
-// lookup. Integer single-access D-form/X-form only; FP and anything not resolvable here falls back to
-// the generic interpreter handler (see Cold_LoadStoreFallback). Ported verbatim from the
-// feature/icube-testflight good branch.
+// iCube: direct-pointer load/store page lookup. Memory keeps one host pointer per 128 KiB BAT page
+// (null = MMIO / unmapped / page-table-mapped), rebuilt on every DBAT change, for the logical and the
+// physical address space; these are the same tables the JITs use when there is no fastmem arena. One
+// load resolves an effective address to host memory under ANY BAT layout, real mode included, where the
+// old compare chain hardcoded the default 0x80/0x90/0xC0/0xD0 windows. Indexed by MSR.DR. Set in Init.
 namespace
 {
-struct CI_RegionInfo
-{
-  u8* base;
-  u32 mask;
-  u32 sub;
-  bool is_fake;
-};
+constexpr u32 CI_PAGE_OFFSET_MASK = PowerPC::BAT_PAGE_SIZE - 1;
 
-static inline CI_RegionInfo CI_GetRegionInfo(u32 ea, bool dr, u8* mem1_base, u32 mem1_mask,
-                                             u8* exram_base, u32 exram_mask, u8* fakevmem_base,
-                                             u32 fakevmem_mask)
+static const void* const* s_page_tables[2] = {nullptr, nullptr};
+// Cache-inhibited (uncached mirror) BATs: a sub-word store through one has data-duplication and
+// PI-interrupt side effects in the generic path, so byte/half stores consult the WI bit first.
+static const PowerPC::BatTable* s_dbat_table = nullptr;
+static GPFifo::GPFifoManager* s_gpfifo = nullptr;
+static bool s_low_dcbz_hack = false;
+
+static inline u8* CI_PagePtr(const PowerPC::PowerPCState& ppc_state, u32 ea)
 {
-  CI_RegionInfo info{nullptr, 0, 0, false};
-  if (ea >= Memory::MEM1_BASE_ADDR && ea - Memory::MEM1_BASE_ADDR <= mem1_mask)
-  {
-    info.base = mem1_base;
-    info.mask = mem1_mask;
-    info.sub = Memory::MEM1_BASE_ADDR;
-    return info;
-  }
-  if (ea >= Memory::MEM2_BASE_ADDR && ea - Memory::MEM2_BASE_ADDR <= exram_mask)
-  {
-    info.base = exram_base;
-    info.mask = exram_mask;
-    info.sub = Memory::MEM2_BASE_ADDR;
-    return info;
-  }
-  if (fakevmem_base && ((ea & 0xFE000000u) == 0x7E000000u))
-  {
-    info.base = fakevmem_base;
-    info.mask = fakevmem_mask;
-    info.sub = 0;
-    info.is_fake = true;
-    return info;
-  }
-  if (!dr && ea >= 0xC0000000u && ea - 0xC0000000u <= mem1_mask)
-  {
-    info.base = mem1_base;
-    info.mask = mem1_mask;
-    info.sub = 0xC0000000u;
-    return info;
-  }
-  if (!dr && ea >= 0xD0000000u && ea - 0xD0000000u <= exram_mask)
-  {
-    info.base = exram_base;
-    info.mask = exram_mask;
-    info.sub = 0xD0000000u;
-    return info;
-  }
-  return info;
+  const void* const* const table = s_page_tables[ppc_state.msr.DR];
+  return const_cast<u8*>(static_cast<const u8*>(table[ea >> PowerPC::BAT_INDEX_SHIFT]));
 }
 
-static inline u32 CI_RegionOffset(const CI_RegionInfo& r, u32 ea)
+static inline bool CI_IsWriteInhibitedPage(const PowerPC::PowerPCState& ppc_state, u32 ea)
 {
-  return r.is_fake ? (ea & r.mask) : ((ea - r.sub) & r.mask);
+  return ppc_state.msr.DR &&
+         ((*s_dbat_table)[ea >> PowerPC::BAT_INDEX_SHIFT] & PowerPC::BAT_WI_BIT) != 0;
+}
+
+// True when a store to `ea` is a gather-pipe write exactly as MMU::WriteToHardware would classify it
+// (BAT-translate under MSR.DR, then match the masked physical address).
+static inline bool CI_IsGatherPipeWrite(const PowerPC::PowerPCState& ppc_state, u32 ea)
+{
+  u32 physical = ea;
+  if (ppc_state.msr.DR)
+  {
+    const u32 bat = (*s_dbat_table)[ea >> PowerPC::BAT_INDEX_SHIFT];
+    if ((bat & PowerPC::BAT_MAPPED_BIT) == 0)
+      return false;
+    physical = (bat & PowerPC::BAT_RESULT_MASK) | (ea & CI_PAGE_OFFSET_MASK);
+  }
+  return (physical & 0xFFFFF000) == GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS;
 }
 
 // iCube WIN#2: CR0/XER side-effect helpers for the micro-op handlers. Byte-exact mirrors of the
@@ -194,8 +175,9 @@ static bool s_specialized_psq = false;
 static bool s_specialized_fp_arith = false;
 
 // iCube: software-prefetch hints (MAIN_CACHED_INTERPRETER_PREFETCH). When OFF (the default on this
-// Apple-only fork) NO __builtin_prefetch is ever emitted, so the CIR hot loop and the PIC load/store
-// path are byte-for-byte identical to the current no-hints state. INVERTED DEFAULT vs the upstream
+// Apple-only fork) NO __builtin_prefetch is ever emitted, so the CIR hot loop is byte-for-byte
+// identical to the current no-hints state. (The load/store handlers no longer test this flag: a
+// per-access branch on a default-off debug knob cost more than the hint could return.) INVERTED DEFAULT vs the upstream
 // fork: the iFly fork measured "remove prefetch on Apple Silicon = +33%" — the manual hints fight the
 // Apple Silicon hardware prefetcher, so the fast state is NO hints. This flag exists only so the hints
 // can be re-added on-device for A/B confirmation (flip ON => hints emitted => expected SLOWER on Apple).
@@ -1211,20 +1193,123 @@ static CacheLoopMatch RecognizeCacheLoop(const PPCAnalyst::CodeOp* code, u32 num
 }
 }  // namespace
 
+// iCube: emit-time mapping from an instruction to its direct-pointer handler. nullopt = not covered
+// (stays on the generic / specialized paths). rA == 0 forms are left out so the handlers never test
+// for it (dcbz excepted, see LoadStoreFast).
+namespace
+{
+struct CI_LoadStoreForm
+{
+  CIMemKind kind;
+  bool indexed;
+  bool update;
+};
+
+std::optional<CI_LoadStoreForm> CI_ClassifyLoadStore(UGeckoInstruction inst)
+{
+  std::optional<CI_LoadStoreForm> form;
+  // clang-format off
+  switch (inst.OPCD)
+  {
+  case 32: form = {CIMemKind::LWZ, false, false}; break;
+  case 33: form = {CIMemKind::LWZ, false, true}; break;
+  case 34: form = {CIMemKind::LBZ, false, false}; break;
+  case 35: form = {CIMemKind::LBZ, false, true}; break;
+  case 36: form = {CIMemKind::STW, false, false}; break;
+  case 37: form = {CIMemKind::STW, false, true}; break;
+  case 38: form = {CIMemKind::STB, false, false}; break;
+  case 39: form = {CIMemKind::STB, false, true}; break;
+  case 40: form = {CIMemKind::LHZ, false, false}; break;
+  case 41: form = {CIMemKind::LHZ, false, true}; break;
+  case 42: form = {CIMemKind::LHA, false, false}; break;
+  case 43: form = {CIMemKind::LHA, false, true}; break;
+  case 44: form = {CIMemKind::STH, false, false}; break;
+  case 45: form = {CIMemKind::STH, false, true}; break;
+  case 46: form = {CIMemKind::LMW, false, false}; break;
+  case 47: form = {CIMemKind::STMW, false, false}; break;
+  case 48: form = {CIMemKind::LFS, false, false}; break;
+  case 49: form = {CIMemKind::LFS, false, true}; break;
+  case 50: form = {CIMemKind::LFD, false, false}; break;
+  case 51: form = {CIMemKind::LFD, false, true}; break;
+  case 52: form = {CIMemKind::STFS, false, false}; break;
+  case 53: form = {CIMemKind::STFS, false, true}; break;
+  case 54: form = {CIMemKind::STFD, false, false}; break;
+  case 55: form = {CIMemKind::STFD, false, true}; break;
+  case 56: form = {CIMemKind::PSQL, false, false}; break;
+  case 57: form = {CIMemKind::PSQL, false, true}; break;
+  case 60: form = {CIMemKind::PSQST, false, false}; break;
+  case 61: form = {CIMemKind::PSQST, false, true}; break;
+  case 4:
+  {
+    // The indexed psq forms decode on a 6-bit sub-opcode; ask the interpreter's own table.
+    const auto func = Interpreter::GetInterpreterOp(inst);
+    if (func == Interpreter::psq_lx) form = {CIMemKind::PSQL, true, false};
+    else if (func == Interpreter::psq_lux) form = {CIMemKind::PSQL, true, true};
+    else if (func == Interpreter::psq_stx) form = {CIMemKind::PSQST, true, false};
+    else if (func == Interpreter::psq_stux) form = {CIMemKind::PSQST, true, true};
+    break;
+  }
+  case 31:
+    switch (inst.SUBOP10)
+    {
+    case 23: form = {CIMemKind::LWZ, true, false}; break;
+    case 55: form = {CIMemKind::LWZ, true, true}; break;
+    case 87: form = {CIMemKind::LBZ, true, false}; break;
+    case 119: form = {CIMemKind::LBZ, true, true}; break;
+    case 279: form = {CIMemKind::LHZ, true, false}; break;
+    case 311: form = {CIMemKind::LHZ, true, true}; break;
+    case 343: form = {CIMemKind::LHA, true, false}; break;
+    case 375: form = {CIMemKind::LHA, true, true}; break;
+    case 151: form = {CIMemKind::STW, true, false}; break;
+    case 183: form = {CIMemKind::STW, true, true}; break;
+    case 215: form = {CIMemKind::STB, true, false}; break;
+    case 247: form = {CIMemKind::STB, true, true}; break;
+    case 407: form = {CIMemKind::STH, true, false}; break;
+    case 439: form = {CIMemKind::STH, true, true}; break;
+    case 534: form = {CIMemKind::LWBR, true, false}; break;
+    case 790: form = {CIMemKind::LHBR, true, false}; break;
+    case 662: form = {CIMemKind::STWBR, true, false}; break;
+    case 918: form = {CIMemKind::STHBR, true, false}; break;
+    case 535: form = {CIMemKind::LFS, true, false}; break;
+    case 567: form = {CIMemKind::LFS, true, true}; break;
+    case 599: form = {CIMemKind::LFD, true, false}; break;
+    case 631: form = {CIMemKind::LFD, true, true}; break;
+    case 663: form = {CIMemKind::STFS, true, false}; break;
+    case 695: form = {CIMemKind::STFS, true, true}; break;
+    case 727: form = {CIMemKind::STFD, true, false}; break;
+    case 759: form = {CIMemKind::STFD, true, true}; break;
+    case 983: form = {CIMemKind::STFIW, true, false}; break;
+    case 1014: form = {CIMemKind::DCBZ, true, false}; break;
+    default: break;
+    }
+    break;
+  default:
+    break;
+  }
+  // clang-format on
+  if (form && inst.RA == 0 && form->kind != CIMemKind::DCBZ)
+    return std::nullopt;
+  return form;
+}
+}  // namespace
+
 void CachedInterpreter::Init()
 {
-  // Wire the fastmem arena BEFORE RefreshConfig() — RefreshConfig computes jo.fastmem from
-  // jo.fastmem_arena, and Jit64/JitArm64::Init both call InitFastmemArena() first for exactly this
-  // reason. Without it, jo.fastmem_arena stays false -> jo.fastmem is always false -> the PIC
-  // direct-pointer load/store fast path (gated on jo.fastmem at the DoJit emission site) NEVER
-  // emits, silently leaving the CIR as the bare stock interpreter (the PIC win was inert). The
-  // ~16GiB arena is covered by the app's extended-virtual-addressing + increased-memory-limit
-  // entitlements; if reservation fails on a device, jo.fastmem_arena stays false and PIC gracefully
-  // no-ops. PIC region-checks every access and falls back to the generic handler, so it never
-  // faults — the CIR needs no backpatch fault handler (unlike the JITs).
+  // Same order as Jit64/JitArm64::Init (RefreshConfig derives jo.fastmem from jo.fastmem_arena). The
+  // direct-pointer load/store path itself no longer depends on the arena: it resolves pages through
+  // Memory's BAT page tables, which exist whether or not the reservation succeeded.
   InitFastmemArena();
   RefreshConfig();
   s_pic_loadstore = Config::Get(Config::MAIN_CIR_PIC_LOADSTORE);
+  {
+    auto& memory = m_system.GetMemory();
+    s_page_tables[0] =
+        reinterpret_cast<const void* const*>(memory.GetPhysicalPageMappingsBase());
+    s_page_tables[1] = reinterpret_cast<const void* const*>(memory.GetLogicalPageMappingsBase());
+    s_dbat_table = &m_system.GetMMU().GetDBATTable();
+    s_gpfifo = &m_system.GetGPFifo();
+    s_low_dcbz_hack = Config::Get(Config::MAIN_LOW_DCBZ_HACK);
+  }
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
   s_specialized_ops_validate = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
   // iCube: FP load/store specialization (default OFF; independent A/B toggle). Read once at codegen time.
@@ -2033,480 +2118,455 @@ s32 CachedInterpreter::InterpretAndCheckExceptions(
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-// iCube WIN#1: PIC direct-pointer D-form integer load/store. INTEGER ONLY (FP opcodes are excluded at
-// the emission site via FL_USE_FPU and never reach here). Any opcode/alignment/region this switch does
-// not handle delegates to Cold_LoadStoreFallback, which runs the exact generic interpreter handler, so
-// DSI/alignment/MMIO semantics are preserved for everything PIC does not specialize. write_pc mirrors
-// Interpret<write_pc>. Ported (integer subset, scalar lmw/stmw) from feature/icube-testflight.
-// iCube 2026-09-16: lmw/stmw outlined from LoadStoreDFormPIC. Their two loops (per-word region pre-scan,
-// then the copy) were the only high-register-pressure region in the handler, and LLVM answered by saving
-// six callee-saved pairs right after the EA computation — on the path EVERY D-form load/store takes (about a
-// sixth of the handler's self time on device was that prologue/epilogue, NSMBW + F-Zero Time Profiler).
-// This is reached by a TAIL call (the case is `return LoadStoreMultiplePIC<...>(...)`), so nothing stays
-// live across it and the hot handler needs no prologue at all. Pre-scans the whole range before writing,
-// exactly as before; a failed scan falls back with no partial effect.
-template <bool store>
-[[gnu::noinline]] s32 CachedInterpreter::LoadStoreMultiplePIC(PowerPC::PowerPCState& ppc_state, u32 ea,
-                                                              const LoadStoreDFormPICOperands& operands)
+// iCube: direct-pointer load/store handlers. See the declaration in CachedInterpreter.h for the contract.
+// Every access the fast path serves is 1/2/4-byte aligned (or a whole 32-byte cache line), so it can
+// never straddle a 128 KiB BAT page; the 8-byte and multi-word kinds check their span explicitly. FP
+// kinds are bit-identical to Interpreter_LoadStore.cpp (lfs fills both halves with ConvertToDouble, lfd
+// sets PS0 only, stfs stores ConvertToSingle(PS0), stfd/stfiwx store PS0 bits); FPU availability is the
+// block-level CheckFPU's job, exactly as for the generic Interpret path these replace.
+namespace
 {
-  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
-               exram_mask, fakevmem_base, fakevmem_mask] = operands;
-  if ((ea & 0b11) != 0 || ppc_state.msr.LE) [[unlikely]]
-    return Cold_LoadStoreFallback(ppc_state, operands);
-  const u32 first = store ? static_cast<u32>(inst.RS) : static_cast<u32>(inst.RD);
-  const u32 count = 32u - first;
-  u8* region_base = nullptr;
-  u32 region_mask = 0;
-  u32 region_sub = 0;
-  bool region_is_fake = false;
-  u32 addr = ea;
-  for (u32 k = 0; k < count; ++k, addr += 4)
+// Alignment the fast path requires of the effective address (mask of bits that must be clear).
+constexpr u32 CI_AlignMask(CIMemKind kind)
+{
+  switch (kind)
   {
-    const auto r = CI_GetRegionInfo(addr, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
-                                    exram_mask, fakevmem_base, fakevmem_mask);
-    if (!r.base)
-      return Cold_LoadStoreFallback(ppc_state, operands);
-    if (!region_base)
-    {
-      region_base = r.base;
-      region_mask = r.mask;
-      region_sub = r.sub;
-      region_is_fake = r.is_fake;
-    }
-    else if (region_base != r.base || region_mask != r.mask || region_sub != r.sub ||
-             region_is_fake != r.is_fake)
-    {
-      return Cold_LoadStoreFallback(ppc_state, operands);
-    }
+  case CIMemKind::LBZ:
+  case CIMemKind::STB:
+  case CIMemKind::DCBZ:
+    return 0;
+  case CIMemKind::LHZ:
+  case CIMemKind::LHA:
+  case CIMemKind::STH:
+  case CIMemKind::LHBR:
+  case CIMemKind::STHBR:
+    return 0b1;
+  default:
+    return 0b11;
   }
-  if (!region_base)
-    return Cold_LoadStoreFallback(ppc_state, operands);
-  addr = ea;
-  for (u32 r = first; r <= 31u; ++r, addr += 4)
+}
+
+// Byte and half stores are the ones a cache-inhibited BAT treats specially (MMU::WriteToHardware).
+constexpr bool CI_IsSubWordStore(CIMemKind kind)
+{
+  return kind == CIMemKind::STB || kind == CIMemKind::STH || kind == CIMemKind::STHBR;
+}
+
+template <typename T>
+inline T CI_ReadHost(const u8* p)
+{
+  T value;
+  std::memcpy(&value, p, sizeof(T));
+  return value;
+}
+
+template <typename T>
+inline void CI_WriteHost(u8* p, T value)
+{
+  std::memcpy(p, &value, sizeof(T));
+}
+}  // namespace
+
+namespace
+{
+// GX command streams are stores to the write-gather pipe: serve them without the generic handler's MMU
+// walk. Returns false (nothing done) for anything that is not a plain, aligned, in-page pipe store.
+// Callers only try this for non-update forms, which are the only ones that ever target the pipe.
+template <CIMemKind kind>
+inline bool CI_TryGatherPipeStore(PowerPC::PowerPCState& ppc_state, UGeckoInstruction inst, u32 ea)
+{
+  if constexpr (kind == CIMemKind::STW || kind == CIMemKind::STB || kind == CIMemKind::STH ||
+                kind == CIMemKind::STFS || kind == CIMemKind::STFD)
   {
-    const u32 roff = region_is_fake ? (addr & region_mask) : ((addr - region_sub) & region_mask);
-    if constexpr (store)
-      *reinterpret_cast<u32*>(region_base + roff) = Common::swap32(ppc_state.gpr[r]);
+    constexpr u32 size = kind == CIMemKind::STB ? 1 :
+                         kind == CIMemKind::STH ? 2 :
+                         kind == CIMemKind::STFD ? 8 :
+                                                   4;
+    constexpr u32 gather_pipe_page_size = 0x1000;
+    if ((ea & (gather_pipe_page_size - 1)) + size > gather_pipe_page_size ||
+        (ea & CI_AlignMask(kind)) != 0 || !CI_IsGatherPipeWrite(ppc_state, ea))
+    {
+      return false;
+    }
+    if constexpr (kind == CIMemKind::STW)
+      s_gpfifo->Write32(ppc_state.gpr[inst.RS]);
+    else if constexpr (kind == CIMemKind::STH)
+      s_gpfifo->Write16(static_cast<u16>(ppc_state.gpr[inst.RS]));
+    else if constexpr (kind == CIMemKind::STB)
+      s_gpfifo->Write8(static_cast<u8>(ppc_state.gpr[inst.RS]));
+    else if constexpr (kind == CIMemKind::STFS)
+      s_gpfifo->Write32(ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64()));
     else
-      ppc_state.gpr[r] = Common::FromBigEndian(*reinterpret_cast<const u32*>(region_base + roff));
+      s_gpfifo->Write64(ppc_state.ps[inst.FS].PS0AsU64());
+    return true;
   }
-  return sizeof(AnyCallback) + sizeof(operands);
+  else
+  {
+    return false;
+  }
 }
+}  // namespace
 
-template <bool write_pc>
-s32 CachedInterpreter::LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
-                                         const LoadStoreDFormPICOperands& operands)
+template <CIMemKind kind, bool try_gather_pipe>
+[[gnu::noinline]] s32 CachedInterpreter::LoadStoreFastCold(PowerPC::PowerPCState& ppc_state,
+                                                           const InterpretOperands& operands, u32 ea)
 {
-  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
-               exram_mask, fakevmem_base, fakevmem_mask] = operands;
-
-  if constexpr (write_pc)
+  if constexpr (try_gather_pipe)
   {
-    ppc_state.pc = current_pc;
-    ppc_state.npc = current_pc + 4;
+    if (CI_TryGatherPipeStore<kind>(ppc_state, operands.inst, ea))
+      return sizeof(AnyCallback) + sizeof(operands);
   }
-
-  // D-form EA: ea = (RA ? GPR[RA] : 0) + SIMM_16
-  const u32 ra = inst.RA;
-  const u32 ea = ra ? (ppc_state.gpr[ra] + static_cast<u32>(inst.SIMM_16))
-                    : static_cast<u32>(inst.SIMM_16);
-
-  u8* base_ptr = nullptr;
-  u32 offset = 0;
-  const auto region = CI_GetRegionInfo(ea, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
-                                       exram_mask, fakevmem_base, fakevmem_mask);
-  if (region.base)
-  {
-    base_ptr = region.base;
-    offset = CI_RegionOffset(region, ea);
-  }
-
-  if (base_ptr) [[likely]]
-  {
-    // iCube: optional PIC-data prefetch (MAIN_CACHED_INTERPRETER_PREFETCH, default OFF). Off => no
-    // hint emitted (byte-identical to the current fast state); ON re-adds it to A/B the +33%-by-
-    // removal finding. Read hints (locality 1) over the target line; safe for both loads and stores.
-#if defined(__GNUC__) || defined(__clang__)
-    if (s_prefetch_enabled)
-    {
-      __builtin_prefetch(base_ptr + offset, 0, 1);
-      __builtin_prefetch(base_ptr + offset + 32, 0, 1);
-    }
-#endif
-    switch (inst.OPCD)
-    {
-    case 32:  // lwz
-    {
-      if ((ea & 0b11) != 0) [[unlikely]]
-        break;
-      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 33:  // lwzu (update)
-    {
-      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
-        break;
-      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
-      ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 34:  // lbz
-    {
-      ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 35:  // lbzu (update)
-    {
-      if (ra == 0)
-        break;
-      ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
-      ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 40:  // lhz
-    {
-      if ((ea & 0b1) != 0) [[unlikely]]
-        break;
-      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 41:  // lhzu (update)
-    {
-      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
-        break;
-      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
-      ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 42:  // lha
-    {
-      if ((ea & 0b1) != 0) [[unlikely]]
-        break;
-      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 43:  // lhau (update)
-    {
-      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
-        break;
-      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
-      ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 36:  // stw
-    {
-      if ((ea & 0b11) != 0) [[unlikely]]
-        break;
-      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 37:  // stwu (update)
-    {
-      if (ra == 0 || (ea & 0b11) != 0) [[unlikely]]
-        break;
-      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
-      ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 38:  // stb
-    {
-      *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 39:  // stbu (update)
-    {
-      if (ra == 0)
-        break;
-      *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
-      ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 44:  // sth
-    {
-      if ((ea & 0b1) != 0) [[unlikely]]
-        break;
-      *reinterpret_cast<u16*>(base_ptr + offset) =
-          Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 45:  // sthu (update)
-    {
-      if (ra == 0 || (ea & 0b1) != 0) [[unlikely]]
-        break;
-      *reinterpret_cast<u16*>(base_ptr + offset) =
-          Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
-      ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    // iCube 2026-09-16: FP D-form loads/stores. Bit-identical to Interpreter_LoadStore.cpp: lfs fills both
-    // halves with ConvertToDouble(single), lfd sets PS0 only, stfs stores ConvertToSingle(PS0), stfd stores
-    // PS0; all four require 4-byte alignment (else the generic handler raises the alignment exception),
-    // update forms need rA != 0. FPU availability is the block-level CheckFPU's job, exactly as for the
-    // generic Interpret path these replace. In FP-heavy titles (F-Zero GX) the generic path put ~10 % of the
-    // emulation thread into the MMU slow paths (Time Profiler, core 5).
-    case 48:  // lfs
-    case 49:  // lfsu (update)
-    {
-      const bool update = (inst.OPCD == 49);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
-      ppc_state.ps[inst.FD].Fill(ConvertToDouble(Common::FromBigEndian(raw)));
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 50:  // lfd
-    case 51:  // lfdu (update)
-    {
-      const bool update = (inst.OPCD == 51);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      const u64 raw = *reinterpret_cast<const u64*>(base_ptr + offset);
-      ppc_state.ps[inst.FD].SetPS0(Common::FromBigEndian(raw));
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 52:  // stfs
-    case 53:  // stfsu (update)
-    {
-      const bool update = (inst.OPCD == 53);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      *reinterpret_cast<u32*>(base_ptr + offset) =
-          Common::swap32(ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64()));
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 54:  // stfd
-    case 55:  // stfdu (update)
-    {
-      const bool update = (inst.OPCD == 55);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      *reinterpret_cast<u64*>(base_ptr + offset) = Common::swap64(ppc_state.ps[inst.FS].PS0AsU64());
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 46:  // lmw — multi-word path outlined (tail call keeps this handler prologue-free)
-      return LoadStoreMultiplePIC<false>(ppc_state, ea, operands);
-    case 47:  // stmw — multi-word path outlined (tail call keeps this handler prologue-free)
-      return LoadStoreMultiplePIC<true>(ppc_state, ea, operands);
-    default:
-      break;  // FP or unsupported D-form -> fallback
-    }
-  }
-  return Cold_LoadStoreFallback(ppc_state, operands);
-}
-
-template <bool write_pc>
-s32 CachedInterpreter::LoadStoreDFormPIC(std::ostream& stream,
-                                         const LoadStoreDFormPICOperands& operands)
-{
-  fmt::print(stream, "LoadStoreDFormPIC(pc={:#010x}, OPCD={})\n", operands.current_pc,
-             operands.inst.OPCD);
-  return sizeof(AnyCallback) + sizeof(operands);
-}
-
-// iCube WIN#1: PIC direct-pointer X-form integer load/store (OPCD == 31). INTEGER ONLY. Byte-reverse
-// variants (lwbrx/lhbrx/stwbrx/sthbrx) are integer and included; FP-indexed and paired-single forms
-// are excluded at the emission site (FL_USE_FPU) and any unhandled SUBOP10 falls back generically.
-template <bool write_pc>
-s32 CachedInterpreter::LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
-                                         const LoadStoreDFormPICOperands& operands)
-{
-  const auto& [interpreter, func, current_pc, inst, power_pc, mem1_base, mem1_mask, exram_base,
-               exram_mask, fakevmem_base, fakevmem_mask] = operands;
-
-  if constexpr (write_pc)
-  {
-    ppc_state.pc = current_pc;
-    ppc_state.npc = current_pc + 4;
-  }
-
-  // X-form EA: ea = (RA ? GPR[RA] : 0) + GPR[RB]
-  const u32 ra = inst.RA;
-  const u32 rb = inst.RB;
-  const u32 ea = (ra ? ppc_state.gpr[ra] : 0) + ppc_state.gpr[rb];
-
-  u8* base_ptr = nullptr;
-  u32 offset = 0;
-  const auto region = CI_GetRegionInfo(ea, ppc_state.msr.DR, mem1_base, mem1_mask, exram_base,
-                                       exram_mask, fakevmem_base, fakevmem_mask);
-  if (region.base)
-  {
-    base_ptr = region.base;
-    offset = CI_RegionOffset(region, ea);
-  }
-
-  if (base_ptr) [[likely]]
-  {
-    // iCube: optional PIC-data prefetch (MAIN_CACHED_INTERPRETER_PREFETCH, default OFF). Off => no
-    // hint emitted (byte-identical to the current fast state); ON re-adds it to A/B the +33%-by-
-    // removal finding. Read hints (locality 1) over the target line; safe for both loads and stores.
-#if defined(__GNUC__) || defined(__clang__)
-    if (s_prefetch_enabled)
-    {
-      __builtin_prefetch(base_ptr + offset, 0, 1);
-      __builtin_prefetch(base_ptr + offset + 32, 0, 1);
-    }
-#endif
-    switch (inst.SUBOP10)
-    {
-    case 23:   // lwzx
-    case 55:   // lwzux (update)
-    {
-      const bool update = (inst.SUBOP10 == 55);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = Common::FromBigEndian(raw);
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 87:   // lbzx
-    case 119:  // lbzux (update)
-    {
-      const bool update = (inst.SUBOP10 == 119);
-      if (update && ra == 0)
-        break;
-      ppc_state.gpr[inst.RD] = static_cast<u32>(*(base_ptr + offset));
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 279:  // lhzx
-    case 311:  // lhzux (update)
-    {
-      const bool update = (inst.SUBOP10 == 311);
-      if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::FromBigEndian(raw));
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 343:  // lhax
-    case 375:  // lhaux (update)
-    {
-      const bool update = (inst.SUBOP10 == 375);
-      if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = static_cast<u32>(static_cast<s16>(Common::FromBigEndian(raw)));
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 151:  // stwx
-    case 183:  // stwux (update)
-    {
-      const bool update = (inst.SUBOP10 == 183);
-      if ((ea & 0b11) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      *reinterpret_cast<u32*>(base_ptr + offset) = Common::swap32(ppc_state.gpr[inst.RS]);
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 215:  // stbx
-    case 247:  // stbux (update)
-    {
-      const bool update = (inst.SUBOP10 == 247);
-      if (update && ra == 0)
-        break;
-      *(base_ptr + offset) = static_cast<u8>(ppc_state.gpr[inst.RS]);
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 407:  // sthx
-    case 439:  // sthux (update)
-    {
-      const bool update = (inst.SUBOP10 == 439);
-      if ((ea & 0b1) != 0 || (update && ra == 0)) [[unlikely]]
-        break;
-      *reinterpret_cast<u16*>(base_ptr + offset) =
-          Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS]));
-      if (update)
-        ppc_state.gpr[ra] = ea;
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 534:  // lwbrx
-    {
-      if ((ea & 0b11) != 0) [[unlikely]]
-        break;
-      const u32 raw = *reinterpret_cast<const u32*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = Common::swap32(Common::FromBigEndian(raw));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 790:  // lhbrx
-    {
-      if ((ea & 0b1) != 0) [[unlikely]]
-        break;
-      const u16 raw = *reinterpret_cast<const u16*>(base_ptr + offset);
-      ppc_state.gpr[inst.RD] = static_cast<u32>(Common::swap16(Common::FromBigEndian(raw)));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 662:  // stwbrx
-    {
-      if ((ea & 0b11) != 0)
-        break;
-      const u32 raw = ppc_state.gpr[inst.RS];
-      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    case 918:  // sthbrx
-    {
-      if ((ea & 0b1) != 0)
-        break;
-      const u16 raw = static_cast<u16>(ppc_state.gpr[inst.RS]);
-      std::memcpy(base_ptr + offset, &raw, sizeof(raw));
-      return sizeof(AnyCallback) + sizeof(operands);
-    }
-    default:
-      break;  // FP-indexed / paired-single / unsupported X-form -> fallback
-    }
-  }
-  return Cold_LoadStoreFallback(ppc_state, operands);
-}
-
-template <bool write_pc>
-s32 CachedInterpreter::LoadStoreXFormPIC(std::ostream& stream,
-                                         const LoadStoreDFormPICOperands& operands)
-{
-  fmt::print(stream, "LoadStoreXFormPIC(pc={:#010x}, SUBOP10={})\n", operands.current_pc,
-             operands.inst.SUBOP10);
-  return sizeof(AnyCallback) + sizeof(operands);
-}
-
-// iCube WIN#1: cold fallback. Runs the exact generic interpreter handler captured at emit time, so
-// DSI/alignment/MMIO semantics are identical to the non-PIC generic path. pc/npc were already written
-// by the PIC body (write_pc) before any fallback, matching Interpret<write_pc>.
-s32 CachedInterpreter::Cold_LoadStoreFallback(PowerPC::PowerPCState& /*ppc_state*/,
-                                              const LoadStoreDFormPICOperands& operands)
-{
+  // The exact generic interpreter handler captured at emit time: DSI/alignment/MMIO semantics are
+  // those of the generic path. pc/npc were already written by the caller when write_pc is set.
   operands.func(operands.interpreter, operands.inst);
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+template <CIMemKind kind, bool indexed, bool update, bool write_pc>
+s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state,
+                                     const InterpretOperands& operands)
+{
+  const UGeckoInstruction inst = operands.inst;
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+
+  // rA != 0 is guaranteed by the emitter (rA == 0 forms stay on the generic handler), except for dcbz,
+  // whose usual spelling is `dcbz 0, rB`.
+  constexpr bool is_psq = kind == CIMemKind::PSQL || kind == CIMemKind::PSQST;
+  u32 ea = indexed ? ppc_state.gpr[inst.RB] :
+                     static_cast<u32>(is_psq ? s32{inst.SIMM_12} : s32{inst.SIMM_16});
+  if constexpr (kind == CIMemKind::DCBZ)
+    ea += inst.RA != 0 ? ppc_state.gpr[inst.RA] : 0;
+  else
+    ea += ppc_state.gpr[inst.RA];
+  u8* const page = CI_PagePtr(ppc_state, ea);
+  if (page == nullptr || (ea & CI_AlignMask(kind)) != 0) [[unlikely]]
+    return LoadStoreFastCold<kind, !update>(ppc_state, operands, ea);
+  const u32 offset = ea & CI_PAGE_OFFSET_MASK;
+  u8* const host = page + offset;
+
+  if constexpr (CI_IsSubWordStore(kind))
+  {
+    if (CI_IsWriteInhibitedPage(ppc_state, ea)) [[unlikely]]
+      return LoadStoreFastCold<kind, !update>(ppc_state, operands, ea);
+  }
+
+  switch (kind)
+  {
+  case CIMemKind::LWZ:
+    ppc_state.gpr[inst.RD] = Common::swap32(CI_ReadHost<u32>(host));
+    break;
+  case CIMemKind::LBZ:
+    ppc_state.gpr[inst.RD] = *host;
+    break;
+  case CIMemKind::LHZ:
+    ppc_state.gpr[inst.RD] = Common::swap16(CI_ReadHost<u16>(host));
+    break;
+  case CIMemKind::LHA:
+    ppc_state.gpr[inst.RD] =
+        static_cast<u32>(s32{static_cast<s16>(Common::swap16(CI_ReadHost<u16>(host)))});
+    break;
+  case CIMemKind::LWBR:
+    ppc_state.gpr[inst.RD] = CI_ReadHost<u32>(host);
+    break;
+  case CIMemKind::LHBR:
+    ppc_state.gpr[inst.RD] = CI_ReadHost<u16>(host);
+    break;
+  case CIMemKind::STW:
+    CI_WriteHost<u32>(host, Common::swap32(ppc_state.gpr[inst.RS]));
+    break;
+  case CIMemKind::STB:
+    *host = static_cast<u8>(ppc_state.gpr[inst.RS]);
+    break;
+  case CIMemKind::STH:
+    CI_WriteHost<u16>(host, Common::swap16(static_cast<u16>(ppc_state.gpr[inst.RS])));
+    break;
+  case CIMemKind::STWBR:
+    CI_WriteHost<u32>(host, ppc_state.gpr[inst.RS]);
+    break;
+  case CIMemKind::STHBR:
+    CI_WriteHost<u16>(host, static_cast<u16>(ppc_state.gpr[inst.RS]));
+    break;
+  case CIMemKind::LFS:
+    ppc_state.ps[inst.FD].Fill(ConvertToDouble(Common::swap32(CI_ReadHost<u32>(host))));
+    break;
+  case CIMemKind::STFS:
+    CI_WriteHost<u32>(host, Common::swap32(ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64())));
+    break;
+  case CIMemKind::STFIW:
+    CI_WriteHost<u32>(host, Common::swap32(static_cast<u32>(ppc_state.ps[inst.FS].PS0AsU64())));
+    break;
+  case CIMemKind::LFD:
+  case CIMemKind::STFD:
+    // The second word may sit on the next BAT page, which need not be host-contiguous.
+    if (offset > PowerPC::BAT_PAGE_SIZE - sizeof(u64)) [[unlikely]]
+      return LoadStoreFastCold<kind, !update>(ppc_state, operands, ea);
+    if constexpr (kind == CIMemKind::LFD)
+      ppc_state.ps[inst.FD].SetPS0(Common::swap64(CI_ReadHost<u64>(host)));
+    else
+      CI_WriteHost<u64>(host, Common::swap64(ppc_state.ps[inst.FS].PS0AsU64()));
+    break;
+  case CIMemKind::LMW:
+  case CIMemKind::STMW:
+  {
+    // inst.RD and inst.RS are the same field: the first register of the run r..r31.
+    const u32 first = inst.RD;
+    const u32 bytes = (32 - first) * sizeof(u32);
+    if (offset + bytes > PowerPC::BAT_PAGE_SIZE || ppc_state.msr.LE) [[unlikely]]
+      return LoadStoreFastCold<kind, !update>(ppc_state, operands, ea);
+    u8* p = host;
+    for (u32 r = first; r < 32; ++r, p += sizeof(u32))
+    {
+      if constexpr (kind == CIMemKind::LMW)
+        ppc_state.gpr[r] = Common::swap32(CI_ReadHost<u32>(p));
+      else
+        CI_WriteHost<u32>(p, Common::swap32(ppc_state.gpr[r]));
+    }
+    break;
+  }
+  case CIMemKind::PSQL:
+  case CIMemKind::PSQST:
+  {
+    // Interpreter_LoadStorePaired.cpp, QUANTIZE_FLOAT branch only (no scale is applied to floats).
+    // Every other quantization type, and LSQE off (program exception), goes to the generic handler.
+    const bool single = (indexed ? inst.Wx : inst.W) != 0;
+    const UGQR gqr(ppc_state.spr[SPR_GQR0 + (indexed ? inst.Ix : inst.I)]);
+    EQuantizeType type;
+    if constexpr (kind == CIMemKind::PSQL)
+      type = gqr.ld_type;
+    else
+      type = gqr.st_type;
+    if (HID2(ppc_state).LSQE == 0 || type != QUANTIZE_FLOAT ||
+        (!single && offset > PowerPC::BAT_PAGE_SIZE - 2 * sizeof(u32))) [[unlikely]]
+    {
+      return LoadStoreFastCold<kind, !update>(ppc_state, operands, ea);
+    }
+    if constexpr (kind == CIMemKind::PSQL)
+    {
+      const double ps0 =
+          std::bit_cast<double>(ConvertToDouble(Common::swap32(CI_ReadHost<u32>(host))));
+      const double ps1 = single ? 1.0 :
+                                  std::bit_cast<double>(ConvertToDouble(
+                                      Common::swap32(CI_ReadHost<u32>(host + sizeof(u32)))));
+      ppc_state.ps[inst.RD].SetBoth(ps0, ps1);
+    }
+    else
+    {
+      CI_WriteHost<u32>(host,
+                        Common::swap32(ConvertToSingleFTZ(ppc_state.ps[inst.RS].PS0AsU64())));
+      if (!single)
+      {
+        CI_WriteHost<u32>(host + sizeof(u32),
+                          Common::swap32(ConvertToSingleFTZ(ppc_state.ps[inst.RS].PS1AsU64())));
+      }
+    }
+    break;
+  }
+  case CIMemKind::DCBZ:
+    // Interpreter::dcbz: alignment exception without HID0.DCE, and the low-MEM1 hack skips the clear.
+    if (!HID0(ppc_state).DCE ||
+        (s_low_dcbz_hack && ea >= 0x80000000 && ea < 0x80008000)) [[unlikely]]
+    {
+      return LoadStoreFastCold<kind, !update>(ppc_state, operands, ea);
+    }
+    std::memset(page + (offset & ~u32{31}), 0, 32);
+    break;
+  }
+
+  if constexpr (update)
+    ppc_state.gpr[inst.RA] = ea;
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreter::LoadStoreFast(std::ostream& stream, const InterpretOperands& operands)
+{
+  fmt::println(stream, "LoadStoreFast(pc={:#010x}, inst={:#010x})", operands.current_pc,
+               operands.inst.hex);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+CachedInterpreter::AnyCallback CachedInterpreter::GetLoadStoreFastCallback(CIMemKind kind,
+                                                                           bool indexed, bool update,
+                                                                           bool write_pc)
+{
+#define CI_LS_PICK(K, X, U)                                                                        \
+  return write_pc ? AnyCallbackCast(CallbackCast(LoadStoreFast<CIMemKind::K, X, U, true>)) :       \
+                    AnyCallbackCast(CallbackCast(LoadStoreFast<CIMemKind::K, X, U, false>))
+#define CI_LS_FORMS(K)                                                                             \
+  case CIMemKind::K:                                                                               \
+    if (indexed)                                                                                   \
+    {                                                                                              \
+      if (update)                                                                                  \
+        CI_LS_PICK(K, true, true);                                                                 \
+      CI_LS_PICK(K, true, false);                                                                  \
+    }                                                                                              \
+    if (update)                                                                                    \
+      CI_LS_PICK(K, false, true);                                                                  \
+    CI_LS_PICK(K, false, false)
+  switch (kind)
+  {
+    CI_LS_FORMS(LWZ);
+    CI_LS_FORMS(LBZ);
+    CI_LS_FORMS(LHZ);
+    CI_LS_FORMS(LHA);
+    CI_LS_FORMS(STW);
+    CI_LS_FORMS(STB);
+    CI_LS_FORMS(STH);
+    CI_LS_FORMS(LFS);
+    CI_LS_FORMS(LFD);
+    CI_LS_FORMS(STFS);
+    CI_LS_FORMS(STFD);
+    CI_LS_FORMS(PSQL);
+    CI_LS_FORMS(PSQST);
+  case CIMemKind::LWBR:
+    if (!indexed || update)
+      return nullptr;
+    CI_LS_PICK(LWBR, true, false);
+  case CIMemKind::LHBR:
+    if (!indexed || update)
+      return nullptr;
+    CI_LS_PICK(LHBR, true, false);
+  case CIMemKind::STWBR:
+    if (!indexed || update)
+      return nullptr;
+    CI_LS_PICK(STWBR, true, false);
+  case CIMemKind::STHBR:
+    if (!indexed || update)
+      return nullptr;
+    CI_LS_PICK(STHBR, true, false);
+  case CIMemKind::STFIW:
+    if (!indexed || update)
+      return nullptr;
+    CI_LS_PICK(STFIW, true, false);
+  case CIMemKind::DCBZ:
+    if (!indexed || update)
+      return nullptr;
+    CI_LS_PICK(DCBZ, true, false);
+  case CIMemKind::LMW:
+    if (indexed || update)
+      return nullptr;
+    CI_LS_PICK(LMW, false, false);
+  case CIMemKind::STMW:
+    if (indexed || update)
+      return nullptr;
+    CI_LS_PICK(STMW, false, false);
+  }
+#undef CI_LS_FORMS
+#undef CI_LS_PICK
+  return nullptr;
+}
+
+// iCube: integer load/stores as micro-ops, so a load or store no longer ends a fused run. Same page
+// lookup and the same fall-back rules as LoadStoreFast.
+#if defined(__clang__)
+#define CI_MUSTTAIL [[clang::musttail]]
+#else
+#define CI_MUSTTAIL
+#endif
+namespace
+{
+template <bool indexed>
+inline u32 CI_MicroMemEA(const PowerPC::PowerPCState& ppc_state, const MicroOp& m)
+{
+  return ppc_state.gpr[m.ra] + (indexed ? ppc_state.gpr[m.rb] :
+                                          static_cast<u32>(s32{static_cast<s16>(m.imm)}));
+}
+
+// Returns false, with no side effect, when the access has to take the generic handler.
+template <CIMemKind kind, bool indexed>
+inline bool CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOp& m)
+{
+  const u32 ea = CI_MicroMemEA<indexed>(ppc_state, m);
+  u8* const page = CI_PagePtr(ppc_state, ea);
+  if (page == nullptr || (ea & CI_AlignMask(kind)) != 0) [[unlikely]]
+    return false;
+  if constexpr (CI_IsSubWordStore(kind))
+  {
+    if (CI_IsWriteInhibitedPage(ppc_state, ea)) [[unlikely]]
+      return false;
+  }
+  u8* const host = page + (ea & CI_PAGE_OFFSET_MASK);
+  switch (kind)
+  {
+  case CIMemKind::LWZ:
+    ppc_state.gpr[m.rd] = Common::swap32(CI_ReadHost<u32>(host));
+    break;
+  case CIMemKind::LBZ:
+    ppc_state.gpr[m.rd] = *host;
+    break;
+  case CIMemKind::LHZ:
+    ppc_state.gpr[m.rd] = Common::swap16(CI_ReadHost<u16>(host));
+    break;
+  case CIMemKind::LHA:
+    ppc_state.gpr[m.rd] =
+        static_cast<u32>(s32{static_cast<s16>(Common::swap16(CI_ReadHost<u16>(host)))});
+    break;
+  case CIMemKind::STW:
+    CI_WriteHost<u32>(host, Common::swap32(ppc_state.gpr[m.rd]));
+    break;
+  case CIMemKind::STB:
+    *host = static_cast<u8>(ppc_state.gpr[m.rd]);
+    break;
+  case CIMemKind::STH:
+    CI_WriteHost<u16>(host, Common::swap16(static_cast<u16>(ppc_state.gpr[m.rd])));
+    break;
+  default:
+    break;
+  }
+  if (m.rc != 0)
+    ppc_state.gpr[m.ra] = ea;
+  return true;
+}
+
+[[gnu::noinline, gnu::cold]] void CI_MicroMemCold(PowerPC::PowerPCState& ppc_state,
+                                                  Interpreter& interpreter, const MicroOp& m)
+{
+  const UGeckoInstruction inst{m.imm};
+  if (m.rc == 0)
+  {
+    bool served = false;
+    switch (m.op)
+    {
+    case MicroOpCode::MEM_STW:
+      served = CI_TryGatherPipeStore<CIMemKind::STW>(ppc_state, inst,
+                                                     CI_MicroMemEA<false>(ppc_state, m));
+      break;
+    case MicroOpCode::MEM_STWX:
+      served = CI_TryGatherPipeStore<CIMemKind::STW>(ppc_state, inst,
+                                                     CI_MicroMemEA<true>(ppc_state, m));
+      break;
+    case MicroOpCode::MEM_STH:
+      served = CI_TryGatherPipeStore<CIMemKind::STH>(ppc_state, inst,
+                                                     CI_MicroMemEA<false>(ppc_state, m));
+      break;
+    case MicroOpCode::MEM_STHX:
+      served = CI_TryGatherPipeStore<CIMemKind::STH>(ppc_state, inst,
+                                                     CI_MicroMemEA<true>(ppc_state, m));
+      break;
+    case MicroOpCode::MEM_STB:
+      served = CI_TryGatherPipeStore<CIMemKind::STB>(ppc_state, inst,
+                                                     CI_MicroMemEA<false>(ppc_state, m));
+      break;
+    case MicroOpCode::MEM_STBX:
+      served = CI_TryGatherPipeStore<CIMemKind::STB>(ppc_state, inst,
+                                                     CI_MicroMemEA<true>(ppc_state, m));
+      break;
+    default:
+      break;
+    }
+    if (served)
+      return;
+  }
+  Interpreter::GetInterpreterOp(inst)(interpreter, inst);
+}
+}  // namespace
+
 // iCube WIN#2: micro-op fusion engine (MAIN_CIR_MICROOP_FUSION). CI_SetPCForMicroOps mirrors the
-// Interpret<write_pc> pc/npc contract; ExecuteMicroOps runs the packed MicroOp array via a
-// computed-goto dispatch (one indirect branch per op, zero indirect calls). The dispatch_table
-// order MUST match enum class MicroOpCode (static_assert enforces it). Each handler reproduces its
-// interpreter op's GPR/CR0/XER side-effects byte-exactly. Ported verbatim from feature/icube-
-// testflight. Only reached when the flag emitted an ExecuteMicroOps callback (flag-off: never).
+// Interpret<write_pc> pc/npc contract; ExecuteMicroOps enters the tail-call threaded handlers below.
+// Only reached when the flag emitted an ExecuteMicroOps callback (flag-off: never).
 template <bool write_pc>
 static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
 {
@@ -2517,1051 +2577,703 @@ static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
   }
 }
 
+// iCube: the fused-run executor is TAIL-CALL threaded: one small function per micro-op, each ending in
+// a guaranteed tail call through the handler table to the next op, and the run is closed by the END
+// sentinel the packer appends (so there is no bound compare anywhere). This is the shape a computed
+// goto is supposed to compile to, but LLVM only splits a shared indirect branch back into its
+// predecessors below 16 of them (tail-dup-pred-size); with 57 handlers every op funnelled through ONE
+// `br`, i.e. one branch-predictor entry for the whole micro-op mix. ppc_state / mp / operands stay in
+// x0-x2 for the whole run and no handler has a prologue. Each handler reproduces its interpreter op's
+// GPR/CR0/XER side effects byte-exactly (see the CI_* helpers). A nested struct so the handlers can
+// name CachedInterpreter's private record types.
+#define CI_MICRO_NEXT()                                                                            \
+  CI_MUSTTAIL return table[static_cast<unsigned>(mp[1].op)](ppc_state, mp + 1, operands)
+#define CI_MICRO_MEM(NAME, KIND, INDEXED)                                                          \
+  static s32 NAME(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,                             \
+                  const ExecuteMicroOpsOperands& operands)                                         \
+  {                                                                                                \
+    if (!CI_MicroMemAccess<CIMemKind::KIND, INDEXED>(ppc_state, *mp)) [[unlikely]]                 \
+      CI_MUSTTAIL return MemCold(ppc_state, mp, operands);                                         \
+    CI_MICRO_NEXT();                                                                               \
+  }
+
+struct CachedInterpreter::MicroOpHandlers
+{
+  using Handler = s32 (*)(PowerPC::PowerPCState&, const MicroOp*, const ExecuteMicroOpsOperands&);
+  // Indexed by MicroOpCode; defined below in enum order.
+  static const Handler table[];
+
+  static s32 CONST32(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                     const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    ppc_state.gpr[m.rd] = m.imm;
+    CI_MICRO_NEXT();
+  }
+
+  static s32 CMP_S_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                      const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const s32 a = s32(ppc_state.gpr[m.ra]);
+    const s32 b = s32(ppc_state.gpr[m.rb]);
+    u32 crf = 0;
+    crf |= (a < b) ? PowerPC::CR_LT : 0;
+    crf |= (a > b) ? PowerPC::CR_GT : 0;
+    crf |= (a == b) ? PowerPC::CR_EQ : 0;
+    CI_WriteCRField(ppc_state, m.rd, crf);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 CMPL_U_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                       const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ppc_state.gpr[m.ra];
+    const u32 b = ppc_state.gpr[m.rb];
+    u32 crf = 0;
+    crf |= (a < b) ? PowerPC::CR_LT : 0;
+    crf |= (a > b) ? PowerPC::CR_GT : 0;
+    crf |= (a == b) ? PowerPC::CR_EQ : 0;
+    CI_WriteCRField(ppc_state, m.rd, crf);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 CMP_S_IMM(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                       const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const s32 a = s32(ppc_state.gpr[m.ra]);
+    const s32 b = s32(s16(m.imm & 0xFFFF));
+    u32 crf = 0;
+    crf |= (a < b) ? PowerPC::CR_LT : 0;
+    crf |= (a > b) ? PowerPC::CR_GT : 0;
+    crf |= (a == b) ? PowerPC::CR_EQ : 0;
+    CI_WriteCRField(ppc_state, m.rd, crf);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 CMPL_U_IMM(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                        const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ppc_state.gpr[m.ra];
+    const u32 b = m.imm & 0xFFFFu;
+    u32 crf = 0;
+    crf |= (a < b) ? PowerPC::CR_LT : 0;
+    crf |= (a > b) ? PowerPC::CR_GT : 0;
+    crf |= (a == b) ? PowerPC::CR_EQ : 0;
+    CI_WriteCRField(ppc_state, m.rd, crf);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 CONST32_ADDRA(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                           const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 ra_val = ppc_state.gpr[m.ra];
+    const s32 hi = static_cast<s16>(static_cast<u32>(m.imm) >> 16);
+    const u32 lo = m.imm & 0xFFFFu;
+    const u32 upper_add = ra_val + (static_cast<u32>(hi) << 16);
+    ppc_state.gpr[m.rd] = upper_add | lo;
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ADDI(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                  const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+    const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+    ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ADDIS(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                   const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
+    const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
+    ppc_state.gpr[m.rd] = ra_val + (static_cast<u32>(simm) << 16);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ORI(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                 const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 ui = m.imm & 0xFFFFu;
+    ppc_state.gpr[m.rd] = rs_val | ui;
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ORIS(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                  const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 ui = (m.imm & 0xFFFFu) << 16;
+    ppc_state.gpr[m.rd] = rs_val | ui;
+    CI_MICRO_NEXT();
+  }
+
+  static s32 XORI(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                  const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 ui = m.imm & 0xFFFFu;
+    ppc_state.gpr[m.rd] = rs_val ^ ui;
+    CI_MICRO_NEXT();
+  }
+
+  static s32 XORIS(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                   const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 ui = (m.imm & 0xFFFFu) << 16;
+    ppc_state.gpr[m.rd] = rs_val ^ ui;
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ANDI(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                  const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 ui = m.imm & 0xFFFFu;
+    ppc_state.gpr[m.rd] = rs_val & ui;
+    CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ANDIS(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                   const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 ui = (m.imm & 0xFFFFu) << 16;
+    ppc_state.gpr[m.rd] = rs_val & ui;
+    CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 RLWINM_IMM(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                        const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 sh = (m.imm >> 0) & 31u;
+    const u32 mb = (m.imm >> 5) & 31u;
+    const u32 me = (m.imm >> 10) & 31u;
+    const u32 mask = MakeRotationMask(mb, me);
+    ppc_state.gpr[m.rd] = std::rotl(rs_val, sh) & mask;
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 AND_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = rs_val & rb_val;
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 OR_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                   const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = rs_val | rb_val;
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 XOR_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = rs_val ^ rb_val;
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 RLWIMI_IMM(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                        const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 ra_old = ppc_state.gpr[m.rd];
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 sh = (m.imm >> 0) & 31u;
+    const u32 mb = (m.imm >> 5) & 31u;
+    const u32 me = (m.imm >> 10) & 31u;
+    const u32 mask = MakeRotationMask(mb, me);
+    const u32 rot = std::rotl(rs_val, sh) & mask;
+    ppc_state.gpr[m.rd] = (ra_old & ~mask) | rot;
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 RLWNM_VAR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                       const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb] & 31u; // shift is low 5 bits of RB
+    const u32 mb = (m.imm >> 5) & 31u;
+    const u32 me = (m.imm >> 10) & 31u;
+    const u32 mask = MakeRotationMask(mb, me);
+    ppc_state.gpr[m.rd] = std::rotl(rs_val, rb_val) & mask;
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ANDC_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                     const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = rs_val & ~rb_val;
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ORC_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = rs_val | ~rb_val;
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 NAND_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                     const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = ~(rs_val & rb_val);
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 NOR_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = ~(rs_val | rb_val);
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 EQV_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rs_val = ppc_state.gpr[m.ra];
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 CNTLZW(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    ppc_state.gpr[m.rd] = static_cast<u32>(std::countl_zero(ppc_state.gpr[m.ra]));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 EXTSB(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                   const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s8>(ppc_state.gpr[m.ra])));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 EXTSH(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                   const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s16>(ppc_state.gpr[m.ra])));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SLW_VAR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                     const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 amount = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] << (amount & 0x1fu));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SRW_VAR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                     const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 amount = ppc_state.gpr[m.rb];
+    ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] >> (amount & 0x1fu));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SRAW_VAR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                      const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 rb_val = ppc_state.gpr[m.rb];
+    if (rb_val & 0x20u)
+    {
+      if (ppc_state.gpr[m.ra] & 0x80000000u)
+      {
+        ppc_state.gpr[m.rd] = 0xFFFFFFFFu;
+        ppc_state.SetCarry(1);
+      }
+      else
+      {
+        ppc_state.gpr[m.rd] = 0x00000000u;
+        ppc_state.SetCarry(0);
+      }
+    }
+    else
+    {
+      const u32 amount = rb_val & 0x1fu;
+      const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+      ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+      ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+    }
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SRAWI_IMM(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                       const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 amount = m.imm & 31u;
+    const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
+    ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
+    ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ADD_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ppc_state.gpr[m.ra];
+    const u32 b = ppc_state.gpr[m.rb];
+    const u32 result = a + b;
+    ppc_state.gpr[m.rd] = result;
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ADDC_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                     const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ppc_state.gpr[m.ra];
+    const u32 b = ppc_state.gpr[m.rb];
+    const u32 result = a + b;
+    ppc_state.gpr[m.rd] = result;
+    ppc_state.SetCarry(CI_Helper_Carry(a, b));
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ADDE_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                     const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 carry = ppc_state.GetCarry();
+    const u32 a = ppc_state.gpr[m.ra];
+    const u32 b = ppc_state.gpr[m.rb];
+    const u32 result = a + b + carry;
+    ppc_state.gpr[m.rd] = result;
+    ppc_state.SetCarry(CI_Helper_Carry(a, b) || (carry != 0 && CI_Helper_Carry(a + b, carry)));
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ADDME(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                   const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 carry = ppc_state.GetCarry();
+    const u32 a = ppc_state.gpr[m.ra];
+    const u32 b = 0xFFFFFFFFu;
+    const u32 result = a + b + carry;
+    ppc_state.gpr[m.rd] = result;
+    ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 ADDZE(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                   const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 carry = ppc_state.GetCarry();
+    const u32 a = ppc_state.gpr[m.ra];
+    const u32 result = a + carry;
+    ppc_state.gpr[m.rd] = result;
+    ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SUBF_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                     const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ~ppc_state.gpr[m.ra];
+    const u32 b = ppc_state.gpr[m.rb];
+    const u32 result = a + b + 1u;
+    ppc_state.gpr[m.rd] = result;
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SUBFC_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                      const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ~ppc_state.gpr[m.ra];
+    const u32 b = ppc_state.gpr[m.rb];
+    const u32 result = a + b + 1u;
+    ppc_state.gpr[m.rd] = result;
+    ppc_state.SetCarry(a == 0xFFFFFFFFu || CI_Helper_Carry(b, a + 1u));
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SUBFE_RR(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                      const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ~ppc_state.gpr[m.ra];
+    const u32 b = ppc_state.gpr[m.rb];
+    const u32 carry = ppc_state.GetCarry();
+    const u32 result = a + b + carry;
+    ppc_state.gpr[m.rd] = result;
+    ppc_state.SetCarry(CI_Helper_Carry(a, b) || CI_Helper_Carry(a + b, carry));
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SUBFME(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ~ppc_state.gpr[m.ra];
+    const u32 b = 0xFFFFFFFFu;
+    const u32 carry = ppc_state.GetCarry();
+    const u32 result = a + b + carry;
+    ppc_state.gpr[m.rd] = result;
+    ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 SUBFZE(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                    const ExecuteMicroOpsOperands& operands)
+  {
+    const MicroOp& m = *mp;
+    const u32 a = ~ppc_state.gpr[m.ra];
+    const u32 carry = ppc_state.GetCarry();
+    const u32 result = a + carry;
+    ppc_state.gpr[m.rd] = result;
+    ppc_state.SetCarry(CI_Helper_Carry(a, carry));
+    if ((m.imm & 1u) != 0)
+      ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
+    if (m.rc)
+      CI_UpdateCR0(ppc_state, result);
+    CI_MICRO_NEXT();
+  }
+
+  static s32 NOP(PowerPC::PowerPCState& ppc_state, const MicroOp* mp,
+                 const ExecuteMicroOpsOperands& operands)
+  {
+    CI_MICRO_NEXT();
+  }
+
+  CI_MICRO_MEM(MEM_LWZ, LWZ, false)
+  CI_MICRO_MEM(MEM_LBZ, LBZ, false)
+  CI_MICRO_MEM(MEM_LHZ, LHZ, false)
+  CI_MICRO_MEM(MEM_LHA, LHA, false)
+  CI_MICRO_MEM(MEM_STW, STW, false)
+  CI_MICRO_MEM(MEM_STB, STB, false)
+  CI_MICRO_MEM(MEM_STH, STH, false)
+  CI_MICRO_MEM(MEM_LWZX, LWZ, true)
+  CI_MICRO_MEM(MEM_LBZX, LBZ, true)
+  CI_MICRO_MEM(MEM_LHZX, LHZ, true)
+  CI_MICRO_MEM(MEM_LHAX, LHA, true)
+  CI_MICRO_MEM(MEM_STWX, STW, true)
+  CI_MICRO_MEM(MEM_STBX, STB, true)
+  CI_MICRO_MEM(MEM_STHX, STH, true)
+
+  // The memory micro-op at mp cannot take the direct path: run it through the generic handler (or the
+  // gather pipe), then carry on with the run. Same signature, so both hops are tail calls and the hot
+  // handlers never make a call.
+  [[gnu::noinline, gnu::cold]] static s32 MemCold(PowerPC::PowerPCState& ppc_state,
+                                                  const MicroOp* mp,
+                                                  const ExecuteMicroOpsOperands& operands)
+  {
+    CI_MicroMemCold(ppc_state, *operands.interpreter, *mp);
+    CI_MICRO_NEXT();
+  }
+
+  // The record is variable length: header + the used ops + this sentinel (see emit_fused).
+  static s32 END(PowerPC::PowerPCState&, const MicroOp*, const ExecuteMicroOpsOperands& operands)
+  {
+    return static_cast<s32>(sizeof(AnyCallback) +
+                            ExecuteMicroOpsOperands::TapeSize(operands.count + 1));
+  }
+};
+
+#undef CI_MICRO_MEM
+#undef CI_MICRO_NEXT
+
+const CachedInterpreter::MicroOpHandlers::Handler CachedInterpreter::MicroOpHandlers::table[] = {
+        &MicroOpHandlers::CONST32,
+        &MicroOpHandlers::CONST32_ADDRA,
+        &MicroOpHandlers::ADDI,
+        &MicroOpHandlers::ADDIS,
+        &MicroOpHandlers::ORI,
+        &MicroOpHandlers::ORIS,
+        &MicroOpHandlers::XORI,
+        &MicroOpHandlers::XORIS,
+        &MicroOpHandlers::ANDI,
+        &MicroOpHandlers::ANDIS,
+        &MicroOpHandlers::RLWINM_IMM,
+        &MicroOpHandlers::AND_RR,
+        &MicroOpHandlers::OR_RR,
+        &MicroOpHandlers::XOR_RR,
+        &MicroOpHandlers::RLWIMI_IMM,
+        &MicroOpHandlers::RLWNM_VAR,
+        &MicroOpHandlers::ANDC_RR,
+        &MicroOpHandlers::ORC_RR,
+        &MicroOpHandlers::NAND_RR,
+        &MicroOpHandlers::NOR_RR,
+        &MicroOpHandlers::EQV_RR,
+        &MicroOpHandlers::CNTLZW,
+        &MicroOpHandlers::EXTSB,
+        &MicroOpHandlers::EXTSH,
+        &MicroOpHandlers::SLW_VAR,
+        &MicroOpHandlers::SRW_VAR,
+        &MicroOpHandlers::SRAW_VAR,
+        &MicroOpHandlers::SRAWI_IMM,
+        &MicroOpHandlers::ADD_RR,
+        &MicroOpHandlers::ADDC_RR,
+        &MicroOpHandlers::ADDE_RR,
+        &MicroOpHandlers::ADDME,
+        &MicroOpHandlers::ADDZE,
+        &MicroOpHandlers::SUBF_RR,
+        &MicroOpHandlers::SUBFC_RR,
+        &MicroOpHandlers::SUBFE_RR,
+        &MicroOpHandlers::SUBFME,
+        &MicroOpHandlers::SUBFZE,
+        &MicroOpHandlers::CMP_S_RR,
+        &MicroOpHandlers::CMPL_U_RR,
+        &MicroOpHandlers::CMP_S_IMM,
+        &MicroOpHandlers::CMPL_U_IMM,
+        &MicroOpHandlers::MEM_LWZ,
+        &MicroOpHandlers::MEM_LBZ,
+        &MicroOpHandlers::MEM_LHZ,
+        &MicroOpHandlers::MEM_LHA,
+        &MicroOpHandlers::MEM_STW,
+        &MicroOpHandlers::MEM_STB,
+        &MicroOpHandlers::MEM_STH,
+        &MicroOpHandlers::MEM_LWZX,
+        &MicroOpHandlers::MEM_LBZX,
+        &MicroOpHandlers::MEM_LHZX,
+        &MicroOpHandlers::MEM_LHAX,
+        &MicroOpHandlers::MEM_STWX,
+        &MicroOpHandlers::MEM_STBX,
+        &MicroOpHandlers::MEM_STHX,
+        &MicroOpHandlers::NOP,
+        &MicroOpHandlers::END,
+};
+
 template <bool write_pc>
 s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
-                                                       const ExecuteMicroOpsOperands& operands)
+                                       const ExecuteMicroOpsOperands& operands)
 {
+  static_assert(std::size(MicroOpHandlers::table) == static_cast<size_t>(MicroOpCode::COUNT),
+                "MicroOpHandlers::table must cover every MicroOpCode, in enum order");
   CI_SetPCForMicroOps<write_pc>(ppc_state, operands.current_pc);
-
-  const u32 count = operands.count;
-  const MicroOp* ops = operands.ops;
-#if defined(__GNUC__) || defined(__clang__)
-  {
-    u32 i = 0;
-    if (i >= count)
-      goto micro_done;
-
-    // The order here MUST match enum class MicroOpCode in CachedInterpreter.h
-    static const void* dispatch_table[] = {
-        &&op_CONST32,       // 0 MicroOpCode::CONST32
-        &&op_CONST32_ADDRA, // 1 MicroOpCode::CONST32_ADDRA
-        &&op_ADDI,          // 2 MicroOpCode::ADDI
-        &&op_ADDIS,         // 3 MicroOpCode::ADDIS
-        &&op_ORI,           // 4 MicroOpCode::ORI
-        &&op_ORIS,          // 5 MicroOpCode::ORIS
-        &&op_XORI,          // 6 MicroOpCode::XORI
-        &&op_XORIS,         // 7 MicroOpCode::XORIS
-        &&op_ANDI,          // 8 MicroOpCode::ANDI
-        &&op_ANDIS,         // 9 MicroOpCode::ANDIS
-        &&op_RLWINM_IMM,    // 10 MicroOpCode::RLWINM_IMM
-        &&op_AND_RR,        // 11 MicroOpCode::AND_RR
-        &&op_OR_RR,         // 12 MicroOpCode::OR_RR
-        &&op_XOR_RR,        // 13 MicroOpCode::XOR_RR
-        &&op_RLWIMI_IMM,    // 14 MicroOpCode::RLWIMI_IMM
-        &&op_RLWNM_VAR,     // 15 MicroOpCode::RLWNM_VAR
-        &&op_ANDC_RR,       // 16 MicroOpCode::ANDC_RR
-        &&op_ORC_RR,        // 17 MicroOpCode::ORC_RR
-        &&op_NAND_RR,       // 18 MicroOpCode::NAND_RR
-        &&op_NOR_RR,        // 19 MicroOpCode::NOR_RR
-        &&op_EQV_RR,        // 20 MicroOpCode::EQV_RR
-        &&op_CNTLZW,        // 21 MicroOpCode::CNTLZW
-        &&op_EXTSB,         // 22 MicroOpCode::EXTSB
-        &&op_EXTSH,         // 23 MicroOpCode::EXTSH
-        &&op_SLW_VAR,       // 24 MicroOpCode::SLW_VAR
-        &&op_SRW_VAR,       // 25 MicroOpCode::SRW_VAR
-        &&op_SRAW_VAR,      // 26 MicroOpCode::SRAW_VAR
-        &&op_SRAWI_IMM,     // 27 MicroOpCode::SRAWI_IMM
-        // Integer add/sub with carry/overflow semantics
-        &&op_ADD_RR,        // 28 MicroOpCode::ADD_RR
-        &&op_ADDC_RR,       // 29 MicroOpCode::ADDC_RR
-        &&op_ADDE_RR,       // 30 MicroOpCode::ADDE_RR
-        &&op_ADDME,         // 31 MicroOpCode::ADDME
-        &&op_ADDZE,         // 32 MicroOpCode::ADDZE
-        &&op_SUBF_RR,       // 33 MicroOpCode::SUBF_RR
-        &&op_SUBFC_RR,      // 34 MicroOpCode::SUBFC_RR
-        &&op_SUBFE_RR,      // 35 MicroOpCode::SUBFE_RR
-        &&op_SUBFME,        // 36 MicroOpCode::SUBFME
-        &&op_SUBFZE,        // 37 MicroOpCode::SUBFZE
-        // Integer compare ops
-        &&op_CMP_S_RR,      // 38 MicroOpCode::CMP_S_RR
-        &&op_CMPL_U_RR,     // 39 MicroOpCode::CMPL_U_RR
-        &&op_CMP_S_IMM,     // 40 MicroOpCode::CMP_S_IMM
-        &&op_CMPL_U_IMM,    // 41 MicroOpCode::CMPL_U_IMM
-        &&op_NOP            // 42 MicroOpCode::NOP
-    };
-    static_assert(std::size(dispatch_table) == static_cast<size_t>(MicroOpCode::COUNT),
-                  "dispatch_table must cover all MicroOpCode entries and match enum order");
-
-  micro_dispatch:
-    {
-      const MicroOp& m = ops[i];
-      const unsigned op_index = static_cast<unsigned>(m.op);
-      if (__builtin_expect(op_index >= static_cast<unsigned>(MicroOpCode::COUNT), 0))
-        goto micro_done; // fail fast; invalid op emitted
-      goto *dispatch_table[op_index];
-    }
-
-  op_CONST32:
-    {
-      const MicroOp& m = ops[i];
-      ppc_state.gpr[m.rd] = m.imm;
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  // Compare handlers: update CR[rd] only, no GPR writes
-  op_CMP_S_RR:
-    {
-      const MicroOp& m = ops[i];
-      const s32 a = s32(ppc_state.gpr[m.ra]);
-      const s32 b = s32(ppc_state.gpr[m.rb]);
-      u32 crf = 0;
-      crf |= (a < b) ? PowerPC::CR_LT : 0;
-      crf |= (a > b) ? PowerPC::CR_GT : 0;
-      crf |= (a == b) ? PowerPC::CR_EQ : 0;
-      CI_WriteCRField(ppc_state, m.rd, crf);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_CMPL_U_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      u32 crf = 0;
-      crf |= (a < b) ? PowerPC::CR_LT : 0;
-      crf |= (a > b) ? PowerPC::CR_GT : 0;
-      crf |= (a == b) ? PowerPC::CR_EQ : 0;
-      CI_WriteCRField(ppc_state, m.rd, crf);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_CMP_S_IMM:
-    {
-      const MicroOp& m = ops[i];
-      const s32 a = s32(ppc_state.gpr[m.ra]);
-      const s32 b = s32(s16(m.imm & 0xFFFF));
-      u32 crf = 0;
-      crf |= (a < b) ? PowerPC::CR_LT : 0;
-      crf |= (a > b) ? PowerPC::CR_GT : 0;
-      crf |= (a == b) ? PowerPC::CR_EQ : 0;
-      CI_WriteCRField(ppc_state, m.rd, crf);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_CMPL_U_IMM:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = m.imm & 0xFFFFu;
-      u32 crf = 0;
-      crf |= (a < b) ? PowerPC::CR_LT : 0;
-      crf |= (a > b) ? PowerPC::CR_GT : 0;
-      crf |= (a == b) ? PowerPC::CR_EQ : 0;
-      CI_WriteCRField(ppc_state, m.rd, crf);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_CONST32_ADDRA:
-    {
-      const MicroOp& m = ops[i];
-      const u32 ra_val = ppc_state.gpr[m.ra];
-      const s32 hi = static_cast<s16>(static_cast<u32>(m.imm) >> 16);
-      const u32 lo = m.imm & 0xFFFFu;
-      const u32 upper_add = ra_val + (static_cast<u32>(hi) << 16);
-      ppc_state.gpr[m.rd] = upper_add | lo;
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ADDI:
-    {
-      const MicroOp& m = ops[i];
-      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
-      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
-      ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ADDIS:
-    {
-      const MicroOp& m = ops[i];
-      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
-      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
-      ppc_state.gpr[m.rd] = ra_val + (static_cast<u32>(simm) << 16);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ORI:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = m.imm & 0xFFFFu;
-      ppc_state.gpr[m.rd] = rs_val | ui;
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ORIS:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = (m.imm & 0xFFFFu) << 16;
-      ppc_state.gpr[m.rd] = rs_val | ui;
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_XORI:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = m.imm & 0xFFFFu;
-      ppc_state.gpr[m.rd] = rs_val ^ ui;
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_XORIS:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = (m.imm & 0xFFFFu) << 16;
-      ppc_state.gpr[m.rd] = rs_val ^ ui;
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ANDI:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = m.imm & 0xFFFFu;
-      ppc_state.gpr[m.rd] = rs_val & ui;
-      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ANDIS:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = (m.imm & 0xFFFFu) << 16;
-      ppc_state.gpr[m.rd] = rs_val & ui;
-      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_RLWINM_IMM:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 sh = (m.imm >> 0) & 31u;
-      const u32 mb = (m.imm >> 5) & 31u;
-      const u32 me = (m.imm >> 10) & 31u;
-      const u32 mask = MakeRotationMask(mb, me);
-      ppc_state.gpr[m.rd] = std::rotl(rs_val, sh) & mask;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_AND_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val & rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_OR_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val | rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_XOR_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val ^ rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_RLWIMI_IMM:
-    {
-      const MicroOp& m = ops[i];
-      const u32 ra_old = ppc_state.gpr[m.rd];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 sh = (m.imm >> 0) & 31u;
-      const u32 mb = (m.imm >> 5) & 31u;
-      const u32 me = (m.imm >> 10) & 31u;
-      const u32 mask = MakeRotationMask(mb, me);
-      const u32 rot = std::rotl(rs_val, sh) & mask;
-      ppc_state.gpr[m.rd] = (ra_old & ~mask) | rot;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_RLWNM_VAR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb] & 31u; // shift is low 5 bits of RB
-      const u32 mb = (m.imm >> 5) & 31u;
-      const u32 me = (m.imm >> 10) & 31u;
-      const u32 mask = MakeRotationMask(mb, me);
-      ppc_state.gpr[m.rd] = std::rotl(rs_val, rb_val) & mask;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ANDC_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val & ~rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ORC_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val | ~rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_NAND_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = ~(rs_val & rb_val);
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_NOR_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = ~(rs_val | rb_val);
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_EQV_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_CNTLZW:
-    {
-      const MicroOp& m = ops[i];
-      ppc_state.gpr[m.rd] = static_cast<u32>(std::countl_zero(ppc_state.gpr[m.ra]));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_EXTSB:
-    {
-      const MicroOp& m = ops[i];
-      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s8>(ppc_state.gpr[m.ra])));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_EXTSH:
-    {
-      const MicroOp& m = ops[i];
-      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s16>(ppc_state.gpr[m.ra])));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SLW_VAR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 amount = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] << (amount & 0x1fu));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SRW_VAR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 amount = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] >> (amount & 0x1fu));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SRAW_VAR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      if (rb_val & 0x20u)
-      {
-        if (ppc_state.gpr[m.ra] & 0x80000000u)
-        {
-          ppc_state.gpr[m.rd] = 0xFFFFFFFFu;
-          ppc_state.SetCarry(1);
-        }
-        else
-        {
-          ppc_state.gpr[m.rd] = 0x00000000u;
-          ppc_state.SetCarry(0);
-        }
-      }
-      else
-      {
-        const u32 amount = rb_val & 0x1fu;
-        const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
-        ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
-        ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
-      }
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SRAWI_IMM:
-    {
-      const MicroOp& m = ops[i];
-      const u32 amount = m.imm & 31u;
-      const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
-      ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
-      ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  // Integer add/sub with carry/overflow semantics
-  op_ADD_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b;
-      ppc_state.gpr[m.rd] = result;
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ADDC_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, b));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ADDE_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 carry = ppc_state.GetCarry();
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, b) || (carry != 0 && CI_Helper_Carry(a + b, carry)));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ADDME:
-    {
-      const MicroOp& m = ops[i];
-      const u32 carry = ppc_state.GetCarry();
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = 0xFFFFFFFFu;
-      const u32 result = a + b + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_ADDZE:
-    {
-      const MicroOp& m = ops[i];
-      const u32 carry = ppc_state.GetCarry();
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 result = a + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SUBF_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b + 1u;
-      ppc_state.gpr[m.rd] = result;
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SUBFC_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b + 1u;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(a == 0xFFFFFFFFu || CI_Helper_Carry(b, a + 1u));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SUBFE_RR:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 carry = ppc_state.GetCarry();
-      const u32 result = a + b + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, b) || CI_Helper_Carry(a + b, carry));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SUBFME:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 b = 0xFFFFFFFFu;
-      const u32 carry = ppc_state.GetCarry();
-      const u32 result = a + b + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_SUBFZE:
-    {
-      const MicroOp& m = ops[i];
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 carry = ppc_state.GetCarry();
-      const u32 result = a + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      ++i;
-      if (i < count) goto micro_dispatch; else goto micro_done;
-    }
-
-  op_NOP:
-    {
-      ++i;
-      if (i < count) goto micro_dispatch;
-    }
-
-  micro_done:
-    ;
-  }
-#else
-  for (u32 i = 0; i < count; ++i)
-  {
-    const MicroOp& m = ops[i];
-    switch (m.op)
-    {
-    case MicroOpCode::CONST32:
-      ppc_state.gpr[m.rd] = m.imm;
-      break;
-    case MicroOpCode::CONST32_ADDRA:
-    {
-      const u32 ra_val = ppc_state.gpr[m.ra];
-      const s32 hi = static_cast<s16>(static_cast<u32>(m.imm) >> 16);
-      const u32 lo = m.imm & 0xFFFFu;
-      const u32 upper_add = ra_val + (static_cast<u32>(hi) << 16);
-      ppc_state.gpr[m.rd] = upper_add | lo;
-      break;
-    }
-    case MicroOpCode::ADDI:
-    {
-      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
-      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
-      ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
-      break;
-    }
-    case MicroOpCode::ADDIS:
-    {
-      const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
-      const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
-      ppc_state.gpr[m.rd] = ra_val + (static_cast<u32>(simm) << 16);
-      break;
-    }
-    case MicroOpCode::ORI:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = m.imm & 0xFFFFu;
-      ppc_state.gpr[m.rd] = rs_val | ui;
-      break;
-    }
-    case MicroOpCode::ORIS:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = (m.imm & 0xFFFFu) << 16;
-      ppc_state.gpr[m.rd] = rs_val | ui;
-      break;
-    }
-    case MicroOpCode::XORI:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = m.imm & 0xFFFFu;
-      ppc_state.gpr[m.rd] = rs_val ^ ui;
-      break;
-    }
-    case MicroOpCode::XORIS:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = (m.imm & 0xFFFFu) << 16;
-      ppc_state.gpr[m.rd] = rs_val ^ ui;
-      break;
-    }
-    case MicroOpCode::ANDI:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = m.imm & 0xFFFFu;
-      ppc_state.gpr[m.rd] = rs_val & ui;
-      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::ANDIS:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 ui = (m.imm & 0xFFFFu) << 16;
-      ppc_state.gpr[m.rd] = rs_val & ui;
-      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::RLWINM_IMM:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 sh = (m.imm >> 0) & 31u;
-      const u32 mb = (m.imm >> 5) & 31u;
-      const u32 me = (m.imm >> 10) & 31u;
-      const u32 mask = MakeRotationMask(mb, me);
-      ppc_state.gpr[m.rd] = std::rotl(rs_val, sh) & mask;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::AND_RR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val & rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::OR_RR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val | rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::XOR_RR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val ^ rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::RLWIMI_IMM:
-    {
-      const u32 ra_old = ppc_state.gpr[m.rd];
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 sh = (m.imm >> 0) & 31u;
-      const u32 mb = (m.imm >> 5) & 31u;
-      const u32 me = (m.imm >> 10) & 31u;
-      const u32 mask = MakeRotationMask(mb, me);
-      const u32 rot = std::rotl(rs_val, sh) & mask;
-      ppc_state.gpr[m.rd] = (ra_old & ~mask) | rot;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::RLWNM_VAR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb] & 31u;
-      const u32 mb = (m.imm >> 5) & 31u;
-      const u32 me = (m.imm >> 10) & 31u;
-      const u32 mask = MakeRotationMask(mb, me);
-      ppc_state.gpr[m.rd] = std::rotl(rs_val, rb_val) & mask;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::ANDC_RR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val & ~rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::ORC_RR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = rs_val | ~rb_val;
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::NAND_RR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = ~(rs_val & rb_val);
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::NOR_RR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = ~(rs_val | rb_val);
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::EQV_RR:
-    {
-      const u32 rs_val = ppc_state.gpr[m.ra];
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::CNTLZW:
-    {
-      ppc_state.gpr[m.rd] = static_cast<u32>(std::countl_zero(ppc_state.gpr[m.ra]));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::EXTSB:
-    {
-      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s8>(ppc_state.gpr[m.ra])));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::EXTSH:
-    {
-      ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s16>(ppc_state.gpr[m.ra])));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::SLW_VAR:
-    {
-      const u32 amount = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] << (amount & 0x1fu));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::SRW_VAR:
-    {
-      const u32 amount = ppc_state.gpr[m.rb];
-      ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] >> (amount & 0x1fu));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::SRAW_VAR:
-    {
-      const u32 rb_val = ppc_state.gpr[m.rb];
-      if (rb_val & 0x20u)
-      {
-        if (ppc_state.gpr[m.ra] & 0x80000000u)
-        {
-          ppc_state.gpr[m.rd] = 0xFFFFFFFFu;
-          ppc_state.SetCarry(1);
-        }
-        else
-        {
-          ppc_state.gpr[m.rd] = 0x00000000u;
-          ppc_state.SetCarry(0);
-        }
-      }
-      else
-      {
-        const u32 amount = rb_val & 0x1fu;
-        const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
-        ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
-        ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
-      }
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    case MicroOpCode::SRAWI_IMM:
-    {
-      const u32 amount = m.imm & 31u;
-      const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
-      ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
-      ppc_state.SetCarry(rrs < 0 && amount > 0 && (static_cast<u32>(rrs) << (32 - amount)) != 0);
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
-      break;
-    }
-    // Integer add/sub with carry/overflow semantics
-    case MicroOpCode::ADD_RR:
-    {
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b;
-      ppc_state.gpr[m.rd] = result;
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::ADDC_RR:
-    {
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, b));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::ADDE_RR:
-    {
-      const u32 carry = ppc_state.GetCarry();
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, b) || (carry != 0 && CI_Helper_Carry(a + b, carry)));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::ADDME:
-    {
-      const u32 carry = ppc_state.GetCarry();
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 b = 0xFFFFFFFFu;
-      const u32 result = a + b + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::ADDZE:
-    {
-      const u32 carry = ppc_state.GetCarry();
-      const u32 a = ppc_state.gpr[m.ra];
-      const u32 result = a + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::SUBF_RR:
-    {
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b + 1u;
-      ppc_state.gpr[m.rd] = result;
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::SUBFC_RR:
-    {
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 result = a + b + 1u;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(a == 0xFFFFFFFFu || CI_Helper_Carry(b, a + 1u));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::SUBFE_RR:
-    {
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 b = ppc_state.gpr[m.rb];
-      const u32 carry = ppc_state.GetCarry();
-      const u32 result = a + b + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, b) || CI_Helper_Carry(a + b, carry));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::SUBFME:
-    {
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 b = 0xFFFFFFFFu;
-      const u32 carry = ppc_state.GetCarry();
-      const u32 result = a + b + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, carry - 1));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::SUBFZE:
-    {
-      const u32 a = ~ppc_state.gpr[m.ra];
-      const u32 carry = ppc_state.GetCarry();
-      const u32 result = a + carry;
-      ppc_state.gpr[m.rd] = result;
-      ppc_state.SetCarry(CI_Helper_Carry(a, carry));
-      if ((m.imm & 1u) != 0)
-        ppc_state.SetXER_OV(CI_HasAddOverflowed(a, 0, result));
-      if (m.rc)
-        CI_UpdateCR0(ppc_state, result);
-      break;
-    }
-    case MicroOpCode::NOP:
-    default:
-      break;
-    }
-  }
-#endif
-
-  // No exceptions/CR updates are modeled here; decoder must only emit safe ops.
-  return sizeof(AnyCallback) + sizeof(operands);
+  const MicroOp* const mp = operands.ops;
+  return MicroOpHandlers::table[static_cast<unsigned>(mp->op)](ppc_state, mp, operands);
 }
 
 // iCube: paired-single sequence fusion (MAIN_CIR_MICROOP_FUSION extension). Invokes the same
@@ -3646,9 +3358,11 @@ s32 CachedInterpreter::ExecuteMicroOpsValidate(PowerPC::PowerPCState& ppc_state,
   // specialized validate leaves the specialized result committed). Reuse the real ExecuteMicroOps by
   // forwarding the fused half of the payload, so the dispatch under test is byte-identical to ship.
   ExecuteMicroOpsOperands fused{};
+  fused.interpreter = operands.interpreter;
   fused.count = operands.count;
   fused.current_pc = operands.current_pc;
   std::copy(std::begin(operands.ops), std::begin(operands.ops) + operands.count, std::begin(fused.ops));
+  fused.ops[fused.count] = MicroOp{MicroOpCode::END, 0, 0, 0, 0, 0};
   ExecuteMicroOps<write_pc>(ppc_state, fused);
 
   std::array<u32, 32> fused_gpr;
@@ -4512,6 +4226,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
     }
   }
 
+  // iCube: the direct-pointer load/store handlers bypass the MMU, so they are off whenever an access
+  // must be observed (memchecks / MMU mode) or routed through the emulated d-cache.
+  const bool load_store_fast = s_pic_loadstore && !jo.memcheck && !m_ppc_state.m_enable_dcache;
   for (u32 i = 0; i < code_block.m_num_instructions; i++)
   {
     PPCAnalyst::CodeOp& op = m_code_buffer[i];
@@ -4761,7 +4478,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           auto emit_fused = [&](const ExecuteMicroOpsOperands& mop, u32 first_idx, u32 last_idx) {
             if (!s_microop_fusion_validate)
             {
-              Write(CallbackCast(ExecuteMicroOps<false>), mop);
+              // Close the run with the END sentinel and write only the used part of the record.
+              ExecuteMicroOpsOperands record = mop;
+              record.interpreter = &interpreter;
+              record.ops[record.count] = MicroOp{MicroOpCode::END, 0, 0, 0, 0, 0};
+              WriteTruncated(CallbackCast(ExecuteMicroOps<false>), record,
+                             ExecuteMicroOpsOperands::TapeSize(record.count + 1));
               return;
             }
             ExecuteMicroOpsValidateOperands vop{};
@@ -4845,15 +4567,62 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           // (c) Pack a run of simple ALU ops into one ExecuteMicroOps. We never start a run on a
           // terminal (guarded above) and HARD-STOP before packing any canEndBlock op, so the terminal
           // is left for its own iteration.
-          if (is_simple_mop(op.inst))
+          // iCube: integer load/stores the direct-pointer path covers pack as MEM_* micro-ops, so a
+          // load or store no longer ends the run (it used to cost a tape dispatch of its own AND split
+          // the ALU run around it). Off under the validate harness: its reference double-run cannot
+          // repeat an MMIO access.
+          auto mem_micro_op = [&](const PPCAnalyst::CodeOp& c) -> std::optional<MicroOp> {
+            if (!load_store_fast || s_microop_fusion_validate || c.skip || c.canEndBlock)
+              return std::nullopt;
+            const auto form = CI_ClassifyLoadStore(c.inst);
+            if (!form)
+              return std::nullopt;
+            MicroOpCode code;
+            switch (form->kind)
+            {
+            case CIMemKind::LWZ:
+              code = form->indexed ? MicroOpCode::MEM_LWZX : MicroOpCode::MEM_LWZ;
+              break;
+            case CIMemKind::LBZ:
+              code = form->indexed ? MicroOpCode::MEM_LBZX : MicroOpCode::MEM_LBZ;
+              break;
+            case CIMemKind::LHZ:
+              code = form->indexed ? MicroOpCode::MEM_LHZX : MicroOpCode::MEM_LHZ;
+              break;
+            case CIMemKind::LHA:
+              code = form->indexed ? MicroOpCode::MEM_LHAX : MicroOpCode::MEM_LHA;
+              break;
+            case CIMemKind::STW:
+              code = form->indexed ? MicroOpCode::MEM_STWX : MicroOpCode::MEM_STW;
+              break;
+            case CIMemKind::STB:
+              code = form->indexed ? MicroOpCode::MEM_STBX : MicroOpCode::MEM_STB;
+              break;
+            case CIMemKind::STH:
+              code = form->indexed ? MicroOpCode::MEM_STHX : MicroOpCode::MEM_STH;
+              break;
+            default:
+              return std::nullopt;
+            }
+            // rd doubles as RS for stores (same instruction field); imm keeps the whole word.
+            return MicroOp{code,
+                           static_cast<u8>(c.inst.RD),
+                           static_cast<u8>(c.inst.RA),
+                           static_cast<u8>(c.inst.RB),
+                           static_cast<u8>(form->update),
+                           c.inst.hex};
+          };
+
+          if (is_simple_mop(op.inst) || mem_micro_op(op))
           {
             ExecuteMicroOpsOperands mop{};
             mop.count = 0;
             mop.current_pc = js.compilerPC;
             u32 last_consumed = i;
 
+            // kMaxOps - 1: the last slot is reserved for the END sentinel emit_fused appends.
             for (u32 j = i; j < code_block.m_num_instructions &&
-                            mop.count < ExecuteMicroOpsOperands::kMaxOps;
+                            mop.count < ExecuteMicroOpsOperands::kMaxOps - 1;
                  ++j)
             {
               PPCAnalyst::CodeOp& next = m_code_buffer[j];
@@ -4870,12 +4639,23 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               // The fold loops below carry the same (jj - i) bound, identically gated.
               if (s_microop_fusion_validate && (j - i) >= ExecuteMicroOpsValidateOperands::kMaxOps)
                 break;  // consumed-original span is full; leave the rest for the next iteration
+              if (const auto mem_op = mem_micro_op(next))
+              {
+                mop.ops[mop.count++] = *mem_op;
+                // The loop top charged and counted op[i]; do the same for every further consumed op.
+                if (j != i)
+                {
+                  js.downcountAmount += next.opinfo->num_cycles;
+                  ++js.numLoadStoreInst;
+                }
+                last_consumed = j;
+                continue;
+              }
               if (next.skip || (next.opinfo->flags & (FL_LOADSTORE | FL_USE_FPU)) != 0 ||
                   !is_simple_mop(next.inst) || next.canEndBlock)
               {
-                break;  // hard stop: terminal / LS / FP / skip / non-simple ends the run
+                break;  // hard stop: terminal / uncovered LS / FP / skip / non-simple ends the run
               }
-
               MicroOp& mu = mop.ops[mop.count++];
               switch (next.inst.OPCD)
               {
@@ -5366,7 +5146,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 last_consumed = j;
             }
 
-            if (mop.count > 0)
+            // A lone load/store is cheaper as its own direct-pointer record than as a one-op run:
+            // nothing but op[i] was consumed or charged, so fall through to that emission below.
+            const bool lone_memory_op = mop.count == 1 && last_consumed == i &&
+                                        mop.ops[0].op >= MicroOpCode::MEM_LWZ &&
+                                        mop.ops[0].op <= MicroOpCode::MEM_STHX;
+            if (mop.count > 0 && !lone_memory_op)
             {
               // All packed ops are non-terminal (canEndBlock hard-stopped the run), so write_pc is
               // always false here. Emit one callback for the consumed run [i..last_consumed].
@@ -5413,51 +5198,22 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         const auto func = Interpreter::GetInterpreterOp(op.inst);
         const InterpretOperands operands = {interpreter, func, js.compilerPC, elim_inst};
         bool emitted = false;
-        // iCube WIN#1: PIC direct-pointer load/store fast path (MAIN_CIR_PIC_LOADSTORE). Emitted FIRST
-        // and supersedes the specialized path for the ops it covers (integer load/stores). HARD GATES,
-        // all required and independent of the flag's intent:
-        //   - !jo.memcheck: already implied here (the exception-path branch above diverts every
-        //     FL_LOADSTORE op when jo.memcheck is set), but reasserted for defense in depth — MMU-mode
-        //     Wii titles and any debugger watchpoint MUST take the generic exception path.
-        //   - jo.fastmem: the fastmem arena/region pointers are valid (the "fastmem is valid" gate).
-        //   - FL_LOADSTORE && !FL_USE_FPU: INTEGER load/stores only. The PIC bodies are integer-only;
-        //     emitting them for FP load/stores would force EA-compute + region-lookup + switch-miss +
-        //     cold fallback on every FP access (a regression), so FP stays on the generic path.
-        // The PIC body still null-checks the resolved region at runtime and delegates anything it does
-        // not handle to Cold_LoadStoreFallback (exact generic handler), so correctness holds regardless.
-        const u32 ls_flags = op.opinfo->flags;
-        // iCube 2026-09-16: FP D-form loads/stores (lfs/lfsu/lfd/lfdu/stfs/stfsu/stfd/stfdu, primary
-        // opcodes 48-55) are admitted too — LoadStoreDFormPIC now has exact cases for them. X-form FP
-        // (opcode 31) is still excluded: LoadStoreXFormPIC has no FP cases and would cold-fallback.
-        const bool fp_dform = (ls_flags & FL_USE_FPU) != 0 && op.inst.OPCD >= 48 && op.inst.OPCD <= 55;
-        if (!emitted && s_pic_loadstore && !jo.memcheck && jo.fastmem &&
-            (ls_flags & FL_LOADSTORE) != 0 && ((ls_flags & FL_USE_FPU) == 0 || fp_dform))
+        // iCube: direct-pointer load/store (MAIN_CIR_PIC_LOADSTORE). Emitted FIRST and supersedes the
+        // specialized path for the ops it covers. The handler is picked here, per opcode/form, so the
+        // record is a plain InterpretOperands. Reaching this branch already implies !jo.memcheck (the
+        // exception-path branch above diverts every FL_LOADSTORE op otherwise: MMU-mode titles and
+        // watchpoints keep the generic handler); load_store_fast adds the accurate-d-cache gate.
+        if (!emitted && load_store_fast)
         {
-          auto& memory = m_system.GetMemory();
-          const LoadStoreDFormPICOperands pic_operands = {interpreter,
-                                                          func,
-                                                          js.compilerPC,
-                                                          op.inst,
-                                                          power_pc,
-                                                          memory.GetRAM(),
-                                                          memory.GetRamMask(),
-                                                          memory.GetEXRAM(),
-                                                          memory.GetExRamMask(),
-                                                          memory.GetFakeVMEM(),
-                                                          memory.GetFakeVMemMask()};
-          if (op.inst.OPCD == 31)
+          if (const auto fast = CI_ClassifyLoadStore(op.inst))
           {
-            Write(op.canEndBlock ? CallbackCast(LoadStoreXFormPIC<true>) :
-                                   CallbackCast(LoadStoreXFormPIC<false>),
-                  pic_operands);
+            if (const AnyCallback callback = GetLoadStoreFastCallback(fast->kind, fast->indexed,
+                                                                      fast->update, op.canEndBlock))
+            {
+              Write(std::bit_cast<Callback<InterpretOperands>>(callback), operands);
+              emitted = true;
+            }
           }
-          else
-          {
-            Write(op.canEndBlock ? CallbackCast(LoadStoreDFormPIC<true>) :
-                                   CallbackCast(LoadStoreDFormPIC<false>),
-                  pic_operands);
-          }
-          emitted = true;
         }
         // iCube: dead CR-flag elimination VALIDATE harness (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE). When BOTH
         // the elim flag and its validate flag are on, every eliminated op is emitted as a

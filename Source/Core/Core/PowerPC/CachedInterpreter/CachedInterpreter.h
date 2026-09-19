@@ -24,10 +24,9 @@ namespace CPU
 enum class State;
 }
 
-// iCube WIN#2: micro-op fusion engine (MAIN_CIR_MICROOP_FUSION). MicroOpCode is the compact op-id the
-// ExecuteMicroOps computed-goto dispatch_table is keyed on; the dispatch_table order in
-// CachedInterpreter.cpp MUST match this enum exactly (a static_assert against COUNT enforces it). Ported
-// verbatim from the feature/icube-testflight good branch. Only used when the flag is on.
+// iCube WIN#2: micro-op fusion engine (MAIN_CIR_MICROOP_FUSION). MicroOpCode is the compact op-id that
+// indexes MicroOpHandlers::table in CachedInterpreter.cpp; the table order MUST match this enum exactly
+// (a static_assert against COUNT checks the length). Only used when the flag is on.
 enum class MicroOpCode : u8
 {
   CONST32,
@@ -76,9 +75,56 @@ enum class MicroOpCode : u8
   CMPL_U_RR,   // CR[rd] = cmp(u32(RA), u32(RB))
   CMP_S_IMM,   // CR[rd] = cmp(s32(RA), SIMM16=imm)
   CMPL_U_IMM,  // CR[rd] = cmp(u32(RA), UIMM16=imm)
+  // iCube: integer load/stores inside a fused run. imm holds the ORIGINAL instruction word (the D-form
+  // displacement is its low 16 bits, and the cold path re-runs the generic handler from it); rd is
+  // RD/RS, ra is RA (never 0, enforced by the packer), rb is RB for the X forms; rc != 0 marks the
+  // update form (RA = EA after the access).
+  MEM_LWZ,
+  MEM_LBZ,
+  MEM_LHZ,
+  MEM_LHA,
+  MEM_STW,
+  MEM_STB,
+  MEM_STH,
+  MEM_LWZX,
+  MEM_LBZX,
+  MEM_LHZX,
+  MEM_LHAX,
+  MEM_STWX,
+  MEM_STBX,
+  MEM_STHX,
   NOP,
+  END,  // sentinel the packer appends after the last op of every run; closes the threaded dispatch
   COUNT,
 };
+
+// iCube: the access a direct-pointer load/store handler performs. One handler is instantiated per
+// (kind, indexed, update, write_pc) and chosen at emit time, so the handler never decodes the opcode.
+enum class CIMemKind : u8
+{
+  LWZ,
+  LBZ,
+  LHZ,
+  LHA,
+  STW,
+  STB,
+  STH,
+  LWBR,   // X-form only
+  LHBR,   // X-form only
+  STWBR,  // X-form only
+  STHBR,  // X-form only
+  LFS,
+  LFD,
+  STFS,
+  STFD,
+  STFIW,  // X-form only
+  LMW,    // D-form only
+  STMW,   // D-form only
+  DCBZ,   // X-form only
+  PSQL,   // psq_l family, float quantization type only (checked against the GQR at run time)
+  PSQST,  // psq_st family, likewise
+};
+constexpr u32 CI_MEM_KIND_COUNT = static_cast<u32>(CIMemKind::PSQST) + 1;
 
 // iCube WIN#2: one decoded fusable op in an ExecuteMicroOps run. Trivially copyable POD.
 struct MicroOp
@@ -192,10 +238,6 @@ private:
   // its stream layout/advancement stays byte-identical to stock 2509.
   struct SpecializedInterpretOperands;
   struct InterpretAndCheckExceptionsOperands;
-  // iCube WIN#1: payload for the PIC (position-independent-code) direct-pointer load/store fast path
-  // (MAIN_CIR_PIC_LOADSTORE). Carries the InterpretOperands prefix (for the cold fallback) plus the
-  // fastmem region base/mask pointers captured at emit time. See LoadStoreDFormPIC / LoadStoreXFormPIC.
-  struct LoadStoreDFormPICOperands;
   // iCube WIN#2: payload for the micro-op fusion engine (MAIN_CIR_MICROOP_FUSION). Carries a packed
   // run of fusable pure-register integer/immediate MicroOps that ExecuteMicroOps dispatches over via a
   // computed goto. SEPARATE struct, only ever written when the flag is on, so the generic (flag-off)
@@ -280,32 +322,23 @@ private:
   template <bool write_pc>
   static s32 InterpretAndCheckExceptions(std::ostream& stream,
                                          const InterpretAndCheckExceptionsOperands& operands);
-  // iCube WIN#1: PIC direct-pointer load/store (MAIN_CIR_PIC_LOADSTORE). Computes the effective
-  // address, resolves the host RAM region directly (bypassing the per-access MMU/region lookup), and
-  // does the load/store with the correct endian swap. INTEGER D-form / X-form only (FP excluded at
-  // emission via FL_USE_FPU); any opcode/alignment/region the fast path does not handle delegates to
-  // Cold_LoadStoreFallback, which runs the exact generic interpreter handler (operands.func), so
-  // semantics are identical to the generic path for everything PIC does not specialize. ALWAYS
-  // memcheck-gated at the emission site (MMU-mode / watchpoints take the generic exception path).
-  template <bool write_pc>
-  static s32 LoadStoreDFormPIC(PowerPC::PowerPCState& ppc_state,
-                               const LoadStoreDFormPICOperands& operands);
-  // iCube 2026-09-16: lmw/stmw outlined so the hot D-form handler stays prologue-free (see .cpp).
-  // Reached by a tail call; does the alignment check, the whole-range pre-scan, the copy, and falls
-  // back itself, returning the record size exactly like LoadStoreDFormPIC would.
-  template <bool store>
-  static s32 LoadStoreMultiplePIC(PowerPC::PowerPCState& ppc_state, u32 ea,
-                                  const LoadStoreDFormPICOperands& operands);
-  template <bool write_pc>
-  static s32 LoadStoreDFormPIC(std::ostream& stream, const LoadStoreDFormPICOperands& operands);
-  template <bool write_pc>
-  static s32 LoadStoreXFormPIC(PowerPC::PowerPCState& ppc_state,
-                               const LoadStoreDFormPICOperands& operands);
-  template <bool write_pc>
-  static s32 LoadStoreXFormPIC(std::ostream& stream, const LoadStoreDFormPICOperands& operands);
-  // Cold fallback: runs the exact generic interpreter handler. Preserves DSI/alignment/MMIO semantics.
-  static s32 Cold_LoadStoreFallback(PowerPC::PowerPCState& ppc_state,
-                                    const LoadStoreDFormPICOperands& operands);
+  // iCube: direct-pointer load/store (MAIN_CIR_PIC_LOADSTORE). One handler per (kind, indexed, update,
+  // write_pc), picked at emit time by GetLoadStoreFastCallback, so there is no opcode decode, no rA == 0
+  // test and no region compare chain at run time: the host page comes from Memory's per-BAT-page pointer
+  // tables (logical when MSR.DR, physical otherwise; null = MMIO / unmapped), which the MMU keeps current
+  // on every BAT change. Anything the fast path does not take (null page, unaligned, page-crossing,
+  // cache-inhibited sub-word store) tail-calls LoadStoreFastCold, which serves gather-pipe stores
+  // directly and otherwise runs the exact generic interpreter handler. Emitted only when !jo.memcheck
+  // and the accurate d-cache is off. The payload is a plain InterpretOperands.
+  template <CIMemKind kind, bool indexed, bool update, bool write_pc>
+  static s32 LoadStoreFast(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands);
+  template <CIMemKind kind, bool try_gather_pipe>
+  static s32 LoadStoreFastCold(PowerPC::PowerPCState& ppc_state, const InterpretOperands& operands,
+                               u32 ea);
+  static s32 LoadStoreFast(std::ostream& stream, const InterpretOperands& operands);
+  // Null when the (kind, indexed, update) combination does not exist.
+  static AnyCallback GetLoadStoreFastCallback(CIMemKind kind, bool indexed, bool update,
+                                              bool write_pc);
   // iCube WIN#2: execute a fused run of pure-register integer/immediate micro-ops via a computed-goto
   // dispatch over the packed MicroOp array (MAIN_CIR_MICROOP_FUSION). Each handler reproduces the
   // corresponding interpreter op's GPR/CR0/XER side-effects byte-exactly (CR/XER via the same
@@ -315,6 +348,8 @@ private:
   template <bool write_pc>
   static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state,
                              const ExecuteMicroOpsOperands& operands);
+  // One tail-called handler per MicroOpCode plus their dispatch table (defined in the .cpp).
+  struct MicroOpHandlers;
   template <bool write_pc>
   static s32 ExecuteMicroOps(std::ostream& stream, const ExecuteMicroOpsOperands& operands);
   // iCube WIN#2 validate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Self-validating analogue of
@@ -517,41 +552,24 @@ struct CachedInterpreter::InterpretAndCheckExceptionsOperands : InterpretOperand
   u32 downcount;
 };
 
-// iCube WIN#1: PIC load/store payload. Mirrors the InterpretOperands prefix (so Cold_LoadStoreFallback
-// can run the exact generic handler), carries the PowerPCManager (parity with the good branch; unused
-// on the fast path), and the six fastmem region base/mask pointers captured at emit time. Trivially
-// copyable; alignof == alignof(AnyCallback) (8 on arm64) and sizeof is a multiple of 8, satisfying
-// CachedInterpreterEmitter::Write's static_assert.
-struct CachedInterpreter::LoadStoreDFormPICOperands
-{
-  Interpreter& interpreter;
-  void (*func)(Interpreter&, UGeckoInstruction);  // Interpreter::Instruction
-  u32 current_pc;
-  UGeckoInstruction inst;
-
-  PowerPC::PowerPCManager& power_pc;
-
-  u8* mem1_base;
-  u32 mem1_mask;
-  u8* exram_base;
-  u32 exram_mask;
-  u8* fakevmem_base;
-  u32 fakevmem_mask;
-  // iCube Phase-0 note: deliberately NOT padded with CIR_TAPE_PAD_BYTES. This struct is consumed via
-  // structured bindings (decltype decomposition) at the PIC dispatch sites, where an extra member breaks
-  // the binding arity. The tape-stride probe pads InterpretOperands (generic + specialized) instead; the
-  // PIC path's dominant stall is guest-memory access (a Pillar-1b software-fastmem probe), not tape locality.
-};
-
-// iCube WIN#2: payload for one fused micro-op run (MAIN_CIR_MICROOP_FUSION). The embedded fixed array
-// keeps lifetime simple and avoids heap allocs in codegen; kMaxOps bounds a run. Trivially copyable;
-// only written into the callback stream when the flag is on, so the generic path never sees it.
+// iCube WIN#2: payload for one fused micro-op run (MAIN_CIR_MICROOP_FUSION). Only written into the
+// callback stream when the flag is on, so the generic path never sees it. The record on the tape is
+// VARIABLE length: the emitter writes TapeSize(count + 1) bytes (header + the used ops + the END
+// sentinel, rounded up to the callback alignment) and the handler returns the same distance, so a
+// two-op run costs 56 bytes of tape instead of the full 64-op array. interpreter serves the memory micro-ops' cold path.
 struct CachedInterpreter::ExecuteMicroOpsOperands
 {
-  static constexpr u32 kMaxOps = 64;
+  static constexpr u32 kMaxOps = 64;  // including the END sentinel
+  Interpreter* interpreter;
+  u32 current_pc;
   u32 count;
   MicroOp ops[kMaxOps];
-  u32 current_pc;
+
+  static constexpr std::size_t TapeSize(u32 op_count)
+  {
+    const std::size_t used = offsetof(ExecuteMicroOpsOperands, ops) + op_count * sizeof(MicroOp);
+    return (used + alignof(AnyCallback) - 1) & ~(alignof(AnyCallback) - 1);
+  }
 };
 
 // iCube WIN#2 validate: payload for ExecuteMicroOpsValidate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Carries

@@ -8,6 +8,7 @@
 #include <iosfwd>
 #include <type_traits>
 
+#include "Common/Assert.h"
 #include "Common/CodeBlock.h"
 #include "Common/CommonTypes.h"
 
@@ -81,6 +82,17 @@ public:
     Write(AnyCallbackCast(callback), &operands, sizeof(Operands));
   }
   void Write(AnyCallback callback) { Write(callback, nullptr, 0); }
+  // iCube: write only the first `size` bytes of `operands` (a record whose tail is an unused fixed
+  // array). `size` must keep the stream aligned; the callback must return the same distance.
+  template <class Operands>
+  void WriteTruncated(Callback<Operands> callback, const Operands& operands, std::size_t size)
+  {
+    static_assert(std::is_trivially_copyable_v<Operands> &&
+                  std::is_trivially_destructible_v<Operands> &&
+                  alignof(Operands) <= alignof(AnyCallback));
+    ASSERT(size <= sizeof(Operands) && size % alignof(AnyCallback) == 0);
+    Write(AnyCallbackCast(callback), &operands, size);
+  }
 
   const u8* GetCodePtr() const { return m_code; }
   u8* GetWritableCodePtr() { return m_code; }
