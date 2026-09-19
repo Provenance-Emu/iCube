@@ -29,6 +29,7 @@ NSString* const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDi
 #import "Core/Config/GraphicsSettings.h"
 #import "Core/Core.h"
 #import "Core/System.h"
+#include "Common/Version.h"
 #include "Core/ConfigManager.h"
 #import "Core/Config/MainSettings.h"
 
@@ -726,6 +727,21 @@ static bool s_backgroundAutoPaused = false;
     }
     if (repaired) Config::Save();
     [defaults setInteger:4 forKey:@"adaptive_clock_schema_v"];
+  }
+
+  // A learned clock is only meaningful for the core that learned it. f* is "the highest clock THIS
+  // engine sustains", and a seeded boot only re-checks one step around the seed, so after the core
+  // gets faster every game stays pinned near its old, lower clock: the emulator reports 100 % speed
+  // (the CPU thread even sleeps in the throttle) while the game itself runs slow-motion. Relearn from
+  // 1.0 whenever the core revision changes. Runs whether or not the adaptive clock is enabled now, so
+  // stale seeds are gone by the time it is switched on.
+  NSString* const engineRev = [NSString stringWithUTF8String:Common::GetScmRevStr().c_str()];
+  if (![[defaults stringForKey:@"adaptive_clock_engine_rev"] isEqualToString:engineRev]) {
+    for (NSString* key in [[defaults dictionaryRepresentation] allKeys]) {
+      if ([key hasPrefix:@"adaptive_clock_cpu_"] || [key hasPrefix:@"adaptive_clock_vi_"])
+        [defaults removeObjectForKey:key];
+    }
+    [defaults setObject:engineRev forKey:@"adaptive_clock_engine_rev"];
   }
 
   // The adaptive loop itself only runs when the user has enabled it (existing toggle — no new one).
