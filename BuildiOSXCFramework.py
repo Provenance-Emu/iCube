@@ -275,12 +275,12 @@ class DolphinBuilder:
     def resolve_pgo(self):
         """(mode, profile_path). Idiot-proof by default:
 
-        DOL_PGO=generate         instrumented core (tools/pgo/pgo.sh record sets this)
+        DOL_PGO=generate         instrumented core (Tools/pgo/pgo.sh record sets this)
         DOL_PGO=use              optimize with DOL_PGO_PROFILE, or pgo/icube.profdata when unset
         DOL_PGO=off              never use a profile
         DOL_PGO unset            use pgo/icube.profdata when it exists, otherwise a normal build
 
-        The profile is recorded and merged by tools/pgo/pgo.sh; a stale one is harmless (clang
+        The profile is recorded and merged by Tools/pgo/pgo.sh; a stale one is harmless (clang
         ignores functions whose hash no longer matches), just less effective: see `pgo.sh status`.
         """
         default_profile = self.repo_root_dir / "pgo" / "icube.profdata"

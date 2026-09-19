@@ -2,14 +2,14 @@
 #
 # pgo.sh — one-command Profile-Guided Optimization for the iCube core (PVlibDolphin).
 #
-#   tools/pgo/pgo.sh record    build + install the INSTRUMENTED app on a connected device, let you
+#   Tools/pgo/pgo.sh record    build + install the INSTRUMENTED app on a connected device, let you
 #                              play, pull the .profraw files, merge them into pgo/icube.profdata,
 #                              check the result, and rebuild the optimized core.
-#   tools/pgo/pgo.sh merge DIR merge .profraw files you already have (e.g. downloaded from the
+#   Tools/pgo/pgo.sh merge DIR merge .profraw files you already have (e.g. downloaded from the
 #                              in-app web server: Software/pgo/) into pgo/icube.profdata.
-#   tools/pgo/pgo.sh status    what the current profile was recorded from and how stale it is.
-#   tools/pgo/pgo.sh device    which connected device `record` would use.
-#   tools/pgo/pgo.sh clean     remove the instrumented build dirs (build-*-pgogen, build-pgo).
+#   Tools/pgo/pgo.sh status    what the current profile was recorded from and how stale it is.
+#   Tools/pgo/pgo.sh device    which connected device `record` would use.
+#   Tools/pgo/pgo.sh clean     remove the instrumented build dirs (build-*-pgogen, build-pgo).
 #
 # Nothing else to remember: once pgo/icube.profdata exists, EVERY core build (Xcode's
 # "Build Dolphin Core" phase, BuildiOSXCFramework.py by hand, CI) uses it automatically;
@@ -120,7 +120,7 @@ PY
 }
 
 cmd_status() {
-  [ -f "$PROFDATA" ] || { say "no profile yet ($PROFDATA). Run: tools/pgo/pgo.sh record"; return 0; }
+  [ -f "$PROFDATA" ] || { say "no profile yet ($PROFDATA). Run: Tools/pgo/pgo.sh record"; return 0; }
   python3 - "$META" "$ROOT" "$PROFDATA" <<'PY'
 import json, os, subprocess, sys, datetime
 meta_path, root, profdata = sys.argv[1:4]
@@ -167,7 +167,7 @@ cmd_record() {
   [ -d "$app" ] || die "built app not found under $WORK/DerivedData/Build/Products"
   local core="$app/Frameworks/PVlibDolphin-ios.framework/PVlibDolphin-ios"
   nm -gU "$core" 2>/dev/null | grep -q '___llvm_profile_write_file' \
-    || die "the embedded core is NOT instrumented ($core). Stale framework copy? Try: tools/pgo/pgo.sh clean"
+    || die "the embedded core is NOT instrumented ($core). Stale framework copy? Try: Tools/pgo/pgo.sh clean"
   local bundle
   bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
 

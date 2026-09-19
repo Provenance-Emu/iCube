@@ -4,11 +4,11 @@ The jitless engine is dozens of tiny handlers with cold tails, which is exactly 
 and inlines well. One command records a profile; after that every core build uses it on its own.
 
 ```bash
-tools/pgo/pgo.sh record     # build + install the instrumented app, play, pull, merge, rebuild
-tools/pgo/pgo.sh status     # what the profile was recorded from, and how stale it is
-tools/pgo/pgo.sh device     # which connected device `record` would use (PGO_DEVICE=<name|udid>)
-tools/pgo/pgo.sh merge DIR  # merge .profraw files you already have
-tools/pgo/pgo.sh clean      # drop the instrumented build dirs
+Tools/pgo/pgo.sh record     # build + install the instrumented app, play, pull, merge, rebuild
+Tools/pgo/pgo.sh status     # what the profile was recorded from, and how stale it is
+Tools/pgo/pgo.sh device     # which connected device `record` would use (PGO_DEVICE=<name|udid>)
+Tools/pgo/pgo.sh merge DIR  # merge .profraw files you already have
+Tools/pgo/pgo.sh clean      # drop the instrumented build dirs
 ```
 
 ## What `record` does
