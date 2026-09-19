@@ -271,6 +271,29 @@ class DolphinBuilder:
             self._log(f"Unexpected error: {str(e)}", "error")
             return False
 
+
+    def resolve_pgo(self):
+        """(mode, profile_path). Idiot-proof by default:
+
+        DOL_PGO=generate         instrumented core (tools/pgo/pgo.sh record sets this)
+        DOL_PGO=use              optimize with DOL_PGO_PROFILE, or pgo/icube.profdata when unset
+        DOL_PGO=off              never use a profile
+        DOL_PGO unset            use pgo/icube.profdata when it exists, otherwise a normal build
+
+        The profile is recorded and merged by tools/pgo/pgo.sh; a stale one is harmless (clang
+        ignores functions whose hash no longer matches), just less effective: see `pgo.sh status`.
+        """
+        default_profile = self.repo_root_dir / "pgo" / "icube.profdata"
+        mode = os.environ.get("DOL_PGO", "").strip().lower()
+        profile = os.environ.get("DOL_PGO_PROFILE", "").strip()
+        if mode in ("", "auto"):
+            if default_profile.exists():
+                return "use", str(default_profile)
+            return "off", ""
+        if mode == "use" and not profile:
+            profile = str(default_profile)
+        return mode, profile
+
     def build_platform(self, platform: str) -> bool:
         """Build Dolphin for a specific platform."""
         print(f"🔨 Starting build for {platform}...")
@@ -283,7 +306,11 @@ class DolphinBuilder:
         xcode_platform = platform_config["xcode_platform"]
 
         # Create build directory
-        cmake_build_dir = self.repo_root_dir / f"build-{xcode_platform}-{CONFIG['build_target']}"
+        # The instrumented (DOL_PGO=generate) core gets a build dir of its own: every flag differs, so
+        # sharing one would force a full rebuild each time you switch between recording and shipping.
+        pgo_suffix = "-pgogen" if self.resolve_pgo()[0] == "generate" else ""
+        cmake_build_dir = (self.repo_root_dir /
+                           f"build-{xcode_platform}-{CONFIG['build_target']}{pgo_suffix}")
 
         # Clean build directory if requested
         if self.clean and cmake_build_dir.exists():
@@ -354,7 +381,7 @@ class DolphinBuilder:
         # feeds CMAKE_SHARED_LINKER_FLAGS; without it the dylib fails to link with undefined
         # __llvm_profile_* symbols. The -u force-keeps survive -dead_strip across the dylib boundary
         # so the app's flush shim can resolve them.
-        pgo_mode = os.environ.get("DOL_PGO", "off")
+        pgo_mode, pgo_profile = self.resolve_pgo()
         pgo_cflags = ""
         pgo_ldflags = ""
         if pgo_mode == "generate":
@@ -363,10 +390,10 @@ class DolphinBuilder:
                            "-Wl,-u,___llvm_profile_write_file "
                            "-Wl,-u,___llvm_profile_set_filename")
         elif pgo_mode == "use":
-            pgo_profile = os.environ.get("DOL_PGO_PROFILE", "")
             if not pgo_profile or not os.path.exists(pgo_profile):
                 raise RuntimeError(
-                    f"DOL_PGO=use but DOL_PGO_PROFILE is missing or not found: {pgo_profile!r}")
+                    f"DOL_PGO=use but the profile is missing or not found: {pgo_profile!r}")
+            print(f"[PGO] optimizing with profile {pgo_profile}")
             pgo_cflags = (f"-fprofile-use={pgo_profile} "
                           "-Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date")
         elif pgo_mode != "off":
