@@ -160,6 +160,20 @@ arm64 iOS slice (all three CachedInterpreter TUs + the IR tier); codegen verifie
    a prologue, and the duplicate `switch` fallback is gone. Runs end in an `END` sentinel.
 7. **Variable-length run records** (`WriteTruncated`, `ExecuteMicroOpsOperands::TapeSize`): a fused
    run used to occupy 784 B of tape whatever its length; a two-op run is now 56 B.
+8. **Record chaining** (commit 8aa8c0331a, `CachedInterpreterEmitter::WriteChainable`,
+   `CI_CHAIN_EXIT`): every non-terminal record used to return to `ExecuteOneBlock`, which walked up
+   to eight pointer compares before an indirect call to the next one. Chain-capable records (fused
+   runs, direct-pointer load/stores, generic `InterpretChained`, `InterpretSpecializedChained`) carry
+   a tag bit in their callback slot and the erased `(ppc_state, payload)` signature; the emitter
+   back-patches a record to its chaining variant when the next record is chain-capable and
+   contiguous (a fused run swaps its `END` sentinel for `END_CHAIN`), and the executor tests the tag
+   first, publishes the chain head in `s_chain_base` and adds the distance the last record returns.
+   A chained `lwz` is 26 instructions ending in one `br`. Load/stores that can end a block stay
+   generic, so the `write_pc` handler variants are gone; `Interpret<false>` is no longer emitted.
+   A/B switches (default ON, settings-API keys in parentheses): `CIRRecordChaining`
+   (`cirRecordChaining`), `CIRMemMicroOps` (`cirMemMicroOps`), plus the existing `CIRPICLoadStore`.
+   Caveat: the Phase-0 per-record tape probes (`s_tape_prefetch_dist` / thrash stride) only see chain
+   heads now.
 To instrument: honest preset A/B against develop on WW / Chibi / F-Zero (`ab.py`); Time Profiler for
 `LoadStoreFast*`, `MicroOpHandlers::*`, `WriteToHardware`; correctness via
 `MAIN_CIR_MICROOP_FUSION_VALIDATE` (ALU ops only — memory micro-ops are not packed under validate
