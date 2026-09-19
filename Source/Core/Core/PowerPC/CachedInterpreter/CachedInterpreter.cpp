@@ -4989,6 +4989,16 @@ bool CachedInterpreter::SetEmitterStateToFreeCodeRegion()
 
 void CachedInterpreter::FreeRanges()
 {
+  // iCube: this is the moment destroyed tape becomes REUSABLE, and a pending dynamic-link fill may
+  // still point into it. A block can be invalidated while it is running (icbi / REL loading in Wii
+  // titles and GoldenEye: Rogue Agent); it then runs on to its own LinkBlock, misses (its links were
+  // cleared) and publishes s_dyn_fill_slot INSIDE its already-destroyed tape, after DestroyBlock's
+  // generation bump. The next Jit() would hand that tape to a new block and the fill in
+  // ExecuteOneBlock would then write dyn_pc / dyn_flags / dyn_rel over the new block's records:
+  // a callback slot whose upper half is a guest pc, i.e. a jump to garbage. Drop the pending fill
+  // (and every cached dynamic link) before any range is reused.
+  if (!m_block_cache.GetRangesToFree().empty())
+    BumpDynLinkGeneration();
   for (const auto& [from, to] : m_block_cache.GetRangesToFree())
     m_free_ranges.insert(from, to);
   m_block_cache.ClearRangesToFree();
@@ -6639,6 +6649,8 @@ std::size_t CachedInterpreter::DisassembleFarCode(const JitBlock& block, std::os
 
 void CachedInterpreter::ClearCache()
 {
+  // The whole tape is about to be reused: no pending dynamic-link fill may survive (see FreeRanges).
+  BumpDynLinkGeneration();
   m_block_cache.Clear();
   m_block_cache.ClearRangesToFree();
   ClearCodeSpace();
