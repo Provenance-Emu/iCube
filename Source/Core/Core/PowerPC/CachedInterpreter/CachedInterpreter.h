@@ -425,6 +425,12 @@ private:
   // inline the handler body). Same InterpretOperands payload and semantics as InterpretChained.
   template <void (*Handler)(Interpreter&, UGeckoInstruction), bool chain>
   static s32 InterpretDirect(PowerPC::PowerPCState& ppc_state, const void* payload);
+  // Same, with the handler run inside the dead-FPRF hint window (MAIN_CIR_DEAD_FPRF_ELIM): the FPRF
+  // classification is skipped when the analyzer proved it dead. FP / paired-single arithmetic only.
+  template <void (*Handler)(Interpreter&, UGeckoInstruction), bool chain>
+  static s32 InterpretDirectNoFPRF(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static AnyCallback GetInterpretDirectNoFPRFCallback(void (*func)(Interpreter&, UGeckoInstruction),
+                                                      bool chain);
   // Null when `func` has no direct instantiation.
   static AnyCallback GetInterpretDirectCallback(void (*func)(Interpreter&, UGeckoInstruction),
                                                 bool chain);

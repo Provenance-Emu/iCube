@@ -2243,6 +2243,12 @@ std::vector<CachedInterpreter::AnyCallback> CachedInterpreter::GetInterpretDirec
   callbacks.push_back(AnyCallback{InterpretDirect<&Interpreter::name, true>});
   CIR_DIRECT_OP_LIST(CIR_DIRECT_BOTH)
 #undef CIR_DIRECT_BOTH
+#define CIR_NOFPRF_BOTH(name)                                                                      \
+  callbacks.push_back(GetInterpretDirectNoFPRFCallback(&Interpreter::name, false));                \
+  callbacks.push_back(GetInterpretDirectNoFPRFCallback(&Interpreter::name, true));
+  CIR_SPECIALIZED_FP_ARITH_OPS(CIR_NOFPRF_BOTH)
+  CIR_SPECIALIZED_PS_ARITH_OPS(CIR_NOFPRF_BOTH)
+#undef CIR_NOFPRF_BOTH
   return callbacks;
 }
 
@@ -4102,6 +4108,34 @@ s32 CachedInterpreter::InterpretFPRFElim(PowerPC::PowerPCState& ppc_state,
     operands.func(operands.interpreter, operands.inst);
   }
   return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube: direct, chain-capable form of InterpretFPRFElim. The old record was written with a plain
+// Write, so with dead-FPRF elimination on EVERY qualifying FP op ended the chain and went back through
+// the executor, and it called the handler through a pointer.
+template <void (*Handler)(Interpreter&, UGeckoInstruction), bool chain>
+s32 CachedInterpreter::InterpretDirectNoFPRF(PowerPC::PowerPCState& ppc_state, const void* payload)
+{
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
+  {
+    const DeadFPRFHintGuard guard;
+    Handler(operands.interpreter, operands.inst);
+  }
+  CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
+}
+
+CachedInterpreter::AnyCallback
+CachedInterpreter::GetInterpretDirectNoFPRFCallback(void (*func)(Interpreter&, UGeckoInstruction),
+                                                    bool chain)
+{
+#define CIR_NOFPRF_PICK(name)                                                                      \
+  if (func == &Interpreter::name)                                                                  \
+    return chain ? AnyCallback{InterpretDirectNoFPRF<&Interpreter::name, true>} :                  \
+                   AnyCallback{InterpretDirectNoFPRF<&Interpreter::name, false>};
+  CIR_SPECIALIZED_FP_ARITH_OPS(CIR_NOFPRF_PICK)
+  CIR_SPECIALIZED_PS_ARITH_OPS(CIR_NOFPRF_PICK)
+#undef CIR_NOFPRF_PICK
+  return nullptr;
 }
 
 template <bool write_pc>
@@ -6007,6 +6041,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             Write(op.canEndBlock ? CallbackCast(InterpretFPRFElimValidate<true>) :
                                    CallbackCast(InterpretFPRFElimValidate<false>),
                   operands);
+          }
+          else if (const AnyCallback direct =
+                       op.canEndBlock ? nullptr : GetInterpretDirectNoFPRFCallback(func, false))
+          {
+            WriteChainable(direct, GetInterpretDirectNoFPRFCallback(func, true), &operands,
+                           sizeof(operands));
           }
           else
           {
