@@ -4285,9 +4285,11 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   // recognizer never runs and nothing is emitted -> byte-identical to baseline. We disable the fast path
   // when debugging is on (the records must stay singly-steppable / breakpointable) — the callback would
   // bulk-fill across instruction boundaries a breakpoint inside the loop could otherwise catch.
+  // The bulk fill writes host RAM directly, so like the direct-pointer load/stores it must stay off
+  // when stores have to be observed (memchecks / MMU mode) or go through the emulated d-cache.
   StoreLoopMatch store_loop;
   u32 store_loop_per_iter = 0;
-  if (s_store_loop_ff && !IsDebuggingEnabled())
+  if (s_store_loop_ff && !IsDebuggingEnabled() && !jo.memcheck && !m_ppc_state.m_enable_dcache)
   {
     store_loop = RecognizeStoreLoop(m_code_buffer.data(), code_block.m_num_instructions, js.blockStart);
     if (store_loop.matched)
