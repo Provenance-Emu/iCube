@@ -123,11 +123,12 @@ let preScripts: [TargetScript] = [
         script: """
         set -euo pipefail
         SCRIPT="$PROJECT_DIR/../../../BuildiOSXCFramework.py"
+        slice=""
         case "${PLATFORM_NAME}" in
-          iphoneos)          platform="OS64" ;;
-          iphonesimulator)   platform="SIMULATORARM64" ;;
-          appletvos)         platform="TVOS" ;;
-          appletvsimulator)  platform="SIMULATOR_TVOS" ;;
+          iphoneos)          platform="OS64";           slice="PVlibDolphin-ios" ;;
+          iphonesimulator)   platform="SIMULATORARM64"; slice="PVlibDolphin-ios-sim" ;;
+          appletvos)         platform="TVOS";           slice="PVlibDolphin-tvos" ;;
+          appletvsimulator)  platform="SIMULATOR_TVOS"; slice="PVlibDolphin-tvos-sim" ;;
           macosx)
             if [[ "${SUPPORTS_MACCATALYST:-}" == "YES" || "${EFFECTIVE_PLATFORM_NAME:-}" == "-maccatalyst" ]]; then
               platform="MAC_CATALYST"
@@ -137,7 +138,17 @@ let preScripts: [TargetScript] = [
           *) echo "Error: Unsupported PLATFORM_NAME: ${PLATFORM_NAME}"; exit 1 ;;
         esac
         echo "Building PVlibDolphin for platform: ${platform} (CONFIGURATION=${CONFIGURATION})"
-        exec /usr/bin/python3 "${SCRIPT}" -p "${platform}" -v
+        /usr/bin/python3 "${SCRIPT}" -p "${platform}" -v
+        # Xcode's ProcessXCFramework step copies the slice into BUILT_PRODUCTS_DIR BEFORE this phase
+        # has rebuilt it, so the first app build after any core change would link and embed the
+        # PREVIOUS core (undefined new symbols at best, a silently stale engine at worst). Put the
+        # slice that was just built where the linker and the embed step will look for it.
+        fresh="$PROJECT_DIR/../../../build/xcframework/${slice}.framework"
+        if [[ -n "${slice}" && -d "${fresh}" && -n "${BUILT_PRODUCTS_DIR:-}" ]]; then
+          mkdir -p "${BUILT_PRODUCTS_DIR}/${slice}.framework"
+          /usr/bin/rsync -a --delete "${fresh}/" "${BUILT_PRODUCTS_DIR}/${slice}.framework/"
+          echo "Synced fresh ${slice}.framework into ${BUILT_PRODUCTS_DIR}"
+        fi
         """,
         name: "Build Dolphin Core",
         outputPaths: [
