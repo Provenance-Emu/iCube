@@ -656,21 +656,7 @@ void PowerPCManager::MSRUpdated()
 
 // FPSCR update functions
 
-// iCube: dead-FPRF elimination hint. See PowerPC.h. thread_local because the CPU thread is the only
-// writer/reader; static-init false. Set TRUE only inside the CIR's InterpretFPRFElim RAII window for an
-// op whose FPRF PPCAnalyst proved dead, so the two UpdateFPRF* helpers below early-return. When the CIR
-// MAIN_CIR_DEAD_FPRF_ELIM flag is off it is never set, so this is a single not-taken branch everywhere.
-static thread_local bool s_dead_fprf_elim_hint = false;
-
-bool GetDeadFPRFElimHint()
-{
-  return s_dead_fprf_elim_hint;
-}
-
-void SetDeadFPRFElimHint(bool value)
-{
-  s_dead_fprf_elim_hint = value;
-}
+// iCube: dead-FPRF elimination hint: see g_dead_fprf_elim_hint in PowerPC.h.
 
 // iCube: psq FLOAT fast-path enable + validate. See PowerPC.h. Plain file-statics (not thread_local): they
 // are written once on the CPU thread at CachedInterpreter::Init before emulation runs and only read
@@ -704,14 +690,14 @@ void PowerPCState::UpdateFPRFDouble(double dvalue)
   // iCube: skip the FPRF classify+store when the CIR proved this op's FPRF is dead. This writes ONLY the
   // FPRF field, so an early-return is EXACTLY the op minus the FPRF write — result/rounding/exceptions/
   // all other FPSCR bits are unaffected.
-  if (s_dead_fprf_elim_hint) [[unlikely]]
+  if (g_dead_fprf_elim_hint) [[unlikely]]
     return;
   fpscr.FPRF = Common::ClassifyDouble(dvalue);
 }
 
 void PowerPCState::UpdateFPRFSingle(float fvalue)
 {
-  if (s_dead_fprf_elim_hint) [[unlikely]]
+  if (g_dead_fprf_elim_hint) [[unlikely]]
     return;
   fpscr.FPRF = Common::ClassifyFloat(fvalue);
 }

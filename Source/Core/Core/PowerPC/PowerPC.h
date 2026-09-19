@@ -412,12 +412,21 @@ void RecalculateAllFeatureFlags(PowerPCState& ppc_state);
 // LIVE across every exception/block-exit boundary by the analyzer's may_exit_block guard — it sets this
 // thread-local hint TRUE for exactly the duration of that one handler call (via an RAII guard) so the
 // UpdateFPRF* helpers early-return without computing/storing FPRF. The numeric result, rounding,
-// exceptions and every other FPSCR bit are untouched (the helpers do nothing else). A file-static
-// thread_local is used instead of a PowerPCState member so the JIT/JitArm64 hardcoded struct offsets
-// are unaffected. Default state is FALSE; when the CIR flag is off it is never set true, so the regular
+// exceptions and every other FPSCR bit are untouched (the helpers do nothing else). A global is used
+// instead of a PowerPCState member so the JIT/JitArm64 hardcoded struct offsets are unaffected. Default state is FALSE; when the CIR flag is off it is never set true, so the regular
 // interpreter and the JITs see one predicted-not-taken branch and otherwise byte-identical behavior.
-bool GetDeadFPRFElimHint();
-void SetDeadFPRFElimHint(bool value);
+// A plain inline global, not thread_local: on Apple platforms every thread_local access is a call
+// through the TLV descriptor, and an FP op touches this three times (set, test, clear). Only the CPU
+// thread runs interpreter FP ops, so there is nothing to keep apart per thread.
+inline bool g_dead_fprf_elim_hint = false;
+inline bool GetDeadFPRFElimHint()
+{
+  return g_dead_fprf_elim_hint;
+}
+inline void SetDeadFPRFElimHint(bool value)
+{
+  g_dead_fprf_elim_hint = value;
+}
 
 // iCube: quantized paired-single FLOAT fast-path enable (MAIN_CIR_PSQ_FASTPATH) and its self-validation
 // (MAIN_CIR_PSQ_FASTPATH_VALIDATE). Read once at CachedInterpreter::Init and stashed in a file-static so
