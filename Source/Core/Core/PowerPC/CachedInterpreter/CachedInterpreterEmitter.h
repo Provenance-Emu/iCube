@@ -114,6 +114,14 @@ public:
   void SetChainingEnabled(bool enabled) { m_chaining_enabled = enabled; }
   // Forget the previous record, e.g. at the start of a block.
   void ResetChain() { m_chain_prev_end = nullptr; }
+  // Take back the most recent record(s) so something else can be written in their place (emit-time
+  // fusion of a record with the one after it). A predecessor already patched to chain into `to`
+  // stays valid as long as what is written there next is chain-capable too.
+  void RewindTo(u8* to)
+  {
+    m_code = to;
+    ResetChain();
+  }
 
   const u8* GetCodePtr() const { return m_code; }
   u8* GetWritableCodePtr() { return m_code; }

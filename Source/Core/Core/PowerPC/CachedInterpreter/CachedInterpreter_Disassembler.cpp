@@ -213,6 +213,11 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
                                 (form & 32) != 0),
           static_cast<ErasedDisassemble>(BranchCond));
     }
+    for (u32 form = 0; form < 64; ++form)
+    {
+      add(GetCmpBranchCallback(form & 3, (form >> 2) & 3, (form & 16) != 0, (form & 32) != 0),
+          static_cast<ErasedDisassemble>(CmpBranch));
+    }
     add(AnyCallback{ContinueIfNpc<false>}, static_cast<ErasedDisassemble>(ContinueIfNpc));
     add(AnyCallback{ContinueIfNpc<true>}, static_cast<ErasedDisassemble>(ContinueIfNpc));
     add(AnyCallback{InterpretChained<false>},

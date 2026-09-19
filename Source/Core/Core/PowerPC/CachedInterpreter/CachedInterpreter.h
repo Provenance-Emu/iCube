@@ -423,6 +423,17 @@ private:
   // chain is ignored for the mid-block form (its successor is chosen at run time).
   static AnyCallback GetBranchCondCallback(u32 cr_bit, bool dec_ctr, bool to_lr, bool mid_block,
                                            bool chain);
+  // iCube: compare + conditional branch fused into ONE record (the most common instruction pair, and
+  // otherwise two records and two dispatches). Written when a bc that qualifies for BranchCond
+  // directly follows the compare micro-op that sets the CR field it tests: the compare record is
+  // taken back and this one written in its place. It still writes the CR field (it may be live) and
+  // then behaves exactly like BranchCond, deciding from the comparison it just made.
+  // cmp: 0 = cmp, 1 = cmpl, 2 = cmpi, 3 = cmpli.
+  struct CmpBranchOperands;
+  template <int cmp, u32 cr_bit, bool mid_block, bool chain>
+  static s32 CmpBranch(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 CmpBranch(std::ostream& stream, const void* payload);
+  static AnyCallback GetCmpBranchCallback(int cmp, u32 cr_bit, bool mid_block, bool chain);
   // iCube: long blocks (MAIN_CIR_LONG_BLOCKS). With the analyzer's conditional-continue and
   // branch-follow options on, a branch is no longer always the last instruction of a block. After a
   // mid-block conditional branch this record decides: npc == the next instruction of the block means
@@ -678,6 +689,21 @@ struct CachedInterpreter::CondBranchOperands
   UGeckoInstruction inst;
   u32 skip;  // mid-block form: bytes of exit records that follow (patched once they are written)
   u32 unused;
+};
+
+// Same leading layout as CondBranchOperands (current_pc, inst, skip), so the emitter patches `skip`
+// the same way for both.
+struct CachedInterpreter::CmpBranchOperands
+{
+  u32 current_pc;  // of the branch
+  UGeckoInstruction inst;  // the branch
+  u32 skip;
+  u8 ra;
+  u8 rb;
+  u8 crfd;
+  u8 unused;
+  u32 imm;  // compare immediate, as the compare micro-op stores it
+  u32 unused2;
 };
 
 struct CachedInterpreter::ContinueIfNpcOperands

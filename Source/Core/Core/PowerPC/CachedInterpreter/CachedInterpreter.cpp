@@ -2627,6 +2627,31 @@ s32 CachedInterpreter::LoadStoreFastChecked(std::ostream& stream, const void* pa
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// Shared tail of BranchCond / CmpBranch: pick the successor record. Mid-block, taken falls into the
+// exit records that follow and not-taken hops over them; as the last op it is a plain chain exit.
+// Expects `taken`, `operands`, `payload`, and the template parameters mid_block / chain in scope.
+#define CI_BRANCH_SUCCESSOR(OPERANDS)                                                              \
+  do                                                                                               \
+  {                                                                                                \
+    if constexpr (mid_block)                                                                       \
+    {                                                                                              \
+      const u8* const ci_exits = static_cast<const u8*>(payload) + sizeof(OPERANDS);               \
+      const u8* const ci_target = taken ? ci_exits : ci_exits + operands.skip;                     \
+      std::uintptr_t ci_target_slot;                                                               \
+      std::memcpy(&ci_target_slot, ci_target, sizeof(ci_target_slot));                             \
+      if (s_chain_links && (ci_target_slot & CHAIN_TAG) != 0) [[likely]]                           \
+      {                                                                                            \
+        CI_MUSTTAIL return reinterpret_cast<AnyCallback>(ci_target_slot - CHAIN_TAG)(              \
+            ppc_state, ci_target + sizeof(AnyCallback));                                           \
+      }                                                                                            \
+      return static_cast<s32>(ci_target - s_chain_base);                                           \
+    }                                                                                              \
+    else                                                                                           \
+    {                                                                                              \
+      CI_CHAIN_EXIT(chain, payload, sizeof(OPERANDS));                                             \
+    }                                                                                              \
+  } while (false)
+
 // iCube: specialized conditional branch. See the declaration. State written is exactly what
 // InterpretBcx / InterpretBclr write for the same instruction (pc, npc, CTR); LK forms and the
 // CTR-and-condition forms stay on those handlers.
@@ -2673,25 +2698,96 @@ s32 CachedInterpreter::BranchCond(PowerPC::PowerPCState& ppc_state, const void* 
       destination += pc;
   }
   ppc_state.npc = taken ? destination : pc + 4;
+  CI_BRANCH_SUCCESSOR(CondBranchOperands);
+}
 
-  if constexpr (mid_block)
+template <int cmp, u32 cr_bit, bool mid_block, bool chain>
+s32 CachedInterpreter::CmpBranch(PowerPC::PowerPCState& ppc_state, const void* payload)
+{
+  const auto& operands = *static_cast<const CmpBranchOperands*>(payload);
+  const UGeckoInstruction inst = operands.inst;
+  const u32 pc = operands.current_pc;
+
+  // The compare, exactly as the CMP_* micro-ops do it.
+  bool less;
+  bool greater;
+  if constexpr (cmp == 0 || cmp == 2)
   {
-    // Taken: fall into the exit records that follow. Not taken: the block goes on after them.
-    const u8* const exits = static_cast<const u8*>(payload) + sizeof(CondBranchOperands);
-    const u8* const target = taken ? exits : exits + operands.skip;
-    std::uintptr_t slot;
-    std::memcpy(&slot, target, sizeof(slot));
-    if (s_chain_links && (slot & CHAIN_TAG) != 0) [[likely]]
-    {
-      CI_MUSTTAIL return reinterpret_cast<AnyCallback>(slot - CHAIN_TAG)(
-          ppc_state, target + sizeof(AnyCallback));
-    }
-    return static_cast<s32>(target - s_chain_base);
+    const s32 a = static_cast<s32>(ppc_state.gpr[operands.ra]);
+    const s32 b = cmp == 0 ? static_cast<s32>(ppc_state.gpr[operands.rb]) :
+                             s32{static_cast<s16>(operands.imm & 0xFFFF)};
+    less = a < b;
+    greater = a > b;
   }
   else
   {
-    CI_CHAIN_EXIT(chain, payload, sizeof(CondBranchOperands));
+    const u32 a = ppc_state.gpr[operands.ra];
+    const u32 b = cmp == 1 ? ppc_state.gpr[operands.rb] : (operands.imm & 0xFFFFu);
+    less = a < b;
+    greater = a > b;
   }
+  CI_WriteCompare(ppc_state, operands.crfd, less, greater);
+
+  // The branch, exactly as BranchCond does it, from the comparison just made.
+  ppc_state.pc = pc;
+  bool bit;
+  if constexpr (cr_bit == 0)
+    bit = less;
+  else if constexpr (cr_bit == 1)
+    bit = greater;
+  else if constexpr (cr_bit == 2)
+    bit = !less && !greater;
+  else
+    bit = ppc_state.GetXER_SO() != 0;
+  const bool taken = bit == (((inst.BO >> 3) & 1) != 0);
+  u32 destination = static_cast<u32>(s32{static_cast<s16>(inst.BD << 2)});
+  if (!inst.AA)
+    destination += pc;
+  ppc_state.npc = taken ? destination : pc + 4;
+  CI_BRANCH_SUCCESSOR(CmpBranchOperands);
+}
+
+s32 CachedInterpreter::CmpBranch(std::ostream& stream, const void* payload)
+{
+  const auto& operands = *static_cast<const CmpBranchOperands*>(payload);
+  fmt::println(stream, "CmpBranch(pc={:#010x}, inst={:#010x}, ra={}, rb={}, crfd={}, imm={:#x})",
+               operands.current_pc, operands.inst.hex, operands.ra, operands.rb, operands.crfd,
+               operands.imm);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+CachedInterpreter::AnyCallback CachedInterpreter::GetCmpBranchCallback(int cmp, u32 cr_bit,
+                                                                       bool mid_block, bool chain)
+{
+#define CI_CB_FORM(CMP, BIT)                                                                       \
+  (mid_block ? AnyCallback{CmpBranch<CMP, BIT, true, false>} :                                     \
+   chain     ? AnyCallback{CmpBranch<CMP, BIT, false, true>} :                                     \
+               AnyCallback{CmpBranch<CMP, BIT, false, false>})
+#define CI_CB_BITS(CMP)                                                                            \
+  switch (cr_bit & 3)                                                                              \
+  {                                                                                                \
+  case 0:                                                                                          \
+    return CI_CB_FORM(CMP, 0);                                                                     \
+  case 1:                                                                                          \
+    return CI_CB_FORM(CMP, 1);                                                                     \
+  case 2:                                                                                          \
+    return CI_CB_FORM(CMP, 2);                                                                     \
+  default:                                                                                         \
+    return CI_CB_FORM(CMP, 3);                                                                     \
+  }
+  switch (cmp)
+  {
+  case 0:
+    CI_CB_BITS(0)
+  case 1:
+    CI_CB_BITS(1)
+  case 2:
+    CI_CB_BITS(2)
+  default:
+    CI_CB_BITS(3)
+  }
+#undef CI_CB_BITS
+#undef CI_CB_FORM
 }
 
 s32 CachedInterpreter::BranchCond(std::ostream& stream, const void* payload)
@@ -4938,6 +5034,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
     }
   }
 
+  // iCube: the last micro-op record written, so a bc that directly follows the compare feeding it can
+  // take that record back and write one fused CmpBranch instead (see emit_fused / BranchCond below).
+  u8* last_micro_record = nullptr;
+  MicroOp last_micro{};
+  u32 last_micro_index = 0;
+
   // iCube: the direct-pointer load/store handlers bypass the MMU, so they are off whenever an access
   // must be observed (memchecks / MMU mode) or routed through the emulated d-cache.
   const bool load_store_fast = s_pic_loadstore && !jo.memcheck && !m_ppc_state.m_enable_dcache &&
@@ -5006,6 +5108,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       // Set when this op was emitted as a mid-block BranchCond, which needs its `skip` patched once
       // the exit records that follow it are written (it replaces ContinueIfNpc).
       u8* cond_branch_record = nullptr;
+      std::size_t cond_branch_size = 0;  // its operand size (CondBranchOperands or CmpBranchOperands)
       // An unconditional blr / b / bl that ends the block and whose exit is a LinkBlock is folded into
       // that LinkBlock (1 = blr, 2 = b, 3 = bl; see LinkBlock's `terminal`). Idle-loop branches exit
       // through a plain EndBlock and debugging wants the generic branch handlers, so both keep theirs.
@@ -5270,9 +5373,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 const MicroOp& packed = mop.ops[k];
                 const MicroOpPayload record = {packed.rd, packed.ra, packed.rb, packed.rc, packed.imm};
                 const auto code = static_cast<size_t>(packed.op);
+                last_micro_record = GetWritableCodePtr();
+                last_micro = packed;
                 WriteChainable(MicroOpHandlers::table[0][code], MicroOpHandlers::table[1][code],
                                &record, sizeof(record));
               }
+              last_micro_index = last_idx;
               return;
             }
             ExecuteMicroOpsValidateOperands vop{};
@@ -6180,13 +6286,48 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           {
             const bool merged_continue =
                 mid_block_terminal && !op.branchIsIdleLoop && !op.branchIsCtrIdleLoop;
-            const CondBranchOperands branch_operands = {js.compilerPC, op.inst, 0, 0};
             const u32 cr_bit = op.inst.BI & 3;
-            cond_branch_record = merged_continue ? GetWritableCodePtr() : nullptr;
-            WriteChainable(
-                GetBranchCondCallback(cr_bit, bo_checks_ctr, is_bclr, merged_continue, false),
-                GetBranchCondCallback(cr_bit, bo_checks_ctr, is_bclr, merged_continue, true),
-                &branch_operands, sizeof(branch_operands));
+            // Fuse with the compare in front of it: the previous INSTRUCTION is a compare on the CR
+            // field this branch tests, and its micro-op is the last thing on the tape.
+            int fused_cmp = -1;
+            if (is_bc && bo_checks_cond && i > 0 && last_micro_record != nullptr &&
+                last_micro_index == i - 1 && !m_code_buffer[i - 1].skip &&
+                last_micro_record + sizeof(AnyCallback) + sizeof(MicroOpPayload) == GetCodePtr() &&
+                last_micro.rd == (op.inst.BI >> 2))
+            {
+              switch (last_micro.op)
+              {
+              case MicroOpCode::CMP_S_RR: fused_cmp = 0; break;
+              case MicroOpCode::CMPL_U_RR: fused_cmp = 1; break;
+              case MicroOpCode::CMP_S_IMM: fused_cmp = 2; break;
+              case MicroOpCode::CMPL_U_IMM: fused_cmp = 3; break;
+              default: break;
+              }
+            }
+            if (fused_cmp >= 0)
+            {
+              RewindTo(last_micro_record);
+              last_micro_record = nullptr;
+              const CmpBranchOperands fused_operands = {js.compilerPC, op.inst, 0,
+                                                        last_micro.ra,  last_micro.rb,
+                                                        last_micro.rd,  0,
+                                                        last_micro.imm, 0};
+              cond_branch_record = merged_continue ? GetWritableCodePtr() : nullptr;
+              cond_branch_size = sizeof(fused_operands);
+              WriteChainable(GetCmpBranchCallback(fused_cmp, cr_bit, merged_continue, false),
+                             GetCmpBranchCallback(fused_cmp, cr_bit, merged_continue, true),
+                             &fused_operands, sizeof(fused_operands));
+            }
+            else
+            {
+              const CondBranchOperands branch_operands = {js.compilerPC, op.inst, 0, 0};
+              cond_branch_record = merged_continue ? GetWritableCodePtr() : nullptr;
+              cond_branch_size = sizeof(branch_operands);
+              WriteChainable(
+                  GetBranchCondCallback(cr_bit, bo_checks_ctr, is_bclr, merged_continue, false),
+                  GetBranchCondCallback(cr_bit, bo_checks_ctr, is_bclr, merged_continue, true),
+                  &branch_operands, sizeof(branch_operands));
+            }
           }
           else if (merged_terminal != 0)
           {
@@ -6282,7 +6423,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       }
       if (cond_branch_record != nullptr && !HasWriteFailed())
       {
-        u8* const exits_begin = cond_branch_record + sizeof(AnyCallback) + sizeof(CondBranchOperands);
+        // `skip` sits at the same offset in both record types.
+        static_assert(offsetof(CondBranchOperands, skip) == offsetof(CmpBranchOperands, skip));
+        u8* const exits_begin = cond_branch_record + sizeof(AnyCallback) + cond_branch_size;
         const u32 skip = static_cast<u32>(GetCodePtr() - exits_begin);
         std::memcpy(cond_branch_record + sizeof(AnyCallback) + offsetof(CondBranchOperands, skip),
                     &skip, sizeof(skip));
