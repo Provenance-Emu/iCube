@@ -207,6 +207,8 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
     add(AnyCallback{EndBlockChained}, end_block);
     add(AnyCallback{ExecuteFusedPsqSeqChained<false>}, psq_seq);
     add(AnyCallback{ExecuteFusedPsqSeqChained<true>}, psq_seq);
+    add(AnyCallback{ContinueIfNpc<false>}, static_cast<ErasedDisassemble>(ContinueIfNpc));
+    add(AnyCallback{ContinueIfNpc<true>}, static_cast<ErasedDisassemble>(ContinueIfNpc));
     add(AnyCallback{InterpretChained<false>},
         static_cast<ErasedDisassemble>(CachedInterpreter::InterpretChained));
     add(AnyCallback{InterpretChained<true>},

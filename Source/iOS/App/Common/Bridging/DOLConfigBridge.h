@@ -204,6 +204,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirMemMicroOps:(BOOL)enabled;
 + (BOOL)cirRecordChaining;        // tape records tail-call each other instead of returning to the executor (default ON)
 + (void)setCirRecordChaining:(BOOL)enabled;
++ (BOOL)cirLongBlocks;            // blocks continue past not-taken branches and through b/bl (default ON)
++ (void)setCirLongBlocks:(BOOL)enabled;
 + (BOOL)stallMetrics;             // CPU-thread stall instrumentation (default ON, <0.5% overhead)
 + (void)setStallMetrics:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;

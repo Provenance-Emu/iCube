@@ -1077,6 +1077,11 @@ const Info<bool> MAIN_CIR_MEM_MICROOPS{{System::Main, "Core", "CIRMemMicroOps"},
 // load/stores, generic and specialized non-terminal ops) tail-call each other instead of returning
 // to the executor loop between every record. Flip OFF to A/B.
 const Info<bool> MAIN_CIR_RECORD_CHAINING{{System::Main, "Core", "CIRRecordChaining"}, true};
+// iCube: long blocks. Turns on PPCAnalyst's conditional-continue and branch-follow for the cached
+// interpreter (it used to end a block at EVERY branch): a block runs on past not-taken conditional
+// branches and through unconditional b/bl (and leaf returns), so there are far fewer block
+// transitions to pay for. Off while debugging. Flip OFF to A/B.
+const Info<bool> MAIN_CIR_LONG_BLOCKS{{System::Main, "Core", "CIRLongBlocks"}, true};
 // iCube WIN#1: PIC (position-independent-code) direct-pointer load/store on the CachedInterpreter.
 // Integer D-form/X-form load/stores resolve the host RAM pointer directly and do the access with the
 // correct endian swap, bypassing the per-access MMU/region lookup (~15% on memory-bound titles).

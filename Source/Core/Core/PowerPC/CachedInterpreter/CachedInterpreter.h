@@ -363,6 +363,15 @@ private:
   // Null when the (kind, indexed, update) combination does not exist.
   static AnyCallback GetLoadStoreFastCallback(CIMemKind kind, bool indexed, bool update, bool chain,
                                               bool checked);
+  // iCube: long blocks (MAIN_CIR_LONG_BLOCKS). With the analyzer's conditional-continue and
+  // branch-follow options on, a branch is no longer always the last instruction of a block. After a
+  // mid-block conditional branch this record decides: npc == the next instruction of the block means
+  // the block goes on, so it hops over `skip` bytes of exit records (idle checks + EndBlock /
+  // LinkBlock); otherwise it falls into them and the block ends there, charged for the cycles so far.
+  struct ContinueIfNpcOperands;
+  template <bool chain>
+  static s32 ContinueIfNpc(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 ContinueIfNpc(std::ostream& stream, const void* payload);
   // iCube: chain-capable forms of other records that sit inside or at the end of most blocks. They
   // wrap the typed callbacks above (same records, same semantics); CheckFPUChained and
   // EndBlockChained may return 0, which ends the chain and the block.
@@ -585,6 +594,12 @@ struct CachedInterpreter::InterpretOperands
 struct CachedInterpreter::SpecializedInterpretOperands : InterpretOperands
 {
   u16 op_id;  // CirSpecOp value; index into the dispatch jump-table
+};
+
+struct CachedInterpreter::ContinueIfNpcOperands
+{
+  u32 continue_pc;  // guest address of the next instruction in this block
+  u32 skip;         // bytes of exit records that follow this record (patched once they are written)
 };
 
 struct CachedInterpreter::InterpretAndCheckExceptionsOperands : InterpretOperands

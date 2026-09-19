@@ -64,6 +64,8 @@ static GPFifo::GPFifoManager* s_gpfifo = nullptr;
 static bool s_low_dcbz_hack = false;
 // MAIN_CIR_MEM_MICROOPS: pack integer load/stores into fused micro-op runs (A/B switch).
 static bool s_mem_microops = true;
+// MAIN_CIR_LONG_BLOCKS: analyzer conditional-continue + branch-follow (see ContinueIfNpc).
+static bool s_long_blocks = true;
 
 static inline u8* CI_PagePtr(const PowerPC::PowerPCState& ppc_state, u32 ea)
 {
@@ -1355,6 +1357,7 @@ void CachedInterpreter::Init()
     s_interpreter = &m_system.GetInterpreter();
   }
   s_mem_microops = Config::Get(Config::MAIN_CIR_MEM_MICROOPS);
+  s_long_blocks = Config::Get(Config::MAIN_CIR_LONG_BLOCKS);
   s_chain_links = Config::Get(Config::MAIN_CIR_RECORD_CHAINING);
   SetChainingEnabled(s_chain_links);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
@@ -2481,6 +2484,37 @@ s32 CachedInterpreter::LoadStoreFastChecked(std::ostream& stream, const void* pa
   const auto& operands = *static_cast<const InterpretAndCheckExceptionsOperands*>(payload);
   fmt::println(stream, "LoadStoreFastChecked(pc={:#010x}, inst={:#010x}, downcount={})",
                operands.current_pc, operands.inst.hex, operands.downcount);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube: long blocks. See the declaration. The continue target is chosen at run time, so like
+// LinkBlock it tests the target's tag itself instead of relying on an emit-time patch; the fall-in
+// path (the block ends here) is the ordinary chain exit into the exit records.
+template <bool chain>
+s32 CachedInterpreter::ContinueIfNpc(PowerPC::PowerPCState& ppc_state, const void* payload)
+{
+  const auto& operands = *static_cast<const ContinueIfNpcOperands*>(payload);
+  if (ppc_state.npc == operands.continue_pc)
+  {
+    const u8* const target =
+        static_cast<const u8*>(payload) + sizeof(ContinueIfNpcOperands) + operands.skip;
+    std::uintptr_t slot;
+    std::memcpy(&slot, target, sizeof(slot));
+    if (s_chain_links && (slot & CHAIN_TAG) != 0) [[likely]]
+    {
+      CI_MUSTTAIL return reinterpret_cast<AnyCallback>(slot - CHAIN_TAG)(
+          ppc_state, target + sizeof(AnyCallback));
+    }
+    return static_cast<s32>(target - s_chain_base);
+  }
+  CI_CHAIN_EXIT(chain, payload, sizeof(ContinueIfNpcOperands));
+}
+
+s32 CachedInterpreter::ContinueIfNpc(std::ostream& stream, const void* payload)
+{
+  const auto& operands = *static_cast<const ContinueIfNpcOperands*>(payload);
+  fmt::println(stream, "ContinueIfNpc(continue_pc={:#010x}, skip={})", operands.continue_pc,
+               operands.skip);
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -4377,6 +4411,18 @@ void CachedInterpreter::Jit(u32 em_address, bool clear_cache_and_retry_on_failur
   }
   FreeRanges();
 
+  // iCube: long blocks. Off while debugging so every branch still round-trips the dispatcher
+  // (breakpoints / stepping), exactly like the JITs' SetOptimizationEnabled.
+  if (s_long_blocks && !IsDebuggingEnabled())
+  {
+    analyzer.SetOption(PPCAnalyst::PPCAnalyzer::OPTION_CONDITIONAL_CONTINUE);
+    analyzer.SetOption(PPCAnalyst::PPCAnalyzer::OPTION_BRANCH_FOLLOW);
+  }
+  else
+  {
+    analyzer.ClearOption(PPCAnalyst::PPCAnalyzer::OPTION_CONDITIONAL_CONTINUE);
+    analyzer.ClearOption(PPCAnalyst::PPCAnalyzer::OPTION_BRANCH_FOLLOW);
+  }
   const u32 nextPC =
       analyzer.Analyze(em_address, &code_block, &m_code_buffer, m_code_buffer.size());
   if (code_block.m_memory_exception)
@@ -4457,16 +4503,29 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   // bulk-fill across instruction boundaries a breakpoint inside the loop could otherwise catch.
   // The bulk fill writes host RAM directly, so like the direct-pointer load/stores it must stay off
   // when stores have to be observed (memchecks / MMU mode) or go through the emulated d-cache.
+  // iCube: with long blocks the loop's bdnz is no longer the last instruction of the block, so the
+  // loop recognizers look at the block up to and including its FIRST branch. Both fast paths leave the
+  // records in place and let them run the final iteration, whose not-taken bdnz then simply carries
+  // on into the rest of the block.
+  u32 loop_prefix_len = code_block.m_num_instructions;
+  for (u32 k = 0; k < code_block.m_num_instructions; ++k)
+  {
+    if (m_code_buffer[k].canEndBlock)
+    {
+      loop_prefix_len = k + 1;
+      break;
+    }
+  }
   StoreLoopMatch store_loop;
   u32 store_loop_per_iter = 0;
   if (s_store_loop_ff && !IsDebuggingEnabled() && !jo.memcheck && !m_ppc_state.m_enable_dcache)
   {
-    store_loop = RecognizeStoreLoop(m_code_buffer.data(), code_block.m_num_instructions, js.blockStart);
+    store_loop = RecognizeStoreLoop(m_code_buffer.data(), loop_prefix_len, js.blockStart);
     if (store_loop.matched)
     {
       // per-iteration emulated cycles = sum of every op's num_cycles (== js.downcountAmount at the bdnz,
       // which the normal path charges once per dispatch == once per loop iteration).
-      for (u32 k = 0; k < code_block.m_num_instructions; ++k)
+      for (u32 k = 0; k < loop_prefix_len; ++k)
         store_loop_per_iter += m_code_buffer[k].opinfo->num_cycles;
       // Log ONCE that only this exact shape is covered (no silent cap; stw/other shapes are future work).
       static bool logged_once = false;
@@ -4494,12 +4553,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   u32 cache_loop_per_iter = 0;
   if (s_cache_loop_ff && !IsDebuggingEnabled())
   {
-    cache_loop = RecognizeCacheLoop(m_code_buffer.data(), code_block.m_num_instructions, js.blockStart);
+    cache_loop = RecognizeCacheLoop(m_code_buffer.data(), loop_prefix_len, js.blockStart);
     if (cache_loop.matched)
     {
       // per-iteration emulated cycles = sum of every op's num_cycles (== js.downcountAmount at the bdnz,
       // which the normal path charges once per dispatch == once per loop iteration).
-      for (u32 k = 0; k < code_block.m_num_instructions; ++k)
+      for (u32 k = 0; k < loop_prefix_len; ++k)
         cache_loop_per_iter += m_code_buffer[k].opinfo->num_cycles;
       // Log ONCE that only this exact shape is covered.
       static bool logged_once = false;
@@ -4572,8 +4631,16 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       }
 
       // Instruction may cause a DSI Exception or Program Exception.
+      // iCube: long blocks. A canEndBlock op that is not the last instruction only exists under the
+      // analyzer options above: a conditional branch / trap the block continues past, or a followed
+      // unconditional branch. A mid-block tw/twi must deliver its program exception itself, which is
+      // exactly what the exception-checking record does.
+      const bool mid_block_terminal =
+          op.canEndBlock && i + 1 < code_block.m_num_instructions;
+      const bool mid_block_trap =
+          mid_block_terminal && (op.inst.OPCD == 3 || (op.inst.OPCD == 31 && op.inst.SUBOP10 == 4));
       if ((jo.memcheck && (op.opinfo->flags & FL_LOADSTORE) != 0) ||
-          (!op.canEndBlock && ShouldHandleFPExceptionForInstruction(&op)))
+          (!op.canEndBlock && ShouldHandleFPExceptionForInstruction(&op)) || mid_block_trap)
       {
         const InterpretAndCheckExceptionsOperands operands = {
             {interpreter, Interpreter::GetInterpreterOp(op.inst), js.compilerPC, op.inst},
@@ -5736,6 +5803,28 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         }
       }
 
+      // iCube: long blocks. Decide what follows a mid-block terminal:
+      //  - idle-loop branches always leave (as in the JITs), so they keep the plain exit below and
+      //    whatever the analyzer appended after them is never reached;
+      //  - a branch that always goes on (followed b/bl, always-taken bc, tw/twi, whose trap already
+      //    left through the exception check) needs no exit records at all;
+      //  - anything else is conditional: ContinueIfNpc guards the exit records.
+      const bool idle_branch = op.branchIsIdleLoop || op.branchIsCtrIdleLoop;
+      const bool always_continues =
+          mid_block_terminal && !idle_branch &&
+          (mid_block_trap || op.inst.OPCD == 18 ||
+           (op.inst.OPCD == 16 && (op.inst.BO & BO_DONT_DECREMENT_FLAG) != 0 &&
+            (op.inst.BO & BO_DONT_CHECK_CONDITION) != 0));
+      if (always_continues)
+        continue;
+      u8* continue_record = nullptr;
+      if (mid_block_terminal && !idle_branch)
+      {
+        continue_record = GetWritableCodePtr();
+        const ContinueIfNpcOperands continue_operands = {m_code_buffer[i + 1].address, 0};
+        WriteChainable(AnyCallback{ContinueIfNpc<false>}, AnyCallback{ContinueIfNpc<true>},
+                       &continue_operands, sizeof(continue_operands));
+      }
       if (op.branchIsIdleLoop)
         Write(CheckIdle, {m_system.GetCoreTiming(), js.blockStart});
       // For simple CTR-controlled tight loops, fast-forward by exiting the loop and yielding.
@@ -5757,6 +5846,14 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         const bool dyn_terminal = !idle_terminal && op.inst.OPCD == 19 &&
                                   (op.inst.SUBOP10 == 16 || op.inst.SUBOP10 == 528);
         WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo, dyn_terminal);
+      }
+      if (continue_record != nullptr && !HasWriteFailed())
+      {
+        // The exit records are in place: tell ContinueIfNpc how far to hop over them.
+        u8* const exits_begin = continue_record + sizeof(AnyCallback) + sizeof(ContinueIfNpcOperands);
+        const u32 skip = static_cast<u32>(GetCodePtr() - exits_begin);
+        std::memcpy(continue_record + sizeof(AnyCallback) + offsetof(ContinueIfNpcOperands, skip),
+                    &skip, sizeof(skip));
       }
     }
   }
