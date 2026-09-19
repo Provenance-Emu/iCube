@@ -358,11 +358,27 @@ private:
   static s32 LoadStoreFast(PowerPC::PowerPCState& ppc_state, const void* payload);
   template <CIMemKind kind, bool chain, bool checked>
   static s32 LoadStoreFastCold(PowerPC::PowerPCState& ppc_state, const void* payload);
+  // After an inline gather-pipe store filled the pipe: run the (out-of-line) burst check, then go on.
+  template <bool chain, bool checked>
+  static s32 LoadStoreGatherFlush(PowerPC::PowerPCState& ppc_state, const void* payload);
   static s32 LoadStoreFast(std::ostream& stream, const void* payload);
   static s32 LoadStoreFastChecked(std::ostream& stream, const void* payload);
   // Null when the (kind, indexed, update) combination does not exist.
   static AnyCallback GetLoadStoreFastCallback(CIMemKind kind, bool indexed, bool update, bool chain,
                                               bool checked);
+  // iCube: specialized conditional branch (bc / bclr without LK, testing EITHER a CR bit OR the CTR).
+  // The generic inline terminal decodes BO/BI on every execution, builds the whole 4-bit CR field to
+  // read one bit, and branches on the guest outcome; mid-block it was then followed by a
+  // ContinueIfNpc record that branched on the same outcome again. Here the tested CR bit, the CTR
+  // form and the target kind are template parameters, npc is a select, and the mid-block form picks
+  // its successor record (exit records vs. the rest of the block) with a select too.
+  struct CondBranchOperands;
+  template <u32 cr_bit, bool dec_ctr, bool to_lr, bool mid_block, bool chain>
+  static s32 BranchCond(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 BranchCond(std::ostream& stream, const void* payload);
+  // chain is ignored for the mid-block form (its successor is chosen at run time).
+  static AnyCallback GetBranchCondCallback(u32 cr_bit, bool dec_ctr, bool to_lr, bool mid_block,
+                                           bool chain);
   // iCube: long blocks (MAIN_CIR_LONG_BLOCKS). With the analyzer's conditional-continue and
   // branch-follow options on, a branch is no longer always the last instruction of a block. After a
   // mid-block conditional branch this record decides: npc == the next instruction of the block means
@@ -594,6 +610,14 @@ struct CachedInterpreter::InterpretOperands
 struct CachedInterpreter::SpecializedInterpretOperands : InterpretOperands
 {
   u16 op_id;  // CirSpecOp value; index into the dispatch jump-table
+};
+
+struct CachedInterpreter::CondBranchOperands
+{
+  u32 current_pc;
+  UGeckoInstruction inst;
+  u32 skip;  // mid-block form: bytes of exit records that follow (patched once they are written)
+  u32 unused;
 };
 
 struct CachedInterpreter::ContinueIfNpcOperands

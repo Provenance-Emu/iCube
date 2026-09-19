@@ -94,6 +94,34 @@ static inline bool CI_IsGatherPipeWrite(const PowerPC::PowerPCState& ppc_state, 
   return (physical & 0xFFFFF000) == GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS;
 }
 
+// iCube: GX command streams are runs of stores to the write-gather pipe, far too frequent for the cold
+// path. This is GPFifoManager::FastWriteN inlined (big-endian bytes at ppc_state.gather_pipe_ptr);
+// the burst check GPFifoManager::WriteN does after it stays out of line and is only needed when the
+// pipe reaches GATHER_PIPE_SIZE. Returns 0 = not a (plain, aligned, in-page) pipe store, nothing done;
+// 1 = stored; 2 = stored and the caller must run CheckGatherPipe().
+template <typename T>
+inline int CI_GatherPipeFastStore(PowerPC::PowerPCState& ppc_state, u32 ea, T value)
+{
+  constexpr u32 gather_pipe_page_size = 0x1000;
+  constexpr u32 align_mask = sizeof(T) >= 4 ? 3 : sizeof(T) - 1;
+  if ((ea & (gather_pipe_page_size - 1)) + sizeof(T) > gather_pipe_page_size ||
+      (ea & align_mask) != 0 || !CI_IsGatherPipeWrite(ppc_state, ea))
+  {
+    return 0;
+  }
+  if constexpr (sizeof(T) == 8)
+    value = Common::swap64(value);
+  else if constexpr (sizeof(T) == 4)
+    value = Common::swap32(value);
+  else if constexpr (sizeof(T) == 2)
+    value = Common::swap16(value);
+  std::memcpy(ppc_state.gather_pipe_ptr, &value, sizeof(T));
+  ppc_state.gather_pipe_ptr += sizeof(T);
+  const auto pending = static_cast<std::size_t>(ppc_state.gather_pipe_ptr -
+                                                ppc_state.gather_pipe_base_ptr);
+  return pending >= GPFifo::GATHER_PIPE_SIZE ? 2 : 1;
+}
+
 }  // namespace
 
 // iCube: record chaining (see CachedInterpreterEmitter::WriteChainable). A chain-capable record leaves
@@ -2334,7 +2362,30 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
     ea += ppc_state.gpr[inst.RA];
   u8* const page = CI_PagePtr(ppc_state, ea);
   if (page == nullptr || (ea & CI_AlignMask(kind)) != 0) [[unlikely]]
+  {
+    if constexpr (!update && (kind == CIMemKind::STW || kind == CIMemKind::STB ||
+                              kind == CIMemKind::STH || kind == CIMemKind::STFS ||
+                              kind == CIMemKind::STFD))
+    {
+      int stored;
+      if constexpr (kind == CIMemKind::STW)
+        stored = CI_GatherPipeFastStore<u32>(ppc_state, ea, ppc_state.gpr[inst.RS]);
+      else if constexpr (kind == CIMemKind::STH)
+        stored = CI_GatherPipeFastStore<u16>(ppc_state, ea, static_cast<u16>(ppc_state.gpr[inst.RS]));
+      else if constexpr (kind == CIMemKind::STB)
+        stored = CI_GatherPipeFastStore<u8>(ppc_state, ea, static_cast<u8>(ppc_state.gpr[inst.RS]));
+      else if constexpr (kind == CIMemKind::STFS)
+        stored = CI_GatherPipeFastStore<u32>(ppc_state, ea,
+                                             ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64()));
+      else
+        stored = CI_GatherPipeFastStore<u64>(ppc_state, ea, ppc_state.ps[inst.FS].PS0AsU64());
+      if (stored == 2) [[unlikely]]
+        CI_MUSTTAIL return LoadStoreGatherFlush<chain, checked>(ppc_state, payload);
+      if (stored == 1)
+        CI_CHAIN_EXIT(chain, payload, sizeof(Record));
+    }
     CI_MUSTTAIL return LoadStoreFastCold<kind, chain, checked>(ppc_state, payload);
+  }
   const u32 offset = ea & CI_PAGE_OFFSET_MASK;
   u8* const host = page + offset;
 
@@ -2471,6 +2522,15 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
   CI_CHAIN_EXIT(chain, payload, sizeof(Record));
 }
 
+template <bool chain, bool checked>
+[[gnu::noinline]] s32 CachedInterpreter::LoadStoreGatherFlush(PowerPC::PowerPCState& ppc_state,
+                                                              const void* payload)
+{
+  using Record = std::conditional_t<checked, InterpretAndCheckExceptionsOperands, InterpretOperands>;
+  s_gpfifo->CheckGatherPipe();
+  CI_CHAIN_EXIT(chain, payload, sizeof(Record));
+}
+
 s32 CachedInterpreter::LoadStoreFast(std::ostream& stream, const void* payload)
 {
   const auto& operands = *static_cast<const InterpretOperands*>(payload);
@@ -2485,6 +2545,107 @@ s32 CachedInterpreter::LoadStoreFastChecked(std::ostream& stream, const void* pa
   fmt::println(stream, "LoadStoreFastChecked(pc={:#010x}, inst={:#010x}, downcount={})",
                operands.current_pc, operands.inst.hex, operands.downcount);
   return sizeof(AnyCallback) + sizeof(operands);
+}
+
+// iCube: specialized conditional branch. See the declaration. State written is exactly what
+// InterpretBcx / InterpretBclr write for the same instruction (pc, npc, CTR); LK forms and the
+// CTR-and-condition forms stay on those handlers.
+template <u32 cr_bit, bool dec_ctr, bool to_lr, bool mid_block, bool chain>
+s32 CachedInterpreter::BranchCond(PowerPC::PowerPCState& ppc_state, const void* payload)
+{
+  const auto& operands = *static_cast<const CondBranchOperands*>(payload);
+  const UGeckoInstruction inst = operands.inst;
+  const u32 pc = operands.current_pc;
+  // BO / BI sit in the same instruction bits for bc and bclr.
+  const u32 bo = inst.BO;
+  ppc_state.pc = pc;
+
+  bool taken;
+  if constexpr (dec_ctr)
+  {
+    const u32 ctr = --CTR(ppc_state);
+    taken = (((ctr != 0) ^ (bo >> 1)) & 1) != 0;
+  }
+  else
+  {
+    const u64 cr = ppc_state.cr.fields[inst.BI >> 2];
+    bool bit;
+    if constexpr (cr_bit == 0)  // LT
+      bit = ((cr >> PowerPC::CR_EMU_LT_BIT) & 1) != 0;
+    else if constexpr (cr_bit == 1)  // GT
+      bit = static_cast<s64>(cr) > 0;
+    else if constexpr (cr_bit == 2)  // EQ
+      bit = (cr & 0xFFFFFFFF) == 0;
+    else  // SO
+      bit = ((cr >> PowerPC::CR_EMU_SO_BIT) & 1) != 0;
+    taken = bit == (((bo >> 3) & 1) != 0);
+  }
+
+  u32 destination;
+  if constexpr (to_lr)
+  {
+    destination = LR(ppc_state) & ~u32{3};
+  }
+  else
+  {
+    destination = static_cast<u32>(s32{static_cast<s16>(inst.BD << 2)});
+    if (!inst.AA)
+      destination += pc;
+  }
+  ppc_state.npc = taken ? destination : pc + 4;
+
+  if constexpr (mid_block)
+  {
+    // Taken: fall into the exit records that follow. Not taken: the block goes on after them.
+    const u8* const exits = static_cast<const u8*>(payload) + sizeof(CondBranchOperands);
+    const u8* const target = taken ? exits : exits + operands.skip;
+    std::uintptr_t slot;
+    std::memcpy(&slot, target, sizeof(slot));
+    if (s_chain_links && (slot & CHAIN_TAG) != 0) [[likely]]
+    {
+      CI_MUSTTAIL return reinterpret_cast<AnyCallback>(slot - CHAIN_TAG)(
+          ppc_state, target + sizeof(AnyCallback));
+    }
+    return static_cast<s32>(target - s_chain_base);
+  }
+  else
+  {
+    CI_CHAIN_EXIT(chain, payload, sizeof(CondBranchOperands));
+  }
+}
+
+s32 CachedInterpreter::BranchCond(std::ostream& stream, const void* payload)
+{
+  const auto& operands = *static_cast<const CondBranchOperands*>(payload);
+  fmt::println(stream, "BranchCond(pc={:#010x}, inst={:#010x}, skip={})", operands.current_pc,
+               operands.inst.hex, operands.skip);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+CachedInterpreter::AnyCallback CachedInterpreter::GetBranchCondCallback(u32 cr_bit, bool dec_ctr,
+                                                                        bool to_lr, bool mid_block,
+                                                                        bool chain)
+{
+#define CI_BC_FORM(BIT, CTRF, LRF)                                                                 \
+  (mid_block ? AnyCallback{BranchCond<BIT, CTRF, LRF, true, false>} :                             \
+   chain     ? AnyCallback{BranchCond<BIT, CTRF, LRF, false, true>} :                             \
+               AnyCallback{BranchCond<BIT, CTRF, LRF, false, false>})
+#define CI_BC_TARGET(BIT, CTRF) (to_lr ? CI_BC_FORM(BIT, CTRF, true) : CI_BC_FORM(BIT, CTRF, false))
+  if (dec_ctr)
+    return CI_BC_TARGET(0, true);
+  switch (cr_bit & 3)
+  {
+  case 0:
+    return CI_BC_TARGET(0, false);
+  case 1:
+    return CI_BC_TARGET(1, false);
+  case 2:
+    return CI_BC_TARGET(2, false);
+  default:
+    return CI_BC_TARGET(3, false);
+  }
+#undef CI_BC_TARGET
+#undef CI_BC_FORM
 }
 
 // iCube: long blocks. See the declaration. The continue target is chosen at run time, so like
@@ -2635,18 +2796,30 @@ inline u32 CI_MicroMemEA(const PowerPC::PowerPCState& ppc_state, const MicroOp& 
                                           static_cast<u32>(s32{static_cast<s16>(m.imm)}));
 }
 
-// Returns false, with no side effect, when the access has to take the generic handler.
+// 1 = done. 0 = nothing done, the access has to take the generic handler (MemCold). 2 = an inline
+// gather-pipe store filled the pipe: done, but run the burst check (MemGatherFlush).
 template <CIMemKind kind, bool indexed>
-inline bool CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOp& m)
+inline int CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOp& m)
 {
   const u32 ea = CI_MicroMemEA<indexed>(ppc_state, m);
   u8* const page = CI_PagePtr(ppc_state, ea);
   if (page == nullptr || (ea & CI_AlignMask(kind)) != 0) [[unlikely]]
-    return false;
+  {
+    if (m.rc != 0)
+      return 0;
+    if constexpr (kind == CIMemKind::STW)
+      return CI_GatherPipeFastStore<u32>(ppc_state, ea, ppc_state.gpr[m.rd]);
+    else if constexpr (kind == CIMemKind::STH)
+      return CI_GatherPipeFastStore<u16>(ppc_state, ea, static_cast<u16>(ppc_state.gpr[m.rd]));
+    else if constexpr (kind == CIMemKind::STB)
+      return CI_GatherPipeFastStore<u8>(ppc_state, ea, static_cast<u8>(ppc_state.gpr[m.rd]));
+    else
+      return 0;
+  }
   if constexpr (CI_IsSubWordStore(kind))
   {
     if (CI_IsWriteInhibitedPage(ppc_state, ea)) [[unlikely]]
-      return false;
+      return 0;
   }
   u8* const host = page + (ea & CI_PAGE_OFFSET_MASK);
   switch (kind)
@@ -2678,7 +2851,7 @@ inline bool CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOp& m
   }
   if (m.rc != 0)
     ppc_state.gpr[m.ra] = ea;
-  return true;
+  return 1;
 }
 
 [[gnu::noinline, gnu::cold]] void CI_MicroMemCold(PowerPC::PowerPCState& ppc_state,
@@ -2752,8 +2925,13 @@ static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
   static s32 NAME(PowerPC::PowerPCState& ppc_state, const void* payload)                           \
   {                                                                                                \
     const MicroOp* const mp = static_cast<const MicroOp*>(payload);                                \
-    if (!CI_MicroMemAccess<CIMemKind::KIND, INDEXED>(ppc_state, *mp)) [[unlikely]]                 \
+    const int done = CI_MicroMemAccess<CIMemKind::KIND, INDEXED>(ppc_state, *mp);                  \
+    if (done != 1) [[unlikely]]                                                                    \
+    {                                                                                              \
+      if (done == 2)                                                                               \
+        CI_MUSTTAIL return MemGatherFlush(ppc_state, payload);                                     \
       CI_MUSTTAIL return MemCold(ppc_state, payload);                                              \
+    }                                                                                              \
     CI_MICRO_NEXT();                                                                               \
   }
 
@@ -3484,6 +3662,14 @@ struct CachedInterpreter::MicroOpHandlers
   {
     const MicroOp* const mp = static_cast<const MicroOp*>(payload);
     CI_MicroMemCold(ppc_state, *s_interpreter, *mp);
+    CI_MICRO_NEXT();
+  }
+
+  // An inline gather-pipe store filled the pipe: run the burst check, then carry on with the run.
+  [[gnu::noinline]] static s32 MemGatherFlush(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
+    s_gpfifo->CheckGatherPipe();
     CI_MICRO_NEXT();
   }
 
@@ -4637,6 +4823,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       // exactly what the exception-checking record does.
       const bool mid_block_terminal =
           op.canEndBlock && i + 1 < code_block.m_num_instructions;
+      // Set when this op was emitted as a mid-block BranchCond, which needs its `skip` patched once
+      // the exit records that follow it are written (it replaces ContinueIfNpc).
+      u8* cond_branch_record = nullptr;
       const bool mid_block_trap =
           mid_block_terminal && (op.inst.OPCD == 3 || (op.inst.OPCD == 31 && op.inst.SUBOP10 == 4));
       if ((jo.memcheck && (op.opinfo->flags & FL_LOADSTORE) != 0) ||
@@ -5781,7 +5970,27 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         {
           // iCube 2026-09-17: bcx (primary opcode 16) terminals take the inline conditional-branch
           // handler unless debugging is on (branch watch needs the generic Interpreter::bcx).
-          if (op.canEndBlock && op.inst.OPCD == 16 && !IsDebuggingEnabled())
+          // iCube: bc / bclr that test exactly one thing (a CR bit, or the CTR) and do not link get
+          // the specialized branch. Mid-block (long blocks) it also does ContinueIfNpc's job, so no
+          // such record follows; an idle-loop branch always leaves the block and takes the plain form.
+          const bool is_bc = op.inst.OPCD == 16;
+          const bool is_bclr = op.inst.OPCD == 19 && op.inst.SUBOP10 == 16;
+          const bool bo_checks_ctr = (op.inst.BO & BO_DONT_DECREMENT_FLAG) == 0;
+          const bool bo_checks_cond = (op.inst.BO & BO_DONT_CHECK_CONDITION) == 0;
+          if (op.canEndBlock && (is_bc || is_bclr) && !IsDebuggingEnabled() && !op.inst.LK &&
+              bo_checks_ctr != bo_checks_cond)
+          {
+            const bool merged_continue =
+                mid_block_terminal && !op.branchIsIdleLoop && !op.branchIsCtrIdleLoop;
+            const CondBranchOperands branch_operands = {js.compilerPC, op.inst, 0, 0};
+            const u32 cr_bit = op.inst.BI & 3;
+            cond_branch_record = merged_continue ? GetWritableCodePtr() : nullptr;
+            WriteChainable(
+                GetBranchCondCallback(cr_bit, bo_checks_ctr, is_bclr, merged_continue, false),
+                GetBranchCondCallback(cr_bit, bo_checks_ctr, is_bclr, merged_continue, true),
+                &branch_operands, sizeof(branch_operands));
+          }
+          else if (op.canEndBlock && op.inst.OPCD == 16 && !IsDebuggingEnabled())
             WriteChainable(AnyCallback{InterpretBcx<false>}, AnyCallback{InterpretBcx<true>}, &operands,
                            sizeof(operands));
           else if (op.canEndBlock && op.inst.OPCD == 18 && !IsDebuggingEnabled())
@@ -5818,7 +6027,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       if (always_continues)
         continue;
       u8* continue_record = nullptr;
-      if (mid_block_terminal && !idle_branch)
+      if (mid_block_terminal && !idle_branch && cond_branch_record == nullptr)
       {
         continue_record = GetWritableCodePtr();
         const ContinueIfNpcOperands continue_operands = {m_code_buffer[i + 1].address, 0};
@@ -5846,6 +6055,13 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         const bool dyn_terminal = !idle_terminal && op.inst.OPCD == 19 &&
                                   (op.inst.SUBOP10 == 16 || op.inst.SUBOP10 == 528);
         WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo, dyn_terminal);
+      }
+      if (cond_branch_record != nullptr && !HasWriteFailed())
+      {
+        u8* const exits_begin = cond_branch_record + sizeof(AnyCallback) + sizeof(CondBranchOperands);
+        const u32 skip = static_cast<u32>(GetCodePtr() - exits_begin);
+        std::memcpy(cond_branch_record + sizeof(AnyCallback) + offsetof(CondBranchOperands, skip),
+                    &skip, sizeof(skip));
       }
       if (continue_record != nullptr && !HasWriteFailed())
       {

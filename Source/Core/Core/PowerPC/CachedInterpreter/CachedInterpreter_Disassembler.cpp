@@ -166,7 +166,11 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
   std::call_once(s_sorted_lookup_flag, [] {
     using ErasedDisassemble = s32 (*)(std::ostream&, const void*);
     const auto add = [](AnyCallback callback, ErasedDisassemble disassemble) {
-      if (callback != nullptr)
+      // Several template forms can share one instantiation (and the linker may fold identical
+      // ones), and the table must not hold duplicate keys.
+      const bool known = std::ranges::any_of(
+          sorted_lookup, [callback](const LookupKV& kv) { return kv.first == callback; });
+      if (callback != nullptr && !known)
         sorted_lookup.emplace_back(callback, disassemble);
     };
     for (u32 kind = 0; kind < CI_MEM_KIND_COUNT; ++kind)
@@ -207,6 +211,12 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
     add(AnyCallback{EndBlockChained}, end_block);
     add(AnyCallback{ExecuteFusedPsqSeqChained<false>}, psq_seq);
     add(AnyCallback{ExecuteFusedPsqSeqChained<true>}, psq_seq);
+    for (u32 form = 0; form < 64; ++form)
+    {
+      add(GetBranchCondCallback(form & 3, (form & 4) != 0, (form & 8) != 0, (form & 16) != 0,
+                                (form & 32) != 0),
+          static_cast<ErasedDisassemble>(BranchCond));
+    }
     add(AnyCallback{ContinueIfNpc<false>}, static_cast<ErasedDisassemble>(ContinueIfNpc));
     add(AnyCallback{ContinueIfNpc<true>}, static_cast<ErasedDisassemble>(ContinueIfNpc));
     add(AnyCallback{InterpretChained<false>},
