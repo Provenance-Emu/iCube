@@ -186,6 +186,21 @@ arm64 iOS slice (all three CachedInterpreter TUs + the IR tier); codegen verifie
     `InterpretAndCheckExceptionsOperands` record; the cold path delivers DSI / program exceptions
     and ends the block like the generic record. Off with watchpoints, pause-on-panic, accurate
     d-cache. Memory micro-ops stay off in MMU mode.
+11. **More integer micro-ops + more chain-capable records** (73ea5ab0fe): `mulli`, `subfic`,
+    `addic`/`addic.`, `neg(o)`, `mullw(o)`, `mulhw`, `mulhwu`, `divw(o)`, `divwu(o)` and the LR/CTR
+    forms of `mfspr`/`mtspr` (every prologue/epilogue) no longer end a fused run; covered by
+    `MAIN_CIR_MICROOP_FUSION_VALIDATE`. `CheckFPU`, the non-profiled `EndBlock` and the fused psq
+    sequence got chain-capable wrappers.
+12. **Long blocks** (6ab05eeba3, `CIRLongBlocks` / `cirLongBlocks`, default ON, off while
+    debugging): the cached interpreter had NEVER set a PPCAnalyst option, so every block ended at
+    its first branch. `OPTION_CONDITIONAL_CONTINUE` + `OPTION_BRANCH_FOLLOW` are on now. After a
+    mid-block conditional branch a `ContinueIfNpc` record hops over the exit records when
+    npc == the block's next instruction, else falls into them (exit charged for the cycles so far);
+    followed `b`/`bl`, always-taken `bc` and `tw`/`twi` emit no exit (a mid-block trap uses
+    `InterpretAndCheckExceptions`); idle-loop branches keep an unconditional exit; the store-loop /
+    cache-loop recognizers look at the block up to its first branch. This is the riskiest item of
+    the lot: first suspect if anything misbehaves, and the first A/B to run.
+    Also fixed on the way (0ce086c788): `StoreLoopFill` is now off under memchecks / accurate d-cache.
 Deliberately NOT done: FP load/stores and FP arithmetic inside fused runs. With chaining a hop
 between records costs about what a hop inside a run does (4 vs 3 instructions), so the remaining
 gain is record size only, against a real ordering risk with the block-level `CheckFPU`. Revisit only
