@@ -402,9 +402,6 @@ private:
   static s32 LoadStoreFast(PowerPC::PowerPCState& ppc_state, const void* payload);
   template <CIMemKind kind, bool chain, bool checked>
   static s32 LoadStoreFastCold(PowerPC::PowerPCState& ppc_state, const void* payload);
-  // After an inline gather-pipe store filled the pipe: run the (out-of-line) burst check, then go on.
-  template <bool chain, bool checked>
-  static s32 LoadStoreGatherFlush(PowerPC::PowerPCState& ppc_state, const void* payload);
   static s32 LoadStoreFast(std::ostream& stream, const void* payload);
   static s32 LoadStoreFastChecked(std::ostream& stream, const void* payload);
   // Null when the (kind, indexed, update) combination does not exist.
@@ -483,6 +480,9 @@ private:
   static s32 MicroOpRecord(std::ostream& stream, const void* payload);
   // Every micro-op handler (both chain variants), for the disassembler's callback lookup.
   static std::span<const AnyCallback> GetMicroOpCallbacks();
+  // Every fused-pair handler, likewise.
+  static std::vector<AnyCallback> GetMicroOpPairCallbacks();
+  static s32 MicroOpPairRecord(std::ostream& stream, const void* payload);
   // iCube WIN#2 validate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Self-validating analogue of
   // InterpretSpecialized's double-run: run the real generic Interpreter:: handlers for the original
   // consumed instructions on the live state, snapshot GPR/CR/XER(ca,so_ov)/pc/npc/Exceptions, restore,

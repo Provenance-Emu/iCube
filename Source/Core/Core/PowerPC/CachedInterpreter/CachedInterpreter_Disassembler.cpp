@@ -106,6 +106,14 @@ s32 CachedInterpreter::MicroOpRecord(std::ostream& stream, const void* payload)
   return sizeof(AnyCallback) + sizeof(MicroOpPayload);
 }
 
+s32 CachedInterpreter::MicroOpPairRecord(std::ostream& stream, const void* payload)
+{
+  const auto* const m = static_cast<const MicroOpPayload*>(payload);
+  fmt::println(stream, "MicroOpPair(rd={}, ra={}, imm={:#010x} | rd={}, ra={}, imm={:#010x})", m[0].rd,
+               m[0].ra, m[0].imm, m[1].rd, m[1].ra, m[1].imm);
+  return sizeof(AnyCallback) + 2 * sizeof(MicroOpPayload);
+}
+
 s32 CachedInterpreter::InterpretChained(std::ostream& stream, const void* payload)
 {
   return Interpret<false>(stream, *static_cast<const InterpretOperands*>(payload));
@@ -179,6 +187,8 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
     }
     for (const AnyCallback handler : GetMicroOpCallbacks())
       add(handler, static_cast<ErasedDisassemble>(MicroOpRecord));
+    for (const AnyCallback pair : GetMicroOpPairCallbacks())
+      add(pair, static_cast<ErasedDisassemble>(MicroOpPairRecord));
     for (int form = 0; form < 3 * 2 * 2 * 4; ++form)
     {
       add(GetLinkBlockCallback(form % 3, (form / 3) % 2 != 0, (form / 6) % 2 != 0, form / 12),

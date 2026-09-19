@@ -1082,6 +1082,9 @@ const Info<bool> MAIN_CIR_RECORD_CHAINING{{System::Main, "Core", "CIRRecordChain
 // branches and through unconditional b/bl (and leaf returns), so there are far fewer block
 // transitions to pay for. Off while debugging. Flip OFF to A/B.
 const Info<bool> MAIN_CIR_LONG_BLOCKS{{System::Main, "Core", "CIRLongBlocks"}, true};
+// iCube: fused micro-op pairs: two adjacent micro-ops in one tape record, one dispatch instead of
+// two. Flip OFF to A/B.
+const Info<bool> MAIN_CIR_MICRO_PAIRS{{System::Main, "Core", "CIRMicroPairs"}, true};
 // iCube WIN#1: PIC (position-independent-code) direct-pointer load/store on the CachedInterpreter.
 // Integer D-form/X-form load/stores resolve the host RAM pointer directly and do the access with the
 // correct endian swap, bypassing the per-access MMU/region lookup (~15% on memory-bound titles).

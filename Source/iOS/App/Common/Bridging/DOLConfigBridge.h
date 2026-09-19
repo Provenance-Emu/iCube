@@ -206,6 +206,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirRecordChaining:(BOOL)enabled;
 + (BOOL)cirLongBlocks;            // blocks continue past not-taken branches and through b/bl (default ON)
 + (void)setCirLongBlocks:(BOOL)enabled;
++ (BOOL)cirMicroPairs;            // two adjacent micro-ops fused into one record (default ON)
++ (void)setCirMicroPairs:(BOOL)enabled;
 + (BOOL)stallMetrics;             // CPU-thread stall instrumentation (default ON, <0.5% overhead)
 + (void)setStallMetrics:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;

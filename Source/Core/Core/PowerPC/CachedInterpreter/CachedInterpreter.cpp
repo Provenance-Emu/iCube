@@ -66,6 +66,8 @@ static bool s_low_dcbz_hack = false;
 static bool s_mem_microops = true;
 // MAIN_CIR_LONG_BLOCKS: analyzer conditional-continue + branch-follow (see ContinueIfNpc).
 static bool s_long_blocks = true;
+// MAIN_CIR_MICRO_PAIRS: fused micro-op pairs (see MicroOpHandlers::GetPair).
+static bool s_micro_pairs = true;
 
 // Blocks are compiled per MSR.DR state (it is one of the block-cache feature flags, and every link
 // re-checks the flags), so DR is an emit-time constant: the direct-pointer path is only emitted into
@@ -1389,6 +1391,7 @@ void CachedInterpreter::Init()
   }
   s_mem_microops = Config::Get(Config::MAIN_CIR_MEM_MICROOPS);
   s_long_blocks = Config::Get(Config::MAIN_CIR_LONG_BLOCKS);
+  s_micro_pairs = Config::Get(Config::MAIN_CIR_MICRO_PAIRS);
   s_chain_links = Config::Get(Config::MAIN_CIR_RECORD_CHAINING);
   SetChainingEnabled(s_chain_links);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
@@ -2443,27 +2446,6 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
   u8* const page = CI_PagePtr(ppc_state, ea);
   if (page == nullptr || (ea & CI_AlignMask(kind)) != 0) [[unlikely]]
   {
-    if constexpr (!update && (kind == CIMemKind::STW || kind == CIMemKind::STB ||
-                              kind == CIMemKind::STH || kind == CIMemKind::STFS ||
-                              kind == CIMemKind::STFD))
-    {
-      int stored;
-      if constexpr (kind == CIMemKind::STW)
-        stored = CI_GatherPipeFastStore<u32>(ppc_state, ea, ppc_state.gpr[inst.RS]);
-      else if constexpr (kind == CIMemKind::STH)
-        stored = CI_GatherPipeFastStore<u16>(ppc_state, ea, static_cast<u16>(ppc_state.gpr[inst.RS]));
-      else if constexpr (kind == CIMemKind::STB)
-        stored = CI_GatherPipeFastStore<u8>(ppc_state, ea, static_cast<u8>(ppc_state.gpr[inst.RS]));
-      else if constexpr (kind == CIMemKind::STFS)
-        stored = CI_GatherPipeFastStore<u32>(ppc_state, ea,
-                                             ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64()));
-      else
-        stored = CI_GatherPipeFastStore<u64>(ppc_state, ea, ppc_state.ps[inst.FS].PS0AsU64());
-      if (stored == 2) [[unlikely]]
-        CI_MUSTTAIL return LoadStoreGatherFlush<chain, checked>(ppc_state, payload);
-      if (stored == 1)
-        CI_CHAIN_EXIT(chain, payload, sizeof(Record));
-    }
     CI_MUSTTAIL return LoadStoreFastCold<kind, chain, checked>(ppc_state, payload);
   }
   const u32 offset = ea & CI_PAGE_OFFSET_MASK;
@@ -2567,11 +2549,11 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
     }
     if constexpr (kind == CIMemKind::PSQL)
     {
-      const double ps0 =
-          std::bit_cast<double>(ConvertToDouble(Common::swap32(CI_ReadHost<u32>(host))));
-      const double ps1 = single ? 1.0 :
-                                  std::bit_cast<double>(ConvertToDouble(
-                                      Common::swap32(CI_ReadHost<u32>(host + sizeof(u32)))));
+      // The u64 SetBoth overload is inline; the double one is an out-of-line call (a stack frame in
+      // an otherwise leaf handler), and the bits are what we have anyway.
+      const u64 ps0 = ConvertToDouble(Common::swap32(CI_ReadHost<u32>(host)));
+      const u64 ps1 = single ? std::bit_cast<u64>(1.0) :
+                               ConvertToDouble(Common::swap32(CI_ReadHost<u32>(host + sizeof(u32))));
       ppc_state.ps[inst.RD].SetBoth(ps0, ps1);
     }
     else
@@ -2599,15 +2581,6 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
 
   if constexpr (update)
     ppc_state.gpr[inst.RA] = ea;
-  CI_CHAIN_EXIT(chain, payload, sizeof(Record));
-}
-
-template <bool chain, bool checked>
-[[gnu::noinline]] s32 CachedInterpreter::LoadStoreGatherFlush(PowerPC::PowerPCState& ppc_state,
-                                                              const void* payload)
-{
-  using Record = std::conditional_t<checked, InterpretAndCheckExceptionsOperands, InterpretOperands>;
-  s_gpfifo->CheckGatherPipe();
   CI_CHAIN_EXIT(chain, payload, sizeof(Record));
 }
 
@@ -2972,30 +2945,20 @@ inline u32 CI_MicroMemEA(const PowerPC::PowerPCState& ppc_state, const MicroOpPa
                                           static_cast<u32>(s32{static_cast<s16>(m.imm)}));
 }
 
-// 1 = done. 0 = nothing done, the access has to take the generic handler (MemCold). 2 = an inline
-// gather-pipe store filled the pipe: done, but run the burst check (MemGatherFlush).
+// Returns false, with no side effect, when the access cannot take the direct path (MMIO, gather pipe,
+// unaligned, ...): the caller then leaves through a tail call to CI_SlowMem. The handler itself makes
+// no call, so it has no stack frame.
 template <CIMemKind kind, bool indexed, bool update>
-inline int CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
+inline bool CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
 {
   const u32 ea = CI_MicroMemEA<indexed>(ppc_state, m);
   u8* const page = CI_PagePtr(ppc_state, ea);
   if (page == nullptr || (ea & CI_AlignMask(kind)) != 0) [[unlikely]]
-  {
-    if constexpr (update)
-      return 0;
-    else if constexpr (kind == CIMemKind::STW)
-      return CI_GatherPipeFastStore<u32>(ppc_state, ea, ppc_state.gpr[m.rd]);
-    else if constexpr (kind == CIMemKind::STH)
-      return CI_GatherPipeFastStore<u16>(ppc_state, ea, static_cast<u16>(ppc_state.gpr[m.rd]));
-    else if constexpr (kind == CIMemKind::STB)
-      return CI_GatherPipeFastStore<u8>(ppc_state, ea, static_cast<u8>(ppc_state.gpr[m.rd]));
-    else
-      return 0;
-  }
+    return false;
   if constexpr (CI_IsSubWordStore(kind))
   {
     if (CI_IsWriteInhibitedPage(ppc_state, ea)) [[unlikely]]
-      return 0;
+      return false;
   }
   u8* const host = page + (ea & CI_PAGE_OFFSET_MASK);
   switch (kind)
@@ -3027,7 +2990,33 @@ inline int CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOpPayl
   }
   if constexpr (update)
     ppc_state.gpr[m.ra] = ea;
-  return 1;
+  return true;
+}
+
+// The slow side of a memory micro-op. Gather-pipe stores (GX command streams, so not rare) are served
+// right here with the inlined fast write; everything else runs the generic interpreter handler, which
+// is always correct. Out of line on purpose: this is where the calls live.
+template <CIMemKind kind, bool indexed, bool update>
+[[gnu::noinline]] void CI_SlowMem(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
+{
+  if constexpr (!update &&
+                (kind == CIMemKind::STW || kind == CIMemKind::STH || kind == CIMemKind::STB))
+  {
+    const u32 ea = CI_MicroMemEA<indexed>(ppc_state, m);
+    int stored;
+    if constexpr (kind == CIMemKind::STW)
+      stored = CI_GatherPipeFastStore<u32>(ppc_state, ea, ppc_state.gpr[m.rd]);
+    else if constexpr (kind == CIMemKind::STH)
+      stored = CI_GatherPipeFastStore<u16>(ppc_state, ea, static_cast<u16>(ppc_state.gpr[m.rd]));
+    else
+      stored = CI_GatherPipeFastStore<u8>(ppc_state, ea, static_cast<u8>(ppc_state.gpr[m.rd]));
+    if (stored == 2)
+      s_gpfifo->CheckGatherPipe();
+    if (stored != 0)
+      return;
+  }
+  const UGeckoInstruction inst{m.imm};
+  Interpreter::GetInterpreterOp(inst)(*s_interpreter, inst);
 }
 
 }  // namespace
@@ -3061,13 +3050,8 @@ static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
   static s32 NAME(PowerPC::PowerPCState& ppc_state, const void* payload)                           \
   {                                                                                                \
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);                        \
-    const int done = CI_MicroMemAccess<CIMemKind::KIND, INDEXED, UPDATE>(ppc_state, m);            \
-    if (done != 1) [[unlikely]]                                                                    \
-    {                                                                                              \
-      if (done == 2)                                                                               \
-        CI_MUSTTAIL return MemGatherFlush<chain>(ppc_state, payload);                              \
-      CI_MUSTTAIL return MemCold<chain>(ppc_state, payload);                                       \
-    }                                                                                              \
+    if (!CI_MicroMemAccess<CIMemKind::KIND, INDEXED, UPDATE>(ppc_state, m)) [[unlikely]]           \
+      CI_MUSTTAIL return MemSlow<CIMemKind::KIND, INDEXED, UPDATE, chain>(ppc_state, payload);     \
     CI_MICRO_NEXT();                                                                               \
   }
 
@@ -3077,11 +3061,14 @@ struct CachedInterpreter::MicroOpHandlers
   // WriteChainable patch in table[1][op] when the next record is chain-capable.
   static const AnyCallback table[2][static_cast<size_t>(MicroOpCode::COUNT)];
 
+  static inline void CONST32_body(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
+  {
+    ppc_state.gpr[m.rd] = m.imm;
+  }
   template <bool chain>
   static s32 CONST32(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
-    ppc_state.gpr[m.rd] = m.imm;
+    CONST32_body(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 
@@ -3219,15 +3206,18 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
-  template <bool chain>
-  static s32 RLWINM_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
+  static inline void RLWINM_IMM_body(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     // rb = SH, imm = the MB..ME mask, both decoded by the packer.
     const u32 result = std::rotl(ppc_state.gpr[m.ra], m.rb) & m.imm;
     ppc_state.gpr[m.rd] = result;
     if (m.rc)
       CI_UpdateCR0(ppc_state, result);
+  }
+  template <bool chain>
+  static s32 RLWINM_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    RLWINM_IMM_body(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 
@@ -3243,15 +3233,18 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
-  template <bool chain>
-  static s32 OR_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
+  static inline void OR_RR_body(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = rs_val | rb_val;
     if (m.rc)
       CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+  }
+  template <bool chain>
+  static s32 OR_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    OR_RR_body(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 
@@ -3450,10 +3443,8 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
-  template <bool chain>
-  static s32 ADD_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
+  static inline void ADD_RR_body(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
     const u32 result = a + b;
@@ -3462,6 +3453,11 @@ struct CachedInterpreter::MicroOpHandlers
       ppc_state.SetXER_OV(CI_HasAddOverflowed(a, b, result));
     if (m.rc)
       CI_UpdateCR0(ppc_state, result);
+  }
+  template <bool chain>
+  static s32 ADD_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    ADD_RR_body(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 
@@ -3736,35 +3732,47 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  static inline void MFSPR_RAW_body(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
+  {
+    ppc_state.gpr[m.rd] = ppc_state.spr[m.imm];
+  }
   template <bool chain>
   static s32 MFSPR_RAW(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
-    ppc_state.gpr[m.rd] = ppc_state.spr[m.imm];
+    MFSPR_RAW_body(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 
+  static inline void MTSPR_RAW_body(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
+  {
+    ppc_state.spr[m.imm] = ppc_state.gpr[m.rd];
+  }
   template <bool chain>
   static s32 MTSPR_RAW(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
-    ppc_state.spr[m.imm] = ppc_state.gpr[m.rd];
+    MTSPR_RAW_body(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 
+  static inline void CONST_SPR_body(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
+  {
+    ppc_state.spr[m.rd] = m.imm;
+  }
   template <bool chain>
   static s32 CONST_SPR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
-    ppc_state.spr[m.rd] = m.imm;
+    CONST_SPR_body(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 
+  static inline void ADD_IMM32_body(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
+  {
+    ppc_state.gpr[m.rd] = ppc_state.gpr[m.ra] + m.imm;
+  }
   template <bool chain>
   static s32 ADD_IMM32(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
-    ppc_state.gpr[m.rd] = ppc_state.gpr[m.ra] + m.imm;
+    ADD_IMM32_body(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 
@@ -3797,23 +3805,84 @@ struct CachedInterpreter::MicroOpHandlers
   CI_MICRO_MEM(MEM_STBUX, STB, true, true)
   CI_MICRO_MEM(MEM_STHUX, STH, true, true)
 
-  // The memory micro-op cannot take the direct path: run it through the generic handler, then carry
-  // on. Same signature, so both hops are tail calls and the hot handlers never make a call.
-  template <bool chain>
-  [[gnu::noinline, gnu::cold]] static s32 MemCold(PowerPC::PowerPCState& ppc_state,
-                                                  const void* payload)
+  // iCube: fused pairs. Two adjacent micro-ops in ONE record (two 8-byte payloads), so the pair costs
+  // one dispatch instead of two; in a flat profile of tiny handlers the dispatch IS most of the cost.
+  // Bodies are the very same inline functions the single handlers run. A memory op that cannot take
+  // the direct path leaves through a tail call that finishes the pair via CI_SlowMem.
+  using Body = void (*)(PowerPC::PowerPCState&, const MicroOpPayload&);
+  static constexpr std::size_t kPairSize = 2 * sizeof(MicroOpPayload);
+  template <CIMemKind second, bool chain>
+  [[gnu::noinline]] static s32 PairSlowSecond(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
-    const UGeckoInstruction inst{m.imm};
-    Interpreter::GetInterpreterOp(inst)(*s_interpreter, inst);
-    CI_MICRO_NEXT();
+    CI_SlowMem<second, false, false>(ppc_state, static_cast<const MicroOpPayload*>(payload)[1]);
+    CI_CHAIN_EXIT(chain, payload, kPairSize);
+  }
+  template <CIMemKind first, Body second, bool chain>
+  [[gnu::noinline]] static s32 PairSlowFirstThen(PowerPC::PowerPCState& ppc_state,
+                                                 const void* payload)
+  {
+    const auto* const p = static_cast<const MicroOpPayload*>(payload);
+    CI_SlowMem<first, false, false>(ppc_state, p[0]);
+    second(ppc_state, p[1]);
+    CI_CHAIN_EXIT(chain, payload, kPairSize);
+  }
+  // Nothing of the pair has run yet. The second access gets the direct path again if it can.
+  template <CIMemKind first, CIMemKind second, bool chain>
+  [[gnu::noinline]] static s32 PairSlowFirstThenMem(PowerPC::PowerPCState& ppc_state,
+                                                    const void* payload)
+  {
+    const auto* const p = static_cast<const MicroOpPayload*>(payload);
+    CI_SlowMem<first, false, false>(ppc_state, p[0]);
+    if (!CI_MicroMemAccess<second, false, false>(ppc_state, p[1]))
+      CI_SlowMem<second, false, false>(ppc_state, p[1]);
+    CI_CHAIN_EXIT(chain, payload, kPairSize);
   }
 
-  // An inline gather-pipe store filled the pipe: run the burst check, then carry on.
-  template <bool chain>
-  [[gnu::noinline]] static s32 MemGatherFlush(PowerPC::PowerPCState& ppc_state, const void* payload)
+  template <Body first, Body second, bool chain>
+  static s32 PairAA(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    s_gpfifo->CheckGatherPipe();
+    const auto* const p = static_cast<const MicroOpPayload*>(payload);
+    first(ppc_state, p[0]);
+    second(ppc_state, p[1]);
+    CI_CHAIN_EXIT(chain, payload, kPairSize);
+  }
+  template <Body first, CIMemKind second, bool chain>
+  static s32 PairAM(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    const auto* const p = static_cast<const MicroOpPayload*>(payload);
+    first(ppc_state, p[0]);
+    if (!CI_MicroMemAccess<second, false, false>(ppc_state, p[1])) [[unlikely]]
+      CI_MUSTTAIL return PairSlowSecond<second, chain>(ppc_state, payload);
+    CI_CHAIN_EXIT(chain, payload, kPairSize);
+  }
+  template <CIMemKind first, Body second, bool chain>
+  static s32 PairMA(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    const auto* const p = static_cast<const MicroOpPayload*>(payload);
+    if (!CI_MicroMemAccess<first, false, false>(ppc_state, p[0])) [[unlikely]]
+      CI_MUSTTAIL return PairSlowFirstThen<first, second, chain>(ppc_state, payload);
+    second(ppc_state, p[1]);
+    CI_CHAIN_EXIT(chain, payload, kPairSize);
+  }
+  template <CIMemKind first, CIMemKind second, bool chain>
+  static s32 PairMM(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    const auto* const p = static_cast<const MicroOpPayload*>(payload);
+    if (!CI_MicroMemAccess<first, false, false>(ppc_state, p[0])) [[unlikely]]
+      CI_MUSTTAIL return PairSlowFirstThenMem<first, second, chain>(ppc_state, payload);
+    if (!CI_MicroMemAccess<second, false, false>(ppc_state, p[1])) [[unlikely]]
+      CI_MUSTTAIL return PairSlowSecond<second, chain>(ppc_state, payload);
+    CI_CHAIN_EXIT(chain, payload, kPairSize);
+  }
+  // Null when (a, b) is not a fused pair.
+  static AnyCallback GetPair(MicroOpCode a, MicroOpCode b, bool chain);
+
+  // The memory micro-op cannot take the direct path: CI_SlowMem, then carry on. Same signature, so
+  // both hops are tail calls and the hot handlers never make a call.
+  template <CIMemKind kind, bool indexed, bool update, bool chain>
+  [[gnu::noinline]] static s32 MemSlow(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    CI_SlowMem<kind, indexed, update>(ppc_state, *static_cast<const MicroOpPayload*>(payload));
     CI_MICRO_NEXT();
   }
 };
@@ -3996,6 +4065,78 @@ const CachedInterpreter::AnyCallback
             &MicroOpHandlers::NOP<true>,
         },
 };
+
+// The ops that take part in fused pairs: the hottest simple ops and the plain D-form loads/stores.
+// (Two copies of each list: the preprocessor will not expand a macro inside itself.)
+#define CI_PAIR_ALU_1(X, ...)                                                                      \
+  X(CONST32, __VA_ARGS__) X(ADD_IMM32, __VA_ARGS__) X(RLWINM_IMM, __VA_ARGS__)                     \
+  X(OR_RR, __VA_ARGS__) X(ADD_RR, __VA_ARGS__) X(MFSPR_RAW, __VA_ARGS__)                           \
+  X(MTSPR_RAW, __VA_ARGS__) X(CONST_SPR, __VA_ARGS__)
+#define CI_PAIR_ALU_2(X, ...)                                                                      \
+  X(CONST32, __VA_ARGS__) X(ADD_IMM32, __VA_ARGS__) X(RLWINM_IMM, __VA_ARGS__)                     \
+  X(OR_RR, __VA_ARGS__) X(ADD_RR, __VA_ARGS__) X(MFSPR_RAW, __VA_ARGS__)                           \
+  X(MTSPR_RAW, __VA_ARGS__) X(CONST_SPR, __VA_ARGS__)
+#define CI_PAIR_MEM_1(X, ...)                                                                      \
+  X(LWZ, __VA_ARGS__) X(STW, __VA_ARGS__) X(LBZ, __VA_ARGS__) X(STB, __VA_ARGS__)
+#define CI_PAIR_MEM_2(X, ...)                                                                      \
+  X(LWZ, __VA_ARGS__) X(STW, __VA_ARGS__) X(LBZ, __VA_ARGS__) X(STB, __VA_ARGS__)
+
+CachedInterpreter::AnyCallback CachedInterpreter::MicroOpHandlers::GetPair(MicroOpCode a,
+                                                                           MicroOpCode b, bool chain)
+{
+#define CI_PICK(FORM, ...)                                                                         \
+  return chain ? AnyCallback{FORM<__VA_ARGS__, true>} : AnyCallback{FORM<__VA_ARGS__, false>};
+#define CI_CELL_AA(B, A)                                                                           \
+  if (a == MicroOpCode::A && b == MicroOpCode::B)                                                  \
+    CI_PICK(PairAA, &A##_body, &B##_body)
+#define CI_ROW_AA(A, ...) CI_PAIR_ALU_2(CI_CELL_AA, A)
+  CI_PAIR_ALU_1(CI_ROW_AA)
+#define CI_CELL_AM(B, A)                                                                           \
+  if (a == MicroOpCode::A && b == MicroOpCode::MEM_##B)                                            \
+    CI_PICK(PairAM, &A##_body, CIMemKind::B)
+#define CI_ROW_AM(A, ...) CI_PAIR_MEM_2(CI_CELL_AM, A)
+  CI_PAIR_ALU_1(CI_ROW_AM)
+#define CI_CELL_MA(B, A)                                                                           \
+  if (a == MicroOpCode::MEM_##A && b == MicroOpCode::B)                                            \
+    CI_PICK(PairMA, CIMemKind::A, &B##_body)
+#define CI_ROW_MA(A, ...) CI_PAIR_ALU_2(CI_CELL_MA, A)
+  CI_PAIR_MEM_1(CI_ROW_MA)
+#define CI_CELL_MM(B, A)                                                                           \
+  if (a == MicroOpCode::MEM_##A && b == MicroOpCode::MEM_##B)                                      \
+    CI_PICK(PairMM, CIMemKind::A, CIMemKind::B)
+#define CI_ROW_MM(A, ...) CI_PAIR_MEM_2(CI_CELL_MM, A)
+  CI_PAIR_MEM_1(CI_ROW_MM)
+#undef CI_ROW_MM
+#undef CI_CELL_MM
+#undef CI_ROW_MA
+#undef CI_CELL_MA
+#undef CI_ROW_AM
+#undef CI_CELL_AM
+#undef CI_ROW_AA
+#undef CI_CELL_AA
+#undef CI_PICK
+  return nullptr;
+}
+
+std::vector<CachedInterpreter::AnyCallback> CachedInterpreter::GetMicroOpPairCallbacks()
+{
+  std::vector<AnyCallback> callbacks;
+  for (u32 a = 0; a < static_cast<u32>(MicroOpCode::COUNT); ++a)
+  {
+    for (u32 b = 0; b < static_cast<u32>(MicroOpCode::COUNT); ++b)
+    {
+      for (const bool chain : {false, true})
+      {
+        if (const AnyCallback pair = MicroOpHandlers::GetPair(static_cast<MicroOpCode>(a),
+                                                              static_cast<MicroOpCode>(b), chain))
+        {
+          callbacks.push_back(pair);
+        }
+      }
+    }
+  }
+  return callbacks;
+}
 
 std::span<const CachedInterpreter::AnyCallback> CachedInterpreter::GetMicroOpCallbacks()
 {
@@ -5371,6 +5512,25 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               for (u32 k = 0; k < mop.count; ++k)
               {
                 const MicroOp& packed = mop.ops[k];
+                // Greedy pairing: this op and the next one as a single fused record when the pair
+                // has one (s_micro_pairs: MAIN_CIR_MICRO_PAIRS).
+                if (s_micro_pairs && k + 1 < mop.count)
+                {
+                  const MicroOp& next_packed = mop.ops[k + 1];
+                  if (const AnyCallback pair =
+                          MicroOpHandlers::GetPair(packed.op, next_packed.op, false))
+                  {
+                    const MicroOpPayload both[2] = {
+                        {packed.rd, packed.ra, packed.rb, packed.rc, packed.imm},
+                        {next_packed.rd, next_packed.ra, next_packed.rb, next_packed.rc,
+                         next_packed.imm}};
+                    last_micro_record = nullptr;  // not a lone compare: nothing for CmpBranch to fuse
+                    WriteChainable(pair, MicroOpHandlers::GetPair(packed.op, next_packed.op, true),
+                                   both, sizeof(both));
+                    ++k;
+                    continue;
+                  }
+                }
                 const MicroOpPayload record = {packed.rd, packed.ra, packed.rb, packed.rc, packed.imm};
                 const auto code = static_cast<size_t>(packed.op);
                 last_micro_record = GetWritableCodePtr();
