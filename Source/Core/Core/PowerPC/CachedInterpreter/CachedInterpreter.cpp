@@ -185,12 +185,17 @@ static inline void CI_UpdateCR0(PowerPC::PowerPCState& ppc_state, u32 value)
   ppc_state.cr.fields[0] = cr_val;
 }
 
-// Write a CR field (CRFD), mirroring Helper_IntCompare SO behavior.
-static inline void CI_WriteCRField(PowerPC::PowerPCState& ppc_state, u32 crfd, u32 cr_field)
+// Integer compare result, written in the CR's internal format without the PPC-format round trip
+// (three csets, an SO branch and a table load). Bit-identical to Helper_IntCompare + SetField: the
+// table SetField indexes IS PPCToInternal, and SO is just CR_EMU_SO_BIT OR-ed in.
+static inline void CI_WriteCompare(PowerPC::PowerPCState& ppc_state, u32 crfd, bool less, bool greater)
 {
-  if (ppc_state.GetXER_SO())
-    cr_field |= PowerPC::CR_SO;
-  ppc_state.cr.SetField(crfd, cr_field);
+  using CR = PowerPC::ConditionRegister;
+  constexpr u64 lt = CR::PPCToInternal(PowerPC::CR_LT);
+  constexpr u64 gt = CR::PPCToInternal(PowerPC::CR_GT);
+  constexpr u64 eq = CR::PPCToInternal(PowerPC::CR_EQ);
+  const u64 value = less ? lt : (greater ? gt : eq);
+  ppc_state.cr.fields[crfd] = value | (u64{ppc_state.GetXER_SO()} << PowerPC::CR_EMU_SO_BIT);
 }
 
 // Carry/overflow helpers matching Interpreter semantics.
@@ -1693,17 +1698,22 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
 // flags only change which per-INSTRUCTION callback is emitted; this changes only the block TERMINAL.
 // They never touch the same operand and ExecuteOneBlock dispatches LinkBlock through the unchanged
 // generic indirect tail, so the two features are orthogonal and may be enabled together.
-template <bool instrumented, int edge, bool tail>
+template <bool instrumented, int edge, bool tail, int terminal>
 s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
   const auto& operands = *static_cast<const LinkBlockOperands*>(payload);
   const u8* const callback_site = static_cast<const u8*>(payload) - sizeof(AnyCallback);
-  // Everything that needs a call lives in the instrumented variant, so the variant on the tape is a
-  // leaf with no prologue. Decided before any state is touched.
-  if constexpr (!instrumented)
+  // (0) The folded terminal: exactly what InterpretBclr / InterpretBx leave in npc and LR for an
+  // unconditional blr / b / bl (their pc write is dead: step (1) overwrites it).
+  if constexpr (terminal == 1)
   {
-    if (PowerPC::PerformanceMonitorActive(ppc_state) || s_link_instrumented) [[unlikely]]
-      CI_MUSTTAIL return LinkBlock<true, edge, tail>(ppc_state, payload);
+    ppc_state.npc = LR(ppc_state) & ~u32{3};
+  }
+  else if constexpr (terminal >= 2)
+  {
+    if constexpr (terminal == 3)
+      LR(ppc_state) = operands.lr_value;
+    ppc_state.npc = operands.expected_pc;
   }
   // (1) End-of-block accounting — IDENTICAL to EndBlock<false>. Must run on EVERY exit (linked or
   // not) so pc/downcount/PMC bookkeeping is exactly what the unlinked path would have produced.
@@ -1818,17 +1828,35 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* p
   return static_cast<s32>(target - s_chain_base);
 }
 
-CachedInterpreter::AnyCallback CachedInterpreter::GetLinkBlockCallback(int edge, bool tail)
+CachedInterpreter::AnyCallback CachedInterpreter::GetLinkBlockCallback(int edge, bool tail,
+                                                                       bool instrumented,
+                                                                       int terminal)
 {
-  switch (edge)
-  {
-  case 1:
-    return tail ? AnyCallback{LinkBlock<false, 1, true>} : AnyCallback{LinkBlock<false, 1, false>};
-  case 2:
-    return tail ? AnyCallback{LinkBlock<false, 2, true>} : AnyCallback{LinkBlock<false, 2, false>};
-  default:
-    return tail ? AnyCallback{LinkBlock<false, 0, true>} : AnyCallback{LinkBlock<false, 0, false>};
-  }
+#define CI_LINK_FORM(EDGE, TERMINAL)                                                               \
+  (instrumented ? (tail ? AnyCallback{LinkBlock<true, EDGE, true, TERMINAL>} :                     \
+                          AnyCallback{LinkBlock<true, EDGE, false, TERMINAL>}) :                   \
+                  (tail ? AnyCallback{LinkBlock<false, EDGE, true, TERMINAL>} :                    \
+                          AnyCallback{LinkBlock<false, EDGE, false, TERMINAL>}))
+  if (edge == 0 && terminal == 0)
+    return CI_LINK_FORM(0, 0);
+  if (edge == 1 && terminal == 0)
+    return CI_LINK_FORM(1, 0);
+  if (edge == 1 && terminal == 2)
+    return CI_LINK_FORM(1, 2);
+  if (edge == 1 && terminal == 3)
+    return CI_LINK_FORM(1, 3);
+  if (edge == 2 && terminal == 0)
+    return CI_LINK_FORM(2, 0);
+  if (edge == 2 && terminal == 1)
+    return CI_LINK_FORM(2, 1);
+#undef CI_LINK_FORM
+  return nullptr;
+}
+
+bool CachedInterpreter::ExitIsLinkBlock(u32 link_target, bool dyn_linkable) const
+{
+  const bool link_ok = s_block_linking && !IsProfilingEnabled() && !IsDebuggingEnabled();
+  return link_ok && (link_target != 0xFFFFFFFF || (s_dyn_linking && dyn_linkable));
 }
 
 void CachedInterpreter::ValidateLinkTarget(const PowerPC::PowerPCState& ppc_state,
@@ -2850,16 +2878,16 @@ inline u32 CI_MicroMemEA(const PowerPC::PowerPCState& ppc_state, const MicroOpPa
 
 // 1 = done. 0 = nothing done, the access has to take the generic handler (MemCold). 2 = an inline
 // gather-pipe store filled the pipe: done, but run the burst check (MemGatherFlush).
-template <CIMemKind kind, bool indexed>
+template <CIMemKind kind, bool indexed, bool update>
 inline int CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
 {
   const u32 ea = CI_MicroMemEA<indexed>(ppc_state, m);
   u8* const page = CI_PagePtr(ppc_state, ea);
   if (page == nullptr || (ea & CI_AlignMask(kind)) != 0) [[unlikely]]
   {
-    if (m.rc != 0)
+    if constexpr (update)
       return 0;
-    if constexpr (kind == CIMemKind::STW)
+    else if constexpr (kind == CIMemKind::STW)
       return CI_GatherPipeFastStore<u32>(ppc_state, ea, ppc_state.gpr[m.rd]);
     else if constexpr (kind == CIMemKind::STH)
       return CI_GatherPipeFastStore<u16>(ppc_state, ea, static_cast<u16>(ppc_state.gpr[m.rd]));
@@ -2901,7 +2929,7 @@ inline int CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOpPayl
   default:
     break;
   }
-  if (m.rc != 0)
+  if constexpr (update)
     ppc_state.gpr[m.ra] = ea;
   return 1;
 }
@@ -2932,12 +2960,12 @@ static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
 // GPR/CR0/XER side effects byte-exactly (see the CI_* helpers). A nested struct so the handlers can
 // name CachedInterpreter's private record types.
 #define CI_MICRO_NEXT() CI_CHAIN_EXIT(chain, payload, sizeof(MicroOpPayload))
-#define CI_MICRO_MEM(NAME, KIND, INDEXED)                                                          \
+#define CI_MICRO_MEM(NAME, KIND, INDEXED, UPDATE)                                                  \
   template <bool chain>                                                                            \
   static s32 NAME(PowerPC::PowerPCState& ppc_state, const void* payload)                           \
   {                                                                                                \
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);                        \
-    const int done = CI_MicroMemAccess<CIMemKind::KIND, INDEXED>(ppc_state, m);                    \
+    const int done = CI_MicroMemAccess<CIMemKind::KIND, INDEXED, UPDATE>(ppc_state, m);            \
     if (done != 1) [[unlikely]]                                                                    \
     {                                                                                              \
       if (done == 2)                                                                               \
@@ -2967,11 +2995,7 @@ struct CachedInterpreter::MicroOpHandlers
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const s32 a = s32(ppc_state.gpr[m.ra]);
     const s32 b = s32(ppc_state.gpr[m.rb]);
-    u32 crf = 0;
-    crf |= (a < b) ? PowerPC::CR_LT : 0;
-    crf |= (a > b) ? PowerPC::CR_GT : 0;
-    crf |= (a == b) ? PowerPC::CR_EQ : 0;
-    CI_WriteCRField(ppc_state, m.rd, crf);
+    CI_WriteCompare(ppc_state, m.rd, a < b, a > b);
     CI_MICRO_NEXT();
   }
 
@@ -2981,11 +3005,7 @@ struct CachedInterpreter::MicroOpHandlers
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
-    u32 crf = 0;
-    crf |= (a < b) ? PowerPC::CR_LT : 0;
-    crf |= (a > b) ? PowerPC::CR_GT : 0;
-    crf |= (a == b) ? PowerPC::CR_EQ : 0;
-    CI_WriteCRField(ppc_state, m.rd, crf);
+    CI_WriteCompare(ppc_state, m.rd, a < b, a > b);
     CI_MICRO_NEXT();
   }
 
@@ -2995,11 +3015,7 @@ struct CachedInterpreter::MicroOpHandlers
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const s32 a = s32(ppc_state.gpr[m.ra]);
     const s32 b = s32(s16(m.imm & 0xFFFF));
-    u32 crf = 0;
-    crf |= (a < b) ? PowerPC::CR_LT : 0;
-    crf |= (a > b) ? PowerPC::CR_GT : 0;
-    crf |= (a == b) ? PowerPC::CR_EQ : 0;
-    CI_WriteCRField(ppc_state, m.rd, crf);
+    CI_WriteCompare(ppc_state, m.rd, a < b, a > b);
     CI_MICRO_NEXT();
   }
 
@@ -3009,11 +3025,7 @@ struct CachedInterpreter::MicroOpHandlers
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = m.imm & 0xFFFFu;
-    u32 crf = 0;
-    crf |= (a < b) ? PowerPC::CR_LT : 0;
-    crf |= (a > b) ? PowerPC::CR_GT : 0;
-    crf |= (a == b) ? PowerPC::CR_EQ : 0;
-    CI_WriteCRField(ppc_state, m.rd, crf);
+    CI_WriteCompare(ppc_state, m.rd, a < b, a > b);
     CI_MICRO_NEXT();
   }
 
@@ -3115,14 +3127,11 @@ struct CachedInterpreter::MicroOpHandlers
   static s32 RLWINM_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
-    const u32 rs_val = ppc_state.gpr[m.ra];
-    const u32 sh = (m.imm >> 0) & 31u;
-    const u32 mb = (m.imm >> 5) & 31u;
-    const u32 me = (m.imm >> 10) & 31u;
-    const u32 mask = MakeRotationMask(mb, me);
-    ppc_state.gpr[m.rd] = std::rotl(rs_val, sh) & mask;
+    // rb = SH, imm = the MB..ME mask, both decoded by the packer.
+    const u32 result = std::rotl(ppc_state.gpr[m.ra], m.rb) & m.imm;
+    ppc_state.gpr[m.rd] = result;
     if (m.rc)
-      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      CI_UpdateCR0(ppc_state, result);
     CI_MICRO_NEXT();
   }
 
@@ -3166,16 +3175,12 @@ struct CachedInterpreter::MicroOpHandlers
   static s32 RLWIMI_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
-    const u32 ra_old = ppc_state.gpr[m.rd];
-    const u32 rs_val = ppc_state.gpr[m.ra];
-    const u32 sh = (m.imm >> 0) & 31u;
-    const u32 mb = (m.imm >> 5) & 31u;
-    const u32 me = (m.imm >> 10) & 31u;
-    const u32 mask = MakeRotationMask(mb, me);
-    const u32 rot = std::rotl(rs_val, sh) & mask;
-    ppc_state.gpr[m.rd] = (ra_old & ~mask) | rot;
+    // rb = SH, imm = the MB..ME mask, both decoded by the packer.
+    const u32 mask = m.imm;
+    const u32 result = (ppc_state.gpr[m.rd] & ~mask) | (std::rotl(ppc_state.gpr[m.ra], m.rb) & mask);
+    ppc_state.gpr[m.rd] = result;
     if (m.rc)
-      CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
+      CI_UpdateCR0(ppc_state, result);
     CI_MICRO_NEXT();
   }
 
@@ -3652,6 +3657,14 @@ struct CachedInterpreter::MicroOpHandlers
   }
 
   template <bool chain>
+  static s32 CONST_SPR(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
+    ppc_state.spr[m.rd] = m.imm;
+    CI_MICRO_NEXT();
+  }
+
+  template <bool chain>
   static s32 ADD_IMM32(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
     const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
@@ -3659,20 +3672,34 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
-  CI_MICRO_MEM(MEM_LWZ, LWZ, false)
-  CI_MICRO_MEM(MEM_LBZ, LBZ, false)
-  CI_MICRO_MEM(MEM_LHZ, LHZ, false)
-  CI_MICRO_MEM(MEM_LHA, LHA, false)
-  CI_MICRO_MEM(MEM_STW, STW, false)
-  CI_MICRO_MEM(MEM_STB, STB, false)
-  CI_MICRO_MEM(MEM_STH, STH, false)
-  CI_MICRO_MEM(MEM_LWZX, LWZ, true)
-  CI_MICRO_MEM(MEM_LBZX, LBZ, true)
-  CI_MICRO_MEM(MEM_LHZX, LHZ, true)
-  CI_MICRO_MEM(MEM_LHAX, LHA, true)
-  CI_MICRO_MEM(MEM_STWX, STW, true)
-  CI_MICRO_MEM(MEM_STBX, STB, true)
-  CI_MICRO_MEM(MEM_STHX, STH, true)
+  CI_MICRO_MEM(MEM_LWZ, LWZ, false, false)
+  CI_MICRO_MEM(MEM_LBZ, LBZ, false, false)
+  CI_MICRO_MEM(MEM_LHZ, LHZ, false, false)
+  CI_MICRO_MEM(MEM_LHA, LHA, false, false)
+  CI_MICRO_MEM(MEM_STW, STW, false, false)
+  CI_MICRO_MEM(MEM_STB, STB, false, false)
+  CI_MICRO_MEM(MEM_STH, STH, false, false)
+  CI_MICRO_MEM(MEM_LWZX, LWZ, true, false)
+  CI_MICRO_MEM(MEM_LBZX, LBZ, true, false)
+  CI_MICRO_MEM(MEM_LHZX, LHZ, true, false)
+  CI_MICRO_MEM(MEM_LHAX, LHA, true, false)
+  CI_MICRO_MEM(MEM_STWX, STW, true, false)
+  CI_MICRO_MEM(MEM_STBX, STB, true, false)
+  CI_MICRO_MEM(MEM_STHX, STH, true, false)
+  CI_MICRO_MEM(MEM_LWZU, LWZ, false, true)
+  CI_MICRO_MEM(MEM_LBZU, LBZ, false, true)
+  CI_MICRO_MEM(MEM_LHZU, LHZ, false, true)
+  CI_MICRO_MEM(MEM_LHAU, LHA, false, true)
+  CI_MICRO_MEM(MEM_STWU, STW, false, true)
+  CI_MICRO_MEM(MEM_STBU, STB, false, true)
+  CI_MICRO_MEM(MEM_STHU, STH, false, true)
+  CI_MICRO_MEM(MEM_LWZUX, LWZ, true, true)
+  CI_MICRO_MEM(MEM_LBZUX, LBZ, true, true)
+  CI_MICRO_MEM(MEM_LHZUX, LHZ, true, true)
+  CI_MICRO_MEM(MEM_LHAUX, LHA, true, true)
+  CI_MICRO_MEM(MEM_STWUX, STW, true, true)
+  CI_MICRO_MEM(MEM_STBUX, STB, true, true)
+  CI_MICRO_MEM(MEM_STHUX, STH, true, true)
 
   // The memory micro-op cannot take the direct path: run it through the generic handler, then carry
   // on. Same signature, so both hops are tail calls and the hot handlers never make a call.
@@ -3755,6 +3782,7 @@ const CachedInterpreter::AnyCallback
             &MicroOpHandlers::MFSPR_RAW<false>,
             &MicroOpHandlers::MTSPR_RAW<false>,
             &MicroOpHandlers::ADD_IMM32<false>,
+            &MicroOpHandlers::CONST_SPR<false>,
             &MicroOpHandlers::MEM_LWZ<false>,
             &MicroOpHandlers::MEM_LBZ<false>,
             &MicroOpHandlers::MEM_LHZ<false>,
@@ -3769,6 +3797,20 @@ const CachedInterpreter::AnyCallback
             &MicroOpHandlers::MEM_STWX<false>,
             &MicroOpHandlers::MEM_STBX<false>,
             &MicroOpHandlers::MEM_STHX<false>,
+            &MicroOpHandlers::MEM_LWZU<false>,
+            &MicroOpHandlers::MEM_LBZU<false>,
+            &MicroOpHandlers::MEM_LHZU<false>,
+            &MicroOpHandlers::MEM_LHAU<false>,
+            &MicroOpHandlers::MEM_STWU<false>,
+            &MicroOpHandlers::MEM_STBU<false>,
+            &MicroOpHandlers::MEM_STHU<false>,
+            &MicroOpHandlers::MEM_LWZUX<false>,
+            &MicroOpHandlers::MEM_LBZUX<false>,
+            &MicroOpHandlers::MEM_LHZUX<false>,
+            &MicroOpHandlers::MEM_LHAUX<false>,
+            &MicroOpHandlers::MEM_STWUX<false>,
+            &MicroOpHandlers::MEM_STBUX<false>,
+            &MicroOpHandlers::MEM_STHUX<false>,
             &MicroOpHandlers::NOP<false>,
         },
         {
@@ -3826,6 +3868,7 @@ const CachedInterpreter::AnyCallback
             &MicroOpHandlers::MFSPR_RAW<true>,
             &MicroOpHandlers::MTSPR_RAW<true>,
             &MicroOpHandlers::ADD_IMM32<true>,
+            &MicroOpHandlers::CONST_SPR<true>,
             &MicroOpHandlers::MEM_LWZ<true>,
             &MicroOpHandlers::MEM_LBZ<true>,
             &MicroOpHandlers::MEM_LHZ<true>,
@@ -3840,6 +3883,20 @@ const CachedInterpreter::AnyCallback
             &MicroOpHandlers::MEM_STWX<true>,
             &MicroOpHandlers::MEM_STBX<true>,
             &MicroOpHandlers::MEM_STHX<true>,
+            &MicroOpHandlers::MEM_LWZU<true>,
+            &MicroOpHandlers::MEM_LBZU<true>,
+            &MicroOpHandlers::MEM_LHZU<true>,
+            &MicroOpHandlers::MEM_LHAU<true>,
+            &MicroOpHandlers::MEM_STWU<true>,
+            &MicroOpHandlers::MEM_STBU<true>,
+            &MicroOpHandlers::MEM_STHU<true>,
+            &MicroOpHandlers::MEM_LWZUX<true>,
+            &MicroOpHandlers::MEM_LBZUX<true>,
+            &MicroOpHandlers::MEM_LHZUX<true>,
+            &MicroOpHandlers::MEM_LHAUX<true>,
+            &MicroOpHandlers::MEM_STWUX<true>,
+            &MicroOpHandlers::MEM_STBUX<true>,
+            &MicroOpHandlers::MEM_STHUX<true>,
             &MicroOpHandlers::NOP<true>,
         },
 };
@@ -4597,7 +4654,8 @@ bool CachedInterpreter::HandleFunctionHooking(u32 address)
   return true;
 }
 
-void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable, bool always_taken)
+void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable, bool always_taken,
+                                      int merged_terminal, u32 lr_value)
 {
   // iCube: linkable IFF all hold: feature on; not profiling (the link trampoline is unprofiled);
   // not debugging (breakpoints/stepping must round-trip the dispatcher so a single ExecuteOneBlock
@@ -4647,14 +4705,21 @@ void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable, bool a
                                       0,
                                       0,
                                       0,
-                                      0};  // iCube: dynamic inline cache starts empty
+                                      0,  // iCube: dynamic inline cache starts empty
+                                      lr_value};
   // exitPtrs must point at the AnyCallback slot (start of this callback), so WriteLinkBlock can
   // compute rel = dest->normalEntry - exitPtrs and LinkBlock recovers the same callback_site.
   u8* const callback_site = GetWritableCodePtr();
   // Chain-capable so the terminal before it falls straight in; it has no chaining variant of its own
   // (its successor is chosen at run time), hence the empty patch.
   const int edge = dyn_only ? 2 : (always_taken ? 1 : 0);
-  WriteChainable(GetLinkBlockCallback(edge, s_chain_links), &operands, sizeof(operands), 0, 0, 0);
+  // The perfmon state is a block-cache feature flag (PowerPC::MMCRUpdated), like the JITs' jo use.
+  const bool instrumented =
+      s_link_instrumented || (js.curBlock->feature_flags & FEATURE_FLAG_PERFMON) != 0;
+  const AnyCallback link = GetLinkBlockCallback(edge, s_chain_links, instrumented, merged_terminal);
+  ASSERT_MSG(DYNA_REC, link != nullptr, "No LinkBlock form for edge {} terminal {}", edge,
+             merged_terminal);
+  WriteChainable(link, &operands, sizeof(operands), 0, 0, 0);
   if (dyn_only)
     return;
 
@@ -4941,6 +5006,21 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
       // Set when this op was emitted as a mid-block BranchCond, which needs its `skip` patched once
       // the exit records that follow it are written (it replaces ContinueIfNpc).
       u8* cond_branch_record = nullptr;
+      // An unconditional blr / b / bl that ends the block and whose exit is a LinkBlock is folded into
+      // that LinkBlock (1 = blr, 2 = b, 3 = bl; see LinkBlock's `terminal`). Idle-loop branches exit
+      // through a plain EndBlock and debugging wants the generic branch handlers, so both keep theirs.
+      int merged_terminal = 0;
+      if (op.canEndBlock && !mid_block_terminal && !op.skip && !IsDebuggingEnabled() &&
+          !op.branchIsIdleLoop && !op.branchIsCtrIdleLoop)
+      {
+        const bool plain_blr = op.inst.OPCD == 19 && op.inst.SUBOP10 == 16 && !op.inst.LK_3 &&
+                               (op.inst.BO_2 & BO_DONT_DECREMENT_FLAG) != 0 &&
+                               (op.inst.BO_2 & BO_DONT_CHECK_CONDITION) != 0;
+        if (op.inst.OPCD == 18 && ExitIsLinkBlock(op.branchTo, false))
+          merged_terminal = op.inst.LK ? 3 : 2;
+        else if (plain_blr && op.branchTo == 0xFFFFFFFF && ExitIsLinkBlock(0xFFFFFFFF, true))
+          merged_terminal = 1;
+      }
       const bool mid_block_trap =
           mid_block_terminal && (op.inst.OPCD == 3 || (op.inst.OPCD == 31 && op.inst.SUBOP10 == 4));
       if ((jo.memcheck && (op.opinfo->flags & FL_LOADSTORE) != 0) ||
@@ -5287,39 +5367,31 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             const auto form = CI_ClassifyLoadStore(c.inst);
             if (!form)
               return std::nullopt;
-            MicroOpCode code;
+            // D / X and plain / update forms are separate ops, laid out as four runs of the same
+            // seven kinds (see enum class MicroOpCode).
+            u32 kind_index;
             switch (form->kind)
             {
-            case CIMemKind::LWZ:
-              code = form->indexed ? MicroOpCode::MEM_LWZX : MicroOpCode::MEM_LWZ;
-              break;
-            case CIMemKind::LBZ:
-              code = form->indexed ? MicroOpCode::MEM_LBZX : MicroOpCode::MEM_LBZ;
-              break;
-            case CIMemKind::LHZ:
-              code = form->indexed ? MicroOpCode::MEM_LHZX : MicroOpCode::MEM_LHZ;
-              break;
-            case CIMemKind::LHA:
-              code = form->indexed ? MicroOpCode::MEM_LHAX : MicroOpCode::MEM_LHA;
-              break;
-            case CIMemKind::STW:
-              code = form->indexed ? MicroOpCode::MEM_STWX : MicroOpCode::MEM_STW;
-              break;
-            case CIMemKind::STB:
-              code = form->indexed ? MicroOpCode::MEM_STBX : MicroOpCode::MEM_STB;
-              break;
-            case CIMemKind::STH:
-              code = form->indexed ? MicroOpCode::MEM_STHX : MicroOpCode::MEM_STH;
-              break;
+            case CIMemKind::LWZ: kind_index = 0; break;
+            case CIMemKind::LBZ: kind_index = 1; break;
+            case CIMemKind::LHZ: kind_index = 2; break;
+            case CIMemKind::LHA: kind_index = 3; break;
+            case CIMemKind::STW: kind_index = 4; break;
+            case CIMemKind::STB: kind_index = 5; break;
+            case CIMemKind::STH: kind_index = 6; break;
             default:
               return std::nullopt;
             }
+            constexpr u32 kinds = 7;
+            const MicroOpCode first = form->update ? MicroOpCode::MEM_LWZU : MicroOpCode::MEM_LWZ;
+            const auto code = static_cast<MicroOpCode>(static_cast<u32>(first) +
+                                                       (form->indexed ? kinds : 0) + kind_index);
             // rd doubles as RS for stores (same instruction field); imm keeps the whole word.
             return MicroOp{code,
                            static_cast<u8>(c.inst.RD),
                            static_cast<u8>(c.inst.RA),
                            static_cast<u8>(c.inst.RB),
-                           static_cast<u8>(form->update),
+                           0,
                            c.inst.hex};
           };
 
@@ -5440,22 +5512,18 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.op = MicroOpCode::RLWIMI_IMM;
                 mu.rd = next.inst.RA;  // destination RA
                 mu.ra = next.inst.RS;  // source RS
-                mu.rb = 0;
+                // The rotate amount and the MB..ME mask are constants: decode them once, here.
+                mu.rb = static_cast<u8>(next.inst.SH & 31u);
                 mu.rc = rc_of(next);
-                // Pack SH/MB/ME into imm: [0..4]=SH, [5..9]=MB, [10..14]=ME
-                mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
-                         ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
-                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                mu.imm = MakeRotationMask(next.inst.MB & 31u, next.inst.ME & 31u);
                 break;
               case 21:  // rlwinm/rlwinm.
                 mu.op = MicroOpCode::RLWINM_IMM;
                 mu.rd = next.inst.RA;  // destination RA
                 mu.ra = next.inst.RS;  // source RS
-                mu.rb = 0;
+                mu.rb = static_cast<u8>(next.inst.SH & 31u);
                 mu.rc = rc_of(next);
-                mu.imm = (static_cast<u32>(next.inst.SH) & 31u) |
-                         ((static_cast<u32>(next.inst.MB) & 31u) << 5) |
-                         ((static_cast<u32>(next.inst.ME) & 31u) << 10);
+                mu.imm = MakeRotationMask(next.inst.MB & 31u, next.inst.ME & 31u);
                 {
                   // NOP elimination: rlwinm rA,rA,0,0,31 with Rc==0
                   const bool is_identity = (next.inst.SH & 31u) == 0 && (next.inst.MB & 31u) == 0 &&
@@ -6120,6 +6188,24 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 GetBranchCondCallback(cr_bit, bo_checks_ctr, is_bclr, merged_continue, true),
                 &branch_operands, sizeof(branch_operands));
           }
+          else if (merged_terminal != 0)
+          {
+            // Folded into the LinkBlock that WriteEndBlock emits below: no terminal record.
+          }
+          else if (mid_block_terminal && op.inst.OPCD == 18 && !IsDebuggingEnabled() &&
+                   !op.branchIsIdleLoop && !op.branchIsCtrIdleLoop)
+          {
+            // A followed b / bl: the block simply carries on at the target, and nothing downstream
+            // reads pc or npc before the next terminal rewrites them. All that is left of the
+            // instruction is bl's LR write.
+            if (op.inst.LK)
+            {
+              const MicroOpPayload record = {static_cast<u8>(SPR_LR), 0, 0, 0, js.compilerPC + 4};
+              const auto code = static_cast<size_t>(MicroOpCode::CONST_SPR);
+              WriteChainable(MicroOpHandlers::table[0][code], MicroOpHandlers::table[1][code],
+                             &record, sizeof(record));
+            }
+          }
           else if (op.canEndBlock && op.inst.OPCD == 16 && !IsDebuggingEnabled())
             WriteChainable(AnyCallback{InterpretBcx<false>}, AnyCallback{InterpretBcx<true>}, &operands,
                            sizeof(operands));
@@ -6187,9 +6273,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // blocks stay on the plain EndBlock path.
         const bool dyn_terminal = !idle_terminal && op.inst.OPCD == 19 &&
                                   (op.inst.SUBOP10 == 16 || op.inst.SUBOP10 == 528);
-        // b / bl: the static target is the only possible npc.
-        const bool always_taken = op.inst.OPCD == 18;
-        WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo, dyn_terminal, always_taken);
+        // b / bl: the static target is the only possible npc. The same holds for the exit of a
+        // mid-block bc, which is only reached when the branch was taken.
+        const bool always_taken =
+            op.inst.OPCD == 18 || (op.inst.OPCD == 16 && mid_block_terminal && !idle_terminal);
+        WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo, dyn_terminal, always_taken,
+                      merged_terminal, js.compilerPC + 4);
       }
       if (cond_branch_record != nullptr && !HasWriteFailed())
       {

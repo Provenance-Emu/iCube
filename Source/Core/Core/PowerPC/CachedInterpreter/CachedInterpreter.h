@@ -90,10 +90,11 @@ enum class MicroOpCode : u8
   MFSPR_RAW,   // RD = SPR[imm]; LR and CTR only (plain moves, legal in user mode)
   MTSPR_RAW,   // SPR[imm] = RD; LR and CTR only
   ADD_IMM32,   // RD = RA + imm (full 32-bit, precomputed): addi / addis with rA != 0
+  CONST_SPR,   // SPR[rd] = imm: the LR write of a followed (mid-block) bl
   // iCube: integer load/stores inside a fused run. imm holds the ORIGINAL instruction word (the D-form
   // displacement is its low 16 bits, and the cold path re-runs the generic handler from it); rd is
-  // RD/RS, ra is RA (never 0, enforced by the packer), rb is RB for the X forms; rc != 0 marks the
-  // update form (RA = EA after the access).
+  // RD/RS, ra is RA (never 0, enforced by the packer), rb is RB for the X forms. The update forms
+  // (RA = EA after the access) are the MEM_*U / MEM_*UX ops below.
   MEM_LWZ,
   MEM_LBZ,
   MEM_LHZ,
@@ -108,6 +109,21 @@ enum class MicroOpCode : u8
   MEM_STWX,
   MEM_STBX,
   MEM_STHX,
+  // Update forms (rA = EA after the access): separate ops, so no handler tests for it.
+  MEM_LWZU,
+  MEM_LBZU,
+  MEM_LHZU,
+  MEM_LHAU,
+  MEM_STWU,
+  MEM_STBU,
+  MEM_STHU,
+  MEM_LWZUX,
+  MEM_LBZUX,
+  MEM_LHZUX,
+  MEM_LHAUX,
+  MEM_STWUX,
+  MEM_STBUX,
+  MEM_STHUX,
   NOP,
   COUNT,
 };
@@ -241,7 +257,7 @@ private:
   // trampoline (and records the LinkData for upstream patching) instead of a plain EndBlock. Default
   // UINT32_MAX preserves the stock behavior for all the non-static call sites.
   void WriteEndBlock(u32 link_target = 0xFFFFFFFF, bool dyn_linkable = false,
-                     bool always_taken = false);
+                     bool always_taken = false, int merged_terminal = 0, u32 lr_value = 0);
 
   // Finds a free memory region and sets the code emitter to point at that region.
   // Returns false if no free memory region can be found.
@@ -330,9 +346,17 @@ private:
   // 1 = unconditional static branch (npc always equals the static target: no pc compare),
   // 2 = blr/bctr (no static edge at all: straight to the dynamic cache). `tail` = follow a link with a
   // tail call into the successor (MAIN_CIR_RECORD_CHAINING), decided at emit time as well.
-  template <bool instrumented, int edge, bool tail>
+  // `terminal` folds the block's last branch INTO this record, so a return or a jump is one record
+  // instead of two: 0 = none (a terminal record precedes), 1 = blr (npc = LR), 2 = b, 3 = bl
+  // (npc = the static target; bl also sets LR). `instrumented` (performance monitor, hot-block
+  // profiler, link validation) is chosen at emit time: the profiler/validate switches are fixed at
+  // Init and the perfmon state is one of the block's feature flags.
+  template <bool instrumented, int edge, bool tail, int terminal>
   static s32 LinkBlock(PowerPC::PowerPCState& ppc_state, const void* payload);
-  static AnyCallback GetLinkBlockCallback(int edge, bool tail);
+  // Null for combinations that do not exist (terminal 1 needs edge 2; terminals 2/3 need edge 1).
+  static AnyCallback GetLinkBlockCallback(int edge, bool tail, bool instrumented, int terminal);
+  // Whether WriteEndBlock would emit a LinkBlock (rather than a plain EndBlock) for this exit.
+  bool ExitIsLinkBlock(u32 link_target, bool dyn_linkable) const;
   static s32 LinkBlock(std::ostream& stream, const void* payload);
   // iCube: MAIN_CIR_BLOCK_LINKING_VALIDATE check shared by the static and dynamic link paths.
   static void ValidateLinkTarget(const PowerPC::PowerPCState& ppc_state, const u8* callback_site,
@@ -617,6 +641,8 @@ struct CachedInterpreter::LinkBlockOperands
   u32 dyn_generation;
   s32 dyn_rel;
   u32 : 32;
+  // iCube: LR value for a folded `bl` terminal (LinkBlock terminal 3); fills what was padding.
+  u32 lr_value;
 };
 
 struct CachedInterpreter::InterpretOperands

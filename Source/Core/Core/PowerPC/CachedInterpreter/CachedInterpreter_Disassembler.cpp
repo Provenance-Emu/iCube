@@ -179,10 +179,10 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
     }
     for (const AnyCallback handler : GetMicroOpCallbacks())
       add(handler, static_cast<ErasedDisassemble>(MicroOpRecord));
-    for (int edge = 0; edge < 3; ++edge)
+    for (int form = 0; form < 3 * 2 * 2 * 4; ++form)
     {
-      add(GetLinkBlockCallback(edge, false), static_cast<ErasedDisassemble>(CachedInterpreter::LinkBlock));
-      add(GetLinkBlockCallback(edge, true), static_cast<ErasedDisassemble>(CachedInterpreter::LinkBlock));
+      add(GetLinkBlockCallback(form % 3, (form / 3) % 2 != 0, (form / 6) % 2 != 0, form / 12),
+          static_cast<ErasedDisassemble>(CachedInterpreter::LinkBlock));
     }
     add(AnyCallback{InterpretBcx<false>}, static_cast<ErasedDisassemble>(InterpretBcx));
     add(AnyCallback{InterpretBcx<true>}, static_cast<ErasedDisassemble>(InterpretBcx));
