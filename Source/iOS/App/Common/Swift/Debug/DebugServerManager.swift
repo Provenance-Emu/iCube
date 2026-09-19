@@ -22,6 +22,65 @@
 // iCube-Swift.h.
 
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
+
+/// Reference-counted wrapper around `UIApplication.isIdleTimerDisabled`.
+///
+/// Two independent features need the device awake, and the flag is a single global: a game on
+/// screen, and the debug/bench HTTP server. Setting the flag directly meant whoever finished
+/// last re-enabled sleep for the other — exiting a game to the library re-armed auto-lock even
+/// though a remote test session was still driving the app over `iproxy`, and the phone then
+/// locked, iOS suspended the app, and every later request failed with a connection reset.
+/// Game Mode does not inhibit auto-lock; only this flag does.
+/// Swift-only on purpose: `release` is a reserved Objective-C selector, so this type is never
+/// exposed to ObjC. ObjC++ callers should go through `DebugServerManager` instead.
+///
+/// Deliberately NOT `@MainActor`: the emulation reason is dropped from `deinit`, which is a
+/// nonisolated context. The reason set is guarded by a lock and the UIKit flag is only ever
+/// touched on the main thread.
+enum KeepAwake {
+  enum Reason: Hashable {
+    case emulation
+    case debugServer
+  }
+
+  private static let lock = NSLock()
+  private static var reasons: Set<Reason> = []
+
+  /// Keep the device awake for `reason` until the matching `release`.
+  static func acquire(_ reason: Reason) {
+    update { $0.insert(reason) }
+  }
+
+  /// Drop `reason`; the device may sleep again once no reason remains.
+  static func release(_ reason: Reason) {
+    update { $0.remove(reason) }
+  }
+
+  private static func update(_ body: (inout Set<Reason>) -> Void) {
+    lock.lock()
+    body(&reasons)
+    let disabled = !reasons.isEmpty
+    let count = reasons.count
+    lock.unlock()
+
+    if Thread.isMainThread {
+      apply(disabled, count)
+    } else {
+      DispatchQueue.main.async { apply(disabled, count) }
+    }
+  }
+
+  private static func apply(_ disabled: Bool, _ count: Int) {
+    #if canImport(UIKit)
+    guard UIApplication.shared.isIdleTimerDisabled != disabled else { return }
+    UIApplication.shared.isIdleTimerDisabled = disabled
+    NSLog("[KeepAwake] idle timer disabled = \(disabled) (reasons held: \(count))")
+    #endif
+  }
+}
 
 @objc(DebugServerManager)
 @MainActor
@@ -87,6 +146,9 @@ final class DebugServerManager: NSObject {
       do {
         try await server.start()
         self.isRunning = true
+        // A remote session drives the app with no touches, so the phone would otherwise
+        // auto-lock and iOS would suspend the app out from under the test.
+        KeepAwake.acquire(.debugServer)
         self.serverURL = self.server.serverURL?.absoluteString ?? "http://127.0.0.1:\(Self.port)/"
         NSLog("[DebugServer] listening on \(self.serverURL) (loopback only; iproxy to reach over USB)")
       } catch {
@@ -101,6 +163,7 @@ final class DebugServerManager: NSObject {
     DebugEventBus.shared.stopProducers()
     server.stop()
     isRunning = false
+    KeepAwake.release(.debugServer)
     serverURL = ""
   }
 }

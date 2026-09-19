@@ -22,8 +22,22 @@
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 
-// 512 MiB... hopefully this is enough, because we can't allocate more if we need it
-constexpr size_t EXECUTABLE_REGION_SIZE = 536870912;
+// Sized to what actually gets allocated out of it, because on an iOS 26 TXM device this
+// number is NOT just reserved address space:
+//   * JitArm64 takes TOTAL_CODE_SIZE (= NEAR*2 + FAR*2 = 256 MiB, Jit.cpp) in ONE
+//     allocation, so the region has to exceed that outright.
+//   * VertexLoaderARM64 takes 4 KiB per vertex format; the allocator rounds each up to a
+//     16 KiB page, and a game can build a lot of them.
+//   * The allocator itself adds pagesize-1 + sizeof(void*) per block on top of lwmem's
+//     own headers.
+// 32 MiB of slack over the JIT's 256 MiB covers the latter two.
+//
+// Why not just ask for more: authorizing this region under TXM means a debugger WRITES one
+// byte into every 16 KiB page of it, which faults every one of those pages in. The size is
+// therefore paid twice over -- once as resident dirty memory for the whole run, and once as
+// bless time at boot (a 512 MiB region measured ~12 min unpipelined, ~10 s pipelined, with
+// the app frozen throughout). Keep it tight.
+constexpr size_t EXECUTABLE_REGION_SIZE = 288 * 1024 * 1024;
 
 static u8* g_rx_region = nullptr;
 static ptrdiff_t g_rw_region_diff = 0;

@@ -46,7 +46,14 @@ CMD_PREPARE_REGION = 1
 PAGE_SIZE = 0x4000      # arm64 iOS
 FILL_BYTE = 0x69        # the byte StikDebug writes
 
-PAGES_PER_WRITE = max(1, int(os.environ.get("DOL_BLESS_PAGES_PER_WRITE", "1")))
+# Pages blessed per debugger write. LLDB's WriteMemory is synchronous, so unlike
+# StikDebug (which pipelines 128 one-byte packets per gdb-remote round trip) the only way
+# to amortise the round trip here is to make each write SPAN pages: a write covering k
+# pages faults in, and therefore blesses, all k. One page per write measures ~45 pages/s
+# over USB, i.e. minutes of a frozen app for a region this size; 64 pages (1 MiB) per write
+# cuts that to a few hundred calls. Set DOL_BLESS_PAGES_PER_WRITE=1 for the
+# StikDebug-identical behaviour if a spanning write is ever found not to bless every page.
+PAGES_PER_WRITE = max(1, int(os.environ.get("DOL_BLESS_PAGES_PER_WRITE", "64")))
 HONOR_DETACH = os.environ.get("DOL_BLESS_HONOR_DETACH") == "1"
 
 
