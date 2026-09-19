@@ -111,13 +111,6 @@ s32 CachedInterpreter::InterpretChained(std::ostream& stream, const void* payloa
   return Interpret<false>(stream, *static_cast<const InterpretOperands*>(payload));
 }
 
-s32 CachedInterpreter::InterpretSpecializedChained(std::ostream& stream, const void* payload)
-{
-  const auto& operands = *static_cast<const SpecializedInterpretOperands*>(payload);
-  fmt::println(stream, "InterpretSpecialized(op_id={})", operands.op_id);
-  return sizeof(AnyCallback) + sizeof(operands);
-}
-
 template <bool write_pc>
 s32 CachedInterpreter::ExecuteFusedPsqSeq(std::ostream& stream,
                                           const ExecuteFusedPsqSeqOperands& operands)
@@ -222,10 +215,8 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
         static_cast<ErasedDisassemble>(CachedInterpreter::InterpretChained));
     add(AnyCallback{InterpretChained<true>},
         static_cast<ErasedDisassemble>(CachedInterpreter::InterpretChained));
-    add(AnyCallback{InterpretSpecializedChained<false>},
-        static_cast<ErasedDisassemble>(CachedInterpreter::InterpretSpecializedChained));
-    add(AnyCallback{InterpretSpecializedChained<true>},
-        static_cast<ErasedDisassemble>(CachedInterpreter::InterpretSpecializedChained));
+    for (const AnyCallback direct : GetInterpretDirectCallbacks())
+      add(direct, static_cast<ErasedDisassemble>(CachedInterpreter::InterpretChained));
     const auto end = std::ranges::sort(sorted_lookup, {}, &LookupKV::first);
     ASSERT_MSG(DYNA_REC, std::ranges::adjacent_find(sorted_lookup, {}, &LookupKV::first) == end,
                "Sorted lookup should not contain duplicate keys.");

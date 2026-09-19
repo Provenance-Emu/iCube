@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <span>
 #include <string>
+#include <vector>
 
 #include "Common/CommonTypes.h"
 #include "Common/Visibility.h"
@@ -412,9 +413,15 @@ private:
   template <bool chain>
   static s32 InterpretChained(PowerPC::PowerPCState& ppc_state, const void* payload);
   static s32 InterpretChained(std::ostream& stream, const void* payload);
-  template <bool chain>
-  static s32 InterpretSpecializedChained(PowerPC::PowerPCState& ppc_state, const void* payload);
-  static s32 InterpretSpecializedChained(std::ostream& stream, const void* payload);
+  // iCube: direct records. One instantiation per Interpreter:: handler, picked at emit time, so the
+  // call target is a compile-time constant (no op-id switch, no jump table, no indirect call; LTO can
+  // inline the handler body). Same InterpretOperands payload and semantics as InterpretChained.
+  template <void (*Handler)(Interpreter&, UGeckoInstruction), bool chain>
+  static s32 InterpretDirect(PowerPC::PowerPCState& ppc_state, const void* payload);
+  // Null when `func` has no direct instantiation.
+  static AnyCallback GetInterpretDirectCallback(void (*func)(Interpreter&, UGeckoInstruction),
+                                                bool chain);
+  static std::vector<AnyCallback> GetInterpretDirectCallbacks();
   // iCube WIN#2: execute a fused run of pure-register integer/immediate micro-ops via a computed-goto
   // dispatch over the packed MicroOp array (MAIN_CIR_MICROOP_FUSION). Each handler reproduces the
   // corresponding interpreter op's GPR/CR0/XER side-effects byte-exactly (CR/XER via the same

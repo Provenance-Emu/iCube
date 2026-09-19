@@ -2186,15 +2186,47 @@ s32 CachedInterpreter::InterpretSpecialized(PowerPC::PowerPCState& ppc_state,
   return specialized_distance;
 }
 
-// iCube: chain-capable form of the non-terminal specialized record. Same direct (inlinable) handler
-// calls through the op-id switch; never emitted under the specialized-ops validate harness.
-template <bool chain>
-s32 CachedInterpreter::InterpretSpecializedChained(PowerPC::PowerPCState& ppc_state,
-                                                   const void* payload)
+// iCube: direct records. See the declaration. The list is every op the specialized switch covered
+// plus the common non-terminal leftovers (CR logic, mfcr/mtcrf, cache hints, ...); anything else keeps
+// the generic InterpretChained record and its indirect call.
+#define CIR_DIRECT_EXTRA_OPS(X)                                                                    \
+  X(mfcr) X(mtcrf) X(mcrf) X(mcrxr) X(crand) X(crandc) X(creqv) X(crnand) X(crnor) X(cror)         \
+  X(crorc) X(crxor) X(mftb) X(mfsr) X(mfsrin) X(dcbt) X(dcbtst) X(dcbf) X(dcbst) X(dcbi) X(icbi)   \
+  X(eieio) X(sync)
+#define CIR_DIRECT_OP_LIST(X)                                                                      \
+  CIR_SPECIALIZED_OP_LIST(X)                                                                       \
+  CIR_DIRECT_EXTRA_OPS(X)
+
+template <void (*Handler)(Interpreter&, UGeckoInstruction), bool chain>
+s32 CachedInterpreter::InterpretDirect(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
-  const auto& operands = *static_cast<const SpecializedInterpretOperands*>(payload);
-  CIR_SPEC_SWITCH(static_cast<CirSpecOp>(operands.op_id), operands);
-  CI_CHAIN_EXIT(chain, payload, sizeof(SpecializedInterpretOperands));
+  const auto& operands = *static_cast<const InterpretOperands*>(payload);
+  Handler(operands.interpreter, operands.inst);
+  CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
+}
+
+CachedInterpreter::AnyCallback
+CachedInterpreter::GetInterpretDirectCallback(void (*func)(Interpreter&, UGeckoInstruction),
+                                              bool chain)
+{
+#define CIR_DIRECT_PICK(name)                                                                      \
+  if (func == &Interpreter::name)                                                                  \
+    return chain ? AnyCallback{InterpretDirect<&Interpreter::name, true>} :                        \
+                   AnyCallback{InterpretDirect<&Interpreter::name, false>};
+  CIR_DIRECT_OP_LIST(CIR_DIRECT_PICK)
+#undef CIR_DIRECT_PICK
+  return nullptr;
+}
+
+std::vector<CachedInterpreter::AnyCallback> CachedInterpreter::GetInterpretDirectCallbacks()
+{
+  std::vector<AnyCallback> callbacks;
+#define CIR_DIRECT_BOTH(name)                                                                      \
+  callbacks.push_back(AnyCallback{InterpretDirect<&Interpreter::name, false>});                    \
+  callbacks.push_back(AnyCallback{InterpretDirect<&Interpreter::name, true>});
+  CIR_DIRECT_OP_LIST(CIR_DIRECT_BOTH)
+#undef CIR_DIRECT_BOTH
+  return callbacks;
 }
 
 template <bool write_pc>
@@ -5996,9 +6028,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                                                               static_cast<u16>(SpecOpId(func))};
           if (!op.canEndBlock && !s_specialized_ops_validate)
           {
-            WriteChainable(AnyCallback{InterpretSpecializedChained<false>},
-                           AnyCallback{InterpretSpecializedChained<true>}, &spec_operands,
-                           sizeof(spec_operands));
+            // The direct record replaces the op-id switch for every op on the specialized list.
+            WriteChainable(GetInterpretDirectCallback(func, false),
+                           GetInterpretDirectCallback(func, true), &operands, sizeof(operands));
           }
           else
           {
@@ -6048,6 +6080,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                            sizeof(operands));
           else if (op.canEndBlock)
             Write(CallbackCast(Interpret<true>), operands);
+          else if (const AnyCallback direct = GetInterpretDirectCallback(func, false))
+            WriteChainable(direct, GetInterpretDirectCallback(func, true), &operands,
+                           sizeof(operands));
           else
             WriteChainable(AnyCallback{InterpretChained<false>}, AnyCallback{InterpretChained<true>},
                            &operands, sizeof(operands));
