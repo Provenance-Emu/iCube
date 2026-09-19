@@ -173,9 +173,12 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
     {
       for (u32 form = 0; form < 8; ++form)
       {
-        add(GetLoadStoreFastCallback(static_cast<CIMemKind>(kind), (form & 1) != 0, (form & 2) != 0,
-                                     (form & 4) != 0),
-            static_cast<ErasedDisassemble>(CachedInterpreter::LoadStoreFast));
+        const auto pick = [&](bool checked) {
+          return GetLoadStoreFastCallback(static_cast<CIMemKind>(kind), (form & 1) != 0,
+                                          (form & 2) != 0, (form & 4) != 0, checked);
+        };
+        add(pick(false), static_cast<ErasedDisassemble>(CachedInterpreter::LoadStoreFast));
+        add(pick(true), static_cast<ErasedDisassemble>(CachedInterpreter::LoadStoreFastChecked));
       }
     }
     add(AnyCallback{ExecuteMicroOps<false>},

@@ -339,14 +339,18 @@ private:
   // All of these are CHAIN-CAPABLE records (see CachedInterpreterEmitter::WriteChainable): erased
   // (ppc_state, payload) signature so one record can tail-call the next, and a `chain` variant that
   // does. Load/stores that can end a block never take this path, so there is no write_pc variant.
-  template <CIMemKind kind, bool indexed, bool update, bool chain>
+  // `checked` is the MMU-mode form: the record is an InterpretAndCheckExceptionsOperands and the cold
+  // path ends the block on a DSI / program exception exactly like InterpretAndCheckExceptions. The
+  // direct path is the same: a BAT-mapped page cannot fault, and BATs outrank the page table.
+  template <CIMemKind kind, bool indexed, bool update, bool chain, bool checked>
   static s32 LoadStoreFast(PowerPC::PowerPCState& ppc_state, const void* payload);
-  template <CIMemKind kind, bool chain>
+  template <CIMemKind kind, bool chain, bool checked>
   static s32 LoadStoreFastCold(PowerPC::PowerPCState& ppc_state, const void* payload);
   static s32 LoadStoreFast(std::ostream& stream, const void* payload);
+  static s32 LoadStoreFastChecked(std::ostream& stream, const void* payload);
   // Null when the (kind, indexed, update) combination does not exist.
-  static AnyCallback GetLoadStoreFastCallback(CIMemKind kind, bool indexed, bool update,
-                                              bool chain);
+  static AnyCallback GetLoadStoreFastCallback(CIMemKind kind, bool indexed, bool update, bool chain,
+                                              bool checked);
   // iCube: chain-capable forms of the generic and the specialized non-terminal records.
   template <bool chain>
   static s32 InterpretChained(PowerPC::PowerPCState& ppc_state, const void* payload);

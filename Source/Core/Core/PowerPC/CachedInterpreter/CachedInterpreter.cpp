@@ -2278,11 +2278,12 @@ inline bool CI_TryGatherPipeStore(PowerPC::PowerPCState& ppc_state, UGeckoInstru
 
 // Everything the direct path declines. Takes only the record (so it can carry the chain on) and
 // re-derives the effective address from the instruction word; this is the cold path.
-template <CIMemKind kind, bool chain>
+template <CIMemKind kind, bool chain, bool checked>
 [[gnu::noinline]] s32 CachedInterpreter::LoadStoreFastCold(PowerPC::PowerPCState& ppc_state,
                                                            const void* payload)
 {
-  const auto& operands = *static_cast<const InterpretOperands*>(payload);
+  using Record = std::conditional_t<checked, InterpretAndCheckExceptionsOperands, InterpretOperands>;
+  const Record& operands = *static_cast<const Record*>(payload);
   if constexpr (kind == CIMemKind::STW || kind == CIMemKind::STB || kind == CIMemKind::STH ||
                 kind == CIMemKind::STFS || kind == CIMemKind::STFD)
   {
@@ -2293,17 +2294,30 @@ template <CIMemKind kind, bool chain>
     const u32 ea = ppc_state.gpr[inst.RA] +
                    (indexed ? ppc_state.gpr[inst.RB] : static_cast<u32>(s32{inst.SIMM_16}));
     if (!update && CI_TryGatherPipeStore<kind>(ppc_state, inst, ea))
-      CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
+      CI_CHAIN_EXIT(chain, payload, sizeof(Record));
   }
   // The exact generic interpreter handler captured at emit time: DSI/alignment/MMIO semantics are
   // those of the generic path.
   operands.func(operands.interpreter, operands.inst);
-  CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
+  if constexpr (checked)
+  {
+    // InterpretAndCheckExceptions<false>: deliver the exception and end the block (a chain member
+    // returning 0 ends the chain and the block, see ExecuteOneBlock).
+    if ((ppc_state.Exceptions & (EXCEPTION_DSI | EXCEPTION_PROGRAM)) != 0)
+    {
+      ppc_state.pc = operands.current_pc;
+      ppc_state.downcount -= operands.downcount;
+      operands.power_pc.CheckExceptions();
+      return 0;
+    }
+  }
+  CI_CHAIN_EXIT(chain, payload, sizeof(Record));
 }
 
-template <CIMemKind kind, bool indexed, bool update, bool chain>
+template <CIMemKind kind, bool indexed, bool update, bool chain, bool checked>
 s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
+  using Record = std::conditional_t<checked, InterpretAndCheckExceptionsOperands, InterpretOperands>;
   const UGeckoInstruction inst = static_cast<const InterpretOperands*>(payload)->inst;
 
   // rA != 0 is guaranteed by the emitter (rA == 0 forms stay on the generic handler), except for dcbz,
@@ -2317,14 +2331,14 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
     ea += ppc_state.gpr[inst.RA];
   u8* const page = CI_PagePtr(ppc_state, ea);
   if (page == nullptr || (ea & CI_AlignMask(kind)) != 0) [[unlikely]]
-    CI_MUSTTAIL return LoadStoreFastCold<kind, chain>(ppc_state, payload);
+    CI_MUSTTAIL return LoadStoreFastCold<kind, chain, checked>(ppc_state, payload);
   const u32 offset = ea & CI_PAGE_OFFSET_MASK;
   u8* const host = page + offset;
 
   if constexpr (CI_IsSubWordStore(kind))
   {
     if (CI_IsWriteInhibitedPage(ppc_state, ea)) [[unlikely]]
-      CI_MUSTTAIL return LoadStoreFastCold<kind, chain>(ppc_state, payload);
+      CI_MUSTTAIL return LoadStoreFastCold<kind, chain, checked>(ppc_state, payload);
   }
 
   switch (kind)
@@ -2376,7 +2390,7 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
   case CIMemKind::STFD:
     // The second word may sit on the next BAT page, which need not be host-contiguous.
     if (offset > PowerPC::BAT_PAGE_SIZE - sizeof(u64)) [[unlikely]]
-      CI_MUSTTAIL return LoadStoreFastCold<kind, chain>(ppc_state, payload);
+      CI_MUSTTAIL return LoadStoreFastCold<kind, chain, checked>(ppc_state, payload);
     if constexpr (kind == CIMemKind::LFD)
       ppc_state.ps[inst.FD].SetPS0(Common::swap64(CI_ReadHost<u64>(host)));
     else
@@ -2389,7 +2403,7 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
     const u32 first = inst.RD;
     const u32 bytes = (32 - first) * sizeof(u32);
     if (offset + bytes > PowerPC::BAT_PAGE_SIZE || ppc_state.msr.LE) [[unlikely]]
-      CI_MUSTTAIL return LoadStoreFastCold<kind, chain>(ppc_state, payload);
+      CI_MUSTTAIL return LoadStoreFastCold<kind, chain, checked>(ppc_state, payload);
     u8* p = host;
     for (u32 r = first; r < 32; ++r, p += sizeof(u32))
     {
@@ -2415,7 +2429,7 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
     if (HID2(ppc_state).LSQE == 0 || type != QUANTIZE_FLOAT ||
         (!single && offset > PowerPC::BAT_PAGE_SIZE - 2 * sizeof(u32))) [[unlikely]]
     {
-      CI_MUSTTAIL return LoadStoreFastCold<kind, chain>(ppc_state, payload);
+      CI_MUSTTAIL return LoadStoreFastCold<kind, chain, checked>(ppc_state, payload);
     }
     if constexpr (kind == CIMemKind::PSQL)
     {
@@ -2443,7 +2457,7 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
     if (!HID0(ppc_state).DCE ||
         (s_low_dcbz_hack && ea >= 0x80000000 && ea < 0x80008000)) [[unlikely]]
     {
-      CI_MUSTTAIL return LoadStoreFastCold<kind, chain>(ppc_state, payload);
+      CI_MUSTTAIL return LoadStoreFastCold<kind, chain, checked>(ppc_state, payload);
     }
     std::memset(page + (offset & ~u32{31}), 0, 32);
     break;
@@ -2451,7 +2465,7 @@ s32 CachedInterpreter::LoadStoreFast(PowerPC::PowerPCState& ppc_state, const voi
 
   if constexpr (update)
     ppc_state.gpr[inst.RA] = ea;
-  CI_CHAIN_EXIT(chain, payload, sizeof(InterpretOperands));
+  CI_CHAIN_EXIT(chain, payload, sizeof(Record));
 }
 
 s32 CachedInterpreter::LoadStoreFast(std::ostream& stream, const void* payload)
@@ -2459,6 +2473,14 @@ s32 CachedInterpreter::LoadStoreFast(std::ostream& stream, const void* payload)
   const auto& operands = *static_cast<const InterpretOperands*>(payload);
   fmt::println(stream, "LoadStoreFast(pc={:#010x}, inst={:#010x})", operands.current_pc,
                operands.inst.hex);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
+s32 CachedInterpreter::LoadStoreFastChecked(std::ostream& stream, const void* payload)
+{
+  const auto& operands = *static_cast<const InterpretAndCheckExceptionsOperands*>(payload);
+  fmt::println(stream, "LoadStoreFastChecked(pc={:#010x}, inst={:#010x}, downcount={})",
+               operands.current_pc, operands.inst.hex, operands.downcount);
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
@@ -2474,11 +2496,13 @@ s32 CachedInterpreter::InterpretChained(PowerPC::PowerPCState& ppc_state, const 
 
 CachedInterpreter::AnyCallback CachedInterpreter::GetLoadStoreFastCallback(CIMemKind kind,
                                                                            bool indexed, bool update,
-                                                                           bool chain)
+                                                                           bool chain, bool checked)
 {
 #define CI_LS_PICK(K, X, U)                                                                        \
-  return chain ? AnyCallback{LoadStoreFast<CIMemKind::K, X, U, true>} :                            \
-                 AnyCallback{LoadStoreFast<CIMemKind::K, X, U, false>}
+  return checked ? (chain ? AnyCallback{LoadStoreFast<CIMemKind::K, X, U, true, true>} :           \
+                            AnyCallback{LoadStoreFast<CIMemKind::K, X, U, false, true>}) :         \
+                   (chain ? AnyCallback{LoadStoreFast<CIMemKind::K, X, U, true, false>} :          \
+                            AnyCallback{LoadStoreFast<CIMemKind::K, X, U, false, false>})
 #define CI_LS_FORMS(K)                                                                             \
   case CIMemKind::K:                                                                               \
     if (indexed)                                                                                   \
@@ -4321,6 +4345,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   // iCube: the direct-pointer load/store handlers bypass the MMU, so they are off whenever an access
   // must be observed (memchecks / MMU mode) or routed through the emulated d-cache.
   const bool load_store_fast = s_pic_loadstore && !jo.memcheck && !m_ppc_state.m_enable_dcache;
+  // MMU-mode titles set jo.memcheck only so faults are delivered; the direct path is still exact for
+  // BAT-mapped pages. Watchpoints and pause-on-panic need every access observed, so they keep it off.
+  const bool load_store_fast_mmu = s_pic_loadstore && jo.memcheck && m_system.IsMMUMode() &&
+                                   !m_system.IsPauseOnPanicMode() &&
+                                   !m_system.GetPowerPC().GetMemChecks().HasAny() &&
+                                   !m_ppc_state.m_enable_dcache;
   for (u32 i = 0; i < code_block.m_num_instructions; i++)
   {
     PPCAnalyst::CodeOp& op = m_code_buffer[i];
@@ -4375,9 +4405,24 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             {interpreter, Interpreter::GetInterpreterOp(op.inst), js.compilerPC, op.inst},
             power_pc,
             js.downcountAmount};
-        Write(op.canEndBlock ? CallbackCast(InterpretAndCheckExceptions<true>) :
-                               CallbackCast(InterpretAndCheckExceptions<false>),
-              operands);
+        // iCube: MMU-mode titles get the direct-pointer load/store too, in its `checked` form.
+        const auto fast = load_store_fast_mmu && !op.canEndBlock ? CI_ClassifyLoadStore(op.inst) :
+                                                                   std::nullopt;
+        const AnyCallback unchained =
+            fast ? GetLoadStoreFastCallback(fast->kind, fast->indexed, fast->update, false, true) :
+                   nullptr;
+        if (unchained != nullptr)
+        {
+          WriteChainable(unchained,
+                         GetLoadStoreFastCallback(fast->kind, fast->indexed, fast->update, true, true),
+                         &operands, sizeof(operands));
+        }
+        else
+        {
+          Write(op.canEndBlock ? CallbackCast(InterpretAndCheckExceptions<true>) :
+                                 CallbackCast(InterpretAndCheckExceptions<false>),
+                operands);
+        }
       }
       else
       {
@@ -5306,11 +5351,12 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
           if (const auto fast = CI_ClassifyLoadStore(op.inst))
           {
             const AnyCallback unchained =
-                GetLoadStoreFastCallback(fast->kind, fast->indexed, fast->update, false);
+                GetLoadStoreFastCallback(fast->kind, fast->indexed, fast->update, false, false);
             if (unchained != nullptr)
             {
               WriteChainable(unchained,
-                             GetLoadStoreFastCallback(fast->kind, fast->indexed, fast->update, true),
+                             GetLoadStoreFastCallback(fast->kind, fast->indexed, fast->update, true,
+                                                      false),
                              &operands, sizeof(operands));
               emitted = true;
             }
