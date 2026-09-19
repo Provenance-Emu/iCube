@@ -98,13 +98,12 @@ s32 CachedInterpreter::FastForwardCtrIdle(std::ostream& stream, const CheckCtrId
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
-s32 CachedInterpreter::ExecuteMicroOps(std::ostream& stream, const void* payload)
+s32 CachedInterpreter::MicroOpRecord(std::ostream& stream, const void* payload)
 {
-  const auto& operands = *static_cast<const ExecuteMicroOpsOperands*>(payload);
-  fmt::print(stream, "MicroOps (count={}) at PC={:#010x}\n", operands.count,
-             operands.current_pc);
-  return static_cast<s32>(sizeof(AnyCallback) +
-                          ExecuteMicroOpsOperands::TapeSize(operands.count + 1));
+  const auto& m = *static_cast<const MicroOpPayload*>(payload);
+  fmt::println(stream, "MicroOp(rd={}, ra={}, rb={}, rc={}, imm={:#010x})", m.rd, m.ra, m.rb, m.rc,
+               m.imm);
+  return sizeof(AnyCallback) + sizeof(MicroOpPayload);
 }
 
 s32 CachedInterpreter::InterpretChained(std::ostream& stream, const void* payload)
@@ -185,8 +184,8 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
         add(pick(true), static_cast<ErasedDisassemble>(CachedInterpreter::LoadStoreFastChecked));
       }
     }
-    add(AnyCallback{ExecuteMicroOps<false>},
-        static_cast<ErasedDisassemble>(CachedInterpreter::ExecuteMicroOps));
+    for (const AnyCallback handler : GetMicroOpCallbacks())
+      add(handler, static_cast<ErasedDisassemble>(MicroOpRecord));
     add(AnyCallback{LinkBlock<false>}, static_cast<ErasedDisassemble>(CachedInterpreter::LinkBlock));
     add(AnyCallback{InterpretBcx<false>}, static_cast<ErasedDisassemble>(InterpretBcx));
     add(AnyCallback{InterpretBcx<true>}, static_cast<ErasedDisassemble>(InterpretBcx));

@@ -2790,7 +2790,7 @@ CachedInterpreter::AnyCallback CachedInterpreter::GetLoadStoreFastCallback(CIMem
 namespace
 {
 template <bool indexed>
-inline u32 CI_MicroMemEA(const PowerPC::PowerPCState& ppc_state, const MicroOp& m)
+inline u32 CI_MicroMemEA(const PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
 {
   return ppc_state.gpr[m.ra] + (indexed ? ppc_state.gpr[m.rb] :
                                           static_cast<u32>(s32{static_cast<s16>(m.imm)}));
@@ -2799,7 +2799,7 @@ inline u32 CI_MicroMemEA(const PowerPC::PowerPCState& ppc_state, const MicroOp& 
 // 1 = done. 0 = nothing done, the access has to take the generic handler (MemCold). 2 = an inline
 // gather-pipe store filled the pipe: done, but run the burst check (MemGatherFlush).
 template <CIMemKind kind, bool indexed>
-inline int CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOp& m)
+inline int CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOpPayload& m)
 {
   const u32 ea = CI_MicroMemEA<indexed>(ppc_state, m);
   u8* const page = CI_PagePtr(ppc_state, ea);
@@ -2854,47 +2854,6 @@ inline int CI_MicroMemAccess(PowerPC::PowerPCState& ppc_state, const MicroOp& m)
   return 1;
 }
 
-[[gnu::noinline, gnu::cold]] void CI_MicroMemCold(PowerPC::PowerPCState& ppc_state,
-                                                  Interpreter& interpreter, const MicroOp& m)
-{
-  const UGeckoInstruction inst{m.imm};
-  if (m.rc == 0)
-  {
-    bool served = false;
-    switch (m.op)
-    {
-    case MicroOpCode::MEM_STW:
-      served = CI_TryGatherPipeStore<CIMemKind::STW>(ppc_state, inst,
-                                                     CI_MicroMemEA<false>(ppc_state, m));
-      break;
-    case MicroOpCode::MEM_STWX:
-      served = CI_TryGatherPipeStore<CIMemKind::STW>(ppc_state, inst,
-                                                     CI_MicroMemEA<true>(ppc_state, m));
-      break;
-    case MicroOpCode::MEM_STH:
-      served = CI_TryGatherPipeStore<CIMemKind::STH>(ppc_state, inst,
-                                                     CI_MicroMemEA<false>(ppc_state, m));
-      break;
-    case MicroOpCode::MEM_STHX:
-      served = CI_TryGatherPipeStore<CIMemKind::STH>(ppc_state, inst,
-                                                     CI_MicroMemEA<true>(ppc_state, m));
-      break;
-    case MicroOpCode::MEM_STB:
-      served = CI_TryGatherPipeStore<CIMemKind::STB>(ppc_state, inst,
-                                                     CI_MicroMemEA<false>(ppc_state, m));
-      break;
-    case MicroOpCode::MEM_STBX:
-      served = CI_TryGatherPipeStore<CIMemKind::STB>(ppc_state, inst,
-                                                     CI_MicroMemEA<true>(ppc_state, m));
-      break;
-    default:
-      break;
-    }
-    if (served)
-      return;
-  }
-  Interpreter::GetInterpreterOp(inst)(interpreter, inst);
-}
 }  // namespace
 
 // iCube WIN#2: micro-op fusion engine (MAIN_CIR_MICROOP_FUSION). CI_SetPCForMicroOps mirrors the
@@ -2910,49 +2869,50 @@ static inline void CI_SetPCForMicroOps(PowerPC::PowerPCState& ppc_state, u32 pc)
   }
 }
 
-// iCube: the fused-run executor is TAIL-CALL threaded: one small function per micro-op, each ending in
-// a guaranteed tail call through the handler table to the next op, and the run is closed by the END
-// sentinel the packer appends (so there is no bound compare anywhere). This is the shape a computed
+// iCube: micro-ops are DIRECT-THREADED tape records: one small function per micro-op whose address sits
+// in the record's own callback slot, followed by an 8-byte MicroOpPayload, each ending in a guaranteed
+// tail call to the next record (CI_CHAIN_EXIT). A fused run is therefore just consecutive records: no
+// run entry, no END sentinel, no opcode table lookup on the hot path. This is the shape a computed
 // goto is supposed to compile to, but LLVM only splits a shared indirect branch back into its
 // predecessors below 16 of them (tail-dup-pred-size); with 57 handlers every op funnelled through ONE
 // `br`, i.e. one branch-predictor entry for the whole micro-op mix. ppc_state / mp / operands stay in
 // x0-x2 for the whole run and no handler has a prologue. Each handler reproduces its interpreter op's
 // GPR/CR0/XER side effects byte-exactly (see the CI_* helpers). A nested struct so the handlers can
 // name CachedInterpreter's private record types.
-#define CI_MICRO_NEXT()                                                                            \
-  CI_MUSTTAIL return table[static_cast<unsigned>(mp[1].op)](ppc_state, mp + 1)
+#define CI_MICRO_NEXT() CI_CHAIN_EXIT(chain, payload, sizeof(MicroOpPayload))
 #define CI_MICRO_MEM(NAME, KIND, INDEXED)                                                          \
+  template <bool chain>                                                                            \
   static s32 NAME(PowerPC::PowerPCState& ppc_state, const void* payload)                           \
   {                                                                                                \
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);                                \
-    const int done = CI_MicroMemAccess<CIMemKind::KIND, INDEXED>(ppc_state, *mp);                  \
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);                        \
+    const int done = CI_MicroMemAccess<CIMemKind::KIND, INDEXED>(ppc_state, m);                    \
     if (done != 1) [[unlikely]]                                                                    \
     {                                                                                              \
       if (done == 2)                                                                               \
-        CI_MUSTTAIL return MemGatherFlush(ppc_state, payload);                                     \
-      CI_MUSTTAIL return MemCold(ppc_state, payload);                                              \
+        CI_MUSTTAIL return MemGatherFlush<chain>(ppc_state, payload);                              \
+      CI_MUSTTAIL return MemCold<chain>(ppc_state, payload);                                       \
     }                                                                                              \
     CI_MICRO_NEXT();                                                                               \
   }
 
 struct CachedInterpreter::MicroOpHandlers
 {
-  // Indexed by MicroOpCode; defined below in enum order. Handlers take the erased (ppc_state, payload)
-  // callback signature, payload being the MicroOp, so END_CHAIN can tail-call the next tape record.
-  static const AnyCallback table[];
+  // [chain][MicroOpCode]; defined below in enum order. The emitter writes table[0][op] and lets
+  // WriteChainable patch in table[1][op] when the next record is chain-capable.
+  static const AnyCallback table[2][static_cast<size_t>(MicroOpCode::COUNT)];
 
+  template <bool chain>
   static s32 CONST32(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     ppc_state.gpr[m.rd] = m.imm;
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 CMP_S_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const s32 a = s32(ppc_state.gpr[m.ra]);
     const s32 b = s32(ppc_state.gpr[m.rb]);
     u32 crf = 0;
@@ -2963,10 +2923,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 CMPL_U_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
     u32 crf = 0;
@@ -2977,10 +2937,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 CMP_S_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const s32 a = s32(ppc_state.gpr[m.ra]);
     const s32 b = s32(s16(m.imm & 0xFFFF));
     u32 crf = 0;
@@ -2991,10 +2951,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 CMPL_U_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = m.imm & 0xFFFFu;
     u32 crf = 0;
@@ -3005,10 +2965,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 CONST32_ADDRA(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 ra_val = ppc_state.gpr[m.ra];
     const s32 hi = static_cast<s16>(static_cast<u32>(m.imm) >> 16);
     const u32 lo = m.imm & 0xFFFFu;
@@ -3017,70 +2977,70 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ADDI(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
     const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
     ppc_state.gpr[m.rd] = ra_val + static_cast<u32>(simm);
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ADDIS(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 ra_val = (m.ra == 0) ? 0u : ppc_state.gpr[m.ra];
     const s32 simm = static_cast<s32>(static_cast<s16>(m.imm & 0xFFFF));
     ppc_state.gpr[m.rd] = ra_val + (static_cast<u32>(simm) << 16);
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ORI(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 ui = m.imm & 0xFFFFu;
     ppc_state.gpr[m.rd] = rs_val | ui;
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ORIS(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 ui = (m.imm & 0xFFFFu) << 16;
     ppc_state.gpr[m.rd] = rs_val | ui;
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 XORI(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 ui = m.imm & 0xFFFFu;
     ppc_state.gpr[m.rd] = rs_val ^ ui;
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 XORIS(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 ui = (m.imm & 0xFFFFu) << 16;
     ppc_state.gpr[m.rd] = rs_val ^ ui;
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ANDI(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 ui = m.imm & 0xFFFFu;
     ppc_state.gpr[m.rd] = rs_val & ui;
@@ -3088,10 +3048,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ANDIS(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 ui = (m.imm & 0xFFFFu) << 16;
     ppc_state.gpr[m.rd] = rs_val & ui;
@@ -3099,10 +3059,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 RLWINM_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 sh = (m.imm >> 0) & 31u;
     const u32 mb = (m.imm >> 5) & 31u;
@@ -3114,10 +3074,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 AND_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = rs_val & rb_val;
@@ -3126,10 +3086,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 OR_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = rs_val | rb_val;
@@ -3138,10 +3098,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 XOR_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = rs_val ^ rb_val;
@@ -3150,10 +3110,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 RLWIMI_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 ra_old = ppc_state.gpr[m.rd];
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 sh = (m.imm >> 0) & 31u;
@@ -3167,10 +3127,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 RLWNM_VAR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb] & 31u; // shift is low 5 bits of RB
     const u32 mb = (m.imm >> 5) & 31u;
@@ -3182,10 +3142,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ANDC_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = rs_val & ~rb_val;
@@ -3194,10 +3154,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ORC_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = rs_val | ~rb_val;
@@ -3206,10 +3166,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 NAND_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = ~(rs_val & rb_val);
@@ -3218,10 +3178,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 NOR_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = ~(rs_val | rb_val);
@@ -3230,10 +3190,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 EQV_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rs_val = ppc_state.gpr[m.ra];
     const u32 rb_val = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = ~(rs_val ^ rb_val);
@@ -3242,40 +3202,40 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 CNTLZW(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     ppc_state.gpr[m.rd] = static_cast<u32>(std::countl_zero(ppc_state.gpr[m.ra]));
     if (m.rc)
       CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 EXTSB(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s8>(ppc_state.gpr[m.ra])));
     if (m.rc)
       CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 EXTSH(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     ppc_state.gpr[m.rd] = static_cast<u32>(static_cast<s32>(static_cast<s16>(ppc_state.gpr[m.ra])));
     if (m.rc)
       CI_UpdateCR0(ppc_state, ppc_state.gpr[m.rd]);
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SLW_VAR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 amount = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] << (amount & 0x1fu));
     if (m.rc)
@@ -3283,10 +3243,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SRW_VAR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 amount = ppc_state.gpr[m.rb];
     ppc_state.gpr[m.rd] = (amount & 0x20u) ? 0u : (ppc_state.gpr[m.ra] >> (amount & 0x1fu));
     if (m.rc)
@@ -3294,10 +3254,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SRAW_VAR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 rb_val = ppc_state.gpr[m.rb];
     if (rb_val & 0x20u)
     {
@@ -3324,10 +3284,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SRAWI_IMM(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 amount = m.imm & 31u;
     const s32 rrs = static_cast<s32>(ppc_state.gpr[m.ra]);
     ppc_state.gpr[m.rd] = static_cast<u32>(rrs >> amount);
@@ -3337,10 +3297,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ADD_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
     const u32 result = a + b;
@@ -3352,10 +3312,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ADDC_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
     const u32 result = a + b;
@@ -3368,10 +3328,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ADDE_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 carry = ppc_state.GetCarry();
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
@@ -3385,10 +3345,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ADDME(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 carry = ppc_state.GetCarry();
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = 0xFFFFFFFFu;
@@ -3402,10 +3362,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ADDZE(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 carry = ppc_state.GetCarry();
     const u32 a = ppc_state.gpr[m.ra];
     const u32 result = a + carry;
@@ -3418,10 +3378,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SUBF_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ~ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
     const u32 result = a + b + 1u;
@@ -3433,10 +3393,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SUBFC_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ~ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
     const u32 result = a + b + 1u;
@@ -3449,10 +3409,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SUBFE_RR(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ~ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
     const u32 carry = ppc_state.GetCarry();
@@ -3466,10 +3426,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SUBFME(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ~ppc_state.gpr[m.ra];
     const u32 b = 0xFFFFFFFFu;
     const u32 carry = ppc_state.GetCarry();
@@ -3483,10 +3443,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SUBFZE(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ~ppc_state.gpr[m.ra];
     const u32 carry = ppc_state.GetCarry();
     const u32 result = a + carry;
@@ -3499,35 +3459,35 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 NOP(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 MULLI(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     // Wrapping multiply: same low 32 bits as the interpreter's s32 * s32.
     ppc_state.gpr[m.rd] = ppc_state.gpr[m.ra] * m.imm;
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 SUBFIC(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     ppc_state.gpr[m.rd] = m.imm - a;
     ppc_state.SetCarry(a == 0 || CI_Helper_Carry(0 - a, m.imm));
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 ADDIC(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 result = a + m.imm;
     ppc_state.gpr[m.rd] = result;
@@ -3537,10 +3497,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 NEG(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 result = ~a + 1;
     ppc_state.gpr[m.rd] = result;
@@ -3551,10 +3511,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 MULLW(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const s64 product = s64{static_cast<s32>(ppc_state.gpr[m.ra])} *
                         s64{static_cast<s32>(ppc_state.gpr[m.rb])};
     const u32 result = static_cast<u32>(product);
@@ -3566,10 +3526,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 MULHW(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const s64 product = s64{static_cast<s32>(ppc_state.gpr[m.ra])} *
                         s64{static_cast<s32>(ppc_state.gpr[m.rb])};
     const u32 result = static_cast<u32>(product >> 32);
@@ -3579,10 +3539,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 MULHWU(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u64 product = u64{ppc_state.gpr[m.ra]} * u64{ppc_state.gpr[m.rb]};
     const u32 result = static_cast<u32>(product >> 32);
     ppc_state.gpr[m.rd] = result;
@@ -3591,10 +3551,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 DIVW(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const s32 a = static_cast<s32>(ppc_state.gpr[m.ra]);
     const s32 b = static_cast<s32>(ppc_state.gpr[m.rb]);
     const bool overflow = b == 0 || (static_cast<u32>(a) == 0x80000000 && b == -1);
@@ -3607,10 +3567,10 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 DIVWU(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     const u32 a = ppc_state.gpr[m.ra];
     const u32 b = ppc_state.gpr[m.rb];
     const bool overflow = b == 0;
@@ -3623,19 +3583,27 @@ struct CachedInterpreter::MicroOpHandlers
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 MFSPR_RAW(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     ppc_state.gpr[m.rd] = ppc_state.spr[m.imm];
     CI_MICRO_NEXT();
   }
 
+  template <bool chain>
   static s32 MTSPR_RAW(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    const MicroOp& m = *mp;
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
     ppc_state.spr[m.imm] = ppc_state.gpr[m.rd];
+    CI_MICRO_NEXT();
+  }
+
+  template <bool chain>
+  static s32 ADD_IMM32(PowerPC::PowerPCState& ppc_state, const void* payload)
+  {
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
+    ppc_state.gpr[m.rd] = ppc_state.gpr[m.ra] + m.imm;
     CI_MICRO_NEXT();
   }
 
@@ -3654,127 +3622,192 @@ struct CachedInterpreter::MicroOpHandlers
   CI_MICRO_MEM(MEM_STBX, STB, true)
   CI_MICRO_MEM(MEM_STHX, STH, true)
 
-  // The memory micro-op at mp cannot take the direct path: run it through the generic handler (or the
-  // gather pipe), then carry on with the run. Same signature, so both hops are tail calls and the hot
-  // handlers never make a call.
+  // The memory micro-op cannot take the direct path: run it through the generic handler, then carry
+  // on. Same signature, so both hops are tail calls and the hot handlers never make a call.
+  template <bool chain>
   [[gnu::noinline, gnu::cold]] static s32 MemCold(PowerPC::PowerPCState& ppc_state,
                                                   const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
-    CI_MicroMemCold(ppc_state, *s_interpreter, *mp);
+    const MicroOpPayload& m = *static_cast<const MicroOpPayload*>(payload);
+    const UGeckoInstruction inst{m.imm};
+    Interpreter::GetInterpreterOp(inst)(*s_interpreter, inst);
     CI_MICRO_NEXT();
   }
 
-  // An inline gather-pipe store filled the pipe: run the burst check, then carry on with the run.
+  // An inline gather-pipe store filled the pipe: run the burst check, then carry on.
+  template <bool chain>
   [[gnu::noinline]] static s32 MemGatherFlush(PowerPC::PowerPCState& ppc_state, const void* payload)
   {
-    const MicroOp* const mp = static_cast<const MicroOp*>(payload);
     s_gpfifo->CheckGatherPipe();
     CI_MICRO_NEXT();
-  }
-
-  // The sentinel is the last op of the record, so the record ends at the next callback boundary.
-  static const u8* RecordEnd(const void* sentinel)
-  {
-    const auto end = reinterpret_cast<std::uintptr_t>(static_cast<const MicroOp*>(sentinel) + 1);
-    return reinterpret_cast<const u8*>((end + alignof(AnyCallback) - 1) &
-                                       ~std::uintptr_t{alignof(AnyCallback) - 1});
-  }
-  static s32 END(PowerPC::PowerPCState& ppc_state, const void* payload)
-  {
-    CI_CHAIN_EXIT(false, RecordEnd(payload), 0);
-  }
-  static s32 END_CHAIN(PowerPC::PowerPCState& ppc_state, const void* payload)
-  {
-    CI_CHAIN_EXIT(true, RecordEnd(payload), 0);
   }
 };
 
 #undef CI_MICRO_MEM
 #undef CI_MICRO_NEXT
 
-const CachedInterpreter::AnyCallback CachedInterpreter::MicroOpHandlers::table[] = {
-        &MicroOpHandlers::CONST32,
-        &MicroOpHandlers::CONST32_ADDRA,
-        &MicroOpHandlers::ADDI,
-        &MicroOpHandlers::ADDIS,
-        &MicroOpHandlers::ORI,
-        &MicroOpHandlers::ORIS,
-        &MicroOpHandlers::XORI,
-        &MicroOpHandlers::XORIS,
-        &MicroOpHandlers::ANDI,
-        &MicroOpHandlers::ANDIS,
-        &MicroOpHandlers::RLWINM_IMM,
-        &MicroOpHandlers::AND_RR,
-        &MicroOpHandlers::OR_RR,
-        &MicroOpHandlers::XOR_RR,
-        &MicroOpHandlers::RLWIMI_IMM,
-        &MicroOpHandlers::RLWNM_VAR,
-        &MicroOpHandlers::ANDC_RR,
-        &MicroOpHandlers::ORC_RR,
-        &MicroOpHandlers::NAND_RR,
-        &MicroOpHandlers::NOR_RR,
-        &MicroOpHandlers::EQV_RR,
-        &MicroOpHandlers::CNTLZW,
-        &MicroOpHandlers::EXTSB,
-        &MicroOpHandlers::EXTSH,
-        &MicroOpHandlers::SLW_VAR,
-        &MicroOpHandlers::SRW_VAR,
-        &MicroOpHandlers::SRAW_VAR,
-        &MicroOpHandlers::SRAWI_IMM,
-        &MicroOpHandlers::ADD_RR,
-        &MicroOpHandlers::ADDC_RR,
-        &MicroOpHandlers::ADDE_RR,
-        &MicroOpHandlers::ADDME,
-        &MicroOpHandlers::ADDZE,
-        &MicroOpHandlers::SUBF_RR,
-        &MicroOpHandlers::SUBFC_RR,
-        &MicroOpHandlers::SUBFE_RR,
-        &MicroOpHandlers::SUBFME,
-        &MicroOpHandlers::SUBFZE,
-        &MicroOpHandlers::CMP_S_RR,
-        &MicroOpHandlers::CMPL_U_RR,
-        &MicroOpHandlers::CMP_S_IMM,
-        &MicroOpHandlers::CMPL_U_IMM,
-        &MicroOpHandlers::MULLI,
-        &MicroOpHandlers::SUBFIC,
-        &MicroOpHandlers::ADDIC,
-        &MicroOpHandlers::NEG,
-        &MicroOpHandlers::MULLW,
-        &MicroOpHandlers::MULHW,
-        &MicroOpHandlers::MULHWU,
-        &MicroOpHandlers::DIVW,
-        &MicroOpHandlers::DIVWU,
-        &MicroOpHandlers::MFSPR_RAW,
-        &MicroOpHandlers::MTSPR_RAW,
-        &MicroOpHandlers::MEM_LWZ,
-        &MicroOpHandlers::MEM_LBZ,
-        &MicroOpHandlers::MEM_LHZ,
-        &MicroOpHandlers::MEM_LHA,
-        &MicroOpHandlers::MEM_STW,
-        &MicroOpHandlers::MEM_STB,
-        &MicroOpHandlers::MEM_STH,
-        &MicroOpHandlers::MEM_LWZX,
-        &MicroOpHandlers::MEM_LBZX,
-        &MicroOpHandlers::MEM_LHZX,
-        &MicroOpHandlers::MEM_LHAX,
-        &MicroOpHandlers::MEM_STWX,
-        &MicroOpHandlers::MEM_STBX,
-        &MicroOpHandlers::MEM_STHX,
-        &MicroOpHandlers::NOP,
-        &MicroOpHandlers::END,
-        &MicroOpHandlers::END_CHAIN,
+const CachedInterpreter::AnyCallback
+    CachedInterpreter::MicroOpHandlers::table[2][static_cast<size_t>(MicroOpCode::COUNT)] = {
+        {
+            &MicroOpHandlers::CONST32<false>,
+            &MicroOpHandlers::CONST32_ADDRA<false>,
+            &MicroOpHandlers::ADDI<false>,
+            &MicroOpHandlers::ADDIS<false>,
+            &MicroOpHandlers::ORI<false>,
+            &MicroOpHandlers::ORIS<false>,
+            &MicroOpHandlers::XORI<false>,
+            &MicroOpHandlers::XORIS<false>,
+            &MicroOpHandlers::ANDI<false>,
+            &MicroOpHandlers::ANDIS<false>,
+            &MicroOpHandlers::RLWINM_IMM<false>,
+            &MicroOpHandlers::AND_RR<false>,
+            &MicroOpHandlers::OR_RR<false>,
+            &MicroOpHandlers::XOR_RR<false>,
+            &MicroOpHandlers::RLWIMI_IMM<false>,
+            &MicroOpHandlers::RLWNM_VAR<false>,
+            &MicroOpHandlers::ANDC_RR<false>,
+            &MicroOpHandlers::ORC_RR<false>,
+            &MicroOpHandlers::NAND_RR<false>,
+            &MicroOpHandlers::NOR_RR<false>,
+            &MicroOpHandlers::EQV_RR<false>,
+            &MicroOpHandlers::CNTLZW<false>,
+            &MicroOpHandlers::EXTSB<false>,
+            &MicroOpHandlers::EXTSH<false>,
+            &MicroOpHandlers::SLW_VAR<false>,
+            &MicroOpHandlers::SRW_VAR<false>,
+            &MicroOpHandlers::SRAW_VAR<false>,
+            &MicroOpHandlers::SRAWI_IMM<false>,
+            &MicroOpHandlers::ADD_RR<false>,
+            &MicroOpHandlers::ADDC_RR<false>,
+            &MicroOpHandlers::ADDE_RR<false>,
+            &MicroOpHandlers::ADDME<false>,
+            &MicroOpHandlers::ADDZE<false>,
+            &MicroOpHandlers::SUBF_RR<false>,
+            &MicroOpHandlers::SUBFC_RR<false>,
+            &MicroOpHandlers::SUBFE_RR<false>,
+            &MicroOpHandlers::SUBFME<false>,
+            &MicroOpHandlers::SUBFZE<false>,
+            &MicroOpHandlers::CMP_S_RR<false>,
+            &MicroOpHandlers::CMPL_U_RR<false>,
+            &MicroOpHandlers::CMP_S_IMM<false>,
+            &MicroOpHandlers::CMPL_U_IMM<false>,
+            &MicroOpHandlers::MULLI<false>,
+            &MicroOpHandlers::SUBFIC<false>,
+            &MicroOpHandlers::ADDIC<false>,
+            &MicroOpHandlers::NEG<false>,
+            &MicroOpHandlers::MULLW<false>,
+            &MicroOpHandlers::MULHW<false>,
+            &MicroOpHandlers::MULHWU<false>,
+            &MicroOpHandlers::DIVW<false>,
+            &MicroOpHandlers::DIVWU<false>,
+            &MicroOpHandlers::MFSPR_RAW<false>,
+            &MicroOpHandlers::MTSPR_RAW<false>,
+            &MicroOpHandlers::ADD_IMM32<false>,
+            &MicroOpHandlers::MEM_LWZ<false>,
+            &MicroOpHandlers::MEM_LBZ<false>,
+            &MicroOpHandlers::MEM_LHZ<false>,
+            &MicroOpHandlers::MEM_LHA<false>,
+            &MicroOpHandlers::MEM_STW<false>,
+            &MicroOpHandlers::MEM_STB<false>,
+            &MicroOpHandlers::MEM_STH<false>,
+            &MicroOpHandlers::MEM_LWZX<false>,
+            &MicroOpHandlers::MEM_LBZX<false>,
+            &MicroOpHandlers::MEM_LHZX<false>,
+            &MicroOpHandlers::MEM_LHAX<false>,
+            &MicroOpHandlers::MEM_STWX<false>,
+            &MicroOpHandlers::MEM_STBX<false>,
+            &MicroOpHandlers::MEM_STHX<false>,
+            &MicroOpHandlers::NOP<false>,
+        },
+        {
+            &MicroOpHandlers::CONST32<true>,
+            &MicroOpHandlers::CONST32_ADDRA<true>,
+            &MicroOpHandlers::ADDI<true>,
+            &MicroOpHandlers::ADDIS<true>,
+            &MicroOpHandlers::ORI<true>,
+            &MicroOpHandlers::ORIS<true>,
+            &MicroOpHandlers::XORI<true>,
+            &MicroOpHandlers::XORIS<true>,
+            &MicroOpHandlers::ANDI<true>,
+            &MicroOpHandlers::ANDIS<true>,
+            &MicroOpHandlers::RLWINM_IMM<true>,
+            &MicroOpHandlers::AND_RR<true>,
+            &MicroOpHandlers::OR_RR<true>,
+            &MicroOpHandlers::XOR_RR<true>,
+            &MicroOpHandlers::RLWIMI_IMM<true>,
+            &MicroOpHandlers::RLWNM_VAR<true>,
+            &MicroOpHandlers::ANDC_RR<true>,
+            &MicroOpHandlers::ORC_RR<true>,
+            &MicroOpHandlers::NAND_RR<true>,
+            &MicroOpHandlers::NOR_RR<true>,
+            &MicroOpHandlers::EQV_RR<true>,
+            &MicroOpHandlers::CNTLZW<true>,
+            &MicroOpHandlers::EXTSB<true>,
+            &MicroOpHandlers::EXTSH<true>,
+            &MicroOpHandlers::SLW_VAR<true>,
+            &MicroOpHandlers::SRW_VAR<true>,
+            &MicroOpHandlers::SRAW_VAR<true>,
+            &MicroOpHandlers::SRAWI_IMM<true>,
+            &MicroOpHandlers::ADD_RR<true>,
+            &MicroOpHandlers::ADDC_RR<true>,
+            &MicroOpHandlers::ADDE_RR<true>,
+            &MicroOpHandlers::ADDME<true>,
+            &MicroOpHandlers::ADDZE<true>,
+            &MicroOpHandlers::SUBF_RR<true>,
+            &MicroOpHandlers::SUBFC_RR<true>,
+            &MicroOpHandlers::SUBFE_RR<true>,
+            &MicroOpHandlers::SUBFME<true>,
+            &MicroOpHandlers::SUBFZE<true>,
+            &MicroOpHandlers::CMP_S_RR<true>,
+            &MicroOpHandlers::CMPL_U_RR<true>,
+            &MicroOpHandlers::CMP_S_IMM<true>,
+            &MicroOpHandlers::CMPL_U_IMM<true>,
+            &MicroOpHandlers::MULLI<true>,
+            &MicroOpHandlers::SUBFIC<true>,
+            &MicroOpHandlers::ADDIC<true>,
+            &MicroOpHandlers::NEG<true>,
+            &MicroOpHandlers::MULLW<true>,
+            &MicroOpHandlers::MULHW<true>,
+            &MicroOpHandlers::MULHWU<true>,
+            &MicroOpHandlers::DIVW<true>,
+            &MicroOpHandlers::DIVWU<true>,
+            &MicroOpHandlers::MFSPR_RAW<true>,
+            &MicroOpHandlers::MTSPR_RAW<true>,
+            &MicroOpHandlers::ADD_IMM32<true>,
+            &MicroOpHandlers::MEM_LWZ<true>,
+            &MicroOpHandlers::MEM_LBZ<true>,
+            &MicroOpHandlers::MEM_LHZ<true>,
+            &MicroOpHandlers::MEM_LHA<true>,
+            &MicroOpHandlers::MEM_STW<true>,
+            &MicroOpHandlers::MEM_STB<true>,
+            &MicroOpHandlers::MEM_STH<true>,
+            &MicroOpHandlers::MEM_LWZX<true>,
+            &MicroOpHandlers::MEM_LBZX<true>,
+            &MicroOpHandlers::MEM_LHZX<true>,
+            &MicroOpHandlers::MEM_LHAX<true>,
+            &MicroOpHandlers::MEM_STWX<true>,
+            &MicroOpHandlers::MEM_STBX<true>,
+            &MicroOpHandlers::MEM_STHX<true>,
+            &MicroOpHandlers::NOP<true>,
+        },
 };
 
-template <bool write_pc>
-s32 CachedInterpreter::ExecuteMicroOps(PowerPC::PowerPCState& ppc_state, const void* payload)
+std::span<const CachedInterpreter::AnyCallback> CachedInterpreter::GetMicroOpCallbacks()
 {
-  static_assert(std::size(MicroOpHandlers::table) == static_cast<size_t>(MicroOpCode::COUNT),
-                "MicroOpHandlers::table must cover every MicroOpCode, in enum order");
-  const auto& operands = *static_cast<const ExecuteMicroOpsOperands*>(payload);
-  CI_SetPCForMicroOps<write_pc>(ppc_state, operands.current_pc);
-  CI_MUSTTAIL return MicroOpHandlers::table[static_cast<unsigned>(operands.ops[0].op)](
-      ppc_state, operands.ops);
+  return {MicroOpHandlers::table[0], 2 * static_cast<size_t>(MicroOpCode::COUNT)};
+}
+
+// Runs a packed run outside the tape (the fusion validate harness): the same handlers, unchained, one
+// after the other. Their return value (a tape distance) is meaningless here and ignored.
+void CachedInterpreter::RunMicroOps(PowerPC::PowerPCState& ppc_state,
+                                    const ExecuteMicroOpsOperands& operands)
+{
+  for (u32 i = 0; i < operands.count; ++i)
+  {
+    const MicroOp& op = operands.ops[i];
+    const MicroOpPayload record = {op.rd, op.ra, op.rb, op.rc, op.imm};
+    MicroOpHandlers::table[0][static_cast<size_t>(op.op)](ppc_state, &record);
+  }
 }
 
 // iCube: paired-single sequence fusion (MAIN_CIR_MICROOP_FUSION extension). Invokes the same
@@ -3862,8 +3895,8 @@ s32 CachedInterpreter::ExecuteMicroOpsValidate(PowerPC::PowerPCState& ppc_state,
   fused.count = operands.count;
   fused.current_pc = operands.current_pc;
   std::copy(std::begin(operands.ops), std::begin(operands.ops) + operands.count, std::begin(fused.ops));
-  fused.ops[fused.count] = MicroOp{MicroOpCode::END, 0, 0, 0, 0, 0};
-  ExecuteMicroOps<write_pc>(ppc_state, &fused);
+  CI_SetPCForMicroOps<write_pc>(ppc_state, fused.current_pc);
+  RunMicroOps(ppc_state, fused);
 
   std::array<u32, 32> fused_gpr;
   std::array<u64, 8> fused_cr;
@@ -5069,16 +5102,15 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             if (!s_microop_fusion_validate)
             {
               // Close the run with the END sentinel and write only the used part of the record.
-              // A run chains into its successor by swapping the sentinel, not its entry callback.
-              ExecuteMicroOpsOperands record = mop;
-              record.ops[record.count] = MicroOp{MicroOpCode::END, 0, 0, 0, 0, 0};
-              const std::size_t sentinel_offset = sizeof(AnyCallback) +
-                                                  offsetof(ExecuteMicroOpsOperands, ops) +
-                                                  record.count * sizeof(MicroOp) +
-                                                  offsetof(MicroOp, op);
-              WriteChainable(AnyCallback{ExecuteMicroOps<false>}, &record,
-                             ExecuteMicroOpsOperands::TapeSize(record.count + 1), sentinel_offset,
-                             static_cast<u64>(MicroOpCode::END_CHAIN), sizeof(MicroOpCode));
+              // One direct-threaded record per micro-op; WriteChainable links each to the next.
+              for (u32 k = 0; k < mop.count; ++k)
+              {
+                const MicroOp& packed = mop.ops[k];
+                const MicroOpPayload record = {packed.rd, packed.ra, packed.rb, packed.rc, packed.imm};
+                const auto code = static_cast<size_t>(packed.op);
+                WriteChainable(MicroOpHandlers::table[0][code], MicroOpHandlers::table[1][code],
+                               &record, sizeof(record));
+              }
               return;
             }
             ExecuteMicroOpsValidateOperands vop{};
@@ -5216,9 +5248,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
             mop.current_pc = js.compilerPC;
             u32 last_consumed = i;
 
-            // kMaxOps - 1: the last slot is reserved for the END sentinel emit_fused appends.
             for (u32 j = i; j < code_block.m_num_instructions &&
-                            mop.count < ExecuteMicroOpsOperands::kMaxOps - 1;
+                            mop.count < ExecuteMicroOpsOperands::kMaxOps;
                  ++j)
             {
               PPCAnalyst::CodeOp& next = m_code_buffer[j];
@@ -5296,16 +5327,32 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 mu.imm = static_cast<u32>(next.inst.SIMM_16);
                 break;
               case 14:  // addi
-                mu.op = MicroOpCode::ADDI;
-                mu.rd = next.inst.RD;  // RT
-                mu.ra = next.inst.RA;  // RA (0 allowed)
-                mu.imm = static_cast<u32>(next.inst.SIMM_16);
-                break;
-              case 15:  // addis
-                mu.op = MicroOpCode::ADDIS;
+                if (next.inst.RA == 0)
+                {
+                  // li: a plain constant, so the handler needs no rA == 0 test.
+                  mu.op = MicroOpCode::CONST32;
+                  mu.rd = next.inst.RD;
+                  mu.imm = static_cast<u32>(s32{next.inst.SIMM_16});
+                  break;
+                }
+                // rA != 0: the sign-extended immediate is precomputed, the handler is one add.
+                mu.op = MicroOpCode::ADD_IMM32;
                 mu.rd = next.inst.RD;
                 mu.ra = next.inst.RA;
-                mu.imm = static_cast<u32>(next.inst.SIMM_16);
+                mu.imm = static_cast<u32>(s32{next.inst.SIMM_16});
+                break;
+              case 15:  // addis
+                if (next.inst.RA == 0)
+                {
+                  mu.op = MicroOpCode::CONST32;  // lis
+                  mu.rd = next.inst.RD;
+                  mu.imm = static_cast<u32>(s32{next.inst.SIMM_16}) << 16;
+                  break;
+                }
+                mu.op = MicroOpCode::ADD_IMM32;
+                mu.rd = next.inst.RD;
+                mu.ra = next.inst.RA;
+                mu.imm = static_cast<u32>(s32{next.inst.SIMM_16}) << 16;
                 break;
               case 20:  // rlwimix
                 mu.op = MicroOpCode::RLWIMI_IMM;
@@ -5803,12 +5850,7 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 last_consumed = j;
             }
 
-            // A lone load/store is cheaper as its own direct-pointer record than as a one-op run:
-            // nothing but op[i] was consumed or charged, so fall through to that emission below.
-            const bool lone_memory_op = mop.count == 1 && last_consumed == i &&
-                                        mop.ops[0].op >= MicroOpCode::MEM_LWZ &&
-                                        mop.ops[0].op <= MicroOpCode::MEM_STHX;
-            if (mop.count > 0 && !lone_memory_op)
+            if (mop.count > 0)
             {
               // All packed ops are non-terminal (canEndBlock hard-stopped the run), so write_pc is
               // always false here. Emit one callback for the consumed run [i..last_consumed].

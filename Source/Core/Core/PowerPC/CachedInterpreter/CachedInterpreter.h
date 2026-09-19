@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <span>
 #include <string>
 
 #include "Common/CommonTypes.h"
@@ -87,6 +88,7 @@ enum class MicroOpCode : u8
   DIVWU,       // RD = RA / RB unsigned (0 on divide by zero); optional OV via imm bit0; optional record
   MFSPR_RAW,   // RD = SPR[imm]; LR and CTR only (plain moves, legal in user mode)
   MTSPR_RAW,   // SPR[imm] = RD; LR and CTR only
+  ADD_IMM32,   // RD = RA + imm (full 32-bit, precomputed): addi / addis with rA != 0
   // iCube: integer load/stores inside a fused run. imm holds the ORIGINAL instruction word (the D-form
   // displacement is its low 16 bits, and the cold path re-runs the generic handler from it); rd is
   // RD/RS, ra is RA (never 0, enforced by the packer), rb is RB for the X forms; rc != 0 marks the
@@ -106,8 +108,6 @@ enum class MicroOpCode : u8
   MEM_STBX,
   MEM_STHX,
   NOP,
-  END,  // sentinel the packer appends after the last op of every run; closes the threaded dispatch
-  END_CHAIN,  // same, but continues into the chain-capable record that follows (see WriteChainable)
   COUNT,
 };
 
@@ -149,6 +149,18 @@ struct MicroOp
   u8 rc;    // non-zero if this op should update CR0 (record bit)
   u32 imm;  // immediate value (signed/unsigned depends on op)
 };
+
+// iCube: what a micro-op looks like ON THE TAPE: the callback slot holds its handler (direct
+// threading, so MicroOp::op is not stored) and this is the record's whole 8-byte payload.
+struct MicroOpPayload
+{
+  u8 rd;
+  u8 ra;
+  u8 rb;
+  u8 rc;
+  u32 imm;
+};
+static_assert(sizeof(MicroOpPayload) == 8);
 
 // iCube: CachedInterpreter hot-block profiler (MAIN_CIR_PROFILE, default OFF). Flycast/PPSSPP-style
 // sampler: accumulates a per-block run-count + total emulated cycles keyed by the block ENTRY guest
@@ -409,11 +421,13 @@ private:
   // CI_UpdateCR0/CI_WriteCRField/CI_Helper_Carry/CI_HasAddOverflowed helpers the generic compare/
   // arithmetic ops use). write_pc mirrors Interpret<write_pc>. ONLY emitted when the flag is on;
   // dispatched through the existing generic indirect tail in ExecuteOneBlock (no hot-path branch).
-  template <bool write_pc>
-  static s32 ExecuteMicroOps(PowerPC::PowerPCState& ppc_state, const void* payload);
+  // Runs a packed run off the tape, for the fusion validate harness.
+  static void RunMicroOps(PowerPC::PowerPCState& ppc_state, const ExecuteMicroOpsOperands& operands);
   // One tail-called handler per MicroOpCode plus their dispatch table (defined in the .cpp).
   struct MicroOpHandlers;
-  static s32 ExecuteMicroOps(std::ostream& stream, const void* payload);
+  static s32 MicroOpRecord(std::ostream& stream, const void* payload);
+  // Every micro-op handler (both chain variants), for the disassembler's callback lookup.
+  static std::span<const AnyCallback> GetMicroOpCallbacks();
   // iCube WIN#2 validate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Self-validating analogue of
   // InterpretSpecialized's double-run: run the real generic Interpreter:: handlers for the original
   // consumed instructions on the live state, snapshot GPR/CR/XER(ca,so_ov)/pc/npc/Exceptions, restore,
@@ -632,23 +646,15 @@ struct CachedInterpreter::InterpretAndCheckExceptionsOperands : InterpretOperand
   u32 downcount;
 };
 
-// iCube WIN#2: payload for one fused micro-op run (MAIN_CIR_MICROOP_FUSION). Only written into the
-// callback stream when the flag is on, so the generic path never sees it. The record on the tape is
-// VARIABLE length: the emitter writes TapeSize(count + 1) bytes (header + the used ops + the END
-// sentinel, rounded up to the callback alignment), so a two-op run costs 48 bytes of tape instead of
-// the full 64-op array. The END handler finds the end of the record from its own position.
+// iCube WIN#2: one fused micro-op run as the PACKER builds it (MAIN_CIR_MICROOP_FUSION). It is not a
+// tape record any more: emit_fused writes one direct-threaded record per op (see MicroOpPayload), and
+// the validate harness runs it through RunMicroOps.
 struct CachedInterpreter::ExecuteMicroOpsOperands
 {
-  static constexpr u32 kMaxOps = 64;  // including the END sentinel
+  static constexpr u32 kMaxOps = 64;
   u32 current_pc;
   u32 count;
   MicroOp ops[kMaxOps];
-
-  static constexpr std::size_t TapeSize(u32 op_count)
-  {
-    const std::size_t used = offsetof(ExecuteMicroOpsOperands, ops) + op_count * sizeof(MicroOp);
-    return (used + alignof(AnyCallback) - 1) & ~(alignof(AnyCallback) - 1);
-  }
 };
 
 // iCube WIN#2 validate: payload for ExecuteMicroOpsValidate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Carries
