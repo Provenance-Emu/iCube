@@ -139,8 +139,9 @@ static const u8* s_chain_base = nullptr;
 static bool s_chain_links = true;
 // Per-dispatcher-entry link guards, owned by ExecuteOneBlock and consumed by LinkBlock (which may
 // follow many links without the executor seeing any of them).
-static const CPU::State* s_state_ptr = nullptr;
 static u32 s_linked_hops = 0;
+// MAIN_CIR_PROFILE || MAIN_CIR_BLOCK_LINKING_VALIDATE, folded so LinkBlock tests one flag.
+static bool s_link_instrumented = false;
 // The one Interpreter of this System, for cold paths that have no record field to carry it.
 static Interpreter* s_interpreter = nullptr;
 
@@ -1427,6 +1428,7 @@ void CachedInterpreter::Init()
   // read can fire) rather than lazily on the first Record() on the CPU thread — closes the (tiny)
   // race window between the first-block allocation and a Copy-State reader.
   s_cir_profile = Config::Get(Config::MAIN_CIR_PROFILE);
+  s_link_instrumented = s_cir_profile || s_block_linking_validate;
   // iCube: dead CR-flag elimination (default OFF). Read once at codegen time. When off DoJit never clears
   // an Rc bit, so the emitted stream is byte-identical to the flag-off baseline.
   s_dead_flag_elim = Config::Get(Config::MAIN_CIR_DEAD_FLAG_ELIM);
@@ -1547,7 +1549,6 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
   }
   // iCube: block-linking safety guards, reset on each dispatcher entry (this function) and consumed by
   // LinkBlock, which follows links with tail calls the loop below never sees.
-  s_state_ptr = state_ptr;
   s_linked_hops = 0;
   // iCube: optional register-file prefetch hints (MAIN_CACHED_INTERPRETER_PREFETCH, default OFF). When
   // the flag is off NOTHING is emitted here and the loop is byte-identical to the current fast state.
@@ -1695,7 +1696,7 @@ s32 CachedInterpreter::EndBlock(PowerPC::PowerPCState& ppc_state,
 // flags only change which per-INSTRUCTION callback is emitted; this changes only the block TERMINAL.
 // They never touch the same operand and ExecuteOneBlock dispatches LinkBlock through the unchanged
 // generic indirect tail, so the two features are orthogonal and may be enabled together.
-template <bool instrumented>
+template <bool instrumented, int edge, bool tail>
 s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* payload)
 {
   const auto& operands = *static_cast<const LinkBlockOperands*>(payload);
@@ -1704,11 +1705,8 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* p
   // leaf with no prologue. Decided before any state is touched.
   if constexpr (!instrumented)
   {
-    if (PowerPC::PerformanceMonitorActive(ppc_state) || s_cir_profile ||
-        s_block_linking_validate) [[unlikely]]
-    {
-      CI_MUSTTAIL return LinkBlock<true>(ppc_state, payload);
-    }
+    if (PowerPC::PerformanceMonitorActive(ppc_state) || s_link_instrumented) [[unlikely]]
+      CI_MUSTTAIL return LinkBlock<true, edge, tail>(ppc_state, payload);
   }
   // (1) End-of-block accounting — IDENTICAL to EndBlock<false>. Must run on EVERY exit (linked or
   // not) so pc/downcount/PMC bookkeeping is exactly what the unlinked path would have produced.
@@ -1756,8 +1754,10 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* p
   // feature_flags and generation all match the live state; a miss publishes the slot so the very
   // next dispatcher round-trip fills it. Fail-safe like the static path: a mismatch never executes
   // the wrong stream, it costs one dispatcher round-trip.
-  s32 rel = operands.rel;
-  if (ppc_state.pc != operands.expected_pc || rel == 0) [[unlikely]]
+  // edge 2 has no static edge (expected_pc == UINT32_MAX, rel never patched); edge 1's terminal is
+  // unconditional, so npc always equals expected_pc and only "not linked yet" sends it to the cache.
+  s32 rel = edge == 2 ? 0 : operands.rel;
+  if (edge == 2 || rel == 0 || (edge == 0 && ppc_state.pc != operands.expected_pc))
   {
     if (operands.dyn_rel == 0 || operands.dyn_pc != ppc_state.pc ||
         operands.dyn_generation != s_dyn_generation ||
@@ -1795,12 +1795,13 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* p
       ValidateLinkTarget(ppc_state, callback_site, rel);
   }
 
-  // (6) Per-hop guards, formerly ExecuteOneBlock's (it no longer sees a followed link). A stop/pause/
-  // state-change request must be observed without waiting for the slice to end, and the hop cap
-  // bounds the worst-case wake-race spin between CoreTiming::Advance() round-trips. Returning 0 sends
-  // us to the dispatcher, which resolves the same target from pc; downcount is untouched, so
+  // (6) Per-hop guard, formerly ExecuteOneBlock's (it no longer sees a followed link). The hop cap
+  // bounds how long a chain of links can run before Run()'s loop re-checks the CPU state and the
+  // slice: 256 short blocks is tens of microseconds, so a stop/pause request is still seen promptly
+  // and the separate per-hop read of the CPU state is not needed. Returning 0 sends us to the
+  // dispatcher, which resolves the same target from pc; downcount is untouched, so
   // interrupt/decrementer cadence is unchanged.
-  if (*s_state_ptr != CPU::State::Running || ++s_linked_hops >= CIR_MAX_LINKED_HOPS) [[unlikely]]
+  if (++s_linked_hops >= CIR_MAX_LINKED_HOPS) [[unlikely]]
     return 0;
 
   // (7) Follow. The successor's first record is normally chain-capable: enter it with a tail call.
@@ -1809,12 +1810,28 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* p
   const u8* const target = callback_site + rel;
   std::uintptr_t slot;
   std::memcpy(&slot, target, sizeof(slot));
-  if (s_chain_links && (slot & CHAIN_TAG) != 0) [[likely]]
+  if constexpr (tail)
   {
-    CI_MUSTTAIL return reinterpret_cast<AnyCallback>(slot - CHAIN_TAG)(
-        ppc_state, target + sizeof(AnyCallback));
+    if ((slot & CHAIN_TAG) != 0) [[likely]]
+    {
+      CI_MUSTTAIL return reinterpret_cast<AnyCallback>(slot - CHAIN_TAG)(
+          ppc_state, target + sizeof(AnyCallback));
+    }
   }
   return static_cast<s32>(target - s_chain_base);
+}
+
+CachedInterpreter::AnyCallback CachedInterpreter::GetLinkBlockCallback(int edge, bool tail)
+{
+  switch (edge)
+  {
+  case 1:
+    return tail ? AnyCallback{LinkBlock<false, 1, true>} : AnyCallback{LinkBlock<false, 1, false>};
+  case 2:
+    return tail ? AnyCallback{LinkBlock<false, 2, true>} : AnyCallback{LinkBlock<false, 2, false>};
+  default:
+    return tail ? AnyCallback{LinkBlock<false, 0, true>} : AnyCallback{LinkBlock<false, 0, false>};
+  }
 }
 
 void CachedInterpreter::ValidateLinkTarget(const PowerPC::PowerPCState& ppc_state,
@@ -4549,7 +4566,7 @@ bool CachedInterpreter::HandleFunctionHooking(u32 address)
   return true;
 }
 
-void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable)
+void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable, bool always_taken)
 {
   // iCube: linkable IFF all hold: feature on; not profiling (the link trampoline is unprofiled);
   // not debugging (breakpoints/stepping must round-trip the dispatcher so a single ExecuteOneBlock
@@ -4605,7 +4622,8 @@ void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable)
   u8* const callback_site = GetWritableCodePtr();
   // Chain-capable so the terminal before it falls straight in; it has no chaining variant of its own
   // (its successor is chosen at run time), hence the empty patch.
-  WriteChainable(AnyCallback{LinkBlock<false>}, &operands, sizeof(operands), 0, 0, 0);
+  const int edge = dyn_only ? 2 : (always_taken ? 1 : 0);
+  WriteChainable(GetLinkBlockCallback(edge, s_chain_links), &operands, sizeof(operands), 0, 0, 0);
   if (dyn_only)
     return;
 
@@ -6131,7 +6149,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // blocks stay on the plain EndBlock path.
         const bool dyn_terminal = !idle_terminal && op.inst.OPCD == 19 &&
                                   (op.inst.SUBOP10 == 16 || op.inst.SUBOP10 == 528);
-        WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo, dyn_terminal);
+        // b / bl: the static target is the only possible npc.
+        const bool always_taken = op.inst.OPCD == 18;
+        WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo, dyn_terminal, always_taken);
       }
       if (cond_branch_record != nullptr && !HasWriteFailed())
       {

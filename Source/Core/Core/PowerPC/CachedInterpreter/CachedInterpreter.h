@@ -240,7 +240,8 @@ private:
   // When block linking is enabled and the terminal is a linkable static branch, emits a LinkBlock
   // trampoline (and records the LinkData for upstream patching) instead of a plain EndBlock. Default
   // UINT32_MAX preserves the stock behavior for all the non-static call sites.
-  void WriteEndBlock(u32 link_target = 0xFFFFFFFF, bool dyn_linkable = false);
+  void WriteEndBlock(u32 link_target = 0xFFFFFFFF, bool dyn_linkable = false,
+                     bool always_taken = false);
 
   // Finds a free memory region and sets the code emitter to point at that region.
   // Returns false if no free memory region can be found.
@@ -324,8 +325,14 @@ private:
   // when that record is chain-capable, so a linked transition never returns to the executor.
   // <false> is what the tape holds: a leaf that tail-calls <true> (same logic plus the performance
   // monitor update, the hot-block profiler and link validation) when any of those is active.
-  template <bool instrumented>
+  // `edge` is what the terminal in front of it can do, known at emit time, so each form skips the
+  // checks that cannot apply: 0 = conditional static branch (static edge, else the dynamic cache),
+  // 1 = unconditional static branch (npc always equals the static target: no pc compare),
+  // 2 = blr/bctr (no static edge at all: straight to the dynamic cache). `tail` = follow a link with a
+  // tail call into the successor (MAIN_CIR_RECORD_CHAINING), decided at emit time as well.
+  template <bool instrumented, int edge, bool tail>
   static s32 LinkBlock(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static AnyCallback GetLinkBlockCallback(int edge, bool tail);
   static s32 LinkBlock(std::ostream& stream, const void* payload);
   // iCube: MAIN_CIR_BLOCK_LINKING_VALIDATE check shared by the static and dynamic link paths.
   static void ValidateLinkTarget(const PowerPC::PowerPCState& ppc_state, const u8* callback_site,
