@@ -1438,8 +1438,29 @@ struct DebugRootView: View {
           settingsCaption(
             Button(L("Enable JIT via StikDebug")) { StikDebugLauncher.enableJIT() },
             L("Hands iCube's bundled JIT script to StikDebug and enables JIT for this app. StikDebug will relaunch iCube; reopen a game afterward to run with JIT."))
+
+          /// Shown only after StikDebug has been asked and did not attach. Every current iOS 26
+          /// JIT app rides the same StikDebug protocol -- there is no alternative broker to offer
+          /// instead -- and the live failures cluster in StikDebug's transport, not the handshake.
+          /// These are the three checks that resolve most of them.
+          if !debuggerAttached && !txmAuthorized {
+            settingsCaption(
+              Text(L("StikDebug didn't attach?")).font(.footnote).foregroundStyle(.secondary),
+              L("In StikDebug: run \"Reset Developer Disk Image\", confirm its VPN is connected, and re-import your pairing file if it was removed. Those three cover most failures. On a Mac, Xcode or lldb works instead."))
+          }
         }
         #endif
+
+        settingsCaption(
+          Button(L("JIT Setup Guide")) {
+            #if os(iOS)
+            if let url = URL(string: "https://icube-emu.com/guide/jit/") {
+              UIApplication.shared.open(url)
+            }
+            #endif
+          },
+          L("What JIT does, why iOS 26 needs a debugger to switch it on, and what to expect without it."))
+
         HStack { Text(L("Fastmem")); Spacer(); Text(fastmemAvailable ? L("Available") : L("Not Available")).foregroundStyle(.secondary) }
       }
 

@@ -51,7 +51,18 @@ enum StikDebugLauncher {
     #endif
   }
 
-  /// Builds `stikdebug://enable-jit?bundle-id=…&script-name=icube.js&script-data=<base64url>`.
+  /// Builds `stikdebug://enable-jit?bundle-id=…&pid=…&script-name=icube.js&script-data=<base64url>`.
+  ///
+  /// `pid` is REQUIRED and its absence is not a soft failure. StikDebug's integration guide says
+  /// to always send the bundle id together with the current pid: with a pid it calls
+  /// `debugApp(withPID:)` and attaches to the process that is already running, and without one it
+  /// falls back to `debugApp(withBundleID:)`, which goes through `process_control_launch_app()`
+  /// and expects an integer pid back in the launch response. For an app that is ALREADY running --
+  /// which iCube always is, since it is the thing opening the URL -- that path fails with
+  /// `UnexpectedResponse("expected integer PID in launch app response")` and no debugger is ever
+  /// attached. Observed here as: the deep link opens, iCube is relaunched, and it comes back with
+  /// `debugger_attached = false`, so the brk handshake never runs and the user silently lands on
+  /// the interpreter. Same fix as intraducine/iridium#29.
   /// The script is base64url-encoded without padding: StikDebug decodes `script-data` twice (once
   /// via `URLComponents.queryItems`, again via `removingPercentEncoding`), and the base64url
   /// alphabet (`A–Z a–z 0–9 - _`) contains no percent-escapable characters, so it survives intact.
@@ -65,7 +76,8 @@ enum StikDebugLauncher {
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.")
     let safeBundleID = bundleID.addingPercentEncoding(withAllowedCharacters: allowed) ?? bundleID
     return URL(string:
-      "\(scheme)://enable-jit?bundle-id=\(safeBundleID)&script-name=\(scriptResource).js&script-data=\(encodedScript)")
+      "\(scheme)://enable-jit?bundle-id=\(safeBundleID)&pid=\(getpid())"
+      + "&script-name=\(scriptResource).js&script-data=\(encodedScript)")
   }
 
   /// Standard base64url (RFC 4648 §5): `+`→`-`, `/`→`_`, padding stripped.
