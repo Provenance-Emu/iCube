@@ -112,8 +112,17 @@ public enum SaveStateService {
   /// If resume is enabled and an auto-state exists for the running title, load it.
   /// Returns true if a load was issued. Safe to call right after the game boots.
   /// (The save side runs in TVEmulationBridge.stop so every quit path is covered.)
+  /// One-shot: the next boot starts fresh even though an auto-state exists. Set by the library's
+  /// "Start Fresh" action: a bad auto-state would otherwise be reloaded on every single launch, with
+  /// no way back into the game. Main thread only, like everything else here.
+  public static var skipResumeOnce = false
+
   @discardableResult
   public static func resumeIfAvailable() -> Bool {
+    if skipResumeOnce {
+      skipResumeOnce = false
+      return false
+    }
     guard resumeEnabled, let url = autoStateURL,
           FileManager.default.fileExists(atPath: url.path) else { return false }
     TVEmulationBridge.loadState(fromPath: url.path)

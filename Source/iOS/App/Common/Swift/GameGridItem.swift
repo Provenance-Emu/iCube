@@ -683,6 +683,16 @@ struct GameGridItem: View {
       if selectionMode { handlePrimaryAction() } else { select(item) }
     }
     .contextMenu {
+      // Only meaningful when launches auto-resume: boot this one time without loading the
+      // auto-state (it may be the very thing that is broken).
+      if SaveStateService.resumeEnabled {
+        Button(action: {
+          SaveStateService.skipResumeOnce = true
+          select(item)
+        }) {
+          Label(L("Start Fresh (Skip Resume)"), systemImage: "arrow.counterclockwise")
+        }
+      }
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
       }

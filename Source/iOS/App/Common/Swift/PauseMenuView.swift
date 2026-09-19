@@ -21,6 +21,7 @@ internal struct PauseMenuView: View {
   private enum Pane { case main, saves, cheats, controllers }
   @State private var pane: Pane = .main
   @State private var showExitDialog: Bool = false
+  @State private var showResetDialog: Bool = false
   @State private var showShaders: Bool = false
   @State private var showSettingsSheet: Bool = false
   @State private var showControllersSheet: Bool = false
@@ -71,6 +72,7 @@ internal struct PauseMenuView: View {
     #if os(iOS)
     items.append(IOSMenuItem(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray, role: nil) { showSettingsSheet = true })
     #endif
+    items.append(IOSMenuItem(title: L("Reset System"), subtitle: L("Restart the game from power-on"), icon: "arrow.counterclockwise.circle", tint: .orange, role: nil) { showResetDialog = true })
     items.append(IOSMenuItem(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red, role: .destructive) { showExitDialog = true })
     return items
   }
@@ -291,6 +293,17 @@ internal struct PauseMenuView: View {
       refreshPauseMenuControllerNav()
     }
     #endif
+    .alert(L("Reset System"), isPresented: $showResetDialog) {
+      Button(L("Cancel"), role: .cancel) { showResetDialog = false }
+      Button(L("Reset"), role: .destructive) {
+        // Same as the console's reset button. It does not reload the auto-resume state, so it is also
+        // the way out of a game that resumed into a bad save.
+        TVEmulationBridge.resetSystem()
+        onClose()
+      }
+    } message: {
+      Text(L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."))
+    }
     .alert(L("Exit Game"), isPresented: $showExitDialog) {
       Button(L("Cancel"), role: .cancel) { showExitDialog = false }
       Button(L("Quit"), role: .destructive) {
@@ -686,6 +699,41 @@ internal struct PauseMenuView: View {
             // Settings
             settingsButtonRow
 
+            // Reset System
+            Button(action: { showResetDialog = true }) {
+              HStack(spacing: 20) {
+                ZStack {
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.orange.opacity(0.15))
+                    .frame(width: 48, height: 48)
+
+                  Image(systemName: "arrow.counterclockwise.circle")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.orange)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(L("Reset System"))
+                    .font(.system(size: 18, weight: .semibold))
+
+                  Text(L("Restart the game from power-on"))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                  .font(.system(size: 14, weight: .medium))
+                  .foregroundColor(.secondary)
+              }
+              .padding(.horizontal, 24)
+              .padding(.vertical, 16)
+              .background(.orange.opacity(0.05))
+              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
             // Exit Game
             Button(action: { showExitDialog = true }) {
               HStack(spacing: 20) {
@@ -732,6 +780,17 @@ internal struct PauseMenuView: View {
       .padding(60)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .zIndex(100)
+      .alert(L("Reset System"), isPresented: $showResetDialog) {
+        Button(L("Cancel"), role: .cancel) { showResetDialog = false }
+        Button(L("Reset"), role: .destructive) {
+          // Same as the console's reset button. It does not reload the auto-resume state, so it is also
+          // the way out of a game that resumed into a bad save.
+          TVEmulationBridge.resetSystem()
+          onClose()
+        }
+      } message: {
+        Text(L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."))
+      }
       .alert(L("Exit Game"), isPresented: $showExitDialog) {
         Button(L("Cancel"), role: .cancel) { showExitDialog = false }
         Button(L("Quit"), role: .destructive) {

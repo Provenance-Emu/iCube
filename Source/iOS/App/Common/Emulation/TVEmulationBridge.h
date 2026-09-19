@@ -16,6 +16,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)pause;
 + (void)resume;
 + (BOOL)isPaused;
+/// The console's reset button: the running game restarts from power-on. Resumes a paused core,
+/// because a reset only takes effect while the CPU runs. No-op when nothing is running.
++ (void)resetSystem;
 
 // Convenience wrappers for Swift
 // Launch a game file at path; sensible defaults applied.

@@ -10,6 +10,7 @@
 #import "EmulationBootType.h"
 
 // C++ Core host messaging
+#include "Core/HW/ProcessorInterface.h"
 #include "Core/Host.h"
 #include "Core/Core.h"
 #include "Core/System.h"
@@ -58,6 +59,14 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 
 + (void)resume {
   Core::SetState(Core::System::GetInstance(), Core::State::Running);
+}
+
++ (void)resetSystem {
+  auto& system = Core::System::GetInstance();
+  if (!Core::IsRunning(system))
+    return;
+  system.GetProcessorInterface().ResetButton_Tap();
+  Core::SetState(system, Core::State::Running);
 }
 
 + (BOOL)isPaused {
