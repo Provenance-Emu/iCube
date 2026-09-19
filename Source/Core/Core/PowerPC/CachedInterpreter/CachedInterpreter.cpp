@@ -51,12 +51,12 @@ CachedInterpreter::~CachedInterpreter() = default;
 // (null = MMIO / unmapped / page-table-mapped), rebuilt on every DBAT change, for the logical and the
 // physical address space; these are the same tables the JITs use when there is no fastmem arena. One
 // load resolves an effective address to host memory under ANY BAT layout, real mode included, where the
-// old compare chain hardcoded the default 0x80/0x90/0xC0/0xD0 windows. Indexed by MSR.DR. Set in Init.
+// old compare chain hardcoded the default 0x80/0x90/0xC0/0xD0 windows. Set in Init.
 namespace
 {
 constexpr u32 CI_PAGE_OFFSET_MASK = PowerPC::BAT_PAGE_SIZE - 1;
 
-static const void* const* s_page_tables[2] = {nullptr, nullptr};
+static const void* const* s_logical_pages = nullptr;
 // Cache-inhibited (uncached mirror) BATs: a sub-word store through one has data-duplication and
 // PI-interrupt side effects in the generic path, so byte/half stores consult the WI bit first.
 static const PowerPC::BatTable* s_dbat_table = nullptr;
@@ -67,30 +67,29 @@ static bool s_mem_microops = true;
 // MAIN_CIR_LONG_BLOCKS: analyzer conditional-continue + branch-follow (see ContinueIfNpc).
 static bool s_long_blocks = true;
 
-static inline u8* CI_PagePtr(const PowerPC::PowerPCState& ppc_state, u32 ea)
+// Blocks are compiled per MSR.DR state (it is one of the block-cache feature flags, and every link
+// re-checks the flags), so DR is an emit-time constant: the direct-pointer path is only emitted into
+// DR = 1 blocks and its handlers go straight to the logical table. DR = 0 (real-mode) blocks keep the
+// generic records. ppc_state is unused but kept so call sites read the same.
+static inline u8* CI_PagePtr(const PowerPC::PowerPCState& /*ppc_state*/, u32 ea)
 {
-  const void* const* const table = s_page_tables[ppc_state.msr.DR];
-  return const_cast<u8*>(static_cast<const u8*>(table[ea >> PowerPC::BAT_INDEX_SHIFT]));
+  return const_cast<u8*>(static_cast<const u8*>(s_logical_pages[ea >> PowerPC::BAT_INDEX_SHIFT]));
 }
 
-static inline bool CI_IsWriteInhibitedPage(const PowerPC::PowerPCState& ppc_state, u32 ea)
+static inline bool CI_IsWriteInhibitedPage(const PowerPC::PowerPCState& /*ppc_state*/, u32 ea)
 {
-  return ppc_state.msr.DR &&
-         ((*s_dbat_table)[ea >> PowerPC::BAT_INDEX_SHIFT] & PowerPC::BAT_WI_BIT) != 0;
+  return ((*s_dbat_table)[ea >> PowerPC::BAT_INDEX_SHIFT] & PowerPC::BAT_WI_BIT) != 0;
 }
 
 // True when a store to `ea` is a gather-pipe write exactly as MMU::WriteToHardware would classify it
 // (BAT-translate under MSR.DR, then match the masked physical address).
 static inline bool CI_IsGatherPipeWrite(const PowerPC::PowerPCState& ppc_state, u32 ea)
 {
-  u32 physical = ea;
-  if (ppc_state.msr.DR)
-  {
-    const u32 bat = (*s_dbat_table)[ea >> PowerPC::BAT_INDEX_SHIFT];
-    if ((bat & PowerPC::BAT_MAPPED_BIT) == 0)
-      return false;
-    physical = (bat & PowerPC::BAT_RESULT_MASK) | (ea & CI_PAGE_OFFSET_MASK);
-  }
+  // DR = 1 (see CI_PagePtr): always BAT-translated.
+  const u32 bat = (*s_dbat_table)[ea >> PowerPC::BAT_INDEX_SHIFT];
+  if ((bat & PowerPC::BAT_MAPPED_BIT) == 0)
+    return false;
+  const u32 physical = (bat & PowerPC::BAT_RESULT_MASK) | (ea & CI_PAGE_OFFSET_MASK);
   return (physical & 0xFFFFF000) == GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS;
 }
 
@@ -1377,9 +1376,7 @@ void CachedInterpreter::Init()
   s_pic_loadstore = Config::Get(Config::MAIN_CIR_PIC_LOADSTORE);
   {
     auto& memory = m_system.GetMemory();
-    s_page_tables[0] =
-        reinterpret_cast<const void* const*>(memory.GetPhysicalPageMappingsBase());
-    s_page_tables[1] = reinterpret_cast<const void* const*>(memory.GetLogicalPageMappingsBase());
+    s_logical_pages = reinterpret_cast<const void* const*>(memory.GetLogicalPageMappingsBase());
     s_dbat_table = &m_system.GetMMU().GetDBATTable();
     s_gpfifo = &m_system.GetGPFifo();
     s_low_dcbz_hack = Config::Get(Config::MAIN_LOW_DCBZ_HACK);
@@ -4878,13 +4875,14 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 
   // iCube: the direct-pointer load/store handlers bypass the MMU, so they are off whenever an access
   // must be observed (memchecks / MMU mode) or routed through the emulated d-cache.
-  const bool load_store_fast = s_pic_loadstore && !jo.memcheck && !m_ppc_state.m_enable_dcache;
+  const bool load_store_fast = s_pic_loadstore && !jo.memcheck && !m_ppc_state.m_enable_dcache &&
+                               m_ppc_state.msr.DR;
   // MMU-mode titles set jo.memcheck only so faults are delivered; the direct path is still exact for
   // BAT-mapped pages. Watchpoints and pause-on-panic need every access observed, so they keep it off.
   const bool load_store_fast_mmu = s_pic_loadstore && jo.memcheck && m_system.IsMMUMode() &&
                                    !m_system.IsPauseOnPanicMode() &&
                                    !m_system.GetPowerPC().GetMemChecks().HasAny() &&
-                                   !m_ppc_state.m_enable_dcache;
+                                   !m_ppc_state.m_enable_dcache && m_ppc_state.msr.DR;
   for (u32 i = 0; i < code_block.m_num_instructions; i++)
   {
     PPCAnalyst::CodeOp& op = m_code_buffer[i];
