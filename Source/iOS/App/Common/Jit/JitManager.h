@@ -38,8 +38,17 @@ NS_ASSUME_NONNULL_BEGIN
 /// `DOL_JIT_TXM=1` in the environment forces true, `DOL_JIT_TXM=0` forces false.
 - (bool)shouldAttemptTXMHandshake;
 
-/// Records the outcome of the TXM handshake (see txmAuthorized).
+/// Call immediately before issuing the TXM handshake. Persists a crash cookie so that if
+/// the brk kills us (a debugger is attached that is not a broker, and EXC_BREAKPOINT cannot
+/// be caught), the next launch declines to try again instead of crashing forever.
+- (void)beginTXMHandshake;
+
+/// Records the outcome of the TXM handshake (see txmAuthorized) and clears the cookie.
 - (void)noteTXMHandshakeResult:(bool)authorized;
+
+/// Clears the crash cookie after an explicit user request to enable JIT, so a one-off bad
+/// attempt does not disable the feature permanently.
+- (void)clearTXMHandshakeCookie;
 
 @end
 

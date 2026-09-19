@@ -42,6 +42,8 @@ enum StikDebugLauncher {
           UIApplication.shared.canOpenURL(url) else {
       return false
     }
+    // Explicit user intent: re-arm the handshake even if a previous attempt died on the brk.
+    JitManager.shared().clearTXMHandshakeCookie()
     UIApplication.shared.open(url, options: [:], completionHandler: nil)
     return true
     #else

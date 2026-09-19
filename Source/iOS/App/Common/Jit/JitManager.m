@@ -5,6 +5,12 @@
 
 #import "JitManager+Debugger.h"
 
+// Sticky "the TXM handshake did not come back last time" flag. The brk is only safe when the
+// attached debugger is a broker that answers it; any other attached debugger turns it into an
+// uncatchable EXC_BREAKPOINT, which the in-process SIGTRAP net cannot help with because the
+// debugger owns the exception. Without this, such a device would crash on every single boot.
+static NSString* const kTXMHandshakeInFlightKey = @"ICubeTXMHandshakeInFlight";
+
 typedef NS_ENUM(NSInteger, DOLJitType) {
   DOLJitTypeDebugger,
   DOLJitTypeUnrestricted
@@ -124,6 +130,15 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
     return false;
   }
 
+  // A previous launch issued the handshake and never got to clear the cookie, i.e. the brk
+  // killed us. Whatever is attached is not a broker, so do not try again; the user gets the
+  // Cached Interpreter, and "Enable JIT via StikDebug" re-arms it explicitly.
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:kTXMHandshakeInFlightKey]) {
+    self.acquisitionError = @"A previous attempt to authorize the JIT region did not complete, so "
+                             "JIT is off for safety. Use \"Enable JIT via StikDebug\" to retry.";
+    return false;
+  }
+
   // Auto-detect: a broker can only answer the brk if a debugger is attached right
   // now. CS_DEBUGGED alone is not enough — old-style JIT enablers set it and detach
   // immediately. Xcode counts: its LLDB answers the brk through the bless hook in
@@ -133,7 +148,21 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   return [self checkIfDebuggerAttachedNow];
 }
 
+- (void)beginTXMHandshake {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setBool:YES forKey:kTXMHandshakeInFlightKey];
+  [defaults synchronize];  // must reach disk before the brk, which may never return
+}
+
+- (void)clearTXMHandshakeCookie {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  [defaults removeObjectForKey:kTXMHandshakeInFlightKey];
+  [defaults synchronize];
+}
+
 - (void)noteTXMHandshakeResult:(bool)authorized {
+  // We came back from the brk at all, so it was not fatal: retire the cookie either way.
+  [self clearTXMHandshakeCookie];
   self.txmAuthorized = authorized;
   if (authorized) {
     self.acquisitionError = nil;

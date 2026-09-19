@@ -1732,6 +1732,12 @@ after_set:
 
           if (regionAlreadyAuthorized || [jitManager shouldAttemptTXMHandshake])
           {
+            // Persist a crash cookie first: if the attached debugger is not a broker, the brk
+            // is an uncatchable EXC_BREAKPOINT and this process dies here. The cookie makes the
+            // NEXT launch decline the handshake instead of crashing on every boot forever.
+            if (!regionAlreadyAuthorized)
+              [jitManager beginTXMHandshake];
+
             Common::SetJitType(Common::JitType::LuckTXM);
             Common::AllocateExecutableMemoryRegion();
 
