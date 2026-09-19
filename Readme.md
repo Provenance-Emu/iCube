@@ -4,6 +4,22 @@ DolphiniOS is a port of the Dolphin Emulator to iOS and iPadOS. For installation
 
 This is the repository for the new DolphiniOS codebase.
 
+## JIT on iOS 26 (Trusted Execution Monitor)
+
+iCube runs the JIT recompiler again on iOS 26. TXM will not execute a freshly written
+code page until a debugger has written to that page, so iCube asks an attached broker to
+touch every page of its 288 MB code region once at startup. After that the broker can
+detach and the region stays usable for the life of the process.
+
+* **Users:** see **[JIT & Performance](https://icube-emu.com/guide/jit/)** for how to turn
+  it on with StikDebug, what to expect without it, and troubleshooting.
+* **Developers:** `Source/iOS/App/Project/Scripts/dolphin_jit_lldb.py` is an LLDB stop hook
+  that services the handshake, wired up through the repo `.lldbinit`, so Xcode and
+  command-line `lldb` both work as brokers.
+
+Without a broker attached at boot, iCube falls back to the Cached Interpreter. It never
+requires JIT to run.
+
 ## Building
 
 See **[Source/iOS/BUILDING.md](Source/iOS/BUILDING.md)** for the current iCube build workflow (Tuist, xcframework, schemes, and command-line builds).
