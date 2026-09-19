@@ -133,7 +133,7 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   // A previous launch issued the handshake and never got to clear the cookie, i.e. the brk
   // killed us. Whatever is attached is not a broker, so do not try again; the user gets the
   // Cached Interpreter, and "Enable JIT via StikDebug" re-arms it explicitly.
-  if ([[NSUserDefaults standardUserDefaults] boolForKey:kTXMHandshakeInFlightKey]) {
+  if (self.txmHandshakeBlocked) {
     self.acquisitionError = @"A previous attempt to authorize the JIT region did not complete, so "
                              "JIT is off for safety. Use \"Enable JIT via StikDebug\" to retry.";
     return false;
@@ -146,6 +146,10 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   // at the brk (EXC_BREAKPOINT in the debugger, no crash), which is a developer's
   // problem to notice, not a user's.
   return [self checkIfDebuggerAttachedNow];
+}
+
+- (bool)txmHandshakeBlocked {
+  return [[NSUserDefaults standardUserDefaults] boolForKey:kTXMHandshakeInFlightKey];
 }
 
 - (void)beginTXMHandshake {

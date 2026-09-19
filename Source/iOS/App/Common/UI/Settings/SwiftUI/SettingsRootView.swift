@@ -1377,6 +1377,7 @@ struct DebugRootView: View {
   @State private var jitError: String = ""
   @State private var debuggerAttached: Bool = false
   @State private var txmAuthorized: Bool = false
+  @State private var txmHandshakeBlocked: Bool = false
   @State private var fastmemAvailable: Bool = false
   @State private var launchTimes: Int = 0
   @State private var loggingEnabled: Bool = false
@@ -1416,6 +1417,18 @@ struct DebugRootView: View {
           HStack { Text(L("TXM JIT Region")); Spacer(); Text(txmAuthorized ? L("Authorized") : L("Not Authorized")).foregroundStyle(.secondary) }
         }
         HStack { Text(L("JIT Error")); Spacer(); Text(jitError.isEmpty ? "(none)" : jitError).foregroundStyle(.secondary).multilineTextAlignment(.trailing) }
+        /// Recovery that does NOT depend on StikDebug being installed. The cookie is set
+        /// before the brk and cleared on return, so anything that kills the app in between
+        /// (a non-broker debugger, but also jetsam while the region faults in) leaves it set.
+        /// Without this, a developer on Xcode or a user with no StikDebug has no way back.
+        if txmHandshakeBlocked {
+          settingsCaption(
+            Button(L("Retry JIT Authorization")) {
+              JitManager.shared().clearTXMHandshakeCookie()
+              txmHandshakeBlocked = false
+            },
+            L("A previous attempt to authorize the JIT region never finished, so iCube is declining to retry on its own. This re-arms it for the next time you open a game with a debugger attached."))
+        }
         #if os(iOS)
         /// iOS 26 TXM hand-off: ship iCube's own broker script to StikDebug inline so JIT can be
         /// authorized without the user pre-assigning a script. Shown only when actionable: JIT
@@ -1531,11 +1544,13 @@ struct DebugRootView: View {
     let error = manager.acquisitionError ?? ""
     let attached = manager.debuggerAttached
     let authorized = manager.txmAuthorized
+    let blocked = manager.txmHandshakeBlocked
     await MainActor.run {
       jitAcquired = acquired
       jitError = error
       debuggerAttached = attached
       txmAuthorized = authorized
+      txmHandshakeBlocked = blocked
     }
   }
 

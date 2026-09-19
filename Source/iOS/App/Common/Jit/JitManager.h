@@ -50,6 +50,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// attempt does not disable the feature permanently.
 - (void)clearTXMHandshakeCookie;
 
+/// True when the cookie is set, i.e. a previous handshake never returned and JIT is being
+/// declined for safety. Surfaced in Settings so a stuck device has a way back that does not
+/// depend on StikDebug being installed.
+@property (readonly, assign) bool txmHandshakeBlocked;
+
 @end
 
 NS_ASSUME_NONNULL_END
