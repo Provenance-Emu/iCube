@@ -192,6 +192,21 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
     add(AnyCallback{InterpretBclr<true>}, static_cast<ErasedDisassemble>(InterpretBclr));
     add(AnyCallback{InterpretBcctr<false>}, static_cast<ErasedDisassemble>(InterpretBcctr));
     add(AnyCallback{InterpretBcctr<true>}, static_cast<ErasedDisassemble>(InterpretBcctr));
+    const ErasedDisassemble check_fpu = +[](std::ostream& stream, const void* payload) -> s32 {
+      return CheckFPU(stream, *static_cast<const CheckHaltOperands*>(payload));
+    };
+    const ErasedDisassemble end_block = +[](std::ostream& stream, const void* payload) -> s32 {
+      return EndBlock<false>(stream, *static_cast<const EndBlockOperands<false>*>(payload));
+    };
+    const ErasedDisassemble psq_seq = +[](std::ostream& stream, const void* payload) -> s32 {
+      return ExecuteFusedPsqSeq<false>(stream,
+                                       *static_cast<const ExecuteFusedPsqSeqOperands*>(payload));
+    };
+    add(AnyCallback{CheckFPUChained<false>}, check_fpu);
+    add(AnyCallback{CheckFPUChained<true>}, check_fpu);
+    add(AnyCallback{EndBlockChained}, end_block);
+    add(AnyCallback{ExecuteFusedPsqSeqChained<false>}, psq_seq);
+    add(AnyCallback{ExecuteFusedPsqSeqChained<true>}, psq_seq);
     add(AnyCallback{InterpretChained<false>},
         static_cast<ErasedDisassemble>(CachedInterpreter::InterpretChained));
     add(AnyCallback{InterpretChained<true>},

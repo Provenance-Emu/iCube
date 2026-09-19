@@ -75,6 +75,18 @@ enum class MicroOpCode : u8
   CMPL_U_RR,   // CR[rd] = cmp(u32(RA), u32(RB))
   CMP_S_IMM,   // CR[rd] = cmp(s32(RA), SIMM16=imm)
   CMPL_U_IMM,  // CR[rd] = cmp(u32(RA), UIMM16=imm)
+  // More integer ops that used to end a run (each mirrors its Interpreter_Integer.cpp handler).
+  MULLI,       // RD = RA * SIMM16=imm (low 32 bits)
+  SUBFIC,      // RD = imm - RA; set CA
+  ADDIC,       // RD = RA + imm; set CA; rc set for addic.
+  NEG,         // RD = -RA; optional OV via imm bit0; optional record via rc
+  MULLW,       // RD = low32(RA * RB) signed; optional OV via imm bit0; optional record via rc
+  MULHW,       // RD = high32(s64(RA) * s64(RB)); optional record via rc
+  MULHWU,      // RD = high32(u64(RA) * u64(RB)); optional record via rc
+  DIVW,        // RD = RA / RB signed (0 / -1 on overflow); optional OV via imm bit0; optional record
+  DIVWU,       // RD = RA / RB unsigned (0 on divide by zero); optional OV via imm bit0; optional record
+  MFSPR_RAW,   // RD = SPR[imm]; LR and CTR only (plain moves, legal in user mode)
+  MTSPR_RAW,   // SPR[imm] = RD; LR and CTR only
   // iCube: integer load/stores inside a fused run. imm holds the ORIGINAL instruction word (the D-form
   // displacement is its low 16 bits, and the cold path re-runs the generic handler from it); rd is
   // RD/RS, ra is RA (never 0, enforced by the packer), rb is RB for the X forms; rc != 0 marks the
@@ -351,6 +363,14 @@ private:
   // Null when the (kind, indexed, update) combination does not exist.
   static AnyCallback GetLoadStoreFastCallback(CIMemKind kind, bool indexed, bool update, bool chain,
                                               bool checked);
+  // iCube: chain-capable forms of other records that sit inside or at the end of most blocks. They
+  // wrap the typed callbacks above (same records, same semantics); CheckFPUChained and
+  // EndBlockChained may return 0, which ends the chain and the block.
+  template <bool chain>
+  static s32 CheckFPUChained(PowerPC::PowerPCState& ppc_state, const void* payload);
+  static s32 EndBlockChained(PowerPC::PowerPCState& ppc_state, const void* payload);
+  template <bool chain>
+  static s32 ExecuteFusedPsqSeqChained(PowerPC::PowerPCState& ppc_state, const void* payload);
   // iCube: chain-capable forms of the generic and the specialized non-terminal records.
   template <bool chain>
   static s32 InterpretChained(PowerPC::PowerPCState& ppc_state, const void* payload);
