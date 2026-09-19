@@ -3,6 +3,7 @@
 
 #include "Common/MemoryUtil.h"
 
+#include <algorithm>
 #include <csetjmp>
 #include <csignal>
 #include <cstdlib>
@@ -37,7 +38,13 @@
 // therefore paid twice over -- once as resident dirty memory for the whole run, and once as
 // bless time at boot (a 512 MiB region measured ~12 min unpipelined, ~10 s pipelined, with
 // the app frozen throughout). Keep it tight.
-constexpr size_t EXECUTABLE_REGION_SIZE = 288 * 1024 * 1024;
+// Was 288 MiB while JitArm64's TOTAL_CODE_SIZE was 256 MiB. That budget is now halved to
+// 128 MiB on iOS/tvOS (see the note in JitArm64/Jit.cpp) because every page here is made
+// RESIDENT by the authorization pass, and 288 MiB resident was killing the app with critical
+// memory pressure mid-boot when an on-device broker like StikDebug is resident too. 160 MiB
+// keeps the same 32 MiB of slack over the JIT's single allocation for the vertex loaders and
+// allocator overhead described above.
+constexpr size_t EXECUTABLE_REGION_SIZE = 160 * 1024 * 1024;
 
 static u8* g_rx_region = nullptr;
 static ptrdiff_t g_rw_region_diff = 0;
@@ -93,6 +100,36 @@ static void TxmUniversalPrepare(void* addr, size_t len)
   register u64 x1 asm("x1") = static_cast<u64>(len);
   register u64 x16 asm("x16") = 1;  // CMD_PREPARE_REGION
   asm volatile("brk #0xf00d" : "+r"(x0), "+r"(x1), "+r"(x16) : : "memory");
+}
+
+// Ask for the region in granules rather than in one call.
+//
+// TxmUniversalPrepare issues a SINGLE brk for the whole length, which is what shipped, and it is
+// not what the universal protocol is built for: the script loops servicing breakpoints until it
+// sees CMD_DETACH precisely so a client can prepare repeatedly as its region grows. A broker is
+// free to bless less than asked for in one call, and StikDebug's does -- it works in 16 MiB
+// granules. Nothing reports the shortfall, so the app runs happily on the blessed prefix and then
+// dies the moment execution reaches a page past it.
+//
+// Observed on an iPhone 16 Pro Max / iOS 26.6.2 with StikDebug as the broker: the handshake
+// reports success ("[JitManager] TXM boot: attached=1 authorized=1"), the game runs for ~90 s, and
+// then EXC_BAD_ACCESS / SIGBUS at 0x1379b8000, which the crash report places 67,125,248 bytes into
+// the 128 MiB JIT code region -- i.e. exactly past the blessed prefix, on the first instruction
+// fetch from a page the broker never touched. The tethered lldb broker never showed this because
+// it blesses every page it is handed in one pass.
+static constexpr size_t TXM_PREPARE_GRANULE = 16 * 1024 * 1024;
+
+static void TxmUniversalPrepareAll(void* addr, size_t len)
+{
+  u8* cursor = static_cast<u8*>(addr);
+  size_t remaining = len;
+  while (remaining != 0)
+  {
+    const size_t chunk = std::min(remaining, TXM_PREPARE_GRANULE);
+    TxmUniversalPrepare(cursor, chunk);
+    cursor += chunk;
+    remaining -= chunk;
+  }
 }
 
 static void TxmUniversalDetach()
@@ -306,18 +343,46 @@ void AllocateExecutableMemoryRegion_LuckTXM()
     const char* force_universal = getenv("DOL_JIT_TXM_UNIVERSAL");
     if (force_universal && force_universal[0] == '1')
     {
-      TxmUniversalPrepare(rx_ptr, size);
+      TxmUniversalPrepareAll(rx_ptr, size);
       TxmUniversalDetach();
+      os_log(OS_LOG_DEFAULT, "[LuckTXM] prepared %zu MiB via universal (forced)", size >> 20);
     }
     else
     {
-      const u64 legacy_result = TxmLegacyPrepare(rx_ptr, size);
+      // Probe with ONE granule, not the whole region.
+      //
+      // This used to ask for `size` in a single legacy brk and, if the broker did not reject it,
+      // assume the entire region was blessed. It is not: a broker may bless less than asked and
+      // report nothing. StikDebug blesses 64 MiB here, so execution died with EXC_BAD_ACCESS /
+      // SIGBUS the moment the JIT emitted past that -- twice, at byte 67,125,248 of the region
+      // both times, which is 64 MiB plus exactly one page. An identical fault offset across two
+      // runs is what gives it away; a memory-pressure kill would not land on the same byte.
+      //
+      // So probe with the first granule to find out which protocol the broker speaks, then keep
+      // asking, a granule at a time, until the whole region is covered.
+      const size_t probe = std::min(size, TXM_PREPARE_GRANULE);
+      const u64 legacy_result = TxmLegacyPrepare(rx_ptr, probe);
       if (static_cast<u32>(legacy_result) == TXM_LEGACY_REJECTED)
       {
-        // universal.js rejected the legacy sentinel without preparing the
-        // region; migrate to the universal command it understands.
-        TxmUniversalPrepare(rx_ptr, size);
+        // universal.js rejected the legacy sentinel without preparing anything; migrate to the
+        // universal command it understands, for the WHOLE region including the probed granule.
+        TxmUniversalPrepareAll(rx_ptr, size);
         TxmUniversalDetach();
+        os_log(OS_LOG_DEFAULT, "[LuckTXM] prepared %zu MiB via universal after legacy reject",
+               size >> 20);
+      }
+      else
+      {
+        // Legacy broker answered. Continue with it for the remainder.
+        size_t done = probe;
+        while (done < size)
+        {
+          const size_t chunk = std::min(size - done, TXM_PREPARE_GRANULE);
+          TxmLegacyPrepare(static_cast<u8*>(rx_ptr) + done, chunk);
+          done += chunk;
+        }
+        os_log(OS_LOG_DEFAULT, "[LuckTXM] prepared %zu MiB via legacy in %zu granules", size >> 20,
+               (size + TXM_PREPARE_GRANULE - 1) / TXM_PREPARE_GRANULE);
       }
     }
   }

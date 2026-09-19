@@ -38,14 +38,40 @@
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 using namespace Arm64Gen;
 
+// iCube: HALVED from upstream's 64 MiB on iOS/tvOS. Upstream's "using more RAM isn't much of a
+// problem" is a desktop assumption and it is false here. Under TXM the whole code region has to
+// be authorized page by page by a debugger before ANY of it will execute, and authorizing a page
+// means writing to it, which faults it in. Every byte of this budget is therefore RESIDENT from
+// the moment the game boots, not lazily committed address space.
+//
+// Measured on an iPhone 16 Pro Max / iOS 26.6.2 with StikDebug as the broker: the handshake
+// succeeds ("[JitManager] TXM boot: attached=1 authorized=1"), then the device logs repeated
+// `ATXMemoryPressureMonitor ... type: critical` and the app is killed mid-boot -- a black screen,
+// with the JIT provably working right up until it died. StikDebug is itself resident during this
+// (it is an app on the same device, unlike a tethered lldb broker, which is why the lldb runs
+// survived at 64 MiB). 32 MiB halves the resident cost to 128 MiB total.
+//
+// The cost of a smaller code space is more frequent block-cache flushes, not correctness: the
+// cache clears and re-emits. If a title is ever found that thrashes, raise this rather than the
+// TXM region, and keep EXECUTABLE_REGION_SIZE in MemoryUtil_iOS_LuckTXM.cpp in step -- it must
+// stay strictly greater than TOTAL_CODE_SIZE, which is taken in ONE allocation.
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+constexpr size_t NEAR_CODE_SIZE = 1024 * 1024 * 32;
+constexpr size_t FAR_CODE_SIZE = 1024 * 1024 * 32;
+#else
 constexpr size_t NEAR_CODE_SIZE = 1024 * 1024 * 64;
 // We use a bigger farcode size for JitArm64 than Jit64, because JitArm64 always emits farcode
 // for the slow path of each loadstore instruction. Jit64 postpones emitting farcode until the
 // farcode actually is needed, saving it from having to emit farcode for most instructions.
 // TODO: Perhaps implement something similar to Jit64. But using more RAM isn't much of a problem.
 constexpr size_t FAR_CODE_SIZE = 1024 * 1024 * 64;
+#endif
 constexpr size_t TOTAL_CODE_SIZE = NEAR_CODE_SIZE * 2 + FAR_CODE_SIZE * 2;
 
 JitArm64::JitArm64(Core::System& system)
