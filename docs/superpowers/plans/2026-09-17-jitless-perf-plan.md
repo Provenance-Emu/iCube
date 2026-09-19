@@ -174,12 +174,27 @@ arm64 iOS slice (all three CachedInterpreter TUs + the IR tier); codegen verifie
    (`cirRecordChaining`), `CIRMemMicroOps` (`cirMemMicroOps`), plus the existing `CIRPICLoadStore`.
    Caveat: the Phase-0 per-record tape probes (`s_tape_prefetch_dist` / thrash stride) only see chain
    heads now.
+9. **Terminals and `LinkBlock` join the chain** (d047348418): the inline bcx/bx/bclr/bcctr terminals
+   are chain-capable, and a followed link (static or dynamic) tail-calls the successor block's first
+   record, so one chain can span many linked blocks (`s_chain_base` keeps naming the head the
+   executor entered). The running-state check and the 256-hop cap moved from `ExecuteOneBlock` into
+   `LinkBlock`; a trip returns 0 and the dispatcher re-resolves pc. `LinkBlock<false>` (on the tape)
+   is a 73-instruction leaf; PMC update, hot-block profiler and link validation live in
+   `LinkBlock<true>`, reached by a tail call. The executor treats a 0 distance from a chain as block
+   end. This is the block-transition item (2) above, done through chaining.
+10. **MMU-mode titles** (220a1b218a): `checked` handler variants on an
+    `InterpretAndCheckExceptionsOperands` record; the cold path delivers DSI / program exceptions
+    and ends the block like the generic record. Off with watchpoints, pause-on-panic, accurate
+    d-cache. Memory micro-ops stay off in MMU mode.
+Deliberately NOT done: FP load/stores and FP arithmetic inside fused runs. With chaining a hop
+between records costs about what a hop inside a run does (4 vs 3 instructions), so the remaining
+gain is record size only, against a real ordering risk with the block-level `CheckFPU`. Revisit only
+if a profile shows FP-heavy blocks dominated by record hops.
 To instrument: honest preset A/B against develop on WW / Chibi / F-Zero (`ab.py`); Time Profiler for
 `LoadStoreFast*`, `MicroOpHandlers::*`, `WriteToHardware`; correctness via
 `MAIN_CIR_MICROOP_FUSION_VALIDATE` (ALU ops only — memory micro-ops are not packed under validate
 because the reference double-run cannot repeat an MMIO access), FIFO recordings and savestate
-compares. Not done: MMU-mode titles (still generic), FP load/stores inside fused runs (CheckFPU
-ordering), gather-pipe `psq_st`.
+compares. Not done: gather-pipe `psq_st`.
 
 ## Method (non-negotiable, it found everything above)
 Same-session A/B on the phone: check `cpu_core_configured` before AND after
