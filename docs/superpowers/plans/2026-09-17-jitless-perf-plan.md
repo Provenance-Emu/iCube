@@ -127,6 +127,46 @@ call-heavy titles (Chibi-Robo is branch-heavy the same way).
    (the old "cannot enable JIT under Xcode" early-return is gone). 512 MiB region = 32768
    one-byte writes over USB, `DOL_BLESS_PAGES_PER_WRITE` trades bytes for round-trips.
 
+## Guest memory access rework (2026-09-18, branch `feature/ci-fastmem-handlers`, NOT yet measured)
+Why: across the three engine-5 traces guest memory access is the largest named bucket after the
+executor — `LoadStoreDFormPIC` 15.7 % (WW) / 15.7 % (F-Zero) / 18.9 % (Chibi) self, plus
+`WriteToHardware` 2–4 %, `ReadFromHardware` ~1 %, `Helper_Dequantize` 1–2 %. Disassembly of the
+shipped handler showed a plain `lwz` costing ~40 host instructions: 8 tape loads (six of them
+process-wide region constants copied into every 88-byte record), a MEM1/MEM2/fake-VMEM compare
+chain, a per-access test of the prefetch debug flag, and a SECOND jump-table `br` on `inst.OPCD`.
+Written on the user's call to implement first and instrument afterwards. Compiles clean for the
+arm64 iOS slice (all three CachedInterpreter TUs + the IR tier); codegen verified by disassembly;
+**no device run yet**.
+1. **One handler per (opcode kind, D/X form, update, write_pc)** picked at emit time
+   (`LoadStoreFast`, `GetLoadStoreFastCallback`, `CI_ClassifyLoadStore`): no opcode switch, no
+   `rA == 0` test (those forms stay generic), no prefetch test. Record = plain `InterpretOperands`
+   (24 B, was 80 B). `lwz` is now 24 instructions, no prologue, one `ret`.
+2. **Page lookup through upstream's `Memory::m_logical_page_mappings` / `m_physical_page_mappings`**
+   (one host pointer per 128 KiB BAT page, null = MMIO, rebuilt by `UpdateDBATMappings` on every
+   DBAT change; indexed by MSR.DR). Correct under custom BATs and real mode, covers locked L1 cache
+   and fake VMEM, and no longer needs the fastmem arena (the `jo.fastmem` gate is gone). Preserved
+   semantics: sub-word stores through a cache-inhibited BAT fall back (data-duplication + PI
+   interrupt path), everything is off under `jo.memcheck` and under the accurate d-cache.
+3. **New coverage**: X-form FP (`lfsx/lfdx/stfsx/stfdx` + update, `stfiwx`), `dcbz` (HID0.DCE and
+   the low-MEM1 hack honoured), `psq_l/psq_st/psq_lx/psq_stx` + update for the FLOAT quantization
+   type (checked against the GQR at run time), `lmw/stmw` as a single span check.
+4. **Gather-pipe stores served from the cold path** (`CI_TryGatherPipeStore`): BAT-translate, match
+   `0x0C008000`, call `GPFifo::WriteN` directly instead of generic handler → `WriteToHardware`.
+5. **Integer load/stores are micro-ops** (`MEM_*`), so they no longer end a fused run or cost a tape
+   dispatch of their own. Cold accesses leave through a tail call (`MicroOpHandlers::MemCold`).
+6. **Fused-run executor is tail-call threaded** (`MicroOpHandlers`, `[[clang::musttail]]`): the
+   computed-goto version compiled to ONE shared `br` for all handlers (LLVM will not tail-duplicate
+   an indirect branch with > 16 predecessors), now 58 handlers each end in their own `br`, none has
+   a prologue, and the duplicate `switch` fallback is gone. Runs end in an `END` sentinel.
+7. **Variable-length run records** (`WriteTruncated`, `ExecuteMicroOpsOperands::TapeSize`): a fused
+   run used to occupy 784 B of tape whatever its length; a two-op run is now 56 B.
+To instrument: honest preset A/B against develop on WW / Chibi / F-Zero (`ab.py`); Time Profiler for
+`LoadStoreFast*`, `MicroOpHandlers::*`, `WriteToHardware`; correctness via
+`MAIN_CIR_MICROOP_FUSION_VALIDATE` (ALU ops only — memory micro-ops are not packed under validate
+because the reference double-run cannot repeat an MMIO access), FIFO recordings and savestate
+compares. Not done: MMU-mode titles (still generic), FP load/stores inside fused runs (CheckFPU
+ordering), gather-pipe `psq_st`.
+
 ## Method (non-negotiable, it found everything above)
 Same-session A/B on the phone: check `cpu_core_configured` before AND after
 (the phone silently sat on engine 6 for a day); thermal state must match; profile
