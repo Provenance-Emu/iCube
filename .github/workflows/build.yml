@@ -48,7 +48,16 @@ jobs:
       TUIST_VERSION: '4.200.0'
       XCODE_VERSION: '26.3'
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-      XCODE_COMMON_BUILD_ARGS: -workspace Source/iOS/App/iCube.xcworkspace -derivedDataPath "${{ github.workspace }}/build-Xcode" -sdk iphoneos -destination generic/platform=iOS DOL_BUILD_SOURCE="development" CODE_SIGNING_ALLOWED="NO" CODE_SIGNING_REQUIRED="NO"
+      # CURRENT_PROJECT_VERSION is stamped here for the same reason release.yml
+      # stamps it. The pbxproj hardcodes 13, so before this EVERY alpha shipped
+      # as CFBundleVersion 13 forever. AltStore/SideStore decide an update exists
+      # by comparing the feed's buildVersion against the installed bundle's, so a
+      # constant one means the rolling alpha can never offer an update no matter
+      # how many times it is rebuilt -- users sit on whichever alpha they first
+      # installed. github.run_number is strictly increasing and costs nothing;
+      # `git rev-list --count HEAD` would need fetch-depth: 0 on a repo cloned
+      # with `submodules: recursive`, which is not a cheap ask for a build number.
+      XCODE_COMMON_BUILD_ARGS: -workspace Source/iOS/App/iCube.xcworkspace -derivedDataPath "${{ github.workspace }}/build-Xcode" -sdk iphoneos -destination generic/platform=iOS DOL_BUILD_SOURCE="development" CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED="NO" CODE_SIGNING_REQUIRED="NO"
     steps:
       - uses: actions/checkout@v2
         with:
