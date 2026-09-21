@@ -15,13 +15,6 @@
 #import "InputCommon/ControllerEmu/ControllerEmu.h"
 #import "InputCommon/InputConfig.h"
 
-#import "BootNoticeManager.h"
-#import "UnofficialBuildNoticeViewController.h"
-#if TARGET_OS_TV
-#import <UIKit/UIKit.h>
-#include <dlfcn.h>
-#endif
-
 @implementation FirstRunInitializationService
 
 - (void)importDefaultProfileForInputConfig:(InputConfig*)config {
@@ -58,39 +51,6 @@
     } else {
       NSLog(@"[Config] Skipping Base default MAIN_GFX_BACKEND because higher layer is active");
     }
-
-#if TARGET_OS_TV
-    // Default CPU core on tvOS: prefer CachedInterpreter on newer systems (major >= 26),
-    // use JIT on older systems where you support it.
-    NSOperatingSystemVersion osv = NSProcessInfo.processInfo.operatingSystemVersion;
-    (void)osv; // Do not override CPU core by default; respect user configuration.
-#endif
-
-    // Present boot notice. On tvOS we don't ship the XIB; try SwiftUI-hosted equivalent if available.
-#if TARGET_OS_TV
-    typedef UIViewController* (*MakeNoticeFunc)(void);
-    MakeNoticeFunc makeFn = (MakeNoticeFunc)dlsym(RTLD_DEFAULT, "TVOSMakeUnofficialBuildNoticeController");
-    if (makeFn) {
-      [[BootNoticeManager shared] enqueueViewController:makeFn()];
-    } else {
-      // Fallback lightweight notice to avoid hard failure if Swift file isn't linked to the target
-      UIViewController* vc = [UIViewController new];
-      vc.view.backgroundColor = [UIColor blackColor];
-      UILabel* label = [[UILabel alloc] initWithFrame:CGRectZero];
-      label.text = @"Unofficial Build";
-      label.textColor = [UIColor whiteColor];
-      label.font = [UIFont boldSystemFontOfSize:42];
-      label.translatesAutoresizingMaskIntoConstraints = NO;
-      [vc.view addSubview:label];
-      [NSLayoutConstraint activateConstraints:@[
-        [label.centerXAnchor constraintEqualToAnchor:vc.view.centerXAnchor],
-        [label.centerYAnchor constraintEqualToAnchor:vc.view.centerYAnchor]
-      ]];
-      [[BootNoticeManager shared] enqueueViewController:vc];
-    }
-#else
-    [[BootNoticeManager shared] enqueueViewController:[[UnofficialBuildNoticeViewController alloc] initWithNibName:@"UnofficialBuildNotice" bundle:nil]];
-#endif
   }
 
   return true;
