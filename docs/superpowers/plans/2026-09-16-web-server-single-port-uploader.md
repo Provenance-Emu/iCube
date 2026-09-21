@@ -1,5 +1,18 @@
 # Web Server Re-port Implementation Plan
 
+> **SUPERSEDED / DONE — 2026-09-21.** Every task in this plan landed on `develop`; the
+> checkboxes below were simply never ticked. Verified by reading the merged code and by
+> `git merge-base --is-ancestor` on the cited SHAs (all true against current `develop`):
+> `33d42a8195`, `5c670ea3fb`, `c46ec4f263`, `17c008f41e`, `40fc5e427b`. iCube already has
+> a single `NWListener` on one port, per-request WebDAV-vs-browser classification, the
+> package-resource upload page, a benchmark script, and real `swift test` coverage. Do
+> **not** re-run this plan. Remaining lifecycle work (who calls `start()`/`stop()`, and
+> when) is tracked separately as WS-3 in
+> `docs/superpowers/plans/2026-09-21-icube-post-jit-roadmap.md`. This file is kept for
+> history; its checkboxes are left unticked on purpose rather than hand-waved, since no
+> one has re-verified each one individually against this exact wording — the SHAs above
+> are the actual evidence.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring iCube's `PVWebServer` package up to iFly's server: one port for WebDAV and the browser UI, no silent upload corruption, no symlink escape, iFly's upload page, real unit tests, and a benchmark.

@@ -107,6 +107,10 @@ final class ROMUploadServer: @unchecked Sendable {
     private var listener: NWListener?
     private var bonjourWebDAV: NetService?
     private let bonjourDelegate = WebDAVBonjourDelegate()
+    /// Set once `netServiceDidPublish` actually fires for the current `bonjourWebDAV`.
+    /// `NetService.publish()` can fail to schedule at all and never call back either
+    /// delegate method — see the 5s self-check in `advertiseWebDAV`.
+    private var bonjourPublishConfirmed = false
     /// Guards `start()` against a second concurrent call while the port-fallback loop is running.
     private var isStarting = false
     private var activeConnections = [ObjectIdentifier: NWConnection]()
@@ -259,11 +263,35 @@ final class ROMUploadServer: @unchecked Sendable {
             // `stop()` may have run (and torn the listener down) before this hop lands on the
             // main queue; publishing here would orphan a Bonjour record for a dead port.
             guard self.isRunning, self.port == candidate else { return }
+            self.lock.lock(); self.bonjourPublishConfirmed = false; self.lock.unlock()
             let service = NetService(domain: "", type: "_webdav._tcp.", name: self.pageTitle, port: Int32(candidate))
+            self.bonjourDelegate.onPublish = { [weak self] in
+                guard let self else { return }
+                self.lock.lock(); self.bonjourPublishConfirmed = true; self.lock.unlock()
+            }
             service.delegate = self.bonjourDelegate
             service.schedule(in: .main, forMode: .common)
             service.publish()
             self.lock.lock(); self.bonjourWebDAV = service; self.lock.unlock()
+
+            // NetService publishes asynchronously off the run loop and reports neither
+            // success NOR failure if it simply never gets scheduled — silence here reads
+            // as "advertising works" for weeks while `_webdav._tcp` discovery is actually
+            // dead. `_http._tcp` is separately (and reliably) advertised via
+            // `NWListener.service`, which is why only ONE confirmation is required here
+            // (unlike iFly, which publishes both service types through NetService and
+            // waits for two).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self else { return }
+                self.lock.lock()
+                let confirmed = self.bonjourPublishConfirmed
+                let stillCurrent = self.isRunningUnlocked && self.port == candidate
+                self.lock.unlock()
+                guard stillCurrent, !confirmed else { return }
+                NSLog("[ROMUploadServer] _webdav._tcp NetService published no service within 5s "
+                      + "(NWListener's _http._tcp registration is the working path; check "
+                      + "Local Network permission if neither is reachable)")
+            }
         }
     }
 
@@ -2412,10 +2440,16 @@ final class ROMUploadServer: @unchecked Sendable {
 
 // MARK: - Bonjour Delegate
 
-/// `NetService.publish()` fails silently without a delegate. This just logs.
+/// `NetService.publish()` fails silently without a delegate — this logs the explicit
+/// failure/success callbacks, and lets `advertiseWebDAV` additionally detect the case
+/// where NEITHER callback ever fires (see the 5s self-check there).
 private final class WebDAVBonjourDelegate: NSObject, NetServiceDelegate {
+    /// Reassigned by `advertiseWebDAV` before each `publish()` call.
+    var onPublish: (() -> Void)?
+
     func netServiceDidPublish(_ sender: NetService) {
         NSLog("[ROMUploadServer] _webdav._tcp published on port \(sender.port)")
+        onPublish?()
     }
 
     func netService(_ sender: NetService, didNotPublish errorDict: [String: NSNumber]) {
