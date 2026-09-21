@@ -66,9 +66,17 @@ public struct WebServerLifecyclePolicy {
         switch event {
         case .appForegrounded:
             isForeground = true
-            // Never start on top of a game: if emulation paused the server (or is
-            // still running), emulationDidEnd owns the restart, not us.
-            guard !serverIsRunning, !pausedForEmulation, !isEmulationRunning else { return .none }
+            // Only `pausedForEmulation` gates a restart here, not `isEmulationRunning`.
+            // `pausedForEmulation` is set exactly when WE stopped the server for a game,
+            // so only `emulationDidEnd` may resurrect it — that's what stops a foreground
+            // event from racing an emulation-driven stop (see the lifecycle tests). But
+            // `isEmulationRunning` alone must NOT block a start: if a game is reported
+            // running yet the server was never running to begin with (e.g. its async
+            // NWListener bind was still in flight when the game booted — see
+            // WebServerLifecycleService's known limitation) or `DOLEmulationDidEndNotification`
+            // is ever missed on an abandoned boot, gating on it too would leave the server
+            // dead for the rest of the app session with no way to recover.
+            guard !serverIsRunning, !pausedForEmulation else { return .none }
             return .start
 
         case .appBackgrounded:

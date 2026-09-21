@@ -83,6 +83,20 @@ final class WebServerLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.handle(.emulationDidEnd, serverIsRunning: false), .start)
     }
 
+    // MARK: - isEmulationRunning alone must never strand the server stopped
+
+    func testForegroundStartsEvenIfEmulationIsReportedRunningButWeNeverPausedIt() {
+        // Guards against a stuck `isEmulationRunning` (e.g. a missed DidEnd on an
+        // abandoned boot, or the async-start race where the server was still binding
+        // when emulationWillStart fired) permanently blocking every future restart.
+        // Only `pausedForEmulation` — the flag WE set when WE stopped it — may gate this.
+        var policy = WebServerLifecyclePolicy()
+        XCTAssertEqual(policy.handle(.emulationWillStart, serverIsRunning: false), .none)
+        XCTAssertTrue(policy.isEmulationRunning)
+        XCTAssertFalse(policy.pausedForEmulation)
+        XCTAssertEqual(policy.handle(.appForegrounded, serverIsRunning: false), .start)
+    }
+
     // MARK: - Upload counting never goes negative
 
     func testUploadCountFloorsAtZero() {

@@ -30,6 +30,17 @@ import UIKit
 /// upload would be writing to. The one exception is an upload already in flight when a
 /// game starts (`WebServerLifecyclePolicy.uploadsInFlight`), so booting a game a moment
 /// after starting a transfer never truncates it.
+///
+/// Known limitations (WS-3, not fixed here — narrow enough to defer):
+/// - `startServers()` binds its `NWListener` asynchronously. If a game is launched fast
+///   enough that the bind is still in flight when `emulationWillStart` fires, `isRunning`
+///   reads false, so the pause is skipped and the server ends up running for that whole
+///   session once the bind completes. Not a regression (the server always ran during
+///   gameplay before this task); just not a airtight pause.
+/// - The in-game pause menu's Settings screen (`SettingsRootView` with `isPauseMenuStyle`)
+///   shows the upload URL. While a game is paused, this service has stopped the server, so
+///   that row now reads blank instead of a working URL — previously it force-started the
+///   server itself. No error is surfaced explaining why.
 final class WebServerLifecycleService: NSObject, UIApplicationDelegate {
     private let lock = NSLock()
     private var policy = WebServerLifecyclePolicy()
