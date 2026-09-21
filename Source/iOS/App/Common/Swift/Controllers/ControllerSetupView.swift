@@ -96,6 +96,11 @@ struct ControllerSetupSections: View {
   /// they outlive the call and finish their pulse before being torn down.
   @State private var identifyEngines: [CHHapticEngine] = []
 
+  /// Posted when a Wiimote's extension or sideways orientation changes, so the
+  /// touch overlay can re-lay-out. Single definition; was duplicated as a literal.
+  private static let wiiOverlayLayoutChanged =
+    Notification.Name("DOLWiiOverlayLayoutChangedNotification")
+
   private struct MappingTarget: Identifiable {
     let isGC: Bool
     let portOneBased: Int
@@ -153,9 +158,7 @@ struct ControllerSetupSections: View {
       NavigationStack {
         ControllersMappingView(isGC: target.isGC, portOneBased: target.portOneBased)
           .navigationTitle(L("Customize Buttons"))
-          #if os(iOS)
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { mappingTarget = nil } } }
-          #endif
       }
     }
     .sheet(isPresented: Binding(get: { showProfileForGCPort != nil }, set: { if !$0 { showProfileForGCPort = nil } })) {
@@ -207,6 +210,23 @@ struct ControllerSetupSections: View {
 
   @ViewBuilder
   private func gcPlayerRow(_ port: Int) -> some View {
+#if os(tvOS)
+    tvPlayerLink(title: String(format: L("Player %d"), port),
+                 current: gcQualifiers[port] ?? "") {
+      Section(header: Text(L("Device"))) {
+        tvDeviceRows(current: gcQualifiers[port] ?? "") { tag in applyGC(tag, port: port) }
+      }
+      Section {
+        Button(L("Profiles…")) {
+          gcProfiles = TVControllerMappingBridge.profiles(forGCPort: port)
+          showProfileForGCPort = port
+        }
+        Button(L("Customize Buttons…")) {
+          mappingTarget = MappingTarget(isGC: true, portOneBased: port)
+        }
+      }
+    }
+#else
     VStack(alignment: .leading, spacing: 14) {
       devicePicker(
         label: String(format: L("Player %d"), port),
@@ -227,10 +247,39 @@ struct ControllerSetupSections: View {
       .buttonStyle(.borderless)
     }
     .padding(.vertical, 6)
+#endif
   }
 
   @ViewBuilder
   private func wiiPlayerRow(_ w: Int) -> some View {
+#if os(tvOS)
+    tvPlayerLink(title: String(format: L("Wii Remote %d"), w),
+                 current: wiiQualifiers[w] ?? "") {
+      Section(header: Text(L("Device"))) {
+        tvDeviceRows(current: wiiQualifiers[w] ?? "") { tag in applyWii(tag, wiimote: w) }
+      }
+      Section(header: Text(L("Extension"))) {
+        ForEach(0 ... 2, id: \.self) { v in
+          tvOptionRow(extensionName(v), isSelected: wiiExtension[w - 1] == v) {
+            setWiiExtension(v, for: w)
+          }
+        }
+      }
+      Section {
+        Toggle(L("Sideways"), isOn: Binding(
+          get: { wiiSideways[w - 1] },
+          set: { setWiiSideways($0, for: w) }
+        ))
+        Button(L("Profiles…")) {
+          wiiProfiles = TVControllerMappingBridge.profiles(forWiimote: w)
+          showProfileForWiimote = w
+        }
+        Button(L("Customize Buttons…")) {
+          mappingTarget = MappingTarget(isGC: false, portOneBased: w)
+        }
+      }
+    }
+#else
     VStack(alignment: .leading, spacing: 14) {
       devicePicker(
         label: String(format: L("Wii Remote %d"), w),
@@ -239,12 +288,7 @@ struct ControllerSetupSections: View {
       )
       Picker(L("Extension"), selection: Binding(
         get: { wiiExtension[w - 1] },
-        set: { v in
-          wiiExtension[w - 1] = v
-          DOLWiimoteBridge.setExtensionForWiimote(w - 1, extension: v)
-          ControllerManager.shared.reconcile()
-          NotificationCenter.default.post(name: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil)
-        }
+        set: { setWiiExtension($0, for: w) }
       )) {
         Text(L("None")).tag(0)
         Text(L("Nunchuk")).tag(1)
@@ -254,12 +298,7 @@ struct ControllerSetupSections: View {
 
       Toggle(L("Sideways"), isOn: Binding(
         get: { wiiSideways[w - 1] },
-        set: { v in
-          wiiSideways[w - 1] = v
-          DOLWiimoteBridge.setSidewaysForWiimote(w - 1, enabled: v)
-          ControllerManager.shared.reconcile()
-          NotificationCenter.default.post(name: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil)
-        }
+        set: { setWiiSideways($0, for: w) }
       ))
 
       HStack {
@@ -276,7 +315,73 @@ struct ControllerSetupSections: View {
       .buttonStyle(.borderless)
     }
     .padding(.vertical, 6)
+#endif
   }
+
+#if os(tvOS)
+  // MARK: tvOS player layout
+  //
+  // On tvOS a List row is a SINGLE focus target, so the iOS layout — a VStack of
+  // a Picker, a Picker, a Toggle and two Buttons inside one row — collapsed each
+  // player into one focusable element. In practice only the Sideways toggle
+  // responded; the device picker, the extension picker, Profiles and Customize
+  // Buttons were all unreachable. SwiftUI `Picker` has no usable tvOS
+  // presentation here either, the same reason the library toolbar's `Menu`s were
+  // dead. So each player drills into its own screen where every control is its
+  // own row, and the option lists are explicit focusable Buttons.
+
+  /// A collapsed player row: the port's name plus the device bound to it,
+  /// pushing a detail screen built from `content`.
+  @ViewBuilder
+  private func tvPlayerLink<Content: View>(
+    title: String,
+    current: String,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    let summary = deviceSummary(current)
+    NavigationLink {
+      List { content() }
+        .navigationTitle(title)
+    } label: {
+      HStack {
+        Text(title)
+        Spacer()
+        Text(summary).foregroundStyle(.secondary)
+      }
+    }
+    .accessibilityLabel("\(title), \(summary)")
+  }
+
+  /// One selectable option, checked when current. A plain Button so tvOS gives
+  /// it a focus ring.
+  @ViewBuilder
+  private func tvOptionRow(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      HStack {
+        Text(title)
+        Spacer()
+        if isSelected { Image(systemName: "checkmark") }
+      }
+    }
+    .accessibilityLabel(title)
+    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+  }
+
+  /// The device options — None / Touchscreen / each connected controller —
+  /// as individually focusable rows, replacing the unreachable `Picker`.
+  @ViewBuilder
+  private func tvDeviceRows(current: String, onSelect: @escaping (DeviceTag) -> Void) -> some View {
+    let selection = tag(forQualifier: current)
+    tvOptionRow(L("None"), isSelected: selection == .none) { onSelect(.none) }
+    tvOptionRow(L("Touchscreen"), isSelected: selection == .touchscreen) { onSelect(.touchscreen) }
+    ForEach(Array(controllers.enumerated()), id: \.offset) { _, c in
+      let q = TVControllerMappingBridge.qualifiedName(for: c) as String
+      tvOptionRow(friendlyName(c), isSelected: selection == .controller(q)) {
+        onSelect(.controller(q))
+      }
+    }
+  }
+#endif
 
   /// A Device picker: Touchscreen / each connected controller (by friendly
   /// name) / None. Selecting a physical device auto-activates the port.
@@ -340,6 +445,54 @@ struct ControllerSetupSections: View {
         }
       }
       .navigationTitle(title)
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button(L("Cancel")) {
+            showProfileForGCPort = nil
+            showProfileForWiimote = nil
+          }
+        }
+      }
+    }
+  }
+
+  // MARK: Wiimote option setters (shared by both platform layouts)
+
+  private func setWiiExtension(_ v: Int, for w: Int) {
+    wiiExtension[w - 1] = v
+    DOLWiimoteBridge.setExtensionForWiimote(w - 1, extension: v)
+    ControllerManager.shared.reconcile()
+    NotificationCenter.default.post(name: Self.wiiOverlayLayoutChanged, object: nil)
+  }
+
+  private func setWiiSideways(_ v: Bool, for w: Int) {
+    wiiSideways[w - 1] = v
+    DOLWiimoteBridge.setSidewaysForWiimote(w - 1, enabled: v)
+    ControllerManager.shared.reconcile()
+    NotificationCenter.default.post(name: Self.wiiOverlayLayoutChanged, object: nil)
+  }
+
+  private func extensionName(_ v: Int) -> String {
+    switch v {
+    case 1: return L("Nunchuk")
+    case 2: return L("Classic")
+    default: return L("None")
+    }
+  }
+
+  /// Display name for the device currently bound to a port, for the collapsed
+  /// tvOS row and for accessibility.
+  private func deviceSummary(_ current: String) -> String {
+    switch tag(forQualifier: current) {
+    case .none: return L("None")
+    case .touchscreen: return L("Touchscreen")
+    case .controller(let q):
+      if let c = controllers.first(where: {
+        (TVControllerMappingBridge.qualifiedName(for: $0) as String) == q
+      }) {
+        return friendlyName(c)
+      }
+      return q
     }
   }
 
