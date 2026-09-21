@@ -35,13 +35,62 @@ private final class ShoulderState {
 
 private var shoulderStates: [ObjectIdentifier: ShoulderState] = [:]
 
-/// Helper to show the pause menu consistently
-private func presentPauseMenu() {
-  #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-  GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
-  #endif
-  TVEmulationBridge.pause()
-  NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+/// Helper to show the pause menu consistently.
+/// Delegates to `PauseGestureTracker.requestPauseMenu`, the single gated +
+/// coalesced sink for every pause route.
+private func presentPauseMenu(_ reason: String) {
+  Task { @MainActor in
+    PauseGestureTracker.shared.requestPauseMenu(reason: reason)
+  }
+}
+
+/// Installs the app-wide "Menu/Options opens the pause menu" handlers.
+///
+/// Every controller type gets an **ungated** route to the pause menu — no
+/// shoulder chord required:
+/// - `microGamepad.buttonMenu` (Siri Remote, and the micro profile every MFi
+///   controller also exposes). This was previously either nil or an empty
+///   swallow closure everywhere, which is why the Siri Remote could not reach
+///   the pause menu at all.
+/// - `extendedGamepad.buttonMenu` / `buttonOptions` (Xbox, DualShock/DualSense,
+///   Switch Pro, bare MFi). The L1+R1+L2+R2+Menu chord still works — it is
+///   routed separately through `PauseGestureTracker.menuOrStartPressed()` — but
+///   it is no longer the only way in.
+///
+/// The handlers are installed unconditionally and left installed; a nil handler
+/// lets the system take the button back (Game Center / app switcher), which is
+/// what the old per-screen swallow closures were working around. The gate is in
+/// `requestPauseMenu`, which no-ops unless emulation is actually running, so a
+/// Menu press on the library screen is simply absorbed.
+func installPauseMenuHandlers(_ c: GCController) {
+  if #available(iOS 14.0, tvOS 14.0, *) {
+    c.microGamepad?.buttonMenu.preferredSystemGestureState = .disabled
+    c.extendedGamepad?.buttonMenu.preferredSystemGestureState = .disabled
+    c.extendedGamepad?.buttonOptions?.preferredSystemGestureState = .disabled
+  }
+
+  c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, pressed in
+    guard pressed else { return }
+    presentPauseMenu("microGamepad.buttonMenu")
+  }
+
+  guard let eg = c.extendedGamepad else { return }
+  eg.buttonMenu.pressedChangedHandler = { _, _, pressed in
+    guard pressed else { return }
+    // Chord first (it also drives fast-forward state), then the ungated path.
+    // Both land in requestPauseMenu, which coalesces them into one request.
+    Task { @MainActor in
+      PauseGestureTracker.shared.menuOrStartPressed()
+      PauseGestureTracker.shared.requestPauseMenu(reason: "extendedGamepad.buttonMenu")
+    }
+  }
+  eg.buttonOptions?.pressedChangedHandler = { _, _, pressed in
+    guard pressed else { return }
+    Task { @MainActor in
+      PauseGestureTracker.shared.menuOrStartPressed()
+      PauseGestureTracker.shared.requestPauseMenu(reason: "extendedGamepad.buttonOptions")
+    }
+  }
 }
 
 func configureController(_ c: GCController) {
@@ -285,25 +334,12 @@ func installExtraInputHandlers(_ c: GCController) {
       recomputeShouldersAndNotify()
     }
 
-    // Start/Menu style buttons should consult PauseGestureTracker for shoulder+start combo
-    eg.buttonMenu.pressedChangedHandler = { _, _, pressed in
-      Task { @MainActor in
-        if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
-      }
-    }
-    eg.buttonOptions?.pressedChangedHandler = { _, _, pressed in
-      Task { @MainActor in
-        if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
-      }
-    }
-
     // DualShock / DualSense / Xbox Home buttons open pause menu directly
     if #available(iOS 14.0, tvOS 14.0, *) {
       if let ds4 = eg as? GCDualShockGamepad {
         // TouchPad
         ds4.touchpadButton?.pressedChangedHandler = { _, _, pressed in
           Task { @MainActor in
-            NSLog("ds4.touchpadButton")
             if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
           }
         }
@@ -311,10 +347,8 @@ func installExtraInputHandlers(_ c: GCController) {
         ds4.buttonHome?.preferredSystemGestureState = .disabled
         // Some OS versions expose a home button
         ds4.buttonHome?.pressedChangedHandler = { _, _, pressed in
-          Task { @MainActor in
-            NSLog("ds4.buttonHome")
-            if pressed { presentPauseMenu() }
-          }
+          guard pressed else { return }
+          presentPauseMenu("ds4.buttonHome")
         }
         // Install IR mapping from touchpad
         installTouchpadIRHandlers(c, eg: eg)
@@ -326,10 +360,8 @@ func installExtraInputHandlers(_ c: GCController) {
         ds5.buttonHome?.preferredSystemGestureState = .disabled
 
         ds5.buttonHome?.pressedChangedHandler = { _, _, pressed in
-          Task { @MainActor in
-            NSLog("ds5.buttonHome")
-            if pressed { presentPauseMenu() }
-          }
+          guard pressed else { return }
+          presentPauseMenu("ds5.buttonHome")
         }
         // Install IR mapping from touchpad
         installTouchpadIRHandlers(c, eg: eg)
@@ -341,10 +373,8 @@ func installExtraInputHandlers(_ c: GCController) {
         xbox.buttonHome?.preferredSystemGestureState = .disabled
 
         xbox.buttonHome?.pressedChangedHandler = { _, _, pressed in
-          Task { @MainActor in
-            NSLog("xbox.buttonHome")
-            if pressed { presentPauseMenu() }
-          }
+          guard pressed else { return }
+          presentPauseMenu("xbox.buttonHome")
         }
       }
     }
@@ -365,11 +395,11 @@ func installExtraInputHandlers(_ c: GCController) {
   // IGNORE THE COMPILER WARNING, USING .HOME HANDLER IS NOT GOOD ENOUGH!
   // FUCK YOU APPLE I HATE THIS STUPID MENU BUTTON SHIT AND ALL OF GCCONTROLLER!!!
   c.controllerPausedHandler = { _ in
-    Task { @MainActor in
-      NSLog("controllerPausedHandler entered")
-      PauseGestureTracker.shared.menuOrStartPressed()
-    }
+    presentPauseMenu("controllerPausedHandler")
   }
+
+  // Ungated Menu/Options -> pause menu for every controller type.
+  installPauseMenuHandlers(c)
 
   // Fix B going back on tvOS
   if #available(tvOS 14.0, *) {
