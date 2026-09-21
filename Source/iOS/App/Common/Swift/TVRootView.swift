@@ -1,4 +1,3 @@
-import PVWebServer
 import SwiftUI
 
 struct TVRootView: View {
@@ -6,8 +5,8 @@ struct TVRootView: View {
     TVLibraryView()
       .tint(Color("DolphinTint"))
       .background(Color.black)
-      .onAppear {
-        PVWebServer.shared.startServers()
-      }
+      // WS-3: the upload/WebDAV server's lifecycle is now owned by
+      // WebServerLifecycleService (started at scene become-active, see
+      // ServiceManager), not by this view appearing.
   }
 }

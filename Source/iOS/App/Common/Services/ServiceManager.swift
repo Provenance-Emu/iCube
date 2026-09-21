@@ -14,6 +14,7 @@ class ServiceManager {
   let services: [UIApplicationDelegate] = [
     DefaultsInitService(),
     WebUploadImportService(),
+    WebServerLifecycleService(),
     DolphinCoreService(),
     FirstRunInitializationService(),
     LegacyInputConfigMigrationService(),
@@ -27,6 +28,7 @@ class ServiceManager {
   let services: [UIApplicationDelegate] = [
     DefaultsInitService(),
     WebUploadImportService(),
+    WebServerLifecycleService(),
     DolphinCoreService(),
     FirstRunInitializationService(),
     LegacyInputConfigMigrationService(),

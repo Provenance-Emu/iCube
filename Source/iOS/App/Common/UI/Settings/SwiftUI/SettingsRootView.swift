@@ -134,13 +134,10 @@ struct SettingsRootView<Background: View>: View {
       if webDavDisplay.isEmpty { webDavDisplay = PVWebServer.shared.webDavURLString ?? "" }
     }
 #if os(iOS)
-    // iOS has no app-root start site (tvOS starts the server at TVRootView). Start the
-    // upload/WebDAV server when Settings — which displays the URL the user uploads to —
-    // appears. startServers() binds asynchronously (NWListener in a Task), so the URL is
-    // nil until it's .ready; poll briefly and refresh the displayed URL once it resolves.
-    if !PVWebServer.shared.isWWWUploadServerRunning {
-      PVWebServer.shared.startServers()
-    }
+    // WS-3: WebServerLifecycleService now owns starting the server (at scene
+    // become-active, i.e. app launch), so this view no longer starts it itself.
+    // startServers() binds asynchronously (NWListener in a Task), so the URL can
+    // still be nil the moment Settings appears; poll briefly and refresh once it resolves.
     for _ in 0..<20 {  // up to ~2s for the listener to come up
       if let u = PVWebServer.shared.urlString, !u.isEmpty {
         await MainActor.run {
