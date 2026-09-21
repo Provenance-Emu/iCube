@@ -560,8 +560,10 @@ struct EmulationScreen: View {
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
         ControllerManager.shared.registerGCOverride(forController: 0)
         configureAllControllers()
-        // Resume where I left off: if enabled and an auto-state exists, load it.
-        SaveStateService.resumeIfAvailable()
+        // Resume where I left off, or boot straight into a chosen save state —
+        // whichever was requested. Also arms/consults the boot watchdog so a
+        // launch that never got past this same load is declined next time.
+        SaveStateService.resumeOrBootIntoPendingState()
       }
       // Auto-pause when app goes to background on tvOS
       NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
@@ -711,7 +713,7 @@ struct EmulationScreen: View {
         resumeObserver = NotificationCenter.default.addObserver(
           forName: Notification.Name("DOLEmulationDidStartNotification"),
           object: nil, queue: .main) { _ in
-          SaveStateService.resumeIfAvailable()
+          SaveStateService.resumeOrBootIntoPendingState()
         }
       }
 
