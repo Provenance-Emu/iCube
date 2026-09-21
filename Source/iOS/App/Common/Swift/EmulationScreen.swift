@@ -642,8 +642,9 @@ struct EmulationScreen: View {
         c.extendedGamepad?.valueChangedHandler = nil
         c.gamepad?.valueChangedHandler = nil
         c.microGamepad?.valueChangedHandler = nil
-        c.extendedGamepad?.buttonMenu.pressedChangedHandler = nil
-        c.microGamepad?.buttonMenu.pressedChangedHandler = nil
+        // Menu/Options handlers stay installed (never nil — a nil handler hands
+        // the button back to tvOS/iOS). They self-gate on emulation running.
+        installPauseMenuHandlers(c)
       }
       #if !os(tvOS)
       arPollTask?.cancel()

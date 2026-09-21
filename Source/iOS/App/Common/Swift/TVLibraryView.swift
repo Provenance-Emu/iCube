@@ -1235,8 +1235,11 @@ struct TVLibraryView: View {
           for c in GCController.controllers() {
             c.extendedGamepad?.valueChangedHandler = nil
             c.microGamepad?.valueChangedHandler = nil
-            c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
-            c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
+            // Keep the app's Menu/Options handlers installed rather than a bare
+            // swallow closure: they still absorb the press (so Game Center never
+            // opens) but route to the pause menu when a game IS running, which is
+            // what makes Menu reachable from the Siri Remote during gameplay.
+            installPauseMenuHandlers(c)
             if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] cleared handlers for \(c.vendorName ?? "(nil)")") }
             // Ensure microGamepad behaves sanely for library nav
             if let mg = c.microGamepad { mg.reportsAbsoluteDpadValues = true; mg.allowsRotation = true }
@@ -2642,8 +2645,7 @@ struct TVLibraryView: View {
 #if !os(tvOS)
     GCController.shouldMonitorBackgroundEvents = false
     for c in GCController.controllers() {
-      c.extendedGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
-      c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, _ in /* swallow to avoid Game Center */ }
+      installPauseMenuHandlers(c)
 
       if let egp = c.extendedGamepad {
         let cid = ObjectIdentifier(c)
@@ -2748,8 +2750,8 @@ struct TVLibraryView: View {
           mgp.valueChangedHandler = nil
         }
       }
-      c.extendedGamepad?.buttonMenu.pressedChangedHandler = nil
-      c.microGamepad?.buttonMenu.pressedChangedHandler = nil
+      // Re-install (never nil): a nil handler hands Menu back to the system.
+      installPauseMenuHandlers(c)
       prevEGPHandlers.removeValue(forKey: cid)
       prevMGPHandlers.removeValue(forKey: cid)
     }

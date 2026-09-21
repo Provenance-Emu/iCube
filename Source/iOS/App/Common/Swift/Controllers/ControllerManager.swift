@@ -181,7 +181,15 @@ final class ControllerManager: NSObject, ObservableObject {
       self.updateWiimoteEmulationForExternalControllers()
       self.reconcile()
     }
-    observers.append(contentsOf: [onConnect, onDisconnect, onEmulationStart])
+    // Hardware Menu presses that arrive on the UIPress path (tvOS Siri Remote)
+    // land here so they go through the same gated + coalesced sink as the
+    // GCController paths, and so the core is actually paused before the overlay
+    // is shown. This observer is app-wide, matching the connect observer.
+    let onPauseRequest = NotificationCenter.default.addObserver(
+      forName: PauseGestureTracker.requestPauseMenuNotification, object: nil, queue: .main) { _ in
+        PauseGestureTracker.shared.requestPauseMenu(reason: "uipress-menu")
+      }
+    observers.append(contentsOf: [onConnect, onDisconnect, onEmulationStart, onPauseRequest])
 
     // Fast-forward toggled bridge -> publisher
     NotificationCenter.default.publisher(for: Notification.Name("DOLFastForwardToggled"))

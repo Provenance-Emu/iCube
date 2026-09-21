@@ -4,6 +4,12 @@
 #import "EmuEventVC.h"
 #import <UIKit/UIKit.h>
 
+NSNotificationName const DOLRequestPauseMenuNotification = @"DOLRequestPauseMenu";
+
+/// How long Menu must be held to exit to the library. A release before this is a
+/// short press and opens the pause menu instead.
+static const NSTimeInterval kMenuLongPressDuration = 2.0;
+
 #if TARGET_OS_TV
 @interface EmuFocusTrapView : UIView
 @end
@@ -41,7 +47,7 @@
   NSLog(@"[INPUT] EmuEventVC viewDidLoad (unconditional)");
   // Long-press on tvOS Menu button to exit back to library
   UILongPressGestureRecognizer* lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleMenuLongPress:)];
-  lp.minimumPressDuration = 2.0; // 2 seconds hold
+  lp.minimumPressDuration = kMenuLongPressDuration;
   lp.allowedPressTypes = @[ @(UIPressTypeMenu) ];
   [self.view addGestureRecognizer:lp];
 
@@ -98,7 +104,16 @@
   }
 }
 
-// tvOS remote and controller presses
+// tvOS remote and controller presses.
+//
+// Menu is the app's pause button during emulation, and a 2-second hold is the
+// exit-to-library gesture. Both live here because a short press is only knowable
+// at RELEASE: pressesBegan arms the long-press timer, pressesEnded decides.
+// Menu presses are NOT forwarded to super — the superclass hands them to the
+// system, which is part of why the Siri Remote's Menu was a dead key during
+// gameplay. The UILongPressGestureRecognizer installed in viewDidLoad receives
+// press events independently of the responder chain, so skipping super does not
+// disable it.
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
@@ -106,22 +121,35 @@
     }
   }
 #if TARGET_OS_TV
+  BOOL handledMenu = NO;
   // Fallback long-press detection using a timer in case the gesture recognizer doesn't fire
   for (UIPress* p in presses) {
-    if (p.type == UIPressTypeMenu && _menuLongPressTimer == nil) {
-      if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-        NSLog(@"[INPUT] Starting Menu long-press timer (2.0s)");
-      }
-      _menuLongPressTimer = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:NO block:^(__unused NSTimer * _Nonnull t) {
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-          NSLog(@"[INPUT] Menu long-press timer fired – posting DOLEmulationRequestExitToLibrary");
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{
-          [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLEmulationRequestExitToLibrary" object:nil];
-        });
-      }];
+    if (p.type != UIPressTypeMenu)
+      continue;
+    handledMenu = YES;
+    if (_menuLongPressTimer != nil)
+      continue;
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+      NSLog(@"[INPUT] Starting Menu long-press timer (%.1fs)", kMenuLongPressDuration);
     }
+    __weak typeof(self) weakSelf = self;
+    _menuLongPressTimer = [NSTimer scheduledTimerWithTimeInterval:kMenuLongPressDuration repeats:NO block:^(__unused NSTimer * _Nonnull t) {
+      if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+        NSLog(@"[INPUT] Menu long-press timer fired – posting DOLEmulationRequestExitToLibrary");
+      }
+      dispatch_async(dispatch_get_main_queue(), ^{
+        // Clearing the handle is what tells pressesEnded this was a LONG press,
+        // so the eventual release does not also open the pause menu.
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) {
+          strongSelf->_menuLongPressTimer = nil;
+        }
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLEmulationRequestExitToLibrary" object:nil];
+      });
+    }];
   }
+  if (handledMenu)
+    return;
 #endif
   [super pressesBegan:presses withEvent:event];
 }
@@ -146,15 +174,24 @@
     }
   }
 #if TARGET_OS_TV
+  BOOL handledMenu = NO;
   for (UIPress* p in presses) {
-    if (p.type == UIPressTypeMenu && _menuLongPressTimer) {
-      if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-        NSLog(@"[INPUT] Cancelling Menu long-press timer (press ended)");
-      }
-      [_menuLongPressTimer invalidate];
-      _menuLongPressTimer = nil;
+    if (p.type != UIPressTypeMenu)
+      continue;
+    handledMenu = YES;
+    if (_menuLongPressTimer == nil)
+      continue;  // the long press already fired (exit posted); swallow the release
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
+      NSLog(@"[INPUT] Menu released before %.1fs – requesting pause menu", kMenuLongPressDuration);
     }
+    [_menuLongPressTimer invalidate];
+    _menuLongPressTimer = nil;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [[NSNotificationCenter defaultCenter] postNotificationName:DOLRequestPauseMenuNotification object:nil];
+    });
   }
+  if (handledMenu)
+    return;
 #endif
   [super pressesEnded:presses withEvent:event];
 }

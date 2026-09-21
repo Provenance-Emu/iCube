@@ -15,6 +15,10 @@ final class PauseGestureTracker {
   /// userInfo: ["active": Bool]
   static let fastForwardDidChangeNotification = Notification.Name("DOLFastForwardDidChange")
 
+  /// Swift mirror of `DOLRequestPauseMenuNotification` (declared in EmuEventVC.h,
+  /// defined in EmuEventVC.m — the single string literal lives there).
+  static let requestPauseMenuNotification: Notification.Name = .DOLRequestPauseMenu
+
   /// True when all four shoulder buttons are currently held down.
   private(set) var isAllShouldersHeld: Bool = false {
     didSet {
@@ -37,6 +41,11 @@ final class PauseGestureTracker {
     }
   }
 
+  /// Two Menu routes can fire for one physical press (UIPress + GCController).
+  /// Requests closer together than this are treated as the same press.
+  private static let pauseRequestCoalesceWindow: TimeInterval = 0.35
+  private var lastPauseRequest: TimeInterval = 0
+
   private init() {}
 
   /// Call whenever the current state of the four shoulder buttons changes.
@@ -46,18 +55,45 @@ final class PauseGestureTracker {
     isAllShouldersHeld = allPressed
   }
 
-  /// Call when Menu or Start is pressed.
-  /// If all shoulders are currently held, this will show the pause menu.
-  /// Also permits a small timing tolerance if shoulders were just pressed
-  /// shortly before the Menu press to account for handler ordering.
+  /// Call when Menu or Start is pressed **as part of the shoulder chord**.
+  ///
+  /// This is now only the *chord* path: L1+R1+L2+R2 held while Menu/Start is
+  /// pressed. The ungated Menu/Options path lives in `installPauseMenuHandlers`
+  /// (ControllerExtensions) and calls `requestPauseMenu()` directly, so no
+  /// controller depends on discovering this combo any more. The chord is kept
+  /// because it doubles as the fast-forward gesture and users rely on it.
   func menuOrStartPressed() {
-    NSLog("menuOrStartPressed entered: isAllShouldersHeld? \(isAllShouldersHeld ? "Yes" : "No")")
-
-    // let now = Date().timeIntervalSince1970
     guard isAllShouldersHeld else { return }
-    DispatchQueue.main.async {
-      NSLog("menuOrStartPressed recognized shoulder gesture")
+    requestPauseMenu(reason: "shoulder-chord")
+  }
 
+  /// The single sink for "the user asked for the pause menu".
+  ///
+  /// Every route — Siri Remote Menu (UIPress), microGamepad Menu, extended
+  /// gamepad Menu/Options, DS4/DS5/Xbox Home, the touchpad button, the
+  /// on-screen long press and the shoulder chord — funnels through here so that:
+  ///
+  /// 1. It is **gated** on emulation actually running. The same handlers stay
+  ///    installed while the library is on screen (a nil handler lets tvOS/iOS
+  ///    fall back to its own Menu behaviour — Game Center / app switcher), so
+  ///    the gate is what makes an always-installed handler safe.
+  /// 2. It is **coalesced**. On tvOS a Siri Remote Menu press can arrive on both
+  ///    the UIPress path and the GCController path; without a window the menu
+  ///    would be requested twice for one press.
+  func requestPauseMenu(reason: String = "") {
+    guard TVEmulationBridge.isRunning() else {
+      if UserDefaults.standard.bool(forKey: "input_debug") {
+        NSLog("[INPUT] pause request ignored (%@): emulation not running", reason)
+      }
+      return
+    }
+    let now = Date().timeIntervalSinceReferenceDate
+    guard now - lastPauseRequest > Self.pauseRequestCoalesceWindow else { return }
+    lastPauseRequest = now
+    DispatchQueue.main.async {
+      if UserDefaults.standard.bool(forKey: "input_debug") {
+        NSLog("[INPUT] presenting pause menu (%@)", reason)
+      }
       #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
       GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
       #endif
@@ -69,11 +105,7 @@ final class PauseGestureTracker {
   @MainActor
   @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
     if gesture.state == .began {
-      #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-      GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
-      #endif
-      TVEmulationBridge.pause()
-      NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
+      requestPauseMenu(reason: "long-press")
     }
   }
 
