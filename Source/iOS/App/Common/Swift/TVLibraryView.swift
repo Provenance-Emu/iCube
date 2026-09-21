@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import GameController
+import PVWebServer
 import UniformTypeIdentifiers
 #if os(iOS)
 #endif
@@ -228,6 +229,33 @@ final class TVLibraryViewModel: ObservableObject {
 
   func sources(for item: TVGameItem) -> [TVGameItem] {
     groupsByKey[key(for: item)] ?? [item]
+  }
+}
+
+/// The three content menus in the library toolbar. On iOS these are SwiftUI `Menu`s; on tvOS,
+/// where `Menu` has no usable presentation, the same content is pushed as a sheet. Owning the
+/// title and icon here keeps the two platforms labelled identically.
+enum TVToolbarSheet: String, Identifiable, CaseIterable {
+  case view
+  case importGames
+  case system
+
+  var id: String { rawValue }
+
+  var systemImage: String {
+    switch self {
+    case .view: return "square.grid.3x3"
+    case .importGames: return "square.and.arrow.down"
+    case .system: return "gamecontroller"
+    }
+  }
+
+  var title: String {
+    switch self {
+    case .view: return L("View Options")
+    case .importGames: return L("Import")
+    case .system: return L("System")
+    }
   }
 }
 
@@ -465,6 +493,18 @@ struct TVLibraryView: View {
   @State private var showDSUSession = false
   /// Presents the About iCube sheet (tapped via the toolbar Dolphin logo on iOS).
   @State private var showAbout = false
+  /// Live Wi-Fi upload address shown on the empty-library screen. Empty while the server
+  /// is still binding, so it is polled rather than read once.
+  @State private var emptyLibraryWebURL: String = ""
+  /// How often the empty-library screen re-reads the upload server's address.
+  private static let uploadAddressPollInterval: TimeInterval = 2
+#if os(tvOS)
+  /// Which library toolbar menu is currently presented as a sheet. tvOS only: see TVToolbarSheet.
+  @State private var tvToolbarSheet: TVToolbarSheet?
+  /// A toolbar-menu action that presents another sheet has to wait for the toolbar sheet to
+  /// finish dismissing, or the second presentation is dropped.
+  private static let tvToolbarSheetDismissDelay: TimeInterval = 0.35
+#endif
 
   // MARK: - Computed Bindings (extracted to prevent compiler timeout)
 
@@ -595,12 +635,14 @@ struct TVLibraryView: View {
   /// Current grid columns (kept in state for controller navigation)
   @State private var gridColumnCount: Int = 3
 
+  /// Wi-Fi upload guide. Available on every platform: the upload server itself runs on tvOS
+  /// too (TVRootView starts it), and on tvOS it is the only practical way to add a game.
+  @State private var showWebImportSheet = false
   /// iOS document pickers
 #if os(iOS) || targetEnvironment(macCatalyst)
   @State private var showImportSoftwarePicker = false
   @State private var showImportNANDPicker = false
   @State private var showImportSkylanderPicker = false
-  @State private var showWebImportSheet = false
   /// Navigate to settings as a push on iOS
   @State private var navigateToSettings = false
   /// Controller navigation repeat throttle
@@ -1249,16 +1291,67 @@ struct TVLibraryView: View {
       SwimmingDolphinsView(count: 3, direction: .leftToRight, maxSize: 120, opacity: 0.22)
       SwimmingDolphinsView(count: 2, direction: .rightToLeft, maxSize: 100, opacity: 0.16)
 
-      // Centered friendly message
+      // Centered friendly message, plus the routes that actually get a game onto the device.
       VStack(spacing: 20) {
         DolphinErrorView(
           title: L("Library Empty"),
           message: L("No games found. Add GameCube & Wii ROMs to your library to get started with iCube! 🎮")
         )
+        emptyLibraryUploadAddress
+        emptyLibraryActions
       }
       .padding()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onAppear { emptyLibraryWebURL = PVWebServer.shared.urlString ?? "" }
+    .onReceive(
+      Timer.publish(every: Self.uploadAddressPollInterval, on: .main, in: .common).autoconnect()
+    ) { _ in
+      emptyLibraryWebURL = PVWebServer.shared.urlString ?? ""
+    }
+  }
+
+  /// The Wi-Fi upload address, shown inline so a first-run user can start copying files
+  /// without navigating anywhere. Empty until the server finishes binding; see WS-3.
+  @ViewBuilder
+  private var emptyLibraryUploadAddress: some View {
+    if !emptyLibraryWebURL.isEmpty {
+      VStack(spacing: 4) {
+        Text(L("Open this address in a browser on the same Wi-Fi:"))
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+        Text(emptyLibraryWebURL)
+          .font(.headline)
+          .foregroundStyle(.primary)
+          .lineLimit(2)
+          .multilineTextAlignment(.center)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var emptyLibraryActions: some View {
+    HStack(spacing: 16) {
+#if os(iOS) || targetEnvironment(macCatalyst)
+      Button(action: { showImportSoftwarePicker = true }) {
+        Label(L("Import Game"), systemImage: "doc.badge.plus")
+      }
+      .buttonStyle(.borderedProminent)
+#endif
+      Button(action: { showWebImportSheet = true }) {
+        Label(L("Upload via Wi-Fi…"), systemImage: "wifi")
+      }
+      .buttonStyle(.borderedProminent)
+      Button(action: { showSources = true }) {
+        Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
+      }
+      .buttonStyle(.bordered)
+      Button(action: { model.rescan() }) {
+        Label(L("Rescan"), systemImage: "arrow.clockwise")
+      }
+      .buttonStyle(.bordered)
+      .disabled(model.isRescanning)
+    }
   }
 
   @ViewBuilder
@@ -1314,20 +1407,16 @@ struct TVLibraryView: View {
       }
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      libraryViewMenu
-        .focusable(true)
+      tvToolbarButton(.view)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      libraryImportMenu
-        .focusable(true)
+      tvToolbarButton(.importGames)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
-      librarySystemMenu
-        .focusable(true)
+      tvToolbarButton(.system)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       librarySettingsButton
-        .focusable(true)
     }
   }
   #else // iOS
@@ -1374,15 +1463,16 @@ struct TVLibraryView: View {
     #endif
   }
 
-  /// View controls: selection, sort, grid zoom, rescan (+ search on tvOS).
+#if !os(tvOS)
+  /// View controls: selection, sort, grid zoom, rescan.
   @ViewBuilder
   private var libraryViewMenu: some View {
     Menu {
       libraryViewMenuSection
     } label: {
-      Image(systemName: "square.grid.3x3")
+      Image(systemName: TVToolbarSheet.view.systemImage)
     }
-    .accessibilityLabel(L("View Options"))
+    .accessibilityLabel(TVToolbarSheet.view.title)
   }
 
   /// Import paths: files, NAND, Skylanders, sources, Wi-Fi upload guide.
@@ -1391,9 +1481,9 @@ struct TVLibraryView: View {
     Menu {
       libraryImportMenuSection
     } label: {
-      Image(systemName: "square.and.arrow.down")
+      Image(systemName: TVToolbarSheet.importGames.systemImage)
     }
-    .accessibilityLabel(L("Import"))
+    .accessibilityLabel(TVToolbarSheet.importGames.title)
   }
 
   /// System boot / update / DSU actions.
@@ -1402,9 +1492,51 @@ struct TVLibraryView: View {
     Menu {
       librarySystemMenuSection
     } label: {
-      Image(systemName: "gamecontroller")
+      Image(systemName: TVToolbarSheet.system.systemImage)
     }
-    .accessibilityLabel(L("System"))
+    .accessibilityLabel(TVToolbarSheet.system.title)
+  }
+#endif
+
+#if os(tvOS)
+  /// A plain focusable Button standing in for a toolbar `Menu`, which tvOS cannot present.
+  @ViewBuilder
+  private func tvToolbarButton(_ kind: TVToolbarSheet) -> some View {
+    Button(action: { tvToolbarSheet = kind }) {
+      Image(systemName: kind.systemImage)
+    }
+    .accessibilityLabel(kind.title)
+  }
+
+  @ViewBuilder
+  private func tvToolbarSheetBody(_ kind: TVToolbarSheet) -> some View {
+    NavigationStack {
+      List {
+        switch kind {
+        case .view: libraryViewMenuSection
+        case .importGames: libraryImportMenuSection
+        case .system: librarySystemMenuSection
+        }
+      }
+      .navigationTitle(kind.title)
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button(L("Done")) { tvToolbarSheet = nil }
+        }
+      }
+    }
+  }
+#endif
+
+  /// Runs a library-menu action. On tvOS the menu is a sheet, so an action that presents
+  /// something else has to dismiss it first; on iOS the `Menu` dismisses itself.
+  private func libraryMenuAction(_ action: @escaping () -> Void) {
+#if os(tvOS)
+    tvToolbarSheet = nil
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.tvToolbarSheetDismissDelay, execute: action)
+#else
+    action()
+#endif
   }
 
   @ViewBuilder
@@ -1427,15 +1559,17 @@ struct TVLibraryView: View {
   private var libraryViewMenuSection: some View {
     Section(L("View")) {
 #if os(tvOS)
-      Button(action: { showSearchSheet = true }) {
+      Button(action: { libraryMenuAction { showSearchSheet = true } }) {
         Label(L("Search"), systemImage: "magnifyingglass")
       }
 #endif
       Button(action: {
-        if isSelectionMode {
-          exitSelectionMode()
-        } else {
-          isSelectionMode = true
+        libraryMenuAction {
+          if isSelectionMode {
+            exitSelectionMode()
+          } else {
+            isSelectionMode = true
+          }
         }
       }) {
         Label(
@@ -1443,6 +1577,21 @@ struct TVLibraryView: View {
           systemImage: isSelectionMode ? "checkmark.circle.fill" : "checkmark.circle"
         )
       }
+#if os(tvOS)
+      // The toolbar sheet is inside a NavigationStack, so these push instead of opening a Menu.
+      NavigationLink {
+        List { sortMenuItems }
+          .navigationTitle(L("Sort"))
+      } label: {
+        Label(L("Sort"), systemImage: "arrow.up.arrow.down")
+      }
+      NavigationLink {
+        List { gridZoomMenuItems }
+          .navigationTitle(L("Grid Size"))
+      } label: {
+        Label(L("Grid Size"), systemImage: "square.grid.3x3")
+      }
+#else
       Menu {
         sortMenuItems
       } label: {
@@ -1453,7 +1602,8 @@ struct TVLibraryView: View {
       } label: {
         Label(L("Grid Size"), systemImage: "square.grid.3x3")
       }
-      Button(action: { model.rescan() }) {
+#endif
+      Button(action: { libraryMenuAction { model.rescan() } }) {
         Label(L("Rescan"), systemImage: "arrow.clockwise")
       }
       .disabled(model.isRescanning)
@@ -1487,11 +1637,11 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var librarySystemMenuSection: some View {
     Section(L("System")) {
-      Button(action: { model.loadGameCubeMainMenu() }) {
+      Button(action: { libraryMenuAction { model.loadGameCubeMainMenu() } }) {
         Label(L("GameCube: Load Main Menu"), systemImage: "gamecontroller")
       }
 #if os(tvOS)
-      Button(action: { showUpdateRegions = true }) {
+      Button(action: { libraryMenuAction { showUpdateRegions = true } }) {
         Label(L("Wii: Online System Update"), systemImage: "arrow.triangle.2.circlepath")
       }
 #else
@@ -1522,20 +1672,15 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var libraryImportMenuSection: some View {
     Section(L("Import")) {
-      Button(action: {
 #if os(iOS) || targetEnvironment(macCatalyst)
-        showImportSoftwarePicker = true
-#endif
-      }) {
+      // Document pickers: iOS/Catalyst only, there is no Files picker on tvOS.
+      Button(action: { showImportSoftwarePicker = true }) {
         Label(L("Import Game"), systemImage: "doc.badge.plus")
       }
-      Button(action: {
-#if os(iOS) || targetEnvironment(macCatalyst)
-        showImportNANDPicker = true
-#endif
-      }) {
+      Button(action: { showImportNANDPicker = true }) {
         Label(L("Import BootMii NAND Backup…"), systemImage: "tray.and.arrow.down")
       }
+#endif
 #if os(iOS)
       if DOLConfigBridge.mainEmulateSkylanderPortal() {
         Button(action: { showImportSkylanderPicker = true }) {
@@ -1543,12 +1688,14 @@ struct TVLibraryView: View {
         }
       }
       Divider()
-      Button(action: { showWebImportSheet = true }) {
+#endif
+      Button(action: { libraryMenuAction { showWebImportSheet = true } }) {
         Label(L("Upload via Wi-Fi…"), systemImage: "wifi")
       }
+#if os(iOS)
       Divider()
 #endif
-      Button(action: { showSources = true }) {
+      Button(action: { libraryMenuAction { showSources = true } }) {
         Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
       }
     }
@@ -1773,6 +1920,7 @@ struct TVLibraryView: View {
     }
 #if os(tvOS)
     .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
+    .sheet(item: $tvToolbarSheet) { tvToolbarSheetBody($0) }
     .sheet(isPresented: $showSearchSheet) {
       NavigationStack {
         Form {
@@ -1837,10 +1985,10 @@ struct TVLibraryView: View {
       }
     // Sources sheet
       .sheet(isPresented: $showSources) { SourcesView() }
-#if os(iOS)
       .sheet(isPresented: $showWebImportSheet) {
         LibraryWebImportView()
       }
+#if os(iOS)
       .fileImporter(
         isPresented: $showImportSkylanderPicker,
         allowedContentTypes: [.data],

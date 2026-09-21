@@ -78,6 +78,9 @@ struct LibraryWebImportView: View {
           .textSelection(.enabled)
         #endif
           .lineLimit(3)
+#if os(iOS)
+        // tvOS has no pasteboard and no browser to open the URL in, so it reads the
+        // address off the screen instead — no action row there.
         HStack(spacing: 12) {
           Button {
             copyToPasteboard(url)
@@ -85,7 +88,6 @@ struct LibraryWebImportView: View {
             Label(L("Copy"), systemImage: "doc.on.doc")
           }
           .buttonStyle(.bordered)
-#if os(iOS)
           if let link = URL(string: url) {
             Button {
               openURL(link)
@@ -94,8 +96,8 @@ struct LibraryWebImportView: View {
             }
             .buttonStyle(.bordered)
           }
-#endif
         }
+#endif
       }
     }
     .padding(.vertical, 4)
@@ -107,14 +109,14 @@ struct LibraryWebImportView: View {
     ipAddress = PVWebServer.shared.ipAddress ?? ""
   }
 
-  private func copyToPasteboard(_ value: String) {
 #if os(iOS)
+  private func copyToPasteboard(_ value: String) {
     UIPasteboard.general.string = value
     NotificationCenter.default.post(
       name: NSNotification.Name("DOLShowSnackbar"),
       object: nil,
       userInfo: ["text": L("Copied to clipboard")]
     )
-#endif
   }
+#endif
 }
