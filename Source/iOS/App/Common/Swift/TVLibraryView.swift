@@ -1329,15 +1329,11 @@ struct TVLibraryView: View {
     }
   }
 
+  /// tvOS only: the iOS empty state is unchanged, and this row is too wide for a phone.
   @ViewBuilder
   private var emptyLibraryActions: some View {
+#if os(tvOS)
     HStack(spacing: 16) {
-#if os(iOS) || targetEnvironment(macCatalyst)
-      Button(action: { showImportSoftwarePicker = true }) {
-        Label(L("Import Game"), systemImage: "doc.badge.plus")
-      }
-      .buttonStyle(.borderedProminent)
-#endif
       Button(action: { showWebImportSheet = true }) {
         Label(L("Upload via Wi-Fi…"), systemImage: "wifi")
       }
@@ -1352,6 +1348,7 @@ struct TVLibraryView: View {
       .buttonStyle(.bordered)
       .disabled(model.isRescanning)
     }
+#endif
   }
 
   @ViewBuilder
@@ -1408,15 +1405,19 @@ struct TVLibraryView: View {
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       tvToolbarButton(.view)
+        .focusable(true)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       tvToolbarButton(.importGames)
+        .focusable(true)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       tvToolbarButton(.system)
+        .focusable(true)
     }
     ToolbarItem(placement: .navigationBarTrailing) {
       librarySettingsButton
+        .focusable(true)
     }
   }
   #else // iOS
