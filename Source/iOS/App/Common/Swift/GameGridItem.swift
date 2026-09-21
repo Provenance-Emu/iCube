@@ -696,7 +696,9 @@ struct GameGridItem: View {
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
       }
-      //            Button(L("View Save States")) { showSaveStates(item) }
+      Button(action: { showSaveStates(item) }) {
+        Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
+      }
 
       // Cheats menu with tvOS 16 compatibility
       if #available(tvOS 17.0, iOS 14.0, *) {
@@ -905,6 +907,18 @@ struct GameGridItem: View {
     // library's View Options menu.
     .contextMenu {
       // Align with tvOS context menu
+      // Only meaningful when launches auto-resume: boot this one time without loading the
+      // auto-state (it may be the very thing that is broken). tvOS has had this since the
+      // context menu was added; iOS had no equivalent, so an iPhone stuck in a bad
+      // auto-resume loop had no way back into the library without reinstalling.
+      if SaveStateService.resumeEnabled {
+        Button(action: {
+          SaveStateService.skipResumeOnce = true
+          select(item)
+        }) {
+          Label(L("Start Fresh (Skip Resume)"), systemImage: "arrow.counterclockwise")
+        }
+      }
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
       }
@@ -913,7 +927,9 @@ struct GameGridItem: View {
           Label(L("Select Games"), systemImage: "checkmark.circle")
         }
       }
-      //            Button(L("View Save States")) { showSaveStates(item) }
+      Button(action: { showSaveStates(item) }) {
+        Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
+      }
 
       // Cheats menu with tvOS 16 compatibility
       if #available(tvOS 17.0, iOS 14.0, *) {

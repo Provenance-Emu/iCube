@@ -8,6 +8,7 @@
 #import "EmulationCoordinator.h"
 #import "EmulationBootParameter.h"
 #import "EmulationBootType.h"
+#import "iCube-Swift.h"
 
 // C++ Core host messaging
 #include "Core/HW/ProcessorInterface.h"
@@ -50,6 +51,9 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
       State::SaveAs(Core::System::GetInstance(), std::string(autoPath.UTF8String));  // 2603: no wait flag
     }
   }
+  // A clean exit is proof the resume/boot-into-state load earlier this session (if
+  // any) did not take the app down, so it is safe to auto-resume again next launch.
+  [BootWatchdog clear];
   Host_Message(HostMessageID::WMUserStop);
 }
 
@@ -63,7 +67,10 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 
 + (void)resetSystem {
   auto& system = Core::System::GetInstance();
-  if (!Core::IsRunning(system))
+  // A game can be booted but Paused (e.g. from the pause menu), not just Running.
+  // Guard on "no game booted at all" instead of "not currently Running", otherwise
+  // Reset System silently no-ops whenever it's invoked from the pause menu.
+  if (Core::IsUninitialized(system))
     return;
   system.GetProcessorInterface().ResetButton_Tap();
   Core::SetState(system, Core::State::Running);

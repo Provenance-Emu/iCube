@@ -109,23 +109,65 @@ public enum SaveStateService {
     return FileManager.default.fileExists(atPath: url.path)
   }
 
-  /// If resume is enabled and an auto-state exists for the running title, load it.
-  /// Returns true if a load was issued. Safe to call right after the game boots.
-  /// (The save side runs in TVEmulationBridge.stop so every quit path is covered.)
   /// One-shot: the next boot starts fresh even though an auto-state exists. Set by the library's
   /// "Start Fresh" action: a bad auto-state would otherwise be reloaded on every single launch, with
   /// no way back into the game. Main thread only, like everything else here.
   public static var skipResumeOnce = false
 
+  // MARK: - Boot into a chosen save state
+
+  /// Path to a save state that should be loaded immediately after the next boot,
+  /// in place of the ordinary auto-resume. Set by "boot into a chosen save
+  /// state" entry points (the save-state browser's Load action, when reached
+  /// from the library rather than the pause menu of an already-running game)
+  /// right before launching the game. Consumed once by
+  /// `resumeOrBootIntoPendingState()`, which always clears it so a stale request
+  /// can never leak into a later, unrelated boot.
+  public static var pendingBootStatePath: String?
+
+  /// If resume is enabled and an auto-state exists for the running title (or a
+  /// specific save state was requested via `pendingBootStatePath`), load it.
+  /// Returns true if a load was issued. Safe to call right after the game boots
+  /// (the save side runs in `TVEmulationBridge.stop`, so every quit path is
+  /// covered). Single entry point for the `DOLEmulationDidStartNotification`
+  /// observers (tvOS/iOS `EmulationScreen.swift`): a requested boot state takes
+  /// precedence over resume when both are set, and whichever load actually
+  /// happens is wrapped with the boot watchdog, so a previous attempt that never
+  /// got past this same step is declined instead of repeated.
   @discardableResult
-  public static func resumeIfAvailable() -> Bool {
+  public static func resumeOrBootIntoPendingState() -> Bool {
+    // A previous launch armed the watchdog around this exact step and nothing
+    // ever cleared it - the state (or the auto-state) that step was about to
+    // load never let the app come back up. Don't try it again automatically.
+    if BootWatchdog.previousBootNeverCompleted {
+      BootWatchdog.clear()
+      pendingBootStatePath = nil
+      skipResumeOnce = false
+      NotificationCenter.default.post(
+        name: NSNotification.Name("DOLShowSnackbar"), object: nil,
+        userInfo: ["text": "Skipped resuming — the last attempt didn't finish loading."]
+      )
+      return false
+    }
+
+    if let path = pendingBootStatePath {
+      pendingBootStatePath = nil
+      guard FileManager.default.fileExists(atPath: path) else { return false }
+      BootWatchdog.armBeforeBoot()
+      TVEmulationBridge.loadState(fromPath: path)
+      BootWatchdog.clearAfterLivenessWindow()
+      return true
+    }
+
     if skipResumeOnce {
       skipResumeOnce = false
       return false
     }
     guard resumeEnabled, let url = autoStateURL,
           FileManager.default.fileExists(atPath: url.path) else { return false }
+    BootWatchdog.armBeforeBoot()
     TVEmulationBridge.loadState(fromPath: url.path)
+    BootWatchdog.clearAfterLivenessWindow()
     return true
   }
 }
