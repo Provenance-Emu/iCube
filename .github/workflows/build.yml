@@ -404,11 +404,39 @@ jobs:
             echo "::warning::FEED_DISPATCH_TOKEN not set — skipping icube-emu.com refresh."
             exit 0
           fi
-          gh api repos/Provenance-Emu/icube-emu.github.io/dispatches \
+          # Report WHY, not just that it failed. This step has been failing
+          # silently since 2026-09-02: the site repo has never once received a
+          # repository_dispatch, while the identical call to Provenance-Emu/
+          # Provenance in the step above has succeeded 51 times with the same
+          # token. That is the signature of a fine-grained PAT whose repository
+          # access list includes Provenance but not icube-emu.github.io -- the
+          # permissions are already correct, the repo just is not on the list.
+          # A fine-grained PAT returns 404 (not 403) for a repo it cannot see,
+          # so both are treated as the same diagnosis.
+          #
+          # The consequence used to be cosmetic; it is not any more. The feed now
+          # publishes the alpha's real CFBundleVersion, so until the site
+          # redeploys it advertises a build number the rolling IPA no longer
+          # carries, and SideStore refuses to install it. deploy.yml's */15 cron
+          # is the only thing closing that window.
+          if out=$(gh api repos/Provenance-Emu/icube-emu.github.io/dispatches \
             -f event_type=companion-release \
-            -F client_payload[app]=icube \
-            && echo "Requested icube-emu.com redeploy" \
-            || echo "::warning::icube-emu.com dispatch failed; run its deploy.yml by hand"
+            -F client_payload[app]=icube 2>&1); then
+            echo "Requested icube-emu.com redeploy"
+          else
+            case "$out" in
+              *404*|*403*|*"Not Found"*|*"Resource not accessible"*)
+                echo "::warning::FEED_DISPATCH_TOKEN cannot reach \
+          Provenance-Emu/icube-emu.github.io. Add that repo to the token's \
+          repository access list (github.com/settings/personal-access-tokens). \
+          Until then the site feed lags the alpha by up to its */15 cron, and \
+          installs fail during that window." ;;
+              *)
+                echo "::warning::icube-emu.com dispatch failed: ${out}" ;;
+            esac
+            echo "Close the window by hand with: \
+          gh workflow run deploy.yml -R Provenance-Emu/icube-emu.github.io"
+          fi
 
       - name: Update pinned tracking issue
         continue-on-error: true
