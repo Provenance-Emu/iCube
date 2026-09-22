@@ -40,6 +40,11 @@
 #   Tools/icube-feed-token.sh install    # check, then store it as the Actions secret
 #   Tools/icube-feed-token.sh dispatch   # fire both refreshes now, using the stored token
 #
+#   Tools/icube-feed-token.sh set        # paste a new token (hidden); test; store it
+#   Tools/icube-feed-token.sh set --from-gh-cli
+#                                        # reuse the gh CLI's own OAuth token instead
+#   ... add --save-to-op to also write it back into the 1Password item
+#
 # Environment
 #   OP_ITEM   1Password secret reference WITHOUT the field, e.g.
 #             op://Private/provenance-website-dispatch      (default below)
@@ -116,8 +121,9 @@ validate_shape() {
   case "$t" in
     *[[:space:]]*) die "the token contains whitespace — that is not a GitHub token" ;;
     ghp_*|github_pat_*|gho_*|ghu_*|ghs_*|ghr_*) : ;;
-    *) die "the value does not look like a GitHub token (expected a ghp_/github_pat_ prefix).
-  If this is deliberate, set OP_FIELD explicitly and re-run." ;;
+    *) die "the value does not look like a GitHub token.
+  Expected one of the ghp_ / github_pat_ / gho_ / ghu_ / ghs_ / ghr_ prefixes.
+  If it came from 1Password, the field may be the wrong one -- try '$0 fields'." ;;
   esac
 }
 
@@ -242,6 +248,69 @@ cmd_dispatch() {
   done
 }
 
+# Take a token from somewhere other than 1Password, test it, and store it.
+#
+# Stdin is read with `read -rs`: not echoed, not in argv (which `ps` exposes),
+# not in shell history. That is the whole reason this is a command rather than a
+# one-liner in a README -- every hand-written version of this either echoed the
+# token or piped into `gh` in a way that could not fail safely.
+#
+# There is no API to CREATE a GitHub token: the classic Authorizations API was
+# removed in 2020 and fine-grained PATs are web-UI only. So either paste one, or
+# use --from-gh-cli to reuse the token `gh` already holds.
+cmd_set() {
+  need gh
+  local token from_gh=0 save_op=0 arg who
+
+  for arg in "$@"; do
+    case "$arg" in
+      --from-gh-cli) from_gh=1 ;;
+      --save-to-op)  save_op=1 ;;
+      *) die "unknown flag '$arg' (expected --from-gh-cli and/or --save-to-op)" ;;
+    esac
+  done
+
+  if [ "$from_gh" = 1 ]; then
+    # `gh auth token` already has whatever scopes you granted the CLI, and the
+    # docs' documented path for this endpoint is an OAuth/classic token with
+    # `repo`. Convenient, but understand the trade: it is YOUR CLI credential,
+    # usually with much broader scopes than this job needs, and it can rotate
+    # when you re-auth, which would silently break CI.
+    token="$(gh auth token 2>/dev/null)" || die "gh has no token — run 'gh auth login'"
+    warn "using the gh CLI's own token; its scopes are broader than this job needs"
+  else
+    printf 'Paste the token (input hidden), then Enter: ' >&2
+    IFS= read -rs token || die "no input"
+    printf '\n' >&2
+  fi
+
+  validate_shape "$token"
+  who="$(token_identity "$token")" || die "that token is not valid — nothing stored"
+  ok "valid; authenticates as ${who}"
+
+  info "Testing before storing ..."
+  probe_all "$token" || die "that token cannot refresh the feeds — nothing stored.
+  Classic token with the 'repo' scope is the configuration GitHub documents."
+
+  printf '%s' "$token" | gh secret set "$SECRET_NAME" --repo "$ICUBE_REPO"
+  ok "stored ${SECRET_NAME} in ${ICUBE_REPO}"
+
+  if [ "$save_op" = 1 ]; then
+    need op
+    local ref vault item
+    ref="$(item_ref)"; vault="${ref%%/*}"; item="${ref#*/}"
+    # Caveat, stated rather than hidden: `op item edit` takes the value as an
+    # argument, so it is briefly visible in `ps` on this machine. Everything
+    # else here avoids argv; 1Password's CLI offers no stdin path for editing a
+    # single field, so this is opt-in instead of default.
+    op item edit "$item" --vault "$vault" "token[password]=${token}" >/dev/null \
+      && ok "updated ${vault}/${item} field 'token'" \
+      || warn "could not update the 1Password item — the CI secret is set regardless"
+  else
+    info "Not written to 1Password. Add --save-to-op if you want 'check'/'install' to work later."
+  fi
+}
+
 cmd_status() {
   need gh; need jq
   local updated newest feed bv url
@@ -292,8 +361,9 @@ case "${1:-status}" in
   fields)   cmd_fields ;;
   check)    cmd_check ;;
   install)  shift || true; cmd_install "${1:-}" ;;
+  set)      shift || true; cmd_set "$@" ;;
   dispatch) cmd_dispatch ;;
   -h|--help|help)
     sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//' ;;
-  *) die "unknown command '$1' — try: status | fields | check | install | dispatch" ;;
+  *) die "unknown command '$1' — try: status | fields | check | install | set | dispatch" ;;
 esac
