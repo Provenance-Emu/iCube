@@ -126,6 +126,31 @@ public enum SyncClassifier {
         return nil
     }
 
+    /// Whether a directory is worth walking into at all.
+    ///
+    /// Purely an optimisation: every file under a directory this rejects would
+    /// also be rejected by `classify`, so skipping the subtree can never change
+    /// what syncs — it only avoids enumerating (and, for the scanner, hashing)
+    /// tens of thousands of files under `Cache/`, `Dump/` and `Load/`. A texture
+    /// pack alone can be gigabytes.
+    ///
+    /// - Parameter relativePath: directory path relative to `User/`, same form
+    ///   as `classify(relativePath:)` takes.
+    /// - Returns: `false` only when nothing under the directory could ever sync.
+    ///
+    /// - Note: added for WS-5's scanner. Deliberately conservative — it consults
+    ///   the same `excludedTopLevelDirectories` set `classify` does, so the two
+    ///   cannot disagree.
+    public static func shouldDescend(intoDirectoryRelativePath relativePath: String) -> Bool {
+        let normalized = relativePath
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
+        // The root itself is always walked.
+        guard !normalized.isEmpty else { return true }
+        guard let top = normalized.split(separator: "/").first.map(String.init) else { return true }
+        return !excludedTopLevelDirectories.contains(top)
+    }
+
     /// Whether a file of this size may leave the device. Applied in addition to
     /// `classify`, never instead of it.
     public static func isWithinSizeLimit(_ sizeBytes: Int64) -> Bool {

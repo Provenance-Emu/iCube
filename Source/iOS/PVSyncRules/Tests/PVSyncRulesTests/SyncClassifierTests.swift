@@ -131,4 +131,41 @@ final class SyncClassifierTests: XCTestCase {
         XCTAssertFalse(SyncableFileType.saveStateThumbnail.isRequiredToResume)
         XCTAssertFalse(SyncableFileType.wiiSave.isRequiredToResume)
     }
+
+    // MARK: - Directory pruning (WS-5 scanner optimisation)
+
+    func testShouldDescendSkipsExcludedTrees() {
+        XCTAssertFalse(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "Cache"))
+        XCTAssertFalse(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "Cache/GameCovers"))
+        XCTAssertFalse(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "Load/Textures/GALE01"))
+        XCTAssertFalse(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "dump/frames"))
+        XCTAssertFalse(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "Logs"))
+    }
+
+    func testShouldDescendAllowsSyncableTrees() {
+        XCTAssertTrue(SyncClassifier.shouldDescend(intoDirectoryRelativePath: ""))
+        XCTAssertTrue(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "StateSaves"))
+        XCTAssertTrue(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "Wii/title/00010000"))
+        XCTAssertTrue(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "GC/USA"))
+        XCTAssertTrue(SyncClassifier.shouldDescend(intoDirectoryRelativePath: "GameSettings"))
+    }
+
+    /// Pruning is an optimisation, never a policy change: anything under a
+    /// pruned directory must already have been rejected by `classify`.
+    func testPruningNeverHidesASyncableFile() {
+        let probes = [
+            "Cache/GameCovers/GALE01.png",
+            "Load/Textures/GALE01/tex1.png",
+            "Dump/Frames/dff.dff",
+            "Logs/dolphin.log",
+            "Shaders/foo.glsl"
+        ]
+        for path in probes {
+            let directory = (path as NSString).deletingLastPathComponent
+            XCTAssertFalse(SyncClassifier.shouldDescend(intoDirectoryRelativePath: directory),
+                           "\(directory) should be pruned")
+            XCTAssertNil(SyncClassifier.classify(relativePath: path),
+                         "\(path) must be rejected by classify regardless of pruning")
+        }
+    }
 }
