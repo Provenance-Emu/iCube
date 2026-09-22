@@ -248,6 +248,25 @@ cmd_dispatch() {
   done
 }
 
+# Terminals in bracketed-paste mode wrap a paste in ESC[200~ ... ESC[201~, and
+# `read -rs` hands those bytes through verbatim -- so a good token arrives with
+# an escape sequence glued to each end and fails the prefix check with a message
+# that blames the token rather than the terminal. Pasting is the normal way to
+# use this command, so it has to survive that.
+#
+# Deleting everything outside [A-Za-z0-9_] is NOT enough, which is how the first
+# version of this got it wrong: that strips the ESC and the brackets but keeps
+# the DIGITS out of the markers, turning a token into 200ghp_...201.
+#
+# So extract the token instead of cleaning around it. Every GitHub token is a
+# known prefix followed by [A-Za-z0-9_], which no escape sequence can look like,
+# and taking the first match ignores anything pasted alongside it.
+sanitize_pasted() {
+  printf '%s' "$1" \
+    | grep -oE '(ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]+' \
+    | head -1
+}
+
 # Take a token from somewhere other than 1Password, test it, and store it.
 #
 # Stdin is read with `read -rs`: not echoed, not in argv (which `ps` exposes),
@@ -282,6 +301,7 @@ cmd_set() {
     printf 'Paste the token (input hidden), then Enter: ' >&2
     IFS= read -rs token || die "no input"
     printf '\n' >&2
+    token="$(sanitize_pasted "$token")"
   fi
 
   validate_shape "$token"
