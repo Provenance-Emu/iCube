@@ -96,9 +96,10 @@ public struct SyncPlanner: Sendable {
             }
         }
 
-        // Remote-only files come last: uploads are cheap and local-first, and a
-        // run that dies partway should have pushed this device's work up before
-        // it started pulling other devices' work down.
+        // Files that exist only remotely come last. Files present on both sides
+        // are handled in the loop above, in path order, so a download for one of
+        // those can still precede an upload — the guarantee is only that a
+        // purely-new local file is never queued behind a purely-new remote one.
         for path in remoteByPath.keys.sorted() where localByPath[path] == nil {
             guard let remoteMeta = remoteByPath[path] else { continue }
             steps.append(.download(remoteMeta))

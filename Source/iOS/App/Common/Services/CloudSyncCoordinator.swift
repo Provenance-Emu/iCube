@@ -263,6 +263,15 @@ final class CloudSyncCoordinator: ObservableObject {
     private func runSync(trigger: SyncTrigger) async {
         guard let scanner, let provider else { return }
 
+        // Scan first, and unconditionally. The local inventory is the half that
+        // does not need a cloud, so the settings pane can show what *would*
+        // sync — and the classifier can be seen doing its job — on a build with
+        // no container at all. It also means the counts are real before the
+        // first successful round trip rather than after it.
+        let local = await scanner.scanLocalFiles()
+        rebuildMetadataCache(from: local)
+        refreshStatistics()
+
         if let reason = await provider.unavailableReason() {
             unavailableReason = reason
             addEvent(.info, message: reason.localizedDescription)
@@ -270,7 +279,6 @@ final class CloudSyncCoordinator: ObservableObject {
         }
         unavailableReason = nil
 
-        let local = await scanner.scanLocalFiles()
         let remote: [SyncableFileMetadata]
         do {
             remote = try await provider.fetchRemoteMetadata()
@@ -457,6 +465,36 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     // MARK: - Bookkeeping
+
+    /// Rebuild the cache from what is actually on disk, carrying forward what we
+    /// already know about files whose bytes have not changed.
+    ///
+    /// Rebuilt rather than mutated in place because a cache that is only ever
+    /// added to drifts: delete a save state and its entry — and its bytes —
+    /// stay in the totals for the rest of the session, so the per-category
+    /// counts climb and never come back down.
+    private func rebuildMetadataCache(from local: [SyncableFileMetadata]) {
+        var rebuilt: [String: SyncableFileMetadata] = [:]
+        for file in local {
+            var entry = file
+            // Same bytes as last pass: keep the sync state we learned, so a
+            // synced file does not flip back to "local" on every scan.
+            if let previous = metadataCache[file.relativePath],
+               previous.checksum == file.checksum {
+                entry.syncStatus = previous.syncStatus
+                entry.lastSyncDate = previous.lastSyncDate
+                entry.cloudKitRecordID = previous.cloudKitRecordID
+                entry.lastError = previous.lastError
+                entry.syncAttempts = previous.syncAttempts
+            }
+            rebuilt[file.relativePath] = entry
+        }
+        metadataCache = rebuilt
+
+        // A conflict over a file that is no longer on disk cannot be resolved,
+        // and leaving it in the list is a dead end for the user.
+        pendingConflicts.removeAll { rebuilt[$0.metadata.relativePath] == nil }
+    }
 
     private func refreshStatistics() {
         statistics = SyncStatistics.summarize(

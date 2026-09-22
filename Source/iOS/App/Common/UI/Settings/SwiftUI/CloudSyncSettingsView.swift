@@ -42,9 +42,13 @@ struct CloudSyncSettingsView: View {
             HStack {
                 Label(L("Sync This Device"), systemImage: "icloud")
                 Spacer()
+                // Deliberately NOT disabled when sync is unavailable. Turning it
+                // on with no container is harmless — the engine runs, scans
+                // locally, finds no cloud, and says so in the footer — and it
+                // is what makes this whole screen exercisable on a build that
+                // has no CloudKit container, which is every build today.
                 Toggle("", isOn: $coordinator.isEnabled)
                     .labelsHidden()
-                    .disabled(coordinator.unavailableReason != nil)
             }
 
             if coordinator.isEnabled {

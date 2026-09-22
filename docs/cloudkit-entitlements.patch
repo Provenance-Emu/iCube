@@ -102,7 +102,7 @@
 
 --- a/Source/iOS/App/DolphiniOS/DolphiniOS.entitlements
 +++ b/Source/iOS/App/DolphiniOS/DolphiniOS.entitlements
-@@ -2,6 +2,15 @@
+@@ -2,6 +2,14 @@
  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
  <plist version="1.0">
  <dict>
@@ -120,7 +120,7 @@
 
 --- a/Source/iOS/App/DolphiniOS/iCube AppStore.entitlements
 +++ b/Source/iOS/App/DolphiniOS/iCube AppStore.entitlements
-@@ -2,6 +2,15 @@
+@@ -2,6 +2,14 @@
  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
  <plist version="1.0">
  <dict>
@@ -138,7 +138,7 @@
 
 --- a/Source/iOS/App/Project/Entitlements/Public.entitlements
 +++ b/Source/iOS/App/Project/Entitlements/Public.entitlements
-@@ -2,6 +2,15 @@
+@@ -2,6 +2,14 @@
  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
  <plist version="1.0">
  <dict>
@@ -156,7 +156,7 @@
 
 --- a/Source/iOS/App/Project/Entitlements/Private.entitlements
 +++ b/Source/iOS/App/Project/Entitlements/Private.entitlements
-@@ -2,6 +2,15 @@
+@@ -2,6 +2,14 @@
  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
  <plist version="1.0">
  <dict>
