@@ -38,7 +38,7 @@ extension View {
   }
 }
 // MARK: tvOS-friendly selectable row
-struct SelectRow: View {
+struct SettingsSelectRow: View {
   let label: String
   let checked: Bool
   let action: () -> Void

@@ -291,15 +291,15 @@ private struct TextureCacheAccuracyPicker: View {
   @Binding var selected: Int
   var body: some View {
     List {
-      SelectRow(label: L("Safe"), checked: selected == 512) {
+      SettingsSelectRow(label: L("Safe"), checked: selected == 512) {
         selected = 512
         DOLConfigBridge.setGfxSafeTextureCacheColorSamples(512)
       }
-      SelectRow(label: L("Default"), checked: selected == 128) {
+      SettingsSelectRow(label: L("Default"), checked: selected == 128) {
         selected = 128
         DOLConfigBridge.setGfxSafeTextureCacheColorSamples(128)
       }
-      SelectRow(label: L("Fast"), checked: selected == 0) {
+      SettingsSelectRow(label: L("Fast"), checked: selected == 0) {
         selected = 0
         DOLConfigBridge.setGfxSafeTextureCacheColorSamples(0)
       }
@@ -312,9 +312,9 @@ private struct ViSkipModePicker: View {
   @Binding var selected: Int
   var body: some View {
     List {
-      SelectRow(label: L("Off"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxHackViSkipMode(0) }
-      SelectRow(label: L("On"), checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxHackViSkipMode(1) }
-      SelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; DOLConfigBridge.setGfxHackViSkipMode(2) }
+      SettingsSelectRow(label: L("Off"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxHackViSkipMode(0) }
+      SettingsSelectRow(label: L("On"), checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxHackViSkipMode(1) }
+      SettingsSelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; DOLConfigBridge.setGfxHackViSkipMode(2) }
     }
     .navigationTitle(L("VI Skip Mode"))
   }
@@ -324,8 +324,8 @@ private struct BBoxSyncModePicker: View {
   @Binding var selected: Int
   var body: some View {
     List {
-      SelectRow(label: L("Latched"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxBboxSyncMode(0) }
-      SelectRow(label: L("Force Sync"), checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxBboxSyncMode(1) }
+      SettingsSelectRow(label: L("Latched"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxBboxSyncMode(0) }
+      SettingsSelectRow(label: L("Force Sync"), checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxBboxSyncMode(1) }
     }
     .navigationTitle(L("Bounding Box Sync"))
   }
@@ -338,9 +338,9 @@ struct MetalTriStatePicker: View {
   let setter: (Int) -> Void
   var body: some View {
     List {
-      SelectRow(label: L("Off"), checked: selected == 0) { selected = 0; setter(0) }
-      SelectRow(label: L("On"), checked: selected == 1) { selected = 1; setter(1) }
-      SelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; setter(2) }
+      SettingsSelectRow(label: L("Off"), checked: selected == 0) { selected = 0; setter(0) }
+      SettingsSelectRow(label: L("On"), checked: selected == 1) { selected = 1; setter(1) }
+      SettingsSelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; setter(2) }
     }
     .navigationTitle(title)
   }

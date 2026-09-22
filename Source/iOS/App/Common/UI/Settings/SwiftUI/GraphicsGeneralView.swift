@@ -265,7 +265,7 @@ struct GraphicsBackendPickerView: View {
   var body: some View {
     List {
       ForEach(Array(GraphicsBackend.allCases.enumerated()), id: \.offset) { _, value in
-        SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxBackend(value.backendKey) }
+        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxBackend(value.backendKey) }
       }
     }
     .navigationTitle(L("Backend"))
@@ -277,7 +277,7 @@ struct GraphicsAspectRatioView: View {
   var body: some View {
     List {
       ForEach(Array(AspectRatio.allCases.enumerated()), id: \.offset) { _, value in
-        SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxAspectRatio(value.aspectRaw) }
+        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxAspectRatio(value.aspectRaw) }
       }
     }
     .navigationTitle(L("Aspect Ratio"))
@@ -289,7 +289,7 @@ struct GraphicsTargetFPSView: View {
   var body: some View {
     List {
       ForEach(Array(TargetFPS.allCases.enumerated()), id: \.offset) { _, value in
-        SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxAutoIRTargetFPS(value.fpsValue) }
+        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxAutoIRTargetFPS(value.fpsValue) }
       }
     }
     .navigationTitle(L("Target FPS"))
@@ -303,7 +303,7 @@ struct GraphicsMinScaleView: View {
   var body: some View {
     List {
       ForEach(Array(InternalScale.allCases.enumerated()), id: \.offset) { _, value in
-        SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxAutoIRMinScale(value.scaleValue) }
+        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxAutoIRMinScale(value.scaleValue) }
       }
     }
     .navigationTitle(L("Min Scale"))
@@ -315,7 +315,7 @@ struct GraphicsMaxScaleView: View {
   var body: some View {
     List {
       ForEach(Array(InternalScale.allCases.enumerated()), id: \.offset) { _, value in
-        SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxAutoIRMaxScale(value.scaleValue) }
+        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxAutoIRMaxScale(value.scaleValue) }
       }
     }
     .navigationTitle(L("Max Scale"))
@@ -327,7 +327,7 @@ struct GraphicsShaderTypeView: View {
   var body: some View {
     List {
       ForEach(Array(ShaderCompileType.allCases.enumerated()), id: \.offset) { _, value in
-        SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxShaderCompilationMode(value.modeRaw) }
+        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setGfxShaderCompilationMode(value.modeRaw) }
       }
     }
     .navigationTitle(L("Shader Type"))

@@ -118,7 +118,7 @@ private struct BackendPickerView: View {
   var body: some View {
     List {
       ForEach(options, id: \.self) { opt in
-        SelectRow(label: opt, checked: opt == selected) {
+        SettingsSelectRow(label: opt, checked: opt == selected) {
           // Strip annotation before passing to bridge
           var raw = opt.replacingOccurrences(of: " (Supports Spatial Audio)", with: "")
           raw = raw.replacingOccurrences(of: " (Speakers/HDMI)", with: "")

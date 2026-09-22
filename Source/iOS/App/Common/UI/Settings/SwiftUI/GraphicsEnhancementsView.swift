@@ -263,7 +263,7 @@ private struct AnisotropyPicker: View {
   var body: some View {
     List {
       ForEach(options, id: \.self) { v in
-        SelectRow(label: "\(v)x", checked: v == selected) { selected = v; DOLConfigBridge.setGfxEnhanceAnisotropySamples(v) }
+        SettingsSelectRow(label: "\(v)x", checked: v == selected) { selected = v; DOLConfigBridge.setGfxEnhanceAnisotropySamples(v) }
       }
     }
     .navigationTitle(L("Anisotropic Filtering"))
@@ -278,7 +278,7 @@ private struct MSAAPicker: View {
   var body: some View {
     List {
       ForEach(options, id: \.self) { v in
-        SelectRow(label: v == 1 ? L("None") : "\(v)x", checked: v == selected) {
+        SettingsSelectRow(label: v == 1 ? L("None") : "\(v)x", checked: v == selected) {
           selected = v
           DOLConfigBridge.setGfxMsaa(v)
         }
@@ -299,7 +299,7 @@ private struct OutputResamplingPicker: View {
   var body: some View {
     List {
       ForEach(options, id: \.1) { opt in
-        SelectRow(label: opt.0, checked: opt.1 == selected) {
+        SettingsSelectRow(label: opt.0, checked: opt.1 == selected) {
           selected = opt.1
           DOLConfigBridge.setGfxEnhanceOutputResampling(opt.1)
         }
@@ -317,11 +317,11 @@ private struct EfbScalePicker: View {
     List {
       ForEach(options, id: \.self) { v in
         if v == 0 {
-          SelectRow(label: L("Auto"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxEfbScale(0) }
+          SettingsSelectRow(label: L("Auto"), checked: selected == 0) { selected = 0; DOLConfigBridge.setGfxEfbScale(0) }
         } else if v == 1 {
-          SelectRow(label: "1x (\(L("Native")))", checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxEfbScale(1) }
+          SettingsSelectRow(label: "1x (\(L("Native")))", checked: selected == 1) { selected = 1; DOLConfigBridge.setGfxEfbScale(1) }
         } else {
-          SelectRow(label: "\(v)x", checked: selected == v) { selected = v; DOLConfigBridge.setGfxEfbScale(v) }
+          SettingsSelectRow(label: "\(v)x", checked: selected == v) { selected = v; DOLConfigBridge.setGfxEfbScale(v) }
         }
       }
     }
