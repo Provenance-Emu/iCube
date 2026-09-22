@@ -74,8 +74,10 @@ struct ICubeContinuityFileProvider: ContinuityFileProviding {
 
         // Size first: it is O(1) and rules out most mismatches without hashing
         // a multi-gigabyte disc image.
-        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil
-        guard size == descriptor.size else { return .presentDiffering }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        guard let size = attributes?[.size] as? Int64, size == descriptor.size else {
+            return .presentDiffering
+        }
 
         guard let hash = try? ContinuityHash.sha256Hex(ofFileAt: url) else { return .presentDiffering }
         return hash == descriptor.sha256 ? .presentMatching : .presentDiffering

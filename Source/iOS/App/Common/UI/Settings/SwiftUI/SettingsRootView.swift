@@ -497,6 +497,12 @@ struct SettingsRootView<Background: View>: View {
               .truncationMode(.middle)
 #endif
           }
+          // WS-4: the receiving side of handoff, and where paired devices are
+          // reviewed and forgotten. Its own row rather than controls inline,
+          // so tvOS can focus it.
+          NavigationLink(destination: ContinuityBrowseView()) {
+            Text(L("Nearby Devices"))
+          }
         }
       }
       .navigationTitle(L("Settings"))
