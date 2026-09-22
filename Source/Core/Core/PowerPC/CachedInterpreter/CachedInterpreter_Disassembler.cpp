@@ -128,6 +128,16 @@ s32 CachedInterpreter::ExecuteFusedPsqSeq(std::ostream& stream,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteFusedGpCopy(std::ostream& stream,
+                                          const ExecuteFusedGpCopyOperands& operands)
+{
+  fmt::print(stream, "FusedGpCopy (pairs={}, lbz r{}+[{}..{}] -> stb {}(r{})) at PC={:#010x}\n",
+             operands.count, operands.ra, operands.load_min, operands.load_max, operands.store_off,
+             operands.rb, operands.current_pc);
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 static std::once_flag s_sorted_lookup_flag;
 
 std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& stream)
@@ -217,6 +227,12 @@ std::size_t CachedInterpreter::Disassemble(const JitBlock& block, std::ostream& 
     add(AnyCallback{EndBlockChained}, end_block);
     add(AnyCallback{ExecuteFusedPsqSeqChained<false>}, psq_seq);
     add(AnyCallback{ExecuteFusedPsqSeqChained<true>}, psq_seq);
+    const ErasedDisassemble gp_copy = +[](std::ostream& stream, const void* payload) -> s32 {
+      return ExecuteFusedGpCopy<false>(stream,
+                                       *static_cast<const ExecuteFusedGpCopyOperands*>(payload));
+    };
+    add(AnyCallback{ExecuteFusedGpCopyChained<false>}, gp_copy);
+    add(AnyCallback{ExecuteFusedGpCopyChained<true>}, gp_copy);
     for (u32 form = 0; form < 64; ++form)
     {
       add(GetBranchCondCallback(form & 3, (form & 4) != 0, (form & 8) != 0, (form & 16) != 0,

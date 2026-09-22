@@ -1085,6 +1085,17 @@ const Info<bool> MAIN_CIR_LONG_BLOCKS{{System::Main, "Core", "CIRLongBlocks"}, t
 // iCube: fused micro-op pairs: two adjacent micro-ops in one tape record, one dispatch instead of
 // two. Flip OFF to A/B.
 const Info<bool> MAIN_CIR_MICRO_PAIRS{{System::Main, "Core", "CIRMicroPairs"}, true};
+// iCube: gather-pipe copy fusion. GX command streams are emitted by the games as long runs of
+// `lbz rD,k(rA) ; stb rD,d(rB)` pairs with a CONSTANT store displacement — every store hits the one
+// write-gather-pipe address (WPAR, 0x0C008000 physical). Need for Speed: Underground's rank-2 block
+// 0x8025e1c8 is 16.5% of all emulated cycles on the CachedInterpreter and is exactly this shape.
+// When on, DoJit collapses such a run into ONE record that resolves the load page and classifies the
+// store address once, then appends the bytes to the pipe in program order with the burst check at the
+// identical store boundaries (see CI_GatherPipeCopyBytes). Every guard is re-checked at run time and
+// any failure falls back to running the pairs one at a time through the unchanged micro-op handlers,
+// so a run that does not actually target the pipe costs one extra compare. Flip OFF to A/B.
+// UNVALIDATED on-device — gated for A/B, like MAIN_CIR_STORE_LOOP_FF and MAIN_CIR_CACHE_LOOP_FF.
+const Info<bool> MAIN_CIR_GP_COPY_FUSION{{System::Main, "Core", "CIRGatherPipeCopyFusion"}, false};
 // iCube WIN#1: PIC (position-independent-code) direct-pointer load/store on the CachedInterpreter.
 // Integer D-form/X-form load/stores resolve the host RAM pointer directly and do the access with the
 // correct endian swap, bypassing the per-access MMU/region lookup (~15% on memory-bound titles).

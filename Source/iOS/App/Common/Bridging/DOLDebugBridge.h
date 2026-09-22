@@ -46,6 +46,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// Top-N guest hot blocks from the cached interpreter's block profiler (needs Main.Core.CIRProfile=true at boot).
 + (NSString*)hotBlocksReport:(NSInteger)topN;
 
+/// Gather-pipe store self-test (CachedInterpreter.h, CIRSelfTest::RunGatherPipeSelfTest): drives the
+/// shipping fused-copy byte kernel and an independent transcription of GPFifoManager::Write8 over the
+/// same input on a scratch pipe and diffs FIFO bursts, per-store pipe pointer and GPR writes. Pure:
+/// touches no live emulation state, so it is safe to call with or without a game running.
++ (NSString*)gatherPipeSelfTest;
+
 /// A snapshot of render-relevant config/state.
 + (NSDictionary<NSString*, id>*)renderState;
 /// Build/version info (SCM revision, branch, app version/build, configuration).

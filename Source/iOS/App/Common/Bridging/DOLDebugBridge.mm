@@ -275,6 +275,10 @@ static NSInteger s_fifoFrames = 0;
   return [NSString stringWithUTF8String:CIRProfiler::BuildHotBlocksReport((u32)MAX(1, topN)).c_str()];
 }
 
++ (NSString*)gatherPipeSelfTest {
+  return [NSString stringWithUTF8String:CIRSelfTest::RunGatherPipeSelfTest().c_str()];
+}
+
 + (NSDictionary<NSString*, id>*)renderState {
   const auto& c = g_ActiveConfig;
   // Ruling (final whole-branch review, item 6): config-sourced fields below are

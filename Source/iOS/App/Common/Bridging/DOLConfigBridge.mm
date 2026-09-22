@@ -357,6 +357,8 @@ static bool ICubeEmulationActive() {
 + (void)setCirLongBlocks:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_LONG_BLOCKS, (bool)enabled); }
 + (BOOL)cirMicroPairs { return Config::Get(Config::MAIN_CIR_MICRO_PAIRS); }
 + (void)setCirMicroPairs:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_MICRO_PAIRS, (bool)enabled); }
++ (BOOL)cirGatherPipeCopyFusion { return Config::Get(Config::MAIN_CIR_GP_COPY_FUSION); }
++ (void)setCirGatherPipeCopyFusion:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CIR_GP_COPY_FUSION, (bool)enabled); }
 // Stall instrumentation: measures where the CPU thread waits (default ON; <0.5% overhead).
 + (BOOL)stallMetrics { return Config::Get(Config::MAIN_STALL_METRICS); }
 + (void)setStallMetrics:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_STALL_METRICS, (bool)enabled); }

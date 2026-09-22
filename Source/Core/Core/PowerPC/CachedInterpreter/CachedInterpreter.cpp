@@ -8,9 +8,11 @@
 #include <bit>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <optional>
 #include <span>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -68,6 +70,9 @@ static bool s_mem_microops = true;
 static bool s_long_blocks = true;
 // MAIN_CIR_MICRO_PAIRS: fused micro-op pairs (see MicroOpHandlers::GetPair).
 static bool s_micro_pairs = true;
+// MAIN_CIR_GP_COPY_FUSION: fuse a run of lbz/stb-to-the-write-gather-pipe pairs (see
+// ExecuteFusedGpCopy). Read once at codegen time; when off the recognizer never runs.
+static bool s_gp_copy_fusion = true;
 
 // Blocks are compiled per MSR.DR state (it is one of the block-cache feature flags, and every link
 // re-checks the flags), so DR is an emit-time constant: the direct-pointer path is only emitted into
@@ -83,6 +88,16 @@ static inline bool CI_IsWriteInhibitedPage(const PowerPC::PowerPCState& /*ppc_st
   return ((*s_dbat_table)[ea >> PowerPC::BAT_INDEX_SHIFT] & PowerPC::BAT_WI_BIT) != 0;
 }
 
+// The gather-pipe test on an already-translated PHYSICAL address, spelled exactly as
+// MMU::WriteToHardware spells it. The 0xFFFFF000 mask is deliberate and load-bearing: the 750CL
+// manual (9.4.2, page 327) says a noncacheable store matching WPAR[GB_ADDR] in bits 0-26 but with a
+// nonzero low tail still reaches the buffer, and Pac-Man World 3 depends on that (bug 8386). Shared
+// with the self-test so the two can never drift apart.
+constexpr bool CI_GatherPipePhysicalMatch(u32 physical)
+{
+  return (physical & 0xFFFFF000) == GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS;
+}
+
 // True when a store to `ea` is a gather-pipe write exactly as MMU::WriteToHardware would classify it
 // (BAT-translate under MSR.DR, then match the masked physical address).
 static inline bool CI_IsGatherPipeWrite(const PowerPC::PowerPCState& ppc_state, u32 ea)
@@ -92,7 +107,7 @@ static inline bool CI_IsGatherPipeWrite(const PowerPC::PowerPCState& ppc_state, 
   if ((bat & PowerPC::BAT_MAPPED_BIT) == 0)
     return false;
   const u32 physical = (bat & PowerPC::BAT_RESULT_MASK) | (ea & CI_PAGE_OFFSET_MASK);
-  return (physical & 0xFFFFF000) == GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS;
+  return CI_GatherPipePhysicalMatch(physical);
 }
 
 // iCube: GX command streams are runs of stores to the write-gather pipe, far too frequent for the cold
@@ -121,6 +136,46 @@ inline int CI_GatherPipeFastStore(PowerPC::PowerPCState& ppc_state, u32 ea, T va
   const auto pending = static_cast<std::size_t>(ppc_state.gather_pipe_ptr -
                                                 ppc_state.gather_pipe_base_ptr);
   return pending >= GPFifo::GATHER_PIPE_SIZE ? 2 : 1;
+}
+
+// iCube: the byte kernel behind the fused gather-pipe copy (see ExecuteFusedGpCopy) — and the single
+// piece of it the self-test drives, so test and ship can never diverge. Appends `count` bytes to the
+// pipe ONE AT A TIME in program order; each byte is loaded from `src_page` immediately before it is
+// appended and written to its destination GPR, exactly where the unfused `lbz rD,k(rA)` would, so a
+// burst that rewrote the source region is observed by the following loads just as it would be
+// unfused. `flush` runs at EXACTLY the points GPFifoManager::WriteN's gather-pipe check would find
+// the pipe full — immediately after the byte that brings the pipe to GATHER_PIPE_SIZE, before the
+// next load — and ppc_state.gather_pipe_ptr is published before and re-read after it, because the
+// flush both consumes and rewinds the pipe. Nothing is batched and no check is deferred: all the
+// fusion removes is the per-store address translation and record dispatch.
+template <typename Flush>
+inline void CI_GatherPipeCopyBytes(PowerPC::PowerPCState& ppc_state, const u8* src_page,
+                                   u32 load_base, const s16* load_off, const u8* dest, u32 count,
+                                   Flush&& flush)
+{
+  u8* gp = ppc_state.gather_pipe_ptr;
+  for (u32 k = 0; k < count; ++k)
+  {
+    const u32 ea = load_base + static_cast<u32>(s32{load_off[k]});
+    const u8 value = src_page[ea & CI_PAGE_OFFSET_MASK];
+    ppc_state.gpr[dest[k]] = value;
+    *gp++ = value;
+    if (static_cast<std::size_t>(gp - ppc_state.gather_pipe_base_ptr) >= GPFifo::GATHER_PIPE_SIZE)
+        [[unlikely]]
+    {
+      ppc_state.gather_pipe_ptr = gp;
+      flush();
+      gp = ppc_state.gather_pipe_ptr;
+    }
+  }
+  ppc_state.gather_pipe_ptr = gp;
+}
+
+// D-form instruction word, so the fused copy's fall-back path can hand the unchanged micro-op
+// handlers the exact `lbz`/`stb` they would have seen unfused (CI_SlowMem re-decodes from it).
+constexpr u32 CI_MakeDForm(u32 opcd, u32 rd, u32 ra, s16 displacement)
+{
+  return (opcd << 26) | (rd << 21) | (ra << 16) | (static_cast<u32>(displacement) & 0xFFFF);
 }
 
 }  // namespace
@@ -1392,6 +1447,7 @@ void CachedInterpreter::Init()
   s_mem_microops = Config::Get(Config::MAIN_CIR_MEM_MICROOPS);
   s_long_blocks = Config::Get(Config::MAIN_CIR_LONG_BLOCKS);
   s_micro_pairs = Config::Get(Config::MAIN_CIR_MICRO_PAIRS);
+  s_gp_copy_fusion = Config::Get(Config::MAIN_CIR_GP_COPY_FUSION);
   s_chain_links = Config::Get(Config::MAIN_CIR_RECORD_CHAINING);
   SetChainingEnabled(s_chain_links);
   s_specialized_ops = Config::Get(Config::MAIN_CIR_SPECIALIZED_OPS);
@@ -2371,16 +2427,20 @@ inline bool CI_TryGatherPipeStore(PowerPC::PowerPCState& ppc_state, UGeckoInstru
     {
       return false;
     }
+    // FastWriteN + FastCheckGatherPipe rather than WriteN: same append, same burst threshold, minus
+    // WriteN's CompileExceptionCheck(FIFOWrite) probe, which only feeds a JIT-only recompile hint the
+    // CachedInterpreter never reads (see the note in CI_SlowMem).
     if constexpr (kind == CIMemKind::STW)
-      s_gpfifo->Write32(ppc_state.gpr[inst.RS]);
+      s_gpfifo->FastWrite32(ppc_state.gpr[inst.RS]);
     else if constexpr (kind == CIMemKind::STH)
-      s_gpfifo->Write16(static_cast<u16>(ppc_state.gpr[inst.RS]));
+      s_gpfifo->FastWrite16(static_cast<u16>(ppc_state.gpr[inst.RS]));
     else if constexpr (kind == CIMemKind::STB)
-      s_gpfifo->Write8(static_cast<u8>(ppc_state.gpr[inst.RS]));
+      s_gpfifo->FastWrite8(static_cast<u8>(ppc_state.gpr[inst.RS]));
     else if constexpr (kind == CIMemKind::STFS)
-      s_gpfifo->Write32(ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64()));
+      s_gpfifo->FastWrite32(ConvertToSingle(ppc_state.ps[inst.FS].PS0AsU64()));
     else
-      s_gpfifo->Write64(ppc_state.ps[inst.FS].PS0AsU64());
+      s_gpfifo->FastWrite64(ppc_state.ps[inst.FS].PS0AsU64());
+    s_gpfifo->FastCheckGatherPipe();
     return true;
   }
   else
@@ -2851,6 +2911,14 @@ s32 CachedInterpreter::ExecuteFusedPsqSeqChained(PowerPC::PowerPCState& ppc_stat
   CI_CHAIN_EXIT(chain, payload, sizeof(ExecuteFusedPsqSeqOperands));
 }
 
+template <bool chain>
+s32 CachedInterpreter::ExecuteFusedGpCopyChained(PowerPC::PowerPCState& ppc_state,
+                                                 const void* payload)
+{
+  ExecuteFusedGpCopy<false>(ppc_state, *static_cast<const ExecuteFusedGpCopyOperands*>(payload));
+  CI_CHAIN_EXIT(chain, payload, sizeof(ExecuteFusedGpCopyOperands));
+}
+
 // iCube: chain-capable form of the generic non-terminal record (Interpret<false>).
 template <bool chain>
 s32 CachedInterpreter::InterpretChained(PowerPC::PowerPCState& ppc_state, const void* payload)
@@ -3010,8 +3078,16 @@ template <CIMemKind kind, bool indexed, bool update>
       stored = CI_GatherPipeFastStore<u16>(ppc_state, ea, static_cast<u16>(ppc_state.gpr[m.rd]));
     else
       stored = CI_GatherPipeFastStore<u8>(ppc_state, ea, static_cast<u8>(ppc_state.gpr[m.rd]));
+    // FastCheckGatherPipe, not CheckGatherPipe: the only thing the latter adds is
+    // JitInterface::CompileExceptionCheck(FIFOWrite), which exists so a JIT can recompile the
+    // storing block with an external-exception check after the FIFO write. It is pure overhead here
+    // — the CachedInterpreter never reads js.fifoWriteAddresses, and inside a fused micro-op run
+    // ppc_state.pc is the RUN's first instruction, not the store, so the probe's opcode test
+    // rejects it and it re-runs its CPUThreadGuard + HostRead<u32> + GetOpInfo on EVERY 32-byte
+    // burst, forever. Jit64/JitArm64 call FastCheckGatherPipe for the same reason. The pipe's own
+    // semantics (UpdateGatherPipe at the 32-byte threshold) are identical either way.
     if (stored == 2)
-      s_gpfifo->CheckGatherPipe();
+      s_gpfifo->FastCheckGatherPipe();
     if (stored != 0)
       return;
   }
@@ -4180,6 +4256,66 @@ s32 CachedInterpreter::ExecuteFusedPsqSeq(PowerPC::PowerPCState& ppc_state,
   return sizeof(AnyCallback) + sizeof(operands);
 }
 
+// iCube: gather-pipe copy fusion (MAIN_CIR_GP_COPY_FUSION). See the payload contract in the header.
+//
+// Correctness, in the order the guards are written:
+//   * The store address is classified ONCE, by the same CI_IsGatherPipeWrite the unfused store uses,
+//     which is MMU::WriteToHardware's own test (BAT-translate under MSR.DR — an emit-time constant
+//     for this path — then the masked physical compare). rb is not written by the run, so the store
+//     EA is the same for all `count` stores: one classification is all of them.
+//   * The whole load span [load_min, load_max] must resolve inside ONE mapped BAT page. ra is not
+//     written by the run either, so every load in the run is inside that page.
+//   * Once both hold, no instruction in the run can fault: a gather-pipe store never raises a DSI
+//     (it does not reach the MMIO/unmapped path at all) and every load is inside a mapped page. That
+//     is what makes it safe to run the whole record without a per-instruction exception check —
+//     exactly the property the guards are there to establish. If either guard fails, NOTHING has
+//     happened yet and the pairs run one at a time through the unchanged micro-op handlers, so a
+//     faulting store faults at its own instruction with the same state as unfused.
+//   * The pipe's side effects are NOT batched: CI_GatherPipeCopyBytes appends one byte at a time and
+//     runs the burst check at the identical store boundaries (see its comment).
+template <bool write_pc>
+s32 CachedInterpreter::ExecuteFusedGpCopy(PowerPC::PowerPCState& ppc_state,
+                                          const ExecuteFusedGpCopyOperands& operands)
+{
+  static_assert(sizeof(ExecuteFusedGpCopyOperands) % alignof(AnyCallback) == 0,
+                "a record payload must keep the tape callback-aligned");
+  static_assert(std::is_trivially_copyable_v<ExecuteFusedGpCopyOperands>);
+  if constexpr (write_pc)
+  {
+    ppc_state.pc = operands.current_pc;
+    ppc_state.npc = operands.current_pc + 4;
+  }
+
+  const u32 store_ea = ppc_state.gpr[operands.rb] + static_cast<u32>(s32{operands.store_off});
+  const u32 load_base = ppc_state.gpr[operands.ra];
+  const u32 span_first = load_base + static_cast<u32>(s32{operands.load_min});
+  const u32 span_last = load_base + static_cast<u32>(s32{operands.load_max});
+  const u8* const page = CI_PagePtr(ppc_state, span_first);
+  if (page == nullptr ||
+      (span_first >> PowerPC::BAT_INDEX_SHIFT) != (span_last >> PowerPC::BAT_INDEX_SHIFT) ||
+      !CI_IsGatherPipeWrite(ppc_state, store_ea)) [[unlikely]]
+  {
+    for (u32 k = 0; k < operands.count; ++k)
+    {
+      const MicroOpPayload load{operands.dest[k], operands.ra, 0, 0,
+                                CI_MakeDForm(34, operands.dest[k], operands.ra,
+                                             operands.load_off[k])};
+      if (!CI_MicroMemAccess<CIMemKind::LBZ, false, false>(ppc_state, load)) [[unlikely]]
+        CI_SlowMem<CIMemKind::LBZ, false, false>(ppc_state, load);
+      const MicroOpPayload store{operands.dest[k], operands.rb, 0, 0,
+                                 CI_MakeDForm(38, operands.dest[k], operands.rb,
+                                              operands.store_off)};
+      if (!CI_MicroMemAccess<CIMemKind::STB, false, false>(ppc_state, store)) [[unlikely]]
+        CI_SlowMem<CIMemKind::STB, false, false>(ppc_state, store);
+    }
+    return sizeof(AnyCallback) + sizeof(operands);
+  }
+
+  CI_GatherPipeCopyBytes(ppc_state, page, load_base, operands.load_off, operands.dest,
+                         operands.count, [] { s_gpfifo->FastCheckGatherPipe(); });
+  return sizeof(AnyCallback) + sizeof(operands);
+}
+
 // iCube WIN#2 validate (MAIN_CIR_MICROOP_FUSION_VALIDATE). Direct analogue of InterpretSpecialized's
 // double-run ALU validate (see ~line 680): the reference here is the REAL generic Interpreter:: handlers
 // for the ORIGINAL consumed instructions — NOT the MicroOps — so it catches the case where the fused
@@ -5319,6 +5455,88 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // loops' explicit `+=`), so the slice downcount matches the unfused path op-for-op.
         if (s_microop_fusion && !op.canEndBlock)
         {
+          // iCube: gather-pipe copy fusion (MAIN_CIR_GP_COPY_FUSION). Need for Speed: Underground's
+          // rank-2 block 0x8025e1c8 — 16.5% of all emulated cycles under the CachedInterpreter — is
+          // a GX display-list push: runs of `lbz rD,k(rA) ; stb rD,-0x8000(rB)` where the STORE
+          // displacement never moves, because every store hits the one write-gather-pipe address.
+          // Fusing the run lets the record resolve the load page and classify the store address once
+          // instead of per byte. Same gates as the memory micro-ops (that is what makes MSR.DR an
+          // emit-time constant and lets the handler use the direct page tables), and off under the
+          // fusion validate harness for the same reason mem_micro_op is: its reference double-run
+          // cannot repeat an MMIO access, and a gather-pipe store is one.
+          const auto gp_pair_at = [&](u32 k) -> std::optional<std::pair<u32, u32>> {
+            // Returns (dest, load_displacement) when code[k]/code[k+1] are an lbz/stb pair that
+            // feeds the store from the load, both plain D-form with a non-zero base.
+            if (k + 1 >= code_block.m_num_instructions)
+              return std::nullopt;
+            const PPCAnalyst::CodeOp& l = m_code_buffer[k];
+            const PPCAnalyst::CodeOp& s = m_code_buffer[k + 1];
+            if (l.skip || s.skip || l.canEndBlock || s.canEndBlock)
+              return std::nullopt;
+            if (l.inst.OPCD != 34 || s.inst.OPCD != 38)  // lbz / stb, never the update forms
+              return std::nullopt;
+            if (l.inst.RA == 0 || s.inst.RA == 0)  // rA == 0 forms keep the generic handler
+              return std::nullopt;
+            if (s.inst.RS != l.inst.RD)  // the store must consume the byte the load just produced
+              return std::nullopt;
+            return std::make_pair(u32{l.inst.RD}, u32{static_cast<u16>(l.inst.SIMM_16)});
+          };
+          if (s_gp_copy_fusion && load_store_fast && s_mem_microops && !s_microop_fusion_validate)
+          {
+            if (const auto head = gp_pair_at(i))
+            {
+              const u32 ra = m_code_buffer[i].inst.RA;
+              const u32 rb = m_code_buffer[i + 1].inst.RA;
+              const s16 store_off = static_cast<s16>(m_code_buffer[i + 1].inst.SIMM_16);
+              ExecuteFusedGpCopyOperands fop{};
+              fop.current_pc = js.compilerPC;
+              fop.ra = static_cast<u8>(ra);
+              fop.rb = static_cast<u8>(rb);
+              fop.store_off = store_off;
+              u32 pairs = 0;
+              for (u32 k = i; pairs < ExecuteFusedGpCopyOperands::kMaxPairs; k += 2)
+              {
+                const auto pair = gp_pair_at(k);
+                if (!pair)
+                  break;
+                const PPCAnalyst::CodeOp& l = m_code_buffer[k];
+                const PPCAnalyst::CodeOp& s = m_code_buffer[k + 1];
+                // One base pair and ONE store displacement for the whole run (a constant store
+                // offset is the pipe signature; a memcpy walks it), and neither base may be
+                // clobbered by the run, or the EAs would move under the single resolution above.
+                if (l.inst.RA != ra || s.inst.RA != rb ||
+                    static_cast<s16>(s.inst.SIMM_16) != store_off)
+                  break;
+                if (pair->first == ra || pair->first == rb)
+                  break;
+                fop.dest[pairs] = static_cast<u8>(pair->first);
+                fop.load_off[pairs] = static_cast<s16>(l.inst.SIMM_16);
+                ++pairs;
+              }
+              // Below four pairs the guard work is not amortized; leave those to the micro-ops.
+              if (pairs >= 4)
+              {
+                fop.count = static_cast<u16>(pairs);
+                fop.load_min = fop.load_off[0];
+                fop.load_max = fop.load_off[0];
+                for (u32 k = 1; k < pairs; ++k)
+                {
+                  fop.load_min = std::min(fop.load_min, fop.load_off[k]);
+                  fop.load_max = std::max(fop.load_max, fop.load_off[k]);
+                }
+                // Charge every consumed op but op[i] itself, which the loop top already charged —
+                // the same accounting emit_psq_seq does, so the slice downcount is op-for-op equal
+                // to the unfused path.
+                for (u32 k = 1; k < pairs * 2; ++k)
+                  js.downcountAmount += m_code_buffer[i + k].opinfo->num_cycles;
+                WriteChainable(AnyCallback{ExecuteFusedGpCopyChained<false>},
+                               AnyCallback{ExecuteFusedGpCopyChained<true>}, &fop, sizeof(fop));
+                i += pairs * 2 - 1;
+                continue;
+              }
+            }
+          }
+
           // iCube: paired-single sequence fusion (F-Zero rank-1 block 0x8006e204 pattern). Fuses
           // consecutive psq_l / ps_mul / ps_madd into one callback when the register dependencies
           // match, cutting per-op dispatch overhead on FP-heavy titles. Gated on the same flag as
@@ -6677,3 +6895,234 @@ void CachedInterpreter::LogGeneratedCode() const
   // TODO C++20: std::ostringstream::view()
   DEBUG_LOG_FMT(DYNA_REC, "{}", std::move(stream).str());
 }
+
+// iCube: gather-pipe store self-test. See the contract on CIRSelfTest::RunGatherPipeSelfTest in the
+// header. The point of the exercise is that the SHIPPING kernel (CI_GatherPipeCopyBytes — the one
+// ExecuteFusedGpCopy calls) is what runs here, against an independent literal transcription of
+// GPFifoManager::FastWrite8 + CheckGatherPipe + UpdateGatherPipe, so the test cannot pass by
+// agreeing with itself. Everything runs on a scratch PowerPCState and a scratch pipe: no live
+// emulation state is touched and nothing reaches the real GPFifoManager, the CP FIFO or the GPU.
+namespace CIRSelfTest
+{
+namespace
+{
+using Burst = std::array<u8, GPFifo::GATHER_PIPE_SIZE>;
+
+// Everything the two paths have to agree on, store by store.
+struct Trace
+{
+  std::vector<Burst> bursts;         // the 32-byte chunks handed to UpdateGatherPipe, in order
+  std::vector<u32> burst_after;      // 0-based index of the store whose append triggered each burst
+  std::vector<std::size_t> pending;  // pipe byte count after EVERY store, bursts included
+  std::array<u32, 32> gpr{};         // the GPR side of the fused `lbz`
+};
+
+// The unoptimized path, transcribed from Core/HW/GPFifo.cpp: Write8 is FastWrite8 then
+// CheckGatherPipe; CheckGatherPipe is "if count >= GATHER_PIPE_SIZE, UpdateGatherPipe";
+// UpdateGatherPipe bursts 32 bytes at a time and memmoves the spill back to the front.
+void ReferenceRun(Trace& trace, u8* pipe, std::size_t preload, const u8* source,
+                  const std::vector<u32>& value_index, const std::vector<u8>& dest)
+{
+  u8* ptr = pipe + preload;
+  for (u32 k = 0; k < value_index.size(); ++k)
+  {
+    const u8 value = source[value_index[k]];
+    trace.gpr[dest[k]] = value;
+
+    *ptr = value;  // FastWrite8
+    ptr += sizeof(u8);
+
+    std::size_t count = static_cast<std::size_t>(ptr - pipe);  // CheckGatherPipe
+    if (count >= GPFifo::GATHER_PIPE_SIZE)
+    {
+      std::size_t processed = 0;
+      for (; count >= GPFifo::GATHER_PIPE_SIZE; processed += GPFifo::GATHER_PIPE_SIZE)
+      {
+        Burst chunk{};
+        std::memcpy(chunk.data(), pipe + processed, GPFifo::GATHER_PIPE_SIZE);
+        trace.bursts.push_back(chunk);
+        trace.burst_after.push_back(k);
+        count -= GPFifo::GATHER_PIPE_SIZE;
+      }
+      std::memmove(pipe, pipe + processed, count);
+      ptr = pipe + count;
+    }
+    trace.pending.push_back(static_cast<std::size_t>(ptr - pipe));
+  }
+}
+
+// Stands in for GPFifoManager::UpdateGatherPipe, which is all FastCheckGatherPipe does once the pipe
+// is full: burst 32 bytes at a time, keep the spill, rewind gather_pipe_ptr. Recording the chunk
+// replaces CopyToEmu + GatherPipeBursted — the only part that would reach the GPU.
+void ScratchUpdateGatherPipe(PowerPC::PowerPCState& state, Trace& trace, u32 store_index)
+{
+  u8* const base = state.gather_pipe_base_ptr;
+  std::size_t count = static_cast<std::size_t>(state.gather_pipe_ptr - base);
+  std::size_t processed = 0;
+  for (; count >= GPFifo::GATHER_PIPE_SIZE; processed += GPFifo::GATHER_PIPE_SIZE)
+  {
+    Burst chunk{};
+    std::memcpy(chunk.data(), base + processed, GPFifo::GATHER_PIPE_SIZE);
+    trace.bursts.push_back(chunk);
+    trace.burst_after.push_back(store_index);
+    count -= GPFifo::GATHER_PIPE_SIZE;
+  }
+  std::memmove(base, base + processed, count);
+  state.gather_pipe_ptr = base + count;
+}
+
+struct Case
+{
+  const char* name;
+  std::size_t preload;       // bytes already sitting in the pipe when the run starts
+  std::vector<s16> offsets;  // the run's lbz displacements, in program order (empty = 0..31)
+};
+}  // namespace
+
+std::string RunGatherPipeSelfTest()
+{
+  std::string out;
+  u32 failures = 0;
+  const auto check = [&](bool ok, const std::string& line) {
+    if (!ok)
+      ++failures;
+    out += fmt::format("{} {}\n", ok ? "ok  " : "FAIL", line);
+  };
+
+  // --- 1. The address classifier, against the mask MMU::WriteToHardware uses. -------------------
+  // The low 12 bits are deliberately ignored: 750CL section 9.4.2 / Dolphin bug 8386 (Pac-Man
+  // World 3) — a noncacheable store matching WPAR[GB_ADDR] with a nonzero tail still lands in the
+  // pipe, so narrowing this mask would silently drop those stores on the floor.
+  struct AddrCase
+  {
+    u32 physical;
+    bool expected;
+  };
+  static constexpr AddrCase kAddrCases[] = {
+      {GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS, true},
+      {GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS + 1, true},  // Pac-Man World 3's misaligned tail
+      {GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS + 0xFFF, true},
+      {GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS + 0x1000, false},
+      {GPFifo::GATHER_PIPE_PHYSICAL_ADDRESS - 1, false},
+      {0x0C000000, false},
+      {0xCC008000, false},  // an EFFECTIVE address: it must be BAT-translated before it can match
+  };
+  for (const AddrCase& c : kAddrCases)
+  {
+    const bool got = CI_GatherPipePhysicalMatch(c.physical);
+    check(got == c.expected,
+          fmt::format("classify {:#010x} -> {} (expected {})", c.physical, got, c.expected));
+  }
+
+  // --- 2. The byte kernel, against the transcribed GPFifoManager. -------------------------------
+  // A 128 KiB scratch "page" (one BAT page, which is what the fused record's span guard bounds)
+  // filled with a non-repeating pattern, so a dropped or reordered byte cannot alias a correct one.
+  std::vector<u8> source(PowerPC::BAT_PAGE_SIZE);
+  for (std::size_t i = 0; i < source.size(); ++i)
+    source[i] = static_cast<u8>((i * 7 + (i >> 5) * 31 + 1) & 0xFF);
+
+  const std::vector<Case> cases = {
+      // The Need for Speed: Underground shape — a SCATTER of byte offsets, not a contiguous copy.
+      {"nfs-scatter", 0, {0, 2, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19, 20, 22, 23}},
+      {"short-no-burst", 0, {0, 1, 2, 3, 4, 5, 6, 7}},
+      {"exactly-one-burst", 0, {}},       // 32 sequential offsets: bursts on the last store
+      {"burst-on-first-store", 31, {}},   // pipe one byte short: bursts on store 0
+      {"burst-mid-run", 7, {}},           // 32 stores from a 7-byte head: bursts at store 24
+      {"negative-displacements", 0, {-8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3}},
+  };
+
+  for (const Case& c : cases)
+  {
+    std::vector<s16> offsets = c.offsets;
+    if (offsets.empty())
+    {
+      for (s16 k = 0; k < 32; ++k)
+        offsets.push_back(k);
+    }
+    const u32 count = static_cast<u32>(offsets.size());
+    // Displacements are relative to a base far enough inside the page that the negative ones stay
+    // inside it — exactly the span guard ExecuteFusedGpCopy enforces at run time.
+    const u32 load_base = 0x4000;
+    std::vector<u32> value_index;
+    std::vector<u8> dest;
+    for (u32 k = 0; k < count; ++k)
+    {
+      value_index.push_back((load_base + static_cast<u32>(s32{offsets[k]})) &
+                            (PowerPC::BAT_PAGE_SIZE - 1));
+      // Reuse two registers the way the real NFS loop reuses r0 and r9.
+      dest.push_back(static_cast<u8>((k % 2) == 0 ? 0 : 9));
+    }
+
+    Trace reference;
+    {
+      std::vector<u8> pipe(GPFifo::GATHER_PIPE_EXTRA_SIZE, 0);
+      ReferenceRun(reference, pipe.data(), c.preload, source.data(), value_index, dest);
+    }
+
+    // (a) the shipping kernel driven ONE store at a time, so the pipe pointer after every single
+    //     store is observable: a deferred, batched or reordered burst check cannot hide here.
+    Trace per_store;
+    {
+      auto state = std::make_unique<PowerPC::PowerPCState>();
+      std::vector<u8> pipe(GPFifo::GATHER_PIPE_EXTRA_SIZE, 0);
+      state->gather_pipe_base_ptr = pipe.data();
+      state->gather_pipe_ptr = pipe.data() + c.preload;
+      for (u32 k = 0; k < count; ++k)
+      {
+        CI_GatherPipeCopyBytes(*state, source.data(), load_base, &offsets[k], &dest[k], 1,
+                               [&] { ScratchUpdateGatherPipe(*state, per_store, k); });
+        per_store.pending.push_back(
+            static_cast<std::size_t>(state->gather_pipe_ptr - state->gather_pipe_base_ptr));
+      }
+      std::copy_n(std::begin(state->gpr), per_store.gpr.size(), per_store.gpr.begin());
+    }
+
+    // (b) the shipping kernel driven over the WHOLE run in ONE call — the way the fused record runs
+    //     it — which exercises the in-loop flush and the pointer publish/reload around it. The burst
+    //     index is recovered exactly: the pipe is flushed at exactly 32 bytes and rewinds to 0, so
+    //     after the n-th burst (n from 0) the bytes consumed are (n + 1) * 32 = preload + appended.
+    Trace fused;
+    std::size_t fused_final_pending = 0;
+    {
+      auto state = std::make_unique<PowerPC::PowerPCState>();
+      std::vector<u8> pipe(GPFifo::GATHER_PIPE_EXTRA_SIZE, 0);
+      state->gather_pipe_base_ptr = pipe.data();
+      state->gather_pipe_ptr = pipe.data() + c.preload;
+      u32 burst_seq = 0;
+      const auto flush = [&] {
+        const std::size_t consumed =
+            static_cast<std::size_t>(burst_seq + 1) * GPFifo::GATHER_PIPE_SIZE;
+        const u32 store_index = static_cast<u32>(consumed - c.preload - 1);
+        ++burst_seq;
+        ScratchUpdateGatherPipe(*state, fused, store_index);
+      };
+      CI_GatherPipeCopyBytes(*state, source.data(), load_base, offsets.data(), dest.data(), count,
+                             flush);
+      std::copy_n(std::begin(state->gpr), fused.gpr.size(), fused.gpr.begin());
+      fused_final_pending =
+          static_cast<std::size_t>(state->gather_pipe_ptr - state->gather_pipe_base_ptr);
+    }
+
+    const std::size_t reference_final =
+        reference.pending.empty() ? c.preload : reference.pending.back();
+    check(per_store.bursts == reference.bursts && per_store.burst_after == reference.burst_after &&
+              per_store.pending == reference.pending && per_store.gpr == reference.gpr,
+          fmt::format("{}: per-store pipe pointer, burst payloads, burst store-indices and GPR "
+                      "writes all match GPFifoManager::Write8 ({} stores, preload {})",
+                      c.name, count, c.preload));
+    check(fused.bursts == reference.bursts,
+          fmt::format("{}: one-call fused run hands the FIFO byte-identical bursts ({} burst(s))",
+                      c.name, reference.bursts.size()));
+    check(fused.burst_after == reference.burst_after,
+          fmt::format("{}: one-call fused run fires each burst on the same store index", c.name));
+    check(fused.gpr == reference.gpr,
+          fmt::format("{}: one-call fused run leaves the same GPR values", c.name));
+    check(fused_final_pending == reference_final,
+          fmt::format("{}: one-call fused run leaves {} pending byte(s) (reference {})", c.name,
+                      fused_final_pending, reference_final));
+  }
+
+  out += fmt::format("{}: {} failure(s)\n", failures == 0 ? "PASS" : "FAIL", failures);
+  return out;
+}
+}  // namespace CIRSelfTest

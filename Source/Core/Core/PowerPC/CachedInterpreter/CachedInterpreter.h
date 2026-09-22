@@ -195,6 +195,19 @@ std::string BuildHotBlocksReport(u32 top_n = 40);
 void Reset();
 }  // namespace CIRProfiler
 
+// iCube oracle for the gather-pipe store path, in the spirit of PowerPC::RunFPUSelfTest. Drives the
+// SHIPPING byte kernel behind the fused gather-pipe copy (CI_GatherPipeCopyBytes) and an independent
+// literal transcription of GPFifoManager::Write8 + CheckGatherPipe over the same input, on a scratch
+// PowerPCState and a scratch pipe, and diffs them: the bytes handed to each burst, the pipe pointer
+// after EVERY store, and the store index at which each burst fires. Also checks the gather-pipe
+// address classifier against the mask MMU::WriteToHardware uses (the Pac-Man World 3 / bug 8386
+// low-bits case included). Pure and self-contained: it touches no live emulation state, allocates its
+// own state, and can be run at any time. Returns one line per check plus a PASS/FAIL summary.
+namespace CIRSelfTest
+{
+std::string RunGatherPipeSelfTest();
+}  // namespace CIRSelfTest
+
 class DOLPHIN_HIDDEN CachedInterpreter : public JitBase, public CachedInterpreterCodeBlock
 {
 public:
@@ -295,6 +308,11 @@ private:
   // consecutive psq_l / ps_mul / ps_madd ops from F-Zero-style hot blocks into one callback to cut
   // per-op dispatch overhead. Only written when micro-op fusion is on. See ExecuteFusedPsqSeq.
   struct ExecuteFusedPsqSeqOperands;
+  // iCube: payload for gather-pipe copy fusion (MAIN_CIR_GP_COPY_FUSION). A run of
+  // `lbz rD,k(rA) ; stb rD,d(rB)` pairs whose store displacement d never changes — the GX command
+  // stream shape. Only written when the flag is on, so the flag-off record stream is byte-identical.
+  // See ExecuteFusedGpCopy.
+  struct ExecuteFusedGpCopyOperands;
   // iCube: payload for the dead CR-flag elimination validate harness (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE).
   // Carries the original (Rc-set) reference instruction, the eliminated (Rc-cleared) shipping instruction,
   // the shared opcode-keyed handler, and the crOut mask of fields this op was permitted to eliminate, so
@@ -448,6 +466,8 @@ private:
   static s32 EndBlockChained(PowerPC::PowerPCState& ppc_state, const void* payload);
   template <bool chain>
   static s32 ExecuteFusedPsqSeqChained(PowerPC::PowerPCState& ppc_state, const void* payload);
+  template <bool chain>
+  static s32 ExecuteFusedGpCopyChained(PowerPC::PowerPCState& ppc_state, const void* payload);
   // iCube: chain-capable forms of the generic and the specialized non-terminal records.
   template <bool chain>
   static s32 InterpretChained(PowerPC::PowerPCState& ppc_state, const void* payload);
@@ -501,6 +521,17 @@ private:
                                 const ExecuteFusedPsqSeqOperands& operands);
   template <bool write_pc>
   static s32 ExecuteFusedPsqSeq(std::ostream& stream, const ExecuteFusedPsqSeqOperands& operands);
+  // iCube: gather-pipe copy fusion (MAIN_CIR_GP_COPY_FUSION). Runs a whole `lbz/stb`-to-the-pipe run
+  // in one callback: the load page and the store's gather-pipe classification are resolved ONCE for
+  // the run, then the bytes are appended in program order with the burst check at the identical
+  // store boundaries. Every guard is re-tested at run time and any failure runs the pairs one by one
+  // through the unchanged micro-op handlers, so the fused path is only ever taken when it is exact.
+  // write_pc mirrors Interpret<write_pc>.
+  template <bool write_pc>
+  static s32 ExecuteFusedGpCopy(PowerPC::PowerPCState& ppc_state,
+                                const ExecuteFusedGpCopyOperands& operands);
+  template <bool write_pc>
+  static s32 ExecuteFusedGpCopy(std::ostream& stream, const ExecuteFusedGpCopyOperands& operands);
   // iCube: dead CR-flag elimination validate (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE). Self-validating analogue
   // of ExecuteMicroOpsValidate / InterpretSpecialized's double-run, specialized to the single-op flag-skip
   // transform: run the REFERENCE (original Rc-set inst, CR computed), snapshot CR, restore, run the
@@ -764,6 +795,29 @@ struct CachedInterpreter::ExecuteFusedPsqSeqOperands
   u32 count;
   UGeckoInstruction inst[kMaxOps];
   u32 current_pc;
+};
+
+// iCube: payload for gather-pipe copy fusion (MAIN_CIR_GP_COPY_FUSION). Describes a run of
+// `lbz dest[k],load_off[k](ra) ; stb dest[k],store_off(rb)` pairs, in program order. `store_off` is
+// ONE value for the whole run — a constant store displacement against a loop-invariant base is the
+// write-gather-pipe signature (a memcpy walks its store offset). load_min / load_max are the
+// smallest and largest load displacements, precomputed so the handler can bound the whole run's
+// source span with one page test. ra and rb are never 0 and are never written by the run (the packer
+// rejects a run where any dest aliases either base), so both effective addresses are fixed for the
+// whole record. Trivially copyable POD; only written when the flag is on.
+struct CachedInterpreter::ExecuteFusedGpCopyOperands
+{
+  static constexpr u32 kMaxPairs = 32;
+  u32 current_pc;
+  u16 count;
+  s16 store_off;
+  s16 load_min;
+  s16 load_max;
+  u8 ra;
+  u8 rb;
+  s16 load_off[kMaxPairs];
+  u8 dest[kMaxPairs];
+  u8 pad[2];  // keeps sizeof a multiple of alignof(AnyCallback); asserted in ExecuteFusedGpCopy
 };
 
 // iCube: payload for the dead CR-flag elimination validate harness (MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE).

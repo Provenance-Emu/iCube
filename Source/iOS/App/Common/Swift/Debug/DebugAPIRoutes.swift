@@ -484,6 +484,13 @@ final class DebugAPIRoutes {
                                   body: Data(DOLDebugBridge.fpuSelfTest().utf8))
     }
 
+    // GET /api/debug/gpfifo-selftest -> text/plain: the gather-pipe store oracle. Diffs the shipping
+    // fused-copy byte kernel against a transcription of GPFifoManager::Write8 on a scratch pipe.
+    server.addRawHandler(forMethod: "GET", path: "/api/debug/gpfifo-selftest") { _, _ in
+      NativeWebServer.RawResponse(status: 200, contentType: "text/plain; charset=utf-8",
+                                  body: Data(DOLDebugBridge.gatherPipeSelfTest().utf8))
+    }
+
     // GET /api/debug/hot-blocks?top=N -> text/plain: the cached interpreter's top-N guest blocks by
     // emulated cycles (Main.Core.CIRProfile must be true at boot). Finds polling/idle loops.
     server.addRawHandler(forMethod: "GET", path: "/api/debug/hot-blocks") { request, _ in
