@@ -125,7 +125,7 @@ private struct ContinuityLibraryRow: View {
         if let artwork, let image = UIImage(data: artwork) {
             Image(uiImage: image)
                 .resizable()
-                .aspectRatio(contentMode: .fit)
+                .scaledToFit()
                 .frame(width: 44, height: 44)
                 .cornerRadius(4)
                 .accessibilityHidden(true)
