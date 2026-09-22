@@ -19,6 +19,24 @@ on:
       - '**/*.md'
   workflow_dispatch:
 
+# The `alpha` release is a rolling tag -- one prerelease, always the current tip
+# -- and every successful run moves it and clobbers its assets. Without a
+# concurrency group, two overlapping pushes both reach `gh release upload
+# --clobber` and the LAST one to finish wins, which is not necessarily the newer
+# commit. Runs 96 and 97 (2026-09-19, 27 seconds apart) both succeeded and both
+# published; 98, 99 and 100 had to be cancelled by hand to stop the same thing.
+#
+# It matters more now that build numbers are real: each run stamps its own
+# CURRENT_PROJECT_VERSION, so a race publishes an IPA whose CFBundleVersion is
+# whichever run happened to land last, and the feed can end up naming the other
+# one. Cancel superseded runs instead -- for a rolling artifact, a half-built
+# older commit has no value, and this is what was being done manually anyway.
+#
+# Keyed on ref, so develop, master and each pull request queue independently.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     # GitHub-hosted. This was `[self-hosted, macOS]`, but the repo has ZERO
