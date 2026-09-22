@@ -12,6 +12,7 @@
 #import "FoundationStringUtil.h"
 #import "LocalizationUtil.h"
 #import "MainSceneCoordinator.h"
+#import "iCube-Swift.h"
 
 @interface MsgAlertManager ()
 
@@ -117,13 +118,15 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
     else
     {
       // iCube: offer a Learn More link to the GameCube BIOS help page on the IPL-missing panic.
+      // Routed through the in-app wiki (DOLHelpBridge) rather than Safari: this alert fires on
+      // tvOS too (no browser to open), and the guide is bundled offline, so this action is
+      // always actionable instead of silently failing without network/on tvOS.
       if (isGCIPLAlert) {
         [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Learn More") style:UIAlertActionStyleDefault
           handler:^(UIAlertAction* action) {
-          NSURL* url = [NSURL URLWithString:@"https://icube-emu.com/help/gamecube-bios"];
-          [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
           confirmed = true;
           finish();
+          [DOLHelpBridge presentBIOSGuide];
         }]];
       }
 
