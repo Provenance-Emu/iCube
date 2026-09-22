@@ -64,6 +64,10 @@ struct ContinuityBrowseView: View {
             }
         }
         .navigationTitle(L("Nearby"))
+        // This device can be serving while its user browses (sharing a library
+        // is not mutually exclusive with looking at someone else's), so an
+        // incoming pairing request has to be answerable from here too.
+        .continuityPairingPrompt()
         .task {
             manager.startBrowsing()
             await manager.refreshTrustedPeers()

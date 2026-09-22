@@ -582,14 +582,20 @@ struct SettingsRootView<Background: View>: View {
               .truncationMode(.middle)
 #endif
           }
-          // WS-5: iCloud sync of everything except ROMs. Everything about it
-          // lives in CloudSyncSettingsView; this is only the way in.
+          // iCloud sync of everything except ROMs. Everything about it lives
+          // in CloudSyncSettingsView; this is only the way in.
           NavigationLink(destination: CloudSyncSettingsView()) {
             HStack {
               Label(L("iCloud Sync"), systemImage: "icloud")
               Spacer()
               SyncStatusIndicator()
             }
+          }
+          // The receiving side of handoff, and where paired devices are
+          // reviewed and forgotten. Its own row rather than controls inline,
+          // so tvOS can focus it.
+          NavigationLink(destination: ContinuityBrowseView()) {
+            Label(L("Nearby Devices"), systemImage: "antenna.radiowaves.left.and.right")
           }
         }
       }
