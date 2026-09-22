@@ -45,6 +45,21 @@ struct ContinuityBrowseView: View {
                 }
             }
 
+            // The owner's side of nearby sharing. Its own row, not a Toggle
+            // inline here, because the screen it leads to has three separate
+            // things on it (the switch, the per-device grants, the excluded
+            // games) and each needs its own focus target on tvOS.
+            Section(header: Text(L("This Device"))) {
+                NavigationLink(destination: ContinuityLibrarySharingView()) {
+                    HStack {
+                        Label(L("Share My Library"), systemImage: "square.stack.3d.up")
+                        Spacer()
+                        Text(manager.sharesLibrary ? L("On") : L("Off"))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
             if !manager.trustedPeers.isEmpty {
                 Section(header: Text(L("Paired Devices"))) {
                     ForEach(manager.trustedPeers) { peer in
@@ -66,11 +81,14 @@ struct ContinuityBrowseView: View {
         .navigationTitle(L("Nearby"))
         // This device can be serving while its user browses (sharing a library
         // is not mutually exclusive with looking at someone else's), so an
-        // incoming pairing request has to be answerable from here too.
+        // incoming pairing request has to be answerable from here too — and so
+        // does a peer asking to copy a game.
         .continuityPairingPrompt()
+        .continuityLibraryPullPrompt()
         .task {
             manager.startBrowsing()
             await manager.refreshTrustedPeers()
+            await manager.refreshLibraryGrants()
         }
         .onDisappear { manager.stopBrowsing() }
     }
@@ -148,6 +166,19 @@ private struct ContinuityPeerDetailView: View {
                 Section {
                     Text(L("This device isn't offering a game right now."))
                         .foregroundColor(.secondary)
+                }
+            }
+
+            if let advertisement = peer.advertisement, advertisement.sharesLibrary {
+                // Its own row rather than a second action inside the section
+                // above: on tvOS a row holding two buttons is one focus target
+                // and the second one is unreachable.
+                Section(header: Text(L("Library"))) {
+                    NavigationLink(destination: ContinuityPeerLibraryView(
+                        peerName: peer.serviceName, advertisement: advertisement
+                    )) {
+                        Label(L("Browse Its Games"), systemImage: "square.stack.3d.up")
+                    }
                 }
             }
 

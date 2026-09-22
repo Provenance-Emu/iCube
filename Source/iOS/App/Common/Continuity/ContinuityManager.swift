@@ -48,12 +48,35 @@ final class ContinuityManager: ObservableObject {
     /// The last thing that went wrong on the serving side, for the handoff
     /// sheet to show. Nil clears it.
     @Published private(set) var lastError: String?
+    /// Whether this device offers its library to paired peers. Off until the
+    /// user opts in — a host that has not opted in serves nothing, not even an
+    /// auth challenge.
+    @Published private(set) var sharesLibrary: Bool = UserDefaults.standard
+        .bool(forKey: ContinuityDefaultsKeys.sharesLibrary)
+    /// A peer waiting to be told whether it may copy a game, with the answer
+    /// the owner gives. nil when nothing is pending.
+    @Published private(set) var pendingLibraryPull: PendingLibraryPullPrompt?
+    /// Every remembered per-peer library decision, for the review-and-revoke
+    /// list. Refreshed whenever grants change.
+    @Published private(set) var libraryGrants: [String: ContinuityLibraryGrant] = [:]
 
     struct PendingPairingPrompt: Identifiable {
         let id = UUID()
         let peerName: String
         let code: String
         let respond: (Bool) -> Void
+    }
+
+    /// A peer asking to copy one game off this device.
+    ///
+    /// This — not the browse — is `.askPerGame`'s control point. Re-asking on
+    /// every browse would train the owner to dismiss the prompt reflexively,
+    /// which is exactly what would make this one worthless.
+    struct PendingLibraryPullPrompt: Identifiable {
+        let id = UUID()
+        let peerName: String
+        let gameName: String
+        let respond: (ContinuityLibraryPullDecision) -> Void
     }
 
     // MARK: - Owned components
@@ -64,7 +87,12 @@ final class ContinuityManager: ObservableObject {
 
     private var sessionServer: ContinuitySessionServer?
     private var pairingServer: ContinuityPairingServer?
+    private var libraryServer: ContinuityLibraryServer?
     private var advertiser: ContinuityBonjourAdvertiser?
+    /// True while this device is advertising a library-presence record (app
+    /// open, sharing, no handoff running). Tracked so the lifecycle
+    /// notifications stay balanced — `WebServerLifecyclePolicy` counts them.
+    private var isAdvertisingLibrary = false
     private let browser = ContinuityBrowser()
     private var browseTask: Task<Void, Never>?
 
@@ -107,10 +135,35 @@ final class ContinuityManager: ObservableObject {
         )
         self.pairingServer = pairingServer
 
+        // Nearby library sharing. Its own server, not a mode on the session
+        // one, for two reasons: there is no session when a library is browsed
+        // (the session routes would 404 forever), and grants are per-peer, so
+        // the server has to know who is asking — which a single shared session
+        // token structurally cannot say. See `ContinuityLibraryServer`.
+        let libraryServer = ContinuityLibraryServer(
+            identity: identity,
+            libraryProvider: ICubeLibraryProvider(),
+            trustStore: trustStore,
+            grantStore: grantStore,
+            approver: LibraryPullApprovalBridge(manager: self),
+            sourceDevice: Self.sourceDevice(),
+            // Read live, so turning the switch off in Settings takes effect on
+            // a peer's very next request rather than at next launch.
+            sharesLibraryProvider: { [weak self] in
+                await MainActor.run { self?.sharesLibrary ?? false }
+            }
+        )
+        self.libraryServer = libraryServer
+
         Task {
             await sessionServer.activate(on: registrar)
             await pairingServer.activate(on: registrar)
+            await libraryServer.activate(on: registrar)
             await self.refreshTrustedPeers()
+            await self.refreshLibraryGrants()
+            // A host that opted in should be findable from launch, not only
+            // after it hands a game off.
+            await self.refreshLibraryAdvertising()
         }
     }
 
@@ -124,6 +177,12 @@ final class ContinuityManager: ObservableObject {
     /// this device at all.
     func beginHandoff(game: TVGameItem) async {
         guard let sessionServer else { return }
+
+        // One Bonjour record at a time. A handoff advert is strictly more
+        // informative than a library-presence one (it names the game in
+        // progress and still carries `sharesLibrary`), so the handoff replaces
+        // it and `endHandoff` puts the library advert back.
+        await stopAdvertisingLibrary()
 
         let identity = GameIdentity(gameItem: game)
         guard identity.hasAnyIdentifier else {
@@ -160,7 +219,7 @@ final class ContinuityManager: ObservableObject {
             token: session.token,
             game: identity,
             urlCandidates: candidates,
-            sharesLibrary: false,
+            sharesLibrary: sharesLibrary,
             peerId: self.identity.id,
             deviceType: Self.deviceTypeCode()
         ))
@@ -173,8 +232,117 @@ final class ContinuityManager: ObservableObject {
         advertiser = nil
         await sessionServer?.endSession()
         servedGameFilePath.value = nil
-        guard activeSession != nil else { return }
-        activeSession = nil
+        if activeSession != nil {
+            activeSession = nil
+            NotificationCenter.default.post(name: .continuitySessionDidEnd, object: nil)
+        }
+        // Fall back to the library-presence advert, if the user shares. A
+        // device that shares its library should not become invisible just
+        // because it finished handing a game off.
+        await refreshLibraryAdvertising()
+    }
+
+    // MARK: - Nearby library sharing
+
+    /// Turns library sharing on or off.
+    ///
+    /// Persisted immediately and read live by the library server, so switching
+    /// it off stops serving on a peer's very next request — there is no cached
+    /// copy to go stale.
+    func setSharesLibrary(_ shares: Bool) async {
+        guard shares != sharesLibrary else { return }
+        sharesLibrary = shares
+        UserDefaults.standard.set(shares, forKey: ContinuityDefaultsKeys.sharesLibrary)
+        if !shares {
+            // Nothing is being served any more, so no token should still be
+            // able to ask. Dropping them stops an in-flight transfer rather
+            // than letting it run to completion after the user said stop.
+            await libraryServer?.forgetAllPeers()
+        }
+        await refreshLibraryAdvertising()
+    }
+
+    func refreshLibraryGrants() async {
+        libraryGrants = await grantStore.allGrants()
+    }
+
+    /// Records (or changes) what one peer may do with this device's library.
+    ///
+    /// `.denied` additionally drops the peer's live token and any cached pull
+    /// approvals, so "Don't Share" is immediate rather than next-launch.
+    func setLibraryGrant(_ grant: ContinuityLibraryGrant, forPeerId peerId: String) async {
+        await grantStore.setGrant(grant, forPeerId: peerId)
+        if grant == .denied { await libraryServer?.forgetPeer(peerId) }
+        await refreshLibraryGrants()
+    }
+
+    /// Forgets a remembered decision, putting the peer back to the default
+    /// (`.askPerGame`). This is the undo for a mis-tapped "Don't Share" — a
+    /// persisted no with no way to reverse it would kill the feature for that
+    /// peer with no recovery short of reinstalling.
+    func clearLibraryGrant(forPeerId peerId: String) async {
+        await grantStore.removeGrant(forPeerId: peerId)
+        await libraryServer?.forgetPeer(peerId)
+        await refreshLibraryGrants()
+    }
+
+    /// Display name for a peer id, for the grant review list. Falls back to the
+    /// raw id for a grant whose peer has since been forgotten — which is
+    /// exactly the row a user needs to see in order to clear it.
+    func displayName(forPeerId peerId: String) -> String {
+        trustedPeers.first { $0.id == peerId }?.name ?? peerId
+    }
+
+    // MARK: - Library advertising
+
+    /// Publishes, or withdraws, the library-presence advert.
+    ///
+    /// A library-presence advert has `game: nil` — the app is open and sharing,
+    /// but nothing is being played, so a browsing device must not offer to
+    /// "continue" anything.
+    ///
+    /// It posts the same session-began/ended notifications a handoff does,
+    /// because it needs the same thing from `WebServerLifecycleService`: the
+    /// server has to be running and stay running. Without that, a user who
+    /// switches sharing on and then boots a game becomes unreachable the moment
+    /// emulation starts, which is a green build and a dead feature.
+    private func refreshLibraryAdvertising() async {
+        guard activeSession == nil else { return }  // a handoff advert wins
+        if sharesLibrary {
+            await startAdvertisingLibrary()
+        } else {
+            await stopAdvertisingLibrary()
+        }
+    }
+
+    private func startAdvertisingLibrary() async {
+        guard !isAdvertisingLibrary else { return }
+        isAdvertisingLibrary = true
+        NotificationCenter.default.post(name: .continuitySessionDidBegin, object: nil)
+
+        guard let candidates = await Self.awaitServerURLCandidates(), !candidates.isEmpty else {
+            lastError = L("Couldn't start the local server, so other devices can't see this library. Check that Wi-Fi is on.")
+            await stopAdvertisingLibrary()
+            return
+        }
+        let advertiser = ContinuityBonjourAdvertiser(port: Self.serverPort())
+        self.advertiser = advertiser
+        await advertiser.publish(ContinuityAdvertisement(
+            sessionId: UUID().uuidString,
+            token: "",
+            game: nil,
+            urlCandidates: candidates,
+            sharesLibrary: true,
+            peerId: identity.id,
+            deviceType: Self.deviceTypeCode()
+        ))
+    }
+
+    private func stopAdvertisingLibrary() async {
+        guard isAdvertisingLibrary else { return }
+        isAdvertisingLibrary = false
+        await advertiser?.withdraw()
+        advertiser = nil
         NotificationCenter.default.post(name: .continuitySessionDidEnd, object: nil)
     }
 
@@ -207,13 +375,20 @@ final class ContinuityManager: ObservableObject {
     func revokeTrust(peerId: String) async {
         await trustStore.removePeer(withId: peerId)
         await grantStore.removeGrant(forPeerId: peerId)
+        // Drop the peer's library token and cached pull approvals too, or a
+        // transfer already under way would run to completion after the user
+        // forgot the device.
+        await libraryServer?.forgetPeer(peerId)
         await refreshTrustedPeers()
+        await refreshLibraryGrants()
     }
 
     func revokeAllTrust() async {
         await trustStore.removeAll()
         await grantStore.removeAll()
+        await libraryServer?.forgetAllPeers()
         await refreshTrustedPeers()
+        await refreshLibraryGrants()
     }
 
     // MARK: - Pairing prompt plumbing
@@ -234,6 +409,33 @@ final class ContinuityManager: ObservableObject {
             pendingPairing = PendingPairingPrompt(peerName: peerName, code: code) { [weak self] approved in
                 self?.pendingPairing = nil
                 continuation.resume(returning: approved)
+            }
+        }
+    }
+
+    /// Presents the per-pull approval prompt and suspends until the user
+    /// answers. The library server races this against its own timeout, so an
+    /// unanswered prompt resolves as a decline rather than wedging the seam.
+    fileprivate func awaitLibraryPullApproval(
+        peerName: String, gameName: String
+    ) async -> ContinuityLibraryPullDecision {
+        await withCheckedContinuation { continuation in
+            // A second request while one prompt is up is declined for now
+            // rather than replacing the visible one. `.denyOnce` and not
+            // `.denyAlways`: the peer did nothing wrong, it was merely second
+            // in the queue, and it must be able to ask again.
+            guard pendingLibraryPull == nil else {
+                continuation.resume(returning: .denyOnce)
+                return
+            }
+            pendingLibraryPull = PendingLibraryPullPrompt(
+                peerName: peerName, gameName: gameName
+            ) { [weak self] decision in
+                self?.pendingLibraryPull = nil
+                if decision == .allowAlways || decision == .denyAlways {
+                    Task { await self?.refreshLibraryGrants() }
+                }
+                continuation.resume(returning: decision)
             }
         }
     }
@@ -328,6 +530,17 @@ private struct PairingApprovalBridge: ContinuityPairingApproving {
     }
 }
 
+/// The same adaptation for the per-pull prompt.
+private struct LibraryPullApprovalBridge: ContinuityLibraryPullApproving {
+    let manager: ContinuityManager
+
+    func approveLibraryPull(
+        peerName: String, gameName: String
+    ) async -> ContinuityLibraryPullDecision {
+        await manager.awaitLibraryPullApproval(peerName: peerName, gameName: gameName)
+    }
+}
+
 // MARK: - Notifications
 
 extension Notification.Name {
@@ -344,4 +557,14 @@ extension Notification.Name {
 enum ContinuityNotificationNames {
     static let sessionDidBegin = "DOLContinuitySessionDidBeginNotification"
     static let sessionDidEnd = "DOLContinuitySessionDidEndNotification"
+}
+
+/// `UserDefaults` keys continuity owns. One definition each, for the same
+/// reason the notification names have one (see CLAUDE.md's no-magic-strings
+/// convention): a key mistyped at one of two call sites is a setting that
+/// silently never takes effect.
+enum ContinuityDefaultsKeys {
+    /// Bool. Absent is false — sharing is opt-in, so an upgrading user who has
+    /// never seen the switch shares nothing.
+    static let sharesLibrary = "continuity_shares_library"
 }
