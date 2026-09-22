@@ -21,7 +21,14 @@ final class ControllerStateStore: NSObject, Sendable {
 
   struct State: Equatable {
     let controllers: [ControllerInfo]
+    /// GameCube pad bindings, ports 1-4.
     let portAssignments: [PortAssignment]
+    /// Wiimote bindings, slots 1-4. Slot 1 is reserved for the touch overlay.
+    let wiimoteAssignments: [PortAssignment]
+    /// Qualified names of every device the ControllerInterface currently
+    /// enumerates (iOS / MFi / DSU). A binding whose qualifier is missing from
+    /// this list points at a device that has gone away.
+    let connectedQualifiers: [String]
     let isWiiSystem: Bool
   }
 
@@ -35,12 +42,23 @@ final class ControllerStateStore: NSObject, Sendable {
         hasMicroGamepad: c.microGamepad != nil
       )
     }
-    var assigns: [PortAssignment] = []
+    var gcAssigns: [PortAssignment] = []
+    var wiiAssigns: [PortAssignment] = []
     for port in 1 ... 4 {
-      let q = TVControllerMappingBridge.defaultDevice(forGCPort: port) as String
-      assigns.append(PortAssignment(portOneBased: port, defaultDeviceQualifier: q))
+      gcAssigns.append(PortAssignment(
+        portOneBased: port,
+        defaultDeviceQualifier: TVControllerMappingBridge.defaultDevice(forGCPort: port) as String))
+      wiiAssigns.append(PortAssignment(
+        portOneBased: port,
+        defaultDeviceQualifier: TVControllerMappingBridge.defaultDevice(forWiimote: port) as String))
     }
+    let connected = TVControllerMappingBridge.allQualifiedDevices()
     let isWii = TVEmulationBridge.isCurrentSystemWii()
-    return State(controllers: controllers, portAssignments: assigns, isWiiSystem: isWii)
+    return State(
+      controllers: controllers,
+      portAssignments: gcAssigns,
+      wiimoteAssignments: wiiAssigns,
+      connectedQualifiers: connected,
+      isWiiSystem: isWii)
   }
 }
