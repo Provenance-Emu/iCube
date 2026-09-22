@@ -375,6 +375,18 @@ static void* s_dyn_fill_slot = nullptr;
 static u64 s_dyn_hits = 0;    // profiler-gated (MAIN_CIR_PROFILE)
 static u64 s_dyn_misses = 0;  // profiler-gated
 
+// iCube: gather-pipe copy fusion observability (MAIN_CIR_GP_COPY_FUSION). All four are profiler-gated
+// (MAIN_CIR_PROFILE) exactly like s_dyn_hits, so the profiler-OFF speed legs of an A/B pay nothing —
+// the fused record IS the hot path being measured, and an ungated counter would tax the measurement.
+// Why these exist: the hot-blocks report charges each block its ANALYZER-STATIC guest-cycle sum
+// (EndBlock records operands.downcount), so record-level fusion changes neither block boundaries, run
+// counts, nor %cyc. The report is therefore IDENTICAL with the flag on and off and cannot show whether
+// the fusion engaged. These counters are the only engine-level proof that it did.
+static u64 s_gp_fused_emitted = 0;    // codegen: fused-copy records emitted into blocks
+static u64 s_gp_fused_runs = 0;       // runtime: fused-copy records executed
+static u64 s_gp_fused_pairs = 0;      // runtime: lbz/stb pairs covered by those executions
+static u64 s_gp_fused_fallbacks = 0;  // runtime: executions whose guards failed -> per-pair path
+
 // iCube: whitelist of hot ops eligible for specialized dispatch. Defined once as X-macros so the
 // emission site, the ExecuteOneBlock dispatch switch, the op-id enum, and the eligibility check all
 // stay in lockstep — adding an op is a single line in the right list.
@@ -1038,6 +1050,9 @@ std::string BuildHotBlocksReport(u32 top_n)
       << s_block_profile.grand_total_runs << " total_cycles=" << grand_cycles << "\n";
   out << "  dyn_link_hits=" << s_dyn_hits << " dyn_link_misses=" << s_dyn_misses
       << " (blr/bctr/bcx-fallthrough exits served from the inline cache vs dispatcher)\n";
+  out << "  gp_fused_emitted=" << s_gp_fused_emitted << " gp_fused_runs=" << s_gp_fused_runs
+      << " gp_fused_pairs=" << s_gp_fused_pairs << " gp_fused_fallbacks=" << s_gp_fused_fallbacks
+      << " (gather-pipe copy fusion; the %cyc column CANNOT show this — it is static guest cycles)\n";
 
   // iCube: DISPATCH CLASS DENSITY — the dynamic instruction mix, weighted by each block's run-count, so
   // it reflects what the CPU actually EXECUTES (not static code size). The FP load/store, FP arithmetic,
@@ -1476,6 +1491,10 @@ void CachedInterpreter::Init()
   ++s_dyn_generation;
   s_dyn_hits = 0;
   s_dyn_misses = 0;
+  s_gp_fused_emitted = 0;
+  s_gp_fused_runs = 0;
+  s_gp_fused_pairs = 0;
+  s_gp_fused_fallbacks = 0;
   // iCube: default false (no hints; the fast state). Flip ON only to A/B the +33%-by-removal finding.
   s_prefetch_enabled = Config::Get(Config::MAIN_CACHED_INTERPRETER_PREFETCH);
   // iCube Phase-0 gate-0 secondary knobs (default 0 = inert). Lazily allocate the thrash scratch only
@@ -4295,6 +4314,8 @@ s32 CachedInterpreter::ExecuteFusedGpCopy(PowerPC::PowerPCState& ppc_state,
       (span_first >> PowerPC::BAT_INDEX_SHIFT) != (span_last >> PowerPC::BAT_INDEX_SHIFT) ||
       !CI_IsGatherPipeWrite(ppc_state, store_ea)) [[unlikely]]
   {
+    if (s_cir_profile) [[unlikely]]
+      ++s_gp_fused_fallbacks;
     for (u32 k = 0; k < operands.count; ++k)
     {
       const MicroOpPayload load{operands.dest[k], operands.ra, 0, 0,
@@ -4311,6 +4332,11 @@ s32 CachedInterpreter::ExecuteFusedGpCopy(PowerPC::PowerPCState& ppc_state,
     return sizeof(AnyCallback) + sizeof(operands);
   }
 
+  if (s_cir_profile) [[unlikely]]
+  {
+    ++s_gp_fused_runs;
+    s_gp_fused_pairs += operands.count;
+  }
   CI_GatherPipeCopyBytes(ppc_state, page, load_base, operands.load_off, operands.dest,
                          operands.count, [] { s_gpfifo->FastCheckGatherPipe(); });
   return sizeof(AnyCallback) + sizeof(operands);
@@ -5516,6 +5542,8 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
               // Below four pairs the guard work is not amortized; leave those to the micro-ops.
               if (pairs >= 4)
               {
+                if (s_cir_profile) [[unlikely]]
+                  ++s_gp_fused_emitted;
                 fop.count = static_cast<u16>(pairs);
                 fop.load_min = fop.load_off[0];
                 fop.load_max = fop.load_off[0];
