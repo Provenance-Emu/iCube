@@ -348,6 +348,21 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
         return YES;
       });
 
+    // NSUserDefaults-backed, read at boot into MAIN_CIR_PROFILE by EmulationCoordinator
+    // (:1763) so CachedInterpreter::Init picks it up for the run. Its own comment already
+    // promised "or via the debug API"; this is that key. Needed to answer "which guest code
+    // is eating the CPU thread" on a title that will not hit full speed -- the report comes
+    // back from GET /api/debug/hot-blocks. Boot-time: flipping it mid-run does nothing until
+    // the game is rebooted, which is also when the counters reset.
+    t[@"cirProfile"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([[NSUserDefaults standardUserDefaults] boolForKey:@"icube.cirProfile"]); },
+      ^(id v){ [[NSUserDefaults standardUserDefaults] setBool:CoerceBool(v) forKey:@"icube.cirProfile"]; },
+      nil,
+      ^BOOL{
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"icube.cirProfile"];
+        return YES;
+      });
+
     t[@"audioVolume"] = mk(DOLSettingTypeInt, YES,
       ^id{ return @([DOLConfigBridge audioVolume]); },
       ^(id v){ [DOLConfigBridge setAudioVolume:CoerceInt(v)]; },
