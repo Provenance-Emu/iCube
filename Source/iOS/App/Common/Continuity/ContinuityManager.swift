@@ -89,10 +89,13 @@ final class ContinuityManager: ObservableObject {
     private var pairingServer: ContinuityPairingServer?
     private var libraryServer: ContinuityLibraryServer?
     private var advertiser: ContinuityBonjourAdvertiser?
-    /// True while this device is advertising a library-presence record (app
-    /// open, sharing, no handoff running). Tracked so the lifecycle
-    /// notifications stay balanced — `WebServerLifecyclePolicy` counts them.
-    private var isAdvertisingLibrary = false
+    /// True while this device holds a `sessionDidBegin` on behalf of library
+    /// sharing — i.e. it has told `WebServerLifecycleService` to keep the
+    /// listener up. Tracked separately from `advertiser` because the two have
+    /// different lifetimes: a handoff replaces the Bonjour RECORD without
+    /// releasing the lifecycle HOLD, and `WebServerLifecyclePolicy` counts
+    /// begin/end notifications, so an unbalanced pair unbinds the socket.
+    private var holdsLibraryServerSession = false
     private let browser = ContinuityBrowser()
     private var browseTask: Task<Void, Never>?
 
@@ -182,7 +185,14 @@ final class ContinuityManager: ObservableObject {
         // informative than a library-presence one (it names the game in
         // progress and still carries `sharesLibrary`), so the handoff replaces
         // it and `endHandoff` puts the library advert back.
-        await stopAdvertisingLibrary()
+        //
+        // The record is withdrawn WITHOUT posting `sessionDidEnd`. The policy
+        // in `WebServerLifecycleService` counts these notifications, so posting
+        // an end here would take the count to zero, stop the listener, and the
+        // begin below would have to bind it again — leaving `beginHandoff` to
+        // race its own 5-second poll and, on a slow bind, tell the user the
+        // server could not start on a device that was reachable a moment ago.
+        await withdrawAdvertisement()
 
         let identity = GameIdentity(gameItem: game)
         guard identity.hasAnyIdentifier else {
@@ -228,8 +238,7 @@ final class ContinuityManager: ObservableObject {
     /// Closes the session, withdraws the advertisement and lets the web server
     /// go back to its normal lifecycle.
     func endHandoff() async {
-        await advertiser?.withdraw()
-        advertiser = nil
+        await withdrawAdvertisement()
         await sessionServer?.endSession()
         servedGameFilePath.value = nil
         if activeSession != nil {
@@ -316,9 +325,14 @@ final class ContinuityManager: ObservableObject {
     }
 
     private func startAdvertisingLibrary() async {
-        guard !isAdvertisingLibrary else { return }
-        isAdvertisingLibrary = true
-        NotificationCenter.default.post(name: .continuitySessionDidBegin, object: nil)
+        guard sharesLibrary, activeSession == nil else { return }
+        if !holdsLibraryServerSession {
+            holdsLibraryServerSession = true
+            NotificationCenter.default.post(name: .continuitySessionDidBegin, object: nil)
+        }
+        // Already publishing. The hold above is idempotent and the record does
+        // not need replacing, so there is nothing else to do.
+        guard advertiser == nil else { return }
 
         guard let candidates = await Self.awaitServerURLCandidates(), !candidates.isEmpty else {
             lastError = L("Couldn't start the local server, so other devices can't see this library. Check that Wi-Fi is on.")
@@ -338,12 +352,24 @@ final class ContinuityManager: ObservableObject {
         ))
     }
 
+    /// Stops sharing entirely: withdraws the record AND releases the lifecycle
+    /// hold, letting the server go back to its normal stop-during-emulation
+    /// behaviour.
     private func stopAdvertisingLibrary() async {
-        guard isAdvertisingLibrary else { return }
-        isAdvertisingLibrary = false
+        await withdrawAdvertisement()
+        guard holdsLibraryServerSession else { return }
+        holdsLibraryServerSession = false
+        NotificationCenter.default.post(name: .continuitySessionDidEnd, object: nil)
+    }
+
+    /// Takes the Bonjour record down without touching the lifecycle hold.
+    ///
+    /// The split matters: a handoff replaces the record while sharing stays on,
+    /// and releasing the hold in between would stop and restart the listener
+    /// for no reason. See the call site in `beginHandoff`.
+    private func withdrawAdvertisement() async {
         await advertiser?.withdraw()
         advertiser = nil
-        NotificationCenter.default.post(name: .continuitySessionDidEnd, object: nil)
     }
 
     // MARK: - Browsing

@@ -116,8 +116,9 @@ final class LibraryManifestTests: XCTestCase {
         XCTAssertFalse(ContinuityManifestBuilder.handoffUserDataKinds.isEmpty)
     }
 
-    /// A provider that mislabels owner data as the game file is a bug, and the
-    /// safe reading of a bug is "serve nothing".
+    /// The last line between a mislabelled memory card and the wire: a provider
+    /// that hands back owner data under the `gameFile` label gets nothing
+    /// served, rather than being taken at its word.
     func testMislabelledDescriptorIsRefused() async throws {
         let identity = game()
         let provider = MockLibraryProvider()
@@ -129,13 +130,9 @@ final class LibraryManifestTests: XCTestCase {
             forKey: identity.stableKey
         )
 
-        // The builder asserts in debug builds; this test documents the release
-        // behaviour, which is a nil manifest rather than a served memory card.
-        #if !DEBUG
         let manifest = await makeBuilder(provider: provider)
             .manifest(forKey: identity.stableKey, sessionId: "s")
-        XCTAssertNil(manifest)
-        #endif
+        XCTAssertNil(manifest, "a descriptor labelled gameFile but carrying a memory card must not be served")
     }
 
     // MARK: - Per-game exclusion

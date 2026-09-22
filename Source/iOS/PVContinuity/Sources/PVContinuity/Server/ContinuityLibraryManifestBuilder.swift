@@ -36,10 +36,17 @@ import Foundation
 ///   * config — device-specific, and pushing it at a peer is hostile even when
 ///     it leaks nothing.
 ///
-/// `ContinuityLibraryManifestTests.testLibraryManifestCarriesNoOwnerSaveData`
-/// asserts this against a provider that offers one descriptor of *every* kind,
-/// and checks `allDescriptors` (which includes the `saveState` field) rather
-/// than `files`. It will fail the moment this changes, which is the point.
+/// `LibraryManifestTests.testLibraryManifestCarriesNoOwnerSaveData` asserts
+/// this over `allDescriptors` — which includes the `saveState` field, and is
+/// what the file route serves from — rather than over `files`, because a
+/// manifest with an empty `files` and a populated `saveState` would leak just
+/// as effectively.
+///
+/// Its companion, `testHandoffManifestDoesCarryOwnerSaveDataForContrast`,
+/// builds a **handoff** manifest from a file provider that really does hand
+/// back a memory card and asserts that it arrives. Without that half, the first
+/// test would pass just as happily against a device that had no save data at
+/// all, and would prove nothing.
 public struct ContinuityLibraryManifestBuilder: Sendable {
 
     /// User-data categories a **library pull** carries: none.
@@ -90,12 +97,12 @@ public struct ContinuityLibraryManifestBuilder: Sendable {
         let entries = await libraryProvider.allEntries()
         guard let entry = entries.first(where: { $0.key == key }) else { return nil }
         guard let gameFile = await libraryProvider.gameFileDescriptor(forKey: key) else { return nil }
-        guard gameFile.kind == .gameFile else {
-            // A provider handing back something labelled otherwise is a bug,
-            // and the safe reading of a bug here is "serve nothing".
-            assertionFailure("library provider returned a non-gameFile descriptor for \(key)")
-            return nil
-        }
+        // A provider handing back something labelled otherwise is a bug, and
+        // the safe reading of a bug on this path is "serve nothing". Checked
+        // rather than asserted: an `assertionFailure` would make the release
+        // behaviour untestable, and this is the last line between a mislabelled
+        // memory card and the wire.
+        guard gameFile.kind == .gameFile else { return nil }
 
         // `saveState: nil` and a `files` array holding exactly the disc image.
         // Both halves matter: the save state travels in its own field and is
