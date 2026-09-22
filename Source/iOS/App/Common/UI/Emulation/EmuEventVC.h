@@ -11,6 +11,11 @@
 /// press, and pauses the core before showing the overlay.
 FOUNDATION_EXPORT NSNotificationName const DOLRequestPauseMenuNotification;
 
+/// How long Menu must be held to exit to the library. A release before this is a
+/// short press and opens the pause menu instead. Exported so the GCController
+/// Menu handlers use the same threshold as the UIPress path.
+FOUNDATION_EXPORT const NSTimeInterval DOLMenuLongPressDuration;
+
 #if TARGET_OS_MACCATALYST
 @interface EmuEventVC : UIViewController
 #else
