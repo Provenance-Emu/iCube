@@ -641,7 +641,7 @@ private struct CpuEnginePicker: View {
                            ? L("Cached Interpreter and the JIT recompilers are faster; the plain Interpreter is the most accurate but far too slow for full-speed play.")
                            : L("This build runs without a JIT entitlement, so only interpreter engines are available. Cached Interpreter is the recommended (and default) choice. Selecting a JIT engine on other builds would silently fall back to Cached Interpreter here."))) {
         ForEach(Array(choices.enumerated()), id: \.offset) { _, value in
-          SelectRow(label: value.label, checked: value == effectiveSelected) { selected = value; DOLConfigBridge.setMainCpuCore(value.rawValue) }
+          SettingsSelectRow(label: value.label, checked: value == effectiveSelected) { selected = value; DOLConfigBridge.setMainCpuCore(value.rawValue) }
         }
       }
     }

@@ -150,11 +150,11 @@ private struct SpeedLimitPicker: View {
   @State private var showHelp = false
   var body: some View {
     List {
-      SelectRow(label: L("Unlimited"), checked: selectedPercent == 0) { selectedPercent = 0 }
+      SettingsSelectRow(label: L("Unlimited"), checked: selectedPercent == 0) { selectedPercent = 0 }
       ForEach(1..<21) { idx in
         let value = idx * 10
         let text = value == 100 ? String(format: "%d%% (%@)", value, L("Normal Speed")) : "\(value)%"
-        SelectRow(label: text, checked: selectedPercent == value) { selectedPercent = value }
+        SettingsSelectRow(label: text, checked: selectedPercent == value) { selectedPercent = value }
       }
     }
     .navigationTitle(L("Speed Limit"))
@@ -168,10 +168,10 @@ private struct FastForwardSpeedPicker: View {
   @State private var showHelp = false
   var body: some View {
     List {
-      SelectRow(label: L("Unlimited"), checked: selectedPercent == 0) { selectedPercent = 0 }
+      SettingsSelectRow(label: L("Unlimited"), checked: selectedPercent == 0) { selectedPercent = 0 }
       ForEach([200, 300, 400, 500, 600, 800, 1000], id: \.self) { value in
         let text = "\(value)% (\(value/100)x)"
-        SelectRow(label: text, checked: selectedPercent == value) { selectedPercent = value }
+        SettingsSelectRow(label: text, checked: selectedPercent == value) { selectedPercent = value }
       }
     }
     .navigationTitle(L("Fast Forward Speed"))
@@ -185,7 +185,7 @@ private struct FallbackRegionPicker: View {
   var body: some View {
     List {
       ForEach(Region.allCases, id: \.rawValue) { r in
-        SelectRow(label: r.label, checked: r == selected) { selected = r }
+        SettingsSelectRow(label: r.label, checked: r == selected) { selected = r }
       }
     }
     .navigationTitle(L("Fallback Region"))

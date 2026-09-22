@@ -130,9 +130,32 @@ which stays with its sibling pickers in `GraphicsHacksView.swift` because it's a
    one was not strictly required).
 5. `MetalTriStatePicker` — used by `GraphicsAdvancedView`, declared next to `GraphicsHacksView`'s
    other (still-private) pickers.
+6. `TouchIRMode` enum + `TouchIRModePicker` — missed in the first pass of this audit. Both are
+   declared in `ControllersRootView.swift` (their main consumer) but are also used by
+   `EnhancedMotionControlsView.swift`. Caught by the mandatory build gate (see below), not by static
+   analysis, and fixed in a follow-up commit on top of the pure-move commit.
+
+## Post-split build-gate fixes (follow-up commit, not part of the pure-move commit)
+
+The mandatory `xcodebuild` gate caught two real problems the line-based audit above missed. Both
+are fixed in a small follow-up commit so the pure-move commit stays exactly that:
+
+- **Name collision:** the shared, now-`internal` `SelectRow` collided with an unrelated, pre-existing
+  `private struct SelectRow` in `Source/iOS/App/Common/Swift/Shaders/ShaderSettingsView.swift`
+  (`invalid redeclaration of 'SelectRow'`). That file is untouched by WS-6 and out of scope, so the
+  shared one was renamed to `SettingsSelectRow` across its definition
+  (`SettingsSharedComponents.swift`) and all 38 call sites in `ControllersRootView.swift`,
+  `ConfigGeneralView.swift`, `PerformanceTuningView.swift`, `ConfigAudioView.swift`,
+  `ConfigGameCubeView.swift`, `ConfigWiiView.swift`, `GraphicsGeneralView.swift`,
+  `GraphicsEnhancementsView.swift`, and `GraphicsHacksView.swift`. `ShaderSettingsView.swift`'s own
+  `SelectRow` is untouched.
+- **Missed cross-file dependency:** `TouchIRMode` and `TouchIRModePicker` (see item 6 above) needed
+  the same `private` → internal widening as the other shared helpers.
 
 No other symbol needed a scope change; every other `private` type's use sites all landed inside its
-own new file.
+own new file. A repo-wide grep for `SelectRow`/`HelpButton`/`HelpSheetButton`/`ConfigSynced`/
+`configSynced`/`MetalTriStatePicker`/`TouchIRMode`/`TouchIRModePicker` declarations outside this
+directory turned up no other collisions.
 
 ## Known follow-up (not done in this split, intentionally out of scope for a pure move)
 

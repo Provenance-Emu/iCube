@@ -91,7 +91,7 @@ private struct GCLanguagePicker: View {
   var body: some View {
     List {
       ForEach(options, id: \.self) { v in
-        SelectRow(label: label(v), checked: v == selected) { selected = v; DOLConfigBridge.setMainGCLanguage(v) }
+        SettingsSelectRow(label: label(v), checked: v == selected) { selected = v; DOLConfigBridge.setMainGCLanguage(v) }
       }
     }
     .navigationTitle(L("System Language"))

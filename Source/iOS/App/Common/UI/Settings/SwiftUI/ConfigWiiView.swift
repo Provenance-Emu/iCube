@@ -175,7 +175,7 @@ private struct WiiLanguagePicker: View {
   private let options: [Int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
   var body: some View {
     List {
-      ForEach(options, id: \.self) { v in SelectRow(label: label(v), checked: v == selected) { selected = v; DOLConfigBridge.setSysconfLanguage(v) } }
+      ForEach(options, id: \.self) { v in SettingsSelectRow(label: label(v), checked: v == selected) { selected = v; DOLConfigBridge.setSysconfLanguage(v) } }
     }
     .navigationTitle(L("System Language"))
   }
@@ -191,7 +191,7 @@ private struct WiiAudioModePicker: View {
   private let options: [Int] = [0, 1, 2]
   var body: some View {
     List {
-      ForEach(options, id: \.self) { v in SelectRow(label: label(v), checked: v == selected) { selected = v; DOLConfigBridge.setSysconfSoundMode(v) } }
+      ForEach(options, id: \.self) { v in SettingsSelectRow(label: label(v), checked: v == selected) { selected = v; DOLConfigBridge.setSysconfSoundMode(v) } }
     }
     .navigationTitle(L("Audio Settings"))
   }
@@ -202,8 +202,8 @@ private struct WiiSensorBarPosPicker: View {
   @Binding var selected: Int
   var body: some View {
     List {
-      SelectRow(label: L("Bottom"), checked: selected == 0) { selected = 0; DOLConfigBridge.setSysconfSensorBarPosition(0) }
-      SelectRow(label: L("Top"), checked: selected == 1) { selected = 1; DOLConfigBridge.setSysconfSensorBarPosition(1) }
+      SettingsSelectRow(label: L("Bottom"), checked: selected == 0) { selected = 0; DOLConfigBridge.setSysconfSensorBarPosition(0) }
+      SettingsSelectRow(label: L("Top"), checked: selected == 1) { selected = 1; DOLConfigBridge.setSysconfSensorBarPosition(1) }
     }
     .navigationTitle(L("Sensor Bar Position"))
   }
@@ -213,8 +213,8 @@ private struct WiiAspectRatioPicker: View {
   @Binding var selectedWide: Bool
   var body: some View {
     List {
-      SelectRow(label: "4:3", checked: selectedWide == false) { selectedWide = false; DOLConfigBridge.setSysconfWidescreen(false) }
-      SelectRow(label: "16:9", checked: selectedWide == true) { selectedWide = true; DOLConfigBridge.setSysconfWidescreen(true) }
+      SettingsSelectRow(label: "4:3", checked: selectedWide == false) { selectedWide = false; DOLConfigBridge.setSysconfWidescreen(false) }
+      SettingsSelectRow(label: "16:9", checked: selectedWide == true) { selectedWide = true; DOLConfigBridge.setSysconfWidescreen(true) }
     }
     .navigationTitle(L("Aspect Ratio"))
   }

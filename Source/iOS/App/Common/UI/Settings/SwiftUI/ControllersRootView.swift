@@ -557,17 +557,17 @@ struct ControllersRootView: View {
 #endif
 }
 
-private enum TouchIRMode: Int, CaseIterable { case gyro = 0, follow = 1, drag = 2
+enum TouchIRMode: Int, CaseIterable { case gyro = 0, follow = 1, drag = 2
   var label: String { switch self { case .gyro: return L("Gyro"); case .follow: return L("Follow"); case .drag: return L("Drag") } }
   static func from(raw: Int) -> TouchIRMode { TouchIRMode(rawValue: raw) ?? .drag }
 }
 
-private struct TouchIRModePicker: View {
+struct TouchIRModePicker: View {
   @Binding var selected: TouchIRMode
   var body: some View {
     List {
       ForEach(Array(TouchIRMode.allCases.enumerated()), id: \.offset) { _, value in
-        SelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setMainTouchPadIRMode(value.rawValue) }
+        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setMainTouchPadIRMode(value.rawValue) }
       }
     }
     .navigationTitle(L("Touch IR Pointer"))
