@@ -28,7 +28,15 @@ struct ICubeLibraryProvider: ContinuityLibraryProviding {
     private static let artworkMaxDimension: CGFloat = 512
 
     func allEntries() async -> [ContinuityLibraryEntry] {
-        let items = await MainActor.run { TVLibraryBridge.currentGames() }
+        // The whole walk runs on the main actor. `TVGameItem` is an ObjC object
+        // owned by the game-list cache and `coverImage` is lazily populated by
+        // it, so reading either off the main thread races the cache rather than
+        // merely being untidy.
+        await MainActor.run { Self.entries(from: TVLibraryBridge.currentGames()) }
+    }
+
+    @MainActor
+    private static func entries(from items: [TVGameItem]) -> [ContinuityLibraryEntry] {
         var entries: [ContinuityLibraryEntry] = []
         var seen = Set<String>()
         for item in items {
@@ -42,10 +50,17 @@ struct ICubeLibraryProvider: ContinuityLibraryProviding {
             // means a genuinely duplicated library entry, and offering it twice
             // would just make the browser show it twice.
             guard seen.insert(identity.stableKey).inserted else { continue }
+            // Answer honestly rather than always true: the field exists so a
+            // browsing peer can draw a placeholder without firing a request per
+            // row to discover there is no cover. `coverImage` is nonnull in the
+            // header but the game-list cache can hand back a zero-sized
+            // placeholder for a title it has no art for, which `pngData(for:)`
+            // rejects — so ask the same question it will.
+            let hasArtwork = item.coverImage.size.width > 0 && item.coverImage.size.height > 0
             entries.append(ContinuityLibraryEntry(
                 game: identity,
                 sizeBytes: Int64(item.fileSize),
-                hasArtwork: true
+                hasArtwork: hasArtwork
             ))
         }
         return entries.sorted { $0.game.displayName.localizedCaseInsensitiveCompare($1.game.displayName) == .orderedAscending }
@@ -63,14 +78,13 @@ struct ICubeLibraryProvider: ContinuityLibraryProviding {
     }
 
     func artworkPNG(forKey key: String) async -> Data? {
-        guard let item = await item(forKey: key) else { return nil }
-        let image = await MainActor.run { item.coverImage }
+        let image = await MainActor.run { Self.item(forKey: key)?.coverImage }
         return Self.pngData(for: image)
     }
 
     func gameFileDescriptor(forKey key: String) async -> FileDescriptor? {
-        guard let item = await item(forKey: key) else { return nil }
-        let path = await MainActor.run { item.filePath }
+        let path: String? = await MainActor.run { Self.item(forKey: key)?.filePath }
+        guard let path else { return nil }
         // A game imported in place from Files lives outside the User directory
         // and has no relative form, so it cannot be offered: the receiving
         // device would have nowhere to reproduce the path. Returning nil makes
@@ -91,9 +105,9 @@ struct ICubeLibraryProvider: ContinuityLibraryProviding {
     /// Matched on `stableKey` rather than on GameID alone so that two discs of
     /// one title, or two revisions, resolve to the entry that was actually
     /// offered.
-    private func item(forKey key: String) async -> TVGameItem? {
-        let items = await MainActor.run { TVLibraryBridge.currentGames() }
-        for item in items where !item.isDemoItem {
+    @MainActor
+    private static func item(forKey key: String) -> TVGameItem? {
+        for item in TVLibraryBridge.currentGames() where !item.isDemoItem {
             if GameIdentity(gameItem: item).stableKey == key { return item }
         }
         return nil

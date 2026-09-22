@@ -33,9 +33,13 @@ import PVWebServer
 /// stops too.
 public actor ContinuityLibraryServer {
 
-    /// How long a library token stays valid without use. Long enough to browse
-    /// a library and pull a disc image over a slow network; short enough that a
-    /// token left behind by a peer that wandered off stops working.
+    /// How long a library token stays valid from the moment it is minted.
+    ///
+    /// An absolute lifetime, deliberately not an idle one: nothing refreshes
+    /// `expiresAt`, so a peer that browses for an hour re-authenticates, which
+    /// is a silent round trip it already knows how to make. Long enough to pull
+    /// a disc image over a slow network; short enough that a token left behind
+    /// by a peer that wandered off stops working.
     public static let tokenLifetime: TimeInterval = 60 * 60
     /// The per-pull approval prompt is a human decision, same shape as pairing.
     public static let approvalTimeout: TimeInterval = 120
