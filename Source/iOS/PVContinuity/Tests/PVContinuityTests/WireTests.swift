@@ -160,6 +160,32 @@ final class AdvertisementCodecTests: XCTestCase {
         XCTAssertEqual(txt["name"]?.count, 180)
     }
 
+    func testAnAdvertisementWithNoURLsDecodesWithNoURLs() {
+        // The case that actually bites: the web server's NWListener binds
+        // asynchronously, so publishing too early ships a TXT record with no
+        // `u0` and the receiver fails at its first step with "advertised no
+        // address". The codec must round-trip that honestly rather than
+        // inventing a candidate — the sender is responsible for not publishing
+        // it (see ContinuityManager.awaitServerURLCandidates).
+        var advertisement = sampleAdvertisement()
+        advertisement.urlCandidates = []
+        let txt = ContinuityTXTRecord.encode(advertisement)
+        XCTAssertNil(txt["u0"])
+
+        let decoded = ContinuityTXTRecord.decode(txt)
+        XCTAssertNotNil(decoded, "a session with no address is still a decodable advertisement")
+        XCTAssertTrue(decoded?.urlCandidates.isEmpty == true)
+    }
+
+    func testURLCandidatesStopAtTheFirstGap() {
+        // Decoding walks u0, u1, … and stops at the first missing index, so a
+        // record that somehow lost u0 yields none rather than silently
+        // promoting u1 to primary.
+        var txt = ContinuityTXTRecord.encode(sampleAdvertisement())
+        txt["u0"] = nil
+        XCTAssertTrue(ContinuityTXTRecord.decode(txt)?.urlCandidates.isEmpty == true)
+    }
+
     func testOnlyTheFirstFourURLCandidatesArePublished() {
         var advertisement = sampleAdvertisement()
         advertisement.urlCandidates = (0..<8).map { URL(string: "http://host\($0)/")! }

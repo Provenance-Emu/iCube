@@ -30,6 +30,12 @@ struct ContinuityHandoffSheet: View {
                     Text(game.gameID).foregroundColor(.secondary)
                 }
 
+                if let error = manager.lastError {
+                    Section {
+                        Text(error).foregroundColor(.orange)
+                    }
+                }
+
                 Section(header: Text(L("Hand Off"))) {
                     if manager.activeSession == nil {
                         Button(L("Offer To Nearby Devices")) {

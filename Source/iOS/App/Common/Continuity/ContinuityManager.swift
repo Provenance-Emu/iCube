@@ -45,6 +45,9 @@ final class ContinuityManager: ObservableObject {
     @Published private(set) var activeSession: ContinuitySessionInfo?
     /// Paired devices, refreshed whenever trust changes.
     @Published private(set) var trustedPeers: [TrustedPeer] = []
+    /// The last thing that went wrong on the serving side, for the handoff
+    /// sheet to show. Nil clears it.
+    @Published private(set) var lastError: String?
 
     struct PendingPairingPrompt: Identifiable {
         let id = UUID()
@@ -133,8 +136,22 @@ final class ContinuityManager: ObservableObject {
         servedGameFilePath.value = game.filePath
         let session = await sessionServer.beginSession(game: identity)
         activeSession = session
+        lastError = nil
 
         NotificationCenter.default.post(name: .continuitySessionDidBegin, object: nil)
+
+        // The notification above is what makes the lifecycle policy start the
+        // server — and `PVWebServer.startServers()` binds its `NWListener`
+        // ASYNCHRONOUSLY. Publishing immediately would ship a TXT record with
+        // no `u0`, and the receiving device would fail at its very first step
+        // with "the other device advertised no address". So wait for a real
+        // URL, and if one never appears, say so instead of advertising a
+        // session nothing can reach.
+        guard let candidates = await Self.awaitServerURLCandidates(), !candidates.isEmpty else {
+            lastError = L("Couldn't start the local server, so this device can't be reached. Check that Wi-Fi is on.")
+            await endHandoff()
+            return
+        }
 
         let advertiser = ContinuityBonjourAdvertiser(port: Self.serverPort())
         self.advertiser = advertiser
@@ -142,7 +159,7 @@ final class ContinuityManager: ObservableObject {
             sessionId: session.sessionId,
             token: session.token,
             game: identity,
-            urlCandidates: Self.serverURLCandidates(),
+            urlCandidates: candidates,
             sharesLibrary: false,
             peerId: self.identity.id,
             deviceType: Self.deviceTypeCode()
@@ -251,6 +268,23 @@ final class ContinuityManager: ObservableObject {
     /// reach it gets a clear connection failure rather than silence.
     private static func serverPort() -> Int {
         PVWebServer.shared.url?.port ?? 80
+    }
+
+    /// How long to wait for the web server's listener to bind before giving up
+    /// on a handoff. Generous enough for a cold start, short enough that a user
+    /// staring at the pause menu gets an answer.
+    private static let serverBindTimeout: TimeInterval = 5
+    private static let serverBindPollInterval: UInt64 = 100_000_000 // 100 ms
+
+    /// Polls until the server reports a URL, or the timeout expires (nil).
+    private static func awaitServerURLCandidates() async -> [URL]? {
+        let deadline = Date().addingTimeInterval(serverBindTimeout)
+        while Date() < deadline {
+            let candidates = serverURLCandidates()
+            if !candidates.isEmpty { return candidates }
+            try? await Task.sleep(nanoseconds: serverBindPollInterval)
+        }
+        return nil
     }
 
     private static func serverURLCandidates() -> [URL] {
