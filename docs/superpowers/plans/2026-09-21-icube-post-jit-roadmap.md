@@ -24,8 +24,13 @@ Reference apps live at:
    has 54 unticked checkboxes, but every task landed. Verified: `33d42a8195`, `5c670ea3fb`,
    `c46ec4f263`, `17c008f41e`, `40fc5e427b` are all ancestors of HEAD. The checkboxes were never
    ticked. **Do not re-do this work.** WS-3 is now a much smaller lifecycle job.
-2. **`CLAUDE.md` is stale** where it describes `PVWebServer` as GCDWebServer-based. It has been
-   `NWListener`-based since the port. Fix this while touching WS-3.
+2. ~~**`CLAUDE.md` is stale** where it describes `PVWebServer` as GCDWebServer-based.~~
+   **WRONG — do not "fix" this.** Verified 2026-09-21 during WS-3: `CLAUDE.md:84` is in the
+   **parent Provenance repo** and describes the **outer** `Provenance/PVWebServer/` module, which
+   genuinely still is GCDWebServer-based (`GCDWebDAVServer/`, `GCDWebServer/`, `GCDWebUploader/`
+   are all present on disk) plus a WIP Swift server. That is a *different module* from this
+   submodule's `Source/iOS/PVWebServer/`, which is the `NWListener` one. The line is accurate as
+   written. Two modules share a name; do not conflate them.
 
 ---
 
@@ -282,7 +287,8 @@ Nobody owns the lifecycle.
    can fail to publish without erroring; iFly logs a warning if publication is not confirmed within
    five seconds. iCube's `advertiseWebDAV` (`ROMUploadServer.swift:249-262`) has no equivalent, so
    the same bug would be invisible here.
-6. Fix the stale GCDWebServer claim in `CLAUDE.md`.
+6. ~~Fix the stale GCDWebServer claim in `CLAUDE.md`.~~ **Void — the claim was not stale.** See
+   correction 2 at the top of this document.
 7. Tick the checkboxes in the Sep 16 plan, or mark it superseded, so the next reader is not misled
    the way this one was.
 
