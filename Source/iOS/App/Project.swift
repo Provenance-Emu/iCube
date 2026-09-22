@@ -537,9 +537,8 @@ let project = Project(
         .local(path: "../PVContinuity"),
         .local(path: "../PVSyncRules"),
         .local(path: "../PVHelp"),
-        // See the note on the matching `.package(product:)` entries above:
-        // WS-4 may add PVSyncRules as well, and only one entry may survive.
-        .local(path: "../PVSyncRules"),
+        // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
+        // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
         .local(path: "../PVCloudSync"),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         .remote(url: "https://github.com/OlehKulykov/PLzmaSDK.git", requirement: .upToNextMajor(from: "1.6.1")),
