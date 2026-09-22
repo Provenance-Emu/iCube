@@ -10,6 +10,20 @@ struct GameProfile: Codable {
   var wiimoteIRSensitivity: Int?
   var wiimoteTouchIRMode: Int?
   var shaderPreviewName: String?
+  /// When true, this title is never offered to devices browsing this one's
+  /// library over Nearby Sharing — absent from the served catalog, and a 404
+  /// on the manifest, artwork and file routes even when asked for by name.
+  ///
+  /// Optional, and nil means "shared", so the field is backward-compatible
+  /// with every `game_profiles.json` written before it existed: the decoder
+  /// simply finds no key and leaves it nil. Do not give it a non-optional
+  /// default — that would make old files fail to decode and silently wipe
+  /// everybody's per-game settings.
+  ///
+  /// It rides in `GameProfile` rather than in its own store because this is
+  /// already the per-game keyed-by-GameID record, and a second parallel store
+  /// would be one more thing to keep in sync with profile deletion.
+  var excludedFromNearbySharing: Bool?
 }
 
 enum TouchControllerOverride: String, Codable {
@@ -68,6 +82,39 @@ final class GameProfiles {
     save()
   }
 
+  // MARK: - Nearby Sharing exclusion
+
+  /// Whether this title is withheld from devices browsing this one's library.
+  ///
+  /// Reads the **stored** profile only, deliberately bypassing
+  /// `profile(for:)`'s recommended-profile fallback: a curated recommendation
+  /// is about how a game runs, and must never be able to decide what leaves
+  /// the device. Absent means shared, which is the right default for a feature
+  /// the user has to opt into at the device level anyway.
+  func isExcludedFromNearbySharing(gameID: String) -> Bool {
+    guard !gameID.isEmpty else { return false }
+    return profiles[gameID]?.excludedFromNearbySharing == true
+  }
+
+  /// Sets (or clears) the exclusion, preserving every other profile field.
+  ///
+  /// Storing `nil` rather than `false` when re-including keeps
+  /// `game_profiles.json` free of entries that say nothing — a game the user
+  /// toggled twice should leave no trace.
+  func setExcludedFromNearbySharing(_ excluded: Bool, forGameID gameID: String) {
+    guard !gameID.isEmpty else { return }
+    var profile = profiles[gameID] ?? GameProfile()
+    profile.excludedFromNearbySharing = excluded ? true : nil
+    profiles[gameID] = profile
+    save()
+  }
+
+  /// Every GameID the user has excluded. Backs the review list in Settings, so
+  /// an exclusion made from a long-press months ago is still findable.
+  func excludedFromNearbySharingGameIDs() -> [String] {
+    profiles.filter { $0.value.excludedFromNearbySharing == true }.keys.sorted()
+  }
+
   /// Applies a touch-controller override to multiple games, preserving other profile fields.
   func batchSetControllerOverride(_ override: TouchControllerOverride, forGameIDs gameIDs: [String]) {
     for gameID in gameIDs where !gameID.isEmpty {
@@ -79,7 +126,18 @@ final class GameProfiles {
   }
 
   func clearProfile(for gameID: String) {
+    // The Nearby Sharing exclusion survives a profile reset. Everything else
+    // here is about how the game RUNS and resetting it is harmless; the
+    // exclusion is about what leaves the device, and silently re-sharing a
+    // game because the user reset its graphics settings is not a trade they
+    // agreed to.
+    let wasExcluded = profiles[gameID]?.excludedFromNearbySharing
     profiles.removeValue(forKey: gameID)
+    if wasExcluded == true {
+      var preserved = GameProfile()
+      preserved.excludedFromNearbySharing = true
+      profiles[gameID] = preserved
+    }
     save()
     // Also clear any per-game overrides and revert to sane defaults at runtime
     // Touch overrides are in UserDefaults

@@ -696,6 +696,10 @@ struct GameGridItem: View {
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
       }
+      // Nearby Sharing exclusion. Enforced server-side in the manifest builder,
+      // not by filtering the browse UI, so an excluded game is absent from what
+      // is served and 404s if a peer asks for it by name.
+      ContinuityExcludeFromSharingButton(gameID: item.gameID)
       Button(action: { showSaveStates(item) }) {
         Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
       }
@@ -922,6 +926,9 @@ struct GameGridItem: View {
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
       }
+      // See the note on the tvOS menu above: exclusion is enforced in the
+      // served manifest, this is only the way to set it.
+      ContinuityExcludeFromSharingButton(gameID: item.gameID)
       if !selectionMode {
         Button(action: { enterSelectionMode() }) {
           Label(L("Select Games"), systemImage: "checkmark.circle")
