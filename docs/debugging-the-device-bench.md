@@ -13,6 +13,28 @@ The server is **loopback-only by design** (`NativeWebServer.swift:12-13`): it bi
 `127.0.0.1` via `requiredLocalEndpoint` *and* rejects any connection whose remote
 endpoint is not loopback. **A LAN IP address will never work.** USB is the only route.
 
+## Shortcut: on a Release build, use Wi-Fi, not USB
+
+**usbmux TCP forwarding does not reach a `Release (AppStore)` build on iOS 26.**
+The app logs `listening`, and every `iproxy` attempt still gets
+`Connection refused` from the device. Hours went into the cable before that was
+established; don't repeat it.
+
+Since `554892a889` an explicit opt-in (the Perf Test Bench toggle, i.e. any
+non-DEBUG build) binds all interfaces, so just talk to the device's LAN address:
+
+```bash
+curl -s http://<device-ip>:8723/api/health
+```
+
+The first request from a new address is refused 403 and prompts on the device —
+Deny / Allow Once / Always Allow. Approve it and retry; that address is then
+remembered (undo via Settings ▸ Debug ▸ Forget Approved Devices). Headless
+tooling can instead send `Authorization: Bearer <token>` with the token from
+Settings ▸ Debug and skip the prompt entirely.
+
+DEBUG builds stay loopback-only and still need `iproxy 8723 8723`.
+
 ## Diagnose in this order
 
 Each step distinguishes a different failure. Do not skip ahead.
