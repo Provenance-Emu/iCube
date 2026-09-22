@@ -294,6 +294,12 @@ let iCube = Target.target(
         .xcframework(path: "../../../Externals/MoltenVK-iOS/MoltenVK.xcframework", condition: .when([.ios])),
         .package(product: "PVWebServer"),
         .package(product: "PVHelp"),
+        // WS-5 CloudKit sync. PVCloudSync depends on PVSyncRules (the shared
+        // "what may leave the device" allow-list, also consumed by WS-4), so
+        // both are listed in `packages:` below. If WS-4 lands a PVSyncRules
+        // entry too, keep ONE — a duplicate `.local(path:)` fails generation.
+        .package(product: "PVSyncRules"),
+        .package(product: "PVCloudSync"),
         .package(product: "Zip"),
         .package(product: "PLzmaSDK"),
         .package(product: "SWCompression"),
@@ -525,6 +531,10 @@ let project = Project(
     packages: [
         .local(path: "../PVWebServer"),
         .local(path: "../PVHelp"),
+        // See the note on the matching `.package(product:)` entries above:
+        // WS-4 may add PVSyncRules as well, and only one entry may survive.
+        .local(path: "../PVSyncRules"),
+        .local(path: "../PVCloudSync"),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         .remote(url: "https://github.com/OlehKulykov/PLzmaSDK.git", requirement: .upToNextMajor(from: "1.6.1")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),

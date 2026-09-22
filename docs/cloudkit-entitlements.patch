@@ -1,0 +1,173 @@
+# CloudKit entitlements for iCube — STAGED, DO NOT APPLY YET
+#
+# WS-5 (CloudKit sync of everything except ROMs) is implemented and builds, but
+# the CloudKit container it needs DOES NOT EXIST in the Apple Developer account.
+# Applying this patch before the container is provisioned breaks code signing
+# for everyone building the app: Xcode cannot match a provisioning profile to an
+# entitlement requesting a container the team does not own.
+#
+# Apply this ONLY after step 1 of the checklist below, and together with step 3.
+#
+# ---------------------------------------------------------------------------
+# PROVISIONING CHECKLIST
+# ---------------------------------------------------------------------------
+#
+# 1. Create the container.
+#    developer.apple.com → Certificates, Identifiers & Profiles → Identifiers →
+#    iCloud Containers → (+) → "iCloud Containers" →
+#      Description: iCube
+#      Identifier:  iCloud.com.joemattiello.iCube
+#
+#    Then enable it on EVERY bundle ID that ships this code. All of these are
+#    real, shipping configurations (see `appConfigs` in Source/iOS/App/Project.swift):
+#      com.joemattiello.iCube
+#      com.joemattiello.iCube-debug
+#      com.joemattiello.iCube-debug-jb
+#      com.joemattiello.iCube-jb
+#      com.joemattiello.iCube-ts
+#      com.joemattiello.iCube-njb-patreon-beta
+#      com.joemattiello.iCube-patreon-beta-jb
+#      com.joemattiello.iCube-ts-patreon-beta
+#    For each: Identifiers → <bundle id> → Capabilities → iCloud → tick
+#    "CloudKit" → Edit → select the iCloud.com.joemattiello.iCube container.
+#
+#    Regenerate/redownload the provisioning profiles afterwards, or let Xcode's
+#    automatic signing do it. `CloudKitAvailability` reads
+#    `embedded.mobileprovision` at runtime and will refuse to touch CloudKit if
+#    the profile does not list the container — so a stale profile fails safe
+#    (sync stays off) rather than trapping.
+#
+# 2. Create the schema.
+#    icloud.developer.apple.com/dashboard → iCube container → Development →
+#    the record type is created automatically on the first upload from a device,
+#    so the simplest path is: run the app with sync on, let it write one record,
+#    then "Deploy Schema Changes" to Production before any App Store build.
+#
+#    If you prefer to author it by hand, it is one record type in the PRIVATE
+#    database (constants in
+#    Source/iOS/PVCloudSync/Sources/PVCloudSync/CloudSyncConstants.swift):
+#      Record type: iCubeUserFile
+#      Zone:        iCubeUserData   (custom zone, private DB)
+#      Fields:      fileName         String
+#                   fileData         Asset
+#                   lastModified     Date/Time
+#                   checksum         String
+#                   fileType         String
+#                   fileSize         Int(64)
+#                   deviceIdentifier String
+#                   appVersion       String
+#    NO queryable index is required. The provider enumerates via
+#    CKFetchRecordZoneChangesOperation precisely so it does not depend on
+#    `recordName` being marked Queryable (iFly shipped a bug from that).
+#
+# 3. Apply this patch AND flip the code switch.
+#      cd <repo root> && git apply docs/cloudkit-entitlements.patch
+#    Then set, in
+#    Source/iOS/PVCloudSync/Sources/PVCloudSync/CloudKitAvailability.swift:
+#      public static let containerIsProvisioned = true
+#    Both are required. The flag alone does nothing without the entitlements;
+#    the entitlements alone leave sync reporting "not available in this build".
+#
+# 4. Verify.
+#    Build to a device, Settings → iCloud Sync. The status row should read
+#    "Up to date" rather than "iCloud sync is not available in this build yet."
+#    Two signed-in devices converging is the real acceptance test and cannot be
+#    checked without both the container and two devices.
+#
+# ---------------------------------------------------------------------------
+# FILES CHANGED (all four are live — none is vestigial)
+# ---------------------------------------------------------------------------
+#
+#   Source/iOS/App/DolphiniOS/DolphiniOS.entitlements
+#       Used by CODE_SIGN_ENTITLEMENTS for every non-AppStore configuration
+#       (Debug/Release Non-Jailbroken, Jailbroken, TrollStore, both betas).
+#
+#   Source/iOS/App/DolphiniOS/iCube AppStore.entitlements
+#       Used by CODE_SIGN_ENTITLEMENTS for "Debug (AppStore)" and
+#       "Release (AppStore)".
+#
+#   Source/iOS/App/Project/Entitlements/Public.entitlements
+#       Used by CI re-signing: CreateIpa.sh for the Non-Jailbroken IPA
+#       (.github/workflows/build.yml:233, release.yml:69).
+#
+#   Source/iOS/App/Project/Entitlements/Private.entitlements
+#       Used by CI re-signing: CreateIpa.sh for the TrollStore .tipa and
+#       CreateDeb.sh for both Jailbroken .debs (build.yml:234,
+#       release.yml:70,74,75).
+#
+# `com.apple.developer.ubiquity-container-identifiers` is deliberately NOT
+# added: iCube uses CloudKit records, not an iCloud Drive document container.
+#
+# ---------------------------------------------------------------------------
+
+--- a/Source/iOS/App/DolphiniOS/DolphiniOS.entitlements
++++ b/Source/iOS/App/DolphiniOS/DolphiniOS.entitlements
+@@ -2,6 +2,15 @@
+ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+ <plist version="1.0">
+ <dict>
++	<key>com.apple.developer.icloud-container-identifiers</key>
++	<array>
++		<string>iCloud.com.joemattiello.iCube</string>
++	</array>
++	<key>com.apple.developer.icloud-services</key>
++	<array>
++		<string>CloudKit</string>
++	</array>
+ 	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
+ 	<true/>
+ 	<key>com.apple.developer.kernel.increased-debugging-memory-limit</key>
+
+--- a/Source/iOS/App/DolphiniOS/iCube AppStore.entitlements
++++ b/Source/iOS/App/DolphiniOS/iCube AppStore.entitlements
+@@ -2,6 +2,15 @@
+ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+ <plist version="1.0">
+ <dict>
++	<key>com.apple.developer.icloud-container-identifiers</key>
++	<array>
++		<string>iCloud.com.joemattiello.iCube</string>
++	</array>
++	<key>com.apple.developer.icloud-services</key>
++	<array>
++		<string>CloudKit</string>
++	</array>
+ 	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
+ 	<true/>
+ 	<key>com.apple.developer.kernel.increased-memory-limit</key>
+
+--- a/Source/iOS/App/Project/Entitlements/Public.entitlements
++++ b/Source/iOS/App/Project/Entitlements/Public.entitlements
+@@ -2,6 +2,15 @@
+ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+ <plist version="1.0">
+ <dict>
++    <key>com.apple.developer.icloud-container-identifiers</key>
++    <array>
++        <string>iCloud.com.joemattiello.iCube</string>
++    </array>
++    <key>com.apple.developer.icloud-services</key>
++    <array>
++        <string>CloudKit</string>
++    </array>
+     <key>com.apple.developer.kernel.increased-memory-limit</key>
+     <true/>
+     <key>get-task-allow</key>
+
+--- a/Source/iOS/App/Project/Entitlements/Private.entitlements
++++ b/Source/iOS/App/Project/Entitlements/Private.entitlements
+@@ -2,6 +2,15 @@
+ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+ <plist version="1.0">
+ <dict>
++	<key>com.apple.developer.icloud-container-identifiers</key>
++	<array>
++		<string>iCloud.com.joemattiello.iCube</string>
++	</array>
++	<key>com.apple.developer.icloud-services</key>
++	<array>
++		<string>CloudKit</string>
++	</array>
+ 	<key>com.apple.private.security.storage.AppDataContainers</key>
+ 	<true/>
+ 	<key>com.apple.private.security.no-sandbox</key>

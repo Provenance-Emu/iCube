@@ -497,6 +497,15 @@ struct SettingsRootView<Background: View>: View {
               .truncationMode(.middle)
 #endif
           }
+          // WS-5: iCloud sync of everything except ROMs. Everything about it
+          // lives in CloudSyncSettingsView; this is only the way in.
+          NavigationLink(destination: CloudSyncSettingsView()) {
+            HStack {
+              Label(L("iCloud Sync"), systemImage: "icloud")
+              Spacer()
+              SyncStatusIndicator()
+            }
+          }
         }
       }
       .navigationTitle(L("Settings"))
