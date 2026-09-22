@@ -119,6 +119,10 @@ final class ROMUploadServer: @unchecked Sendable {
     private let listenerQueue = DispatchQueue(label: "org.dolphin.iCube.uploadserver.listener", qos: .userInitiated)
     private let lock = NSLock()
     private var customRoutes: [CustomRoute] = []
+    /// Async routes registered through `addAsyncHandler` (see WebRoute.swift).
+    /// Consulted before the browser/WebDAV split, so a registered path is
+    /// answered identically no matter how the connection was classified.
+    private var asyncRoutes = WebRouteTable()
     private var cachedIPAddress: String?
 
     /// The Bonjour service URL the WebDAV listener advertises (`_webdav._tcp`).
@@ -333,6 +337,25 @@ final class ROMUploadServer: @unchecked Sendable {
         guard let regex = try? NSRegularExpression(pattern: "^\(pattern)$", options: []) else { return }
         customRoutes.append(CustomRoute(method: method.uppercased(),
                                         path: nil, regex: regex, handler: handler))
+    }
+
+    // MARK: - Async Route Registration
+
+    /// Registers an async handler that owns its full HTTP response (status,
+    /// headers, and either an in-memory or a streamed-from-disk body).
+    ///
+    /// Routes registered here survive `stop()`/`start()` — registration is a
+    /// property of the server object, not of a listener. Registering the same
+    /// method+path twice is a no-op (first wins), so a feature's `activate()`
+    /// can be called defensively without swapping a live handler out from under
+    /// an in-flight request.
+    ///
+    /// Read the transport-security note at the top of `WebRoute.swift` before
+    /// adding a route: this server is plain HTTP on the LAN.
+    func addAsyncHandler(forMethod method: String, path: String,
+                         handler: @escaping WebRouteHandler) {
+        lock.lock(); defer { lock.unlock() }
+        asyncRoutes.register(method: method, path: path, handler: handler)
     }
 
     // MARK: - Connection Handling
@@ -904,6 +927,20 @@ final class ROMUploadServer: @unchecked Sendable {
                               request: HTTPRequest,
                               body: Data,
                               isWebDAV: Bool) {
+        // Async routes are consulted FIRST and regardless of `isWebDAV`. The
+        // browser/WebDAV classification is a heuristic over User-Agent and
+        // method (see WebServerClientMode); a registered route must not answer
+        // differently because a client's header set made it look like Finder.
+        // Registered paths are namespaced (`/api/...`), so this can't shadow a
+        // WebDAV verb on a real file path.
+        lock.lock()
+        let routeTable = asyncRoutes
+        lock.unlock()
+        if let handler = routeTable.handler(forMethod: request.method, path: request.path) {
+            dispatchAsyncRoute(handler, on: connection, request: request, body: body, isWebDAV: isWebDAV)
+            return
+        }
+
         if !isWebDAV {
             lock.lock()
             let routes = customRoutes
@@ -952,6 +989,135 @@ final class ROMUploadServer: @unchecked Sendable {
             routeWebDAV(on: connection, request: request, body: body)
         } else {
             routeHTTP(on: connection, request: request, body: body)
+        }
+    }
+
+    // MARK: - Async Route Dispatch
+
+    /// Runs an async handler off the socket's callback and delivers its answer
+    /// back ON the connection's `ioQueue`.
+    ///
+    /// The queue hop is load-bearing, not hygiene: `ioQueue` serialises this
+    /// socket's receive/send callbacks, which is what keeps Finder's pipelined
+    /// keep-alive requests from interleaving. Sending straight from the Task
+    /// continuation races that serialisation.
+    private func dispatchAsyncRoute(_ handler: @escaping WebRouteHandler,
+                                    on connection: NWConnection,
+                                    request: HTTPRequest,
+                                    body: Data,
+                                    isWebDAV: Bool) {
+        let routeRequest = WebRouteRequest(
+            method: request.method,
+            path: request.path,
+            query: request.queryParameters,
+            headers: request.headers,
+            body: body.isEmpty ? nil : body
+        )
+        Task { [weak self] in
+            let response = await handler(routeRequest)
+            guard let self else { return }
+            let ioQueue = self.connectionIOQueue(for: connection)
+            let deliver: @Sendable () -> Void = { [weak self] in
+                self?.sendRouteResponse(response, on: connection, request: request, isWebDAV: isWebDAV)
+            }
+            if let ioQueue { ioQueue.async(execute: deliver) } else { deliver() }
+        }
+    }
+
+    private func sendRouteResponse(_ response: WebRouteResponse,
+                                   on connection: NWConnection,
+                                   request: HTTPRequest,
+                                   isWebDAV: Bool) {
+        let statusText = WebRouteResponse.reasonPhrase(for: response.status)
+        switch response.body {
+        case .empty:
+            sendDataResponse(on: connection, status: response.status, statusText: statusText,
+                             contentType: response.contentType, body: Data(),
+                             request: request, isWebDAV: isWebDAV,
+                             extraHeaders: response.headers)
+        case .data(let data):
+            sendDataResponse(on: connection, status: response.status, statusText: statusText,
+                             contentType: response.contentType, body: data,
+                             request: request, isWebDAV: isWebDAV,
+                             extraHeaders: response.headers)
+        case .file(let url, let offset, let length):
+            sendRouteFileResponse(url: url, offset: offset, length: length,
+                                  status: response.status, statusText: statusText,
+                                  contentType: response.contentType,
+                                  extraHeaders: response.headers,
+                                  on: connection, request: request, isWebDAV: isWebDAV)
+        }
+    }
+
+    /// Streams `length` bytes starting at `offset`, in 256 KB chunks, so a
+    /// multi-gigabyte disc image never sits in memory.
+    ///
+    /// The response always closes the connection (`Connection: close`, matching
+    /// `serveFile`). Chunk sends and the terminating close are driven by
+    /// `streamFileData`, which has no notion of "this response ended but the
+    /// socket lives on"; keeping close-per-file means a mid-transfer failure
+    /// can never desynchronise a pipelined keep-alive socket. Clients resume
+    /// with a `Range` request on a fresh connection, which is the path that has
+    /// to work anyway.
+    private func sendRouteFileResponse(url: URL, offset: Int64, length: Int64?,
+                                       status: Int, statusText: String,
+                                       contentType: String,
+                                       extraHeaders: [String: String],
+                                       on connection: NWConnection,
+                                       request: HTTPRequest,
+                                       isWebDAV: Bool) {
+        let ioQueue = connectionIOQueue(for: connection)
+        Self.diskIOQueue.async { [weak self] in
+            guard let self else { return }
+
+            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+            let fileSize = (attrs?[.size] as? Int64) ?? 0
+            guard offset >= 0, offset <= fileSize, let handle = try? FileHandle(forReadingFrom: url) else {
+                let respond = {
+                    self.sendResponse(on: connection, status: 404, statusText: "Not Found",
+                                      body: "File not found", request: request,
+                                      isWebDAV: isWebDAV, forceClose: true)
+                }
+                if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                return
+            }
+
+            let available = fileSize - offset
+            let toSend = min(length ?? available, available)
+            if offset > 0 {
+                do {
+                    try handle.seek(toOffset: UInt64(offset))
+                } catch {
+                    handle.closeFile()
+                    let respond = {
+                        self.sendResponse(on: connection, status: 500, statusText: "Internal Server Error",
+                                          body: "Cannot seek file", request: request,
+                                          isWebDAV: isWebDAV, forceClose: true)
+                    }
+                    if let ioQueue { ioQueue.async(execute: respond) } else { respond() }
+                    return
+                }
+            }
+
+            var header = "HTTP/1.1 \(status) \(statusText)\r\n"
+            header += "Content-Type: \(contentType)\r\n"
+            header += "Content-Length: \(toSend)\r\n"
+            for (key, value) in extraHeaders { header += "\(key): \(value)\r\n" }
+            header += "Connection: close\r\n\r\n"
+
+            let beginStream = {
+                connection.send(content: Data(header.utf8), completion: .contentProcessed { error in
+                    if error != nil { handle.closeFile(); connection.cancel(); return }
+                    guard toSend > 0 else {
+                        handle.closeFile()
+                        connection.cancel()
+                        return
+                    }
+                    self.streamFileData(handle: handle, on: connection,
+                                        remaining: Int(toSend), ioQueue: ioQueue)
+                })
+            }
+            if let ioQueue { ioQueue.async(execute: beginStream) } else { beginStream() }
         }
     }
 

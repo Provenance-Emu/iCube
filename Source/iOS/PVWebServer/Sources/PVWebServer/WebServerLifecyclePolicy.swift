@@ -26,6 +26,25 @@ public enum WebServerLifecycleEvent {
     case uploadStarted
     /// A file upload finished (`PVWebServerFileUploadCompletedNotificationName`).
     case uploadEnded
+    /// A continuity handoff / nearby-library session opened (WS-4).
+    ///
+    /// This is the carve-out the pause-during-emulation rule was always going
+    /// to need. Handing a game off happens FROM the in-game pause menu, so by
+    /// the time the user asks for it the server has already been stopped by
+    /// `.emulationWillStart`. "Don't stop next time" is therefore not enough —
+    /// the receiving device has to be able to reach this one *now*, while the
+    /// game is still running. So this event both suppresses future pauses and
+    /// restarts a server this policy itself paused.
+    ///
+    /// The I/O-contention argument that justifies pausing during emulation
+    /// (a multi-GB WebDAV upload competing with the emulator streaming a disc
+    /// image off the same volume) still applies, but it is now the explicit,
+    /// user-initiated cost of a feature they asked for, not a background risk
+    /// taken on their behalf.
+    case continuitySessionBegan
+    /// A continuity session closed. When the last one closes and a game is
+    /// still running, the emulation pause re-applies.
+    case continuitySessionEnded
 }
 
 public enum WebServerLifecycleAction: Equatable {
@@ -45,6 +64,9 @@ public struct WebServerLifecyclePolicy {
     public private(set) var isForeground: Bool
     public private(set) var isEmulationRunning: Bool
     public private(set) var uploadsInFlight: Int = 0
+    /// Open continuity sessions. Non-zero means the server must stay reachable
+    /// even while a game runs — see `.continuitySessionBegan`.
+    public private(set) var continuitySessionsInFlight: Int = 0
     /// True once this policy told the caller to stop the server specifically
     /// because emulation started. Only `emulationDidEnd` may clear it, so a
     /// foreground event during a running game can never restart it early.
@@ -98,7 +120,10 @@ public struct WebServerLifecyclePolicy {
             // is mid-transfer — killing an in-flight upload because the user
             // happened to boot a game a second later would be a worse bug than
             // the one this task exists to fix.
-            guard serverIsRunning, uploadsInFlight == 0 else { return .none }
+            // …and only if no continuity session is open: a peer mid-pull, or a
+            // handoff the user just started, needs this device reachable for the
+            // whole game session.
+            guard serverIsRunning, uploadsInFlight == 0, continuitySessionsInFlight == 0 else { return .none }
             pausedForEmulation = true
             return .stop
 
@@ -116,6 +141,26 @@ public struct WebServerLifecyclePolicy {
         case .uploadEnded:
             uploadsInFlight = max(0, uploadsInFlight - 1)
             return .none
+
+        case .continuitySessionBegan:
+            continuitySessionsInFlight += 1
+            // Clearing `pausedForEmulation` is what makes the restart stick: it
+            // is the flag that otherwise blocks every later `.appForegrounded`
+            // start, and leaving it set would mean a session that opened
+            // mid-game got its server back only until the user switched apps.
+            // Ownership of the "is a game running" pause moves to
+            // `continuitySessionsInFlight` for as long as a session is open.
+            pausedForEmulation = false
+            guard !serverIsRunning, isForeground else { return .none }
+            return .start
+
+        case .continuitySessionEnded:
+            continuitySessionsInFlight = max(0, continuitySessionsInFlight - 1)
+            // Re-apply the emulation pause once the last session closes, so the
+            // carve-out lasts exactly as long as the feature needs it.
+            guard continuitySessionsInFlight == 0, isEmulationRunning, serverIsRunning else { return .none }
+            pausedForEmulation = true
+            return .stop
         }
     }
 }

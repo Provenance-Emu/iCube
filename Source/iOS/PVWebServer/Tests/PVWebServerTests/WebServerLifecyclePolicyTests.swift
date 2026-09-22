@@ -105,3 +105,83 @@ final class WebServerLifecyclePolicyTests: XCTestCase {
         XCTAssertEqual(policy.uploadsInFlight, 0)
     }
 }
+
+// MARK: - WS-4 continuity carve-out
+
+extension WebServerLifecyclePolicyTests {
+
+    /// The headline case: the user boots a game (server pauses), then opens the
+    /// pause menu and hands the game off. The server must come back.
+    func testContinuitySessionDuringAGameRestartsAPausedServer() {
+        var policy = WebServerLifecyclePolicy()
+        XCTAssertEqual(policy.handle(.emulationWillStart, serverIsRunning: true), .stop)
+        XCTAssertTrue(policy.pausedForEmulation)
+
+        XCTAssertEqual(policy.handle(.continuitySessionBegan, serverIsRunning: false), .start)
+        XCTAssertFalse(policy.pausedForEmulation)
+        XCTAssertEqual(policy.continuitySessionsInFlight, 1)
+    }
+
+    /// Backgrounding and returning mid-session must not re-pause the server:
+    /// `pausedForEmulation` has to have been cleared, not just overridden.
+    func testForegroundDuringAContinuitySessionStillStarts() {
+        var policy = WebServerLifecyclePolicy()
+        policy.handle(.emulationWillStart, serverIsRunning: true)
+        policy.handle(.continuitySessionBegan, serverIsRunning: false)
+
+        policy.handle(.appBackgrounded, serverIsRunning: true)
+        XCTAssertEqual(policy.handle(.appForegrounded, serverIsRunning: false), .start)
+    }
+
+    func testEmulationStartIsNotAllowedToPauseWhileASessionIsOpen() {
+        var policy = WebServerLifecyclePolicy()
+        XCTAssertEqual(policy.handle(.continuitySessionBegan, serverIsRunning: true), .none)
+        XCTAssertEqual(policy.handle(.emulationWillStart, serverIsRunning: true), .none)
+        XCTAssertFalse(policy.pausedForEmulation)
+    }
+
+    func testClosingTheLastSessionReappliesTheEmulationPause() {
+        var policy = WebServerLifecyclePolicy()
+        policy.handle(.emulationWillStart, serverIsRunning: true)
+        policy.handle(.continuitySessionBegan, serverIsRunning: false)
+
+        XCTAssertEqual(policy.handle(.continuitySessionEnded, serverIsRunning: true), .stop)
+        XCTAssertTrue(policy.pausedForEmulation)
+        XCTAssertEqual(policy.continuitySessionsInFlight, 0)
+    }
+
+    func testSessionsAreCountedSoAConcurrentPullKeepsTheServerUp() {
+        var policy = WebServerLifecyclePolicy()
+        policy.handle(.emulationWillStart, serverIsRunning: true)
+        policy.handle(.continuitySessionBegan, serverIsRunning: false)
+        policy.handle(.continuitySessionBegan, serverIsRunning: true)
+        XCTAssertEqual(policy.continuitySessionsInFlight, 2)
+
+        XCTAssertEqual(policy.handle(.continuitySessionEnded, serverIsRunning: true), .none)
+        XCTAssertFalse(policy.pausedForEmulation)
+        XCTAssertEqual(policy.handle(.continuitySessionEnded, serverIsRunning: true), .stop)
+    }
+
+    func testClosingTheLastSessionWithNoGameRunningLeavesTheServerUp() {
+        var policy = WebServerLifecyclePolicy()
+        policy.handle(.continuitySessionBegan, serverIsRunning: true)
+        XCTAssertEqual(policy.handle(.continuitySessionEnded, serverIsRunning: true), .none)
+        XCTAssertFalse(policy.pausedForEmulation)
+    }
+
+    func testUnbalancedSessionEndCannotDriveTheCounterNegative() {
+        var policy = WebServerLifecyclePolicy()
+        policy.handle(.continuitySessionEnded, serverIsRunning: true)
+        XCTAssertEqual(policy.continuitySessionsInFlight, 0)
+        // A later real session still works.
+        policy.handle(.emulationWillStart, serverIsRunning: true)
+        XCTAssertEqual(policy.handle(.continuitySessionBegan, serverIsRunning: false), .start)
+    }
+
+    func testSessionBeganWhileBackgroundedDoesNotStartTheServer() {
+        var policy = WebServerLifecyclePolicy()
+        policy.handle(.emulationWillStart, serverIsRunning: true)
+        policy.handle(.appBackgrounded, serverIsRunning: false)
+        XCTAssertEqual(policy.handle(.continuitySessionBegan, serverIsRunning: false), .none)
+    }
+}
