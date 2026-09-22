@@ -22,14 +22,19 @@ import UIKit
 /// opens Settings.
 ///
 /// Emulation pause/resume: gated on `DOLEmulationWillStartNotification` /
-/// `DOLEmulationDidEndNotification` (already posted by `EmulationCoordinator`). iCube
-/// has no live-stats page or continuity consumer today (that's WS-4, not yet built) that
-/// would need the server reachable mid-game, so — unlike keeping it always on — pausing
-/// removes a real, if narrow, I/O contention risk for free: Dolphin streams large
+/// `DOLEmulationDidEndNotification` (already posted by `EmulationCoordinator`). Pausing
+/// removes a real, if narrow, I/O contention risk: Dolphin streams large
 /// ISO/WBFS/RVZ images from the same storage volume a simultaneous multi-GB WebDAV/HTTP
-/// upload would be writing to. The one exception is an upload already in flight when a
-/// game starts (`WebServerLifecyclePolicy.uploadsInFlight`), so booting a game a moment
-/// after starting a transfer never truncates it.
+/// upload would be writing to. There are two exceptions, both of which are cases where
+/// someone is deliberately relying on the server right now:
+/// - an upload already in flight when a game starts (`WebServerLifecyclePolicy.uploadsInFlight`),
+///   so booting a game a moment after starting a transfer never truncates it;
+/// - an open continuity session (`continuitySessionsInFlight`, added by WS-4). This one
+///   also RESTARTS a server the policy paused, because a handoff is started from the
+///   in-game pause menu — by then the pause has already happened, so merely declining to
+///   pause again would leave the feature unreachable. The I/O contention argument still
+///   holds; it is now an explicit cost of something the user asked for rather than a risk
+///   taken on their behalf.
 ///
 /// Known limitations (WS-3, not fixed here — narrow enough to defer):
 /// - `startServers()` binds its `NWListener` asynchronously. If a game is launched fast
@@ -84,7 +89,20 @@ final class WebServerLifecycleService: NSObject, UIApplicationDelegate {
             center.addObserver(
                 forName: Notification.Name(PVWebServerFileUploadCompletedNotificationName),
                 object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.uploadEnded) }
+            ) { [weak self] _ in self?.apply(.uploadEnded) },
+            // WS-4: a handoff is started FROM the in-game pause menu, by which
+            // point `emulationWillStart` has already stopped the server. So
+            // these do not merely suppress the next pause — an open session
+            // restarts the server. See the events' docs in
+            // `WebServerLifecyclePolicy`.
+            center.addObserver(
+                forName: Notification.Name(ContinuityNotificationNames.sessionDidBegin),
+                object: nil, queue: .main
+            ) { [weak self] _ in self?.apply(.continuitySessionBegan) },
+            center.addObserver(
+                forName: Notification.Name(ContinuityNotificationNames.sessionDidEnd),
+                object: nil, queue: .main
+            ) { [weak self] _ in self?.apply(.continuitySessionEnded) }
         ]
 
         lock.lock(); observers = tokens; lock.unlock()

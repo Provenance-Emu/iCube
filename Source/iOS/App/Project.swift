@@ -293,6 +293,10 @@ let iCube = Target.target(
         // tvOS slice and fail. Condition keeps iOS linking byte-for-byte unchanged.
         .xcframework(path: "../../../Externals/MoltenVK-iOS/MoltenVK.xcframework", condition: .when([.ios])),
         .package(product: "PVWebServer"),
+        // WS-4 nearby sharing + continuity handoff. Depends on PVSyncRules (the
+        // shared "what may leave the device" table) and on PVWebServer, whose route
+        // registry it hangs its HTTP API off.
+        .package(product: "PVContinuity"),
         .package(product: "PVHelp"),
         // WS-5 CloudKit sync. PVCloudSync depends on PVSyncRules (the shared
         // "what may leave the device" allow-list, also consumed by WS-4), so
@@ -334,7 +338,7 @@ let iCube = Target.target(
             "INFOPLIST_KEY_GCSupportsGameMode": "YES",
             "INFOPLIST_KEY_LSApplicationCategoryType": "public.app-category.entertainment",
             "INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace": "YES",
-            "INFOPLIST_KEY_NSLocalNetworkUsageDescription": "iCube uses your local network to discover and connect to DSU controllers and devices.",
+            "INFOPLIST_KEY_NSLocalNetworkUsageDescription": "iCube uses your local network to discover DSU controllers, to share your library with nearby devices, and to hand a game off to another device. Transfers between devices are not encrypted.",
             "INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription": "Used to save gameplay clips you record with Instant Replay.",
             "INFOPLIST_KEY_NSSupportsLiveActivities": "YES",
             "INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates": "YES",
@@ -530,6 +534,8 @@ let project = Project(
     ),
     packages: [
         .local(path: "../PVWebServer"),
+        .local(path: "../PVContinuity"),
+        .local(path: "../PVSyncRules"),
         .local(path: "../PVHelp"),
         // See the note on the matching `.package(product:)` entries above:
         // WS-4 may add PVSyncRules as well, and only one entry may survive.

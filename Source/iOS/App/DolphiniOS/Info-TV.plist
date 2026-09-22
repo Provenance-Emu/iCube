@@ -84,6 +84,13 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
+		<!-- Continuity pulls talk plain HTTP to .local / raw-IP peers on the LAN.
+		     ATS exempts local connections by default, but the explicit key removes
+		     any ambiguity on device. This is the transport tradeoff documented in
+		     PVContinuity/ContinuityPairingMath: pairing authenticates the peer and
+		     adds no confidentiality. -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
 			<key>media.retroachievements.org</key>
@@ -106,10 +113,20 @@
 	<array>
 		<string>_altserver._tcp</string>
 		<string>_webdav._tcp</string>
-		<string>_dolphin-dsu._udp</string>
+		<!-- WS-4: continuity handoff + nearby library sharing. On tvOS this is the
+		     ONLY discovery path, since there is no system Handoff. -->
+		<string>_icube-continuity._tcp</string>
+	</array>
+	<!-- Custom Handoff activity: continue a game in progress on another device
+	     (ContinuityAdvertisement.activityType). Handoff is iOS/iPadOS/macOS only;
+	     tvOS uses the in-app Bonjour browser instead, but the key is harmless
+	     there and keeps the two plists from drifting. -->
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.joemattiello.icube.continuity.play</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>iCube uses the local network to discover and connect to DSU controllers and devices.</string>
+	<string>iCube uses the local network to discover DSU controllers, to share your library with nearby devices, and to hand a game off to another device. Transfers between devices are not encrypted.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -17,7 +17,10 @@ internal struct PauseMenuView: View {
   let game: TVGameItem
 
   @FocusState private var focused: FocusField?
-  internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, shaders, exit, back, slot(Int), save, load, mute, fastForward }
+  internal enum FocusField: Hashable {
+    case resume, openSaves, cheats, mapping, settings, shaders, continuity
+    case exit, back, slot(Int), save, load, mute, fastForward
+  }
   private enum Pane { case main, saves, cheats, controllers }
   @State private var pane: Pane = .main
   @State private var showExitDialog: Bool = false
@@ -26,6 +29,8 @@ internal struct PauseMenuView: View {
   @State private var showSettingsSheet: Bool = false
   @State private var showControllersSheet: Bool = false
   @State private var showFilmstripSheet: Bool = false
+  /// WS-4: "continue this game on another device".
+  @State private var showContinuitySheet: Bool = false
 
   // Quick actions: the two things people actually reach for mid-game without
   // wanting to leave the pause menu (mute to take a call, fast-forward past a
@@ -89,6 +94,7 @@ internal struct PauseMenuView: View {
         #endif
       },
       IOSMenuItem(title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange, role: nil) { showShaders = true },
+      IOSMenuItem(title: L("Continue Elsewhere"), subtitle: L("Hand this game to a nearby device"), icon: "arrow.triangle.branch", tint: .teal, role: nil) { showContinuitySheet = true },
     ]
     #if os(iOS)
     items.append(IOSMenuItem(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray, role: nil) { showSettingsSheet = true })
@@ -217,6 +223,12 @@ internal struct PauseMenuView: View {
       }
     }
     #endif
+    // WS-4 sender surface. Unconditional (not #if os(iOS)): tvOS has no system
+    // Handoff, so the in-app offer is the ONLY way an Apple TV can hand a game
+    // to another device.
+    .sheet(isPresented: $showContinuitySheet) {
+      ContinuityHandoffSheet(game: game)
+    }
   }
 
   // Add pull-down to dismiss for iOS
@@ -796,6 +808,45 @@ internal struct PauseMenuView: View {
             }
             .buttonStyle(.plain)
             .focused($focused, equals: .shaders)
+
+            // Continue Elsewhere (WS-4). Its own Button, and therefore its own
+            // focus target — the surrounding VStack of Buttons is what makes
+            // that work on tvOS, unlike a List row holding several controls.
+            Button(action: { showContinuitySheet = true }) {
+              HStack(spacing: 20) {
+                ZStack {
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.white.opacity(0.1))
+                    .frame(width: 48, height: 48)
+
+                  Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(L("Continue Elsewhere"))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+
+                  Text(L("Hand this game to a nearby device"))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                  .font(.system(size: 14, weight: .medium))
+                  .foregroundColor(.white.opacity(0.5))
+              }
+              .padding(.horizontal, 24)
+              .padding(.vertical, 16)
+              .background(.white.opacity(0.05))
+              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .focused($focused, equals: .continuity)
 
             // Settings
             settingsButtonRow
