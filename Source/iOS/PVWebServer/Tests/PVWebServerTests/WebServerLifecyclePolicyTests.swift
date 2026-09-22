@@ -184,4 +184,40 @@ extension WebServerLifecyclePolicyTests {
         policy.handle(.appBackgrounded, serverIsRunning: false)
         XCTAssertEqual(policy.handle(.continuitySessionBegan, serverIsRunning: false), .none)
     }
+
+    // MARK: - User-requested access outranks the emulation pause
+
+    func testOpeningImportDuringAGameStartsTheServer() {
+        var policy = WebServerLifecyclePolicy(isForeground: true, isEmulationRunning: false)
+        XCTAssertEqual(policy.handle(.emulationWillStart, serverIsRunning: true), .stop)
+        XCTAssertTrue(policy.pausedForEmulation)
+        // The user opens the Wi-Fi import sheet mid-game.
+        XCTAssertEqual(policy.handle(.userRequestedAccess, serverIsRunning: false), .start)
+        XCTAssertFalse(policy.pausedForEmulation,
+                       "clearing the flag is what stops the next foreground event killing it again")
+    }
+
+    func testClosingImportReappliesTheEmulationPause() {
+        var policy = WebServerLifecyclePolicy(isForeground: true, isEmulationRunning: true)
+        XCTAssertEqual(policy.handle(.userRequestedAccess, serverIsRunning: false), .start)
+        XCTAssertEqual(policy.handle(.userReleasedAccess, serverIsRunning: true), .stop)
+        XCTAssertTrue(policy.pausedForEmulation)
+    }
+
+    func testEmulationDoesNotPauseWhileImportIsOpen() {
+        var policy = WebServerLifecyclePolicy(isForeground: true, isEmulationRunning: false)
+        XCTAssertEqual(policy.handle(.userRequestedAccess, serverIsRunning: true), .none)
+        XCTAssertEqual(policy.handle(.emulationWillStart, serverIsRunning: true), .none,
+                       "a game booting must not yank the server out from under an open import sheet")
+        XCTAssertFalse(policy.pausedForEmulation)
+    }
+
+    func testNestedRequestsAreBalanced() {
+        var policy = WebServerLifecyclePolicy(isForeground: true, isEmulationRunning: true)
+        XCTAssertEqual(policy.handle(.userRequestedAccess, serverIsRunning: false), .start)
+        XCTAssertEqual(policy.handle(.userRequestedAccess, serverIsRunning: true), .none)
+        XCTAssertEqual(policy.handle(.userReleasedAccess, serverIsRunning: true), .none,
+                       "one surface closing must not stop the server while another is open")
+        XCTAssertEqual(policy.handle(.userReleasedAccess, serverIsRunning: true), .stop)
+    }
 }

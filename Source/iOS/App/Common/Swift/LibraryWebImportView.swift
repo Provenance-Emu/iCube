@@ -55,7 +55,18 @@ struct LibraryWebImportView: View {
           Button(L("Done")) { dismiss() }
         }
       }
-      .onAppear { refreshURLs() }
+      .onAppear {
+        // This sheet exists to show the upload address, so opening it is an
+        // explicit request for the server: start it on demand rather than
+        // reporting "Not Running" at the one moment the user is asking for it.
+        NotificationCenter.default.post(
+          name: Notification.Name(PVWebServerUserAccessRequestedNotificationName), object: nil)
+        refreshURLs()
+      }
+      .onDisappear {
+        NotificationCenter.default.post(
+          name: Notification.Name(PVWebServerUserAccessReleasedNotificationName), object: nil)
+      }
       .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
         refreshURLs()
       }

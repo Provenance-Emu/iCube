@@ -45,6 +45,16 @@ public enum WebServerLifecycleEvent {
     /// A continuity session closed. When the last one closes and a game is
     /// still running, the emulation pause re-applies.
     case continuitySessionEnded
+
+    /// The user opened a surface whose whole purpose is the server — the Wi-Fi
+    /// import sheet, or Settings' network page showing the upload address.
+    /// Asking for the address IS asking for the server, so this outranks the
+    /// emulation pause: otherwise hitting Import during a game shows "Not
+    /// Running" and there is no way for the user to act on it.
+    case userRequestedAccess
+
+    /// That surface went away. Balanced with `userRequestedAccess`.
+    case userReleasedAccess
 }
 
 public enum WebServerLifecycleAction: Equatable {
@@ -71,6 +81,10 @@ public struct WebServerLifecyclePolicy {
     /// because emulation started. Only `emulationDidEnd` may clear it, so a
     /// foreground event during a running game can never restart it early.
     public private(set) var pausedForEmulation: Bool = false
+    /// Open user-facing surfaces that exist to show or use the server. Same
+    /// shape as `continuitySessionsInFlight`: non-zero means stay reachable
+    /// even while a game runs.
+    public private(set) var userAccessRequestsInFlight: Int = 0
 
     public init(isForeground: Bool = true, isEmulationRunning: Bool = false) {
         self.isForeground = isForeground
@@ -123,7 +137,8 @@ public struct WebServerLifecyclePolicy {
             // …and only if no continuity session is open: a peer mid-pull, or a
             // handoff the user just started, needs this device reachable for the
             // whole game session.
-            guard serverIsRunning, uploadsInFlight == 0, continuitySessionsInFlight == 0 else { return .none }
+            guard serverIsRunning, uploadsInFlight == 0, continuitySessionsInFlight == 0,
+                  userAccessRequestsInFlight == 0 else { return .none }
             pausedForEmulation = true
             return .stop
 
@@ -158,7 +173,23 @@ public struct WebServerLifecyclePolicy {
             continuitySessionsInFlight = max(0, continuitySessionsInFlight - 1)
             // Re-apply the emulation pause once the last session closes, so the
             // carve-out lasts exactly as long as the feature needs it.
-            guard continuitySessionsInFlight == 0, isEmulationRunning, serverIsRunning else { return .none }
+            guard continuitySessionsInFlight == 0, userAccessRequestsInFlight == 0,
+                  isEmulationRunning, serverIsRunning else { return .none }
+            pausedForEmulation = true
+            return .stop
+
+        case .userRequestedAccess:
+            userAccessRequestsInFlight += 1
+            // Same reasoning as `.continuitySessionBegan`: clearing the flag is
+            // what makes the start stick past the next foreground event.
+            pausedForEmulation = false
+            guard !serverIsRunning, isForeground else { return .none }
+            return .start
+
+        case .userReleasedAccess:
+            userAccessRequestsInFlight = max(0, userAccessRequestsInFlight - 1)
+            guard userAccessRequestsInFlight == 0, continuitySessionsInFlight == 0,
+                  isEmulationRunning, serverIsRunning else { return .none }
             pausedForEmulation = true
             return .stop
         }

@@ -36,6 +36,14 @@ import Foundation
 
 /// Posted when a file upload begins. userInfo: ["path": String].
 public let PVWebServerFileUploadStartedNotificationName = "PVWebServerFileUploadStartedNotification"
+
+/// Posted by any UI whose purpose is the server itself -- the Wi-Fi import sheet,
+/// Settings' network page. Asking to see the upload address IS asking for the
+/// server, so the lifecycle policy starts it on demand and holds it up for as long
+/// as that surface is on screen, outranking the pause-during-emulation rule.
+/// Balance every post of these with the Released one.
+public let PVWebServerUserAccessRequestedNotificationName = "PVWebServerUserAccessRequestedNotification"
+public let PVWebServerUserAccessReleasedNotificationName = "PVWebServerUserAccessReleasedNotification"
 /// Posted when a file upload completes. userInfo: ["filePath": String, "fileSize": UInt64].
 public let PVWebServerFileUploadCompletedNotificationName = "PVWebServerFileUploadCompletedNotification"
 

@@ -100,6 +100,14 @@ final class WebServerLifecycleService: NSObject, UIApplicationDelegate {
                 object: nil, queue: .main
             ) { [weak self] _ in self?.apply(.continuitySessionBegan) },
             center.addObserver(
+                forName: Notification.Name(PVWebServerUserAccessRequestedNotificationName),
+                object: nil, queue: .main
+            ) { [weak self] _ in self?.apply(.userRequestedAccess) },
+            center.addObserver(
+                forName: Notification.Name(PVWebServerUserAccessReleasedNotificationName),
+                object: nil, queue: .main
+            ) { [weak self] _ in self?.apply(.userReleasedAccess) },
+            center.addObserver(
                 forName: Notification.Name(ContinuityNotificationNames.sessionDidEnd),
                 object: nil, queue: .main
             ) { [weak self] _ in self?.apply(.continuitySessionEnded) }
