@@ -142,16 +142,46 @@ final class NativeWebServer: @unchecked Sendable {
   }
 
   /// nil when the request may proceed; an HTTP status + message when it may not.
-  private func authFailure(for request: HTTPRequest, isLoopback: Bool) -> (Int, String)? {
-    guard !isLoopback, requiredToken != nil else { return nil }
+  ///
+  /// Loopback is always fine. A network client gets in one of two ways: it
+  /// presents the token (headless tooling, no human at the device), or the user
+  /// approves its address on-device once. Neither is required on DEBUG builds,
+  /// where the bench is loopback-only to begin with.
+  private func authFailure(for request: HTTPRequest, remoteAddress: String?, isLoopback: Bool)
+    -> (Int, String)? {
+    guard !isLoopback, allowsNonLoopbackClients else { return nil }
+
     let bearer = request.headers["authorization"]
       .flatMap { $0.hasPrefix("Bearer ") ? String($0.dropFirst(7)) : nil }
-    let presented = bearer ?? request.headers["x-icube-token"]
-    guard let presented, !presented.isEmpty else {
-      return (401, "missing token: send Authorization: Bearer <token> or X-ICube-Token")
+    if let presented = bearer ?? request.headers["x-icube-token"],
+       !presented.isEmpty, tokenMatches(presented) {
+      return nil
     }
-    guard tokenMatches(presented) else { return (403, "bad token") }
-    return nil
+
+    guard let remoteAddress else { return (403, "could not identify client address") }
+
+    // Hop to the main actor for the approval check, and refuse-with-reason
+    // rather than parking the connection while a human finds their phone.
+    let allowed = DispatchQueue.main.sync { BenchAccessApproval.shared.isAllowed(remoteAddress) }
+    if allowed { return nil }
+
+    DispatchQueue.main.async {
+      BenchAccessApproval.shared.requestApproval(for: remoteAddress)
+    }
+    return (403, "approval requested on the device for \(remoteAddress) — approve it there, then retry")
+  }
+
+  /// The client's address, for the approval prompt and allowlist.
+  private func remoteAddress(_ connection: NWConnection) -> String? {
+    guard case let .hostPort(host, _) = connection.endpoint else { return nil }
+    let raw: String
+    switch host {
+    case .ipv4(let a): raw = "\(a)"
+    case .ipv6(let a): raw = "\(a)"
+    case .name(let n, _): raw = n
+    @unknown default: return nil
+    }
+    return raw.split(separator: "%").first.map(String.init) ?? raw
   }
 
   // MARK: - Start / Stop
@@ -409,7 +439,9 @@ final class NativeWebServer: @unchecked Sendable {
 
   private func routeRequest(on connection: NWConnection, request: HTTPRequest, body: Data) {
     // One gate, before any route runs, so a new endpoint cannot forget to check.
-    if let (status, message) = authFailure(for: request, isLoopback: isLoopback(connection)) {
+    if let (status, message) = authFailure(for: request,
+                                          remoteAddress: remoteAddress(connection),
+                                          isLoopback: isLoopback(connection)) {
       sendResponse(on: connection, status: status, statusText: Self.statusText(status),
                    body: "{\"ok\":false,\"error\":\"\(message)\"}",
                    contentType: "application/json")

@@ -34,6 +34,7 @@ struct DebugRootView: View {
   private var benchToken: String {
     UserDefaults.standard.string(forKey: "ICubeBenchServerToken") ?? ""
   }
+  @State private var approvedClients: [String] = []
   @State private var loggingVerbosity: Int = 4
   @State private var inputDebug: Bool = false
   @State private var instantReplay: Bool = false
@@ -154,7 +155,20 @@ struct DebugRootView: View {
                 .textSelection(.enabled)
 #endif
             },
-            L("Send as `Authorization: Bearer <token>` on Wi-Fi requests. Requests over USB or from the device itself do not need it."))
+            L("Optional: headless tooling can send `Authorization: Bearer <token>` to skip the on-device prompt. Requests over USB or from the device itself never need it."))
+        }
+        // A mis-tapped "Always Allow" would otherwise be permanent short of a
+        // reinstall, so it has to be undoable from here.
+        if !approvedClients.isEmpty {
+          settingsCaption(
+            Button(role: .destructive) {
+              BenchAccessApproval.shared.forgetAll()
+              approvedClients = []
+            } label: {
+              Text(String(format: L("Forget %1$ld Approved Device(s)"), approvedClients.count))
+            },
+            String(format: L("Currently allowed without prompting: %1$@"),
+                   approvedClients.joined(separator: ", ")))
         }
       }
 
@@ -202,6 +216,7 @@ struct DebugRootView: View {
     .task {
       if !hydrated {
         hydrated = true
+        approvedClients = BenchAccessApproval.shared.rememberedAddresses
         await withTaskGroup(of: Void.self) { group in
           group.addTask { await syncDebugAsync() }
         }
