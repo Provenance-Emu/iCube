@@ -1426,6 +1426,20 @@ static void EnsurePad1DefaultsToTouchscreen()
   auto* pad0 = Pad::GetConfig()->GetController(0);
   if (pad0)
   {
+    // Respect a CONNECTED physical device already bound to Pad 1. Choosing what
+    // owns Pad 1 is the Swift AssignmentEngine's job; this helper exists only to
+    // make the on-screen pad the fallback when nothing physical is attached.
+    // Without this check it runs after reconcile() on the pause-menu path and
+    // silently overwrites the controller the engine just bound.
+    {
+      const auto dq0 = pad0->GetDefaultDevice();
+      if (!(dq0 == dq_touch) && !dq0.ToString().empty() &&
+          g_controller_interface.HasConnectedDevice(dq0))
+      {
+        goto after_pad1;
+      }
+    }
+
     // If Touchscreen is explicitly assigned to any Pad other than 0, respect that and leave Pad1 alone
     {
       const int numc = Pad::GetConfig()->GetControllerCount();

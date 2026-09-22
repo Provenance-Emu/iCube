@@ -46,6 +46,10 @@ final class PauseGestureTracker {
   private static let pauseRequestCoalesceWindow: TimeInterval = 0.35
   private var lastPauseRequest: TimeInterval = 0
 
+  /// Press-down timestamps for the dual-purpose Menu/Options buttons, keyed by
+  /// route. See `menuButtonChanged`.
+  private var menuPressStart: [String: TimeInterval] = [:]
+
   private init() {}
 
   /// Call whenever the current state of the four shoulder buttons changes.
@@ -65,6 +69,22 @@ final class PauseGestureTracker {
   func menuOrStartPressed() {
     guard isAllShouldersHeld else { return }
     requestPauseMenu(reason: "shoulder-chord")
+  }
+
+  /// Menu is dual-purpose during emulation: a short press opens the pause menu,
+  /// a hold of `DOLMenuLongPressDuration` exits to the library. So the decision
+  /// can only be made at RELEASE — requesting the pause menu on press-down would
+  /// flash the menu at t=0 on every hold and then exit at t=2. `EmuEventVC`
+  /// takes the same shape on the UIPress path, using the same constant.
+  func menuButtonChanged(pressed: Bool, reason: String) {
+    let now = Date().timeIntervalSinceReferenceDate
+    guard !pressed else {
+      menuPressStart[reason] = now
+      return
+    }
+    guard let start = menuPressStart.removeValue(forKey: reason) else { return }
+    guard now - start < DOLMenuLongPressDuration else { return }
+    requestPauseMenu(reason: reason)
   }
 
   /// The single sink for "the user asked for the pause menu".

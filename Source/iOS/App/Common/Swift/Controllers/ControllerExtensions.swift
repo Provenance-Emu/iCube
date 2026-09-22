@@ -102,25 +102,25 @@ func installPauseMenuHandlers(_ c: GCController) {
   }
 
   c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, pressed in
-    guard pressed else { return }
-    presentPauseMenu("microGamepad.buttonMenu")
+    Task { @MainActor in
+      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "microGamepad.buttonMenu")
+    }
   }
 
   guard let eg = c.extendedGamepad else { return }
   eg.buttonMenu.pressedChangedHandler = { _, _, pressed in
-    guard pressed else { return }
-    // Chord first (it also drives fast-forward state), then the ungated path.
-    // Both land in requestPauseMenu, which coalesces them into one request.
     Task { @MainActor in
-      PauseGestureTracker.shared.menuOrStartPressed()
-      PauseGestureTracker.shared.requestPauseMenu(reason: "extendedGamepad.buttonMenu")
+      // The chord is unambiguous (no long-press meaning), so it fires on
+      // press-down. The plain Menu route decides at release — see
+      // menuButtonChanged. Both land in requestPauseMenu, which coalesces them.
+      if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
+      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "extendedGamepad.buttonMenu")
     }
   }
   eg.buttonOptions?.pressedChangedHandler = { _, _, pressed in
-    guard pressed else { return }
     Task { @MainActor in
-      PauseGestureTracker.shared.menuOrStartPressed()
-      PauseGestureTracker.shared.requestPauseMenu(reason: "extendedGamepad.buttonOptions")
+      if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
+      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "extendedGamepad.buttonOptions")
     }
   }
 }
@@ -148,12 +148,6 @@ func configureController(_ c: GCController) {
     eg.buttonOptions?.preferredSystemGestureState = .disabled
   }
   installExtraInputHandlers(c)
-}
-
-func configureAllControllers() {
-  for c in GCController.controllers() {
-    configureController(c)
-  }
 }
 
 private func installMotionHandler(_ c: GCController) {

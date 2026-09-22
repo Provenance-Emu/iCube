@@ -408,15 +408,39 @@ final class ControllerManager: NSObject, ObservableObject {
   // Assign Wiimote slots 2..4 to external controllers that have a touchpad (DS4/DS5).
   // Slot 1 remains for the on-screen touch overlay.
   func updateWiimoteEmulationForExternalControllers() {
-    var nextSlot = 2
     wiimoteSlotByController.removeAll()
 
-    // Disable all P2–P4 by default
-    for s in 2 ... 4 { DOLConfigBridge.setWiimoteSourceFor(s, source: 0) }
+    // Slots the AssignmentEngine has bound to a CONNECTED physical controller
+    // are off limits. This method used to blanket-zero slots 2-4 before
+    // re-enabling only touchpad controllers, and it runs after reconcile() on
+    // both the disconnect path and the pause-menu path — so it silently
+    // deactivated the Wiimote slot of every pad without a touchpad (Xbox,
+    // Switch Pro, bare MFi) on each disconnect and each pause.
+    let connected = Set(TVControllerMappingBridge.allQualifiedDevices().filter { !$0.hasPrefix("iOS/") })
+    var slotForQualifier: [String: Int] = [:]
+    var reserved = Set<Int>()
+    for slot in 2 ... 4 {
+      let qualifier = TVControllerMappingBridge.defaultDevice(forWiimote: slot) as String
+      if connected.contains(qualifier) {
+        reserved.insert(slot)
+        slotForQualifier[qualifier] = slot
+      } else {
+        DOLConfigBridge.setWiimoteSourceFor(slot, source: 0)
+      }
+    }
 
+    // Touchpad controllers (DS4/DS5) additionally drive Wii IR from the pad.
+    var nextSlot = 2
     for c in GCController.controllers() {
-      guard nextSlot <= 4 else { break }
       guard c.supportsTouchpad else { continue }
+      let qualifier = TVControllerMappingBridge.qualifiedName(for: c) as String
+      if let bound = slotForQualifier[qualifier] {
+        // Already on a slot the engine assigned to this exact device; keep it.
+        wiimoteSlotByController[ObjectIdentifier(c)] = bound
+        continue
+      }
+      while nextSlot <= 4, reserved.contains(nextSlot) { nextSlot += 1 }
+      guard nextSlot <= 4 else { break }
       wiimoteSlotByController[ObjectIdentifier(c)] = nextSlot
       DOLConfigBridge.setWiimoteSourceFor(nextSlot, source: 1)
       EmulationCoordinator.ensureWiimoteDefaultsToTouchscreen(forPort: nextSlot)

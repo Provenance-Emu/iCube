@@ -5,10 +5,7 @@
 #import <UIKit/UIKit.h>
 
 NSNotificationName const DOLRequestPauseMenuNotification = @"DOLRequestPauseMenu";
-
-/// How long Menu must be held to exit to the library. A release before this is a
-/// short press and opens the pause menu instead.
-static const NSTimeInterval kMenuLongPressDuration = 2.0;
+const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 
 #if TARGET_OS_TV
 @interface EmuFocusTrapView : UIView
@@ -47,7 +44,7 @@ static const NSTimeInterval kMenuLongPressDuration = 2.0;
   NSLog(@"[INPUT] EmuEventVC viewDidLoad (unconditional)");
   // Long-press on tvOS Menu button to exit back to library
   UILongPressGestureRecognizer* lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleMenuLongPress:)];
-  lp.minimumPressDuration = kMenuLongPressDuration;
+  lp.minimumPressDuration = DOLMenuLongPressDuration;
   lp.allowedPressTypes = @[ @(UIPressTypeMenu) ];
   [self.view addGestureRecognizer:lp];
 
@@ -122,18 +119,22 @@ static const NSTimeInterval kMenuLongPressDuration = 2.0;
   }
 #if TARGET_OS_TV
   BOOL handledMenu = NO;
+  // Only intercept Menu while the GAME owns the screen. With the pause overlay
+  // up (focus trap hidden) Menu is the conventional tvOS "back", and swallowing
+  // it there would leave no way to dismiss the overlay with the remote.
+  const BOOL gameOwnsScreen = (_focusTrap != nil && !_focusTrap.hidden);
   // Fallback long-press detection using a timer in case the gesture recognizer doesn't fire
   for (UIPress* p in presses) {
-    if (p.type != UIPressTypeMenu)
+    if (p.type != UIPressTypeMenu || !gameOwnsScreen)
       continue;
     handledMenu = YES;
     if (_menuLongPressTimer != nil)
       continue;
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-      NSLog(@"[INPUT] Starting Menu long-press timer (%.1fs)", kMenuLongPressDuration);
+      NSLog(@"[INPUT] Starting Menu long-press timer (%.1fs)", DOLMenuLongPressDuration);
     }
     __weak typeof(self) weakSelf = self;
-    _menuLongPressTimer = [NSTimer scheduledTimerWithTimeInterval:kMenuLongPressDuration repeats:NO block:^(__unused NSTimer * _Nonnull t) {
+    _menuLongPressTimer = [NSTimer scheduledTimerWithTimeInterval:DOLMenuLongPressDuration repeats:NO block:^(__unused NSTimer * _Nonnull t) {
       if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
         NSLog(@"[INPUT] Menu long-press timer fired – posting DOLEmulationRequestExitToLibrary");
       }
@@ -175,14 +176,15 @@ static const NSTimeInterval kMenuLongPressDuration = 2.0;
   }
 #if TARGET_OS_TV
   BOOL handledMenu = NO;
+  const BOOL gameOwnsScreen = (_focusTrap != nil && !_focusTrap.hidden);
   for (UIPress* p in presses) {
-    if (p.type != UIPressTypeMenu)
+    if (p.type != UIPressTypeMenu || !gameOwnsScreen)
       continue;
     handledMenu = YES;
     if (_menuLongPressTimer == nil)
       continue;  // the long press already fired (exit posted); swallow the release
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-      NSLog(@"[INPUT] Menu released before %.1fs – requesting pause menu", kMenuLongPressDuration);
+      NSLog(@"[INPUT] Menu released before %.1fs – requesting pause menu", DOLMenuLongPressDuration);
     }
     [_menuLongPressTimer invalidate];
     _menuLongPressTimer = nil;
