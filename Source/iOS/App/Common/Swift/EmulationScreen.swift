@@ -533,10 +533,11 @@ struct EmulationScreen: View {
       let initialCount = GCController.controllers().count
       NSLog("[INPUT] tvOS initial controllers count: %d", initialCount)
       GCController.shouldMonitorBackgroundEvents = true
-      configureAllControllers()
-      setupPauseGestureHandlers()
+      // One install entry point (see ControllerManager.refreshInputHandlers).
+      // Re-run here because installExtraInputHandlers reads the touchpad IR mode
+      // at install time and that setting can change between games.
+      ControllerManager.shared.refreshInputHandlers()
       logCurrentControllers()
-      for c in GCController.controllers() { installExtraInputHandlers(c) }
 
       // Handle pause menu events
       obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
@@ -559,7 +560,7 @@ struct EmulationScreen: View {
       }
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
         ControllerManager.shared.registerGCOverride(forController: 0)
-        configureAllControllers()
+        ControllerManager.shared.refreshInputHandlers()
         // Resume where I left off, or boot straight into a chosen save state —
         // whichever was requested. Also arms/consults the boot watchdog so a
         // launch that never got past this same load is declined next time.
@@ -646,6 +647,9 @@ struct EmulationScreen: View {
         // the button back to tvOS/iOS). They self-gate on emulation running.
         installPauseMenuHandlers(c)
       }
+      // Shoulder / shake / touchpad-IR caches are module-level and used to
+      // survive into the next game.
+      resetAllControllerInputState()
       #if !os(tvOS)
       arPollTask?.cancel()
       arPollTask = nil
@@ -1068,7 +1072,7 @@ struct EmulationScreen: View {
 
       logCurrentControllers()
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
-      for c in GCController.controllers() { installExtraInputHandlers(c) }
+      ControllerManager.shared.refreshInputHandlers()
       #if os(iOS)
       SiriShortcutManager.shared.donatePlay(game: game)
       #endif
@@ -1170,6 +1174,7 @@ struct EmulationScreen: View {
       // in MainDisplaySceneDelegate) so auto-assign stays live after exiting a game.
       // Disable motion when leaving screen
       TCDeviceMotion.shared.setMotionEnabled(false)
+      resetAllControllerInputState()
       arPollTask?.cancel()
       arPollTask = nil
     }
@@ -1273,6 +1278,11 @@ struct EmulationScreen: View {
     } message: {
       Text("Do you want to stop the current game and return to the library?")
     }
+    // Claim controller ownership for as long as the game is on screen. The
+    // library is only *covered*, not dismissed, so SwiftUI never sends it an
+    // onDisappear and its raw nav handlers would otherwise keep moving the grid
+    // (and could launch another game) underneath the running one.
+    .claimsController()
     #endif
   }
 

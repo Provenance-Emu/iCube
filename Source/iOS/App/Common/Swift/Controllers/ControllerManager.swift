@@ -102,13 +102,13 @@ final class ControllerManager: NSObject, ObservableObject {
     isObserving = true
 
     // Initial configure
-    configureAllControllersForCurrentPlatform()
+    refreshInputHandlers()
 
     // Connect/disconnect notifications
     let onConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { [weak self] note in
       guard let self = self else { return }
       if let c = note.object as? GCController {
-        self.configureControllerForCurrentPlatform(c)
+        configureController(c)
         self.presets.applyCurrentPreset()
         // If a disconnect-pause is active, any connecting controller resumes the
         // game so the user is never stranded. If it is the SAME physical device,
@@ -162,6 +162,10 @@ final class ControllerManager: NSObject, ObservableObject {
         self.disconnectPause = DisconnectPause(qualifier: qualifier, port: slot.port, isWii: slot.isWii)
         TVEmulationBridge.pause()
       }
+      // Drop this controller's shoulder / shake / touchpad-IR caches. They are
+      // keyed by ObjectIdentifier (the object address), so leaving them behind
+      // both leaks and lets a future allocation inherit dead state.
+      if let dropped = c { releaseControllerInputState(for: dropped) }
       self.presets.applyCurrentPreset()
       self.controllerDisconnectedSubject.send(c)
       self.reconcile()
@@ -176,7 +180,7 @@ final class ControllerManager: NSObject, ObservableObject {
     // put controllers on Wiimote slots for a Wii title.
     let onEmulationStart = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { [weak self] _ in
       guard let self = self else { return }
-      self.configureAllControllersForCurrentPlatform()
+      self.refreshInputHandlers()
       self.updateWiimoteEmulationForExternalControllers()
       self.reconcile()
     }
@@ -206,25 +210,21 @@ final class ControllerManager: NSObject, ObservableObject {
     cancellables.removeAll()
   }
 
-  private func configureAllControllersForCurrentPlatform() {
-    for c in GCController.controllers() { configureControllerForCurrentPlatform(c) }
-  }
-
-  private func configureControllerForCurrentPlatform(_ c: GCController) {
-    // Install debug/gesture handlers
-    installExtraInputHandlers(c)
-    // Prefer receiving Menu button events inside app
-    if let gp = c.extendedGamepad {
-      if #available(iOS 14.0, tvOS 14.0, *) {
-        gp.buttonMenu.preferredSystemGestureState = .disabled
-        gp.buttonOptions?.preferredSystemGestureState = .disabled
-      }
-    }
-    if let mgp = c.microGamepad {
-      if #available(iOS 14.0, tvOS 14.0, *) {
-        mgp.buttonMenu.preferredSystemGestureState = .disabled
-      }
-    }
+  /// The single install entry point for controller input handlers.
+  ///
+  /// There used to be five ways in — `configureController`,
+  /// `configureControllerForCurrentPlatform`, `setupPauseGestureHandlers`,
+  /// `setupPauseGestureHandler(for:)` and two raw loops in `EmulationScreen` —
+  /// all writing the same single-slot handler properties in an order nobody
+  /// controlled. Now everything routes here.
+  ///
+  /// It is safe (and cheap) to call repeatedly: every handler it installs is an
+  /// unconditional assignment. It is called at connect time, when observation
+  /// starts, and once when a game starts, because `installExtraInputHandlers`
+  /// reads `DOLConfigBridge.mainTouchPadIRMode()` at install time and that
+  /// setting can change between games.
+  func refreshInputHandlers() {
+    for c in GCController.controllers() { configureController(c) }
   }
 
   // MARK: Overrides (GC)

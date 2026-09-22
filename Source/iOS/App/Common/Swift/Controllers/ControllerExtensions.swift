@@ -13,7 +13,6 @@ private final class TouchpadIRState {
 }
 
 private var touchpadIRStates: [ObjectIdentifier: TouchpadIRState] = [:]
-private var activeTurboControllers: Set<ObjectIdentifier> = []
 
 // Shake detection state per controller
 private struct ShakeState {
@@ -34,6 +33,39 @@ private final class ShoulderState {
 }
 
 private var shoulderStates: [ObjectIdentifier: ShoulderState] = [:]
+
+/// Drops the per-controller caches this file keeps, keyed by `ObjectIdentifier`.
+///
+/// They are module-level dictionaries that nothing used to clean up, so a
+/// disconnected controller's shoulder / shake / touchpad-IR state stayed behind
+/// forever — and `ObjectIdentifier` is just the object address, so a later
+/// allocation could land on the same key and inherit a dead controller's state
+/// (e.g. a phantom "all shoulders held" that keeps fast-forward latched).
+func releaseControllerInputState(for controller: GCController) {
+  let id = ObjectIdentifier(controller)
+  touchpadIRStates.removeValue(forKey: id)
+  shakeStates.removeValue(forKey: id)
+  shoulderStates.removeValue(forKey: id)
+  recomputeShoulderGesture()
+}
+
+/// Clears every per-controller cache. Called when a game tears down so state
+/// cannot leak from one game into the next.
+func resetAllControllerInputState() {
+  touchpadIRStates.removeAll()
+  shakeStates.removeAll()
+  shoulderStates.removeAll()
+  recomputeShoulderGesture()
+}
+
+/// Re-derives the shoulder chord from whatever controllers remain, so removing
+/// a controller that was mid-chord releases fast-forward instead of latching it.
+func recomputeShoulderGesture() {
+  let anyAll = shoulderStates.values.contains { $0.allPressed }
+  Task { @MainActor in
+    PauseGestureTracker.shared.updateShoulderState(allPressed: anyAll)
+  }
+}
 
 /// Helper to show the pause menu consistently.
 /// Delegates to `PauseGestureTracker.requestPauseMenu`, the single gated +
@@ -308,12 +340,7 @@ func installExtraInputHandlers(_ c: GCController) {
   // Pause + shoulder gesture handling
   let id = ObjectIdentifier(c)
   if shoulderStates[id] == nil { shoulderStates[id] = ShoulderState() }
-  func recomputeShouldersAndNotify() {
-    let anyAll = shoulderStates.values.contains { $0.allPressed }
-    Task { @MainActor in
-      PauseGestureTracker.shared.updateShoulderState(allPressed: anyAll)
-    }
-  }
+  let recomputeShouldersAndNotify = recomputeShoulderGesture
 
   if let eg = c.extendedGamepad {
     // Shoulder buttons
@@ -407,38 +434,5 @@ func installExtraInputHandlers(_ c: GCController) {
     c.extendedGamepad?.buttonB.preferredSystemGestureState = .disabled
     c.extendedGamepad?.buttonX.preferredSystemGestureState = .disabled
     c.extendedGamepad?.buttonY.preferredSystemGestureState = .disabled
-  }
-}
-
-/// Sets up pause gesture handlers for all currently connected controllers
-func setupPauseGestureHandlers() {
-  for controller in GCController.controllers() {
-    setupPauseGestureHandler(for: controller)
-  }
-}
-
-/// Sets up pause gesture handler for a specific controller
-/// Supports multiple pause gesture combinations:
-/// - L1+R1+L2+R2+Menu (for controllers with Menu button)
-/// - L1+R1+L2+R2 held for 2 seconds (for controllers without Menu button)
-/// - L1+R1+Options (for controllers with Options button but no Menu)
-func setupPauseGestureHandler(for controller: GCController) {
-  // The pause gesture handling is already implemented in installInputDebugHandlers
-  // in ControllerExtensions.swift, so we just need to ensure it's called
-  installExtraInputHandlers(controller)
-
-  // Also ensure Menu button is mapped to Start for controllers that have it
-  if let extendedGamepad = controller.extendedGamepad {
-    if #available(iOS 14, tvOS 14.0, *) {
-      // Ensure Menu button preference is set to always receive
-      extendedGamepad.buttonMenu.preferredSystemGestureState = .disabled
-    }
-  }
-
-  if let microGamepad = controller.microGamepad {
-    if #available(iOS 14, tvOS 14.0, *) {
-      // Ensure Menu button preference is set to always receive for micro gamepad too
-      microGamepad.buttonMenu.preferredSystemGestureState = .disabled
-    }
   }
 }
