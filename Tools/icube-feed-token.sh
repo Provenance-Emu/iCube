@@ -22,6 +22,17 @@
 # argument (argv is world-readable in `ps`). It lives in one shell variable and
 # reaches `gh` and `curl` only on stdin or through the environment.
 #
+# What kind of token this needs
+# -----------------------------
+# GitHub's REST docs for "Create a repository dispatch event" document exactly
+# one working configuration: a CLASSIC personal access token with the `repo`
+# scope. They list no fine-grained permission for the endpoint at all. A
+# fine-grained PAT with both repositories in its access list and
+# `Contents: Read and write` is the commonly reported equivalent and is worth
+# trying first for least privilege -- `check` makes a wrong guess cost one
+# command rather than a broken deploy -- but if it returns 403, the classic
+# token is the documented path, not a workaround.
+#
 # Usage
 #   Tools/icube-feed-token.sh status     # what is deployed and whether it is current
 #   Tools/icube-feed-token.sh fields     # field names on the 1Password item (no values)
@@ -144,8 +155,13 @@ try_dispatch() {
   fi
   case "$out" in
     *403*|*"not accessible"*)
-      bad "${repo}: 403 — token lacks the required permission"
-      warn "  grant 'Contents: Read and write' on the token" ;;
+      bad "${repo}: 403 — the token can see the repo but is not permitted to dispatch"
+      warn "  GitHub documents only ONE configuration for this endpoint:"
+      warn "  a CLASSIC personal access token with the 'repo' scope."
+      warn "  Fine-grained PATs have no documented permission for it; 'Contents:"
+      warn "  Read and write' is the commonly reported answer but is a guess."
+      warn "  Try that first (this script re-tests cheaply); if it still 403s,"
+      warn "  use a classic token with 'repo'." ;;
     *404*|*"Not Found"*)
       bad "${repo}: 404 — repo is not in the token's repository access list"
       warn "  add ${repo} under 'Repository access'" ;;
