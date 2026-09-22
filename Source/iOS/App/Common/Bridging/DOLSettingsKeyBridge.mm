@@ -231,6 +231,36 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
       ^(id v){ [DOLConfigBridge setCirBlockLinkingValidate:CoerceBool(v)]; },
       MakeLayerGetter(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE), MakeResetBlock(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE.GetLocation()));
 
+    // iCube: FP / paired-single dispatch specialization. All default-OFF and
+    // independently A/B-able by design, but they were unreachable from the bench,
+    // so the one measurement that would justify turning them on could not be run.
+    // Profiling NFS Underground put 18.7%% of dynamic dispatch in the GENERIC
+    // 2-call FP+PS bucket these exist to eliminate.
+    t[@"cirSpecializedOps"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirSpecializedOps]); },
+      ^(id v){ [DOLConfigBridge setCirSpecializedOps:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_OPS), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_OPS.GetLocation()));
+
+    t[@"cirSpecializedOpsValidate"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirSpecializedOpsValidate]); },
+      ^(id v){ [DOLConfigBridge setCirSpecializedOpsValidate:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE.GetLocation()));
+
+    t[@"cirSpecializedFpLs"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirSpecializedFpLs]); },
+      ^(id v){ [DOLConfigBridge setCirSpecializedFpLs:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_FP_LS), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_FP_LS.GetLocation()));
+
+    t[@"cirSpecializedFpArith"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirSpecializedFpArith]); },
+      ^(id v){ [DOLConfigBridge setCirSpecializedFpArith:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_FP_ARITH), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_FP_ARITH.GetLocation()));
+
+    t[@"cirSpecializedPsq"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirSpecializedPsq]); },
+      ^(id v){ [DOLConfigBridge setCirSpecializedPsq:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_PSQ), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_PSQ.GetLocation()));
+
     t[@"cirDynLinking"] = mk(DOLSettingTypeBool, NO,
       ^id{ return @([DOLConfigBridge cirDynLinking]); },
       ^(id v){ [DOLConfigBridge setCirDynLinking:CoerceBool(v)]; },
