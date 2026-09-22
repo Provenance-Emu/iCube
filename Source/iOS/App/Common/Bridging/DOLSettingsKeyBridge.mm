@@ -482,10 +482,14 @@ static NSString* TypeName(DOLSettingType type) {
   NSMutableDictionary<NSString*, NSDictionary<NSString*, id>*>* out =
     [NSMutableDictionary dictionaryWithCapacity:table.count];
   [table enumerateKeysAndObjectsUsingBlock:^(NSString* key, DOLSettingEntry* e, BOOL* stop) {
-    id baseValue = e.layerGetter(Config::LayerType::Base);
-    id globalGameValue = e.layerGetter(Config::LayerType::GlobalGame);
-    id perGameValue = e.layerGetter(Config::LayerType::LocalGame);
-    id currentRunValue = e.layerGetter(Config::LayerType::CurrentRun);
+    // layerGetter is nil for keys with no Config layer stack behind them (the
+    // UserDefaults-backed ones). Calling a nil block crashes, so ask once and
+    // report no layers rather than assuming every key is Config-backed.
+    DOLLayerGetterBlock lg = e.layerGetter;
+    id baseValue = lg ? lg(Config::LayerType::Base) : nil;
+    id globalGameValue = lg ? lg(Config::LayerType::GlobalGame) : nil;
+    id perGameValue = lg ? lg(Config::LayerType::LocalGame) : nil;
+    id currentRunValue = lg ? lg(Config::LayerType::CurrentRun) : nil;
 
     NSMutableDictionary<NSString*, id>* layers = [NSMutableDictionary dictionaryWithCapacity:4];
     if (baseValue != nil) layers[@"Base"] = baseValue;
