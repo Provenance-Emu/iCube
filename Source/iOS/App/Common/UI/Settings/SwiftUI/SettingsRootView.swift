@@ -6,6 +6,7 @@ import UIKit
 import CoreHaptics
 import QuartzCore
 import PVWebServer
+import PVHelp
 #if os(iOS)
 import SafariServices
 import AudioToolbox
@@ -433,19 +434,13 @@ struct SettingsRootView<Background: View>: View {
           NavigationLink(destination: DolphinBlogView()) {
             Label(L("Dolphin Blog"), systemImage: "newspaper")
           }
-#if os(tvOS)
-          NavigationLink(destination: HelpPlaceholderView()) {
+          // In-app documentation browser (bundled + cached, works offline and on tvOS — see
+          // WikiHelpView). Was previously a tvOS-only "TODO" stub plus an iOS-only external
+          // link to icube-emu.com/support; both platforms now share the same real content.
+          NavigationLink(destination: WikiHelpView()) {
             Label(L("Help"), systemImage: "questionmark.circle")
+              .accessibilityLabel(L("Help"))
           }
-#else
-          Button {
-            if let url = URL(string: "https://icube-emu.com/support") {
-              openURL(url)
-            }
-          } label: {
-            Label(L("Help"), systemImage: "questionmark.circle")
-          }
-#endif
         }
 
         // Network
@@ -1448,15 +1443,14 @@ struct DebugRootView: View {
         }
         #endif
 
-        settingsCaption(
-          Button(L("JIT Setup Guide")) {
-            #if os(iOS)
-            if let url = URL(string: "https://icube-emu.com/guide/jit/") {
-              UIApplication.shared.open(url)
-            }
-            #endif
-          },
-          L("What JIT does, why iOS 26 needs a debugger to switch it on, and what to expect without it."))
+        // In-app (not Safari): works on tvOS and offline, since the guide is bundled — see
+        // WikiContentProvider. Was previously an external-only link to icube-emu.com/guide/jit/.
+        settingsNavCaption(
+          destination: WikiPageView(path: WikiConstants.Paths.jitGuide, title: L("JIT Setup Guide")),
+          L("What JIT does, why iOS 26 needs a debugger to switch it on, and what to expect without it.")
+        ) {
+          Text(L("JIT Setup Guide"))
+        }
 
         HStack { Text(L("Fastmem")); Spacer(); Text(fastmemAvailable ? L("Available") : L("Not Available")).foregroundStyle(.secondary) }
       }
@@ -1740,15 +1734,6 @@ struct AboutView: View {
   }
 }
 
-#if os(tvOS)
-struct HelpPlaceholderView: View {
-  var body: some View {
-    List { Text(L("TODO: Help content for tvOS")) }
-      .navigationTitle(L("Help"))
-  }
-}
-#endif
-
 // MARK: - Config General (wired)
 
 struct ConfigGeneralView: View {
@@ -2019,6 +2004,7 @@ private struct HelpSheetButton: View {
   @State private var showing = false
   var body: some View {
     Button { showing = true } label: { Image(systemName: "info.circle") }
+      .accessibilityLabel(L("Help"))
       .sheet(isPresented: $showing) {
         NavigationStack {
           ScrollView { Text(text).padding() }

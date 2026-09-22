@@ -293,6 +293,7 @@ let iCube = Target.target(
         // tvOS slice and fail. Condition keeps iOS linking byte-for-byte unchanged.
         .xcframework(path: "../../../Externals/MoltenVK-iOS/MoltenVK.xcframework", condition: .when([.ios])),
         .package(product: "PVWebServer"),
+        .package(product: "PVHelp"),
         .package(product: "Zip"),
         .package(product: "PLzmaSDK"),
         .package(product: "SWCompression"),
@@ -523,6 +524,7 @@ let project = Project(
     ),
     packages: [
         .local(path: "../PVWebServer"),
+        .local(path: "../PVHelp"),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         .remote(url: "https://github.com/OlehKulykov/PLzmaSDK.git", requirement: .upToNextMajor(from: "1.6.1")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),

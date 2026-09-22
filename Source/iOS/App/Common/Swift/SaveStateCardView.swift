@@ -1,9 +1,13 @@
 import SwiftUI
 import UIKit
+import PVHelp
 
 struct SaveStateCardView: View {
   let state: SaveStateInfo
   let thumbnail: UIImage?
+  /// Explains why a save state is version-incompatible and can't be safely loaded, instead of
+  /// leaving the red "Incompatible" badge as an unexplained dead end.
+  @State private var showIncompatibleHelp = false
 
   var body: some View {
     ZStack(alignment: .bottomLeading) {
@@ -55,7 +59,13 @@ struct SaveStateCardView: View {
             Badge(text: "Slot \(slot)")
           }
           if !state.isCompatible {
-            Badge(text: "Incompatible", color: .red)
+            Button {
+              showIncompatibleHelp = true
+            } label: {
+              Badge(text: "Incompatible", color: .red)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("Incompatible save state. Tap for details."))
           }
           Text(timestampString)
             .font(.subheadline)
@@ -63,6 +73,16 @@ struct SaveStateCardView: View {
         }
       }
       .padding(12)
+    }
+    .sheet(isPresented: $showIncompatibleHelp) {
+      NavigationStack {
+        WikiPageView(path: WikiConstants.Paths.saveStateCompatibility, title: L("Save State Compatibility"))
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button(L("Close")) { showIncompatibleHelp = false }
+            }
+          }
+      }
     }
   }
 
