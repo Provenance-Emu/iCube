@@ -308,6 +308,46 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
       ^(id v){ [DOLConfigBridge setMainEmulationSpeedPercent:CoerceInt(v)]; },
       MakeLayerGetter(Config::MAIN_EMULATION_SPEED), MakeResetBlock(Config::MAIN_EMULATION_SPEED.GetLocation()));
 
+    // iCube: the emulated-CPU and VBI clock levers, plus the adaptive controller that
+    // drives them. Exposed so the perf bench can A/B the single most impactful perf
+    // setting there is -- without these, diagnosing "reads 100% speed but the game
+    // renders 25fps" needed hand-toggling in Settings. CoreTimingManager::RefreshConfig
+    // is registered as a config-changed callback (CoreTiming.cpp:108), so the four
+    // Config-backed keys apply live.
+    t[@"mainOverclockEnable"] = mk(DOLSettingTypeBool, YES,
+      ^id{ return @([DOLConfigBridge mainOverclockEnable]); },
+      ^(id v){ [DOLConfigBridge setMainOverclockEnable:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_OVERCLOCK_ENABLE), MakeResetBlock(Config::MAIN_OVERCLOCK_ENABLE.GetLocation()));
+
+    t[@"mainOverclockPercent"] = mk(DOLSettingTypeInt, YES,
+      ^id{ return @([DOLConfigBridge mainOverclockPercent]); },
+      ^(id v){ [DOLConfigBridge setMainOverclockPercent:CoerceInt(v)]; },
+      MakeLayerGetter(Config::MAIN_OVERCLOCK), MakeResetBlock(Config::MAIN_OVERCLOCK.GetLocation()));
+
+    t[@"mainViOverclockEnable"] = mk(DOLSettingTypeBool, YES,
+      ^id{ return @([DOLConfigBridge mainViOverclockEnable]); },
+      ^(id v){ [DOLConfigBridge setMainViOverclockEnable:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_VI_OVERCLOCK_ENABLE), MakeResetBlock(Config::MAIN_VI_OVERCLOCK_ENABLE.GetLocation()));
+
+    t[@"mainViOverclockPercent"] = mk(DOLSettingTypeInt, YES,
+      ^id{ return @([DOLConfigBridge mainViOverclockPercent]); },
+      ^(id v){ [DOLConfigBridge setMainViOverclockPercent:CoerceInt(v)]; },
+      MakeLayerGetter(Config::MAIN_VI_OVERCLOCK), MakeResetBlock(Config::MAIN_VI_OVERCLOCK.GetLocation()));
+
+    // NSUserDefaults-backed, not Config: the adaptive loop reads this key directly
+    // (EmulationCoordinator.mm:748) and takes ownership of both clock levers while it
+    // runs, so a sweep over the four keys above is only meaningful with this OFF.
+    // It is read when the loop arms at boot, hence hotSwappable = NO. No layer getter:
+    // there is no Config layer stack behind a UserDefault.
+    t[@"adaptiveClockEnable"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([[NSUserDefaults standardUserDefaults] boolForKey:@"adaptive_clock_enable"]); },
+      ^(id v){ [[NSUserDefaults standardUserDefaults] setBool:CoerceBool(v) forKey:@"adaptive_clock_enable"]; },
+      nil,
+      ^BOOL{
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"adaptive_clock_enable"];
+        return YES;
+      });
+
     t[@"audioVolume"] = mk(DOLSettingTypeInt, YES,
       ^id{ return @([DOLConfigBridge audioVolume]); },
       ^(id v){ [DOLConfigBridge setAudioVolume:CoerceInt(v)]; },

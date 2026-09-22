@@ -30,6 +30,7 @@
 #include "Core/IOS/USB/Emulated/Skylanders/SkylanderFigure.h"
 #include <atomic>
 #import <iCube-Swift.h>
+#import "EmulationCoordinator.h"
 
 // Extern DSU client RX counter for DEBUG HUD (defined in DualShockUDPClient.cpp)
 namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g_rx_counter; } }
@@ -902,6 +903,16 @@ static bool ICubeEmulationActive() {
 
 + (void)resetGameplayUserDefaults {
   NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
+  // Stop the adaptive-clock loop BEFORE clearing its keys. Removing
+  // `adaptive_clock_enable` does not cancel an already-armed timer: the loop is
+  // guarded by `_adaptiveClockTimer` existing (EmulationCoordinator.mm:695), not by
+  // re-reading the preference, so a reset during a running game left the controller
+  // alive and still writing CurrentRun clock values underneath the freshly-reset
+  // config. Observed as "I reset settings and the CPU clock is still 70%".
+  // setAdaptiveClockEnabled:NO cancels the timer and clears the CurrentRun keys the
+  // controller owns; the removeObjectForKey below then leaves the preference absent
+  // rather than explicitly false, so the app-side default applies again.
+  [[EmulationCoordinator shared] setAdaptiveClockEnabled:NO];
   // Removing a key makes the app-side default apply again, e.g. the vertex loader
   // defaults to NEON when icube_vertex_loader_mode is unset (EmulationCoordinator
   // ICubeJitlessVertexLoaderType), and triple-buffering defaults to true.

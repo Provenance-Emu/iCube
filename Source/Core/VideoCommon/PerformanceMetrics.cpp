@@ -10,11 +10,20 @@
 
 #include "Common/HookableEvent.h"
 #include "Core/Config/GraphicsSettings.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/StallMetrics.h"
 #include "VideoCommon/VideoConfig.h"
+
+namespace
+{
+// Below this emulated-CPU clock the guest is slow enough that a player will read it as
+// "running badly" regardless of what the throttle-relative Speed% says. Used only to pick
+// the overlay colour; the clock is shown for any value under native.
+constexpr float kLowClockWarnFactor = 0.85f;
+}  // namespace
 
 PerformanceMetrics::PerformanceMetrics()
 {
@@ -429,6 +438,24 @@ void PerformanceMetrics::DrawImGuiStats(const float backbuffer_scale)
       clamp_window_position();
       ImGui::TextColored(ImVec4(r, g, b, 1.0f), "Speed:%4.0lf%%", 100.0 * speed);
       ImGui::TextColored(ImVec4(r, g, b, 1.0f), "Max:%6.0lf%%", 100.0 * GetMaxSpeed());
+
+      // iCube: "Speed" is throttle-relative, so underclocking the emulated CPU keeps it
+      // pinned at 100% while the GAME starves -- its logic and internal framerate run slow
+      // because the guest CPU is slow, which reads as "100% speed but it looks worse than
+      // real hardware". The adaptive-clock controller settles wherever the host can hold
+      // full speed, so on a CPU-bound title it can silently converge well under 1.0 and
+      // still report success. Surface the clock whenever it is not native, so a low settle
+      // is visible rather than something you have to go diffing CoreTiming to discover.
+      const bool cpu_oc_on = Config::Get(Config::MAIN_OVERCLOCK_ENABLE);
+      const float cpu_oc = cpu_oc_on ? Config::Get(Config::MAIN_OVERCLOCK) : 1.0f;
+      if (cpu_oc_on && cpu_oc < 0.995f)
+      {
+        // Amber below native, red once the guest is slow enough to be plainly wrong.
+        const bool severe = cpu_oc < kLowClockWarnFactor;
+        ImGui::TextColored(severe ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f) : ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+                           "CPU:%5.0lf%%%s", 100.0 * cpu_oc,
+                           PerformanceMetrics::GetAdaptiveClockActive() ? " auto" : "");
+      }
     }
     ImGui::End();
   }
