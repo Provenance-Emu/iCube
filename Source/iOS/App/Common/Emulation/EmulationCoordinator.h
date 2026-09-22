@@ -53,11 +53,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)applyOverscanCompensationPreference;
 
 /// Ensures GameCube Pad 1 is bound to the iOS Touchscreen when no default device is connected.
-/// Also provides auto-assignment for newly connected external controllers.
+///
+/// Auto-assignment of external controllers is NOT here any more: it hardcoded
+/// `isWii:NO`, so during a Wii game it only ever touched GC pad config and
+/// silently no-opped on Wiimote config. All assignment policy now lives in the
+/// Swift `AssignmentEngine`, reached via `ControllerManager.reconcile()`.
 + (void)ensurePad1DefaultsToTouchscreen;
-/// Assign the most recently connected external controller to the first available player slot
-/// that is not already bound to a connected physical controller (ignores touchscreen bindings).
-+ (void)autoAssignNewestExternalControllerToFirstAvailableSlot;
 
 // Ensure a given Wiimote port (1-based) is set to Emulated and uses the iOS Touchscreen profile
 + (void)ensureWiimoteDefaultsToTouchscreenForPort:(NSInteger)portOneBased;

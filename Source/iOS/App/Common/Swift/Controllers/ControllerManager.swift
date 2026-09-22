@@ -49,6 +49,7 @@ final class ControllerManager: NSObject, ObservableObject {
   private let controllerDisconnectedSubject = PassthroughSubject<GCController?, Never>()
   private let fastForwardToggledSubject = PassthroughSubject<Bool, Never>()
   private var isObserving = false
+  private var isReconciling = false
 
   var controllerConnectedPublisher: AnyPublisher<GCController, Never> { controllerConnectedSubject.eraseToAnyPublisher() }
   var controllerDisconnectedPublisher: AnyPublisher<GCController?, Never> { controllerDisconnectedSubject.eraseToAnyPublisher() }
@@ -114,11 +115,11 @@ final class ControllerManager: NSObject, ObservableObject {
         // restore it to its original slot; otherwise auto-assign to the first
         // free slot. Either way, clear the pause + dismiss the banner + resume.
         if let pending = self.disconnectPause {
+          // Restoring the *original* slot is knowledge reconcile() does not
+          // have (the binding was already cleared), so it is written here and
+          // the reconcile below leaves it alone because the device is now bound.
           if TVControllerMappingBridge.qualifiedName(for: c) as String == pending.qualifier {
             self.assignmentService.assign(qualifier: pending.qualifier, toPlayer: pending.port, system: pending.isWii ? .wii : .gamecube)
-            c.playerIndex = GCControllerPlayerIndex(rawValue: pending.port) ?? .indexUnset
-          } else {
-            EmulationCoordinator.autoAssignNewestExternalControllerToFirstAvailableSlot()
           }
           self.disconnectPause = nil
           TVEmulationBridge.resume()
@@ -127,7 +128,6 @@ final class ControllerManager: NSObject, ObservableObject {
           self.reconcile()
           return
         }
-        EmulationCoordinator.autoAssignNewestExternalControllerToFirstAvailableSlot()
         self.updateWiimoteEmulationForExternalControllers()
         // Battery toast if available
         if #available(iOS 14.0, tvOS 14.0, *), let battery = c.battery {
@@ -168,16 +168,15 @@ final class ControllerManager: NSObject, ObservableObject {
       self.updateWiimoteEmulationForExternalControllers()
     }
     // Boot auto-assign: controllers already connected when a game starts never
-    // fire GCControllerDidConnect, so assign the newest one here. This runs after
-    // the ControllerInterface is initialized (the notification is posted once the
+    // fire GCControllerDidConnect, so reconcile here. This runs after the
+    // ControllerInterface is initialized (the notification is posted once the
     // core reaches Running/Paused, after UICommon::InitControllers), which is the
-    // only point the bridge can produce valid device qualifiers.
+    // only point the bridge can produce valid device qualifiers — and the only
+    // point `isCurrentSystemWii()` is meaningful, which is what lets the engine
+    // put controllers on Wiimote slots for a Wii title.
     let onEmulationStart = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { [weak self] _ in
       guard let self = self else { return }
       self.configureAllControllersForCurrentPlatform()
-      if !GCController.controllers().isEmpty {
-        EmulationCoordinator.autoAssignNewestExternalControllerToFirstAvailableSlot()
-      }
       self.updateWiimoteEmulationForExternalControllers()
       self.reconcile()
     }
@@ -293,17 +292,54 @@ final class ControllerManager: NSObject, ObservableObject {
 
   // MARK: Reconcile
 
+  /// The one place controller assignment is decided and applied.
+  ///
+  /// Sequence: drop bindings to devices that have gone away (mechanical, in
+  /// C++), snapshot, let `AssignmentEngine` decide, apply every decision through
+  /// `ControllerAssignmentService`, then mirror the result onto `playerIndex`.
+  /// The engine is idempotent, so calling this repeatedly is free and port
+  /// assignments stay put across connect/disconnect cycles.
   func reconcile() {
+    // Re-entrancy guard. Connect used to run auto-assign, which called
+    // reconcile, which assigned, which called reconcile again — so one connect
+    // event could decide, re-decide and reassign the same controller several
+    // times before the callback returned.
+    guard !isReconciling else { return }
+    isReconciling = true
+    defer { isReconciling = false }
+
     TVControllerMappingBridge.reconcileAssignments()
 
     let state = ControllerStateStore.shared.snapshot()
-    let decision = AssignmentEngine().decide(from: state)
-    if let p = decision.reassignPortOneBased {
-      // Route through the service so the chosen GC slot is activated, not just bound.
-      assignmentService.assignTouchscreen(toPlayer: p - 1, system: .gamecube)
+    for assignment in AssignmentEngine().decide(from: state).assignments {
+      if let qualifier = assignment.qualifier {
+        assignmentService.assign(qualifier: qualifier,
+                                 toPlayer: assignment.playerZeroBased,
+                                 system: assignment.system)
+      } else {
+        assignmentService.assignTouchscreen(toPlayer: assignment.playerZeroBased,
+                                            system: assignment.system)
+      }
     }
 
+    syncPlayerIndices()
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
+  }
+
+  /// The **only** writer of `GCController.playerIndex`.
+  ///
+  /// It is derived from the config bindings rather than set alongside them, so
+  /// the player LED can never disagree with the port the device is actually
+  /// bound to. Four scattered `playerIndex =` writes (three here, one in
+  /// `TVControllerMappingBridge`) used to drift out of sync with the config.
+  private func syncPlayerIndices() {
+    for controller in GCController.controllers() {
+      if let slot = assignedSlot(for: controller) {
+        controller.playerIndex = GCControllerPlayerIndex(rawValue: slot.port) ?? .indexUnset
+      } else {
+        controller.playerIndex = .indexUnset
+      }
+    }
   }
 
   // MARK: Assign
@@ -314,26 +350,7 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   func assign(_ controller: GCController, toGCPort portOneBased: Int) {
-    let qualifier = TVControllerMappingBridge.qualifiedName(for: controller)
-    if qualifier.isEmpty {
-      // Fallback path retains the bridge's first-connected-MFi heuristic; still
-      // activate the port so ports 2-4 produce input.
-      assignmentService.activate(port: portOneBased - 1, system: .gamecube)
-      TVControllerMappingBridge.assign(controller, toGCPort: portOneBased)
-    } else {
-      assignmentService.assign(qualifier: qualifier, toPlayer: portOneBased - 1, system: .gamecube)
-    }
-    controller.playerIndex = GCControllerPlayerIndex(rawValue: portOneBased - 1) ?? .indexUnset
-    reconcile()
-  }
-
-  /// ObjC-callable assignment that routes through the service (activate + bind +
-  /// profile + save). Used by the C++ auto-assign path so slots 2-4 get activated.
-  /// `portZeroBased` is 0-based (Pad controller index).
-  @objc func assignViaService(qualifier: String, toPort portZeroBased: Int, isWii: Bool) {
-    let system: EmulatedSystem = isWii ? .wii : .gamecube
-    assignmentService.assign(qualifier: qualifier, toPlayer: portZeroBased, system: system)
-    reconcile()
+    assign(controller, toPlayer: portOneBased - 1, system: .gamecube)
   }
 
   // MARK: Wii assign wrappers (mirror the GC wrappers; add reconcile + notification)
@@ -344,13 +361,25 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   func assign(_ controller: GCController, toWiimote indexOneBased: Int) {
-    let qualifier = TVControllerMappingBridge.qualifiedName(for: controller)
-    if qualifier.isEmpty {
-      assignmentService.activate(port: indexOneBased - 1, system: .wii)
-    } else {
-      assignmentService.assign(qualifier: qualifier, toPlayer: indexOneBased - 1, system: .wii)
+    assign(controller, toPlayer: indexOneBased - 1, system: .wii)
+  }
+
+  /// Shared body of the explicit (user-driven) assign wrappers.
+  ///
+  /// The bridge-qualifier fallback that used to live here — activate the port,
+  /// then let `TVControllerMappingBridge.assign(_:toGCPort:)` pick "the first
+  /// connected MFi device" — was one of the six competing writers and bound a
+  /// device the user had not chosen. It is gone: if the ControllerInterface has
+  /// not enumerated this controller yet there is nothing meaningful to bind, so
+  /// the assignment is refused loudly instead of guessing.
+  private func assign(_ controller: GCController, toPlayer portZeroBased: Int, system: EmulatedSystem) {
+    let qualifier = TVControllerMappingBridge.qualifiedName(for: controller) as String
+    guard !qualifier.isEmpty else {
+      NSLog("[INPUT] Cannot assign %@ to player %d: no ControllerInterface device yet",
+            controller.vendorName ?? "controller", portZeroBased + 1)
+      return
     }
-    controller.playerIndex = GCControllerPlayerIndex(rawValue: indexOneBased - 1) ?? .indexUnset
+    assignmentService.assign(qualifier: qualifier, toPlayer: portZeroBased, system: system)
     reconcile()
   }
 

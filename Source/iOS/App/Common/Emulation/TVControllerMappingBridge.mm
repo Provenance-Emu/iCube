@@ -91,40 +91,6 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
   return [NSString stringWithUTF8String:qualifier.c_str()];
 }
 
-+ (void)assignController:(GCController*)controller toGCPort:(NSInteger)portOneBased
-{
-  if (portOneBased < 1 || portOneBased > 4)
-    return;
-
-  NSString* q = [self qualifiedNameForController:controller];
-  if (q.length == 0)
-  {
-    // Fallback: if we cannot match the specific GCController, pick the first connected MFi device
-    const auto devices = g_controller_interface.GetAllDevices();
-    for (const auto& dev : devices)
-    {
-      if (dev && dev->GetSource() == std::string("MFi") && !IsDisconnectedPlaceholder(dev)) { q = [NSString stringWithUTF8String:dev->GetQualifiedName().c_str()]; break; }
-    }
-    if (q.length == 0)
-      return;
-  }
-
-  auto* cfg = Pad::GetConfig();
-  if (!cfg)
-    return;
-  const int port = static_cast<int>(portOneBased - 1);
-  auto* pad = cfg->GetController(port);
-  if (!pad)
-    return;
-  pad->SetDefaultDevice([q UTF8String]);
-  // Load default bindings for this device, then refresh references
-  pad->LoadDefaults(g_controller_interface);
-  pad->UpdateReferences(g_controller_interface);
-  Pad::GetConfig()->SaveConfig();
-
-  controller.playerIndex = (GCControllerPlayerIndex)port;
-}
-
 + (NSString*)defaultDeviceForGCPort:(NSInteger)portOneBased
 {
   auto* cfg = Pad::GetConfig();
@@ -189,69 +155,14 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
     }
   }
 
-  // Unified policy:
-  // 1) If any port has a connected physical device assigned, respect user assignments and stop.
-  // 2) Otherwise, if a physical device is connected, assign it to Pad 1.
-  // 3) Otherwise, assign Touchscreen to Pad 1.
-
-  bool any_connected_physical_assigned = false;
-  for (int i = 0; i < count && !any_connected_physical_assigned; ++i)
-  {
-    auto* pad = cfg->GetController(i);
-    if (!pad) continue;
-    const auto dq = pad->GetDefaultDevice();
-    const bool is_touch = (dq.source == "iOS" && dq.name == "Touchscreen");
-    if (!is_touch && connected_qnames.find(dq.ToString()) != connected_qnames.end())
-      any_connected_physical_assigned = true;
-  }
-
-  if (any_connected_physical_assigned)
-  {
-    if (did_mutate) Pad::GetConfig()->SaveConfig();
-    return;
-  }
-
-  // Try to find a connected physical device to assign to Pad 1
-  std::shared_ptr<ciface::Core::Device> candidate_physical;
-  for (const auto& dev : devices)
-  {
-    if (!dev || IsDisconnectedPlaceholder(dev))
-      continue;
-    const std::string src = dev->GetSource();
-    if (!(src == "MFi" || src == "DSUClient"))
-      continue;
-    // Skip if already assigned anywhere
-    ciface::Core::DeviceQualifier dq_new; dq_new.FromDevice(dev.get());
-    bool already = false;
-    for (int i = 0; i < count; ++i)
-    {
-      auto* pad = cfg->GetController(i);
-      if (pad && pad->GetDefaultDevice() == dq_new) { already = true; break; }
-    }
-    if (!already) { candidate_physical = dev; break; }
-  }
-
-  if (candidate_physical)
-  {
-    auto* pad1 = cfg->GetController(0);
-    if (pad1)
-    {
-      ciface::Core::DeviceQualifier dq_new; dq_new.FromDevice(candidate_physical.get());
-      if (!(pad1->GetDefaultDevice() == dq_new))
-      {
-        pad1->SetDefaultDevice(dq_new);
-        pad1->LoadDefaults(g_controller_interface);
-        pad1->UpdateReferences(g_controller_interface);
-        did_mutate = true;
-      }
-    }
-    if (did_mutate) Pad::GetConfig()->SaveConfig();
-    return;
-  }
-
-  // No physicals connected: ensure Touchscreen on Pad 1
-  [self assignTouchscreenToGCPort:1];
-  // assignTouchscreenToGCPort saves config
+  // NO POLICY HERE. Choosing which device owns which port is the Swift
+  // AssignmentEngine's job; this method only removes bindings that point at
+  // devices the ControllerInterface no longer enumerates, so the engine sees an
+  // accurate snapshot. The three competing auto-assign policies that used to
+  // live below this line (and in EmulationCoordinator) were the reason a single
+  // connect event could assign, re-decide and reassign the same controller.
+  if (did_mutate)
+    Pad::GetConfig()->SaveConfig();
 }
 
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased

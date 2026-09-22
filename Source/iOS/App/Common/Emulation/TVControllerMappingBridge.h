@@ -22,15 +22,15 @@ extern NSString* const TVControllerDevicesChangedNotification;
 @interface TVControllerMappingBridge : NSObject
 
 + (NSString*)qualifiedNameForController:(GCController*)controller NS_SWIFT_NAME(qualifiedName(for:));
-+ (void)assignController:(GCController*)controller toGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assign(_:toGCPort:));
 + (NSString*)defaultDeviceForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(defaultDevice(forGCPort:));
 + (void)clearDefaultDeviceForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(clearDefaultDevice(forGCPort:));
 
 /// Assign the iOS Touchscreen virtual device as the default device for a GC port.
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
 
-/// Reconciles default devices against currently connected controllers, removing phantom devices
-/// and reassigning Player 1 to a connected controller when possible.
+/// Mechanical only: drops default-device bindings that point at devices the
+/// ControllerInterface no longer enumerates, so the Swift AssignmentEngine sees
+/// an accurate snapshot. This never chooses a port and never assigns a device.
 + (void)reconcileAssignments;
 
 /// Enumerate all input devices' qualified names that are valid for mapping (iOS, MFi, DSU)
