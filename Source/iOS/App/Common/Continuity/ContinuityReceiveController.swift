@@ -186,33 +186,80 @@ final class ContinuityReceiveController: ObservableObject {
         pulled: ContinuityFallbackMachine.PulledArtifacts,
         manifest: ContinuityManifest? = nil
     ) async {
-        let local: ContinuityFallbackMachine.LocalCapability
-        if let identity, let match = await library.resolveLocalGame(identity) {
-            local = .gameAvailable(hasLocalSaveState: match.hasLocalSaveState)
-        } else {
-            local = .gameMissing
+        // Resolved ONCE and passed down. Each resolution walks the whole
+        // library on the main actor, and this used to happen twice per handoff.
+        var localMatch: LocalGameMatch?
+        if let identity {
+            localMatch = await library.resolveLocalGame(identity)
         }
 
-        let outcome = ContinuityFallbackMachine.outcome(
+        let local: ContinuityFallbackMachine.LocalCapability = localMatch.map {
+            .gameAvailable(hasLocalSaveState: $0.hasLocalSaveState)
+        } ?? .gameMissing
+
+        var outcome = ContinuityFallbackMachine.outcome(
             failedAt: stage, error: error, local: local, pulled: pulled
         )
-        phase = .finished(outcome)
 
-        await apply(outcome, identity: identity, manifest: manifest)
+        // The boot path is resolved BEFORE the outcome is published, because a
+        // non-failed outcome with nothing to boot is exactly the silent stub
+        // this feature must never produce: the UI would say "starting where the
+        // other device left off" and then nothing would happen.
+        let bootPath = resolveBootPath(outcome: outcome, manifest: manifest, localMatch: localMatch)
+        if bootPath == nil, !Self.isFailure(outcome) {
+            // Do NOT overwrite an existing failure: the ladder's reason is more
+            // specific than "game not found" and is what the user needs to see.
+            outcome = .failed(.gameNotFoundLocally)
+        }
+
+        phase = .finished(outcome)
+        if let bootPath {
+            apply(outcome, bootPath: bootPath, manifest: manifest)
+        }
+    }
+
+    /// Where the game to boot actually is.
+    ///
+    /// The manifest's own `gameFile` descriptor comes FIRST, because the case
+    /// this feature exists for is a receiver that did not have the game: it has
+    /// just pulled the disc image to the manifest's path, and asking the library
+    /// cache about it would come back nil — the cache has not been rescanned
+    /// since the file appeared. Falling back to the library match covers the
+    /// receiver that already owned the game (its disc image may sit anywhere,
+    /// including outside the User directory).
+    private static func isFailure(_ outcome: ContinuityOutcome) -> Bool {
+        if case .failed = outcome { return true }
+        return false
+    }
+
+    private func resolveBootPath(
+        outcome: ContinuityOutcome,
+        manifest: ContinuityManifest?,
+        localMatch: LocalGameMatch?
+    ) -> String? {
+        guard !Self.isFailure(outcome) else { return nil }
+
+        if let relative = manifest?.allDescriptors.first(where: { $0.kind == .gameFile })?.relativePath {
+            let absolute = ContinuityPaths.absoluteURL(forRelativePath: relative).path
+            if FileManager.default.fileExists(atPath: absolute) { return absolute }
+        }
+        return localMatch?.gameAbsolutePath
     }
 
     /// Turns the ladder's answer into an actual boot.
     ///
-    /// `.failed` deliberately does nothing here: the UI shows the reason. There
-    /// is no "boot something anyway" branch, because booting the wrong thing
-    /// after telling the user a handoff failed is worse than not booting.
+    /// `.failed` never reaches here: the UI shows the reason instead. There is
+    /// no "boot something anyway" branch, because booting the wrong thing after
+    /// telling the user a handoff failed is worse than not booting.
     private func apply(
         _ outcome: ContinuityOutcome,
-        identity: GameIdentity?,
+        bootPath: String,
         manifest: ContinuityManifest?
-    ) async {
-        guard let identity, let match = await library.resolveLocalGame(identity) else { return }
-        let absolutePath = ContinuityPaths.absoluteURL(forRelativePath: match.gameRelativePath).path
+    ) {
+        // A freshly pulled disc image is not in the library cache yet, so the
+        // library would not show it and — more importantly — the boot path has
+        // to be known to the cache for the entry to behave like any other.
+        TVLibraryBridge.updateLibrary(withRemotePaths: [bootPath], fetchMetadata: true)
 
         switch outcome {
         case .proceedWithPulledState, .proceedWithPulledStatePartial:
@@ -220,18 +267,16 @@ final class ContinuityReceiveController: ObservableObject {
                 SaveStateService.pendingBootStatePath =
                     ContinuityPaths.absoluteURL(forRelativePath: statePath).path
             }
-            TVEmulationBridge.launchGame(atPath: absolutePath)
         case .bootWithLatestLocalState:
             // Leave `pendingBootStatePath` unset: the ordinary resume path picks
             // the newest local state, which is exactly this rung's meaning.
             SaveStateService.pendingBootStatePath = nil
-            TVEmulationBridge.launchGame(atPath: absolutePath)
         case .bootFresh:
             SaveStateService.pendingBootStatePath = nil
             SaveStateService.skipResumeOnce = true
-            TVEmulationBridge.launchGame(atPath: absolutePath)
         case .failed:
-            break
+            return
         }
+        TVEmulationBridge.launchGame(atPath: bootPath)
     }
 }

@@ -56,15 +56,25 @@ public protocol SaveStateMinting: Sendable {
 /// A game already present on the receiving device.
 public struct LocalGameMatch: Sendable, Equatable {
     public var strength: IdentityMatchStrength
-    /// User-directory-relative path of the local game file.
-    public var gameRelativePath: String
+    /// **Absolute** path of the local game file — what the caller boots.
+    ///
+    /// Deliberately not User-directory-relative, unlike everything in a
+    /// manifest. A library entry can legitimately live outside the User
+    /// directory (imported in place from Files), and such a path has no
+    /// relative form at all; storing it in a field documented as relative and
+    /// letting the caller join it onto the User root produces a path like
+    /// `<userRoot>/Users/…` that fails at boot with no clue why.
+    ///
+    /// Manifest descriptors keep the relative contract; this one does not, and
+    /// the difference is the point.
+    public var gameAbsolutePath: String
     /// Whether any local save state exists for this game — the
     /// `bootWithLatestLocalState` rung of the fallback ladder depends on it.
     public var hasLocalSaveState: Bool
 
-    public init(strength: IdentityMatchStrength, gameRelativePath: String, hasLocalSaveState: Bool) {
+    public init(strength: IdentityMatchStrength, gameAbsolutePath: String, hasLocalSaveState: Bool) {
         self.strength = strength
-        self.gameRelativePath = gameRelativePath
+        self.gameAbsolutePath = gameAbsolutePath
         self.hasLocalSaveState = hasLocalSaveState
     }
 }

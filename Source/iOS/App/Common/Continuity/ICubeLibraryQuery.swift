@@ -22,12 +22,13 @@ struct ICubeLibraryQuery: LibraryQuerying {
             // never be offered as a boot target.
             guard !item.isDemoItem else { continue }
             guard let strength = identity.match(against: GameIdentity(gameItem: item)) else { continue }
-            guard let relativePath = ContinuityPaths.relativePath(forAbsolutePath: item.filePath)
-                    ?? item.filePath as String? else { continue }
 
+            // The library's own absolute path, passed through untouched. A game
+            // imported in place from Files lives outside the User directory and
+            // has no relative form; it is still perfectly bootable.
             let candidate = LocalGameMatch(
                 strength: strength,
-                gameRelativePath: relativePath,
+                gameAbsolutePath: item.filePath,
                 hasLocalSaveState: Self.hasSaveState(gameID: item.gameID)
             )
             // `IdentityMatchStrength` is Comparable with the strongest case
