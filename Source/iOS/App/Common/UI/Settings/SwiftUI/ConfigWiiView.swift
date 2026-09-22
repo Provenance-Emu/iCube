@@ -219,4 +219,3 @@ private struct WiiAspectRatioPicker: View {
     .navigationTitle(L("Aspect Ratio"))
   }
 }
-

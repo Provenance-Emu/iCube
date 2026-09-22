@@ -298,4 +298,3 @@ struct CoreAudioDSPEditor: View {
   }
 }
 #endif
-

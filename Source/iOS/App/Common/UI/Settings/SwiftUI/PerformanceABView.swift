@@ -199,4 +199,3 @@ struct PerformanceABView: View {
     return "engine \(s.cpuEngine) · \(on) opts on · \(adaptive)"
   }
 }
-

@@ -648,4 +648,3 @@ private struct CpuEnginePicker: View {
     .navigationTitle(L("CPU Emulation Engine"))
   }
 }
-

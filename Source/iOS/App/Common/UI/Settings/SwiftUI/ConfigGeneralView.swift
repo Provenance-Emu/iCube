@@ -193,4 +193,3 @@ private struct FallbackRegionPicker: View {
                             "Sets the region used for titles whose region cannot be determined automatically.<br><br>This setting cannot be changed while emulation is active.") }
   }
 }
-

@@ -163,4 +163,3 @@ struct ConfigAchievementsView: View {
   }
 }
 #endif
-

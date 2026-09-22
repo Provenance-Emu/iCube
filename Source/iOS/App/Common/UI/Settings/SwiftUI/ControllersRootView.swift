@@ -573,4 +573,3 @@ struct TouchIRModePicker: View {
     .navigationTitle(L("Touch IR Pointer"))
   }
 }
-
