@@ -5539,8 +5539,19 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
                 fop.load_off[pairs] = static_cast<s16>(l.inst.SIMM_16);
                 ++pairs;
               }
-              // Below four pairs the guard work is not amortized; leave those to the micro-ops.
-              if (pairs >= 4)
+              // Minimum run length. MEASURED, not guessed: with the threshold at 4 this matcher
+              // emitted ZERO records on NFS: Underground, the title it was written for. Its rank-2
+              // block (0x8025e288, 137M runs, 5.8% of emulated cycles) is
+              //   lbz r0,0(r10) / stb r0,-0x8000(r8)
+              //   lbz r9,2(r10) / stb r9,-0x8000(r8)
+              //   lbz r0,3(r10) / stb r0,-0x8000(r8)
+              //   lbz r0,8(r29) / addi / addi / addi / cmpw / blt
+              // — exactly THREE pipe pairs before the run breaks on a load with a different base
+              // and no store. Three still amortizes: the guards are one page resolve, one BAT
+              // compare and one gather-pipe classify, against three MMIO stores that would each
+              // pay full translation plus MMU::WriteToHardware. Two does not, so the floor stays
+              // above it.
+              if (pairs >= 3)
               {
                 if (s_cir_profile) [[unlikely]]
                   ++s_gp_fused_emitted;
