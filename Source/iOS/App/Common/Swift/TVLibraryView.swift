@@ -651,6 +651,11 @@ struct TVLibraryView: View {
   @State private var emuStartObs: NSObjectProtocol?
   @State private var emuEndObs: NSObjectProtocol?
   /// Previous controller handlers to restore on teardown
+  /// Identity of this screen's controller-ownership scope. The raw nav handlers
+  /// below self-gate on it, so a covering surface (the emulation screen, a
+  /// sheet) silences them even though SwiftUI never sends this view an
+  /// `onDisappear` while it is merely covered.
+  @State private var controllerScopeID = UUID()
   @State private var prevEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
   @State private var prevMGPHandlers: [ObjectIdentifier: (GCMicroGamepad, GCControllerElement) -> Void] = [:]
   @State private var dropTargeted: Bool = false
@@ -1224,6 +1229,7 @@ struct TVLibraryView: View {
             showSources = true
           }
         )) : AnyView(EmptyView()))
+        .controllerScope(controllerScopeID)
         .onAppear {
           emulationRunning = false
           if UserDefaults.standard.bool(forKey: "input_debug") { print("[INPUT][LIB] onAppear: controllers=\(GCController.controllers().count)") }
@@ -2643,6 +2649,7 @@ struct TVLibraryView: View {
 
   private func setupControllerNavigation(columns: Int) {
 #if !os(tvOS)
+    let scope = controllerScopeID
     GCController.shouldMonitorBackgroundEvents = false
     for c in GCController.controllers() {
       installPauseMenuHandlers(c)
@@ -2651,6 +2658,7 @@ struct TVLibraryView: View {
         let cid = ObjectIdentifier(c)
         if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
         egp.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
+          guard ControllerFocusCoordinator.isActiveScope(scope) else { return }
           guard !model.games.isEmpty else { return }
           let index: Int = {
             if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
@@ -2700,6 +2708,7 @@ struct TVLibraryView: View {
         let cid = ObjectIdentifier(c)
         if prevMGPHandlers[cid] == nil { prevMGPHandlers[cid] = mgp.valueChangedHandler }
         mgp.valueChangedHandler = {(gamepad: GCMicroGamepad, element: GCControllerElement) in
+          guard ControllerFocusCoordinator.isActiveScope(scope) else { return }
           guard !model.games.isEmpty else { return }
           let index: Int = {
             if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
