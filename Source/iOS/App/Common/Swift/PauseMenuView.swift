@@ -17,7 +17,7 @@ internal struct PauseMenuView: View {
   let game: TVGameItem
 
   @FocusState private var focused: FocusField?
-  internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, shaders, exit, back, slot(Int), save, load }
+  internal enum FocusField: Hashable { case resume, openSaves, cheats, mapping, settings, shaders, exit, back, slot(Int), save, load, mute, fastForward }
   private enum Pane { case main, saves, cheats, controllers }
   @State private var pane: Pane = .main
   @State private var showExitDialog: Bool = false
@@ -26,6 +26,15 @@ internal struct PauseMenuView: View {
   @State private var showSettingsSheet: Bool = false
   @State private var showControllersSheet: Bool = false
   @State private var showFilmstripSheet: Bool = false
+
+  // Quick actions: the two things people actually reach for mid-game without
+  // wanting to leave the pause menu (mute to take a call, fast-forward past a
+  // cutscene). Kept as plain toggles on the main pane rather than a settings
+  // trip. UserDefaults key remembers the pre-mute volume so unmute restores it
+  // instead of guessing a level.
+  @State private var isMuted: Bool = false
+  @State private var fastForwardEnabled: Bool = false
+  private static let volumeBeforeMuteKey = "icube_pause_menu_volume_before_mute"
 
   /// iOS controller-driven focus index into `iosMenuItems`. iOS has no focus
   /// engine here, so navigation is driven manually from GCController input,
@@ -58,6 +67,18 @@ internal struct PauseMenuView: View {
         TVEmulationBridge.resume()
         onClose()
       },
+      IOSMenuItem(
+        title: isMuted ? L("Unmute") : L("Mute"),
+        subtitle: isMuted ? L("Restore audio volume") : L("Silence audio"),
+        icon: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+        tint: .cyan, role: nil
+      ) { toggleMute() },
+      IOSMenuItem(
+        title: L("Fast Forward"),
+        subtitle: fastForwardEnabled ? L("On — tap to disable") : L("Off — tap to enable"),
+        icon: fastForwardEnabled ? "forward.fill" : "forward",
+        tint: .cyan, role: nil
+      ) { toggleFastForwardAction() },
       IOSMenuItem(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple, role: nil) { pane = .saves },
       IOSMenuItem(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow, role: nil) { pane = .cheats },
       IOSMenuItem(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: nil) {
@@ -75,6 +96,26 @@ internal struct PauseMenuView: View {
     items.append(IOSMenuItem(title: L("Reset System"), subtitle: L("Restart the game from power-on"), icon: "arrow.counterclockwise.circle", tint: .orange, role: nil) { showResetDialog = true })
     items.append(IOSMenuItem(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red, role: .destructive) { showExitDialog = true })
     return items
+  }
+
+  /// Mutes by zeroing the volume, remembering the prior level so unmute restores it
+  /// instead of guessing. Mirrors the pattern of other Config-backed toggles: read
+  /// through the bridge rather than trusting `@State` to stay in sync elsewhere.
+  private func toggleMute() {
+    let current = DOLConfigBridge.audioVolume()
+    if current > 0 {
+      UserDefaults.standard.set(current, forKey: Self.volumeBeforeMuteKey)
+      DOLConfigBridge.setAudioVolume(0)
+      isMuted = true
+    } else {
+      let stored = UserDefaults.standard.object(forKey: Self.volumeBeforeMuteKey) as? Int ?? 100
+      DOLConfigBridge.setAudioVolume(stored > 0 ? stored : 100)
+      isMuted = false
+    }
+  }
+
+  private func toggleFastForwardAction() {
+    fastForwardEnabled = TVEmulationBridge.toggleFastForward()
   }
 
   var body: some View {
@@ -118,6 +159,8 @@ internal struct PauseMenuView: View {
       // from this menu still gets a screenshot even though presenting is about to stop.
       SaveStateService.capturePausePreview()
       TVEmulationBridge.pause()
+      isMuted = DOLConfigBridge.audioVolume() <= 0
+      fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
     }
     .onDisappear {
       if TVEmulationBridge.isRunning() && TVEmulationBridge.isPaused() { TVEmulationBridge.resume() }
@@ -371,6 +414,39 @@ internal struct PauseMenuView: View {
     .buttonStyle(.plain)
   }
 
+  /// tvOS pause-menu row for an in-place toggle (mute, fast-forward) rather than a
+  /// pane change — same visual shape as the other rows in `tvMainMenu` so it reads
+  /// as part of the same list, without duplicating that ~25-line HStack per toggle.
+  @ViewBuilder
+  private func tvMenuToggleRow(icon: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      HStack(spacing: 20) {
+        ZStack {
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(.white.opacity(0.1))
+            .frame(width: 48, height: 48)
+          Image(systemName: icon)
+            .font(.system(size: 20, weight: .medium))
+            .foregroundColor(.white)
+        }
+        VStack(alignment: .leading, spacing: 4) {
+          Text(title)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundColor(.white)
+          Text(subtitle)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.white.opacity(0.7))
+        }
+        Spacer()
+      }
+      .padding(.horizontal, 24)
+      .padding(.vertical, 16)
+      .background(.white.opacity(0.05))
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+    .buttonStyle(.plain)
+  }
+
   #if !os(tvOS)
   /// True when at least one connected controller can drive pause-menu navigation.
   private static func hasPauseMenuNavController() -> Bool {
@@ -534,7 +610,12 @@ internal struct PauseMenuView: View {
           .buttonStyle(.plain)
           .focused($focused, equals: .resume)
 
-          // Menu items with SettingsMenuRow styling
+          // Menu items with SettingsMenuRow styling. Wrapped in a ScrollView (rather
+          // than a bare VStack) so this list scrolls instead of overflowing off the
+          // bottom of the screen as more cards land here (quick actions above, WS-4's
+          // continuity hand-off card, etc.) — a fixed-height HStack with no scroll
+          // container is exactly how a growing menu silently goes unreachable on tvOS.
+          ScrollView(showsIndicators: false) {
           VStack(spacing: 12) {
             // Save States
             Button(action: { pane = .saves }) {
@@ -575,6 +656,26 @@ internal struct PauseMenuView: View {
             }
             .buttonStyle(.plain)
             .focused($focused, equals: .openSaves)
+
+            // Quick actions: same row shape as the rest of the list, but these two
+            // toggle in place instead of navigating (mute to take a call,
+            // fast-forward past a cutscene — the things people reach for without
+            // wanting to leave the pause menu).
+            tvMenuToggleRow(
+              icon: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+              title: isMuted ? L("Unmute") : L("Mute"),
+              subtitle: isMuted ? L("Restore audio volume") : L("Silence audio"),
+              action: { toggleMute() }
+            )
+            .focused($focused, equals: .mute)
+
+            tvMenuToggleRow(
+              icon: fastForwardEnabled ? "forward.fill" : "forward",
+              title: L("Fast Forward"),
+              subtitle: fastForwardEnabled ? L("On — press to disable") : L("Off — press to enable"),
+              action: { toggleFastForwardAction() }
+            )
+            .focused($focused, equals: .fastForward)
 
             // Cheats
             Button(action: { pane = .cheats }) {
@@ -773,6 +874,7 @@ internal struct PauseMenuView: View {
             }
             .buttonStyle(.plain)
             .focused($focused, equals: .exit)
+          }
           }
         }
         .frame(width: 480)

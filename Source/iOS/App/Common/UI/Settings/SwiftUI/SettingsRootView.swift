@@ -366,29 +366,133 @@ struct SettingsRootView<Background: View>: View {
     }
   }
 
+  /// One row in the flattened root list. `destination` is type-erased because the
+  /// row array below mixes ~15 unrelated destination view types; with a fixed, small
+  /// row count this is simpler than threading generics through, and it's what makes
+  /// the list filterable by `.searchable` below (a static tree of `NavigationLink`s
+  /// can't be filtered without either this or duplicating every row behind an `if`).
+  private struct SettingsEntry: Identifiable {
+    /// Derived, not `UUID()` — `settingsSections` below is a computed property, so a
+    /// fresh UUID per row on every `body` evaluation would churn `ForEach` identity
+    /// on every re-render (e.g. `refreshLightweightInfo()`'s polling `@State` writes,
+    /// or every keystroke in the search field), tearing down and rebuilding rows and
+    /// popping an open destination back to the list. Titles are unique per section.
+    var id: String { title }
+    let title: String
+    let icon: String
+    let accessibilityLabel: String?
+    /// Extra terms this row should also match on when searching (iOS only — see
+    /// `filteredSettingsSections`), for settings that live a level down and whose
+    /// name alone wouldn't surface the page (e.g. searching "vsync" should find
+    /// Hacks). Deliberately sparse: only the pages with the deepest/least
+    /// discoverable settings get keywords; this is not full-page content indexing.
+    let keywords: [String]
+    let destination: AnyView
+
+    init(title: String, icon: String, accessibilityLabel: String? = nil, keywords: [String] = [], @ViewBuilder destination: () -> some View) {
+      self.title = title
+      self.icon = icon
+      self.accessibilityLabel = accessibilityLabel
+      self.keywords = keywords
+      self.destination = AnyView(destination())
+    }
+  }
+
+  private struct SettingsListSection: Identifiable {
+    /// Derived, not `UUID()` — see `SettingsEntry.id`. The six headers are unique.
+    var id: String { header }
+    let header: String
+    let entries: [SettingsEntry]
+  }
+
+  /// The root list, restructured (WS-6) into ~15 specific destinations grouped under
+  /// a handful of headers, instead of the previous 5 broad hubs (Config/Graphics/...)
+  /// that each hid their own sub-list. Matches Provenance's long-scroll-with-many-
+  /// sections shape (`SettingsSwiftUI.swift`) rather than iFly's tabbed sidebar —
+  /// see the WS-6 report for why. "Config"/"Graphics" as navigation hubs are gone
+  /// from here; `ConfigRootView`/`GraphicsRootView` still exist for the separate
+  /// pause-menu-style surface (`contentForPage(_:)` below), untouched.
+  private var settingsSections: [SettingsListSection] {
+    let generalSection: [SettingsEntry] = [
+      SettingsEntry(title: L("General"), icon: "gear", accessibilityLabel: L("Config Settings")) { ConfigGeneralView() },
+      SettingsEntry(title: L("Performance Tuning"), icon: "gauge.with.dots.needle.67percent", keywords: ["cpu", "interpreter", "cached interpreter", "jit", "speed limit", "fast forward"]) { PerformanceTuningView() },
+      SettingsEntry(title: L("Interface"), icon: "menubar.rectangle") { ConfigInterfaceView() },
+      SettingsEntry(title: L("Advanced"), icon: "cpu") { ConfigAdvancedView() },
+    ]
+    let audioSection: [SettingsEntry] = [
+      SettingsEntry(title: L("Audio"), icon: "speaker.wave.3") { ConfigAudioView() },
+    ]
+    var consolesSection: [SettingsEntry] = [
+      SettingsEntry(title: L("GameCube"), icon: "cube") { ConfigGameCubeView() },
+      SettingsEntry(title: L("Wii"), icon: "tv.and.hifispeaker.fill") { ConfigWiiView() },
+    ]
+    #if USE_RETRO_ACHIEVEMENTS
+    consolesSection.append(SettingsEntry(title: L("Achievements"), icon: "trophy") { ConfigAchievementsView() })
+    #endif
+    let graphicsSection: [SettingsEntry] = [
+      SettingsEntry(title: L("Video"), icon: "display", accessibilityLabel: L("Graphics Settings")) { GraphicsGeneralView() },
+      SettingsEntry(title: L("Enhancements"), icon: "sparkles", keywords: ["anisotropic", "anisotropy", "msaa", "anti-aliasing", "resampling", "efb scale", "internal resolution"]) { GraphicsEnhancementsView() },
+      SettingsEntry(title: L("Hacks"), icon: "wrench.and.screwdriver", keywords: ["texture cache", "vsync", "v-sync", "bbox", "vi skip", "efb"]) { GraphicsHacksView() },
+      SettingsEntry(title: L("Graphics Advanced"), icon: "slider.horizontal.3", keywords: ["present drawable", "manually upload buffers", "metal"]) { GraphicsAdvancedView() },
+      SettingsEntry(title: L("Shaders"), icon: "paintbrush") { ShaderSettingsView() },
+    ]
+    let inputSection: [SettingsEntry] = [
+      SettingsEntry(title: L("Controllers"), icon: "gamecontroller") { ControllersRootView() },
+    ]
+    let systemSection: [SettingsEntry] = [
+      SettingsEntry(title: L("Debug"), icon: "ladybug", keywords: ["fastmem", "jit", "logging", "stall metrics", "wireframe", "haptics"]) { DebugRootView() },
+    ]
+    return [
+      SettingsListSection(header: L("General"), entries: generalSection),
+      SettingsListSection(header: L("Audio"), entries: audioSection),
+      SettingsListSection(header: L("GameCube & Wii"), entries: consolesSection),
+      SettingsListSection(header: L("Graphics"), entries: graphicsSection),
+      SettingsListSection(header: L("Input"), entries: inputSection),
+      SettingsListSection(header: L("System"), entries: systemSection),
+    ]
+  }
+
+#if os(iOS)
+  /// Full-text search, iOS/iPadOS only — deliberately absent on tvOS. tvOS remote
+  /// text entry is slower than just flipping through a dozen rows with the D-pad;
+  /// iFly's SettingsView+Search.swift makes the same call for the same reason, and
+  /// the WS-6 plan calls it worth copying. Filters the flattened list in place
+  /// rather than jumping between tabs (iFly's approach), since after WS-6 there's
+  /// only the one list to filter.
+  @State private var settingsSearchText: String = ""
+#endif
+
+  private var filteredSettingsSections: [SettingsListSection] {
+#if os(iOS)
+    let query = settingsSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return settingsSections }
+    return settingsSections.compactMap { section in
+      let matches = section.entries.filter { entry in
+        entry.title.localizedCaseInsensitiveContains(query)
+          || entry.keywords.contains { $0.localizedCaseInsensitiveContains(query) }
+      }
+      return matches.isEmpty ? nil : SettingsListSection(header: section.header, entries: matches)
+    }
+#else
+    return settingsSections
+#endif
+  }
+
   @ViewBuilder
   private var settingsContent: some View {
     NavigationStack {
       List {
-        Section {
-          NavigationLink(destination: ConfigRootView()) {
-            Label(L("Config"), systemImage: "gear")
-              .accessibilityLabel(L("Config Settings"))
-          }
-          NavigationLink(destination: PerformanceTuningView()) {
-            Label(L("Performance Tuning"), systemImage: "gauge.with.dots.needle.67percent")
-          }
-          NavigationLink(destination: GraphicsRootView()) {
-            Label(L("Graphics"), systemImage: "display")
-              .accessibilityLabel(L("Graphics Settings"))
-          }
-          NavigationLink(destination: ControllersRootView()) {
-            Label(L("Controllers"), systemImage: "gamecontroller")
-          }
-          NavigationLink {
-            DebugRootView()
-          } label: {
-            Label(L("Debug"), systemImage: "ladybug")
+        ForEach(filteredSettingsSections) { section in
+          Section(header: Text(section.header)) {
+            ForEach(section.entries) { entry in
+              NavigationLink(destination: entry.destination) {
+                if let a11y = entry.accessibilityLabel {
+                  Label(entry.title, systemImage: entry.icon).accessibilityLabel(a11y)
+                } else {
+                  Label(entry.title, systemImage: entry.icon)
+                }
+              }
+            }
           }
         }
 
@@ -481,6 +585,9 @@ struct SettingsRootView<Background: View>: View {
         }
       }
       .navigationTitle(L("Settings"))
+#if os(iOS)
+      .searchable(text: $settingsSearchText, prompt: L("Search Settings"))
+#endif
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button(L("Reset All")) { showGlobalResetAlert = true }

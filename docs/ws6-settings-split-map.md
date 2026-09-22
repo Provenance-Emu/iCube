@@ -167,3 +167,47 @@ directory turned up no other collisions.
 - `SettingsCategoryHubs.swift` holds the two-line-item `ConfigRootView` / `GraphicsRootView` hub
   pages, which the later "flatten the root into ~20 sections" commit is expected to fold away or
   replace.
+
+## Root restructure + search (follow-up commit, after the fix commit)
+
+`SettingsRootView.swift`'s `settingsContent` (the root `List` shown from the Library, not the
+separate `pauseMenuStyleContent`/`SettingsSubMenuView` surface used by `SettingsPage`, which is
+untouched) was flattened from 5 broad hubs (Config/Graphics/Controllers/Debug + a version/about
+section) into ~14 specific destinations under 6 headers — General, Audio, GameCube & Wii, Graphics,
+Input, System — plus the unchanged About/Blog/Help/Network section. This matches Provenance's
+long-scroll-with-many-sections shape rather than iFly's tabbed sidebar (see the WS-6 report for the
+reasoning). `ConfigRootView`/`GraphicsRootView` still exist, still used by the pause-menu-style
+surface; they're just no longer how the main Settings screen is entered.
+
+The row list is now data-driven (`SettingsEntry`/`SettingsListSection`, both in
+`SettingsRootView.swift`) instead of a static tree of `NavigationLink`s, specifically so it can be
+filtered. `SettingsEntry.destination` is `AnyView` — a deliberate, scoped use of type erasure to
+hold ~14 unrelated destination view types in one filterable array; not a pattern to copy elsewhere
+in the app.
+
+`.searchable` is applied to the root list on iOS/iPadOS only, gated behind `#if os(iOS)`, filtering
+`settingsSections` by title substring, plus a small `keywords: [String]` list on the pages with the
+least discoverable settings (Performance Tuning, Graphics Enhancements/Hacks/Advanced, Debug — terms
+like "anisotropic", "vsync", "fastmem", "jit"). This is scoped, not full-page content indexing: it
+surfaces the ~5 pages most likely to hide what someone actually typed, not every control on every
+page. tvOS deliberately gets no search — remote text entry is slower than flipping through a dozen
+rows with the D-pad, the same call iFly's `SettingsView+Search.swift` makes for the same reason.
+
+## Pause menu (PauseMenuView.swift, shared with WS-4 — structural changes only)
+
+Two changes, both additive:
+
+- **Quick actions.** Mute (`DOLConfigBridge.audioVolume`/`setAudioVolume:`, remembering the
+  pre-mute level in `UserDefaults` so unmute restores it) and Fast Forward
+  (`TVEmulationBridge.toggleFastForward`/`isFastForwardEnabled`, the same bridge calls
+  `EmulationScreen.swift`'s top-bar button already uses) — the two things people actually reach for
+  mid-game without wanting to leave the pause menu. On iOS they're two more `IOSMenuItem` entries
+  (no new type needed, already in a `ScrollView`d `LazyVGrid`). On tvOS they're two new rows via a
+  new `tvMenuToggleRow` helper, added only for these two rows — the other rows are untouched,
+  deliberately not refactored to share it.
+- **tvOS overflow fix.** `tvMainMenu`'s row list was a bare `VStack` in a fixed-width column with no
+  scroll container — exactly the shape that silently goes unreachable once enough rows land (my two
+  quick actions, WS-4's continuity card, whatever comes after). Wrapped it in a `ScrollView`; no
+  other structural change.
+- Added `FocusField.mute` / `.fastForward` cases (additive; WS-4's own case can sit alongside
+  without conflict).
