@@ -29,6 +29,11 @@ struct DebugRootView: View {
   @State private var fastmemAvailable: Bool = false
   @State private var launchTimes: Int = 0
   @State private var loggingEnabled: Bool = false
+  /// Read, never written here: DebugServerManager mints it on first LAN start.
+  /// Empty on a DEBUG build, where the bench is loopback-only and needs no token.
+  private var benchToken: String {
+    UserDefaults.standard.string(forKey: "ICubeBenchServerToken") ?? ""
+  }
   @State private var loggingVerbosity: Int = 4
   @State private var inputDebug: Bool = false
   @State private var instantReplay: Bool = false
@@ -133,7 +138,24 @@ struct DebugRootView: View {
           Toggle(L("Perf Test Bench (HTTP)"), isOn: Binding(
             get: { UserDefaults.standard.bool(forKey: "ICubeBenchServerEnabled") },
             set: { UserDefaults.standard.set($0, forKey: "ICubeBenchServerEnabled") })),
-          L("Runs a loopback-only HTTP server on port 8723 for automated perf testing. Reach it from the Mac with `iproxy 8723 8723` over USB. Takes effect at the next game boot."))
+          L("Runs an HTTP server on port 8723 for automated perf testing. Over USB: `iproxy 8723 8723`. On a non-debug build it is also reachable over Wi-Fi, because USB forwarding does not reach App Store builds — those requests need the token below. Takes effect at the next game boot."))
+        // The token is the whole reason LAN exposure is safe to offer: this API can
+        // write settings, boot games and load save states. Shown so it can be copied
+        // into tooling; loopback/USB callers never need it.
+        if !benchToken.isEmpty {
+          settingsCaption(
+            VStack(alignment: .leading, spacing: 4) {
+              Text(L("Bench Token"))
+              Text(benchToken)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+#if os(iOS)
+                .textSelection(.enabled)
+#endif
+            },
+            L("Send as `Authorization: Bearer <token>` on Wi-Fi requests. Requests over USB or from the device itself do not need it."))
+        }
       }
 
       Section(header: Text(L("Rendering"))) {

@@ -22,6 +22,8 @@
 // iCube-Swift.h.
 
 import Foundation
+import Security
+import PVWebServer
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -100,7 +102,42 @@ final class DebugServerManager: NSObject {
   ///   iproxy 8723 8723
   static let port: UInt16 = 8723
 
-  private let server = NativeWebServer(port: DebugServerManager.port)
+  /// True when the server is running because the user explicitly asked for it,
+  /// rather than because this is a DEBUG build where it is always on. An explicit
+  /// opt-in earns LAN reachability: usbmux TCP forwarding to an ordinary app port
+  /// does not reach a Release (AppStore) build on iOS 26, so a loopback-only bench
+  /// there is a toggle that silently does nothing.
+  private static var isExplicitOptIn: Bool {
+    #if DEBUG
+    return false
+    #else
+    return UserDefaults.standard.bool(forKey: DebugServerManager.enabledDefaultsKey)
+    #endif
+  }
+
+  /// UserDefaults key holding the LAN bench token.
+  static let tokenDefaultsKey = "ICubeBenchServerToken"
+
+  /// The token a LAN client must present. Generated once and persisted, so
+  /// tooling configured with it keeps working across launches; rotating it is a
+  /// matter of clearing this key. 256 bits from the system CSPRNG.
+  ///
+  /// Only meaningful when the bench is LAN-reachable — loopback callers (USB via
+  /// iproxy, and anything on-device) are exempt.
+  static var lanToken: String {
+    let d = UserDefaults.standard
+    if let existing = d.string(forKey: tokenDefaultsKey), !existing.isEmpty { return existing }
+    var bytes = [UInt8](repeating: 0, count: 32)
+    _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    let token = bytes.map { String(format: "%02x", $0) }.joined()
+    d.set(token, forKey: tokenDefaultsKey)
+    return token
+  }
+
+  private let server = NativeWebServer(
+    port: DebugServerManager.port,
+    allowsNonLoopbackClients: DebugServerManager.isExplicitOptIn,
+    requiredToken: DebugServerManager.isExplicitOptIn ? DebugServerManager.lanToken : nil)
   private let routes = DebugAPIRoutes()
 
   override private init() { super.init() }
@@ -150,7 +187,16 @@ final class DebugServerManager: NSObject {
         // auto-lock and iOS would suspend the app out from under the test.
         KeepAwake.acquire(.debugServer)
         self.serverURL = self.server.serverURL?.absoluteString ?? "http://127.0.0.1:\(Self.port)/"
-        NSLog("[DebugServer] listening on \(self.serverURL) (loopback only; iproxy to reach over USB)")
+        if self.server.allowsNonLoopbackClients {
+          // Say the LAN address, because that is the one that will actually work:
+          // this path exists precisely because USB forwarding does not reach here.
+          let lan = PVWebServer.shared.ipAddress.map { "http://\($0):\(Self.port)/" } ?? "(no LAN address yet)"
+          NSLog("[DebugServer] listening on \(self.serverURL) and \(lan) "
+                + "(LAN reachable: Perf Test Bench is on in a non-DEBUG build; "
+                + "LAN requests need Authorization: Bearer <token> — see Settings > Debug)")
+        } else {
+          NSLog("[DebugServer] listening on \(self.serverURL) (loopback only; iproxy to reach over USB)")
+        }
       } catch {
         self.isRunning = false
         NSLog("[DebugServer] failed to start: \(error.localizedDescription)")

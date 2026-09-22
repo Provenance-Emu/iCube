@@ -15,6 +15,7 @@
 //     iproxy 8723 8723   # then curl http://127.0.0.1:8723/api/perf/live
 
 import Foundation
+import CryptoKit
 import Network
 
 /// A lightweight loopback HTTP/JSON server for the debug + benchmark API.
@@ -93,7 +94,8 @@ final class NativeWebServer: @unchecked Sendable {
     return listener?.state == .ready
   }
 
-  /// The loopback URL the API is served on.
+  /// The URL the API is served on. Loopback unless `allowsNonLoopbackClients`,
+  /// in which case the caller should prefer the device's LAN address for display.
   var serverURL: URL? {
     guard isRunning else { return nil }
     return URL(string: "http://127.0.0.1:\(port)/")
@@ -101,8 +103,55 @@ final class NativeWebServer: @unchecked Sendable {
 
   // MARK: - Init
 
-  init(port: UInt16 = 8723) {
+  /// When true the listener binds every interface and accepts non-loopback
+  /// clients, so the bench is reachable over Wi-Fi as well as USB.
+  ///
+  /// Loopback-only is the right default for the DEBUG build, where the server
+  /// runs unconditionally and nobody asked for it. It is the wrong default for a
+  /// Release build, where the server exists only because the user went into
+  /// Settings and switched "Perf Test Bench (HTTP)" on: usbmux TCP forwarding to
+  /// an ordinary app port does not reach a Release (AppStore) build on iOS 26,
+  /// so loopback-only means the toggle silently does nothing at all. An explicit
+  /// opt-in should work whatever the configuration — see
+  /// docs/debugging-the-device-bench.md.
+  let allowsNonLoopbackClients: Bool
+
+  /// Required on every NON-loopback request when the bench is LAN-reachable.
+  /// Loopback is exempt: reaching 127.0.0.1 already means code on the device or a
+  /// USB tunnel the user plugged in, and requiring it there would break every
+  /// existing iproxy/MCP caller for no gain.
+  ///
+  /// This API can write settings, boot and stop games, load save states and take
+  /// screenshots, so exposing it to a network unauthenticated would hand all of
+  /// that to anyone sharing the Wi-Fi.
+  private let requiredToken: String?
+
+  init(port: UInt16 = 8723, allowsNonLoopbackClients: Bool = false, requiredToken: String? = nil) {
     self.port = port
+    self.allowsNonLoopbackClients = allowsNonLoopbackClients
+    self.requiredToken = requiredToken
+  }
+
+  /// Constant-time-ish comparison via SHA-256 digests, so a wrong token cannot be
+  /// recovered by timing the reject. Same shape as PVContinuity's BearerTokenValidator.
+  private func tokenMatches(_ presented: String) -> Bool {
+    guard let expected = requiredToken else { return true }
+    let a = SHA256.hash(data: Data(presented.utf8))
+    let b = SHA256.hash(data: Data(expected.utf8))
+    return a == b
+  }
+
+  /// nil when the request may proceed; an HTTP status + message when it may not.
+  private func authFailure(for request: HTTPRequest, isLoopback: Bool) -> (Int, String)? {
+    guard !isLoopback, requiredToken != nil else { return nil }
+    let bearer = request.headers["authorization"]
+      .flatMap { $0.hasPrefix("Bearer ") ? String($0.dropFirst(7)) : nil }
+    let presented = bearer ?? request.headers["x-icube-token"]
+    guard let presented, !presented.isEmpty else {
+      return (401, "missing token: send Authorization: Bearer <token> or X-ICube-Token")
+    }
+    guard tokenMatches(presented) else { return (403, "bad token") }
+    return nil
   }
 
   // MARK: - Start / Stop
@@ -113,19 +162,28 @@ final class NativeWebServer: @unchecked Sendable {
 
     let params = NWParameters.tcp
     params.allowLocalEndpointReuse = true
-    // Restrict the bind to loopback. `requiredLocalEndpoint` pins the listening
-    // socket to 127.0.0.1 so the server is never reachable off-device even if
-    // the reject in handleNewConnection were bypassed.
-    params.requiredLocalEndpoint = NWEndpoint.hostPort(
-      host: .ipv4(.loopback),
-      port: NWEndpoint.Port(rawValue: port)!
-    )
 
-    // The port is already carried by `requiredLocalEndpoint`. Passing it again via
-    // `NWListener(using:on:)` makes Network.framework reject the listener with
-    // NWError 22 (EINVAL) on iOS 26 — the two port sources conflict — and the
-    // server silently never binds ("[DebugServer] failed to start" in syslog).
-    let listener = try NWListener(using: params)
+    let listener: NWListener
+    if allowsNonLoopbackClients {
+      // Bind every interface. The port must come from `NWListener(using:on:)`
+      // here and NOT also from `requiredLocalEndpoint` — see the EINVAL note
+      // below, which applies to any double-specified port.
+      listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+    } else {
+      // Restrict the bind to loopback. `requiredLocalEndpoint` pins the listening
+      // socket to 127.0.0.1 so the server is never reachable off-device even if
+      // the reject in handleNewConnection were bypassed.
+      params.requiredLocalEndpoint = NWEndpoint.hostPort(
+        host: .ipv4(.loopback),
+        port: NWEndpoint.Port(rawValue: port)!
+      )
+
+      // The port is already carried by `requiredLocalEndpoint`. Passing it again via
+      // `NWListener(using:on:)` makes Network.framework reject the listener with
+      // NWError 22 (EINVAL) on iOS 26 — the two port sources conflict — and the
+      // server silently never binds ("[DebugServer] failed to start" in syslog).
+      listener = try NWListener(using: params)
+    }
     listener.newConnectionHandler = { [weak self] conn in
       self?.handleNewConnection(conn)
     }
@@ -223,7 +281,7 @@ final class NativeWebServer: @unchecked Sendable {
   private func handleNewConnection(_ connection: NWConnection) {
     // Defence in depth: even though the listener is loopback-bound, refuse
     // anything that is not coming from 127.0.0.1 / ::1.
-    guard isLoopback(connection) else {
+    guard allowsNonLoopbackClients || isLoopback(connection) else {
       connection.cancel()
       return
     }
@@ -350,6 +408,14 @@ final class NativeWebServer: @unchecked Sendable {
   // MARK: - Routing
 
   private func routeRequest(on connection: NWConnection, request: HTTPRequest, body: Data) {
+    // One gate, before any route runs, so a new endpoint cannot forget to check.
+    if let (status, message) = authFailure(for: request, isLoopback: isLoopback(connection)) {
+      sendResponse(on: connection, status: status, statusText: Self.statusText(status),
+                   body: "{\"ok\":false,\"error\":\"\(message)\"}",
+                   contentType: "application/json")
+      return
+    }
+
     lock.lock()
     let raws = rawRoutes
     lock.unlock()
