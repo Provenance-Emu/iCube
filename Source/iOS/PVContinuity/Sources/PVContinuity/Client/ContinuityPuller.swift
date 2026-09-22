@@ -97,10 +97,26 @@ public struct PullFailure: Error, Sendable, Equatable {
 public actor ContinuityPuller {
     private let transport: any ContinuityTransport
     private let fileProvider: any ContinuityFileProviding
+    /// How a descriptor's relative path becomes a download URL.
+    ///
+    /// Injectable because nearby library sharing addresses a file by **entry
+    /// key plus path** rather than by path alone — its host re-derives (and
+    /// re-checks the exclusion of) that entry's manifest before serving a byte.
+    /// Everything else about a pull — ordering, `Range` resume, verify-before-
+    /// move — is identical, so the alternative was a second copy of this actor.
+    private let fileURLBuilder: @Sendable (URL, String) -> URL
 
-    public init(transport: any ContinuityTransport, fileProvider: any ContinuityFileProviding) {
+    /// The handoff default: `ContinuityRoutes.fileURL(base:relativePath:)`.
+    public init(
+        transport: any ContinuityTransport,
+        fileProvider: any ContinuityFileProviding,
+        fileURLBuilder: @escaping @Sendable (URL, String) -> URL = { base, relativePath in
+            ContinuityRoutes.fileURL(base: base, relativePath: relativePath)
+        }
+    ) {
         self.transport = transport
         self.fileProvider = fileProvider
+        self.fileURLBuilder = fileURLBuilder
     }
 
     // MARK: - Manifest
@@ -237,7 +253,7 @@ public actor ContinuityPuller {
         }
 
         let request = ContinuityRequest.authorized(
-            url: ContinuityRoutes.fileURL(base: baseURL, relativePath: descriptor.relativePath),
+            url: fileURLBuilder(baseURL, descriptor.relativePath),
             token: token
         )
         _ = try await transport.download(request, to: partial, resumeOffset: resumeOffset, progress: progress)
