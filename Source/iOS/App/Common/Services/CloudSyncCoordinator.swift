@@ -24,6 +24,31 @@ import PVSyncRules
 /// to be inert-but-honest rather than absent: `CloudKitSyncProvider` refuses to
 /// construct, `InertSyncProvider` takes its place, and `unavailableReason` is
 /// shown in Settings. Nothing here crashes, spins, or silently pretends.
+///
+/// ## App preferences are deliberately NOT synced (WS-5 item 6)
+///
+/// `UserDefaults` / `@AppStorage` is not covered by a file mirror, and
+/// `NSUbiquitousKeyValueStore` is the usual answer. iCube does not adopt it, on
+/// the evidence rather than on taste. Of the 44 distinct `@AppStorage` keys in
+/// the app:
+///
+/// - **~18 are debug or device-capability keys** — the `shader_debug_*` family,
+///   `adaptive_clock_enable`, `icube_vertex_loader_mode`, `shader_precopy_enabled`,
+///   `gfx_overscan_fullscreen`, `motion_debug_*`, `ui_show_dsu_debug_hud`.
+/// - **~18 are peripheral-specific** — the `dsu_*` and `motion_*` families,
+///   `rumble_destination`, `virtual_mfi_connect`. These describe *this* device's
+///   controllers and sensors. An Apple TV has no gyro; pushing an iPhone's
+///   motion configuration onto it is a bug, not a feature.
+/// - **8 are genuinely device-independent**, and 7 of those are library view
+///   preferences (`library_sort_field`, `library_grid_column_offset`, …) plus
+///   `resume_where_left_off`.
+///
+/// So KVS would carry real risk for eight keys of cosmetic value, while the
+/// settings people actually care about — everything Dolphin itself persists —
+/// live in `User/Config/*.ini` and `User/GameSettings/*.ini` and are **already
+/// covered by this file mirror**. Adding an empty KVS scaffold to "leave the
+/// door open" would be dead code. If this is revisited, the right shape is an
+/// explicit allow-list of those eight keys, not a blanket KVS mirror.
 @MainActor
 final class CloudSyncCoordinator: ObservableObject {
 
