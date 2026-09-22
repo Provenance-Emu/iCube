@@ -175,6 +175,27 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
         uploadSummaryProvider = block
     }
 
+    // MARK: - Async route registry
+
+    /// Register an async route that owns its full HTTP response — status,
+    /// headers, and either an in-memory body or a file streamed from disk at a
+    /// byte offset.
+    ///
+    /// This is the seam features hang their own HTTP API off (continuity
+    /// handoff, nearby library sharing) instead of editing the server's private
+    /// route switch. Registration is independent of the listener's lifetime:
+    /// routes registered while the server is stopped are live as soon as it
+    /// starts, and survive the stop/start cycle
+    /// `WebServerLifecycleService` drives.
+    ///
+    /// ⚠️  This server is **plain HTTP on the local network** — no TLS. Read the
+    /// transport-security note at the top of `WebRoute.swift` before adding a
+    /// route that serves anything a user would mind leaking on a shared Wi-Fi.
+    public func addAsyncHandler(forMethod method: String, path: String,
+                                handler: @escaping WebRouteHandler) {
+        server.addAsyncHandler(forMethod: method, path: path, handler: handler)
+    }
+
     // MARK: - Import / rescan bridge
 
     @objc private func onUploadCompleted(_ note: Notification) {
@@ -229,3 +250,10 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
     }
 }
+
+// MARK: - WebRouteRegistering
+
+/// `PVWebServer` is the app-wide route host. Features take this protocol
+/// rather than the concrete singleton so their route registration is testable
+/// against a collecting stub.
+extension PVWebServer: WebRouteRegistering {}
