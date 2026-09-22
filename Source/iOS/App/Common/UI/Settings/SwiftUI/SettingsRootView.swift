@@ -843,4 +843,3 @@ private struct HideListBackgroundIfAvailable: ViewModifier {
   }
 }
 #endif
-

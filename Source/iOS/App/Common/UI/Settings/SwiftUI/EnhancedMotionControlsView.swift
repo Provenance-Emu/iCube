@@ -200,4 +200,3 @@ private struct HorizontalMotionPicker: View {
     .navigationTitle(L("Horizontal Movement"))
   }
 }
-

@@ -333,4 +333,3 @@ struct GraphicsShaderTypeView: View {
     .navigationTitle(L("Shader Type"))
   }
 }
-

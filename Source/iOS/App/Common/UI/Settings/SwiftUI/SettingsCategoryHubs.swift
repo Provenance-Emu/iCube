@@ -75,4 +75,3 @@ struct GraphicsRootView: View {
     .navigationTitle(L("Graphics"))
   }
 }
-
