@@ -113,6 +113,9 @@ final class ROMUploadServer: @unchecked Sendable {
     private var bonjourPublishConfirmed = false
     /// Guards `start()` against a second concurrent call while the port-fallback loop is running.
     private var isStarting = false
+    /// How long a single port bind may sit without reaching `.ready` before it is abandoned.
+    /// Long enough for the user to answer the Local Network permission prompt on first launch.
+    private static let bindTimeout: TimeInterval = 15
     private var activeConnections = [ObjectIdentifier: NWConnection]()
     private var connectionContexts = [ObjectIdentifier: ConnectionContext]()
     /// Serial queue for listener accept/state only — each connection gets its own `ioQueue`.
@@ -240,11 +243,18 @@ final class ROMUploadServer: @unchecked Sendable {
             self.lock.unlock()
         }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            // Every access to `resumed` happens on `listenerQueue` (the state handler and the
+            // timeout below both run there), so the unsafe marker is only about the closure capture.
             nonisolated(unsafe) var resumed = false
             listener.stateUpdateHandler = { [weak listener] state in
                 switch state {
                 case .ready:
                     if !resumed { resumed = true; continuation.resume() }
+                case .waiting(let error):
+                    // Not terminal: Network.framework parks a listener here while, for example,
+                    // the Local Network permission prompt is up or mDNS policy is unresolved. It
+                    // may still become `.ready`, so only log; the bind timeout below decides.
+                    NSLog("[ROMUploadServer] listener waiting on :\(candidate): \(error)")
                 case .failed(let error):
                     NSLog("[ROMUploadServer] listener failed on :\(candidate): \(error)")
                     listener?.cancel()
@@ -256,6 +266,18 @@ final class ROMUploadServer: @unchecked Sendable {
                 }
             }
             listener.start(queue: self.listenerQueue)
+            // A listener that never reaches `.ready` or `.failed` (stuck in `.waiting`, or no
+            // callback at all) used to suspend this continuation forever, which left `isStarting`
+            // set and made every later `start()` a silent no-op for the rest of the session — the
+            // "Upload via Wi-Fi does nothing" bug. Bound the wait so the port loop moves on and a
+            // later user request can try again.
+            self.listenerQueue.asyncAfter(deadline: .now() + Self.bindTimeout) { [weak listener] in
+                guard !resumed else { return }
+                resumed = true
+                NSLog("[ROMUploadServer] listener on :\(candidate) did not become ready within \(Self.bindTimeout)s, giving up on it")
+                listener?.cancel()
+                continuation.resume(throwing: ROMUploadServerError.bindTimedOut(port: candidate))
+            }
         }
         port = candidate
         self.listener = listener
@@ -2628,11 +2650,13 @@ private final class WebDAVBonjourDelegate: NSObject, NetServiceDelegate {
 enum ROMUploadServerError: Error, LocalizedError {
     case initializationFailed
     case startFailed(Error)
+    case bindTimedOut(port: UInt16)
 
     var errorDescription: String? {
         switch self {
         case .initializationFailed: return "Failed to initialize upload server"
         case .startFailed(let error): return "Failed to start upload server: \(error.localizedDescription)"
+        case .bindTimedOut(let port): return "Upload server listener on port \(port) never became ready"
         }
     }
 }

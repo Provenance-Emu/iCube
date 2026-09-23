@@ -142,6 +142,10 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_altserver._tcp</string>
+		<!-- ROMUploadServer advertises _http._tcp through its NWListener and _webdav._tcp
+		     through NetService; both must be declared or local-network policy can park the
+		     listener in .waiting. -->
+		<string>_http._tcp</string>
 		<string>_webdav._tcp</string>
 		<!-- WS-4: continuity handoff + nearby library sharing. On tvOS this is the
 		     ONLY discovery path, since there is no system Handoff. -->
