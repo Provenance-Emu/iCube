@@ -455,27 +455,14 @@ struct EmulationScreen: View {
         .zIndex(5)
       }
     }
-    .sheet(isPresented: $showSettings) {
-      ZStack {
-        // Beautiful blurred background like other menus
-        Image(uiImage: game.coverImage)
-          .resizable()
-          .scaledToFill()
-          .blur(radius: 25)
-
-        // Elegant gradient overlay
-        LinearGradient(
-          colors: [
-            Color.black.opacity(0.85),
-            Color.black.opacity(0.4),
-            Color.black.opacity(0.85)
-          ],
-          startPoint: .top,
-          endPoint: .bottom
-        )
-
-        SettingsRootView(backgroundView: AnyView(Color.clear), isPauseMenuStyle: true, game: game)
-      }
+    // `.sheet` sizes itself to its content's ideal size on tvOS rather than filling the
+    // screen, which is what produced the small floating panel over the running game
+    // (plus the cramped fixed-width layout that used to live behind it — see the
+    // deleted `isPauseMenuStyle` surface in SettingsRootView.swift). `.fullScreenCover`
+    // takes the whole screen, matching how the library's own Settings entry presents
+    // this same view (TVLibraryView.swift `.fullScreenCover(isPresented: $showSettings)`).
+    .fullScreenCover(isPresented: $showSettings) {
+      TVSettingsPage().interactiveDismissDisabled(true)
     }
     //    .sheet(isPresented: $showMotionDebug) {
     //      NavigationStack {

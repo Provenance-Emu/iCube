@@ -42,8 +42,8 @@ import UIKit
 ///   reads false, so the pause is skipped and the server ends up running for that whole
 ///   session once the bind completes. Not a regression (the server always ran during
 ///   gameplay before this task); just not a airtight pause.
-/// - The in-game pause menu's Settings screen (`SettingsRootView` with `isPauseMenuStyle`)
-///   shows the upload URL. While a game is paused, this service has stopped the server, so
+/// - The in-game pause menu's Settings screen (`SettingsRootView`, via `TVSettingsPage` on
+///   tvOS) shows the upload URL. While a game is paused, this service has stopped the server, so
 ///   that row now reads blank instead of a working URL — previously it force-started the
 ///   server itself. No error is surfaced explaining why.
 final class WebServerLifecycleService: NSObject, UIApplicationDelegate {

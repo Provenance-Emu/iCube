@@ -24,13 +24,9 @@ struct SettingsRootView<Background: View>: View {
   @Environment(\.openURL) private var openURL
   @Environment(\.dismiss) private var dismiss
   private let backgroundView: Background?
-  private let isPauseMenuStyle: Bool
-  private let game: TVGameItem?
 
-  init(backgroundView: Background? = nil, isPauseMenuStyle: Bool = false, game: TVGameItem? = nil) {
+  init(backgroundView: Background? = nil) {
     self.backgroundView = backgroundView
-    self.isPauseMenuStyle = isPauseMenuStyle
-    self.game = game
   }
 
   private var appVersion: String {
@@ -84,23 +80,20 @@ struct SettingsRootView<Background: View>: View {
           .ignoresSafeArea()
       }
 
-      if isPauseMenuStyle {
-        pauseMenuStyleContent
-      } else {
-        NavigationStack {
-          settingsContent
-        }
-      }
+      settingsContent
     }
     .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLSettingsSelectControllers"))) { _ in
-      currentSettingsPage = .controllers
+      jumpToControllersRequested = true
     }
     .task {
       await refreshLightweightInfo()
     }
   }
 
-  @State private var currentSettingsPage: SettingsPage? = nil
+  /// Set by the `DOLSettingsSelectControllers` deep link (posted after adding a DSU
+  /// server via a `dolphinios://dsu/add` or legacy `dsu://` URL) so Settings opens
+  /// straight into Controllers instead of leaving the user to find it in the list.
+  @State private var jumpToControllersRequested = false
   @State private var showGlobalResetAlert: Bool = false
 #if os(iOS)
   @State private var showSafari: Bool = false
@@ -131,239 +124,6 @@ struct SettingsRootView<Background: View>: View {
       try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1s
     }
 #endif
-  }
-
-  @ViewBuilder
-  private var pauseMenuStyleContent: some View {
-    if let page = currentSettingsPage {
-      // Show submenu directly (no sheet needed)
-      SettingsSubMenuView(
-        page: page,
-        game: game,
-        onBack: { currentSettingsPage = nil }
-      )
-    } else {
-      // Main settings menu
-      HStack(spacing: 80) {
-        // Left side - Game cover (smaller)
-        VStack(alignment: .leading, spacing: 16) {
-          if let gameItem = game {
-            Image(uiImage: gameItem.coverImage)
-              .resizable()
-              .aspectRatio(2.0/3.0, contentMode: .fit)
-              .frame(width: 180, height: 270)
-              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-              .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
-          }
-
-          VStack(alignment: .leading, spacing: 6) {
-            Text("Settings")
-              .font(.system(size: 24, weight: .bold))
-              .foregroundColor(.white)
-
-            Text("Game & system options")
-              .font(.system(size: 14, weight: .medium))
-              .foregroundColor(.white.opacity(0.7))
-          }
-        }
-        .frame(width: 180)
-
-        // Right side - Settings menu
-        VStack(alignment: .leading, spacing: 32) {
-          // Back button
-          Button(action: { dismiss() }) {
-            HStack(spacing: 12) {
-              Image(systemName: "chevron.left")
-                .font(.system(size: 16, weight: .semibold))
-              Text("Back to Menu")
-                .font(.system(size: 18, weight: .semibold))
-            }
-            .foregroundColor(.white.opacity(0.8))
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(.white.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-          }
-          .buttonStyle(.plain)
-
-          // Settings sections
-          VStack(spacing: 16) {
-            SettingsMenuRow(icon: "gearshape", title: "Config", subtitle: "General configuration") {
-              currentSettingsPage = .config
-            }
-
-            SettingsMenuRow(icon: "gauge.with.dots.needle.67percent", title: "Performance Tuning", subtitle: "CPU & interpreter speed") {
-              currentSettingsPage = .performance
-            }
-
-            SettingsMenuRow(icon: "display", title: "Graphics", subtitle: "Video & rendering settings") {
-              currentSettingsPage = .graphics
-            }
-
-            SettingsMenuRow(icon: "gamecontroller", title: "Controllers", subtitle: "Input & controller setup") {
-              currentSettingsPage = .controllers
-            }
-
-            SettingsMenuRow(icon: "ladybug", title: "Debug", subtitle: "Developer options") {
-              currentSettingsPage = .debug
-            }
-
-            Divider()
-              .background(.white.opacity(0.3))
-              .padding(.vertical, 8)
-
-            // Version info
-            VStack(spacing: 12) {
-              HStack {
-                Text("Version")
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.8))
-                Spacer()
-                Text(appVersionLabel.isEmpty ? appVersion : appVersionLabel)
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.6))
-              }
-
-              HStack {
-                Text("Dolphin Core")
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.8))
-                Spacer()
-                Text(coreVersionLabel.isEmpty ? coreVersion : coreVersionLabel)
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.6))
-              }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-            .background(.white.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            // Network info
-            VStack(spacing: 12) {
-              HStack {
-                Text("Web UI")
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.8))
-                Spacer()
-#if os(iOS)
-                if !(webURLDisplay.isEmpty) {
-                  Button(action: {
-                    if let u = URL(string: webURLDisplay) {
-                      safariURL = u
-                      showSafari = true
-                    }
-                  }) {
-                    Text(webURLDisplay)
-                      .font(.system(size: 16, weight: .medium))
-                      .foregroundColor(.blue)
-                      .lineLimit(1)
-                      .truncationMode(.middle)
-                  }
-                  .buttonStyle(.plain)
-                  .networkURLContextMenu(webURLDisplay, openURL: openURL)
-                } else {
-                  Text(L("Not Running"))
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-                }
-#else
-                Text(webURLDisplay.isEmpty ? L("Not Running") : webURLDisplay)
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.6))
-                  .lineLimit(1)
-                  .truncationMode(.middle)
-#endif
-              }
-              HStack {
-                Text(L("Finder / WebDAV"))
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.8))
-                Spacer()
-#if os(iOS)
-                if !webDavDisplay.isEmpty {
-                  Text(webDavDisplay)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .networkURLContextMenu(webDavDisplay, openURL: openURL)
-                } else {
-                  Text(L("Not Running"))
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-                }
-#else
-                Text(webDavDisplay.isEmpty ? L("Not Running") : webDavDisplay)
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.6))
-                  .lineLimit(1)
-                  .truncationMode(.middle)
-#endif
-              }
-              // Web-import help: short description + link (plain text on tvOS — no browser).
-              VStack(alignment: .leading, spacing: 4) {
-                Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi. Open the address in a browser, or in Finder choose Go › Connect to Server and enter the same address as Guest."))
-                  .font(.system(size: 12))
-                  .foregroundColor(.white.opacity(0.5))
-#if os(iOS)
-                Button(L("Learn more")) {
-                  if let url = URL(string: "https://icube-emu.com/help/web-import") { openURL(url) }
-                }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.blue)
-#else
-                Text(verbatim: "https://icube-emu.com/help/web-import")
-                  .font(.system(size: 12))
-                  .foregroundColor(.white.opacity(0.5))
-#endif
-              }
-              .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-            .background(.white.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            SettingsMenuRow(icon: "info.circle", title: "About", subtitle: "App information") {
-              currentSettingsPage = .about
-            }
-          }
-        }
-        .frame(width: 480)
-      }
-      .padding(.horizontal, 60)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-  }
-
-  private func titleForPage(_ page: SettingsPage) -> String {
-    switch page {
-    case .config: return "Config"
-    case .performance: return L("Performance Tuning")
-    case .graphics: return "Graphics"
-    case .controllers: return "Controllers"
-    case .debug: return "Debug"
-    case .about: return "About"
-    }
-  }
-
-  @ViewBuilder
-  private func contentForPage(_ page: SettingsPage) -> some View {
-    switch page {
-    case .config:
-      ConfigRootView()
-    case .performance:
-      PerformanceTuningView()
-    case .graphics:
-      GraphicsRootView()
-    case .controllers:
-      ControllersRootView()
-    case .debug:
-      DebugRootView()
-    case .about:
-      AboutView()
-    }
   }
 
   /// One row in the flattened root list. `destination` is type-erased because the
@@ -410,8 +170,8 @@ struct SettingsRootView<Background: View>: View {
   /// that each hid their own sub-list. Matches Provenance's long-scroll-with-many-
   /// sections shape (`SettingsSwiftUI.swift`) rather than iFly's tabbed sidebar —
   /// see the WS-6 report for why. "Config"/"Graphics" as navigation hubs are gone
-  /// from here; `ConfigRootView`/`GraphicsRootView` still exist for the separate
-  /// pause-menu-style surface (`contentForPage(_:)` below), untouched.
+  /// from here in favor of their individual rows below (General/Interface/Advanced,
+  /// Video/Enhancements/Hacks/…), each linking straight to its own destination view.
   private var settingsSections: [SettingsListSection] {
     let generalSection: [SettingsEntry] = [
       SettingsEntry(title: L("General"), icon: "gear", accessibilityLabel: L("Config Settings")) { ConfigGeneralView() },
@@ -608,6 +368,11 @@ struct SettingsRootView<Background: View>: View {
           Button(L("Reset All")) { showGlobalResetAlert = true }
         }
       }
+      // DSU-add deep link (dolphinios://dsu/add, legacy dsu://) jumps straight here
+      // instead of leaving the user to find Controllers in the flattened list.
+      .navigationDestination(isPresented: $jumpToControllersRequested) {
+        ControllersRootView()
+      }
     }
     .alert(L("Reset All Settings"), isPresented: $showGlobalResetAlert) {
       Button(L("Cancel"), role: .cancel) {}
@@ -626,235 +391,5 @@ struct SettingsRootView<Background: View>: View {
 extension SettingsRootView where Background == EmptyView {
   init() {
     self.backgroundView = nil
-    self.isPauseMenuStyle = false
-    self.game = nil
   }
 }
-
-/// Settings page types
-internal enum SettingsPage {
-  case config, performance, graphics, controllers, debug, about
-}
-
-// Settings submenu view for pause menu style
-private struct SettingsSubMenuView: View {
-  let page: SettingsPage
-  let game: TVGameItem?
-  let onBack: () -> Void
-  @State private var showResetAll = false
-  @State private var showResetPage = false
-
-  var body: some View {
-    HStack(spacing: 80) {
-      // Left side - Game cover (smaller)
-      VStack(alignment: .leading, spacing: 16) {
-        if let gameItem = game {
-          Image(uiImage: gameItem.coverImage)
-            .resizable()
-            .aspectRatio(2.0/3.0, contentMode: .fit)
-            .frame(width: 180, height: 270)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
-        }
-
-        VStack(alignment: .leading, spacing: 6) {
-          Text(titleForPage(page))
-            .font(.system(size: 24, weight: .bold))
-            .foregroundColor(.white)
-
-          Text(subtitleForPage(page))
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(.white.opacity(0.7))
-        }
-      }
-      .frame(width: 180)
-
-      // Right side - Settings content
-      VStack(alignment: .leading, spacing: 32) {
-        // Back + Reset actions
-        HStack(spacing: 12) {
-          Button(action: onBack) {
-            HStack(spacing: 12) {
-              Image(systemName: "chevron.left")
-                .font(.system(size: 16, weight: .semibold))
-              Text("Back to Settings")
-                .font(.system(size: 18, weight: .semibold))
-            }
-            .foregroundColor(.white.opacity(0.8))
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(.white.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-          }
-          .buttonStyle(.plain)
-
-          Spacer()
-
-          Button(action: { showResetPage = true }) {
-            Text(L("Reset Page"))
-              .font(.system(size: 16, weight: .semibold))
-              .foregroundColor(.white)
-              .padding(.horizontal, 16)
-              .padding(.vertical, 10)
-              .background(.orange.opacity(0.3))
-              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-          }
-          .buttonStyle(.plain)
-
-          Button(action: { showResetAll = true }) {
-            Text(L("Reset All"))
-              .font(.system(size: 16, weight: .semibold))
-              .foregroundColor(.white)
-              .padding(.horizontal, 16)
-              .padding(.vertical, 10)
-              .background(.red.opacity(0.3))
-              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-          }
-          .buttonStyle(.plain)
-        }
-
-        // Settings content - ensure NavigationStack for NavigationLink to work, and focus enabled
-        NavigationStack { contentForPage(page) }
-          .environment(\.colorScheme, .dark)
-          .foregroundStyle(.white)
-#if !os(tvOS)
-          .modifier(HideListBackgroundIfAvailable())
-#endif
-          .background(Color.clear)
-          .frame(maxWidth: 820, maxHeight: 520)
-          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-      }
-      .frame(width: 480)
-      .frame(maxHeight: .infinity)
-    }
-    .padding(.horizontal, 60)
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-#if os(tvOS)
-    .onExitCommand { onBack() }
-#endif
-    .alert(L("Reset All Settings"), isPresented: $showResetAll) {
-      Button(L("Cancel"), role: .cancel) {}
-      Button(L("Reset"), role: .destructive) {
-        DOLConfigBridge.resetAllToDefaults()
-      }
-    } message: {
-      Text(L("This will reset all settings to factory defaults. This may require restarting emulation."))
-    }
-    .alert(L("Reset Page"), isPresented: $showResetPage) {
-      Button(L("Cancel"), role: .cancel) {}
-      Button(L("Reset"), role: .destructive) {
-        let index: Int
-        switch page {
-        case .config: index = 0
-        case .performance: index = 0
-        case .graphics: index = 1
-        case .controllers: index = 2
-        case .debug: index = 3
-        case .about: index = 4
-        }
-        DOLConfigBridge.resetPage(toDefaults: index)
-      }
-    } message: {
-      Text(L("This resets only the settings on this page to defaults."))
-    }
-  }
-
-  private func titleForPage(_ page: SettingsPage) -> String {
-    switch page {
-    case .config: return "Config"
-    case .performance: return L("Performance Tuning")
-    case .graphics: return "Graphics"
-    case .controllers: return "Controllers"
-    case .debug: return "Debug"
-    case .about: return "About"
-    }
-  }
-
-  private func subtitleForPage(_ page: SettingsPage) -> String {
-    switch page {
-    case .config: return "General configuration"
-    case .performance: return "CPU & interpreter speed"
-    case .graphics: return "Video & rendering settings"
-    case .controllers: return "Input & controller setup"
-    case .debug: return "Developer options"
-    case .about: return "App information"
-    }
-  }
-
-  @ViewBuilder
-  private func contentForPage(_ page: SettingsPage) -> some View {
-    switch page {
-    case .config:
-      ConfigRootView()
-    case .performance:
-      PerformanceTuningView()
-    case .graphics:
-      GraphicsRootView()
-    case .controllers:
-      ControllersRootView()
-    case .debug:
-      DebugRootView()
-    case .about:
-      AboutView()
-    }
-  }
-}
-
-// Settings menu row component for pause menu style
-private struct SettingsMenuRow: View {
-  let icon: String
-  let title: String
-  let subtitle: String
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: 20) {
-        // Icon with background
-        ZStack {
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(.white.opacity(0.1))
-            .frame(width: 48, height: 48)
-
-          Image(systemName: icon)
-            .font(.system(size: 20, weight: .medium))
-            .foregroundColor(.white)
-        }
-
-        // Text content
-        VStack(alignment: .leading, spacing: 4) {
-          Text(title)
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundColor(.white)
-
-          Text(subtitle)
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(.white.opacity(0.7))
-        }
-
-        Spacer()
-
-        // Chevron
-        Image(systemName: "chevron.right")
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(.white.opacity(0.5))
-      }
-      .padding(.horizontal, 24)
-      .padding(.vertical, 16)
-      .background(.white.opacity(0.05))
-      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-    .buttonStyle(.plain)
-  }
-}
-
-
-
-/// Config top-level menu with easily re-orderable items
-#if os(iOS)
-private struct HideListBackgroundIfAvailable: ViewModifier {
-  func body(content: Content) -> some View {
-    content.scrollContentBackground(.hidden)
-  }
-}
-#endif

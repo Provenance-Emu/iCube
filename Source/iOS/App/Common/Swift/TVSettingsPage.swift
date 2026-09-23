@@ -12,7 +12,7 @@ internal struct TVSettingsPage: View {
     #if os(tvOS)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
-          Button("Close") { dismiss() }
+          Button(L("Close")) { dismiss() }
             .buttonStyle(.bordered)
         }
       }
