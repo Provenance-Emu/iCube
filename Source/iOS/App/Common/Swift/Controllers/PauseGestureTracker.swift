@@ -45,6 +45,18 @@ final class PauseGestureTracker {
   /// Requests closer together than this are treated as the same press.
   private static let pauseRequestCoalesceWindow: TimeInterval = 0.35
   private var lastPauseRequest: TimeInterval = 0
+  /// Pairing a DualShock/DualSense/Xbox pad means holding its Home/PS button, and the
+  /// framework can deliver that press through the freshly installed `buttonHome` handler
+  /// right after `GCControllerDidConnect`. Mid-game that paused the core and popped the
+  /// pause menu the instant the pad connected (the TestFlight "menu won't go away /
+  /// touch stops working when I connect a controller" reports). Ignore pause requests
+  /// for a short window after any connect.
+  private static let connectGraceWindow: TimeInterval = 0.75
+  private var lastControllerConnect: TimeInterval = 0
+
+  func noteControllerConnected() {
+    lastControllerConnect = Date().timeIntervalSinceReferenceDate
+  }
 
   /// Press-down timestamps for the dual-purpose Menu/Options buttons, keyed by
   /// route. See `menuButtonChanged`.
@@ -108,6 +120,12 @@ final class PauseGestureTracker {
       return
     }
     let now = Date().timeIntervalSinceReferenceDate
+    if now - lastControllerConnect < Self.connectGraceWindow {
+      if UserDefaults.standard.bool(forKey: "input_debug") {
+        NSLog("[INPUT] pause request ignored (%@): controller connected %.2fs ago", reason, now - lastControllerConnect)
+      }
+      return
+    }
     guard now - lastPauseRequest > Self.pauseRequestCoalesceWindow else { return }
     lastPauseRequest = now
     DispatchQueue.main.async {

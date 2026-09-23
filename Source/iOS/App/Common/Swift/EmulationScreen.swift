@@ -1227,8 +1227,13 @@ struct EmulationScreen: View {
         controllerManager.clearDisconnectPause()
       }
     }
-    .onChange(of: showPauseMenu) { _ in
+    .onChange(of: showPauseMenu) { visible in
       isPaused = TVEmulationBridge.isPaused()
+      // The fullScreenCover transition perturbs the GeometryReader size and the Metal
+      // surface never resizes itself (updateUIViewController is empty), so without this
+      // the game could come back small, bottom-left, or half off screen until the next
+      // rotation.
+      if !visible { TVEmulationBridge.resizeSurfaceNow() }
     }
     // The library stack pushes this screen; hide its bar (iOS 26 renders leftover
     // toolbar items as floating glass buttons that also swallow the top-edge tap).

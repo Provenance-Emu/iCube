@@ -108,6 +108,7 @@ final class ControllerManager: NSObject, ObservableObject {
     let onConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { [weak self] note in
       guard let self = self else { return }
       if let c = note.object as? GCController {
+        PauseGestureTracker.shared.noteControllerConnected()
         configureController(c)
         self.presets.applyCurrentPreset()
         // If a disconnect-pause is active, any connecting controller resumes the
