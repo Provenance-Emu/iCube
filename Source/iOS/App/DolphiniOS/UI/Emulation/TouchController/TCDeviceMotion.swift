@@ -10,7 +10,17 @@ import Foundation
   @objc public static let shared = TCDeviceMotion()
 
   private let motionManager = CMMotionManager()
-  private let operationQueue = OperationQueue()
+  /// CoreMotion delivers on this queue. It MUST be serial: the accelerometer, gyro and device-motion
+  /// callbacks all mutate the same state (`shakeHistory`, cursor position, port), and with the default
+  /// unlimited concurrency they ran in parallel and crashed inside `shakeHistory.append` (EXC_BAD_ACCESS
+  /// in swift_release from a torn Array buffer) as soon as a game booted.
+  private let operationQueue: OperationQueue = {
+    let queue = OperationQueue()
+    queue.name = "com.joemattiello.iCube.device-motion"
+    queue.maxConcurrentOperationCount = 1
+    queue.qualityOfService = .userInteractive
+    return queue
+  }()
 
   public private(set) var orientation: UIInterfaceOrientation = .portrait
   public private(set) var motionEnabled = false
