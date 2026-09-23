@@ -375,6 +375,95 @@ static void* s_dyn_fill_slot = nullptr;
 static u64 s_dyn_hits = 0;    // profiler-gated (MAIN_CIR_PROFILE)
 static u64 s_dyn_misses = 0;  // profiler-gated
 
+// iCube: dyn-link MISS CENSUS (profiler-gated, like s_dyn_hits — the speed legs of an A/B pay
+// nothing). The aggregate hit rate says the cache misses a quarter of the time; it does not say WHY,
+// and the why picks the fix. Broken out two ways:
+//
+//   exit kind  0 bx   1 bcx-taken   2 bcx-fallthrough   3 blr   4 bctr   5 other/idle
+//   reason     0 cold (slot empty, unavoidable first time)
+//              1 pc   (the successor CHANGED — the cache is monomorphic, so a multi-caller `blr`
+//                      or a polymorphic `bctr` thrashes here; this is the only bucket a better
+//                      cache structure can win)
+//              2 generation (a DestroyBlock invalidated every entry — churn, not polymorphism)
+//              3 flags (feature_flags diverged; expected to be ~0)
+//
+// A return-address stack only pays off if bucket [blr][pc] dominates; an N-way cache only if
+// [bctr][pc] does; and if [*][generation] dominates, neither helps and the generation bump is the bug.
+enum class CIRDynExitKind
+{
+  Bx,
+  BcxTaken,
+  BcxFallthrough,
+  Blr,
+  Bctr,
+  Other,
+  COUNT
+};
+static const char* CIR_DynExitKindName(u32 k)
+{
+  switch (k)
+  {
+  case 0:  return "bx";
+  case 1:  return "bcx-taken";
+  case 2:  return "bcx-fallthru";
+  case 3:  return "blr";
+  case 4:  return "bctr";
+  default: return "other/idle";
+  }
+}
+static constexpr u32 kCIRDynKinds = static_cast<u32>(CIRDynExitKind::COUNT);
+static u64 s_dyn_hits_by_kind[kCIRDynKinds] = {};
+static u64 s_dyn_miss_by_kind_reason[kCIRDynKinds][4] = {};
+
+// iCube 2026-09-23: GLOBAL INDIRECT-TARGET CACHE (MAIN_CIR_DYN_TARGET_CACHE, default OFF).
+//
+// Measured on NFS: Underground with the census above: 100% of dyn-link misses are `pc-changed` (0%
+// cold, 0% generation), and `blr` alone is 97.3M of the 98.5M misses — a 73.4% hit rate on returns
+// while `bctr` already sits at 93.1%. That is the signature of a MONOMORPHIC cache on a RETURN site:
+// the per-site slot remembers one caller, and any function reached from more than one call site
+// thrashes it forever. No amount of tuning the per-site entry fixes that, because the successor is a
+// property of the CALLER, not of the exit.
+//
+// The fix is to key the cache on the TARGET instead of on the site: a small direct-mapped table from
+// (guest pc, feature_flags) -> the block's absolute normalEntry, consulted when the per-site slot
+// misses. A return to any previously-seen address then hits regardless of which call site it came
+// from. This is the same structure QEMU uses for its indirect-branch dispatch, and it subsumes
+// `bctr` polymorphism for free.
+//
+// Chosen over a return-address stack deliberately: a RAS must be pushed on every `bl` and stays
+// correct only while calls and returns nest, so tail calls, setjmp/longjmp and exception unwinds all
+// need handling or it silently mispredicts. This table has no such coupling — it is pure memoization
+// of "which host code implements this guest pc", so a stale or wrong entry is impossible rather than
+// merely unlikely.
+//
+// SAFETY — identical guards to the per-site slot, which is why this cannot execute a wrong stream:
+//   * `pc` and `flags` must both match the live state, so a collision in the direct-mapped index
+//     fails the tag check and falls through to the dispatcher.
+//   * `generation` must equal s_dyn_generation, which BumpDynLinkGeneration increments on every
+//     DestroyBlock, so an entry that could point into freed or reused tape is dead by construction.
+//     That is the same mechanism the per-site slot already relies on.
+//   * On any mismatch the cost is exactly one dispatcher round-trip — the unlinked behaviour.
+// CPU-thread only, like everything else on this path.
+struct CIRTargetCacheEntry
+{
+  u32 pc;
+  u32 flags;
+  u32 generation;
+  const u8* entry;  // absolute normalEntry; site-independent, unlike the per-site `rel`
+};
+static constexpr u32 kCIRTargetCacheBits = 12;  // 4096 entries * 24B = 96 KiB
+static constexpr u32 kCIRTargetCacheMask = (1u << kCIRTargetCacheBits) - 1;
+static bool s_dyn_target_cache = false;
+static CIRTargetCacheEntry s_target_cache[1u << kCIRTargetCacheBits] = {};
+static u64 s_dyn_global_hits = 0;  // profiler-gated
+// Guest PCs are 4-byte aligned, so the low two bits carry nothing; mix a little so that blocks a
+// constant stride apart do not all collide.
+static inline u32 CIR_TargetCacheIndex(u32 pc)
+{
+  const u32 h = pc >> 2;
+  return (h ^ (h >> kCIRTargetCacheBits)) & kCIRTargetCacheMask;
+}
+
 // iCube: gather-pipe copy fusion observability (MAIN_CIR_GP_COPY_FUSION). All four are profiler-gated
 // (MAIN_CIR_PROFILE) exactly like s_dyn_hits, so the profiler-OFF speed legs of an A/B pay nothing —
 // the fused record IS the hot path being measured, and an ungated counter would tax the measurement.
@@ -1163,6 +1252,58 @@ std::string BuildHotBlocksReport(u32 top_n)
       << s_block_profile.grand_total_runs << " total_cycles=" << grand_cycles << "\n";
   out << "  dyn_link_hits=" << s_dyn_hits << " dyn_link_misses=" << s_dyn_misses
       << " (blr/bctr/bcx-fallthrough exits served from the inline cache vs dispatcher)\n";
+  // iCube: dyn-link MISS CENSUS. The aggregate rate above does not say WHY the cache misses, and the
+  // why picks the fix — see the counter declarations. Only the `pc` column is addressable by a better
+  // cache structure.
+  if (s_dyn_hits != 0 || s_dyn_misses != 0)
+  {
+    out << "  -- DYN-LINK MISS CENSUS (profiler-gated) --\n";
+    out << "     exit          hits           miss:cold      miss:pc        miss:gen       "
+           "miss:flags     hit%\n";
+    for (u32 k = 0; k < kCIRDynKinds; ++k)
+    {
+      const u64 h = s_dyn_hits_by_kind[k];
+      const u64* m = s_dyn_miss_by_kind_reason[k];
+      const u64 tot = h + m[0] + m[1] + m[2] + m[3];
+      if (tot == 0)
+        continue;
+      char line[224];
+      snprintf(line, sizeof(line),
+               "     %-12s %14llu %14llu %14llu %14llu %14llu  %5.1f%%\n", CIR_DynExitKindName(k),
+               static_cast<unsigned long long>(h), static_cast<unsigned long long>(m[0]),
+               static_cast<unsigned long long>(m[1]), static_cast<unsigned long long>(m[2]),
+               static_cast<unsigned long long>(m[3]),
+               100.0 * static_cast<double>(h) / static_cast<double>(tot));
+      out << line;
+    }
+    u64 pc_total = 0, gen_total = 0, cold_total = 0;
+    for (u32 k = 0; k < kCIRDynKinds; ++k)
+    {
+      cold_total += s_dyn_miss_by_kind_reason[k][0];
+      pc_total += s_dyn_miss_by_kind_reason[k][1];
+      gen_total += s_dyn_miss_by_kind_reason[k][2];
+    }
+    if (s_dyn_target_cache)
+    {
+      char gl[176];
+      snprintf(gl, sizeof(gl),
+               "     global target cache: %llu hits (%.1f%% of all hits) - keyed by target pc, not by "
+               "exit site\n",
+               static_cast<unsigned long long>(s_dyn_global_hits),
+               100.0 * static_cast<double>(s_dyn_global_hits) /
+                   static_cast<double>(s_dyn_hits != 0 ? s_dyn_hits : 1));
+      out << gl;
+    }
+    const double dm = static_cast<double>(s_dyn_misses != 0 ? s_dyn_misses : 1);
+    char sum[256];
+    snprintf(sum, sizeof(sum),
+             "     of all misses: cold %.1f%%  pc-changed %.1f%%  generation %.1f%%  "
+             "(only pc-changed is fixable by a better cache)\n",
+             100.0 * static_cast<double>(cold_total) / dm,
+             100.0 * static_cast<double>(pc_total) / dm,
+             100.0 * static_cast<double>(gen_total) / dm);
+    out << sum;
+  }
   out << "  gp_fused_emitted=" << s_gp_fused_emitted << " gp_fused_runs=" << s_gp_fused_runs
       << " gp_fused_pairs=" << s_gp_fused_pairs << " gp_fused_fallbacks=" << s_gp_fused_fallbacks
       << " (gather-pipe copy fusion; the %cyc column CANNOT show this — it is static guest cycles)\n";
@@ -1647,8 +1788,13 @@ void CachedInterpreter::Init()
   s_dyn_linking = s_block_linking && Config::Get(Config::MAIN_CIR_DYN_LINKING);
   s_dyn_fill_slot = nullptr;
   ++s_dyn_generation;
+  s_dyn_target_cache = Config::Get(Config::MAIN_CIR_DYN_TARGET_CACHE);
+  std::memset(s_target_cache, 0, sizeof(s_target_cache));
+  s_dyn_global_hits = 0;
   s_dyn_hits = 0;
   s_dyn_misses = 0;
+  std::memset(s_dyn_hits_by_kind, 0, sizeof(s_dyn_hits_by_kind));
+  std::memset(s_dyn_miss_by_kind_reason, 0, sizeof(s_dyn_miss_by_kind_reason));
   s_gp_fused_emitted = 0;
   s_gp_fused_runs = 0;
   s_gp_fused_pairs = 0;
@@ -1784,6 +1930,17 @@ void CachedInterpreter::ExecuteOneBlock(const CPU::State* state_ptr)
     slot->dyn_flags = static_cast<u32>(ppc_state.feature_flags);
     slot->dyn_generation = s_dyn_generation;
     slot->dyn_rel = static_cast<s32>(normal_entry - site);
+  }
+  // iCube: fill the GLOBAL indirect-target cache (MAIN_CIR_DYN_TARGET_CACHE). Done on EVERY dispatcher
+  // entry, not only after a published miss, so the table is warm for exits that have never missed yet.
+  // One tag write per dispatch, which is noise next to the dispatch itself.
+  if (s_dyn_target_cache)
+  {
+    CIRTargetCacheEntry& slot = s_target_cache[CIR_TargetCacheIndex(ppc_state.pc)];
+    slot.pc = ppc_state.pc;
+    slot.flags = static_cast<u32>(ppc_state.feature_flags);
+    slot.generation = s_dyn_generation;
+    slot.entry = normal_entry;
   }
   // iCube: block-linking safety guards, reset on each dispatcher entry (this function) and consumed by
   // LinkBlock, which follows links with tail calls the loop below never sees.
@@ -2006,12 +2163,47 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* p
         operands.dyn_generation != s_dyn_generation ||
         operands.dyn_flags != static_cast<u32>(ppc_state.feature_flags))
     {
+      // iCube: the per-site slot missed. Before paying a dispatcher round-trip, consult the GLOBAL
+      // target cache, which is keyed by the successor's pc rather than by this exit — the whole point,
+      // since a multi-caller `blr` can never keep a per-site slot warm. Same three guards, so a
+      // mismatch is still just a round-trip.
+      if (s_dyn_target_cache)
+      {
+        const CIRTargetCacheEntry& g = s_target_cache[CIR_TargetCacheIndex(ppc_state.pc)];
+        if (g.entry != nullptr && g.pc == ppc_state.pc && g.generation == s_dyn_generation &&
+            g.flags == static_cast<u32>(ppc_state.feature_flags))
+        {
+          if constexpr (instrumented)
+          {
+            if (s_cir_profile) [[unlikely]]
+            {
+              ++s_dyn_hits;
+              ++s_dyn_global_hits;
+              ++s_dyn_hits_by_kind[operands.exit_kind < kCIRDynKinds ? operands.exit_kind :
+                                                                       kCIRDynKinds - 1];
+            }
+          }
+          rel = static_cast<s32>(g.entry - callback_site);
+          goto cir_follow_link;
+        }
+      }
       if (s_dyn_linking)
       {
         if constexpr (instrumented)
         {
           if (s_cir_profile) [[unlikely]]
+          {
             ++s_dyn_misses;
+            // Attribute the miss. Order matters: cold first (an empty slot has no pc to compare),
+            // then generation (a stale entry's pc is meaningless), then the real polymorphic miss.
+            const u32 reason = operands.dyn_rel == 0                              ? 0u :
+                               operands.dyn_generation != s_dyn_generation        ? 2u :
+                               operands.dyn_pc != ppc_state.pc                    ? 1u :
+                                                                                    3u;
+            const u32 kind = operands.exit_kind < kCIRDynKinds ? operands.exit_kind :
+                                                                 kCIRDynKinds - 1;
+            ++s_dyn_miss_by_kind_reason[kind][reason];
+          }
         }
         s_dyn_fill_slot = const_cast<LinkBlockOperands*>(&operands);
       }
@@ -2020,10 +2212,16 @@ s32 CachedInterpreter::LinkBlock(PowerPC::PowerPCState& ppc_state, const void* p
     if constexpr (instrumented)
     {
       if (s_cir_profile) [[unlikely]]
+      {
         ++s_dyn_hits;
+        ++s_dyn_hits_by_kind[operands.exit_kind < kCIRDynKinds ? operands.exit_kind :
+                                                                 kCIRDynKinds - 1];
+      }
     }
     rel = operands.dyn_rel;
   }
+
+cir_follow_link:
 
   // (5) Optional self-validation. The strongest check (resolving GetBlockFromStartAddress(npc,
   // feature_flags) and asserting normalEntry == callback_site + rel) needs the block cache, which a
@@ -5212,7 +5410,7 @@ bool CachedInterpreter::HandleFunctionHooking(u32 address)
 }
 
 void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable, bool always_taken,
-                                      int merged_terminal, u32 lr_value)
+                                      int merged_terminal, u32 lr_value, u32 exit_kind)
 {
   // iCube: linkable IFF all hold: feature on; not profiling (the link trampoline is unprofiled);
   // not debugging (breakpoints/stepping must round-trip the dispatcher so a single ExecuteOneBlock
@@ -5263,6 +5461,7 @@ void CachedInterpreter::WriteEndBlock(u32 link_target, bool dyn_linkable, bool a
                                       0,
                                       0,
                                       0,  // iCube: dynamic inline cache starts empty
+                                      exit_kind,
                                       lr_value};
   // exitPtrs must point at the AnyCallback slot (start of this callback), so WriteLinkBlock can
   // compute rel = dest->normalEntry - exitPtrs and LinkBlock recovers the same callback_site.
@@ -7006,8 +7205,19 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
         // mid-block bc, which is only reached when the branch was taken.
         const bool always_taken =
             op.inst.OPCD == 18 || (op.inst.OPCD == 16 && mid_block_terminal && !idle_terminal);
+        // iCube: tag the terminal kind for the dyn-link miss census. The cache is MONOMORPHIC (one
+        // last-successor slot per exit), so which terminal misses tells you which fix applies: a
+        // `blr` that misses on pc is a multi-caller return (wants a return-address stack), a `bctr`
+        // that misses on pc is polymorphic indirect dispatch (wants an N-way cache), and a miss on
+        // generation is invalidation churn, which is neither.
+        const u32 exit_kind =
+            idle_terminal ? 5 :
+            (op.inst.OPCD == 19 && op.inst.SUBOP10 == 16) ? 3 :
+            (op.inst.OPCD == 19 && op.inst.SUBOP10 == 528) ? 4 :
+            (op.inst.OPCD == 18) ? 0 :
+            (op.inst.OPCD == 16) ? (mid_block_terminal ? 1 : 2) : 5;
         WriteEndBlock(idle_terminal ? 0xFFFFFFFF : op.branchTo, dyn_terminal, always_taken,
-                      merged_terminal, js.compilerPC + 4);
+                      merged_terminal, js.compilerPC + 4, exit_kind);
       }
       if (cond_branch_record != nullptr && !HasWriteFailed())
       {

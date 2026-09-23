@@ -1095,6 +1095,12 @@ const Info<bool> MAIN_CIR_MICRO_PAIRS{{System::Main, "Core", "CIRMicroPairs"}, t
 // any failure falls back to running the pairs one at a time through the unchanged micro-op handlers,
 // so a run that does not actually target the pipe costs one extra compare. Flip OFF to A/B.
 // UNVALIDATED on-device — gated for A/B, like MAIN_CIR_STORE_LOOP_FF and MAIN_CIR_CACHE_LOOP_FF.
+// iCube: global indirect-target cache for the dyn-link path (see CachedInterpreter.cpp). The
+// per-site inline cache is monomorphic, so a `blr` in a function with several callers thrashes it:
+// measured on NFS: Underground, 100% of dyn-link misses are pc-changed and `blr` is 97.3M of the
+// 98.5M. Keys on the target pc instead, so a return hits whoever called. UNVALIDATED on-device —
+// gated for A/B, like MAIN_CIR_STORE_LOOP_FF and MAIN_CIR_GP_COPY_FUSION.
+const Info<bool> MAIN_CIR_DYN_TARGET_CACHE{{System::Main, "Core", "CIRDynTargetCache"}, false};
 const Info<bool> MAIN_CIR_GP_COPY_FUSION{{System::Main, "Core", "CIRGatherPipeCopyFusion"}, false};
 // iCube WIN#1: PIC (position-independent-code) direct-pointer load/store on the CachedInterpreter.
 // Integer D-form/X-form load/stores resolve the host RAM pointer directly and do the access with the

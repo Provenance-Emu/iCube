@@ -208,6 +208,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setCirLongBlocks:(BOOL)enabled;
 + (BOOL)cirMicroPairs;            // two adjacent micro-ops fused into one record (default ON)
 + (void)setCirMicroPairs:(BOOL)enabled;
++ (BOOL)cirDynTargetCache;
++ (void)setCirDynTargetCache:(BOOL)v;
 + (BOOL)cirGatherPipeCopyFusion;  // lbz/stb runs into the write-gather pipe fused into one record (default ON)
 + (void)setCirGatherPipeCopyFusion:(BOOL)enabled;
 + (BOOL)stallMetrics;             // CPU-thread stall instrumentation (default ON, <0.5% overhead)

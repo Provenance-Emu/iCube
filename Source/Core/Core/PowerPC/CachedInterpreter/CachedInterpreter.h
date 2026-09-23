@@ -270,7 +270,8 @@ private:
   // trampoline (and records the LinkData for upstream patching) instead of a plain EndBlock. Default
   // UINT32_MAX preserves the stock behavior for all the non-static call sites.
   void WriteEndBlock(u32 link_target = 0xFFFFFFFF, bool dyn_linkable = false,
-                     bool always_taken = false, int merged_terminal = 0, u32 lr_value = 0);
+                     bool always_taken = false, int merged_terminal = 0, u32 lr_value = 0,
+                     u32 exit_kind = 0);
 
   // Finds a free memory region and sets the code emitter to point at that region.
   // Returns false if no free memory region can be found.
@@ -682,7 +683,10 @@ struct CachedInterpreter::LinkBlockOperands
   u32 dyn_flags;
   u32 dyn_generation;
   s32 dyn_rel;
-  u32 : 32;
+  // iCube: terminal kind for the dyn-link miss census (CIRDynExitKind). Occupies what was unnamed
+  // padding, so the trampoline does NOT grow. Written at emit, read only by the profiler-gated
+  // counters in LinkBlock — never on the linked fast path.
+  u32 exit_kind;
   // iCube: LR value for a folded `bl` terminal (LinkBlock terminal 3); fills what was padding.
   u32 lr_value;
 };
