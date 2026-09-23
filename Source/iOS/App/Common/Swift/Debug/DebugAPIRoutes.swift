@@ -42,6 +42,34 @@ import Foundation
 /// The error message every `parseBody` caller returns (as a 400) when the
 /// request body is missing, empty, or not a JSON object.
 private let bodyMustBeJSONObjectError = "body must be a JSON object"
+/// iCube: true when a title is loaded, which makes settings writes VOLATILE.
+///
+/// `Config::SetBaseOrCurrent` (Config.h:131) writes the **CurrentRun** layer whenever a key's active
+/// layer is not Base, and CurrentRun is discarded when the run ends. EmulationCoordinator puts a
+/// CurrentRun override on MAIN_CPU_CORE at boot (the JIT-availability fallback), so while a game is
+/// loaded a write to that key lands in CurrentRun, reads back correctly, and then silently reverts to
+/// whatever Base holds the moment the title stops.
+///
+/// That is how a settings restore put the device on the ARM64 JIT while reporting success: the
+/// snapshot had recorded the resolved value 5 (from CurrentRun), the apply wrote CurrentRun again, and
+/// stopping the game dropped it back to Base's 4. For a benchmark harness a write that does not
+/// survive the next boot is worse than a failed write, because it looks like it worked.
+private func aGameIsLoaded() -> Bool {
+  let state = Thread.isMainThread
+    ? DOLDebugBridge.coreState()
+    : DispatchQueue.main.sync { DOLDebugBridge.coreState() }
+  return state != "uninitialized" && state != "unknown"
+}
+
+/// Keys whose ACTIVE layer is not Base after a write — i.e. whose new value will not survive the run.
+private func volatileKeys(_ keys: [String]) -> [String] {
+  let layers = DOLSettingsKeyBridge.snapshotAllLayers()
+  return keys.filter { k in
+    guard let e = layers[k], let l = e["layer"] as? String else { return false }
+    return l != "Base"
+  }.sorted()
+}
+
 /// Settings captured by the first POST /api/bench/preset benchmarkBase, for "restore". Server queue only.
 nonisolated(unsafe) private var presetRestoreSnapshot: PerfSnapshot?
 
@@ -148,6 +176,16 @@ final class DebugAPIRoutes {
         return ["ok": false, "status": 400, "error": "mode must be \"merge\" or \"replace\""]
       }
       let atomic = (dict["atomic"] as? Bool) ?? true
+      // Durability guard. Default ON for `replace` (a full-config write is only meaningful if it
+      // sticks) and OFF for `merge` (tweaking a hot-swappable value mid-run is a legitimate thing to
+      // do). See aGameIsLoaded() for why a write during a run can silently evaporate.
+      let requireDurable = (dict["requireDurable"] as? Bool) ?? (mode == "replace")
+      if requireDurable && aGameIsLoaded() {
+        return ["ok": false, "status": 409,
+                "error": "a title is loaded, so writes land in the volatile CurrentRun layer and are "
+                       + "lost when it stops; POST /api/debug/stop first, or pass "
+                       + "{\"requireDurable\": false} to write anyway"]
+      }
 
       // Validate first: unknown names, and values whose JSON type cannot represent the setting.
       let meta = DOLSettingsKeyBridge.snapshotAll()
@@ -206,6 +244,11 @@ final class DebugAPIRoutes {
         "requiresReboot": outcome.reboot,
       ]
       if !errors.isEmpty { data["errors"] = errors }
+      let vol = volatileKeys(Array(applyList.keys))
+      if !vol.isEmpty {
+        data["volatile"] = vol
+        data["volatileNote"] = "these landed in a non-Base layer and will revert when the title stops"
+      }
       if !outcome.reboot.isEmpty {
         data["note"] = "boot-time keys changed; reload a save state or reboot the title for them to take effect"
       }
@@ -286,6 +329,14 @@ final class DebugAPIRoutes {
       guard mode == "merge" || mode == "replace" else {
         return ["ok": false, "status": 400, "error": "mode must be \"merge\" or \"replace\""]
       }
+      // Restoring a snapshot must be durable or it is a lie — see aGameIsLoaded().
+      if ((dict["requireDurable"] as? Bool) ?? true) && aGameIsLoaded() {
+        return ["ok": false, "status": 409,
+                "error": "a title is loaded, so restored values land in the volatile CurrentRun layer "
+                       + "and revert when it stops (this is how a restore silently left the device on "
+                       + "the wrong CPU core); POST /api/debug/stop first, or pass "
+                       + "{\"requireDurable\": false}"]
+      }
       let parts = path.split(separator: "/").map(String.init)  // api settings snapshots <name> apply
       guard parts.count == 5, let saved = snapshots.load(name: parts[3]) else {
         return ["ok": false, "status": 404, "error": "snapshot not found"]
@@ -310,10 +361,15 @@ final class DebugAPIRoutes {
         }
         return (applied, failed, reboot.sorted())
       }
-      return ["ok": outcome.failed == 0,
-              "data": ["snapshot": parts[3], "mode": mode, "applied": outcome.applied,
-                       "failed": outcome.failed, "skipped": saved.count - values.count,
-                       "requiresReboot": outcome.reboot] as [String: Any]]
+      var data: [String: Any] = ["snapshot": parts[3], "mode": mode, "applied": outcome.applied,
+                                 "failed": outcome.failed, "skipped": saved.count - values.count,
+                                 "requiresReboot": outcome.reboot]
+      let vol = volatileKeys(Array(values.keys))
+      if !vol.isEmpty {
+        data["volatile"] = vol
+        data["volatileNote"] = "these landed in a non-Base layer and will revert when the title stops"
+      }
+      return ["ok": outcome.failed == 0, "data": data]
     }
 
     // GET /api/settings/snapshots/<A>/diff/<B> — diff two saved snapshots by name.
