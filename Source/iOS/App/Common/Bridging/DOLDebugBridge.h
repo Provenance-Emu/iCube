@@ -11,6 +11,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Current core state: "uninitialized" | "starting" | "running" | "paused" | "stopping".
 + (NSString*)coreState;
+/// Raw bytes of emulated RAM at a guest (0x8xxxxxxx / 0x9xxxxxxx / 0xCxxxxxxx / 0xDxxxxxxx) address,
+/// read straight from the host mapping without pausing the CPU, so it works while a panic alert has
+/// the CPU thread blocked. nil when no game is running or the range is not RAM.
++ (nullable NSData*)readGuestMemory:(uint32_t)address length:(uint32_t)length;
 
 /// Pauses the running core. Returns NO if the core is not running.
 + (BOOL)pause;

@@ -26,6 +26,7 @@
 #include "Core/Movie.h"
 #include "Core/State.h"
 #include "Core/System.h"
+#include "Core/HW/Memmap.h"
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/FrameDumper.h"
 
@@ -201,6 +202,15 @@ class RingListener : public Common::Log::LogListener {
     [NSThread sleepForTimeInterval:0.05];
   }
   return nil;
+}
+
++ (nullable NSData*)readGuestMemory:(uint32_t)address length:(uint32_t)length {
+  auto& system = Core::System::GetInstance();
+  if (!Core::IsRunning(system) || length == 0 || length > 65536) return nil;
+  auto& memory = system.GetMemory();
+  const u8* ptr = memory.GetPointerForRange(address, length);
+  if (ptr == nullptr) return nil;
+  return [NSData dataWithBytes:ptr length:length];
 }
 
 + (BOOL)loadStateSlot:(NSInteger)slot {

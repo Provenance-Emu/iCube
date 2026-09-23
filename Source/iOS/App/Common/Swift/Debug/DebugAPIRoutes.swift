@@ -32,6 +32,7 @@
 //   GET  /api/debug/build-info       -> SCM rev/branch/app version/configuration
 //   GET  /api/debug/render-state     -> render-relevant config/state snapshot
 //   GET  /api/logs                   -> query {"tail":N=200} -> last N log lines
+//   GET  /api/debug/mem              -> query {"addr":"0x..","len":N=64} -> raw guest RAM as hex
 //
 // frame-advance/savestate/loadstate bodies are parsed by `parseBody` below: a
 // non-JSON-object body (including a missing one) returns nil, which callers
@@ -785,6 +786,27 @@ final class DebugAPIRoutes {
     }
 
     // GET /api/logs  query tail=N, defaults to 200 when absent; N must be a non-negative integer
+    // GET /api/debug/mem?addr=0x801aa380&len=64 — raw emulated RAM as hex, read from the host
+    // mapping without pausing the CPU (works while a panic alert blocks the CPU thread). Distinguishes
+    // "RAM really holds zeros" from "the CPU core fetched the wrong thing".
+    server.addCustomHandler(forMethod: "GET", path: "/api/debug/mem") { _, _, query, _ in
+      guard let addrRaw = query?["addr"], let addr = UInt32(addrRaw.replacingOccurrences(of: "0x", with: ""), radix: 16) else {
+        return ["ok": false, "status": 400, "error": "addr must be a hex guest address"]
+      }
+      let len = UInt32(query?["len"] ?? "") ?? 64
+      guard len > 0, len <= 65536 else {
+        return ["ok": false, "status": 400, "error": "len must be 1...65536"]
+      }
+      guard let data = DOLDebugBridge.readGuestMemory(addr, length: len) else {
+        return ["ok": false, "status": 409, "error": "core not running or range is not RAM"]
+      }
+      let nonZero = data.reduce(0) { $0 + ($1 == 0 ? 0 : 1) }
+      return ["ok": true, "data": [
+        "addr": String(format: "0x%08x", addr), "len": Int(len), "nonzero_bytes": nonZero,
+        "hex": data.map { String(format: "%02x", $0) }.joined(),
+      ] as [String: Any]]
+    }
+
     server.addCustomHandler(forMethod: "GET", path: "/api/logs") { _, _, query, _ in
       guard let raw = query?["tail"] else {
         return ["ok": true, "data": ["lines": DOLDebugBridge.logTail(200)]]
