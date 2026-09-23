@@ -16,8 +16,17 @@ on:
         default: all
         type: choice
         options: [all, ios, tvos]
+      force:
+        description: 'Upload even if develop has not moved since the last nightly'
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: '0 10 * * *'   # 10:00 UTC, an hour after Provenance's
+
+# The `nightly` tag is moved after a successful upload; that needs write access.
+permissions:
+  contents: write
 
 concurrency:
   group: testflight-${{ github.ref }}
@@ -25,10 +34,12 @@ concurrency:
 
 jobs:
   plan:
-    name: Select platforms
+    name: Select platforms and changes
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
+      should_build: ${{ steps.changed.outputs.should_build }}
+      notes: ${{ steps.changed.outputs.notes }}
     steps:
       - id: pick
         run: |
@@ -39,9 +50,68 @@ jobs:
           esac
           echo "matrix=$M" >> "$GITHUB_OUTPUT"
 
+      # Full history so `git log <last-nightly>..HEAD` has something to walk.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Skip-if-unchanged + release notes, both driven off the same marker.
+      #
+      # The `nightly` tag records the commit of the last SUCCESSFUL upload (moved by the `tag` job
+      # below, only after every matrix leg passed). If it already points at HEAD, develop has not
+      # moved since the last nightly and there is nothing to ship: every run costs an App Store
+      # Connect build number, a processing slot and a Beta App Review submission, so uploading an
+      # identical binary is pure waste. A manual dispatch can override with `force`.
+      #
+      # The same range gives the "What to Test" text. Previously that was a hardcoded line ending in
+      # the full 40-character SHA, which told a tester nothing. Commit subjects since the last
+      # nightly are what they actually want, and generating them is plain git — no API key, no LLM.
+      - id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+          SHORT="${SHA:0:7}"
+          LAST=$(git rev-parse -q --verify refs/tags/nightly 2>/dev/null || echo "")
+          FORCE="${{ inputs.force || 'false' }}"
+
+          if [[ -n "$LAST" && "$LAST" == "$SHA" && "$FORCE" != "true" ]]; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "notes=" >> "$GITHUB_OUTPUT"
+            echo "::notice::develop is unchanged since the last nightly ($SHORT) — skipping. Re-run with force=true to upload anyway."
+            exit 0
+          fi
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+
+          # Subjects only, no merges, newest first. Capped so the text stays readable and well under
+          # the 4000-character limit distribute.py enforces on whatsNew.
+          if [[ -n "$LAST" ]]; then
+            LOG=$(git log --no-merges --pretty=format:'- %s' "${LAST}..${SHA}" | head -25 || true)
+            RANGE="since ${LAST:0:7}"
+          else
+            LOG=$(git log --no-merges --pretty=format:'- %s' -10 || true)
+            RANGE="last 10 commits (no previous nightly tag)"
+          fi
+          [[ -n "$LOG" ]] || LOG="- no commit subjects in range"
+
+          COUNT=$(printf '%s\n' "$LOG" | grep -c '^- ' || true)
+          NOTES=$(printf 'Nightly %s (%s)\n\n%s' "$SHORT" "$RANGE" "$LOG")
+          # Trim hard: TestFlight shows a few lines, and distribute.py caps at 4000 chars anyway.
+          NOTES=$(printf '%s' "$NOTES" | cut -c1-3900)
+
+          # Multi-line output needs a heredoc-style delimiter.
+          {
+            echo "notes<<NOTES_EOF"
+            printf '%s\n' "$NOTES"
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::building $SHORT with $COUNT commit(s) $RANGE"
+
   testflight:
     name: Archive and upload (${{ matrix.platform }})
     needs: plan
+    if: needs.plan.outputs.should_build == 'true'
     # macos-26 + Xcode 26.3, matching build.yml. On macos-15 the runner default is
     # the iOS 18.5 SDK, and the app uses iOS 26 APIs (glassEffect,
     # searchToolbarBehavior, navigationSubtitle) behind `if #available(iOS 26.0,
@@ -250,7 +320,7 @@ jobs:
           bundle-id: com.joemattiello.iCube
           build-number: ${{ steps.archive.outputs.build }}
           platform: ${{ matrix.platform == 'tvos' && 'TV_OS' || 'IOS' }}
-          whats-new: "Nightly build ${{ steps.archive.outputs.build }} from ${{ github.ref_name }} @ ${{ github.sha }}."
+          whats-new: ${{ needs.plan.outputs.notes }}
 
       # xcbeautify-style filtering hides Run Script output, so the raw log is the
       # only place some failures appear.
@@ -265,3 +335,30 @@ jobs:
       - name: Clean up keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+
+  # Move the `nightly` marker to the commit that was just shipped. This is what makes the skip check
+  # in `plan` mean "nothing new since the last SUCCESSFUL upload" rather than "nothing new today":
+  # a failed or cancelled run leaves the tag where it was, so the next nightly retries the same
+  # commit instead of silently skipping it.
+  #
+  # Runs only when every matrix leg succeeded — a partial upload (iOS shipped, tvOS failed) must not
+  # advance the marker, or the failed platform would never be retried.
+  tag:
+    name: Move the nightly marker
+    needs: [plan, testflight]
+    if: needs.plan.outputs.should_build == 'true' && needs.testflight.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Point refs/tags/nightly at this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+          # -f because the tag moves every night; push the same way so the remote follows.
+          git tag -f nightly "$SHA"
+          git push -f origin refs/tags/nightly
+          echo "::notice::nightly now points at ${SHA:0:7}"
