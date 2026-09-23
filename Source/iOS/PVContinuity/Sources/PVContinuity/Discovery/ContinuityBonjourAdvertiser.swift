@@ -29,10 +29,11 @@ public actor ContinuityBonjourAdvertiser: ContinuityAdvertising {
         let redacted = advertisement.redactedForBonjour()
         let txt = NetService.data(fromTXTRecord: ContinuityTXTRecord.encode(redacted).mapValues { Data($0.utf8) })
 
+        let name = await Self.serviceName()
         let service = NetService(
             domain: "local.",
             type: ContinuityService.type,
-            name: Self.serviceName(),
+            name: name,
             port: Int32(port)
         )
         service.delegate = delegate
@@ -53,13 +54,17 @@ public actor ContinuityBonjourAdvertiser: ContinuityAdvertising {
     /// Bonjour instance names must be unique on the network and are what the
     /// browsing user sees, so the device name is the right choice; the suffix
     /// disambiguates two devices a user gave the same name.
-    private static func serviceName() -> String {
+    ///
+    /// `UIDevice.current` is main-actor isolated and `publish` runs on this
+    /// actor's executor, so the name is fetched with a real hop to main. The
+    /// previous `MainActor.assumeIsolated` here trapped on every publish
+    /// (Sentry ICUBE-94).
+    private static func serviceName() async -> String {
         #if canImport(UIKit) && !os(watchOS)
-        let base = DeviceNameProvider.current()
+        await MainActor.run { UIDevice.current.name }
         #else
-        let base = Host.current().localizedName ?? "iCube"
+        Host.current().localizedName ?? "iCube"
         #endif
-        return base
     }
 }
 
@@ -75,10 +80,4 @@ private final class AdvertiserDelegate: NSObject, NetServiceDelegate, @unchecked
 
 #if canImport(UIKit) && !os(watchOS)
 import UIKit
-
-private enum DeviceNameProvider {
-    static func current() -> String {
-        MainActor.assumeIsolated { UIDevice.current.name }
-    }
-}
 #endif
