@@ -84,8 +84,10 @@ private func presentPauseMenu(_ reason: String) {
 ///   chord required. This was previously either nil or an empty swallow
 ///   closure everywhere, which is why the Siri Remote could not reach the
 ///   pause menu at all.
-/// - `extendedGamepad.buttonMenu` (Xbox "≡", PlayStation Options, Switch Pro
-///   "+", bare MFi Menu) is deliberately **not** wired to the pause menu here.
+/// - `extendedGamepad.buttonMenu` (Xbox "≡", the PlayStation button labelled
+///   OPTIONS — GameController exposes it as `buttonMenu`, NOT `buttonOptions`
+///   — Switch Pro "+", bare MFi Menu) is deliberately **not** wired to the
+///   pause menu here.
 ///   The default Dolphin profiles (`Data/Sys/Profiles/GCPad/Physical
 ///   Controller.ini` binds `Buttons/Start = Menu`; the Wiimote profile binds
 ///   `Buttons/+ = Menu`) already map this button to the emulated GameCube
@@ -132,7 +134,7 @@ func installPauseMenuHandlers(_ c: GCController) {
   // noteExtendedGamepadMenuPress`.
   eg.buttonMenu.pressedChangedHandler = { _, _, pressed in
     Task { @MainActor in
-      PauseGestureTracker.shared.noteExtendedGamepadMenuPress()
+      PauseGestureTracker.shared.noteExtendedGamepadMenuPress(pressed: pressed)
       if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
     }
   }

@@ -63,25 +63,38 @@ final class PauseGestureTracker {
   /// extended gamepads), keyed by route. See `menuButtonChanged`.
   private var menuPressStart: [String: TimeInterval] = [:]
 
-  /// Timestamp of the most recent `extendedGamepad.buttonMenu` transition
-  /// (press OR release), noted by `ControllerExtensions.installPauseMenuHandlers`.
-  /// An extended gamepad's Menu button (Xbox "≡", PlayStation Options, Switch
-  /// Pro "+") is bound to the emulated Start/+ by the default Dolphin profile,
-  /// not the pause menu — `buttonOptions` is that pad's dedicated pause
-  /// button instead. `EmuEventVC` (`GCEventViewController`) can still surface
-  /// the SAME physical Menu press as a `"uipress-menu"` request (the route
-  /// that exists so the Siri Remote, which has no other button, can pause) —
-  /// `requestPauseMenu` uses this timestamp to drop that specific duplicate
-  /// without touching a genuine Siri Remote press, which has no accompanying
-  /// extended-gamepad transition to correlate against.
-  private var lastExtendedGamepadMenuPress: TimeInterval = 0
+  /// State of the most recent `extendedGamepad.buttonMenu` transition, noted
+  /// by `ControllerExtensions.installPauseMenuHandlers` on every press AND
+  /// release. An extended gamepad's Menu button (Xbox "≡", the PlayStation
+  /// button labelled OPTIONS — which GameController exposes as `buttonMenu`,
+  /// not `buttonOptions` — Switch Pro "+") is bound to the emulated Start/+
+  /// by the default Dolphin profile, not the pause menu — `buttonOptions` is
+  /// that pad's dedicated pause button instead. `EmuEventVC`
+  /// (`GCEventViewController`) can still surface the SAME physical Menu press
+  /// as a `"uipress-menu"` request (the route that exists so the Siri Remote,
+  /// which has no other button, can pause) — `requestPauseMenu` uses this
+  /// state to drop that specific duplicate without touching a genuine Siri
+  /// Remote press, which has no accompanying extended-gamepad transition to
+  /// correlate against.
+  ///
+  /// Both `isDown` and the timestamp are tracked, not just the timestamp,
+  /// because the two routes race for a hold longer than
+  /// `pauseRequestCoalesceWindow`: by the time `pressesEnded` posts
+  /// `"uipress-menu"` the press-down note may already have fallen outside the
+  /// window. `isDown` still being true (the release-side note on the
+  /// GCController path hasn't landed yet) or the timestamp still being fresh
+  /// (it has) — either one — is enough to suppress, so the outcome does not
+  /// depend on which of the two `@MainActor` hops wins the race.
+  private var extendedGamepadMenuIsDown = false
+  private var lastExtendedGamepadMenuTransition: TimeInterval = 0
 
   private init() {}
 
   /// Call on every `extendedGamepad.buttonMenu` press/release transition.
-  /// See `lastExtendedGamepadMenuPress`.
-  func noteExtendedGamepadMenuPress() {
-    lastExtendedGamepadMenuPress = Date().timeIntervalSinceReferenceDate
+  /// See `extendedGamepadMenuIsDown` / `lastExtendedGamepadMenuTransition`.
+  func noteExtendedGamepadMenuPress(pressed: Bool) {
+    extendedGamepadMenuIsDown = pressed
+    lastExtendedGamepadMenuTransition = Date().timeIntervalSinceReferenceDate
   }
 
   /// Call whenever the current state of the four shoulder buttons changes.
@@ -151,11 +164,12 @@ final class PauseGestureTracker {
       }
       return
     }
-    // See `lastExtendedGamepadMenuPress`: a "uipress-menu" request that
+    // See `extendedGamepadMenuIsDown`: a "uipress-menu" request that
     // correlates with an extended gamepad's Menu press is that pad's Start
     // button, not a pause request — drop it. A genuine Siri Remote press has
     // no accompanying extended-gamepad transition and is unaffected.
-    if reason == "uipress-menu", now - lastExtendedGamepadMenuPress < Self.pauseRequestCoalesceWindow {
+    if reason == "uipress-menu",
+       extendedGamepadMenuIsDown || now - lastExtendedGamepadMenuTransition < Self.pauseRequestCoalesceWindow {
       if UserDefaults.standard.bool(forKey: "input_debug") {
         NSLog("[INPUT] pause request ignored (%@): correlates with an extended-gamepad Menu press (Start)", reason)
       }
