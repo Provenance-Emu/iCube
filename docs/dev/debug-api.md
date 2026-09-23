@@ -127,7 +127,8 @@ key. `"PerGame"` is the user-editable Local GameSettings INI layer;
 | `GET` | `/api/perf/live` | — | current `fps`, `vps`, `speed`, `maxSpeed`, `frameTimeMs`, `rawFrameTimeMs` |
 | `POST` | `/api/bench/start` | `{"slot": N=1, "seconds": S=15}` | `{started, slot, seconds}` — kicks off an async benchmark run |
 | `GET` | `/api/bench/result` | — | `{status: "running"}` \| `{status: "no-result"}` \| `{status: "done", result: {...}}` |
-| `POST` | `/api/bench/sweep` | `{"key": K, "values": [...], "slot": N=1, "seconds": S=15}` | `{started, key, values, slot, seconds}` — runs a benchmark once per value |
+| `POST` | `/api/bench/sweep` | `{"key": K, "values": [...], "slot": N=1, "seconds": S=15}` | `{started, key, values, slot, seconds}` — kicks off an async sweep: one benchmark per value. Hot-swappable keys are set live and re-measured after a save-state reload. Boot-time keys (read once in core init, e.g. the CIR flags) get a real stop → boot → load-state cycle per value, so a game must already be running; expect minutes, and poll the result route |
+| `GET` | `/api/bench/sweep/result` | — | `{status: "running"}` \| `{status: "no-result"}` \| `{status: "done", result: {key, hotSwappable, warning?, runs: [{value, applied, rebooted, observedValue?, error?, result?}]}}` — a run with a non-nil `error` (setKey failed, reboot never reached `running`, too few samples) must not be used for an A/B delta; each `result.settings` is the snapshot taken right before sampling |
 
 ## WebSocket: `/ws/events`
 

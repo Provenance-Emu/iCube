@@ -18,6 +18,7 @@
 //   POST /api/bench/start            body {"slot":N,"seconds":S} -> start a run
 //   GET  /api/bench/result           -> last finished benchmark result
 //   POST /api/bench/sweep            body {"key":K,"values":[...],"slot":N,"seconds":S}
+//   GET  /api/bench/sweep/result     -> last finished sweep (per-value results), or running status
 //   GET  /api/health                 -> build/game/core-state/perf summary
 //   POST /api/debug/boot             body {"gameID":"GZLE01"} -> boot a library title (library must be on screen)
 //   POST /api/debug/stop             -> quit the running game back to the library (server stays up)
@@ -503,6 +504,28 @@ final class DebugAPIRoutes {
       return ["ok": true, "data": [
         "started": true, "key": key, "values": stringValues, "slot": slot, "seconds": seconds,
       ] as [String: Any]]
+    }
+
+    // GET /api/bench/sweep/result — last finished sweep (or running status). A boot-time sweep
+    // reboots the title once per value, so this can take minutes; poll this rather than
+    // assuming POST /api/bench/sweep's immediate response describes the finished run.
+    server.addCustomHandler(forMethod: "GET", path: "/api/bench/sweep/result") { _, _, _, _ in
+      let payload: [String: Any] = DispatchQueue.main.sync {
+        MainActor.assumeIsolated {
+          let mgr = DebugBenchmarkManager.shared
+          if mgr.isSweeping {
+            return ["ok": true, "data": ["status": "running"] as [String: Any]]
+          }
+          guard let result = mgr.lastSweepResult else {
+            return ["ok": true, "data": ["status": "no-result"] as [String: Any]]
+          }
+          guard let dict = Self.encodeJSONObject(result) else {
+            return ["ok": false, "error": "failed to encode result"]
+          }
+          return ["ok": true, "data": ["status": "done", "result": dict] as [String: Any]]
+        }
+      }
+      return payload
     }
 
     // GET /api/health — build/game/core-state/perf summary.
