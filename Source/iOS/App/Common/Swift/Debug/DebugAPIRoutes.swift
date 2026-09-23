@@ -9,8 +9,11 @@
 //
 // Routes:
 //   GET  /api/perf/live              -> live g_perf_metrics snapshot
-//   GET  /api/settings               -> all known settings + metadata
+//   GET  /api/settings[?keys=a,b]    -> all known settings + metadata, or just those keys
 //   POST /api/settings/<key>         body {"value": ...} -> set one setting
+//   POST /api/settings/bulk          body {"values":{k:v,...},"mode":"merge|replace","atomic":true}
+//                                    -> set many at once; replace resets all keys first
+//   POST /api/settings/snapshots/<name>/apply  body {"mode":"merge|replace"} -> restore a snapshot
 //   GET  /api/savestates             -> list save-state slots present on disk
 //   POST /api/bench/start            body {"slot":N,"seconds":S} -> start a run
 //   GET  /api/bench/result           -> last finished benchmark result
@@ -93,11 +96,120 @@ final class DebugAPIRoutes {
       return ["ok": true, "data": snap]
     }
 
-    // GET /api/settings
-    server.addCustomHandler(forMethod: "GET", path: "/api/settings") { _, _, _, _ in
+    // GET /api/settings[?keys=a,b,c]
+    // Without `keys`, every known setting. With it, just those — so a caller checking a handful of
+    // flags between benchmark legs does not have to pull and parse the whole table. Unknown names are
+    // reported in `unknown` rather than failing the read: a probe of a mixed list still returns what
+    // exists, which is what you want when checking whether a build even HAS a key yet.
+    server.addCustomHandler(forMethod: "GET", path: "/api/settings") { _, _, query, _ in
       // snapshotAll reads Config (internally synchronized) — safe off-main.
       let all = DOLSettingsKeyBridge.snapshotAll()
-      return ["ok": true, "data": all]
+      guard let raw = query?["keys"], !raw.isEmpty else {
+        return ["ok": true, "data": all]
+      }
+      let wanted = raw.split(separator: ",").map {
+        $0.trimmingCharacters(in: .whitespaces)
+      }.filter { !$0.isEmpty }
+      var picked: [String: Any] = [:]
+      var unknown: [String] = []
+      for k in wanted {
+        if let v = all[k] { picked[k] = v } else { unknown.append(k) }
+      }
+      var out: [String: Any] = ["ok": true, "data": picked]
+      if !unknown.isEmpty { out["unknown"] = unknown }
+      return out
+    }
+
+    // POST /api/settings/bulk
+    //   body {"values": {"<key>": <value>, ...},
+    //         "mode": "merge" | "replace",   // default merge; replace resets ALL keys first
+    //         "atomic": true }               // default true: validate everything, apply nothing on error
+    //
+    // Why this exists: setting N keys meant N round-trips, each independently able to fail, with no way
+    // to know the device ended up in the state you asked for. That is fine interactively and wrong for
+    // benchmarking — a leg that starts from a half-applied config produces a number that looks valid.
+    // `replace` is the strong form: reset every known key to its default, then apply this map, so the
+    // resulting state is a function of the request alone and not of whatever was toggled beforehand.
+    //
+    // `atomic` validates names and value types up front. Type checking matters because setKey coerces:
+    // sending a string to an int key can silently land a 0 rather than erroring.
+    //
+    // The response separates what changed live from what did not: `requiresReboot` lists the applied
+    // keys that are boot-time, which is the single easiest thing to forget with the CIR flags.
+    server.addCustomHandler(forMethod: "POST", path: "/api/settings/bulk") { _, _, _, body in
+      guard let dict = parseBody(body) else {
+        return ["ok": false, "status": 400, "error": bodyMustBeJSONObjectError]
+      }
+      guard let values = dict["values"] as? [String: Any] else {
+        return ["ok": false, "status": 400, "error": "missing object 'values' of key -> value"]
+      }
+      let mode = (dict["mode"] as? String) ?? "merge"
+      guard mode == "merge" || mode == "replace" else {
+        return ["ok": false, "status": 400, "error": "mode must be \"merge\" or \"replace\""]
+      }
+      let atomic = (dict["atomic"] as? Bool) ?? true
+
+      // Validate first: unknown names, and values whose JSON type cannot represent the setting.
+      let meta = DOLSettingsKeyBridge.snapshotAll()
+      var errors: [String: String] = [:]
+      for (k, v) in values {
+        guard let m = meta[k], let type = m["type"] as? String else {
+          errors[k] = "unknown key"
+          continue
+        }
+        let num = v as? NSNumber
+        let isBoolLiteral = num != nil && CFGetTypeID(num!) == CFBooleanGetTypeID()
+        switch type {
+        case "bool":
+          if !isBoolLiteral && num == nil { errors[k] = "expected bool" }
+        case "int":
+          if isBoolLiteral || num == nil || num!.doubleValue != num!.doubleValue.rounded() {
+            errors[k] = "expected integer"
+          }
+        case "float":
+          if isBoolLiteral || num == nil { errors[k] = "expected number" }
+        default:
+          if !(v is String) { errors[k] = "expected string" }
+        }
+      }
+      if atomic && !errors.isEmpty {
+        return ["ok": false, "status": 400,
+                "error": "nothing applied (atomic); \(errors.count) invalid entr\(errors.count == 1 ? "y" : "ies")",
+                "data": ["errors": errors, "applied": 0] as [String: Any]]
+      }
+
+      // Apply. One hop to main for the whole batch rather than per key.
+      let applyList = values.filter { errors[$0.key] == nil }
+      let outcome: (results: [String: Any], applied: Int, reboot: [String]) = DispatchQueue.main.sync {
+        if mode == "replace" {
+          _ = DOLSettingsKeyBridge.resetKeys([])  // empty == all known keys
+        }
+        var results: [String: Any] = [:]
+        var applied = 0
+        var reboot: [String] = []
+        for (k, v) in applyList {
+          let ok = DOLSettingsKeyBridge.setKey(k, value: v)
+          let hot = DOLSettingsKeyBridge.isHotSwappable(k)
+          if ok {
+            applied += 1
+            if !hot { reboot.append(k) }
+          }
+          results[k] = ["ok": ok, "hotSwappable": hot, "value": "\(v)"] as [String: Any]
+        }
+        return (results, applied, reboot.sorted())
+      }
+      var data: [String: Any] = [
+        "mode": mode,
+        "applied": outcome.applied,
+        "failed": applyList.count - outcome.applied + errors.count,
+        "results": outcome.results,
+        "requiresReboot": outcome.reboot,
+      ]
+      if !errors.isEmpty { data["errors"] = errors }
+      if !outcome.reboot.isEmpty {
+        data["note"] = "boot-time keys changed; reload a save state or reboot the title for them to take effect"
+      }
+      return ["ok": errors.isEmpty, "data": data]
     }
 
     // GET /api/settings/all — same data as GET /api/settings, but with per-layer
@@ -153,6 +265,55 @@ final class DebugAPIRoutes {
       } catch {
         return ["ok": false, "status": 500, "error": "\(error)"]
       }
+    }
+
+    // POST /api/settings/snapshots/<name>/apply  body {"mode": "merge"|"replace"} (optional)
+    // Restore a saved snapshot. Snapshots could be taken and diffed but never re-applied, which made
+    // them a record rather than a tool: the useful move is "put the device back exactly how it was
+    // before I started fiddling", and that needed replaying every key by hand.
+    //
+    // Default mode is `replace`, because that is what restoring a snapshot should mean — every known
+    // key reset first, then the snapshot's values applied, so keys ADDED since the snapshot was taken
+    // go back to their defaults instead of silently keeping whatever they happen to be now.
+    //
+    // Registered before the POST /api/settings/.* regex so it is not shadowed by it (first match wins).
+    server.addCustomHandler(forMethod: "POST",
+                            pathRegex: "/api/settings/snapshots/[^/]+/apply") { [snapshots] _, path, _, body in
+      guard let dict = parseOptionalBody(body) else {
+        return ["ok": false, "status": 400, "error": bodyMustBeJSONObjectError]
+      }
+      let mode = (dict["mode"] as? String) ?? "replace"
+      guard mode == "merge" || mode == "replace" else {
+        return ["ok": false, "status": 400, "error": "mode must be \"merge\" or \"replace\""]
+      }
+      let parts = path.split(separator: "/").map(String.init)  // api settings snapshots <name> apply
+      guard parts.count == 5, let saved = snapshots.load(name: parts[3]) else {
+        return ["ok": false, "status": 404, "error": "snapshot not found"]
+      }
+      // A snapshot stores per-layer state; the resolved `value` is what we replay.
+      var values: [String: Any] = [:]
+      for (k, entry) in saved {
+        guard DOLSettingsKeyBridge.isKnownKey(k) else { continue }  // key retired since the snapshot
+        if let e = entry as? [String: Any], let v = e["value"], !(v is NSNull) { values[k] = v }
+      }
+      let outcome: (applied: Int, failed: Int, reboot: [String]) = DispatchQueue.main.sync {
+        if mode == "replace" { _ = DOLSettingsKeyBridge.resetKeys([]) }
+        var applied = 0, failed = 0
+        var reboot: [String] = []
+        for (k, v) in values {
+          if DOLSettingsKeyBridge.setKey(k, value: v) {
+            applied += 1
+            if !DOLSettingsKeyBridge.isHotSwappable(k) { reboot.append(k) }
+          } else {
+            failed += 1
+          }
+        }
+        return (applied, failed, reboot.sorted())
+      }
+      return ["ok": outcome.failed == 0,
+              "data": ["snapshot": parts[3], "mode": mode, "applied": outcome.applied,
+                       "failed": outcome.failed, "skipped": saved.count - values.count,
+                       "requiresReboot": outcome.reboot] as [String: Any]]
     }
 
     // GET /api/settings/snapshots/<A>/diff/<B> — diff two saved snapshots by name.
