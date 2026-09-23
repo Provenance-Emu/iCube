@@ -558,13 +558,19 @@ struct EmulationScreen: View {
       endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
         dismiss()
       }
-      NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
-        ControllerManager.shared.registerGCOverride(forController: 0)
-        ControllerManager.shared.refreshInputHandlers()
-        // Resume where I left off, or boot straight into a chosen save state —
-        // whichever was requested. Also arms/consults the boot watchdog so a
-        // launch that never got past this same load is declined next time.
-        SaveStateService.resumeOrBootIntoPendingState()
+      // Keep the token and register once: this observer used to be added anonymously on every
+      // appearance and never removed, so launch N ran N copies of the handler. The first copy
+      // consumed the one-shot "Start Fresh" skip flag and the next copy loaded the auto-state
+      // anyway (and a normal launch issued N auto-resume loads).
+      if resumeObserver == nil {
+        resumeObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
+          ControllerManager.shared.registerGCOverride(forController: 0)
+          ControllerManager.shared.refreshInputHandlers()
+          // Resume where I left off, or boot straight into a chosen save state —
+          // whichever was requested. Also arms/consults the boot watchdog so a
+          // launch that never got past this same load is declined next time.
+          SaveStateService.resumeOrBootIntoPendingState()
+        }
       }
       // Auto-pause when app goes to background on tvOS
       NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
@@ -626,6 +632,9 @@ struct EmulationScreen: View {
     .onDisappear {
       if let token = endObserver { NotificationCenter.default.removeObserver(token)
         endObserver = nil
+      }
+      if let token = resumeObserver { NotificationCenter.default.removeObserver(token)
+        resumeObserver = nil
       }
       if let token = obsShowPause { NotificationCenter.default.removeObserver(token)
         obsShowPause = nil
@@ -1160,6 +1169,11 @@ struct EmulationScreen: View {
     .onDisappear {
       if let token = endObserver { NotificationCenter.default.removeObserver(token)
         endObserver = nil
+      }
+      // Without this the resume observer outlived the screen and stacked up one per launch —
+      // the same double-handler bug as the tvOS branch (see the start observer there).
+      if let token = resumeObserver { NotificationCenter.default.removeObserver(token)
+        resumeObserver = nil
       }
       if let t = obsGCConnect { NotificationCenter.default.removeObserver(t)
         obsGCConnect = nil
