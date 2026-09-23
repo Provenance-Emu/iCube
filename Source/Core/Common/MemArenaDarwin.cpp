@@ -118,41 +118,55 @@ bool MemArena::EntryMirrorsSegment(mach_port_t entry, vm_address_t base, size_t 
   if (!ok)
     return false;
 
-  // The real views are mapped at NON-ZERO offsets into the entry (MEM2 sits after MEM1 and the L1
-  // cache). On an A12 iPad mini 5 (iPadOS 26) a MAP_MEM_VM_SHARE entry maps fine at offset 0 but
-  // vm_map with a non-zero offset silently returns a mapping that starts at offset 0 again, so the
-  // MEM2 view was a second view of MEM1 and a game's clear of its MEM2 arena wiped its own code
-  // ("IntCPU: Unknown instruction 00000000"). Prove that an offset view lands where it claims.
-  for (const size_t offset : {(size / 2) & ~(page - 1), size - page})
+  // The real views are mapped at NON-ZERO offsets into the entry and are LARGE (MEM2 is 64 MB at
+  // offset 24 MB+). On an A12 iPad mini 5 (iPadOS 26) a MAP_MEM_VM_SHARE entry maps a single page
+  // at a non-zero offset correctly, but a large mapping at a non-zero offset silently comes back as
+  // a mapping of offset 0: the MEM2 view was a second view of MEM1, and a game's clear of its MEM2
+  // arena wiped its own code ("IntCPU: Unknown instruction 00000000"). Probe with mappings of the
+  // same shape as the real views: from `offset` to the end of the segment.
+  for (const size_t offset : {page, (size / 2) & ~(page - 1)})
   {
+    if (offset >= size)
+      continue;
+    const size_t length = size - offset;
     vm_address_t offset_view = 0;
     const kern_return_t map_result =
-        vm_map(mach_task_self(), &offset_view, page, 0, VM_FLAGS_ANYWHERE, entry,
+        vm_map(mach_task_self(), &offset_view, length, 0, VM_FLAGS_ANYWHERE, entry,
                static_cast<vm_offset_t>(offset), false, prot, prot, VM_INHERIT_DEFAULT);
     if (map_result != KERN_SUCCESS)
     {
-      ERROR_LOG_FMT(MEMMAP, "EntryMirrorsSegment: vm_map at offset {0:#x} returned {1:#x}", offset,
-                    map_result);
+      ERROR_LOG_FMT(MEMMAP, "EntryMirrorsSegment: vm_map of {0:#x} bytes at offset {1:#x} returned {2:#x}",
+                    length, offset, map_result);
       return false;
     }
-    volatile u32* through_base = reinterpret_cast<volatile u32*>(base + offset);
-    volatile u32* through_view = reinterpret_cast<volatile u32*>(offset_view);
-    volatile u32* segment_start = reinterpret_cast<volatile u32*>(base);
-    const u32 saved = *through_base;
-    const u32 saved_start = *segment_start;
-    *through_base = ++marker;
-    *segment_start = ++marker;
-    // A wrapped mapping shows the segment START here instead of the offset's bytes.
-    const u32 expected = marker - 1;  // what we wrote through the base at `offset`
-    if (*through_view != expected)
-      ok = false;
-    *through_base = saved;
-    *segment_start = saved_start;
-    vm_deallocate(mach_task_self(), offset_view, page);
-    if (!ok)
+    volatile u32* base_at_offset = reinterpret_cast<volatile u32*>(base + offset);
+    volatile u32* base_at_end = reinterpret_cast<volatile u32*>(base + size - page);
+    volatile u32* base_at_start = reinterpret_cast<volatile u32*>(base);
+    volatile u32* view_start = reinterpret_cast<volatile u32*>(offset_view);
+    volatile u32* view_end = reinterpret_cast<volatile u32*>(offset_view + length - page);
+    const u32 saved_offset = *base_at_offset;
+    const u32 saved_end = *base_at_end;
+    const u32 saved_start = *base_at_start;
+    const u32 expect_offset = ++marker;
+    const u32 expect_end = ++marker;
+    const u32 decoy_start = ++marker;
+    *base_at_offset = expect_offset;
+    *base_at_end = expect_end;
+    *base_at_start = decoy_start;
+    // A wrapped mapping shows the segment START (the decoy) where the offset's bytes should be.
+    const bool start_ok = *view_start == expect_offset;
+    const bool end_ok = *view_end == expect_end;
+    const bool mirrors = start_ok && end_ok;
+    *base_at_offset = saved_offset;
+    *base_at_end = saved_end;
+    *base_at_start = saved_start;
+    vm_deallocate(mach_task_self(), offset_view, length);
+    if (!mirrors)
     {
-      ERROR_LOG_FMT(MEMMAP, "EntryMirrorsSegment: a view at offset {0:#x} does not mirror that offset",
-                    offset);
+      ERROR_LOG_FMT(MEMMAP,
+                    "EntryMirrorsSegment: a {0:#x}-byte view at offset {1:#x} does not mirror that "
+                    "offset (start ok={2}, end ok={3})",
+                    length, offset, start_ok, end_ok);
       return false;
     }
   }
