@@ -76,24 +76,39 @@ private func presentPauseMenu(_ reason: String) {
   }
 }
 
-/// Installs the app-wide "Menu/Options opens the pause menu" handlers.
+/// Installs the app-wide "one dedicated button opens the pause menu" handlers.
 ///
-/// Every controller type gets an **ungated** route to the pause menu — no
-/// shoulder chord required:
 /// - `microGamepad.buttonMenu` (Siri Remote, and the micro profile every MFi
-///   controller also exposes). This was previously either nil or an empty
-///   swallow closure everywhere, which is why the Siri Remote could not reach
-///   the pause menu at all.
-/// - `extendedGamepad.buttonMenu` / `buttonOptions` (Xbox, DualShock/DualSense,
-///   Switch Pro, bare MFi). The L1+R1+L2+R2+Menu chord still works — it is
-///   routed separately through `PauseGestureTracker.menuOrStartPressed()` — but
-///   it is no longer the only way in.
+///   controller also exposes) is the **only** button the Siri Remote has, so
+///   it keeps opening the pause menu (short press) ungated — no shoulder
+///   chord required. This was previously either nil or an empty swallow
+///   closure everywhere, which is why the Siri Remote could not reach the
+///   pause menu at all.
+/// - `extendedGamepad.buttonMenu` (Xbox "≡", PlayStation Options, Switch Pro
+///   "+", bare MFi Menu) is deliberately **not** wired to the pause menu here.
+///   The default Dolphin profiles (`Data/Sys/Profiles/GCPad/Physical
+///   Controller.ini` binds `Buttons/Start = Menu`; the Wiimote profile binds
+///   `Buttons/+ = Menu`) already map this button to the emulated GameCube
+///   START / Wii Remote `+` / Classic Controller `+` via the MFi
+///   `ControllerInterface` backend (`Source/Core/InputCommon/
+///   ControllerInterface/iOS/MFiController.mm`), which polls
+///   `GCControllerButtonInput.isPressed` independently of any Swift
+///   `pressedChangedHandler`. Swallowing the press here for the pause menu
+///   was the bug: the core kept receiving Start, but the same physical press
+///   also paused emulation, so "Start" never visibly worked. Menu still feeds
+///   the L1+R1+L2+R2+Menu fast-forward-exit chord through
+///   `PauseGestureTracker.menuOrStartPressed()`, which is gated on all four
+///   shoulders and therefore never fires on a plain Menu press.
+/// - `extendedGamepad.buttonOptions` (Xbox View, PlayStation Share/Create,
+///   Switch Pro "-") is the one dedicated pause-menu button on extended
+///   gamepads, matching the DualShock/DualSense/Xbox Home-button routes
+///   installed in `installExtraInputHandlers`.
 ///
 /// The handlers are installed unconditionally and left installed; a nil handler
 /// lets the system take the button back (Game Center / app switcher), which is
 /// what the old per-screen swallow closures were working around. The gate is in
 /// `requestPauseMenu`, which no-ops unless emulation is actually running, so a
-/// Menu press on the library screen is simply absorbed.
+/// press on the library screen is simply absorbed.
 func installPauseMenuHandlers(_ c: GCController) {
   if #available(iOS 14.0, tvOS 14.0, *) {
     c.microGamepad?.buttonMenu.preferredSystemGestureState = .disabled
@@ -108,18 +123,23 @@ func installPauseMenuHandlers(_ c: GCController) {
   }
 
   guard let eg = c.extendedGamepad else { return }
+
+  // Menu maps to the emulated Start/+ (see the profile comment above) — do
+  // NOT route a plain press to the pause menu. Only the gated shoulder-chord
+  // path is wired here. Every transition is also noted on the tracker so it
+  // can drop a same-press "uipress-menu" duplicate arriving via EmuEventVC's
+  // GCEventViewController bridge — see `PauseGestureTracker.
+  // noteExtendedGamepadMenuPress`.
   eg.buttonMenu.pressedChangedHandler = { _, _, pressed in
     Task { @MainActor in
-      // The chord is unambiguous (no long-press meaning), so it fires on
-      // press-down. The plain Menu route decides at release — see
-      // menuButtonChanged. Both land in requestPauseMenu, which coalesces them.
+      PauseGestureTracker.shared.noteExtendedGamepadMenuPress()
       if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
-      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "extendedGamepad.buttonMenu")
     }
   }
+
+  // Options is the one dedicated pause-menu button on extended gamepads.
   eg.buttonOptions?.pressedChangedHandler = { _, _, pressed in
     Task { @MainActor in
-      if pressed { PauseGestureTracker.shared.menuOrStartPressed() }
       PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "extendedGamepad.buttonOptions")
     }
   }

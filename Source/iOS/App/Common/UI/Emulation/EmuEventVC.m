@@ -188,6 +188,17 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
     }
     [_menuLongPressTimer invalidate];
     _menuLongPressTimer = nil;
+    // This UIPress path is GCEventViewController's system bridge, historically
+    // observed for the Siri Remote (which has no other button and must keep
+    // this route — see PauseGestureTracker.requestPauseMenu). If an extended
+    // gamepad's own Menu button ALSO surfaces here for the same physical
+    // press, `requestPauseMenu` drops a "uipress-menu" request that
+    // correlates with a just-noted extended-gamepad Menu press (see
+    // `PauseGestureTracker.noteExtendedGamepadMenuPress`), because that
+    // button is bound to the emulated Start/+ instead, with Options as its
+    // dedicated pause button. No filtering needed here — the arbiter handles
+    // it — so a genuine Siri Remote press with no accompanying gamepad press
+    // is unaffected.
     dispatch_async(dispatch_get_main_queue(), ^{
       [[NSNotificationCenter defaultCenter] postNotificationName:DOLRequestPauseMenuNotification object:nil];
     });

@@ -58,11 +58,31 @@ final class PauseGestureTracker {
     lastControllerConnect = Date().timeIntervalSinceReferenceDate
   }
 
-  /// Press-down timestamps for the dual-purpose Menu/Options buttons, keyed by
-  /// route. See `menuButtonChanged`.
+  /// Press-down timestamps for the dual-purpose pause-menu buttons
+  /// (`microGamepad.buttonMenu` on the Siri Remote, `buttonOptions` on
+  /// extended gamepads), keyed by route. See `menuButtonChanged`.
   private var menuPressStart: [String: TimeInterval] = [:]
 
+  /// Timestamp of the most recent `extendedGamepad.buttonMenu` transition
+  /// (press OR release), noted by `ControllerExtensions.installPauseMenuHandlers`.
+  /// An extended gamepad's Menu button (Xbox "≡", PlayStation Options, Switch
+  /// Pro "+") is bound to the emulated Start/+ by the default Dolphin profile,
+  /// not the pause menu — `buttonOptions` is that pad's dedicated pause
+  /// button instead. `EmuEventVC` (`GCEventViewController`) can still surface
+  /// the SAME physical Menu press as a `"uipress-menu"` request (the route
+  /// that exists so the Siri Remote, which has no other button, can pause) —
+  /// `requestPauseMenu` uses this timestamp to drop that specific duplicate
+  /// without touching a genuine Siri Remote press, which has no accompanying
+  /// extended-gamepad transition to correlate against.
+  private var lastExtendedGamepadMenuPress: TimeInterval = 0
+
   private init() {}
+
+  /// Call on every `extendedGamepad.buttonMenu` press/release transition.
+  /// See `lastExtendedGamepadMenuPress`.
+  func noteExtendedGamepadMenuPress() {
+    lastExtendedGamepadMenuPress = Date().timeIntervalSinceReferenceDate
+  }
 
   /// Call whenever the current state of the four shoulder buttons changes.
   /// - Parameter allPressed: true if L1, R1, L2, R2 are all currently pressed.
@@ -73,21 +93,26 @@ final class PauseGestureTracker {
 
   /// Call when Menu or Start is pressed **as part of the shoulder chord**.
   ///
-  /// This is now only the *chord* path: L1+R1+L2+R2 held while Menu/Start is
-  /// pressed. The ungated Menu/Options path lives in `installPauseMenuHandlers`
-  /// (ControllerExtensions) and calls `requestPauseMenu()` directly, so no
-  /// controller depends on discovering this combo any more. The chord is kept
-  /// because it doubles as the fast-forward gesture and users rely on it.
+  /// This is the *only* route a plain Menu press has into the pause menu:
+  /// L1+R1+L2+R2 held while Menu/Start is pressed. Outside the chord, Menu is
+  /// the emulated Start/+ button (bound by the default Dolphin profile) and
+  /// must NOT open the pause menu — see the doc comment on
+  /// `installPauseMenuHandlers` (ControllerExtensions.swift). The ungated
+  /// pause-menu route for extended gamepads is `buttonOptions` instead, which
+  /// calls `requestPauseMenu()` directly via `menuButtonChanged`. The chord is
+  /// kept because it doubles as the fast-forward gesture and users rely on it.
   func menuOrStartPressed() {
     guard isAllShouldersHeld else { return }
     requestPauseMenu(reason: "shoulder-chord")
   }
 
-  /// Menu is dual-purpose during emulation: a short press opens the pause menu,
-  /// a hold of `DOLMenuLongPressDuration` exits to the library. So the decision
-  /// can only be made at RELEASE — requesting the pause menu on press-down would
-  /// flash the menu at t=0 on every hold and then exit at t=2. `EmuEventVC`
-  /// takes the same shape on the UIPress path, using the same constant.
+  /// The dedicated pause-menu button (Siri Remote Menu, or `buttonOptions` on
+  /// an extended gamepad) is dual-purpose during emulation: a short press
+  /// opens the pause menu, a hold of `DOLMenuLongPressDuration` exits to the
+  /// library. So the decision can only be made at RELEASE — requesting the
+  /// pause menu on press-down would flash the menu at t=0 on every hold and
+  /// then exit at t=2. `EmuEventVC` takes the same shape on the UIPress path,
+  /// using the same constant.
   func menuButtonChanged(pressed: Bool, reason: String) {
     let now = Date().timeIntervalSinceReferenceDate
     guard !pressed else {
@@ -123,6 +148,16 @@ final class PauseGestureTracker {
     if now - lastControllerConnect < Self.connectGraceWindow {
       if UserDefaults.standard.bool(forKey: "input_debug") {
         NSLog("[INPUT] pause request ignored (%@): controller connected %.2fs ago", reason, now - lastControllerConnect)
+      }
+      return
+    }
+    // See `lastExtendedGamepadMenuPress`: a "uipress-menu" request that
+    // correlates with an extended gamepad's Menu press is that pad's Start
+    // button, not a pause request — drop it. A genuine Siri Remote press has
+    // no accompanying extended-gamepad transition and is unaffected.
+    if reason == "uipress-menu", now - lastExtendedGamepadMenuPress < Self.pauseRequestCoalesceWindow {
+      if UserDefaults.standard.bool(forKey: "input_debug") {
+        NSLog("[INPUT] pause request ignored (%@): correlates with an extended-gamepad Menu press (Start)", reason)
       }
       return
     }
