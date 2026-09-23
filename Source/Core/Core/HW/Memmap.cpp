@@ -8,6 +8,8 @@
 
 #include "Core/HW/Memmap.h"
 
+#include <vector>
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -149,25 +151,61 @@ void MemoryManager::Init()
     region.active = true;
     mem_size += region.size;
   }
-  m_arena.GrabSHMSegment(mem_size, "dolphin-emu");
-
   m_physical_page_mappings.fill(nullptr);
 
-  // Create an anonymous view of the physical memory
+  // iCube: create the views, then PROVE they are distinct. Some iOS kernels (A12 iPad mini 5,
+  // iPadOS 26) return views of the shared entry that alias each other at non-zero offsets, so the
+  // MEM2 view was really MEM1 and a game's clear of its MEM2 arena wiped its own code. Probing the
+  // entry beforehand was not enough (the probe passed while the real views still aliased), so the
+  // check is on the actual views: write a marker into each and look for it in the others. On a
+  // failure everything is released and recreated in plain mode (independent allocations, no
+  // fastmem arena).
+  for (int attempt = 0; attempt < 2; ++attempt)
+  {
+    m_arena.GrabSHMSegment(mem_size, "dolphin-emu");
+
+    for (const PhysicalMemoryRegion& region : m_physical_regions)
+    {
+      if (!region.active)
+        continue;
+
+      *region.out_pointer = (u8*)m_arena.CreateView(region.shm_position, region.size);
+
+      if (!*region.out_pointer)
+      {
+        PanicAlertFmt(
+            "Memory::Init(): Failed to create view for physical region at 0x{:08X} (size 0x{:08X}).",
+            region.physical_address, region.size);
+        exit(0);
+      }
+    }
+
+    if (!PhysicalViewsAlias())
+      break;
+
+    for (const PhysicalMemoryRegion& region : m_physical_regions)
+    {
+      if (!region.active || !*region.out_pointer)
+        continue;
+      m_arena.ReleaseView(*region.out_pointer, region.size);
+      *region.out_pointer = nullptr;
+    }
+    m_arena.ReleaseSHMSegment();
+    if (attempt == 1 || Common::MemArena::UsesPlainViews())
+    {
+      PanicAlertFmt("Memory::Init(): emulated memory views alias each other even in plain mode.");
+      exit(0);
+    }
+    ERROR_LOG_FMT(MEMMAP, "Memory::Init(): emulated memory views alias each other; switching to plain "
+                          "per-region allocations (fastmem arena disabled)");
+    Common::MemArena::SetPlainViews(true);
+  }
+
+  // Paging hints and the physical page table for every view.
   for (const PhysicalMemoryRegion& region : m_physical_regions)
   {
     if (!region.active)
       continue;
-
-    *region.out_pointer = (u8*)m_arena.CreateView(region.shm_position, region.size);
-
-    if (!*region.out_pointer)
-    {
-      PanicAlertFmt(
-          "Memory::Init(): Failed to create view for physical region at 0x{:08X} (size 0x{:08X}).",
-          region.physical_address, region.size);
-      exit(0);
-    }
 
 #ifdef __APPLE__
 #if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || (defined(TARGET_OS_TV) && TARGET_OS_TV)
@@ -196,6 +234,37 @@ void MemoryManager::Init()
 bool MemoryManager::IsAddressInFastmemArea(const u8* address) const
 {
   return address >= m_fastmem_arena && address < m_fastmem_arena + m_fastmem_arena_size;
+}
+
+// iCube: true when a marker written through one active region's view is visible through another.
+bool MemoryManager::PhysicalViewsAlias()
+{
+  std::vector<PhysicalMemoryRegion*> active;
+  for (PhysicalMemoryRegion& region : m_physical_regions)
+    if (region.active && *region.out_pointer)
+      active.push_back(&region);
+  bool alias = false;
+  for (size_t i = 0; i < active.size() && !alias; ++i)
+  {
+    volatile u32* mine = reinterpret_cast<volatile u32*>(*active[i]->out_pointer);
+    const u32 saved = *mine;
+    const u32 marker = 0x1C0BE000u + static_cast<u32>(i) * 0x101u + 1u;
+    *mine = marker;
+    for (size_t j = 0; j < active.size(); ++j)
+    {
+      if (j == i)
+        continue;
+      volatile u32* other = reinterpret_cast<volatile u32*>(*active[j]->out_pointer);
+      if (*other == marker)
+      {
+        ERROR_LOG_FMT(MEMMAP, "Physical region at {:#010x} aliases region at {:#010x}",
+                      active[i]->physical_address, active[j]->physical_address);
+        alias = true;
+      }
+    }
+    *mine = saved;
+  }
+  return alias;
 }
 
 bool MemoryManager::InitFastmemArena()
@@ -234,6 +303,12 @@ bool MemoryManager::InitFastmemArena()
   constexpr size_t ppc_view_size = 0x1'0000'0000;
   constexpr size_t guard_size = 0x8000'0000;
   constexpr size_t memory_size = ppc_view_size * 2 + guard_size * 3;
+
+  if (Common::MemArena::UsesPlainViews())
+  {
+    INFO_LOG_FMT(MEMMAP, "Fastmem arena disabled: memory views are plain allocations on this device");
+    return false;
+  }
 
   m_fastmem_arena = m_arena.ReserveMemoryRegion(memory_size);
   if (!m_fastmem_arena)

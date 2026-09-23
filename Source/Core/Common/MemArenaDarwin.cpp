@@ -16,6 +16,14 @@ MemArena::~MemArena() = default;
 
 void MemArena::GrabSHMSegment(size_t size, std::string_view base_name)
 {
+  if (s_plain_views)
+  {
+    // No shared segment at all: CreateView allocates each region independently.
+    m_shm_address = 0;
+    m_shm_entry = MACH_PORT_NULL;
+    m_shm_size = size;
+    return;
+  }
   kern_return_t retval = vm_allocate(mach_task_self(), &m_shm_address, size, VM_FLAGS_ANYWHERE);
   if (retval != KERN_SUCCESS)
   {
@@ -192,6 +200,17 @@ void MemArena::ReleaseSHMSegment()
 
 void* MemArena::CreateView(s64 offset, size_t size)
 {
+  if (s_plain_views)
+  {
+    vm_address_t plain = 0;
+    const kern_return_t plain_result = vm_allocate(mach_task_self(), &plain, size, VM_FLAGS_ANYWHERE);
+    if (plain_result != KERN_SUCCESS)
+    {
+      ERROR_LOG_FMT(MEMMAP, "CreateView (plain) failed: vm_allocate returned {0:#x}", plain_result);
+      return nullptr;
+    }
+    return reinterpret_cast<void*>(plain);
+  }
   if (m_shm_address == 0)
   {
     ERROR_LOG_FMT(MEMMAP, "CreateView failed: no shared memory segment allocated");
@@ -219,6 +238,8 @@ void MemArena::ReleaseView(void* view, size_t size)
 
 u8* MemArena::ReserveMemoryRegion(size_t memory_size)
 {
+  if (s_plain_views)
+    return nullptr;  // no mirroring available; the fastmem arena stays off
   vm_address_t address = 0;
 
   kern_return_t retval = vm_allocate(mach_task_self(), &address, memory_size, VM_FLAGS_ANYWHERE);

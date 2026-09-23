@@ -144,6 +144,18 @@ private:
 #elif defined(__APPLE__)
   // iCube: proves a memory entry really mirrors the whole segment (see MemArenaDarwin.cpp).
   static bool EntryMirrorsSegment(mach_port_t entry, vm_address_t base, size_t size);
+
+public:
+  // iCube: "plain views" mode. Some iOS kernels (A12 iPad mini 5, iPadOS 26) hand back views of a
+  // Mach memory entry that alias each other at non-zero offsets, so MEM2 became a second view of
+  // MEM1. In this mode every CreateView is an independent vm_allocate, there is no shared segment,
+  // and ReserveMemoryRegion returns null so the fastmem arena (which needs mirroring) stays off.
+  // Set by Memory::Init when its post-creation alias check fails; sticky for the process.
+  static void SetPlainViews(bool plain) { s_plain_views = plain; }
+  static bool UsesPlainViews() { return s_plain_views; }
+
+private:
+  static inline bool s_plain_views = false;
   vm_address_t m_shm_address = 0;
   vm_size_t m_shm_size = 0;
   mem_entry_name_port_t m_shm_entry = MACH_PORT_NULL;

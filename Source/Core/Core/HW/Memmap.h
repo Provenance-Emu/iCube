@@ -103,6 +103,7 @@ public:
   void Init();
   void Shutdown();
   bool InitFastmemArena();
+  bool PhysicalViewsAlias();
   void ShutdownFastmemArena();
   void DoState(PointerWrap& p);
 
