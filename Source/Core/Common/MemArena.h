@@ -142,6 +142,8 @@ private:
   void* m_memory_handle = nullptr;
   WindowsMemoryFunctions m_memory_functions;
 #elif defined(__APPLE__)
+  // iCube: proves a memory entry really mirrors the whole segment (see MemArenaDarwin.cpp).
+  static bool EntryMirrorsSegment(mach_port_t entry, vm_address_t base, size_t size);
   vm_address_t m_shm_address = 0;
   vm_size_t m_shm_size = 0;
   mem_entry_name_port_t m_shm_entry = MACH_PORT_NULL;
