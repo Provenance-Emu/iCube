@@ -81,6 +81,10 @@ final class ROMUploadServer: @unchecked Sendable {
 
     /// Title shown in the upload page header (set by the facade).
     var pageTitle: String = "iCube"
+    /// Bonjour instance name for both `_http._tcp` and `_webdav._tcp`. Must be unique on the LAN:
+    /// two devices advertising plain "iCube" collide (NSNetServicesCollisionError, -72001) and the
+    /// second one never publishes. PVWebServer sets this to "<title> (<host name>)".
+    var bonjourName: String = "iCube"
 
     // MARK: - State
 
@@ -228,7 +232,7 @@ final class ROMUploadServer: @unchecked Sendable {
     private func startListener(on candidate: UInt16) async throws {
         let listener = try NWListener(using: Self.makeTCPParameters(), on: NWEndpoint.Port(rawValue: candidate)!)
         listener.newConnectionHandler = { [weak self] conn in self?.handleNewConnection(conn) }
-        listener.service = NWListener.Service(name: pageTitle, type: "_http._tcp")
+        listener.service = NWListener.Service(name: bonjourName, type: "_http._tcp")
         listener.serviceRegistrationUpdateHandler = { [weak self] change in
             guard let self, case let .add(endpoint) = change, case let .hostPort(host, port) = endpoint else { return }
             let hostStr: String
@@ -290,7 +294,7 @@ final class ROMUploadServer: @unchecked Sendable {
             // main queue; publishing here would orphan a Bonjour record for a dead port.
             guard self.isRunning, self.port == candidate else { return }
             self.lock.lock(); self.bonjourPublishConfirmed = false; self.lock.unlock()
-            let service = NetService(domain: "", type: "_webdav._tcp.", name: self.pageTitle, port: Int32(candidate))
+            let service = NetService(domain: "", type: "_webdav._tcp.", name: self.bonjourName, port: Int32(candidate))
             self.bonjourDelegate.onPublish = { [weak self] in
                 guard let self else { return }
                 self.lock.lock(); self.bonjourPublishConfirmed = true; self.lock.unlock()

@@ -97,6 +97,9 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
             ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String)
             ?? "iCube"
         self.server.pageTitle = title
+        // Unique per device so two iCubes on one LAN do not collide on the Bonjour name.
+        let host = ProcessInfo.processInfo.hostName.replacingOccurrences(of: ".local", with: "")
+        self.server.bonjourName = host.isEmpty ? title : "\(title) (\(host))"
 
         // Bridge upload completion → library rescan + toast.
         NotificationCenter.default.addObserver(
