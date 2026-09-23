@@ -69,6 +69,18 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
     private let server: ROMUploadServer
     private var rescanWorkItem: DispatchWorkItem?
     private var pendingUploadCount = 0
+    /// Uploads that have posted Started but not yet Completed. A WebDAV copy is several
+    /// requests (Finder writes the `._` AppleDouble sidecar first, Windows pre-creates a
+    /// zero-byte file), so "a completion arrived" is not "the copy is done"; the rescan waits
+    /// until nothing is still being written, or the library indexes a half-written ROM.
+    private var uploadsInFlight = 0
+    private var lastUploadActivity = Date.distantPast
+    private static let rescanDebounce: TimeInterval = 1.5
+    private static let rescanRecheck: TimeInterval = 2.0
+    /// A failed upload deletes its partial file without posting Completed, which would pin
+    /// `uploadsInFlight` above zero forever. If nothing has started or finished for this long,
+    /// the count is treated as stale and the rescan runs anyway.
+    private static let uploadActivityStaleAfter: TimeInterval = 120
     /// Optional hook for the app target to post-process uploads (e.g. archive extraction).
     private var uploadPostProcessor: ((String) -> Void)?
     /// Optional hook returning custom snackbar text for a debounced upload burst (`nil` → default).
@@ -87,6 +99,12 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
         self.server.pageTitle = title
 
         // Bridge upload completion → library rescan + toast.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(onUploadStarted(_:)),
+            name: Notification.Name(PVWebServerFileUploadStartedNotificationName),
+            object: nil
+        )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(onUploadCompleted(_:)),
@@ -206,9 +224,22 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
 
     // MARK: - Import / rescan bridge
 
+    @objc private func onUploadStarted(_ note: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.uploadsInFlight += 1
+            self.lastUploadActivity = Date()
+        }
+    }
+
     @objc private func onUploadCompleted(_ note: Notification) {
         let path = note.userInfo?["filePath"] as? String
         let processor = uploadPostProcessor
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.uploadsInFlight = max(0, self.uploadsInFlight - 1)
+            self.lastUploadActivity = Date()
+        }
 
         if let path, let processor {
             DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -237,6 +268,16 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
         rescanWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            if self.uploadsInFlight > 0 {
+                if Date().timeIntervalSince(self.lastUploadActivity) < Self.uploadActivityStaleAfter {
+                    // Something is still being written: check again shortly instead of
+                    // indexing a partial file. `pendingUploadCount` keeps accumulating.
+                    self.rearmRescan(after: Self.rescanRecheck)
+                    return
+                }
+                NSLog("[PVWebServer] \(self.uploadsInFlight) upload(s) never completed; rescanning anyway")
+                self.uploadsInFlight = 0
+            }
             let count = self.pendingUploadCount
             self.pendingUploadCount = 0
 
@@ -255,7 +296,13 @@ public final class PVWebServer: NSObject, @unchecked Sendable {
             )
         }
         rescanWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.rescanDebounce, execute: work)
+    }
+
+    private func rearmRescan(after delay: TimeInterval) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard let work = rescanWorkItem else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 }
 
