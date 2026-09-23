@@ -299,8 +299,30 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/sentry-cli" \
             "https://github.com/getsentry/sentry-cli/releases/download/${SENTRY_CLI_VERSION}/sentry-cli-Darwin-universal"
           chmod +x "$RUNNER_TEMP/sentry-cli"
+
+          # The archive's dSYMs folder holds ONLY the app's own dSYM. The Dolphin core ships as a
+          # prebuilt xcframework, so its dSYM lives next to the dylib in the CMake build tree and
+          # has to be uploaded explicitly — that omission is why every crash landing in the core
+          # came back as `at <unknown>`.
+          UPLOAD_PATHS=("$RUNNER_TEMP/iCube-${{ matrix.platform }}.xcarchive/dSYMs")
+          while IFS= read -r d; do UPLOAD_PATHS+=("$d"); done < <(
+            find build-*-Release -name '*.dSYM' -maxdepth 6 -print 2>/dev/null || true)
+          echo "dSYM search found ${#UPLOAD_PATHS[@]} path(s):"
+          printf '  %s\n' "${UPLOAD_PATHS[@]}"
+
           "$RUNNER_TEMP/sentry-cli" debug-files upload --include-sources \
-            "$RUNNER_TEMP/iCube-${{ matrix.platform }}.xcarchive/dSYMs"
+            "${UPLOAD_PATHS[@]}" 2>&1 | tee "$RUNNER_TEMP/sentry-upload.log"
+
+          # sentry-cli exits 0 when it finds nothing, which is how this silently degraded for weeks.
+          # Treat "no debug files" as a failure of THIS step (the job keeps going: the step is
+          # continue-on-error, so a red X here is a visible signal without blocking a release).
+          FOUND=$(grep -oE 'Found [0-9]+ debug information file' "$RUNNER_TEMP/sentry-upload.log" \
+                  | grep -oE '[0-9]+' | head -1 || echo 0)
+          echo "sentry-cli reported $FOUND debug information file(s)"
+          if [ "${FOUND:-0}" -lt 2 ]; then
+            echo "::error::Only $FOUND dSYM(s) uploaded — expected the app AND the Dolphin core. Crashes in the core will not symbolicate."
+            exit 1
+          fi
 
       # Uploading only reaches the Internal group. Without this step the public
       # TestFlight links kept serving whichever build was last assigned by hand

@@ -529,6 +529,18 @@ class DolphinBuilder:
             f"-DCMAKE_CXX_COMPILER_AR={xcrun_find('ar')}",
             f"-DCMAKE_C_COMPILER_RANLIB={xcrun_find('ranlib')}",
             f"-DCMAKE_CXX_COMPILER_RANLIB={xcrun_find('ranlib')}",
+            # iCube: emit debug info so crashes inside the core can be symbolicated.
+            #
+            # CMAKE_BUILD_TYPE=Release is -O3 -DNDEBUG with NO -g, so the shipped dylib carried zero
+            # DWARF sections. Every Sentry crash whose frames land in the core — ExecuteOneBlock and
+            # friends, hundreds of users — was unsymbolicatable BY CONSTRUCTION, and no amount of
+            # fixing the upload step could have helped: there was nothing to upload.
+            #
+            # -g changes no codegen at -O3. On Apple the linker leaves a debug map (N_OSO entries)
+            # pointing at the object files rather than embedding DWARF, so the dylib grows only by
+            # its symbol table; dsymutil then follows that map to build the .dSYM (see below).
+            "-DCMAKE_C_FLAGS_RELEASE=-O3 -DNDEBUG -g",
+            "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG -g",
         ])
 
         # Override deployment target at CMake level to ensure it's respected
@@ -647,6 +659,18 @@ class DolphinBuilder:
             found.sort(key=lambda p: os.path.getmtime(p), reverse=True)
             chosen = found[0]
             self._log(f"Found dylib for {platform}: {os.path.basename(chosen)}", "debug")
+
+            # iCube: build the .dSYM beside the dylib. dsymutil resolves the debug map left by -g
+            # into a standalone bundle, which is what Sentry needs; the dylib itself stays as-is.
+            # Non-fatal: a missing dSYM costs symbolication, never a build.
+            try:
+                dsym_path = chosen + ".dSYM"
+                subprocess.check_call(["xcrun", "dsymutil", chosen, "-o", dsym_path])
+                self._log(f"dSYM: {os.path.basename(dsym_path)}", "success")
+            except (subprocess.CalledProcessError, OSError) as dsym_err:
+                self._log(f"dsymutil failed for {platform} ({dsym_err}); core frames will not "
+                          f"symbolicate in Sentry", "warning")
+
             self.dylibs[platform] = chosen
             self._log(f"Build completed for {platform}", "success")
 
