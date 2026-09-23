@@ -1,7 +1,7 @@
 "JIT is not active" = "JIT is not active";
 "Failed to open \"{0}\" for writing." = "Failed to open \"{0}\" for writing.";
 "Wrote to \"{0}\"." = "Wrote to \"{0}\".";
-"The decryption keys need to be appended to the NAND backup file." = "復号化キーは NAND バックアップ ファイルに追加する必要があります。";
+"The decryption keys need to be appended to the NAND backup file." = "復号化キーを NAND バックアップ ファイルに追加する必要があります。";
 "OpenAL: can't find sound devices" = "OpenAL: can't find sound devices";
 "OpenAL: can't open device {0}" = "OpenAL: can't open device {0}";
 "OpenAL: can't create context for device {0}" = "OpenAL: can't create context for device {0}";
@@ -163,7 +163,7 @@ DFF: MEM1 {4:08X} ({5} MiB), MEM2 {6:08X} ({7} MiB)";
 "Connect Wii Remote 2" = "2PのWiiリモコンを接続";
 "Connect Wii Remote 3" = "3PのWiiリモコンを接続";
 "Connect Wii Remote 4" = "4PのWiiリモコンを接続";
-"Connect Balance Board" = "バランスWiiボードを接続する";
+"Connect Balance Board" = "Connect Balance Board";
 "Toggle SD Card" = "SDカード挿入 切替";
 "Toggle USB Keyboard" = "USB キーボード 切替";
 "Toggle Wii Speak Mute" = "Toggle Wii Speak Mute";
@@ -171,7 +171,8 @@ DFF: MEM1 {4:08X} ({5} MiB), MEM2 {6:08X} ({7} MiB)";
 "Previous Profile" = "前のプロファイル";
 "Next Game Profile" = "次のゲームプロファイル";
 "Previous Game Profile" = "前のゲームプロファイル";
-"Toggle Crop" = "クロッピング 切替";
+"Toggle Aspect Ratio Crop" = "Toggle Aspect Ratio Crop";
+"Toggle Custom Crop" = "Toggle Custom Crop";
 "Toggle Aspect Ratio" = "アスペクト比 設定切替";
 "Toggle Skip EFB Access" = "Skip EFB Access 切替";
 "Toggle EFB Copies" = "EFB Copies 設定切替";
@@ -284,6 +285,12 @@ DSPHLE: Unknown ucode (CRC = {0:08x}) - forcing AX." = "このタイトルは DS
 自作アプリの場合は DSP LLE をお試しください。
 
 DSPHLE: Unknown ucode (CRC = {0:08x}) - forcing AX.";
+"Unhandled Media Board Read: offset={0:08x} length={0:08x}" = "Unhandled Media Board Read: offset={0:08x} length={0:08x}";
+"Unhandled Media Board Command:{0:04x}" = "Unhandled Media Board Command:{0:04x}";
+"Unhandled Media Board Write: offset={0:08x} length={0:08x}" = "Unhandled Media Board Write: offset={0:08x} length={0:08x}";
+"Unhandled Media Board Execute:{0:04x}" = "Unhandled Media Board Execute:{0:04x}";
+"Unhandled Media Board Command:{0:02x}" = "Unhandled Media Board Command:{0:02x}";
+"Unknown game ID:{0:08x}, using default controls." = "Unknown game ID:{0:08x}, using default controls.";
 "The disc that was about to be inserted couldn't be found." = "挿入しようとしたディスクが見つかりませんでした。";
 "A disc is already about to be inserted." = "ディスクは既に挿入されています。";
 "Unknown DVD command {0:08x} - fatal error" = "不明な DVD コマンド {0:08x} - 致命的なエラー";
@@ -301,7 +308,7 @@ DSPHLE: Unknown ucode (CRC = {0:08x}) - forcing AX.";
 "AD16" = "AD16";
 "Microphone" = "マイク";
 "Broadband Adapter (TAP)" = "ブロードバンドアダプタ (TAP)";
-"Triforce Baseboard" = "Triforce Baseboard";
+"Triforce Baseboard" = "Triforce基板";
 "USB Gecko" = "USB Gecko";
 "GCI Folder" = "GCI フォルダ";
 "Advance Game Port" = "アドバンスコネクタ";
@@ -309,6 +316,7 @@ DSPHLE: Unknown ucode (CRC = {0:08x}) - forcing AX.";
 "Broadband Adapter (tapserver)" = "ブロードバンドアダプタ (tapserver)";
 "Broadband Adapter (HLE)" = "ブロードバンドアダプタ (HLE)";
 "Modem Adapter (tapserver)" = "モデムアダプタ (tapserver)";
+"Broadband Adapter (IPC)" = "Broadband Adapter (IPC)";
 "<Nothing>" = "なし";
 "Error: Trying to access Windows-1252 fonts but they are not loaded. Games may not show fonts correctly, or crash." = "エラー： Windows-1252フォントにアクセスを試みましたが読み込めませんでした。ゲームはフォントを正しく表示できないか、クラッシュするでしょう";
 "Error: Trying to access Shift JIS fonts but they are not loaded. Games may not show fonts correctly, or crash." = "エラー： Shift-JISフォントにアクセスを試みましたが読み込めませんでした。ゲームはフォントを正しく表示できないか、クラッシュするでしょう";
@@ -319,8 +327,6 @@ DSPHLE: Unknown ucode (CRC = {0:08x}) - forcing AX.";
 "Error: GBA{0} failed to open the ROM in {1}" = "エラー: GBA{0} は {1} でROMを開けませんでした";
 "Error: GBA{0} failed to create core" = "Error: GBA{0} failed to create core";
 "Error: GBA{0} failed to load the ROM in {1}" = "エラー： GBA{0} が {1} のROMのロードに失敗しました";
-"Error: GBA{0} failed to open the BIOS in {1}" = "エラー: GBA{0} は {1} で BIOS を開けませんでした";
-"Error: GBA{0} failed to load the BIOS in {1}" = "エラー: GBA{0} が {1} のBIOSのロードに失敗しました";
 "Error: GBA{0} failed to open the save in {1}" = "エラー: GBA{0} は {1} でセーブデータを開けませんでした";
 "Error: GBA{0} failed to load the save in {1}" = "エラー： GBA{0} が {1} のセーブデータのロードに失敗しました。";
 "Pad" = "パッド";
@@ -367,6 +373,10 @@ to the connection state of the real default device (if there is one)." = "チェ
 "Triggers" = "トリガー";
 "Rumble" = "振動";
 "Options" = "設定";
+"Triforce" = "Triforce";
+"Test" = "Test";
+"Service" = "Service";
+"Coin" = "Coin";
 "L" = "L";
 "R" = "R";
 "L-Analog" = "L (アナログ)";
@@ -479,10 +489,10 @@ Dolphinがアダプタを使用しようとすると、以下のエラーが発�
 このエミュレートされたコンソールは停止します。";
 "Failed to initialize Realtek Bluetooth device.
 
-Bluetooth passthrough will probably not work." = "Failed to initialize Realtek Bluetooth device.
+Bluetooth passthrough will probably not work." = "Realtek Bluetoothデバイスの初期化に失敗しました。
 
-Bluetooth passthrough will probably not work.";
-"Failed to open Bluetooth device {:04x}:{:04x}: {}" = "Failed to open Bluetooth device {:04x}:{:04x}: {}";
+Bluetoothパススルーは動作しない可能性があります。";
+"Failed to open Bluetooth device {:04x}:{:04x}: {}" = "Bluetoothデバイスを開けませんでした {:04x}:{:04x}: {}";
 "Failed to detach kernel driver for BT passthrough: {0}" = "BTパススルー用カーネルドライバーの切り離しに失敗しました: {0}";
 "Failed to claim interface for BT passthrough: {0}" = "BT パススルーのインターフェースを要求できませんでした: {0}";
 "HTTP GET {0}
@@ -586,7 +596,9 @@ Please recheck that you have the correct code." = "ホストコードが長す�
 "Internal LZO Error - compression failed" = "Internal LZO Error - compression failed";
 "Failed to open file \"{0}\". Verify your write permissions." = "ファイル \"{0}\" のオープンに失敗しました。書き込み権限を確認してください。";
 "Internal LZO Error - decompression failed" = "Internal LZO Error - compression failed";
+"LZO error - output is too large" = "LZO error - output is too large";
 "Error writing file: {0}" = "ファイルの書き込みエラー: {0}";
+"LZO error - output size mismatch" = "LZO error - output size mismatch";
 "Enet Didn't Initialize" = "Enet Didn't Initialize";
 "All players' saves synchronized." = "すべてのプレイヤーのセーブデータは同期されました";
 "{0} failed to synchronize." = "{0} は同期に失敗しました。";
@@ -601,16 +613,16 @@ Please recheck that you have the correct code." = "ホストコードが長す�
 "Error synchronizing cheat codes!" = "チートコードの同期中にエラーが発生しました！";
 "JIT failed to find code space after a cache clear. This should never happen. Please report this incident on the bug tracker. Dolphin will now exit." = "JIT failed to find code space after a cache clear.
 このエラーは起こらないはずです。この状況をバグトラッカーへ報告してください。Dolphinを終了します。";
-"Invalid write to {0:#010x}, PC = {1:#010x}; the game probably would have crashed on real hardware.
+"Invalid write to {0:#010x}, PC = {1:#010x}.
 
-For accurate emulation, enable MMU in advanced settings." = "Invalid write to {0:#010x}, PC = {1:#010x}; the game probably would have crashed on real hardware.
+The game probably would have crashed on real hardware. Enable MMU in advanced settings to accurately emulate game crashes." = "Invalid write to {0:#010x}, PC = {1:#010x}.
 
-For accurate emulation, enable MMU in advanced settings.";
-"Invalid read from {0:#010x}, PC = {1:#010x}; the game probably would have crashed on real hardware.
+The game probably would have crashed on real hardware. Enable MMU in advanced settings to accurately emulate game crashes.";
+"Invalid read from {0:#010x}, PC = {1:#010x}.
 
-For accurate emulation, enable MMU in advanced settings." = "Invalid read from {0:#010x}, PC = {1:#010x}; the game probably would have crashed on real hardware.
+The game probably would have crashed on real hardware. Enable MMU in advanced settings to accurately emulate game crashes." = "Invalid read from {0:#010x}, PC = {1:#010x}.
 
-For accurate emulation, enable MMU in advanced settings.";
+The game probably would have crashed on real hardware. Enable MMU in advanced settings to accurately emulate game crashes.";
 "Internal LZ4 Error - compression failed" = "内部 LZ4 エラー - 圧縮に失敗しました";
 "Internal LZO Error - decompression failed ({0}) ({1}) 
 Unable to retrieve outdated savestate version info." = "内部 LZO エラー - 展開に失敗しました ({0}) ({1})
@@ -622,8 +634,8 @@ Unable to retrieve outdated savestate version info." = "内部 LZO エラー - �
 "Internal LZ4 Error - Tried decompressing {0} bytes" = "内部 LZ4 エラー - {0} bytesの展開を試行しました";
 "Internal LZ4 Error - decompression failed ({0}, {1}, {2})" = "内部 LZ4 エラー - 展開に失敗しました ({0}, {1}, {2})";
 "Internal LZ4 Error - payload size mismatch ({0} / {1}))" = "内部 LZ4 エラー - ペイロードサイズの不一致 ({0} / {1}))";
-"No undo.dtm found, aborting undo load state to prevent movie desyncs" = "undo.dtm ファイルが見つかりません。desync を防止するためステートロードの取消を中止します";
 "There is nothing to undo!" = "取り消すものがありません！";
+"No undo.dtm found, aborting undo load state to prevent movie desyncs" = "undo.dtm ファイルが見つかりません。desync を防止するためステートロードの取消を中止します";
 "Wii Menu" = "Wiiメニュー";
 "Unknown Device" = "Unknown Device";
 "WAD installation failed: The selected file is not a valid WAD." = "WAD installation failed: The selected file is not a valid WAD.";
@@ -652,14 +664,14 @@ Check that you have permissions to write the target folder and that the media ca
 "Failed to write the output file \"{0}\".
 Check that you have enough space available on the target drive." = "出力ファイル\"{0}\"の書き込みに失敗しました。
 ターゲットドライブに十分な空き容量があることを確認してください。";
-"Europe" = "ヨーロッパ";
-"Japan" = "日本";
+"Europe" = "Europe";
+"Japan" = "Japan";
 "USA" = "アメリカ合衆国";
 "Australia" = "オーストラリア";
 "France" = "フランス";
 "Germany" = "ドイツ";
 "Italy" = "イタリア";
-"Korea" = "韓国";
+"Korea" = "Korea";
 "Netherlands" = "オランダ";
 "Russia" = "ロシア";
 "Spain" = "スペイン";
@@ -683,9 +695,8 @@ Check that you have enough space available on the target drive." = "出力ファ
 "This file does not look like a BootMii NAND backup." = "このファイルはBootMii NANDバックアップではないようです";
 "This file does not contain a valid Wii filesystem." = "このファイルには有効な Wii ファイルシステムが含まれていません。";
 "Unable to write to file {0}" = "ファイル {0} に書き込めません";
-"Wii data is not public yet" = "Wii data is not public yet";
-"Failed to connect to Redump.org" = "Redump.org に接続できませんでした";
-"Failed to parse Redump.org data" = "Redump.orgデータの解析に失敗しました。";
+"Failed to connect to Redump.info" = "Failed to connect to Redump.info";
+"Failed to parse Redump.info data" = "Failed to parse Redump.info data";
 "Serial and/or version data is missing from {0}
 Please append \"{1}\" (without the quotes) to the datfile URL when downloading
 Example: {2}" = "シリアルデータまたはバージョンデータが {0} から欠落しています。
@@ -711,6 +722,8 @@ Example: {2}" = "シリアルデータまたはバージョンデータが {0} �
 "The data size for the {0} partition is not evenly divisible by the block size." = "The data size for the {0} partition is not evenly divisible by the block size.";
 "The {0} partition does not have a valid file system." = "The {0} partition does not have a valid file system.";
 "The update partition does not contain the IOS used by this title." = "The update partition does not contain the IOS used by this title.";
+"The {0} partition does not have a valid ticket." = "The {0} partition does not have a valid ticket.";
+"The {0} partition does not have a valid TMD." = "The {0} partition does not have a valid TMD.";
 "{0} (Masterpiece)" = "{0} (Masterpiece)";
 "This game has been hacked to fit on a single-layer DVD. Some content such as pre-rendered videos, extra languages or entire game modes will be broken. This problem generally only exists in illegal copies of games." = "このゲームは、1層DVD に収まるようにハッキングされています。プリレンダリングされたビデオや追加言語、ゲームモード全体など一部のコンテンツは壊れます。この問題は通常、ゲームの違法コピーにのみ存在します。";
 "The format that the disc image is saved in does not store the size of the disc image." = "The format that the disc image is saved in does not store the size of the disc image.";
@@ -727,7 +740,9 @@ Example: {2}" = "シリアルデータまたはバージョンデータが {0} �
 "This title is set to use an invalid IOS." = "This title is set to use an invalid IOS.";
 "This title is set to use an invalid common key." = "This title is set to use an invalid common key.";
 "The specified common key index is {0} but should be {1}." = "The specified common key index is {0} but should be {1}.";
+"The ticket is invalid." = "The ticket is invalid.";
 "The ticket is not correctly signed." = "The ticket is not correctly signed.";
+"The TMD is invalid." = "The TMD is invalid.";
 "The TMD is not correctly signed. If you move or copy this title to the SD Card, the Wii System Menu will not launch it anymore and will also refuse to copy or move it back to the NAND." = "TMDが正しく署名されていません。このタイトルをSDカードに移動またはコピーすると、Wiiシステムメニューが起動しなくなり、NANDにコピーまたは移動することも拒否されます。";
 "This disc image is in the NKit format. It is not a good dump in its current form, but it might become a good dump if converted back. The CRC32 of this file might match the CRC32 of a good dump even though the files are not identical." = "このディスクイメージはNKit形式です。現在の形式では良好なダンプではありませんが、変換しなおせば良好なダンプになるかもしれません。ファイルが同一ではない場合でも、このファイルの CRC32 は正常なダンプの CRC32 と一致する可能性があります。";
 "Some padding data that should be zero is not zero. This can make the game freeze at certain points." = "Some padding data that should be zero is not zero. This can make the game freeze at certain points.";
@@ -736,10 +751,10 @@ Example: {2}" = "シリアルデータまたはバージョンデータが {0} �
 "Errors were found in {0} blocks in the {1} partition." = "Errors were found in {0} blocks in the {1} partition.";
 "Errors were found in {0} unused blocks in the {1} partition." = "Errors were found in {0} unused blocks in the {1} partition.";
 "This is a good dump." = "正常なダンプです。";
-"This is a good dump according to Redump.org, but Dolphin has found problems. This might be a bug in Dolphin." = "Redump.org によると、これは正常なダンプですが、Dolphinで不具合があることが判明しています。これはDolphinのバグかもしれません。";
-"Dolphin is unable to verify unlicensed discs." = "Dolphin is unable to verify unlicensed discs.";
-"Dolphin is unable to verify typical TGC files properly, since they are not dumps of actual discs." = "Dolphin is unable to verify typical TGC files properly, since they are not dumps of actual discs.";
-"Dolphin is currently unable to verify Triforce games." = "Dolphin is currently unable to verify Triforce games.";
+"This is a good dump according to Redump.info, but Dolphin has found problems. This might be a bug in Dolphin." = "This is a good dump according to Redump.info, but Dolphin has found problems. This might be a bug in Dolphin.";
+"Dolphin is unable to verify unlicensed discs." = "Dolphin は非公式ライセンス品のディスクを検証できません。";
+"Dolphin is unable to verify typical TGC files properly, since they are not dumps of actual discs." = "Dolphin は、実際のディスクのダンプではない一般的な TGC ファイルを正しく検証できません。";
+"Dolphin is currently unable to verify Triforce games." = "Dolphin は現在、Triforce ゲームを検証できません。";
 "Compared to the Wii disc release of the game, this is a bad dump. Despite this, it's possible that this is a good dump compared to the Wii U eShop release of the game. Dolphin can't verify this." = "Wii で発売されたディスクと比較すると、これは不良なダンプです。しかし、Wii U eShopでリリースされたゲームと比較すると、これはむしろ良いダンプである可能性があります。Dolphinでは確認できません。";
 "This is a bad dump. This doesn't necessarily mean that the game won't run correctly." = "これは不良ダンプです。必ずしもゲームが正しく動作しないことを意味するわけではありません。";
 "This is a bad dump." = "これは不良ダンプです。";
@@ -765,6 +780,8 @@ Because this title is not for retail Wii consoles, Dolphin cannot ensure that it
 "Branch: %1" = "Branch: %1";
 "Revision: %1" = "Revision: %1";
 "Using Qt %1" = "Using Qt %1";
+"Using SDL %1" = "Using SDL %1";
+"SDL disabled" = "SDL disabled";
 "Check for updates" = "最新版の入手先";
 "Dolphin is a free and open-source GameCube and Wii emulator." = "Dolphin is a free and open-source GameCube and Wii emulator.";
 "This software should not be used to play games you do not legally own." = "合法的に所有していないゲームをプレイするためにこのソフトウェアを使用することはできません。";
@@ -780,6 +797,7 @@ Because this title is not for retail Wii consoles, Dolphin cannot ensure that it
 "%1 has unlocked %2/%3 achievements worth %4/%5 points" = "%1 は %2%3 の実績をロック解除しました。これは %4%5 ポイントに相当します。";
 "%1/%2" = "%1/%2";
 "Rank %1" = "順位 %1";
+"Logged Out - Credentials Expired" = "Logged Out - Credentials Expired";
 "Login Failed - Invalid Username/Password" = "Login Failed - Invalid Username/Password";
 "Login Failed - No Internet Connection" = "Login Failed - No Internet Connection";
 "Login Failed - Server Error" = "Login Failed - Server Error";
@@ -798,6 +816,10 @@ Because this title is not for retail Wii consoles, Dolphin cannot ensure that it
 "Enable unlocking achievements in Encore Mode.<br><br>Encore Mode re-enables achievements the player has already unlocked on the site so that the player will be notified if they meet the unlock conditions again, useful for custom speedrun criteria or simply for fun.<br><br>Setting takes effect on next game load." = "Enable unlocking achievements in Encore Mode.<br><br>Encore Mode re-enables achievements the player has already unlocked on the site so that the player will be notified if they meet the unlock conditions again, useful for custom speedrun criteria or simply for fun.<br><br>Setting takes effect on next game load.";
 "Enable Spectator Mode" = "Enable Spectator Mode";
 "Enable unlocking achievements in Spectator Mode.<br><br>While in Spectator Mode, achievements and leaderboards will be processed and displayed on screen, but will not be submitted to the server.<br><br>If this is on at game launch, it will not be turned off until game close, because a RetroAchievements session will not be created.<br><br>If this is off at game launch, it can be toggled freely while the game is running." = "Enable unlocking achievements in Spectator Mode.<br><br>While in Spectator Mode, achievements and leaderboards will be processed and displayed on screen, but will not be submitted to the server.<br><br>If this is on at game launch, it will not be turned off until game close, because a RetroAchievements session will not be created.<br><br>If this is off at game launch, it can be toggled freely while the game is running.";
+"Show Leaderboard Tracker" = "Show Leaderboard Tracker";
+"Show the on-screen RetroAchievements leaderboard tracker.<br><br>This appears in the bottom-right corner while competing in a leaderboard." = "Show the on-screen RetroAchievements leaderboard tracker.<br><br>This appears in the bottom-right corner while competing in a leaderboard.";
+"Show Challenge Indicators" = "Show Challenge Indicators";
+"Show the on-screen RetroAchievements challenge indicators.<br><br>These appear as achievement badges in the bottom-right corner while tracking progress within a challenge." = "Show the on-screen RetroAchievements challenge indicators.<br><br>These appear as achievement badges in the bottom-right corner while tracking progress within a challenge.";
 "Enable Discord Presence" = "Enable Discord Presence";
 "Use RetroAchievements rich presence in your Discord status.<br><br>Show Current Game on Discord must be enabled." = "Use RetroAchievements rich presence in your Discord status.<br><br>Show Current Game on Discord must be enabled.";
 "Enable Progress Notifications" = "進捗状況の通知を有効にする";
@@ -809,7 +831,7 @@ Because this title is not for retail Wii consoles, Dolphin cannot ensure that it
 "Are you sure you want to log out of RetroAchievements?" = "RetroAchievementsからログアウトしますか？";
 "Confirm Hardcore Off" = "Confirm Hardcore Off";
 "Are you sure you want to turn hardcore mode off?" = "ハードコアモードをオフにしますか？";
-"Achievements" = "実績";
+"Achievements" = "Achievements";
 "Settings" = "設定";
 "Progress" = "進行状況";
 "Leaderboards" = "リーダーボード";
@@ -865,11 +887,11 @@ Because this title is not for retail Wii consoles, Dolphin cannot ensure that it
 "Waiting for first scan..." = "スキャンの待機中...";
 "Display values in Hex" = "16進数で表示";
 "Automatically update Current Values" = "現在の値を自動更新する";
-"Cannot compare against last value on first search." = "Cannot compare against last value on first search.";
+"Cannot compare against last value on first search." = "最初の検索では前回の値との比較はできません。";
 "Failed to parse given value into target data type." = "指定された値を目的のデータ型に解析変換できませんでした。";
 "Scan succeeded." = "スキャンに成功しました。";
-"%n address(es) were removed." = "%n address(es) were removed.";
-"%n address(es) remain." = "%n address(es) remain.";
+"%n address(es) were removed." = "%n 個のアドレスが除かれました。";
+"%n address(es) remain." = "%n 個のアドレスが残っています。";
 "%1 %2" = "%1 %2";
 "%n address(es) could not be accessed in emulated memory." = "%n address(es) could not be accessed in emulated memory.";
 "%1 %2 %3" = "%1 %2 %3";
@@ -884,11 +906,19 @@ Because this title is not for retail Wii consoles, Dolphin cannot ensure that it
 "Show in memory" = "メモリを表示";
 "Add to watch" = "Add to watch";
 "Generate Action Replay Code(s)" = "アクションリプレイコードの生成";
+"Write value" = "値を書き換える";
+"Delete Address" = "アドレスを削除する";
+"Add Read/Write Breakpoint(s)" = "Add Read/Write Breakpoint(s)";
+"Add Write Breakpoint(s)" = "Add Write Breakpoint(s)";
+"Add Read Breakpoint(s)" = "Add Read Breakpoint(s)";
 "Multiple errors occurred while generating AR codes." = "Multiple errors occurred while generating AR codes.";
 "Can only generate AR code for values in virtual memory." = "仮想メモリ上の値に対してのみARコードを生成できます。";
 "Cannot generate AR code for this address." = "このアドレスの AR コードを生成できません。";
 "Internal error while generating AR code." = "Internal error while generating AR code.";
 "Generated AR code(s)." = "ARコードを生成しました。";
+"Value" = "値";
+"Invalid value." = "Invalid value.";
+"There was an error writing (some) values." = "There was an error writing (some) values.";
 "Description" = "説明";
 "Address" = "アドレス";
 "Last Value" = "前回の値";
@@ -901,9 +931,11 @@ Because this title is not for retail Wii consoles, Dolphin cannot ensure that it
 "Add New Code..." = "コードを追加...";
 "Edit Code..." = "コードを編集...";
 "Remove Code" = "コードを削除";
+"Disable All" = "Disable All";
 "Sort Alphabetically" = "アルファベット順で並べ替え";
 "Show Enabled Codes First" = "有効なコードを最初に表示する";
 "Show Disabled Codes First" = "無効なコードを最初に表示する";
+"Enable All" = "Enable All";
 "Clone and Edit Code..." = "コードをコピーして編集...";
 "Cheat Code Editor" = "チートコードエディタ";
 "Creator" = "制作者";
@@ -936,18 +968,22 @@ Would you like to ignore this line and continue parsing?" = "暗号化または�
 "Common" = "全般";
 "Background Input" = "バックグラウンド操作を許可する";
 "Alternate Input Sources" = "外部入力設定";
+"SDL Controller Settings" = "SDL Controller Settings";
+"Empty Value" = "Empty Value";
+"This field cannot be left empty. Please enter a value." = "This field cannot be left empty. Please enter a value.";
 "DSU Client" = "DSU Client";
 "Nothing to configure" = "設定するものは何もありません";
-"Add New DSU Server" = "DSU Serverの追加";
+"Edit DSU Server" = "Edit DSU Server";
 "BetterJoy, DS4Windows, etc" = "BetterJoy, DS4Windows, その他";
 "Server IP Address" = "サーバーのIPアドレス";
 "Server Port" = "サーバーのポート";
-"Add" = "追加";
+"Apply" = "適用";
 "Cancel" = "キャンセル";
 "Enable" = "有効";
 "Add..." = "追加...";
+"Edit" = "Edit";
 "Remove" = "削除";
-"DSU protocol enables the use of input and motion data from compatible sources, like PlayStation, Nintendo Switch and Steam controllers.<br><br>For setup instructions, <a href=\"https://wiki.dolphin-emu.org/index.php?title=DSU_Client\">refer to this page</a>." = "PlayStationやNintendo Switch、Steamコントローラーなど、互換性のある入力デバイスからボタン入力やモーションデータを取得して使用します。<br><br>詳しいセットアップ方法については <a href=\"https://wiki.dolphin-emu.org/index.php?title=DSU_Client\">こちらのページを参照してください</a>";
+"The DSU protocol enables the use of input and motion data from compatible sources, like PlayStation, Nintendo Switch and Steam controllers.<br><br>For setup instructions, <a href=\"https://wiki.dolphin-emu.org/index.php?title=DSU_Client\">refer to this page</a>." = "The DSU protocol enables the use of input and motion data from compatible sources, like PlayStation, Nintendo Switch and Steam controllers.<br><br>For setup instructions, <a href=\"https://wiki.dolphin-emu.org/index.php?title=DSU_Client\">refer to this page</a>.";
 "Size" = "サイズ";
 "Disc" = "ディスク";
 "Data Partition (%1)" = "データパーティション (%1)";
@@ -988,27 +1024,17 @@ Would you like to ignore this line and continue parsing?" = "暗号化または�
 "Section that contains all Gecko cheat codes." = "このセクションはすべてのGeckoチートコードを含みます。";
 "Section that contains all Action Replay cheat codes." = "このセクションはアクションリプレイのすべてのチートコードを含みます。";
 "Section that contains all graphics related settings." = "このセクションはグラフィックス関連のすべての設定を含みます。";
-"Presets" = "プリセット";
-"Failed to open config file!" = "設定ファイルのオープンに失敗しました！";
-"Failed to write config file!" = "設定ファイルの書き込みに失敗！";
-"On" = "有効";
-"Off" = "オフ";
-"Editor" = "エディタ";
 "Refresh" = "再更新";
 "Open in External Editor" = "外部エディタで開く";
-"Core" = "コア";
-"Dual Core" = "デュアルコア動作";
-"MMU" = "MMU";
-"Video" = "描画";
-"Store EFB Copies to Texture Only" = "Store EFB Copies to Texture Only";
-"Store XFB Copies to Texture Only" = "Store XFB Copies to Texture Only";
-"Texture Cache" = "Texture Cache";
-"Safe" = "Safe";
-"Medium" = "中";
-"Fast" = "Fast";
+"Failed to open config file!" = "設定ファイルのオープンに失敗しました！";
+"Failed to write config file!" = "設定ファイルの書き込みに失敗！";
+"Failed to create the configuration file:
+%1" = "Failed to create the configuration file:
+%1";
 "Failed to open file in external editor.
 Make sure there's an application assigned to open INI files." = "外部エディタでファイルを開くことができませんでした
 INIファイルに関連付けされているソフトを確認してください";
+"Core" = "コア";
 "Enable Dual Core" = "デュアルコアを有効にする";
 "Enable MMU" = "MMU (メモリ管理ユニット) を有効にする";
 "Enable FPRF" = "FPRFを有効にする";
@@ -1033,6 +1059,7 @@ INIファイルに関連付けされているソフトを確認してくださ�
 "Default Config (Read Only)" = "デフォルト設定（読み取り専用）";
 "User Config" = "ユーザー設定";
 "Graphics" = "グラフィック";
+"Editor" = "エディタ";
 "Italics mark default game settings, bold marks user settings.
 Right-click to remove user settings.
 Graphics tabs don't display the value of a default game setting.
@@ -1055,24 +1082,19 @@ Anti-Aliasing settings are disabled when the global graphics backend doesn't mat
 "Configure" = "設定";
 "Download Codes" = "Webからコードを入手";
 "Download Codes from the WiiRD Database" = "Webからコードを入手 (WiiRD Database)";
-"Failed to download codes." = "コードの取得に失敗しました";
+"Failed to download Gecko codes. The code server may be temporarily unavailable. Please try again later." = "Failed to download Gecko codes. The code server may be temporarily unavailable. Please try again later.";
+"
+
+Server response: HTTP %1." = "
+
+Server response: HTTP %1.";
+"Download Failed" = "Download Failed";
 "File contained no codes." = "コードを含まないファイルです";
 "Download complete" = "ダウンロード完了";
 "Downloaded %1 codes. (added %2)" = "%1 個のコードが見つかりました。( 新規追加： %2 個 )";
-"Performance Statistics" = "パフォーマンスステータス";
-"Show FPS" = "FPS を表示する";
-"Show Frame Times" = "フレームタイムを表示する";
-"Show VPS" = "VPS を表示する";
-"Show VBlank Times" = "垂直ブランキング期間 (VBlank) 時間を表示";
-"Show Performance Graphs" = "パフォーマンスグラフを表示する";
-"Show % Speed" = "% 速度を表示する";
-"Show Speed Colors" = "スピードカラーを表示";
-"Performance Sample Window (ms)" = "パフォーマンス サンプル ウィンドウ (ミリ秒)";
-"Log Render Time to File" = "レンダリング時間を記録";
 "Debugging" = "デバッグ用";
+"Log Render Time to File" = "レンダリング時間を記録";
 "Enable Wireframe" = "ワイヤーフレーム表示を有効にする";
-"Show Statistics" = "統計情報を表示する";
-"Show Projection Statistics" = "Show Projection Statistics";
 "Texture Format Overlay" = "テクスチャフォーマット情報表示";
 "Enable API Validation Layers" = "API検証レイヤーの有効化";
 "Utility" = "ユーティリティ";
@@ -1093,8 +1115,12 @@ Anti-Aliasing settings are disabled when the global graphics backend doesn't mat
 "Use Lossless Codec (Ut Video)" = "ロスレスコーデック(Ut Video)を使用する";
 "Bitrate (kbps)" = "ビットレート (kbps)";
 "PNG Compression Level" = "PNG圧縮レベル";
-"Misc" = "その他";
 "Crop" = "クロッピングを有効にする";
+"To Aspect Ratio" = "To Aspect Ratio";
+"Custom" = "カスタム";
+"Top" = "上";
+"Bottom" = "下";
+"Misc" = "その他";
 "Enable Progressive Scan" = "プログレッシブ表示を有効にする";
 "Backend Multithreading" = "バックエンドをマルチスレッド化";
 "Prefer VS for Point/Line Expansion" = "点/線の展開時に頂点シェーダーを優先する";
@@ -1103,28 +1129,16 @@ Anti-Aliasing settings are disabled when the global graphics backend doesn't mat
 "Experimental" = "実験的";
 "Defer EFB Cache Invalidation" = "Defer EFB Cache Invalidation";
 "Manual Texture Sampling" = "手動テクスチャサンプリングを有効にする";
-"Shows the number of distinct frames rendered per second as a measure of visual smoothness.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "視覚的な滑らかさの指標として、1秒間にレンダリングされるフレームの数を示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
-"Shows the average time in ms between each distinct rendered frame alongside the standard deviation.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "レンダリングされた各フレーム間の平均時間（ms）と標準偏差を表示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
-"Shows the number of frames rendered per second as a measure of emulation speed.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "エミュレーション速度の指標として、画面上に毎秒レンダリングされたフレーム数を表示します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
-"Shows the average time in ms between each rendered frame alongside the standard deviation.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "各レンダリングフレーム間の平均時間（ms）と標準偏差を表示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
-"Shows frametime graph along with statistics as a representation of emulation performance.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "エミュレーションパフォーマンスを表す統計情報とともにフレームタイムグラフを表示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
-"Shows the % speed of emulation compared to full speed.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "フルスピードと比較したエミュレーションの % 速度を示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
-"Changes the color of the FPS counter depending on emulation speed.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "エミュレーション速度に応じてFPSカウンターの色を変更します。<br><br><dolphin_emphasis> よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
-"The amount of time the FPS and VPS counters will sample over.<br><br>The higher the value, the more stable the FPS/VPS counter will be, but the slower it will be to update.<br><br><dolphin_emphasis>If unsure, leave this at 1000ms.</dolphin_emphasis>" = "FPS カウンターと VPS カウンターがサンプリングされる時間。<br><br>値が大きいほどFPS/VPSカウンターは安定しますが、更新が遅くなります。<br><br><dolphin_emphasis>分からない場合は、1000msのままにしてください。</dolphin_emphasis>";
-"Logs the render time of every frame to User/Logs/render_time.txt.<br><br>Use this feature to measure Dolphin's performance.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "レンダリング所要時間のログを以下のファイルへ保存します
-User/Logs/render_time.txt<br><br>ベンチマークとして有用な機能です。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
-"Renders the scene as a wireframe.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Renders the scene as a wireframe.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
-"Shows various rendering statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows various rendering statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
-"Shows various projection statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows various projection statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Renders the scene as a wireframe.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "画面をワイヤーフレームで描画します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Modifies textures to show the format they're encoded in.<br><br>May require an emulation reset to apply.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "テクスチャがどのフォーマットでエンコードされたのかを表示します。<br><br>この機能を使用するにはゲームの再起動が必要です。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Enables validation of API calls made by the video backend, which may assist in debugging graphical issues. On the Vulkan and D3D backends, this also enables debug symbols for the compiled shaders.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ビデオバックエンドによるAPIコールの検証を有効にし、グラフィックの問題のデバッグを支援します。VulkanおよびD3Dバックエンドでは、コンパイルされたシェーダのデバッグシンボルも有効にします。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Logs the render time of every frame to User/Logs/render_time.txt.<br><br>Use this feature to measure Dolphin's performance.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "レンダリング所要時間のログを以下のファイルへ保存します
+User/Logs/render_time.txt<br><br>ベンチマークとして有用な機能です。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Dumps decoded game textures based on the other flags to User/Dump/Textures/lt;game_idgt;/.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "オプションに基づいた内容でデコードされたテクスチャを下記のフォルダへダンプします。
 User/Dump/Textures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Whether to dump mipmapped game textures to User/Dump/Textures/lt;game_idgt;/.  This includes arbitrary mipmapped textures if 'Arbitrary Mipmap Detection' is enabled in Enhancements.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "User/Dump/Textures/lt;game_idgt;/にミップマップされたゲームテクスチャをダンプするかどうか。 これは、拡張機能で「Arbitrary Mipmap Detection」が有効になっている場合、任意のミップマップテクスチャを含みます。<br><br><dolphin_emphasis>よく分からない場合はチェックしたままにしてください。</dolphin_emphasis>";
 "Whether to dump base game textures to User/Dump/Textures/lt;game_idgt;/.  This includes arbitrary base textures if 'Arbitrary Mipmap Detection' is enabled in Enhancements.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "ベースゲームのテクスチャを \"User/Dump/Textures/lt;game_idgt;/\" にダンプするかどうか。 これは、拡張機能で「Arbitrary Mipmap Detection」が有効になっている場合、任意のベーステクスチャを含みます。<br><br><dolphin_emphasis>よく分からない場合はチェックしたままにしてください。</dolphin_emphasis>";
-"Loads custom textures from User/Load/Textures/lt;game_idgt;/ and User/Load/DynamicInputTextures/lt;game_idgt;/.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "有効にすると以下のフォルダからカスタムテクスチャを読込みます。
-User/Load/Textures/lt;game_idgt;/
-User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Loads custom textures from User/Load/Textures/lt;game_idgt;/ and User/Load/DynamicInputTextures/lt;game_idgt;/.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "User/Load/Textures/lt;game_idgt;/ および User/Load/DynamicInputTextures/lt;game_idgt;/ からカスタムテクスチャを読み込みます。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Caches custom textures to system RAM on startup.<br><br>This can require exponentially more RAM but fixes possible stuttering.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "起動時にカスタムテクスチャをシステムメモリへキャッシュします。<br><br>大量にメモリを消費する代わりに、ロード時のカクつきが軽減されます。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Dumps the contents of EFB copies to User/Dump/Textures/.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "EFBコピーの内容をUser/Dump/Textures/にダンプします。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Dumps the contents of XFB copies to User/Dump/Textures/.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "XFBコピーの内容をUser/Dump/Textures/にダンプします。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
@@ -1134,14 +1148,19 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Encodes frame dumps using the Ut Video codec. If this option is unchecked, a lossy Xvid codec will be used.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Encodes frame dumps using the Ut Video codec. If this option is unchecked, a lossy Xvid codec will be used.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
 "Specifies the zlib compression level to use when saving PNG images (both for screenshots and framedumping).<br><br>Since PNG uses lossless compression, this does not affect the image quality; instead, it is a trade-off between file size and compression time.<br><br>A value of 0 uses no compression at all.  A value of 1 uses very little compression, while the maximum value of 9 applies a lot of compression.  However, for PNG files, levels between 3 and 6 are generally about as good as level 9 but finish in significantly less time.<br><br><dolphin_emphasis>If unsure, leave this at 6.</dolphin_emphasis>" = "PNG画像を保存する際に使用するzlibの圧縮レベルの設定（スクリーンショットおよびフレームダンプの両方に影響） <br><br>PNGはロスレス形式のため設定変更しても画質に影響はなく、この設定は処理速度とファイルサイズのどちらを優先するかを決めるものです。<br><br>0 は無圧縮、 1 から圧縮が始まり 9 までの間で圧縮率を設定できます。
 一般には 3 ～ 6 の設定で 9 とほぼ同等の結果がより短い時間で処理できるとされます。<br><br><dolphin_emphasis>よく分からなければ、6 に設定してください。</dolphin_emphasis>";
-"Crops the picture from its native aspect ratio (which rarely exactly matches 4:3 or 16:9), to the specific user target aspect ratio (e.g. 4:3 or 16:9).<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "画像を本来のアスペクト比（4:3や16:9に正確にはほぼ一致しません）から、特定のユーザーがターゲットとするアスペクト比（4:3や16:9など）に切り取りします。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
-"Enables progressive scan if supported by the emulated software. Most games don't have any issue with this.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "プログレッシブ表示を有効にします（サポートタイトルのみ）ほとんどのタイトルはこの設定について考える必要はありません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Enables progressive scan if supported by the emulated software. Most games don't have any issue with this.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "プログレッシブ表示を有効にします (サポートタイトルのみ)。ほとんどのタイトルはこの設定について考える必要はありません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Enables multithreaded command submission in backends where supported. Enabling this option may result in a performance improvement on systems with more than two CPU cores. Currently, this is limited to the Vulkan backend.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "サポートされている場合、バックエンドでのマルチスレッドコマンド送信を有効にします。このオプションを有効にすると、2つ以上のCPUコアを持つシステムでパフォーマンスが向上することがあります。現在、これはVulkanバックエンドに限定されています。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "On backends that support both using the geometry shader and the vertex shader for expanding points and lines, selects the vertex shader for the job.  May affect performance.<br><br>%1" = "ポイントとラインを展開するためのジオメトリ シェーダーと頂点シェーダーの両方の使用をサポートするバックエンドでは、ジョブの頂点シェーダーを選択します。パフォーマンスに影響を与える可能性があります。<br><br>%1";
 "Cull vertices on the CPU to reduce the number of draw calls required.  May affect performance and draw statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "必要なドローコールの回数を減らすために、CPU上で頂点をカリングします。 パフォーマンスと描画統計に影響するおそれがあります。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Defers invalidation of the EFB access cache until a GPU synchronization command is executed. If disabled, the cache will be invalidated with every draw call. <br><br>May improve performance in some games which rely on CPU EFB Access at the cost of stability.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "GPU同期コマンドが実行されるまで、EFBアクセスキャッシュの無効化を延期します。無効にした場合、キャッシュは描画呼び出しのたびに無効化されます。<br><br>CPUのEFBアクセスに依存している一部のゲームでは、安定性を犠牲にすることでパフォーマンスが向上する可能性があります。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Use a manual implementation of texture sampling instead of the graphics backend's built-in functionality.<br><br>This setting can fix graphical issues in some games on certain GPUs, most commonly vertical lines on FMVs. In addition to this, enabling Manual Texture Sampling will allow for correct emulation of texture wrapping special cases (at 1x IR or when scaled EFB is disabled, and with custom textures disabled) and better emulates Level of Detail calculation.<br><br>This comes at the cost of potentially worse performance, especially at higher internal resolutions.<br><br>If this setting is enabled, the Texture Filtering setting will be disabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Use a manual implementation of texture sampling instead of the graphics backend's built-in functionality.<br><br>This setting can fix graphical issues in some games on certain GPUs, most commonly vertical lines on FMVs. In addition to this, enabling Manual Texture Sampling will allow for correct emulation of texture wrapping special cases (at 1x IR or when scaled EFB is disabled, and with custom textures disabled) and better emulates Level of Detail calculation.<br><br>This comes at the cost of potentially worse performance, especially at higher internal resolutions.<br><br>If this setting is enabled, the Texture Filtering setting will be disabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
 "Implements fullscreen mode with a borderless window spanning the whole screen instead of using exclusive mode. Allows for faster transitions between fullscreen and windowed mode, but slightly increases input latency, makes movement less smooth and slightly decreases performance.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "通常の排他的フルスクリーン表示ではなく、枠のないウィンドウを全画面に広げる形でフルスクリーン表示します。他のウィンドウとの切替が高速になりますが、代わりに若干の操作遅延、動作速度の低下などのデメリットも発生します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Crops the picture from its native aspect ratio (which rarely exactly matches 4:3 or 16:9, because it often includes overscan) to the specific user target aspect ratio (e.g. 4:3 or 16:9).<br><br>This option was previously known as Graphics/Advanced/Misc/Crop.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Crops the picture from its native aspect ratio (which rarely exactly matches 4:3 or 16:9, because it often includes overscan) to the specific user target aspect ratio (e.g. 4:3 or 16:9).<br><br>This option was previously known as Graphics/Advanced/Misc/Crop.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Enables options to crop the picture by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio. Useful to resolve letterboxing issues. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Enables options to crop the picture by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio. Useful to resolve letterboxing issues. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Crops the picture left side by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio.  <br><br><dolphin_emphasis>If unsure, leave this value to 0.</dolphin_emphasis>" = "Crops the picture left side by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio.  <br><br><dolphin_emphasis>If unsure, leave this value to 0.</dolphin_emphasis>";
+"Crops the picture top side by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio.  <br><br><dolphin_emphasis>If unsure, leave this value to 0.</dolphin_emphasis>" = "Crops the picture top side by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio.  <br><br><dolphin_emphasis>If unsure, leave this value to 0.</dolphin_emphasis>";
+"Crops the picture right side by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio.  <br><br><dolphin_emphasis>If unsure, leave this value to 0.</dolphin_emphasis>" = "Crops the picture right side by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio.  <br><br><dolphin_emphasis>If unsure, leave this value to 0.</dolphin_emphasis>";
+"Crops the picture bottom side by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio.  <br><br><dolphin_emphasis>If unsure, leave this value to 0.</dolphin_emphasis>" = "Crops the picture bottom side by discrete native pixels (independent of the internal resolution setting) in order to attain a specific user target aspect ratio.  <br><br><dolphin_emphasis>If unsure, leave this value to 0.</dolphin_emphasis>";
 "<dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "<dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Forced on because %1 doesn't support geometry shaders." = "%1 はジオメトリシェーダーをサポートしていないため、強制的にオンになりました。";
 "Forced off because %1 doesn't support VS expansion." = "%1 は頂点シェーダー拡張をサポートしていないため、強制的にオフになりました。";
@@ -1161,7 +1180,6 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Correct SDR Gamma" = "適切なSDRガンマ";
 "SDR Display Gamma Target" = "SDRディスプレイのガンマターゲット";
 "sRGB" = "sRGB";
-"Custom" = "カスタム";
 "HDR" = "HDR";
 "HDR Paper White Nits" = "HDRペーパーホワイトニット";
 "Enhancements" = "画質向上の設定";
@@ -1206,6 +1224,7 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Output Resampling" = "出力 リサンプリング";
 "Color Correction" = "カラーコレクション";
 "Post-Processing Effect" = "ポストプロセス";
+"Off" = "オフ";
 "Side-by-Side" = "Side-by-Side";
 "Top-and-Bottom" = "Top-and-Bottom";
 "Anaglyph" = "アナグリフ";
@@ -1236,7 +1255,7 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Whether each eye gets full or half image resolution when using side-by-side or above-and-below 3D.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Whether each eye gets full or half image resolution when using side-by-side or above-and-below 3D.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
 "Forces the game to render the RGB color channels in 24-bit, thereby increasing quality by reducing color banding.<br><br>Has no impact on performance and causes few graphical issues.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "強制的にRGB 24bitカラーでレンダリングを行い、カラーバンディングを減らし品質を向上させます。<br><br>パフォーマンスには影響せず、グラフィックの問題もほとんど発生しません。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Disables the blending of adjacent rows when copying the EFB. This is known in some games as \"deflickering\" or \"smoothing\".<br><br>Disabling the filter has no effect on performance, but may result in a sharper image. Causes few graphical issues.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "EFBをコピーするときに隣接する行の交錯を無効にします。いくつかのタイトルで「デフリッカー」または「スムージング」設定として知られるものです。<br><br>このフィルタを無効にしても性能には影響しませんが、よりシャープな画質になります。グラフィックに問題を引き起こす場合があります。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
-"Enables detection of arbitrary mipmaps, which some games use for special distance-based effects.<br><br>May have false positives that result in blurry textures at increased internal resolution, such as in games that use very low resolution mipmaps. Disabling this can also reduce stutter in games that frequently load new textures.<br><br>This setting is disabled when GPU Texture Decoding is enabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "一部のゲームで特殊な距離ベースのエフェクトに使用される、任意のミップマップの検出を可能にします。<br><br>非常に低解像度のミップマップを使用するゲームなどでは、内部解像度が高くなるとテクスチャがぼやけるという誤検出が発生する可能性があります。この設定を無効にすると、新しいテクスチャを頻繁にロードするゲームのスタッターを減らすこともできます。<br><br>この設定はGPU Texture Decodingが有効な場合は、無効になります。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Enables detection of arbitrary mipmaps, which some games use for special distance-based effects.<br><br>May have false positives that result in blurry textures at increased internal resolution, such as in games that use very low resolution mipmaps. Disabling this can also reduce stutter in games that frequently load new textures.<br><br>If this setting is enabled, GPU Texture Decoding will be disabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Enables detection of arbitrary mipmaps, which some games use for special distance-based effects.<br><br>May have false positives that result in blurry textures at increased internal resolution, such as in games that use very low resolution mipmaps. Disabling this can also reduce stutter in games that frequently load new textures.<br><br>If this setting is enabled, GPU Texture Decoding will be disabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
 "Enables scRGB HDR output (if supported by your graphics backend and monitor). Fullscreen might be required.<br><br>This gives post process shaders more room for accuracy, allows \"AutoHDR\" post-process shaders to work, and allows to fully display the PAL and NTSC-J color spaces.<br><br>Note that games still render in SDR internally.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "scRGB HDR出力を有効にします（グラフィックスバックエンドとモニターでサポートされている場合）。フルスクリーンが必要な場合があります。<br><br>これにより、ポストプロセスシェーダの精度に余裕ができ、「AutoHDR」ポストプロセスシェーダが機能するようになり、PALおよびNTSC-J 色空間を完全に表示できるようになります。<br><br>なお、ゲームは内部的にSDRでレンダリングします。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Basic" = "基本設定";
 "Auto" = "自動";
@@ -1250,11 +1269,9 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Backend" = "出力バックエンド";
 "Adapter" = "ビデオカード";
 "Aspect Ratio" = "アスペクト比";
-"Precision Frame Timing" = "Precision Frame Timing";
-"Uses high resolution timers and \"busy waiting\" for improved frame pacing.<br><br>This will marginally increase power usage.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "Uses high resolution timers and \"busy waiting\" for improved frame pacing.<br><br>This will marginally increase power usage.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>";
-"Show NetPlay Ping" = "ネットプレイ：Ping表示";
+"Precision Frame Timing" = "高精度フレームタイミング";
+"Uses high resolution timers and \"busy waiting\" for improved frame pacing.<br><br>This will marginally increase power usage.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "高解像度タイマーとビジーウェイトを使用してフレームペースを最適化します。<br><br>これにより、消費電力が僅かに増加します。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Auto-Adjust Window Size" = "ウィンドウサイズを自動調整する";
-"Show NetPlay Messages" = "ネットプレイ：OSD表示";
 "Render to Main Window" = "メインウィンドウ部分に描画";
 "Shader Compilation" = "シェーダコンパイルの設定";
 "Specialized (Default)" = "Specialized (既定)";
@@ -1269,10 +1286,8 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Uses the main Dolphin window for rendering rather than a separate render window.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ゲーム画面として別のウィンドウではなくゲームリスト部分を使用します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Selects which aspect ratio to use for displaying the game.<br><br>The aspect ratio of the image sent out by the original consoles varied depending on the game and rarely exactly matched 4:3 or 16:9. Some of the image would be cut off by the edges of the TV, or the image wouldn't fill the TV entirely. By default, Dolphin shows the whole image without distorting its proportions, which means it's normal for the image to not entirely fill your display.<br><br><b>Auto</b>: Mimics a TV with either a 4:3 or 16:9 aspect ratio, depending on which type of TV the game seems to be targeting.<br><br><b>Force 16:9</b>: Mimics a TV with a 16:9 (widescreen) aspect ratio.<br><br><b>Force 4:3</b>: Mimics a TV with a 4:3 aspect ratio.<br><br><b>Stretch to Window</b>: Stretches the image to the window size. This will usually distort the image's proportions.<br><br><b>Custom</b>: Mimics a TV with the specified aspect ratio. This is mostly intended to be used with aspect ratio cheats/mods.<br><br><b>Custom (Stretch)</b>: Similar to `Custom`, but stretches the image to the specified aspect ratio. This will usually distort the image's proportions, and should not be used under normal circumstances.<br><br><dolphin_emphasis>If unsure, select Auto.</dolphin_emphasis>" = "ゲームの表示に使用するアスペクト比を選択します。<br><br>オリジナルのコンソールから送信される画像のアスペクト比はゲームによって異なり、4:3 または 16:9 と完全に一致することはほとんどありません。画像の一部がテレビの縁で切れてしまったり、画像がテレビいっぱいに表示されなかったりします。デフォルトでは、Dolphin は比率を歪めることなく画像全体を表示します。これは、画像がディスプレイ全体に表示されないのが正常であることを意味します。<br><br><b>自動</b>: ゲームがターゲットとしていると思われるテレビの種類に応じて、4:3 または 16:9 のアスペクト比のテレビを模倣します。<br><br><b>強制的に 16:9 にする</b>: 16:9 (ワイドスクリーン) アスペクト比のテレビを模倣します。<br><br><b>強制的に 4:3 にする</b>: 4:3 アスペクト比のテレビを模倣します。<br><br><b>ウィンドウに合わせる</b>: 画像をウィンドウ サイズに引き伸ばします。これにより、通常は画像の比率が歪められます。<br><br><b>カスタム</b>: 指定されたアスペクト比のテレビを模倣します。これは主にアスペクト比チート/MODで使用することを目的としています。<br><br><b>カスタム (ストレッチ)</b>: 「カスタム」に似ていますが、指定されたアスペクト比に画像を引き伸ばします。通常、これにより画像の比率が歪むため、通常の状況では使用しないでください。<br><br><dolphin_emphasis>よく分からなければ、「自動」を選択してください。</dolphin_emphasis>";
 "Waits for vertical blanks in order to prevent tearing.<br><br>Decreases performance if emulation speed is below 100%.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "画面のちらつきを防ぐため、垂直同期を待つようにします。<br><br>フルスピードで動作できていない場合、この機能は動作速度の低下を招きます。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
-"Shows the player's maximum ping while playing on NetPlay.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ネットプレイ中に各プレイヤーのPing最大値を表示します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
-"Shows chat messages, buffer changes, and desync alerts while playing NetPlay.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ネットプレイ中、チャットメッセージ/バッファ変更/Desync警告などのメッセージを画面に表示します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Ubershaders are never used. Stuttering will occur during shader compilation, but GPU demands are low.<br><br>Recommended for low-end hardware. <br><br><dolphin_emphasis>If unsure, select this mode.</dolphin_emphasis>" = "Uber (統合) シェーダーを使用しません。シェーダ作成中にカクつきが発生しますが、高性能なGPUでなくても問題になりません。<br><br>低スペック環境にオススメです。<br><br><dolphin_emphasis>よく分からなければ、これを選択してください。</dolphin_emphasis>";
-"Ubershaders will always be used. Provides a near stutter-free experience at the cost of very high GPU performance requirements.<br><br><dolphin_emphasis>Don't use this unless you encountered stuttering with Hybrid Ubershaders and have a very powerful GPU.</dolphin_emphasis>" = "Uber (統合) シェーダーを常に使用します。強力なGPUをお持ちであれば、カクつきとは無縁のゲームプレイが実現されます。<br><br><dolphin_emphasis>強力なGPUを搭載したPCで、Hybrid Ubershaders では問題がある場合にしかオススメできません。</dolphin_emphasis>";
+"Ubershaders will always be used. Provides a near stutter-free experience at the cost of very high GPU performance requirements.<br><br><dolphin_emphasis>Don't use this unless you encountered stuttering with Hybrid Ubershaders and have a very powerful GPU.</dolphin_emphasis>" = "Uber (統合) シェーダーを常に使用します。強力なGPUをお持ちであれば、カクつきとは無縁のゲームプレイが実現されます。<br><br><dolphin_emphasis>強力なGPUを搭載したPCで、「一部使用する」設定でカクつきが発生している場合にのみこれを使用してください。</dolphin_emphasis>";
 "Ubershaders will be used to prevent stuttering during shader compilation, but specialized shaders will be used when they will not cause stuttering.<br><br>In the best case it eliminates shader compilation stuttering while having minimal performance impact, but results depend on video driver behavior." = "Uber (統合) シェーダーをカクつき防止のために使用します。ただし、カクつきを引き起こさないと考えられる一部のシェーダに対しては使用しません。<br><br>最良のケースではパフォーマンスへの影響を最小限に抑えつつカクつきが解消されるはずですが、実際どのような結果になるかは使用中のビデオドライバに依存します。";
 "Prevents shader compilation stuttering by not rendering waiting objects. Can work in scenarios where Ubershaders doesn't, at the cost of introducing visual glitches and broken effects.<br><br><dolphin_emphasis>Not recommended, only use if the other options give poor results.</dolphin_emphasis>" = "Uber (統合) シェーダーは使わず、待機中オブジェクトのレンダリング自体を行わないことでカクつきを防ぎます。代償として描画精度やエフェクト表示が犠牲となります<br><br><dolphin_emphasis>他の方式ではパフォーマンスに影響が出てしまう場合以外、オススメできません</dolphin_emphasis>";
 "Waits for all shaders to finish compiling before starting a game. Enabling this option may reduce stuttering or hitching for a short time after the game is started, at the cost of a longer delay before the game starts. For systems with two or fewer cores, it is recommended to enable this option, as a large shader queue may reduce frame rates.<br><br><dolphin_emphasis>Otherwise, if unsure, leave this unchecked.</dolphin_emphasis>" = "ゲームの起動前に全てのシェーダのコンパイルを行います。有効にするとゲーム起動までに時間がかかるようになりますが、カクつきの軽減が期待できます。特にCPUが2コア以下の場合に有用で、大きなシェーダが要求される際に生じるFPSの低下を抑制できます。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
@@ -1285,10 +1300,15 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Embedded Frame Buffer (EFB)" = "Embedded Frame Buffer (内蔵フレームバッファ)";
 "Skip EFB Access from CPU" = "CPUからのEFBアクセスをスキップする";
 "Ignore Format Changes" = "フォーマットの変更を無視する";
+"Store EFB Copies to Texture Only" = "Store EFB Copies to Texture Only";
 "Defer EFB Copies to RAM" = "メモリへのコピーを遅延させる";
+"Texture Cache" = "Texture Cache";
 "GPU Texture Decoding" = "GPU上でテクスチャをデコードする";
+"Safe" = "Safe";
 "Accuracy" = "精度";
+"Fast" = "Fast";
 "External Frame Buffer (XFB)" = "External Frame Buffer (外部フレームバッファ)";
+"Store XFB Copies to Texture Only" = "Store XFB Copies to Texture Only";
 "Immediately Present XFB" = "XFBを即時表示する";
 "Skip Presenting Duplicate Frames" = "重複フレームの表示をスキップする";
 "Fast Depth Calculation" = "深度の計算を高速に行う";
@@ -1296,22 +1316,25 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Vertex Rounding" = "Vertex Rounding";
 "Save Texture Cache to State" = "Save Texture Cache to State";
 "VBI Skip" = "垂直ブランキング割り込み (VBI) をスキップする";
-"%1 doesn't support this feature on your system." = "%1 はあなたのシステム上でこの機能をサポートしていません";
 "Ignores any requests from the CPU to read from or write to the EFB. <br><br>Improves performance in some games, but will disable all EFB-based graphical effects or gameplay-related features.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "CPUからのEFBへの読み書き要求を無視します。<br><br>ゲームによってはパフォーマンスが向上しますが、EFBベースのグラフィック効果やゲームプレイに関連する機能はすべて無効になります。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Ignores any changes to the EFB format.<br><br>Improves performance in many games without any negative effect. Causes graphical defects in a small number of other games.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "EFBフォーマットに対する変更を一切無視するようにします。<br><br>多くのタイトルでデメリットなしに動作速度が改善されますが、 タイトルによっては描画バグの原因になります。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Stores EFB copies exclusively on the GPU, bypassing system memory. Causes graphical defects in a small number of games.<br><br>Enabled = EFB Copies to Texture<br>Disabled = EFB Copies to RAM (and Texture)<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "システムメモリをバイパスさせ、EFBコピーをGPU上に独占的に格納します。いくつかのタイトルでは描画バグの原因になる可能性があります。<br><br>有効にする = EFB Copies to Texture<br>無効にする = EFB Copies to RAM (and Texture)<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
-"Waits until the game synchronizes with the emulated GPU before writing the contents of EFB copies to RAM.<br><br>Reduces the overhead of EFB RAM copies, providing a performance boost in many games, at the risk of breaking those which do not safely synchronize with the emulated GPU.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "EFBコピーの内容をRAMに書き込む前に、ゲームがエミュレートされたGPUと同期するまで待機します。<br><br>EFB RAMコピーのオーバーヘッドを削減し、多くのゲームでパフォーマンスを向上させますが、エミュレートされたGPUと安全に同期しないゲームは壊れてしまう危険があります。<br><br><dolphin_emphasis>よく分からない場合はチェックしたままにしてください。</dolphin_emphasis>";
+"Waits until the game synchronizes with the emulated GPU before writing the contents of EFB copies to RAM.<br><br>Reduces the overhead of EFB RAM copies, providing a performance boost in many games, at the risk of breaking those which do not safely synchronize with the emulated GPU.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "EFBコピーの内容をRAMに書き込む前に、ゲームがエミュレートされたGPUと同期するまで待機します。<br><br>EFB RAMコピーのオーバーヘッドを削減し、多くのゲームでパフォーマンスを向上させますが、エミュレートされたGPUと安全に同期しないゲームは壊れてしまう危険があります。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Adjusts the accuracy at which the GPU receives texture updates from RAM.<br><br>The \"Safe\" setting eliminates the likelihood of the GPU missing texture updates from RAM. Lower accuracies cause in-game text to appear garbled in certain games.<br><br><dolphin_emphasis>If unsure, select the rightmost value.</dolphin_emphasis>" = "RAMからGPUへのテクスチャ更新の受信精度を調整する設定です。<br><br>Safe 側にセットすると、RAMからのテクスチャ更新を見逃す可能性が低くなります。Fast 側によせるとタイトルによっては文字化けの原因になります。<br><br><dolphin_emphasis>よく分からなければ、右端に合わせておいてください。</dolphin_emphasis>";
 "Stores XFB copies exclusively on the GPU, bypassing system memory. Causes graphical defects in a small number of games.<br><br>Enabled = XFB Copies to Texture<br>Disabled = XFB Copies to RAM (and Texture)<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "システムメモリをバイパスさせ、XFBコピーをGPU上に独占的に格納します。いくつかのタイトルでは描画バグの原因になる可能性があります。<br><br>有効にする = XFB Copies to Texture<br>無効にする = XFB Copies to RAM (and Texture)<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
-"Displays XFB copies as soon as they are created, instead of waiting for scanout.<br><br>Can cause graphical defects in some games if the game doesn't expect all XFB copies to be displayed. However, turning this setting on reduces latency.<br><br>Enabling this also forces an effect equivalent to the Skip Presenting Duplicate Frames setting.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Displays XFB copies as soon as they are created, instead of waiting for scanout.<br><br>Can cause graphical defects in some games if the game doesn't expect all XFB copies to be displayed. However, turning this setting on reduces latency.<br><br>Enabling this also forces an effect equivalent to the Skip Presenting Duplicate Frames setting.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
-"Skips presentation of duplicate frames (XFB copies) in 25fps/30fps games. This may improve performance on low-end devices, while making frame pacing less consistent.<br><br>Disable this option for optimal frame pacing.<br><br>This setting is unavailable when Immediately Present XFB or VBI Skip is enabled. In those cases, duplicate frames are never presented.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "Skips presentation of duplicate frames (XFB copies) in 25fps/30fps games. This may improve performance on low-end devices, while making frame pacing less consistent.<br><br>Disable this option for optimal frame pacing.<br><br>This setting is unavailable when Immediately Present XFB or VBI Skip is enabled. In those cases, duplicate frames are never presented.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>";
-"Enables texture decoding using the GPU instead of the CPU.<br><br>This may result in performance gains in some scenarios, or on systems where the CPU is the bottleneck.<br><br>If this setting is enabled, Arbitrary Mipmap Detection will be disabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "CPU ではなく GPU を使用したテクスチャデコードを有効にします。<br><br>これにより、一部のシナリオや、CPU がボトルネックになっているシス テムでパフォーマンスが向上する可能性があります。<br><br>この設定を有効にすると、任意のミップマップ検出が無効になります。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Displays XFB copies as soon as they are created, instead of waiting for scanout.<br><br>Can cause graphical defects in some games if the game doesn't expect all XFB copies to be displayed. However, turning this setting on reduces latency.<br><br>Enabling this also forces an effect equivalent to the Skip Presenting Duplicate Frames setting.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "XFBコピーが作成された際、スキャンアウトを待たずにすぐ表示します。<br><br>有効にするとレイテンシの改善が見込めますが、すべてのXFBコピーが表示されることを前提にしていない一部タイトルで描画バグが発生する場合があります。<br><br>これを有効にすると、「重複フレームの表示をスキップする」と同等の効果が強制的に適用されます。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Skips presentation of duplicate frames (XFB copies) in 25fps/30fps games. This may improve performance on low-end devices, while making frame pacing less consistent.<br><br>Disable this option for optimal frame pacing.<br><br>This setting is unavailable when Immediately Present XFB or VBI Skip is enabled. In those cases, duplicate frames are never presented.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "25/30fpsのタイトルで重複フレーム（XFBコピー）をスキップするようにします。低スペック環境で速度向上が見込めますが、フレームの表示順に不整合を起こす可能性があります。<br><br>フレームの表示順を最適化するにはこの設定を無効化してください。<br><br>「XFBを即時表示する」または「垂直ブランキング割り込み（VBI）をスキップする」が有効になっている場合、この設定は使用できなくなります。これらの設定が有効な場合、重複フレームは一切表示されなくなります。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Uses a less accurate algorithm to calculate depth values.<br><br>Causes issues in a few games, but can result in a decent speed increase depending on the game and/or GPU.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "不正確なアルゴリズムで深度の値を求めるようにします。<br><br>タイトルと使用中のGPUの種類によっては動作速度の向上が見込めますが、単に問題を引き起こすだけの場合もあります。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
-"Disables bounding box emulation.<br><br>This may improve GPU performance significantly, but some games will break.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "バウンディングボックスのエミュレーションを無効にします。<br><br>GPU性能が大きく向上しますが、タイトルによっては不具合が発生します。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Includes the contents of the embedded frame buffer (EFB) and upscaled EFB copies in save states. Fixes missing and/or non-upscaled textures/objects when loading states at the cost of additional save/load time.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "EFBの内容およびアップスケールされたEFBのコピーをセーブステート内に保存するようにします。ロード時のテクスチャ欠けなどを防止できますが、ステートセーブ／ロード時の処理時間は増加します<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Rounds 2D vertices to whole pixels and rounds the viewport size to a whole number.<br><br>Fixes graphical problems in some games at higher internal resolutions. This setting has no effect when native internal resolution is used.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "2Dの頂点を整数ピクセルに丸め、ビューポートのサイズを整数に丸めます。<br><br>内部解像度が高い場合の一部のゲームにおけるグラフィックの問題を修正します。ネイティブの内部解像度が使用されている場合、この設定は影響しません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
-"Skips Vertical Blank Interrupts when lag is detected, allowing for smooth audio playback when emulation speed is not 100%. <br><br>Enabling this also forces the effect of the Skip Presenting Duplicate Frames setting.<br><br><dolphin_emphasis>WARNING: Can cause freezes and compatibility issues.</dolphin_emphasis> <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Skips Vertical Blank Interrupts when lag is detected, allowing for smooth audio playback when emulation speed is not 100%. <br><br>Enabling this also forces the effect of the Skip Presenting Duplicate Frames setting.<br><br><dolphin_emphasis>WARNING: Can cause freezes and compatibility issues.</dolphin_emphasis> <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Skips Vertical Blank Interrupts when lag is detected, allowing for smooth audio playback when emulation speed is not 100%. <br><br>Enabling this also forces the effect of the Skip Presenting Duplicate Frames setting.<br><br><dolphin_emphasis>WARNING: Can cause freezes and compatibility issues.</dolphin_emphasis> <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ラグが検出された場合に垂直ブランク割り込みをスキップし、エミュレーション速度が 100% でな​​い場合でもスムーズなオーディオ再生を可能にします。<br><br>これを有効にすると、「重複フレームの表示をスキップする」と同等の効果が強制的に適用されます。<br><br><dolphin_emphasis>警告：フリーズや互換性の問題を引き起こす可能性があります。</dolphin_emphasis><br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Texture Cache Accuracy" = "テクスチャキャッシュの精度";
+"Enables texture decoding using the GPU instead of the CPU.<br><br>This may result in performance gains in some scenarios, or on systems where the CPU is the bottleneck.<br><br>This setting is disabled when Arbitrary Mipmap Detection is enabled.<br><br>" = "Enables texture decoding using the GPU instead of the CPU.<br><br>This may result in performance gains in some scenarios, or on systems where the CPU is the bottleneck.<br><br>This setting is disabled when Arbitrary Mipmap Detection is enabled.<br><br>";
+"<dolphin_emphasis>The %1 backend doesn't support GPU Texture Decoding.</dolphin_emphasis>" = "<dolphin_emphasis>The %1 backend doesn't support GPU Texture Decoding.</dolphin_emphasis>";
+"<dolphin_emphasis>GPU Texture Decoding is currently disabled by Arbitrary Mipmap Detection.</dolphin_emphasis>" = "<dolphin_emphasis>GPU Texture Decoding is currently disabled by Arbitrary Mipmap Detection.</dolphin_emphasis>";
+"Disables bounding box emulation.<br><br>This may improve GPU performance significantly, but some games will break.<br><br>" = "Disables bounding box emulation.<br><br>This may improve GPU performance significantly, but some games will break.<br><br>";
+"<dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "<dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>";
+"<dolphin_emphasis>The %1 backend doesn't support Bounding Box emulation.</dolphin_emphasis>" = "<dolphin_emphasis>The %1 backend doesn't support Bounding Box emulation.</dolphin_emphasis>";
 "Open Directory..." = " フォルダーを開く...";
 "Refresh List" = "ゲームリストを再更新";
 "No graphics mod selected" = "グラフィック MOD が選択されていません";
@@ -1331,7 +1354,6 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Game Details" = "ゲーム情報";
 "%1 (Disc %2, Revision %3)" = "%1 (ディスク番号 %2, リビジョン %3)";
 "%1 (Revision %3)" = "%1 (リビジョン %3)";
-"Triforce ID" = "Triforce ID";
 "Game ID" = "ゲームID";
 "Country" = "発売国";
 "Maker" = "メーカー";
@@ -1371,6 +1393,7 @@ User/Load/DynamicInputTextures/lt;game_idgt;/<br><br><dolphin_emphasis>よく分
 "Adapter Detected" = "タップが接続されています";
 "Error Opening Adapter: %1" = "アダプタのオープン時にエラーが発生しました: %1";
 "No Adapter Detected" = "タップは未接続です";
+"Poll Rate: %1 Hz" = "Poll Rate: %1 Hz";
 "Wii Remote %1" = "Wiiリモコン  %1";
 "Window Size" = "画面サイズ";
 "Save" = "保存";
@@ -1438,6 +1461,7 @@ Middle-click to clear." = "左or右クリックで設定画面に入ります
 "Enable Iterative Input Mapping" = "Enable Iterative Input Mapping";
 "Profile" = "プロファイル";
 "Delete" = "削除";
+"Open Folder" = "Open Folder";
 "The profile '%1' does not exist" = "選択されたプロファイル '%1' は存在しません";
 "Confirm" = "確認";
 "Are you sure that you want to delete '%1'?" = "次のプロファイルを削除しますか？ '%1'";
@@ -1462,6 +1486,7 @@ Middle-click to clear." = "左or右クリックで設定画面に入ります
 "Hotkey Settings" = "ホットキーのカスタマイズ";
 "Rotation" = "回転操作";
 "Free Look Controller %1" = "フリールック コントローラ設定 %1";
+"Triforce Baseboard at Port %1" = "ポート %1 のTriforce基板";
 "%1 (Stock)" = "%1 (Stock)";
 "Extension Motion Input" = "拡張コントローラ モーション（外部入力）";
 "Extension Motion Simulation" = "拡張コントローラ モーション";
@@ -1472,13 +1497,13 @@ Middle-click to clear." = "左or右クリックで設定画面に入ります
 "The controls under Accelerometer and Gyroscope are designed to interface directly with motion sensor hardware. They are not intended for mapping traditional buttons, triggers or axes. You might need to configure alternate input sources before using these controls." = "The controls under Accelerometer and Gyroscope are designed to interface directly with motion sensor hardware. They are not intended for mapping traditional buttons, triggers or axes. You might need to configure alternate input sources before using these controls.";
 "Patch Editor" = "パッチエディタ";
 "Patch name" = "パッチ名を入力...";
+"Add" = "追加";
 "Type" = "形式";
 "8-bit" = "8 ビット";
 "16-bit" = "16 ビット";
 "32-bit" = "32 ビット";
 "Conditional" = "条件付き";
 "Comparand" = "比較する";
-"Value" = "値";
 "You have to enter a name." = "名前が入力されていません";
 "Some values you provided are invalid.
 Please check the highlighted values." = "いくつかの値は不正です。
@@ -1492,8 +1517,19 @@ Please check the highlighted values." = "いくつかの値は不正です。
 "Graphics Mods" = "グラフィックスMOD";
 "Verify" = "整合性";
 "Filesystem" = "構造";
+"Enable DirectInput Detection" = "Enable DirectInput Detection";
+"Controls whether SDL should use DirectInput for detecting controllers. Enabling this fixes hotplug detection issues with DualSense controllers but causes Dolphin to hang up on shutdown when using certain 8BitDo controllers.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "Controls whether SDL should use DirectInput for detecting controllers. Enabling this fixes hotplug detection issues with DualSense controllers but causes Dolphin to hang up on shutdown when using certain 8BitDo controllers.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>";
+"Use Joy-Con Pairs as a Single Controller" = "Use Joy-Con Pairs as a Single Controller";
+"Controls whether SDL should treat a pair of Joy-Con as a single controller or as two separate controllers.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "Controls whether SDL should treat a pair of Joy-Con as a single controller or as two separate controllers.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>";
+"Sideways Joy-Con" = "Sideways Joy-Con";
+"Defines the default orientation for individual Joy-Con. This setting has no effect when Use Joy-Con Pairs as a Single Controller is enabled.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "Defines the default orientation for individual Joy-Con. This setting has no effect when Use Joy-Con Pairs as a Single Controller is enabled.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>";
+"Enable DualSense Player LEDs" = "Enable DualSense Player LEDs";
+"Controls whether the player LEDs should be lit to indicate which player is associated with a DualSense controller.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Controls whether the player LEDs should be lit to indicate which player is associated with a DualSense controller.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Main" = "Main";
+"Dolphin must be restarted for these changes to take effect." = "Dolphin must be restarted for these changes to take effect.";
 "Controllers" = "コントローラー";
 "Interface" = "表示";
+"On-Screen Display" = "On-Screen Display";
 "Audio" = "サウンド";
 "Paths" = "フォルダ";
 "GameCube" = "ゲームキューブ";
@@ -1502,14 +1538,16 @@ Please check the highlighted values." = "いくつかの値は不正です。
 "CRC32" = "CRC32";
 "MD5" = "MD5";
 "SHA-1" = "SHA-1";
-"Redump.org Status" = "Redump.orgのステータス";
+"Redump.info Status" = "Redump.info Status";
 "Verify Integrity" = "整合性チェックを実行";
 "Calculate" = "計算する";
 "Verifying" = "整合性チェック中...";
 "Low" = "小";
+"Medium" = "中";
 "High" = "大";
 "Scanning for adapters..." = "Scanning for adapters...";
 "Automatic" = "Automatic";
+"More Options..." = "More Options...";
 "Wii Remotes" = "Wiiリモコン";
 "Passthrough a Bluetooth adapter" = "PC上のBluetoothアダプターをパススルーする";
 "Sync" = "シンクロ";
@@ -1522,9 +1560,7 @@ Please check the highlighted values." = "いくつかの値は不正です。
 "Connect Wii Remotes for Emulated Controllers" = "実機Wiiリモコンをエミュレートされたコントローラとして扱う";
 "Emulated Wii Remote" = "Wiiリモコンをエミュレート";
 "Real Wii Remote" = "実機Wiiリモコンを接続";
-"A supported Bluetooth device could not be found.
-You must manually connect your Wii Remote." = "サポートされているBluetoothデバイスが見つかりません。
-Wiiリモコンを手動で接続してください。";
+"Select a Bluetooth Device" = "Select a Bluetooth Device";
 "Saved Wii Remote pairings can only be reset when a Wii game is running." = "ペアリングのリセットはWiiのゲームを実行中にのみ行えます。";
 "A sync can only be triggered when a Wii game is running." = "WiiリモコンとのシンクロはWiiのゲームを実行中にのみ行えます";
 "Convert" = "ファイル形式の変換";
@@ -1591,7 +1627,7 @@ Would you like to convert it without removing junk data?" = "ファイル \"%1\"
 ジャンクデータを削除せずに変換しますか？";
 "Failed to open the input file \"%1\"." = "inputファイル \"%1\" のオープンに失敗しました。";
 "Dolphin failed to complete the requested action." = "要求された操作を完了することができませんでした。";
-"Successfully converted %n image(s)." = "%n 画像 は正常に変換されました。";
+"Successfully converted %n image(s)." = "%n 個のイメージが正常に変換されました。";
 "<span style=\"color: red; font-weight: bold\">Error</span> on line %1 col %2" = "%1 行 %2列 で<span style=\"color: red; font-weight: bold\">エラー</span>が発生しました。";
 "Instruction" = "Instruction";
 "No input" = "入力なし";
@@ -1845,6 +1881,7 @@ All variables will be printed in the Memory Interface log, if there's a hit or a
 Note: All values are internally converted to Doubles for calculations. It's possible for them to go out of range or to become NaN. A warning will be given if NaN is returned, and the var that became NaN will be logged.";
 "Conditional help" = "Conditional help";
 "Breakpoints" = "ブレークポイント";
+"Disable" = "Disable";
 "Edit Conditional" = "条件の編集";
 "Edit conditional expression" = "条件式の編集";
 "Active" = "Active";
@@ -1912,13 +1949,16 @@ at %2?";
 "Breakpoint encountered! Step out aborted." = "ブレークポイントが発生しました！ ステップアウトが中止されました。";
 "Step out timed out!" = "Step out timed out!";
 "Step out successful!" = "Step out successful!";
-"Symbol" = "Symbol";
-"Note" = "Note";
-"Edit %1" = "Edit %1";
-"Editing %1 starting at: %2
-Warning: Must save the symbol map for changes to be kept." = "Editing %1 starting at: %2
-Warning: Must save the symbol map for changes to be kept.";
-"%1 name" = "%1 name";
+"Edit Symbol" = "Edit Symbol";
+"Editing symbol starting at: %1
+%2" = "Editing symbol starting at: %1
+%2";
+"Editing note starting at: %1
+%2" = "Editing note starting at: %1
+%2";
+"Warning: Must save the symbol map for changes to be kept." = "Warning: Must save the symbol map for changes to be kept.";
+"Symbol name" = "Symbol name";
+"Note name" = "Note name";
 "End Address" = "End Address";
 "Lines" = "Lines";
 "Size: 0x" = "Size: 0x";
@@ -1935,6 +1975,7 @@ Warning: Must save the symbol map for changes to be kept.";
 "Time Spent (ns)" = "Time Spent (ns)";
 "Time Avg. (ns)" = "Time Avg. (ns)";
 "Time %" = "Time %";
+"Symbol" = "Symbol";
 "Stop Profiling" = "Stop Profiling";
 "Start Profiling" = "Start Profiling";
 "Free memory" = "Free memory";
@@ -2042,6 +2083,7 @@ Warning: Must save the symbol map for changes to be kept.";
 "Domain" = "Domain";
 "State" = "State";
 "Blocking" = "ブロッキング";
+"Redirections" = "Redirections";
 "SSL context" = "SSL context";
 "ID" = "ID";
 "Hostname" = "Hostname";
@@ -2121,14 +2163,17 @@ Warning: Must save the symbol map for changes to be kept.";
 "%1
 wants to join your party." = "%1 さんが
 あなたのパーティに参加したいようです";
-"Wii Speak Manager" = "Wii Speak Manager";
+"Logitech USB Microphone Manager" = "Logitech USB Microphone Manager";
 "Some settings cannot be changed when emulation is running." = "Some settings cannot be changed when emulation is running.";
-"Emulate Wii Speak" = "Emulate Wii Speak";
+"Emulate Logitech USB Mic %1" = "Emulate Logitech USB Mic %1";
 "Microphone Configuration" = "Microphone Configuration";
+"Microphone %1 Configuration" = "Microphone %1 Configuration";
 "Mute" = "ミュート";
 "Volume modifier (value: %1dB)" = "Volume modifier (value: %1dB)";
 "Audio backend unsupported" = "Audio backend unsupported";
 "Autodetect preferred microphone" = "Autodetect preferred microphone";
+"Wii Speak Manager" = "Wii Speak Manager";
+"Emulate Wii Speak" = "Emulate Wii Speak";
 "Search Current Object" = "現在のオブジェクトを検索";
 "Next Match" = "次へ";
 "Previous Match" = "前へ";
@@ -2151,7 +2196,7 @@ wants to join your party." = "%1 さんが
 "Usually used for tex coord matrices" = "Usually used for tex coord matrices";
 "Usually used for light objects" = "Usually used for light objects";
 "Primitive %1" = "Primitive %1";
-"FIFO Player" = "FIFO プレーヤー";
+"FIFO Player" = "FIFO Player";
 "File Info" = "ファイル情報";
 "Object Range" = "オブジェクトの範囲";
 "Frame Range" = "フレームの範囲";
@@ -2183,6 +2228,8 @@ Current Frame: %3" = "%1 フレーム
 %3 フレーム";
 "Recording..." = "レコーディング...";
 "No file loaded / recorded." = "読み込み／記録ファイルなし";
+"%1 game(s) in your collection (%2 visible, %3 filtered)" = "%1 game(s) in your collection (%2 visible, %3 filtered)";
+"%1 game(s) in your collection" = "%1 game(s) in your collection";
 "Refreshing..." = "セッションリストを更新中...";
 "Dolphin could not find any GameCube/Wii ISOs or WADs.
 Double-click here to set a games directory..." = "ゲームリストは空です。この文章をダブルクリックして GC/Wii の ディスクイメージ もしくは WAD ファイルのあるフォルダを選択してください。";
@@ -2385,23 +2432,20 @@ Try again with a different character." = "次の場所でブランク図形の�
 "Invalid title ID." = "無効なタイトルID";
 "A save state cannot be loaded without specifying a game to launch." = "起動するタイトルを指定せずにステートセーブをロードすることはできません";
 "Batch mode cannot be used without specifying a game to launch." = "バッチモードの使用にはタイトルの指定が必須です";
-"Allow Usage Statistics Reporting" = "利用統計レポートを許可";
-"Do you authorize Dolphin to report information to Dolphin's developers?" = "Dolphinの開発者への情報提供にご協力いただけますか？";
-"If authorized, Dolphin can collect data on its performance, feature usage, and configuration, as well as data on your system's hardware and operating system.
-
-No private data is ever collected. This data helps us understand how people and emulated games use Dolphin and prioritize our efforts. It also helps us identify rare configurations that are causing bugs, performance and stability issues.
-This authorization can be revoked at any time through Dolphin's settings." = "統計レポートの収集を許可した場合、Dolphinでどのくらいパフォーマンスが出ているか、どんな機能を使っているかといったことや、あなたがどのようなOSやハードウェアを使っているかといったデータを収集し、Dolphinの開発チームに送信するようにします。
-
-個人に関する情報が収集されることはありません。収集したデータは人々がどのようにDolphinを使っているかを調べ、開発の優先順位を決めたり、稀な環境で発生するバグの特定に役立てたりします。
-また、この許可はいつでもDolphinの設定から取り消すことが可能です";
 "Error occurred while loading some texture packs" = "テクスチャパックの読み込み中にエラーが発生しました";
 "Invalid Pack %1 provided: %2" = "無効なリソースパック %1 が与えられました：%2";
 "All GC/Wii files" = "すべての GC/Wii ファイル";
 "A shutdown is already in progress. Unsaved data may be lost if you stop the current emulation before it completes. Force stop?" = "終了処理の実行中です。 この処理が完了する前にエミュレーションの強制終了をするとデータが失われる場合があります。それでも強制終了しますか？";
 "Do you want to stop the current emulation? Unsaved achievement modifications detected." = "Do you want to stop the current emulation? Unsaved achievement modifications detected.";
 "Do you want to stop the current emulation?" = "動作中のゲームを停止しますか？";
+"Non-Triforce games cannot be booted with Triforce hardware attached.
+Please remove the Triforce Baseboard from SP1." = "Triforceハードウェアが接続されている状態では、Triforce以外のゲームは起動できません。
+シリアルポート1 (SP1) からTriforce基板を取り外してください。";
+"Non-Triforce games cannot be booted with Triforce hardware attached.
+Please remove the Triforce Baseboard from Port 1." = "Triforceハードウェアが接続されている状態では、Triforce以外のゲームは起動できません。
+ポート 1 からTriforce基板を取り外してください。";
 "Failed to init core" = "コアの初期化に失敗しました";
-"All Save States (*.sav *.s##);; All Files (*)" = "全てのステートセーブファイル (*.sav *.s##);; 全てのファイル (*)";
+"All Save States (*.sav *.s??);; All Files (*)" = "All Save States (*.sav *.s??);; All Files (*)";
 "Can't start a NetPlay Session while a game is still running!" = "ゲーム実行中はネットプレイセッションを開始できません！";
 "A NetPlay Session is already in progress!" = "ネットプレイのセッションは既に進行中です！";
 "Failed to open server" = "サーバーを開けませんでした";
@@ -2414,9 +2458,8 @@ This authorization can be revoked at any time through Dolphin's settings." = "�
 "Select NAND Backup" = "NAND バックアップの選択";
 "BootMii NAND backup file (*.bin);;All Files (*)" = "BootMii NAND バックアップファイル (*.bin);;すべてのファイル (*)";
 "Importing NAND backup" = "NAND バックアップをインポート";
-"Importing NAND backup
- Time elapsed: %1s" = "NAND バックアップをインポート中...
-経過時間： %1s";
+"Loading NAND..." = "Loading NAND...";
+"Extracting NAND..." = "Extracting NAND...";
 "Select Keys File (OTP/SEEPROM Dump)" = "キーファイル(OTP/SEEPROMダンプ)の選択";
 "BootMii keys file (*.bin);;All Files (*)" = "BootMii キー ファイル (*.bin);;すべてのファイル (*)";
 "Playback of input recordings is disabled in RetroAchievements hardcore mode." = "Playback of input recordings is disabled in RetroAchievements hardcore mode.";
@@ -2430,30 +2473,33 @@ This authorization can be revoked at any time through Dolphin's settings." = "�
 "Wrote to \"%1\"." = "Wrote to \"%1\".";
 "Change Disc..." = "ディスクの入れ替え...";
 "Open User Folder" = "ユーザーフォルダーを開く";
+"Open Config Folder" = "Open Config Folder";
+"Open Cache Folder" = "Open Cache Folder";
 "Tools" = "ツール";
 "Resource Pack Manager" = "リソースパックマネージャ";
-"Emulated USB Devices" = "USBデバイスをエミュレート";
+"Emulated USB Devices" = "Emulated USB Devices";
 "Skylanders Portal" = "スカイランダーズポータル";
 "Infinity Base" = "Infinity Base";
 "Wii Speak" = "Wii Speak";
+"Logitech USB Microphone" = "Logitech USB Microphone";
 "Start NetPlay..." = "ネットプレイを開始...";
 "Browse NetPlay Sessions...." = "ネットプレイセッションブラウザ...";
 "RetroAchievements Development" = "RetroAchievements Development";
-"Load GameCube Main Menu" = "ゲームキューブ メインメニューを起動";
-"Memory Card Manager" = "GCメモリーカードマネージャ";
-"Install WAD..." = "WiiメニューにWADファイルを追加...";
-"Manage NAND" = "Wii NANDの管理";
-"Import BootMii NAND Backup..." = "BootMii NAND バックアップをインポート...";
-"Check NAND..." = "NANDの整合性チェックを実行...";
-"Extract Certificates from NAND" = "証明書ファイルをNANDから取り出す";
-"Perform Online System Update" = "Wii システムアップデート";
-"Current Region" = "現在の地域";
-"United States" = "米国";
-"Import Wii Save..." = "Wii セーブデータのインポート...";
+"Load GameCube Main Menu" = "Load GameCube Main Menu";
+"Memory Card Manager" = "Memory Card Manager";
+"Install WAD..." = "Install WAD...";
+"Manage NAND" = "Manage NAND";
+"Import BootMii NAND Backup..." = "Import BootMii NAND Backup...";
+"Check NAND..." = "Check NAND...";
+"Extract Certificates from NAND" = "Extract Certificates from NAND";
+"Perform Online System Update" = "Perform Online System Update";
+"Current Region" = "Current Region";
+"United States" = "United States";
+"Import Wii Save..." = "Import Wii Save...";
 "Import Wii Saves..." = "Import Wii Saves...";
-"Export All Wii Saves" = "全てのWiiセーブデータをエクスポート";
-"Connect Wii Remotes" = "Wiiリモコンの接続";
-"Connect Wii Remote %1" = "%1PのWiiリモコンを接続";
+"Export All Wii Saves" = "Export All Wii Saves";
+"Connect Wii Remotes" = "Connect Wii Remotes";
+"Connect Wii Remote %1" = "Connect Wii Remote %1";
 "Emulation" = "エミュレーション";
 "Play" = "開始";
 "Pause" = "一時停止";
@@ -2473,6 +2519,7 @@ This authorization can be revoked at any time through Dolphin's settings." = "�
 "Show Toolbar" = "ツールバー";
 "Lock Widgets In Place" = "ツールバーの位置を固定";
 "JIT" = "JIT";
+"Show Game Count" = "Show Game Count";
 "Purge Game List Cache" = "ゲームリストのキャッシュを消去";
 "Configuration" = "Dolphinの設定";
 "Graphics Settings" = "グラフィック設定";
@@ -2519,17 +2566,15 @@ This authorization can be revoked at any time through Dolphin's settings." = "�
 "Export Recording..." = "録画ファイルのエクスポート...";
 "TAS Input" = "TAS用入力ウィンドウを表示";
 "Pause at End of Movie" = "再生終了時に一時停止";
-"Show Rerecord Counter" = "再記録カウンターを表示";
-"Show Lag Counter" = "ラグカウンタを表示";
-"Show Frame Counter" = "フレームカウンタを表示";
-"Show Input Display" = "入力された操作を表示する";
-"Show System Clock" = "システム時間を表示";
+"Enable Movie Window" = "Enable Movie Window";
+"Customize Movie Window" = "Customize Movie Window";
 "Dump Frames" = "フレームのダンプを行う(AVI形式)";
 "Dump Audio" = "サウンドのダンプを行う(WAV形式)";
 "Interpreter Core" = "Interpreter Core";
 "JIT Block Linking Off" = "JIT Block Linking Off";
 "Disable JIT Cache" = "Disable JIT Cache";
 "Disable Fastmem" = "Disable Fastmem";
+"Disable Page Table Fastmem" = "Disable Page Table Fastmem";
 "Disable Fastmem Arena" = "ファストメム・アリーナを無効にします";
 "Disable Large Entry Points Map" = "大規模なエントリ ポイント マップを無効にします";
 "Log JIT Instruction Coverage" = "Log JIT Instruction Coverage";
@@ -2554,6 +2599,7 @@ This authorization can be revoked at any time through Dolphin's settings." = "�
 "Generate Symbols From" = "Generate Symbols From";
 "Signature Database" = "Signature Database";
 "RSO Modules" = "RSO Modules";
+"Show Demangled Names" = "Show Demangled Names";
 "Load Symbol Map" = "シンボルマップの読み込み";
 "Save Symbol Map" = "シンボルマップの保存";
 "Load Other Map File..." = "Load Other Map File...";
@@ -2565,8 +2611,8 @@ This authorization can be revoked at any time through Dolphin's settings." = "�
 "Combine Two Signature Files..." = "署名ファイルを結合...";
 "Apply Signature File..." = "署名ファイルの適用...";
 "Patch HLE Functions" = "HLEファンクションにパッチ";
-"Load vWii System Menu %1" = "vWii システム・メニュー %1 を読み込みます。";
-"Load Wii System Menu %1" = "Wiiメニュー %1 を起動";
+"Load vWii System Menu %1" = "Load vWii System Menu %1";
+"Load Wii System Menu %1" = "Load Wii System Menu %1";
 "Select Title to Install to NAND" = "NANDにインストールするタイトルを選択";
 "WAD files (*.wad)" = "WADファイル (*.wad)";
 "Select Save File" = "セーブファイルの選択";
@@ -2578,7 +2624,7 @@ Overwrite existing save data?" = "Save data for this title already exists in the
 
 Overwrite existing save data?";
 "Successfully imported save file." = "セーブファイルのインポートに成功しました。";
-"Failed to import save file. The given file appears to be corrupted or is not a valid Wii save." = "セーブファイルのインポートに失敗しました。指定されたファイルは破損しているか、有効な Wiiセーブファイルではありません。";
+"Failed to import save file. The given file appears to be corrupted or is not a valid Wii save." = "セーブファイルのインポートに失敗しました。指定されたファイルは破損しているか、有効な Wiiセーブデータではありません。";
 "Failed to import save file. Please launch the game once, then try again." = "セーブファイルのインポートに失敗しました。一度ゲームを起動してから、再度お試しください。";
 "Failed to import save file. Your NAND may be corrupt, or something is preventing access to files within it. Try repairing your NAND (Tools -> Manage NAND -> Check NAND...), then import the save again." = "セーブファイルのインポートに失敗しました。NANDが壊れているか、NAND内のファイルへのアクセスを妨げている可能性があります。NANDを修復し（ツール -> NANDの管理 -> NANDのチェック...）、セーブファイルを再度インポートしてみてください。";
 "Select Save Folder" = "Select Save Folder";
@@ -2587,7 +2633,7 @@ Overwrite existing save data?";
 Overwrite existing save data?" = "%1: Save data for this title already exists in the NAND. Consider backing up the current data before overwriting.
 
 Overwrite existing save data?";
-"%1: Failed to import save file. The given file appears to be corrupted or is not a valid Wii save." = "%1: Failed to import save file. The given file appears to be corrupted or is not a valid Wii save.";
+"%1: Failed to import save file. The given file appears to be corrupted or is not a valid Wii save." = "%1: セーブファイルのインポートに失敗しました。指定されたファイルは破損しているか、有効なWiiセーブデータではありません。";
 "%1: Failed to import save file. Please launch the game once, then try again." = "%1: Failed to import save file. Please launch the game once, then try again.";
 "%1: Failed to import save file. Your NAND may be corrupt, or something is preventing access to files within it. Try repairing your NAND (Tools -> Manage NAND -> Check NAND...), then import the save again." = "%1: Failed to import save file. Your NAND may be corrupt, or something is preventing access to files within it. Try repairing your NAND (Tools -> Manage NAND -> Check NAND...), then import the save again.";
 "Successfully imported %1 save file(s) with %2 failure(s)" = "Successfully imported %1 save file(s) with %2 failure(s)";
@@ -2846,6 +2892,15 @@ Are you sure you want to continue anyway?" = "NKitディスクイメージを実
 続行してもよろしいですか？";
 "I am aware of the risks and want to continue" = "リスクは分かっていますし、これからも続けていきたいです";
 "Don't show this again" = "次回からこの画面を表示しない";
+"Allow Usage Statistics Reporting" = "利用統計レポートを許可";
+"Do you authorize Dolphin to report information to Dolphin's developers?" = "Dolphinの開発者への情報提供にご協力いただけますか？";
+"If authorized, Dolphin can collect data on its performance, feature usage, and configuration, as well as data on your system's hardware and operating system.
+
+No private data is ever collected. This data helps us understand how people and emulated games use Dolphin and prioritize our efforts. It also helps us identify rare configurations that are causing bugs, performance and stability issues.
+This authorization can be revoked at any time through Dolphin's settings." = "統計レポートの収集を許可した場合、Dolphinでどのくらいパフォーマンスが出ているか、どんな機能を使っているかといったことや、あなたがどのようなOSやハードウェアを使っているかといったデータを収集し、Dolphinの開発チームに送信するようにします。
+
+個人に関する情報が収集されることはありません。収集したデータは人々がどのようにDolphinを使っているかを調べ、開発の優先順位を決めたり、稀な環境で発生するバグの特定に役立てたりします。
+また、この許可はいつでもDolphinの設定から取り消すことが可能です";
 "Install" = "インストール";
 "Author" = "作者";
 "Unknown author" = "作者不明";
@@ -2881,12 +2936,16 @@ Are you sure you want to continue anyway?" = "NKitディスクイメージを実
 "Enable Write-Back Cache (slow)" = "ライトバックキャッシュを有効にする (低速)";
 "Enables emulation of the CPU write-back cache.<br>Enabling will have a significant impact on performance.<br>This should be left disabled unless absolutely needed.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "CPUライトバックキャッシュのエミュレーションを有効にします。<br>有効にするとパフォーマンスに大きな影響を与えます。<br>どうしても必要な場合を除き、無効のままにしてください。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Timing" = "Timing";
-"Correct Time Drift" = "Correct Time Drift";
-"Allow the emulated console to run fast after stutters,<br>pursuing accurate overall elapsed time unless paused or speed-adjusted.<br><br>This may be useful for internet play.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Allow the emulated console to run fast after stutters,<br>pursuing accurate overall elapsed time unless paused or speed-adjusted.<br><br>This may be useful for internet play.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Correct Time Drift" = "時間のズレを修正する";
+"Allow the emulated console to run fast after stutters,<br>pursuing accurate overall elapsed time unless paused or speed-adjusted.<br><br>This may be useful for internet play.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "カクつきの発生後にエミュレートされたコンソールを高速で動作させることで、一時停止や速度調整が行われない限り、全体の経過時間を正確に維持するようにします。<br><br>外部サービスを介したオンラインプレイに役に立つ場合があります。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Rush Frame Presentation" = "Rush Frame Presentation";
+"Limits throttling between input and frame output, speeding through emulation to reach presentation, displaying sooner, and thus reducing input latency.<br><br>This will generally make frame pacing worse.<br>This setting can work either with or without Immediately Present XFB.<br>An Audio Buffer Size of at least 80 ms is recommended to ensure full effect.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Limits throttling between input and frame output, speeding through emulation to reach presentation, displaying sooner, and thus reducing input latency.<br><br>This will generally make frame pacing worse.<br>This setting can work either with or without Immediately Present XFB.<br>An Audio Buffer Size of at least 80 ms is recommended to ensure full effect.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Smooth Early Presentation" = "Smooth Early Presentation";
+"Adaptively adjusts the timing of early frame presentation.<br><br>This can improve frame pacing with Immediately Present XFB and/or Rush Frame Presentation, while still maintaining most of the input latency benefits.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Adaptively adjusts the timing of early frame presentation.<br><br>This can improve frame pacing with Immediately Present XFB and/or Rush Frame Presentation, while still maintaining most of the input latency benefits.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
 "Clock Override" = "クロック周波数の変更";
 "Enable Emulated CPU Clock Override" = "CPU Clock Override を有効にする";
 "%1% (%2 MHz)" = "%1% (%2 MHz)";
-"Adjusts the emulated CPU's clock rate.<br><br>On games that have an unstable frame rate despite full emulation speed, higher values can improve their performance, requiring a powerful device. Lower values reduce the emulated console's performance, but improve the emulation speed.<br><br>WARNING: Changing this from the default (100%) can and will break games and cause glitches. Do so at your own risk. Please do not report bugs that occur with a non-default clock.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Adjusts the emulated CPU's clock rate.<br><br>On games that have an unstable frame rate despite full emulation speed, higher values can improve their performance, requiring a powerful device. Lower values reduce the emulated console's performance, but improve the emulation speed.<br><br>WARNING: Changing this from the default (100%) can and will break games and cause glitches. Do so at your own risk. Please do not report bugs that occur with a non-default clock.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Adjusts the emulated CPU's clock rate.<br><br>On games that have an unstable frame rate despite full emulation speed, higher values can improve their performance, requiring a powerful device. Lower values reduce the emulated console's performance, but improve the emulation speed.<br><br>WARNING: Changing this from the default (100%) can and will break games and cause glitches. Do so at your own risk. Please do not report bugs that occur with a non-default clock.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "エミュレートされるCPUのクロック周波数を調節できます。<br><br>エミュレーション速度が最大にもかかわらずフレームレートが不安定なタイトルの場合、この値を大きくすることでパフォーマンスが向上しますが、強力なデバイスが必要になります。逆に値を低くした場合、エミュレートされるコンソールのパフォーマンスが低下しますが、エミュレーション速度は上昇します。<br><br>警告: 既定 (100%) 以外の値では、 クラッシュやバグが発生するおそれがあります。あくまでも自己責任での使用を前提とし、 デフォルト以外の値で発生したバグについては報告しないでください。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "VBI Frequency Override" = "VBI Frequency Override";
 "Enable VBI Frequency Override" = "Enable VBI Frequency Override";
 "%1% (%2 VPS)" = "%1% (%2 VPS)";
@@ -2895,10 +2954,19 @@ Are you sure you want to continue anyway?" = "NKitディスクイメージを実
 "Enable Emulated Memory Size Override" = "Memory Size Override を有効にする";
 "%1 MB (MEM1)" = "%1 MB (MEM1)";
 "%1 MB (MEM2)" = "%1 MB (MEM2)";
-"Adjusts the amount of RAM in the emulated console.<br><br><b>WARNING</b>: Enabling this will completely break many games.<br>Only a small number of games can benefit from this.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Adjusts the amount of RAM in the emulated console.<br><br><b>WARNING</b>: Enabling this will completely break many games.<br>Only a small number of games can benefit from this.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Sets the amount of RAM in the emulated console to the values provided.<br><br><b>WARNING</b>: Enabling this will completely break many games. By default, Dolphin determines what value is required based on the game information.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Sets the amount of RAM in the emulated console to the values provided.<br><br><b>WARNING</b>: Enabling this will completely break many games. By default, Dolphin determines what value is required based on the game information.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
 "Custom RTC Options" = "リアルタイムクロック設定";
 "Enable Custom RTC" = "カスタム RTC を使用する";
-"This setting allows you to set a custom real time clock (RTC) separate from your current system time.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "This setting allows you to set a custom real time clock (RTC) separate from your current system time.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"This setting allows you to set a custom real time clock (RTC) separate from your current system time.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "リアルタイムクロック (RTC) は通常OSのシステム時刻が使われますが、ここで任意の時間に変更することができます。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Reset Dolphin Settings" = "Dolphinの設定を初期化";
+"Reset All Settings" = "全ての設定を初期化する";
+"Are you sure you want to restore all Dolphin settings to their default values? This action cannot be undone!
+All customizations or changes you have made will be lost.
+
+Do you want to proceed?" = "Dolphinの設定を全てデフォルトに戻してもよろしいですか？ この操作は元に戻せません！
+これまでに行った全てのカスタマイズや変更が失われます。
+
+続行しますか？";
 "%1%" = "%1%";
 "DSP Options" = "DSP設定";
 "DSP Emulation Engine" = "DSPのエミュレーション方式";
@@ -2914,7 +2982,7 @@ Are you sure you want to continue anyway?" = "NKitディスクイメージを実
 "High (Latency ~40 ms)" = "High (Latency ~40 ms)";
 "Highest (Latency ~80 ms)" = "Highest (Latency ~80 ms)";
 "Default Device" = "既定のデバイス";
-"Output Device" = "Output Device";
+"Output Device" = "出力デバイス";
 "Latency: %1 ms" = "レイテンシ: %1 ms";
 "Latency:  000 ms" = "レイテンシ: 000 ms";
 "Audio Playback Settings" = "オーディオ再生の設定";
@@ -2922,18 +2990,25 @@ Are you sure you want to continue anyway?" = "NKitディスクイメージを実
 "%1 ms" = "%1 ms";
 " 000 ms" = " 000 ms";
 "Fill Audio Gaps" = "Fill Audio Gaps";
+"Preserve Audio Pitch" = "音声のピッチを保持する";
 "Mute When Disabling Speed Limit" = "速度制限の無効時にミュート";
 "Audio Buffer Size" = "オーディオバッファサイズ";
-"Selects how the Digital Signal Processor (DSP) is emulated. Determines how the audio is processed and what system features are available.<br><br><b>HLE</b> - High Level Emulation of the DSP. Fast, but not always accurate. Lacks Dolby Pro Logic II decoding.<br><br><b>LLE Recompiler</b> - Low Level Emulation of the DSP, via a recompiler. Slower, but more accurate. Enables Dolby Pro Logic II decoding on certain audio backends.<br><br><b>LLE Interpreter</b> - Low Level Emulation of the DSP, via an interpreter. Slowest, for debugging purposes only. Not recommended.<br><br><dolphin_emphasis>If unsure, select HLE.</dolphin_emphasis>" = "Selects how the Digital Signal Processor (DSP) is emulated. Determines how the audio is processed and what system features are available.<br><br><b>HLE</b> - High Level Emulation of the DSP. Fast, but not always accurate. Lacks Dolby Pro Logic II decoding.<br><br><b>LLE Recompiler</b> - Low Level Emulation of the DSP, via a recompiler. Slower, but more accurate. Enables Dolby Pro Logic II decoding on certain audio backends.<br><br><b>LLE Interpreter</b> - Low Level Emulation of the DSP, via an interpreter. Slowest, for debugging purposes only. Not recommended.<br><br><dolphin_emphasis>If unsure, select HLE.</dolphin_emphasis>";
-"Selects which audio API to use internally.<br><br><dolphin_emphasis>If unsure, select %1.</dolphin_emphasis>" = "Selects which audio API to use internally.<br><br><dolphin_emphasis>If unsure, select %1.</dolphin_emphasis>";
-"Sets the audio latency in milliseconds. Higher values may reduce audio crackling. Certain backends only.<br><br><dolphin_emphasis>If unsure, leave this at 20 ms.</dolphin_emphasis>" = "Sets the audio latency in milliseconds. Higher values may reduce audio crackling. Certain backends only.<br><br><dolphin_emphasis>If unsure, leave this at 20 ms.</dolphin_emphasis>";
+"Wii Remote Audio Routing" = "Wii Remote Audio Routing";
+"Enable Wii Remote Audio Routing" = "Enable Wii Remote Audio Routing";
+"Selects how the Digital Signal Processor (DSP) is emulated. Determines how the audio is processed and what system features are available.<br><br><b>HLE</b> - High Level Emulation of the DSP. Fast, but not always accurate. Lacks Dolby Pro Logic II decoding.<br><br><b>LLE Recompiler</b> - Low Level Emulation of the DSP, via a recompiler. Slower, but more accurate. Enables Dolby Pro Logic II decoding on certain audio backends.<br><br><b>LLE Interpreter</b> - Low Level Emulation of the DSP, via an interpreter. Slowest, for debugging purposes only. Not recommended.<br><br><dolphin_emphasis>If unsure, select HLE.</dolphin_emphasis>" = "デジタル信号プロセッサ（DSP）のエミュレーション方式を選択します。オーディオ処理方法と利用可能なシステム機能を決定します。<br><br><b>HLE</b> - DSPの高レベルエミュレーション。高速ですが、常に正確とは限りません。Dolby Pro Logic II のデコードに対応していません。<br><br><b>LLE リコンパイラ</b> - リコンパイラによるDSPの低レベルエミュレーション。低速ですが、より正確なエミュレーションを行います。特定のオーディオバックエンドで Dolby Pro Logic II を利用可能です。<br><br><b>LLE インタプリタ</b> - インタプリタによるDSPの低レベルエミュレーション。最も低速で、デバッグ目的でのみ使用します。非推奨。<br><br><dolphin_emphasis>よく分からなければ、HLEを選択してください。</dolphin_emphasis>";
+"Selects which audio API to use internally.<br><br><dolphin_emphasis>If unsure, select %1.</dolphin_emphasis>" = "内部で使用するオーディオAPIを選択します。<br><br><dolphin_emphasis>よく分からなければ、%1 を選択してください。</dolphin_emphasis>";
+"Sets the audio latency in milliseconds. Higher values may reduce audio crackling. Certain backends only.<br><br><dolphin_emphasis>If unsure, leave this at 20 ms.</dolphin_emphasis>" = "オーディオの出力レイテンシ（ミリ秒）を設定します。高くすると、オーディオのクラックリング（雑音）が軽減される場合があります。特定のバックエンドでのみ使用されます。<br><br><dolphin_emphasis>よく分からなければ、20 ms のままにしてください。</dolphin_emphasis>";
 "Enables Dolby Pro Logic II emulation using 5.1 surround. Certain backends only. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Enables Dolby Pro Logic II emulation using 5.1 surround. Certain backends only. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
 "Adjusts the quality setting of the Dolby Pro Logic II decoder. Higher presets increases audio latency.<br><br><dolphin_emphasis>If unsure, select High.</dolphin_emphasis>" = "Dolby Pro Logic II デコーダーの品質設定を調整します。プリセットを高くすると、オーディオの遅延が増加します。<br><br><dolphin_emphasis>不明な場合は、「High」を選択してください。</dolphin_emphasis>";
 "Adjusts audio output volume.<br><br><dolphin_emphasis>If unsure, leave this at 100%.</dolphin_emphasis>" = "オーディオ出力の音量を調整します。<br><br><dolphin_emphasis>よくわからなければ、100% のままにしてください。</dolphin_emphasis>";
 "Repeat existing audio during lag spikes to prevent stuttering.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "Repeat existing audio during lag spikes to prevent stuttering.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>";
-"Mutes the audio when overriding the emulation speed limit (default hotkey: Tab). <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Mutes the audio when overriding the emulation speed limit (default hotkey: Tab). <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
-"Selects an output device to use.<br><br><dolphin_emphasis>If unsure, select Default Device.</dolphin_emphasis>" = "Selects an output device to use.<br><br><dolphin_emphasis>If unsure, select Default Device.</dolphin_emphasis>";
+"Keeps audio at normal pitch when changing emulation speed. Without this, audio pitch changes proportionally with speed.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "常に音声のピッチを通常通りに保ちます。この設定がオフの場合、音声のピッチはエミュレーションの動作速度に応じて変化します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Mutes the audio when overriding the emulation speed limit (default hotkey: Tab). <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "エミュレーションの速度制限が無効化されている間、音声をミュートします（デフォルトのホットキー: Tab）<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Selects an output device to use.<br><br><dolphin_emphasis>If unsure, select Default Device.</dolphin_emphasis>" = "オーディオの出力デバイスを選択します。<br><br><dolphin_emphasis>よく分からなければ、「既定のデバイス」を選択してください。</dolphin_emphasis>";
 "Latency" = "レイテンシ";
+"Routes each Wii Remote's speaker audio to a separate audio output device. This setting cannot be changed while emulation is active.<br><br>This setting is disabled when Enable Speaker Data is disabled, Passthrough a Bluetooth adapter is selected, or an audio backend other than Cubeb is selected.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Routes each Wii Remote's speaker audio to a separate audio output device. This setting cannot be changed while emulation is active.<br><br>This setting is disabled when Enable Speaker Data is disabled, Passthrough a Bluetooth adapter is selected, or an audio backend other than Cubeb is selected.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Enables routing this Wii Remote's speaker audio to a separate output device." = "Enables routing this Wii Remote's speaker audio to a separate output device.";
+"Selects the audio output device for this Wii Remote's speaker audio.<br><br>This setting is disabled when this Wii Remote is not set to Emulated Wii Remote." = "Selects the audio output device for this Wii Remote's speaker audio.<br><br>This setting is disabled when this Wii Remote is not set to Emulated Wii Remote.";
 "Enter new Broadband Adapter MAC address" = "ブロードバンドアダプタのMACアドレスを入力";
 "For setup instructions, <a href=\"https://wiki.dolphin-emu.org/index.php?title=Broadband_Adapter\">refer to this page</a>." = "セットアップ方法については、<a href=\"https://wiki.dolphin-emu.org/index.php?title=Broadband_Adapter\">このページを参照してください</a>。";
 "Broadband Adapter MAC Address" = "ブロードバンドアダプタ MACアドレス設定";
@@ -2960,14 +3035,14 @@ Are you sure you want to continue anyway?" = "NKitディスクイメージを実
 "Warning: A GCI folder override path is currently configured for this slot. Adjusting the GCI path here will have no effect." = "警告: このスロットには現在、GCIフォルダーのオーバーライドパスが設定されています。ここでGCIパスを調整しても効果はありません。";
 "SP1" = "シリアルポート1";
 "GBA Settings" = "GBA設定";
-"Run GBA Cores in Dedicated Threads" = "GBAコアを専用のスレッドで実行する";
 "BIOS" = "BIOS";
+"Game Boy Player ROM" = "Game Boy Player ROM";
 "Port %1 ROM" = "コントローラーポート %1 のROM";
 "Save in Same Directory as the ROM" = "ROMと同じフォルダにセーブファイルを保存する";
 "Saves" = "セーブ保存先";
 "Choose a File to Open or Create" = "ファイルを選択";
 "Cannot set memory card to an empty path." = "メモリーカードを空のパスに設定できません。";
-"The filename %1 does not conform to Dolphin's region code format for memory cards. Please rename this file to either %2, %3, or %4, matching the region of the save files that are on it." = "ファイル名 %1 はDolphinのメモリーカード用リージョンコード形式に準拠していません。このファイル名を %2、 %3、 %4 のいずれかに変更してください。";
+"The filename %1 does not conform to Dolphin's region code format for memory cards. Please rename this file to either %2, %3, %4, or %5, matching the region of the save files that are on it." = "The filename %1 does not conform to Dolphin's region code format for memory cards. Please rename this file to either %2, %3, %4, or %5, matching the region of the save files that are on it.";
 "The file
 %1
 is either corrupted or not a GameCube memory card file.
@@ -2978,7 +3053,7 @@ is either corrupted or not a GameCube memory card file.
 "The same file can't be used in multiple slots; it is already used by %1." = "同じファイルを複数のスロットで使用することはできません; すでに %1 によって使用されています。";
 "Choose GCI Base Folder" = "GCIベースフォルダを選択";
 "Cannot set GCI folder to an empty path." = "GCI フォルダを空のパスに設定できません。";
-"The folder %1 does not conform to Dolphin's region code format for GCI folders. Please rename this folder to either %2, %3, or %4, matching the region of the save files that are in it." = "フォルダ %1 は Dolphin の GCI フォルダのリージョンコード形式に準拠していません。このフォルダの名前を %2、 %3、 %4 のいずれかに変更してください。";
+"The folder %1 does not conform to Dolphin's region code format for GCI folders. Please rename this folder to either %2, %3, %4, or %5, matching the region of the save files that are in it." = "The folder %1 does not conform to Dolphin's region code format for GCI folders. Please rename this folder to either %2, %3, %4, or %5, matching the region of the save files that are in it.";
 "The same folder can't be used in multiple slots; it is already used by %1." = "同じフォルダーを複数のスロットで使用することはできません: すでに %1 によって使用されています。";
 "Choose a File to Open" = "ファイルを選択";
 "Game Boy Advance Carts (*.gba)" = "ゲームボーイアドバンスROMファイル (*.gba)";
@@ -2990,6 +3065,8 @@ is either corrupted or not a GameCube memory card file.
 "Basic Settings" = "基本設定";
 "Enable Dual Core (speedhack)" = "デュアルコアを有効にする (speedhack)";
 "Enable Cheats" = "チートコードを有効にする";
+"Load Whole Game Into Memory" = "ゲーム全体をメモリに読み込む";
+"Loads the running game into memory in the background.<br><br>This may improve performance with slow or high-latency storage.<br>System memory requirements will be much higher with this setting enabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "実行中のゲームをバックグラウンドでメモリ上にロードします。<br><br>低速（または高レイテンシ）なストレージを使用している場合にパフォーマンスが上昇する可能性があります。<br>有効にすると、システムメモリ要件が大幅に増加します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Allow Mismatched Region Settings" = "コンソール上の言語設定の不一致を許可する";
 "Change Discs Automatically" = "ディスクの入れ替えを自動で行う";
 "Show Current Game on Discord" = "Discordにプレイ中のゲームを表示";
@@ -3007,16 +3084,18 @@ is either corrupted or not a GameCube memory card file.
 "Generate a New Statistics Identity" = "新しい統計IDを作成する";
 "Identity Generation" = "IDの作成";
 "New identity generated." = "新しいIDが作成されました。";
-"Separates CPU and GPU emulation work to separate threads. Reduces single-thread burden by spreading Dolphin's heaviest load across two cores, which usually improves performance. However, it can result in glitches and crashes.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Separates CPU and GPU emulation work to separate threads. Reduces single-thread burden by spreading Dolphin's heaviest load across two cores, which usually improves performance. However, it can result in glitches and crashes.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
-"Enables the use of AR and Gecko cheat codes which can be used to modify games' behavior. These codes can be configured with the Cheats Manager in the Tools menu.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ゲームの動作を変更するために使用できる AR および Gecko チート コードの使用を有効にします。これらのコードは、[ツール] メニューの [チート マネージャー] で設定できます。<br><br>エミュレーションがアクティブな間は、この設定を変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
-"Lets you use languages and other region-related settings that the game may not be designed for. May cause various crashes and bugs.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ゲームが想定していない可能性のある言語やその他の地域関連の設定を使用できます。様々なクラッシュやバグを引き起こす可能性があります。<br><br>この設定はエミュレーションが有効な間は変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
-"Automatically changes the game disc when requested by games with two discs. This feature requires the game to be launched in one of the following ways:<br>- From the game list, with both discs being present in the game list.<br>- With File > Open or the command line interface, with the paths to both discs being provided.<br>- By launching an M3U file with File > Open or the command line interface.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "2枚組ディスクのゲームでリクエストされたときに自動的にゲームディスクを入れ替えます。この機能を使うには、ゲームを以下に示すどれかの方法で起動する必要があります: <br> - 両方のディスクがゲームリストに存在する状態で、ゲームリストから。 <br> - 両方のディスクへのパスが提供された状態で、ファイル > 開く、もしくはコマンドラインインターフェースから。 <br> - M3Uファイルをファイル > 開く、もしくはコマンドラインインターフェースから起動する。 <br> <br> <dolphin_emphasis> よく分からなければ、チェックを入れないでください。 </dolphin_emphasis>";
-"Shows which game is active and the duration of your current play session in your Discord status.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "Discord ステータスに、実行中のゲームと現在のプレイ セッションの継続時間が表示されます。<br><br>エミュレーションが実行中は、この設定を変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
-"Controls how fast emulation runs relative to the original hardware.<br><br>Values higher than 100% will emulate faster than the original hardware can run, if your hardware is able to keep up. Values lower than 100% will slow emulation instead. Unlimited will emulate as fast as your hardware is able to.<br><br><dolphin_emphasis>If unsure, select 100%.</dolphin_emphasis>" = "オリジナルのハードウェアに対するエミュレーションの実行速度を制御します。<br><br>100%より高い値を設定すると、元のハードウェアの動作速度よりも速くエミュレートされます。100%より低い値を設定すると、エミュレーションが遅くなります。制限なしは、ハードウェアが可能な限りの速度でエミュレートします。<br><br><dolphin_emphasis>よく分からなければ、100%を選択してください。</dolphin_emphasis>";
+"Separates CPU and GPU emulation work to separate threads. Reduces single-thread burden by spreading Dolphin's heaviest load across two cores, which usually improves performance. However, it can result in glitches and crashes.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "CPUとGPUのエミュレーション処理を別々のスレッドに分離します。Dolphinの最も負荷の高い処理を2つのコアに分散することでシングルスレッドの負担を軽減し、通常はパフォーマンスが向上します。ただし、不具合やクラッシュが発生する可能性があります。<br><br>この設定はエミュレーション実行中は変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Enables the use of AR and Gecko cheat codes which can be used to modify games' behavior. These codes can be configured with the Cheats Manager in the Tools menu.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ゲームの動作を変更するために使用できる AR および Gecko チート コードの使用を有効にします。これらのコードは、[ツール] メニューの [チート マネージャー] で設定できます。<br><br>この設定はエミュレーション実行中は変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Lets you use languages and other region-related settings that the game may not be designed for. May cause various crashes and bugs.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ゲームが想定していない可能性のある言語やその他の地域関連の設定を使用できます。様々なクラッシュやバグを引き起こす可能性があります。<br><br>この設定はエミュレーション実行中は変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Automatically changes the game disc when requested by games with two discs. This feature requires the game to be launched in one of the following ways:<br>- From the game list, with both discs being present in the game list.<br>- With File > Open or the command line interface, with the paths to both discs being provided.<br>- By launching an M3U file with File > Open or the command line interface.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "2枚組ディスクのゲームをプレイ中、ゲーム側から要求があった際に自動的にディスクを入れ替えます。この機能を使うには、以下のいずれかの方法でゲームを起動する必要があります: <br> - 両方のディスクがゲームリストに存在する状態で、ゲームリストから起動する。 <br> - [ファイル] > [開く]、もしくはコマンドラインインターフェースから、両方のディスクのパスを指定して起動する。 <br> - [ファイル] > [開く]、もしくはコマンドラインインターフェースから、M3Uファイルを指定して起動する。 <br> <br> <dolphin_emphasis> よく分からなければ、チェックを入れないでください。 </dolphin_emphasis>";
+"Shows which game is active and the duration of your current play session in your Discord status.<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "Discord ステータスに、実行中のゲームと現在のプレイ セッションの継続時間が表示されます。<br><br>この設定はエミュレーション実行中は変更できません。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Selects which update track Dolphin uses when checking for updates at startup. If a new update is available, Dolphin will show a list of changes made since your current version and ask you if you want to update.<br><br>The Dev track has the latest version of Dolphin which often updates multiple times per day. Select this track if you want the newest features and fixes.<br><br>The Releases track has an update every few months. Some reasons you might prefer to use this track:<br>- You prefer using versions that have had additional testing.<br>- NetPlay requires players to have the same Dolphin version, and the latest Release version will have the most players to match with.<br>- You frequently use Dolphin's savestate system, which doesn't guarantee backward compatibility of savestates between Dolphin versions. If this applies to you, make sure you make an in-game save before updating (i.e. save your game in the same way you would on a physical GameCube or Wii), then load the in-game save after updating Dolphin and before making any new savestates.<br><br>Selecting \"Don't Update\" will prevent Dolphin from automatically checking for updates.<br><br><dolphin_emphasis>If unsure, select Releases.</dolphin_emphasis>" = "Dolphin が起動時に更新をチェックするときに使用する更新トラックを選択します。新しい更新が利用可能な場合、Dolphin は現在のバージョン以降に行われた変更の一覧を表示し、更新するかどうかを確認します。<br><br>「開発者向け」トラックには開発中のバージョンの Dolphin があり、1 日に複数回更新されることがよくあります。最新の機能と修正が必要な場合は、このトラックを選択してください。<br><br>「リリース」トラックは数ヶ月ごとに更新があります。このトラックを使用する方がよい理由は以下の通り：<br>- 十分なテストが行​​われた安定バージョンを使用することを好む場合。<br>- NetPlayで同じバージョンのDolphinを使用する必要がある（最新のリリース版が最も多くのプレイヤーとマッチングできます。）<br>- Dolphin のセーブステート システムを頻繁に使用する（Dolphin バージョン間のセーブステートの下位互換性は保証されません。これに該当する場合は、アップデート前にゲーム内セーブ（つまり、物理的な GameCube や Wii と同じ方法でゲームをセーブ）し、Dolphin をアップデートした後、新しいセーブステートを作成する前にゲーム内セーブをロードしてください。）<br><br>「更新しない」を選択すると、Dolphin はアップデートを自動的にチェックしなくなります。<br><br><dolphin_emphasis>よく分からなければ、リリースを選択してください。</dolphin_emphasis>";
-"Sets the region used for titles whose region cannot be determined automatically.<br><br>This setting cannot be changed while emulation is active." = "地域を自動的に判別できないタイトルに使用する地域をを設定します。エミュレーションが実行中はこの設定を変更できません。";
+"Sets the region used for titles whose region cannot be determined automatically.<br><br>This setting cannot be changed while emulation is active." = "地域（リージョン）を自動的に判別できないタイトルで使用するリージョンを設定します。<br><br>この設定はエミュレーション実行中は変更できません。";
 "If selected, Dolphin can collect data on its performance, feature usage, emulated games, and configuration, as well as data on your system's hardware and operating system.<br><br>No private data is ever collected. This data helps us understand how people and emulated games use Dolphin and prioritize our efforts. It also helps us identify rare configurations that are causing bugs, performance and stability issues." = "選択すると、Dolphin はパフォーマンス、機能の使用状況、エミュレートされたゲーム、構成に関するデータ、およびシステムのハードウェアとオペレーティング システムに関するデータを収集できます。<br><br>プライベートなデータは収集されません。このデータは、ユーザーやエミュレートされたゲームが Dolphin をどのように使用しているかを理解し、取り組みの優先順位を決めるのに役立ちます。また、バグ、パフォーマンス、安定性の問題を引き起こしているまれな構成を特定するのにも役立ちます。";
 "Generate a new anonymous ID for your usage statistics. This will cause any future statistics to be unassociated with your previous statistics." = "使用状況統計用の新しい匿名 ID を生成します。これにより、以降の統計は以前の統計と関連付けられなくなります。";
+"Controls how fast emulation runs relative to the original hardware.<br><br>Values higher than 100% will emulate faster than the original hardware can run, if your hardware is able to keep up. Values lower than 100% will slow emulation instead. Unlimited will emulate as fast as your hardware is able to.<br><br><dolphin_emphasis>If unsure, select 100%.</dolphin_emphasis>" = "オリジナルのハードウェアに対するエミュレーションの実行速度を制御します。<br><br>100%より高い値を設定すると、元のハードウェアの動作速度よりも速くエミュレートされます。100%より低い値を設定すると、エミュレーションが遅くなります。制限なしは、ハードウェアが可能な限りの速度でエミュレートします。<br><br><dolphin_emphasis>よく分からなければ、100%を選択してください。</dolphin_emphasis>";
+"<dolphin_emphasis>When Hardcore Mode is enabled, Speed Limit values less than 100% will be treated as 100%.</dolphin_emphasis>" = "<dolphin_emphasis>When Hardcore Mode is enabled, Speed Limit values less than 100% will be treated as 100%.</dolphin_emphasis>";
+"%1<br><br>%2" = "%1<br><br>%2";
 "<System Language>" = "＜システムの言語＞";
 "User Interface" = "インターフェイス設定";
 "Language" = "Language";
@@ -3025,6 +3104,9 @@ is either corrupted or not a GameCube memory card file.
 "(System)" = "(システム)";
 "(Light)" = "(ライト)";
 "(Dark)" = "(ダーク)";
+"(Fusion Light)" = "(Fusion Light)";
+"(Fusion Dark Gray)" = "(Fusion Dark Gray)";
+"(Fusion Dark)" = "(Fusion Dark)";
 "Use Built-In Database of Game Names" = "ゲーム名の表記に内蔵リストを使用する";
 "Download Game Covers from GameTDB.com for Use in Grid Mode" = "グリッド表示でパッケージ画像を使用 ( GameTDB.comより取得 )";
 "Enable Debugging UI" = "デバッグUIを有効にする";
@@ -3035,7 +3117,6 @@ is either corrupted or not a GameCube memory card file.
 "Keep Window on Top" = "最前面に表示する";
 "Confirm on Stop" = "動作停止時に確認";
 "Use Panic Handlers" = "パニックハンドラーを使用する";
-"Show On-Screen Display Messages" = "OSDを表示する";
 "Show Active Title in Window Title" = "タイトルバーに起動中のゲーム名を表示";
 "Pause on Focus Loss" = "フォーカスが外れたときに一時停止する";
 "Mouse Cursor Visibility" = "プレイ中のマウスカーソル表示";
@@ -3045,7 +3126,6 @@ is either corrupted or not a GameCube memory card file.
 "Lock Mouse Cursor" = "マウスカーソルをロック";
 "Shows Dolphin's debugging user interface. This lets you view and modify a game's code and memory contents, set debugging breakpoints, examine network requests, and more.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Dolphinのデバッグユーザーインターフェースを表示します。これにより、ゲームのコードやメモリの内容を見たり変更したり、デバッグ用のブレークポイントを設定したり、ネットワークリクエストを調べたりすることができます。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "<dolphin_emphasis>Disabled in Hardcore Mode.</dolphin_emphasis>" = "<dolphin_emphasis>ハードコアモードでは無効になります。</dolphin_emphasis>";
-"%1<br><br>%2" = "%1<br><br>%2";
 "Restart Required" = "再起動が必要";
 "You must restart Dolphin in order for the change to take effect." = "この変更を適用するにはDolphinを再起動してください";
 "Uses Dolphin's database of properly formatted names in the game list's Title column.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "ゲーム リストのタイトル列に、適切にフォーマットされた名前の Dolphin データベースを使用します。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
@@ -3055,17 +3135,61 @@ is either corrupted or not a GameCube memory card file.
 "Requires the render window to be focused for hotkeys to take effect.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "ホットキーを有効にするには、レンダリング ウィンドウにフォーカスする必要があります。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Downloads full game covers from GameTDB.com to display in the game list's Grid View. If this setting is unchecked, the game list displays a banner from the game's save data, and if the game has no save file, displays a generic banner instead.<br><br>List View will always use the save file banners.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "GameTDB.com からすべてのゲーム カバー情報をダウンロードし、ゲーム リストのグリッド ビューに表示します。この設定がオフの場合、ゲーム リストにはゲームのセーブデータのバナーが表示され、セーブファイルがない場合は代わりに汎用バナーが表示されます。<br><br>リスト ビューではつねにセーブファイルのバナーが使用されます。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Disables your screensaver while running a game.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "ゲーム実行中は、スクリーンセーバーを無効にします。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
-"Tracks the time you spend playing games and shows it in the List View (as hours/minutes).<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "ゲームのプレイ時間を追跡し、リスト ビューに表示します (時間/分単位)。<br><br>エミュレーションがアクティブな間はこの設定を変更できません。<br><br><dolphin_emphasis>よくわからなければ、チェックを外さないでください</dolphin_emphasis>";
+"Tracks the time you spend playing games and shows it in the List View (as hours/minutes).<br><br>This setting cannot be changed while emulation is active.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "ゲームのプレイ時間を追跡し、リスト ビューに表示します (時間/分単位)。<br><br>この設定はエミュレーション実行中は変更できません。<br><br><dolphin_emphasis>よくわからなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Prompts you to confirm that you want to end emulation when you press Stop.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "[停止] を押したときに、エミュレーションを終了するかどうかを確認するメッセージを表示します。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "In the event of an error, Dolphin will halt to inform you of the error and present choices on how to proceed. With this option disabled, Dolphin will \"ignore\" all errors. Emulation will not be halted and you will not be notified.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "エラーが発生した場合、Dolphin は停止してエラーを通知し、続行方法の選択肢を提示します。このオプションを無効にすると、Dolphin はすべてのエラーを「無視」します。エミュレーションは停止されず、通知もされません。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
-"Shows on-screen display messages over the render window. These messages disappear after several seconds.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "レンダリングウィンドウの上にオンスクリーンディスプレイメッセージを表示します。これらのメッセージは数秒後に消えます。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Shows the active game title in the render window's title bar.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "レンダーウィンドウのタイトルバーに実行中のゲームタイトルを表示します。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
 "Pauses the game whenever the render window isn't focused.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "レンダリング ウィンドウにフォーカスが当たっていないときは、ゲームを一時停止します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Locks the mouse cursor to the Render Widget as long as it has focus. You can set a hotkey to unlock it.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "レンダーウィジェットにフォーカスがある間、マウスカーソルをロックします。ホットキーを設定してロックを解除することができます。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
 "Shows the mouse cursor briefly whenever it has recently moved, then hides it.<br><br><dolphin_emphasis>If unsure, select this mode.</dolphin_emphasis>" = "マウス カーソルが移動したときに短時間表示され、その後非表示になります。<br><br><dolphin_emphasis>よく分からなければ、このモードを選択してください。</dolphin_emphasis>";
-"Hides the mouse cursor whenever it is inside the render window and the render window is focused.<br><br><dolphin_emphasis>If unsure, select quot;On Movementquot;.</dolphin_emphasis>" = "マウス カーソルがレンダリング ウィンドウ内にあり、レンダリング ウィンドウにフォーカスがある場合は、マウス カーソルを非表示にします。<br><br><dolphin_emphasis>よく分からなければ、quot;移動中のみ表示quot;を選択してください。</dolphin_emphasis>";
-"Shows the mouse cursor at all times.<br><br><dolphin_emphasis>If unsure, select quot;On Movementquot;.</dolphin_emphasis>" = "マウス カーソルを常に表示します。<br><br><dolphin_emphasis>よく分からなければ、quot;移動中のみ表示quot;を選択してください。</dolphin_emphasis>";
+"Hides the mouse cursor whenever it is inside the render window and the render window is focused.<br><br><dolphin_emphasis>If unsure, select quot;On Movementquot;.</dolphin_emphasis>" = "マウス カーソルがレンダリング ウィンドウ内にあり、レンダリング ウィンドウにフォーカスがある場合は、マウス カーソルを非表示にします。<br><br><dolphin_emphasis>よく分からなければ、quot;操作時のみ表示quot;を選択してください。</dolphin_emphasis>";
+"Shows the mouse cursor at all times.<br><br><dolphin_emphasis>If unsure, select quot;On Movementquot;.</dolphin_emphasis>" = "マウス カーソルを常に表示します。<br><br><dolphin_emphasis>よく分からなければ、quot;操作時のみ表示quot;を選択してください。</dolphin_emphasis>";
 "Sets the style of Dolphin's user interface. Any custom styles that you have added will be presented here, allowing you to switch to them.<br><br><dolphin_emphasis>If unsure, select (System).</dolphin_emphasis>" = "Dolphin のユーザー インターフェイスのスタイルを設定します。追加したカスタム スタイルはすべてここに表示され、切り替えることができます。<br><br><dolphin_emphasis>よく分からなければ、(システム) を選択してください。</dolphin_emphasis>";
+"Show Messages" = "メッセージを表示";
+"Font Size" = "Font Size";
+"Performance Statistics" = "パフォーマンスステータス";
+"Show FPS" = "FPS を表示する";
+"Show Frame Times" = "フレームタイムを表示する";
+"Show VPS" = "VPS を表示する";
+"Show VBlank Times" = "垂直ブランキング期間 (VBlank) 時間を表示";
+"Show % Speed" = "% 速度を表示する";
+"Show Performance Graphs" = "パフォーマンスグラフを表示する";
+"Show Speed Colors" = "スピードカラーを表示";
+"Performance Sample Window (ms)" = "パフォーマンス サンプル ウィンドウ (ミリ秒)";
+"Movie Window" = "Movie Window";
+"Show Movie Window" = "Show Movie Window";
+"Show Rerecord Counter" = "再記録カウンターを表示";
+"Show Lag Counter" = "ラグカウンタを表示";
+"Show Frame Counter" = "フレームカウンタを表示";
+"Show Input Display" = "入力された操作を表示する";
+"Show System Clock" = "システム時間を表示";
+"Netplay" = "Netplay";
+"Show NetPlay Ping" = "ネットプレイ：Ping表示";
+"Show NetPlay Chat" = "Show NetPlay Chat";
+"Show Statistics" = "統計情報を表示する";
+"Show Projection Statistics" = "Show Projection Statistics";
+"Show XFB Resolution" = "Show XFB Resolution";
+"Shows on-screen display messages over the render window. These messages disappear after several seconds.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "レンダリングウィンドウの上にオンスクリーンディスプレイメッセージを表示します。これらのメッセージは数秒後に消えます。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
+"Changes the font size of the On-Screen Display. Affects features such as performance statistics, frame counter, and netplay chat.<br><br>The font can be changed by placing a TTF font file into Dolphin's User/Load folder, and renaming it OSD_Font.ttf.<br><br><dolphin_emphasis>If unsure, leave this at 13.</dolphin_emphasis>" = "オンスクリーンディスプレイのフォントサイズを変更します。パフォーマンス統計、フレームカウンター、ネットプレイチャットなどの機能に影響します。<br><br>フォントを変更するには、TTFフォントファイルをDolphinのUser/Loadフォルダに配置し、OSD_Font.ttfに名前を変更してください。<br><br><dolphin_emphasis>よく分からなければ、、13のままにしておいてください。</dolphin_emphasis>";
+"Shows the number of distinct frames rendered per second as a measure of visual smoothness.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "視覚的な滑らかさの指標として、1秒間にレンダリングされるフレームの数を示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
+"Shows the average time in ms between each distinct rendered frame alongside the standard deviation.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "レンダリングされた各フレーム間の平均時間（ms）と標準偏差を表示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
+"Shows the number of frames rendered per second as a measure of emulation speed.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "エミュレーション速度の指標として、画面上に毎秒レンダリングされたフレーム数を表示します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Shows the average time in ms between each rendered frame alongside the standard deviation.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "各レンダリングフレーム間の平均時間（ms）と標準偏差を表示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
+"Shows frametime graph along with statistics as a representation of emulation performance.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "エミュレーションパフォーマンスを表す統計情報とともにフレームタイムグラフを表示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
+"Shows the % speed of emulation compared to full speed.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "フルスピードと比較したエミュレーションの % 速度を示します。<br><br><dolphin_emphasis>分からない場合はチェックを外してください。</dolphin_emphasis>";
+"Changes the color of the FPS counter depending on emulation speed.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "エミュレーション速度に応じてFPSカウンターの色を変更します。<br><br><dolphin_emphasis> よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
+"The amount of time the FPS and VPS counters will sample over.<br><br>The higher the value, the more stable the FPS/VPS counter will be, but the slower it will be to update.<br><br><dolphin_emphasis>If unsure, leave this at 1000ms.</dolphin_emphasis>" = "FPS カウンターと VPS カウンターがサンプリングされる時間。<br><br>値が大きいほどFPS/VPSカウンターは安定しますが、更新が遅くなります。<br><br><dolphin_emphasis>分からない場合は、1000msのままにしてください。</dolphin_emphasis>";
+"Shows the player's maximum ping while playing on NetPlay.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ネットプレイ中に各プレイヤーのPing最大値を表示します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Shows chat messages, buffer changes, and desync alerts while playing NetPlay.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "ネットプレイ中、チャットメッセージ/バッファ変更/Desync警告などのメッセージを画面に表示します。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Shows a window that can be filled with information related to movie recordings. The other options in this group determine what appears in the window. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows a window that can be filled with information related to movie recordings. The other options in this group determine what appears in the window. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Shows how many times the input recording has been overwritten by using savestates.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows how many times the input recording has been overwritten by using savestates.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Shows how many frames have occurred without controller inputs being checked. Resets to 1 when inputs are processed. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows how many frames have occurred without controller inputs being checked. Resets to 1 when inputs are processed. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Shows how many frames have passed. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows how many frames have passed. <br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Shows the controls currently being input.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows the controls currently being input.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Shows current system time.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows current system time.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Shows various rendering statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows various rendering statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Shows various projection statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows various projection statistics.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Shows the size of the emulated external frame buffer (XFB) in pixels, as a product of width and height.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Shows the size of the emulated external frame buffer (XFB) in pixels, as a product of width and height.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
 "Select a Game" = "ディスクドライブチャンネルに表示するゲームを選択";
 "Select Wii NAND Root" = "Wii NANDルート";
 "Select Dump Path" = "ダンプ先を選択";
@@ -3081,15 +3205,14 @@ is either corrupted or not a GameCube memory card file.
 "Load Path" = "ロードパス";
 "Resource Pack Path" = "リソースパックの場所";
 "WFS Path" = "WFS パス";
-"Add New USB Device" = "USBデバイスを追加";
+"IP Address Redirections" = "IP Address Redirections";
+"Emulated" = "Emulated";
+"Real" = "Real";
+"Select" = "Select";
 "Enter USB device ID" = "デバイス（ハードウェア）IDを入力";
 "or select a device" = "もしくは下の一覧から選択";
 "Device VID" = "Device VID";
 "Device PID" = "Device PID";
-"USB Whitelist Error" = "USB ホワイトリストエラー";
-"The entered VID is invalid." = "入力されたデバイス VIDは無効です。";
-"The entered PID is invalid." = "入力されたデバイス PIDは無効です。";
-"This USB device is already whitelisted." = "このデバイスは既に登録済みです。";
 "64 MiB" = "64 MiB";
 "128 MiB" = "128 MiB";
 "256 MiB" = "256 MiB";
@@ -3137,10 +3260,11 @@ WiiLinkは、ForecastやNintendoチャンネルなど、廃止されたWiiConnec
 "Whitelisted USB Passthrough Devices" = "常にパススルーを行うUSBデバイスリスト";
 "Wii Remote Settings" = "Wiiリモコンの設定";
 "Sensor Bar Position" = "センサーバーの位置";
-"Top" = "上";
-"Bottom" = "下";
 "IR Sensitivity" = "Wiiリモコンの感度";
 "Speaker Volume" = "リモコンスピーカー音量";
+"Add New USB Device" = "USBデバイスを追加";
+"USB Whitelist Error" = "USB ホワイトリストエラー";
+"This USB device is already whitelisted." = "このデバイスは既に登録済みです。";
 "Select SD Card Image" = "SDカードイメージの選択";
 "SD Card Image (*.raw);;All Files (*)" = "SDカードファイル (*.raw);; すべてのファイル (*)";
 "Select a Folder to Sync with the SD Card Image" = "SDカードイメージと同期するフォルダを選択";
@@ -3401,6 +3525,7 @@ This can take a while." = "次のタイトルを更新中... %1
 "Expected + or closing paren." = "必要 + または閉じカッコ。";
 "Tokenizing failed." = "トークン化に失敗しました。";
 "No profiles found for game setting '{0}'" = "ゲーム設定 '{0}' のプロファイルが見つかりません";
+"A Dolphin update is already scheduled for the next time it closes." = "A Dolphin update is already scheduled for the next time it closes.";
 "Unable to contact update server." = "アップデートサーバーに接続できません。";
 "Invalid JSON received from auto-update service : {0}" = "自動更新サービスから無効な JSON を受信しました: {0}";
 "You are running the latest version available on this update track." = "最新バージョンを使用しているようです";
@@ -3488,9 +3613,10 @@ Do you really want to enable software rendering? If unsure, select 'No'." = "Sof
 デバッグ用途としてのみ有用なものです。
 本当に使用しますか？よく分からなければ、選択しないでください。";
 "Vulkan" = "Vulkan";
+"You are attempting to use the Vulkan backend on an unsupported operating system. To prevent visual glitches and artifacts, please use the Metal backend or update to macOS Sonoma 14 or newer." = "You are attempting to use the Vulkan backend on an unsupported operating system. To prevent visual glitches and artifacts, please use the Metal backend or update to macOS Sonoma 14 or newer.";
 "Please change the \"SyncOnSkipIdle\" setting to \"True\"! It's currently disabled, which makes this problem very likely to happen." = "「SyncOnSkipIdle」設定を「True」に変更してください。現在無効になっているため、この問題が発生する確率が非常に高くなります。";
 "This error is usually caused by the emulated GPU desyncing with the emulated CPU. Turn off the \"Dual Core\" setting to avoid this." = "このエラーは通常、エミュレートされたGPUがエミュレートされたCPUと同期しないために発生します。これを避けるには、\"Dual Core \"設定をオフにしてください。";
-"This error is usually caused by the emulated GPU desyncing with the emulated CPU, but your current settings make this unlikely to happen. If this error is stopping the game from working, please report it to the developers." = "このエラーは通常、エミュレートされた GPU がエミュレートされた CPU と同期していないことが原因で発生しますが、現在の設定ではこのエラーが発生する可能性は小さいです。このエラーによりゲームが動作しなくなる場合は、開発者に報告してください。";
+"This error is usually caused by the emulated GPU desyncing with the emulated CPU, but your current settings make this unlikely to happen. The error may also be caused by a game bug." = "This error is usually caused by the emulated GPU desyncing with the emulated CPU, but your current settings make this unlikely to happen. The error may also be caused by a game bug.";
 "GFX FIFO: Unknown Opcode ({0:#04x} @ {1}, preprocess={2}).
 
 {3}
@@ -3509,14 +3635,46 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Yes to All" = "すべてはい";
 "No to All" = "すべていいえ";
 "Discard" = "廃棄";
-"Apply" = "適用";
 "Restore Defaults" = "デフォルトの復元";
-"All" = "すべて";
+"Toggle Crop" = "クロッピング 切替";
+"Error: GBA{0} failed to open the BIOS in {1}" = "エラー: GBA{0} は {1} で BIOS を開けませんでした";
+"Error: GBA{0} failed to load the BIOS in {1}" = "エラー: GBA{0} が {1} のBIOSのロードに失敗しました";
+"Wii data is not public yet" = "Wii data is not public yet";
+"Failed to connect to Redump.org" = "Redump.org に接続できませんでした";
+"Failed to parse Redump.org data" = "Redump.orgデータの解析に失敗しました。";
+"This is a good dump according to Redump.org, but Dolphin has found problems. This might be a bug in Dolphin." = "Redump.org によると、これは正常なダンプですが、Dolphinで不具合があることが判明しています。これはDolphinのバグかもしれません。";
+"Add New DSU Server" = "DSU Serverの追加";
+"DSU protocol enables the use of input and motion data from compatible sources, like PlayStation, Nintendo Switch and Steam controllers.<br><br>For setup instructions, <a href=\"https://wiki.dolphin-emu.org/index.php?title=DSU_Client\">refer to this page</a>." = "PlayStationやNintendo Switch、Steamコントローラーなど、互換性のある入力デバイスからボタン入力やモーションデータを取得して使用します。<br><br>詳しいセットアップ方法については <a href=\"https://wiki.dolphin-emu.org/index.php?title=DSU_Client\">こちらのページを参照してください</a>";
+"Presets" = "プリセット";
+"On" = "有効";
+"Dual Core" = "デュアルコア動作";
+"MMU" = "MMU";
+"Video" = "描画";
+"Failed to download codes." = "コードの取得に失敗しました";
+"Crops the picture from its native aspect ratio (which rarely exactly matches 4:3 or 16:9), to the specific user target aspect ratio (e.g. 4:3 or 16:9).<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "画像を本来のアスペクト比（4:3や16:9に正確にはほぼ一致しません）から、特定のユーザーがターゲットとするアスペクト比（4:3や16:9など）に切り取りします。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Enables detection of arbitrary mipmaps, which some games use for special distance-based effects.<br><br>May have false positives that result in blurry textures at increased internal resolution, such as in games that use very low resolution mipmaps. Disabling this can also reduce stutter in games that frequently load new textures.<br><br>This setting is disabled when GPU Texture Decoding is enabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "一部のゲームで特殊な距離ベースのエフェクトに使用される、任意のミップマップの検出を可能にします。<br><br>非常に低解像度のミップマップを使用するゲームなどでは、内部解像度が高くなるとテクスチャがぼやけるという誤検出が発生する可能性があります。この設定を無効にすると、新しいテクスチャを頻繁にロードするゲームのスタッターを減らすこともできます。<br><br>この設定はGPU Texture Decodingが有効な場合は、無効になります。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Show NetPlay Messages" = "ネットプレイ：OSD表示";
+"%1 doesn't support this feature on your system." = "%1 はあなたのシステム上でこの機能をサポートしていません";
+"Enables texture decoding using the GPU instead of the CPU.<br><br>This may result in performance gains in some scenarios, or on systems where the CPU is the bottleneck.<br><br>If this setting is enabled, Arbitrary Mipmap Detection will be disabled.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "CPU ではなく GPU を使用したテクスチャデコードを有効にします。<br><br>これにより、一部のシナリオや、CPU がボトルネックになっているシス テムでパフォーマンスが向上する可能性があります。<br><br>この設定を有効にすると、任意のミップマップ検出が無効になります。<br><br><dolphin_emphasis>よく分からなければ、チェックを入れないでください。</dolphin_emphasis>";
+"Disables bounding box emulation.<br><br>This may improve GPU performance significantly, but some games will break.<br><br><dolphin_emphasis>If unsure, leave this checked.</dolphin_emphasis>" = "バウンディングボックスのエミュレーションを無効にします。<br><br>GPU性能が大きく向上しますが、タイトルによっては不具合が発生します。<br><br><dolphin_emphasis>よく分からなければ、チェックを外さないでください。</dolphin_emphasis>";
+"Triforce ID" = "Triforce ID";
+"Redump.org Status" = "Redump.orgのステータス";
+"Note" = "Note";
+"Edit %1" = "Edit %1";
+"%1 name" = "%1 name";
+"All Save States (*.sav *.s##);; All Files (*)" = "全てのステートセーブファイル (*.sav *.s##);; 全てのファイル (*)";
+"Adjusts the amount of RAM in the emulated console.<br><br><b>WARNING</b>: Enabling this will completely break many games.<br>Only a small number of games can benefit from this.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>" = "Adjusts the amount of RAM in the emulated console.<br><br><b>WARNING</b>: Enabling this will completely break many games.<br>Only a small number of games can benefit from this.<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>";
+"Run GBA Cores in Dedicated Threads" = "GBAコアを専用のスレッドで実行する";
+"The filename %1 does not conform to Dolphin's region code format for memory cards. Please rename this file to either %2, %3, or %4, matching the region of the save files that are on it." = "ファイル名 %1 はDolphinのメモリーカード用リージョンコード形式に準拠していません。このファイル名を %2、 %3、 %4 のいずれかに変更してください。";
+"The folder %1 does not conform to Dolphin's region code format for GCI folders. Please rename this folder to either %2, %3, or %4, matching the region of the save files that are in it." = "フォルダ %1 は Dolphin の GCI フォルダのリージョンコード形式に準拠していません。このフォルダの名前を %2、 %3、 %4 のいずれかに変更してください。";
+"Show On-Screen Display Messages" = "OSDを表示する";
+"The entered VID is invalid." = "入力されたデバイス VIDは無効です。";
+"The entered PID is invalid." = "入力されたデバイス PIDは無効です。";
+"This error is usually caused by the emulated GPU desyncing with the emulated CPU, but your current settings make this unlikely to happen. If this error is stopping the game from working, please report it to the developers." = "このエラーは通常、エミュレートされた GPU がエミュレートされた CPU と同期していないことが原因で発生しますが、現在の設定ではこのエラーが発生する可能性は小さいです。このエラーによりゲームが動作しなくなる場合は、開発者に報告してください。";
 "WiiWare" = "Wiiウェア";
 "games" = "ゲーム";
 "selected" = "件選択中";
 "Done" = "完了";
-"Platform" = "プラットフォーム";
 "Platform: Auto" = "プラットフォーム: 自動";
 "Controller" = "コントローラー";
 "Controller: Auto" = "コントローラー: 自動";
