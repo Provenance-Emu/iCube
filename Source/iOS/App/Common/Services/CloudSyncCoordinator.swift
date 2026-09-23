@@ -101,6 +101,18 @@ final class CloudSyncCoordinator: ObservableObject {
     /// iCube has no ORM and this is not worth inventing one for.
     private var metadataCache: [String: SyncableFileMetadata] = [:]
 
+    /// When a sync run last actually completed (successfully or not). `nil`
+    /// until the first run finishes.
+    ///
+    /// `refreshStatistics()` is called from `runSync` right after the local
+    /// scan — before the availability/remote checks — so the settings pane can
+    /// show real per-category counts on a build with no container at all. That
+    /// call must not stamp "now" as the sync date, or the footer would read
+    /// "Last Synced: just now" on the same screen that says "iCloud sync is not
+    /// available in this build yet." Only the trigger that runs a call site
+    /// which reaches the end of `runSync` moves this forward.
+    private var lastSyncCompletionDate: Date?
+
     private init() {
         let enabled = UserDefaults.standard.bool(forKey: PreferenceKey.enabled)
         self.isEnabled = enabled
@@ -256,12 +268,20 @@ final class CloudSyncCoordinator: ObservableObject {
         metadataCache.removeAll()
         pendingConflicts.removeAll()
         statistics = SyncStatistics()
+        lastSyncCompletionDate = nil
+        lastError = nil
     }
 
     // MARK: - The sync run
 
     private func runSync(trigger: SyncTrigger) async {
         guard let scanner, let provider else { return }
+
+        // A fresh trigger gets a fresh chance to report cleanly. Without this,
+        // one transient fetch failure leaves red error text in the status
+        // footer for the rest of the session, even after a later run succeeds
+        // without incident — nothing else on the success path clears it.
+        lastError = nil
 
         // Scan first, and unconditionally. The local inventory is the half that
         // does not need a cloud, so the settings pane can show what *would*
@@ -317,6 +337,7 @@ final class CloudSyncCoordinator: ObservableObject {
             }
         }
 
+        lastSyncCompletionDate = Date()
         refreshStatistics()
         addEvent(.success, message: "Sync completed (\(trigger.rawValue))")
     }
@@ -500,7 +521,7 @@ final class CloudSyncCoordinator: ObservableObject {
         statistics = SyncStatistics.summarize(
             metadataCache.values,
             conflictCount: pendingConflicts.count,
-            lastSyncDate: Date()
+            lastSyncDate: lastSyncCompletionDate
         )
     }
 
