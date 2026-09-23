@@ -1,0 +1,25 @@
+# fly.io deployment config. Adjust `app` before first `fly launch`/`fly deploy`.
+app = "discord-issue-bridge"
+primary_region = "iad"
+
+[build]
+
+[env]
+  STORE_PATH = "/data/store.json"
+  GITHUB_REPO = "Provenance-Emu/iCube"
+  DRY_RUN = "false"
+
+# Secrets (set with `fly secrets set`, never here):
+#   DISCORD_BOT_TOKEN, GITHUB_TOKEN, and optionally CHANNEL_MAP
+
+[[mounts]]
+  source = "discord_issue_bridge_data"
+  destination = "/data"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
+
+# This bot only makes outbound connections (Discord gateway, GitHub REST) --
+# no inbound HTTP service is required, so no [[services]] block.

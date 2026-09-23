@@ -1,0 +1,19 @@
+{
+  "name": "discord-issue-bridge",
+  "version": "1.0.0",
+  "description": "Mirrors Discord bug reports from mapped channels/forums into GitHub issues.",
+  "type": "module",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20",
+    "discord.js": "^14"
+  }
+}

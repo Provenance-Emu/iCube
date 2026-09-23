@@ -1,0 +1,17 @@
+services:
+  discord-issue-bridge:
+    build: .
+    restart: unless-stopped
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?set DISCORD_BOT_TOKEN in your .env}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?set GITHUB_TOKEN in your .env}
+      GITHUB_REPO: ${GITHUB_REPO:-Provenance-Emu/iCube}
+      CHANNEL_MAP: ${CHANNEL_MAP:-}
+      STORE_PATH: /data/store.json
+      DRY_RUN: ${DRY_RUN:-false}
+      IGNORE_PREFIX: ${IGNORE_PREFIX:-!}
+    volumes:
+      - discord-issue-bridge-data:/data
+
+volumes:
+  discord-issue-bridge-data:
