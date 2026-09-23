@@ -952,10 +952,114 @@ static CIRDispClass CIR_ClassifyOp(u32 op)
   }
 }
 
+// iCube: PER-OPCODE FP/PS CENSUS (Target B). The DISPATCH CLASS DENSITY table above buckets by the raw
+// opcode word and calls every FP/PS op "GENERIC (2-call)". That label is WRONG on the shipping config and
+// the error is large: the direct-pointer load/store path (MAIN_CIR_PIC_LOADSTORE, default **true**) is
+// emitted FIRST at the emit site and supersedes specialization, and CI_ClassifyLoadStore covers primary
+// 48-55 (lfs/lfd/stfs/stfd +u) and 56/57/60/61 + primary-4 indexed (psq_l/psq_st +u/+x). So FP and psq
+// LOAD/STORES already take a single direct call, not the generic trampoline. Only FP arithmetic
+// (primary 59/63) and paired-single ARITHMETIC (primary 4 non-psq) are genuinely generic, and only while
+// s_specialized_fp_arith is off.
+//
+// This census resolves each walked instruction to the SAME handler the emit site uses
+// (Interpreter::GetInterpreterOp) and mirrors the emit-site precedence exactly:
+//   1. PIC   — direct-pointer load/store fast path wins first (needs !canEndBlock)
+//   2. SPEC  — IsSpecializedOp + that op's own gating flag (the four whitelists are disjoint)
+//   3. GEN   — the generic Interpret<> trampoline, i.e. the real 2-call tax
+// so the output says what the emitter ACTUALLY did, per opcode, weighted by dynamic run count.
+//
+// ASSUMPTION, stated in the report: the PIC verdict uses the load_store_fast value captured from the last
+// DoJit (s_report_ls_fast). That already folds in !jo.memcheck / !m_enable_dcache / msr.DR, so it is the
+// real value rather than an inference, but it is the LAST block compiled, not a per-block record.
+enum class CIRDispatchPath
+{
+  Pic,
+  Specialized,
+  Generic
+};
+static const char* CIR_DispatchPathName(CIRDispatchPath p)
+{
+  switch (p)
+  {
+  case CIRDispatchPath::Pic:         return "PIC-direct";
+  case CIRDispatchPath::Specialized: return "specialized";
+  default:                           return "GENERIC-2call";
+  }
+}
+
+// Captured in DoJit (compile-time, cold) so the report can tell PIC-eligible from not without guessing.
+static bool s_report_ls_fast = false;
+
+// Hoisted above the census (definition of CI_ClassifyLoadStore stays at its original site, further
+// down): the census must ask the SAME question the emit site asks, so it calls that function rather
+// than re-deriving PIC coverage from primary opcodes, which would silently drift from it.
+struct CI_LoadStoreForm
+{
+  CIMemKind kind;
+  bool indexed;
+  bool update;
+};
+std::optional<CI_LoadStoreForm> CI_ClassifyLoadStore(UGeckoInstruction inst);
+
+struct CIRCensusRow
+{
+  const char* name;
+  CIRDispatchPath path;
+  CIRDispClass cls;
+  u64 runs;
+};
+// Small fixed table keyed by (primary, subop) — FP/PS opcode space is tiny and this is report-time only.
+struct CIRCensus
+{
+  static constexpr u32 kMax = 96;
+  CIRCensusRow rows[kMax];
+  u32 count = 0;
+  u64 total_fp_ps = 0;
+  void Add(const char* name, CIRDispatchPath path, CIRDispClass cls, u64 runs)
+  {
+    total_fp_ps += runs;
+    for (u32 i = 0; i < count; ++i)
+    {
+      if (rows[i].name == name || (rows[i].name && name && std::strcmp(rows[i].name, name) == 0))
+      {
+        rows[i].runs += runs;
+        return;
+      }
+    }
+    if (count < kMax)
+      rows[count++] = CIRCensusRow{name, path, cls, runs};
+  }
+};
+
+// Resolve one instruction word to the path the emit site would have chosen for it.
+static CIRDispatchPath CIR_ResolveDispatchPath(UGeckoInstruction inst, u32 pc)
+{
+  const GekkoOPInfo* info = PPCTables::GetOpInfo(inst, pc);
+  const bool can_end_block = info != nullptr && (info->type == OpType::Branch ||
+                                                 (info->flags & FL_ENDBLOCK) != 0);
+  if (s_report_ls_fast && !can_end_block && CI_ClassifyLoadStore(inst).has_value())
+    return CIRDispatchPath::Pic;
+  const auto func = Interpreter::GetInterpreterOp(inst);
+  if (IsSpecializedOp(func))
+  {
+    const bool gated_on = IsFpLsSpecializedOp(func) ?
+                              s_specialized_fp_ls :
+                              (IsPsqSpecializedOp(func) ?
+                                   s_specialized_psq :
+                                   (IsFpArithSpecializedOp(func) ? s_specialized_fp_arith :
+                                                                   s_specialized_ops));
+    if (gated_on)
+      return CIRDispatchPath::Specialized;
+  }
+  return CIRDispatchPath::Generic;
+}
+
 // iCube: walk one profiled block from entry_pc (stopping after the first block-terminator, same shape as
 // CIR_AppendBlockDisasm) and add `runs` to the per-class instruction-execution tally for each instruction.
 // Report-time only; bounded by kMaxInsts. Unreadable words end the walk (rest of the block is gone).
-static void CIR_AccumulateBlockClasses(u32 entry_pc, u64 runs, u64* class_runs, u64* total_runs)
+// `census`, when non-null, additionally tallies every FP/PS instruction by exact opcode and actual path.
+static void CIR_AccumulateBlockClasses(u32 entry_pc, u64 runs, u64* class_runs, u64* total_runs,
+                                       CIRCensus* census = nullptr)
 {
   constexpr u32 kMaxInsts = 32;
   u32 addr = entry_pc;
@@ -967,6 +1071,15 @@ static void CIR_AccumulateBlockClasses(u32 entry_pc, u64 runs, u64* class_runs, 
     const CIRDispClass c = CIR_ClassifyOp(op);
     class_runs[static_cast<int>(c)] += runs;
     *total_runs += runs;
+    if (census != nullptr &&
+        (c == CIRDispClass::FpLoadStore || c == CIRDispClass::FpArith ||
+         c == CIRDispClass::PairedSingle))
+    {
+      const UGeckoInstruction inst{op};
+      const GekkoOPInfo* info = PPCTables::GetOpInfo(inst, addr);
+      const char* name = (info != nullptr && info->opname != nullptr) ? info->opname : "<unknown>";
+      census->Add(name, CIR_ResolveDispatchPath(inst, addr), c, runs);
+    }
     if (CIR_IsBlockTerminator(op))
       break;
   }
@@ -1063,8 +1176,10 @@ std::string BuildHotBlocksReport(u32 top_n)
   {
     u64 class_runs[static_cast<int>(CIRDispClass::COUNT)] = {};
     u64 total_runs = 0;
+    static CIRCensus census;  // report-time only; reset per report
+    census = CIRCensus{};
     for (const auto& e : entries)
-      CIR_AccumulateBlockClasses(e.pc, e.runs, class_runs, &total_runs);
+      CIR_AccumulateBlockClasses(e.pc, e.runs, class_runs, &total_runs, &census);
     if (total_runs != 0)
     {
       out << "  -- DISPATCH CLASS DENSITY (dynamic, run-count weighted) --\n";
@@ -1086,6 +1201,56 @@ std::string BuildHotBlocksReport(u32 top_n)
                "     GENERIC FP+PS (2-call tax, specialization/fusion candidates): %.1f%%\n",
                generic_pct);
       out << sum;
+
+      // iCube: PER-OPCODE FP/PS CENSUS (Target B). The line above is a STATIC bucket and overstates the
+      // real 2-call tax — see CIR_ResolveDispatchPath. This table is the authoritative version: every
+      // FP/PS opcode the game actually executed, with the path the emitter actually chose for it.
+      out << "  -- FP/PS PER-OPCODE CENSUS (dynamic, run-count weighted) --\n";
+      {
+        char fl[192];
+        snprintf(fl, sizeof(fl),
+                 "     flags: pic_loadstore=%d spec_ops=%d spec_fp_ls=%d spec_psq=%d "
+                 "spec_fp_arith=%d (ls_fast=%d)\n",
+                 s_pic_loadstore ? 1 : 0, s_specialized_ops ? 1 : 0, s_specialized_fp_ls ? 1 : 0,
+                 s_specialized_psq ? 1 : 0, s_specialized_fp_arith ? 1 : 0, s_report_ls_fast ? 1 : 0);
+        out << fl;
+      }
+      // Sort by runs, descending (insertion sort; the table is tiny).
+      for (u32 i = 1; i < census.count; ++i)
+      {
+        CIRCensusRow key = census.rows[i];
+        int j = static_cast<int>(i) - 1;
+        while (j >= 0 && census.rows[j].runs < key.runs)
+        {
+          census.rows[j + 1] = census.rows[j];
+          --j;
+        }
+        census.rows[j + 1] = key;
+      }
+      u64 path_runs[3] = {};
+      out << "     opcode           path            runs           %all   class\n";
+      for (u32 i = 0; i < census.count; ++i)
+      {
+        const CIRCensusRow& r = census.rows[i];
+        path_runs[static_cast<int>(r.path)] += r.runs;
+        char line[160];
+        snprintf(line, sizeof(line), "     %-16s %-14s %14llu  %5.2f%%  %s\n", r.name,
+                 CIR_DispatchPathName(r.path), static_cast<unsigned long long>(r.runs),
+                 100.0 * static_cast<double>(r.runs) / static_cast<double>(total_runs),
+                 CIR_DispClassName(r.cls));
+        out << line;
+      }
+      char tot[224];
+      snprintf(tot, sizeof(tot),
+               "     TOTALS  PIC-direct %.2f%%  specialized %.2f%%  GENERIC-2call %.2f%%  "
+               "(of all executed instructions)\n",
+               100.0 * static_cast<double>(path_runs[0]) / static_cast<double>(total_runs),
+               100.0 * static_cast<double>(path_runs[1]) / static_cast<double>(total_runs),
+               100.0 * static_cast<double>(path_runs[2]) / static_cast<double>(total_runs));
+      out << tot;
+      out << "     ^ GENERIC-2call is the ONLY bucket specialization can still remove. An opcode that is\n"
+             "       GENERIC while its whitelist flag is off is a FLAG FLIP, not new code; one that is\n"
+             "       GENERIC with the flag ON is genuinely missing from the whitelists.\n";
     }
   }
 
@@ -1348,13 +1513,6 @@ static CacheLoopMatch RecognizeCacheLoop(const PPCAnalyst::CodeOp* code, u32 num
 // for it (dcbz excepted, see LoadStoreFast).
 namespace
 {
-struct CI_LoadStoreForm
-{
-  CIMemKind kind;
-  bool indexed;
-  bool update;
-};
-
 std::optional<CI_LoadStoreForm> CI_ClassifyLoadStore(UGeckoInstruction inst)
 {
   std::optional<CI_LoadStoreForm> form;
@@ -5357,6 +5515,9 @@ bool CachedInterpreter::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
   // must be observed (memchecks / MMU mode) or routed through the emulated d-cache.
   const bool load_store_fast = s_pic_loadstore && !jo.memcheck && !m_ppc_state.m_enable_dcache &&
                                m_ppc_state.msr.DR;
+  // iCube: captured for the report-time FP/PS census so it can tell PIC-eligible from not without
+  // re-deriving jo/msr state it cannot see. Compile-time (cold), one bool store per block.
+  s_report_ls_fast = load_store_fast;
   // MMU-mode titles set jo.memcheck only so faults are delivered; the direct path is still exact for
   // BAT-mapped pages. Watchpoints and pause-on-panic need every access observed, so they keep it off.
   const bool load_store_fast_mmu = s_pic_loadstore && jo.memcheck && m_system.IsMMUMode() &&
