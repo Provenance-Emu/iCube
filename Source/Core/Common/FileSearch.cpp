@@ -47,9 +47,19 @@ std::vector<std::string> DoFileSearch(std::span<const std::string_view> director
     });
   };
 
+  // iCube: Finder writes an AppleDouble "._<name>" sidecar next to every file it copies over
+  // WebDAV. It carries the same extension as the game, so it matched here and the library
+  // listed (and booted) it as a second copy of the title. Never surface those.
+  auto is_apple_double_sidecar = [](const fs::path& path) {
+    const auto name = PathToString(path.filename());
+    return name.starts_with("._");
+  };
+
   std::vector<std::string> result;
   auto add_filtered = [&](const fs::directory_entry& entry) {
     auto& path = entry.path();
+    if (is_apple_double_sidecar(path))
+      return;
     if (accept_all || (!entry.is_directory() && ext_matches(path)))
       result.emplace_back(PathToString(path));
   };

@@ -1659,9 +1659,25 @@ final class ROMUploadServer: @unchecked Sendable {
                 finish(failure)
                 return
             }
+            if Self.isMetadataSidecar(target) {
+                // Finder insists on writing these and treats a refusal as a failed copy, so the
+                // PUT is accepted and the file dropped. Nothing announces it, so the library
+                // never rescans for it.
+                try? FileManager.default.removeItem(at: target)
+                finish(nil)
+                return
+            }
             self.postUploadCompleted(filePath: target.path)
             finish(nil)
         }
+    }
+
+    /// AppleDouble `._<name>` sidecars and `.DS_Store`: macOS metadata that the WebDAV client
+    /// writes alongside every real file. They carry the game's extension, so if they land in
+    /// the Software folder the library lists a second, unbootable copy of the title.
+    static func isMetadataSidecar(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        return name.hasPrefix("._") || name == ".DS_Store"
     }
 
     private func browserPutFinish(on connection: NWConnection, request: HTTPRequest) -> PutFinish {
@@ -2360,6 +2376,7 @@ final class ROMUploadServer: @unchecked Sendable {
     /// Post the upload-started notification using the SAME string the old
     /// GCDWebServer stack used, so existing observers keep working.
     private func postUploadStarted(path: String) {
+        if Self.isMetadataSidecar(URL(fileURLWithPath: path)) { return }
         NotificationCenter.default.post(
             name: Notification.Name(PVWebServerFileUploadStartedNotificationName),
             object: nil, userInfo: ["path": path]

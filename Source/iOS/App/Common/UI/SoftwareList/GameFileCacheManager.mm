@@ -29,10 +29,39 @@ static dispatch_queue_t GameFileCacheQueue() {
   return queue;
 }
 
+/// Delete AppleDouble "._<name>" sidecars anywhere under the Software folder. Finder writes
+/// one next to every file it copies over WebDAV (the target has no xattr support); they carry
+/// the game's extension, so builds before this listed and booted them as a second copy of the
+/// title ("IntCPU: Unknown instruction 00000000"). The scan now skips them, and this removes
+/// the ones users already imported. `.DS_Store` goes too. Nothing iCube uses lives in either.
+static void PurgeAppleDoubleSidecars(NSString* softwareFolder) {
+  NSFileManager* fm = [NSFileManager defaultManager];
+  NSDirectoryEnumerator<NSURL*>* e =
+      [fm enumeratorAtURL:[NSURL fileURLWithPath:softwareFolder]
+          includingPropertiesForKeys:@[ NSURLIsRegularFileKey ]
+                             options:0
+                        errorHandler:nil];
+  NSUInteger removed = 0;
+  for (NSURL* url in e) {
+    NSString* name = url.lastPathComponent;
+    if (![name hasPrefix:@"._"] && ![name isEqualToString:@".DS_Store"])
+      continue;
+    NSNumber* isRegular = nil;
+    [url getResourceValue:&isRegular forKey:NSURLIsRegularFileKey error:nil];
+    if (!isRegular.boolValue)
+      continue;
+    if ([fm removeItemAtURL:url error:nil])
+      removed++;
+  }
+  if (removed > 0)
+    NSLog(@"[GameFileCache] Removed %lu AppleDouble/.DS_Store sidecar(s) from the Software folder", (unsigned long)removed);
+}
+
 /// Extract orphaned archives in the Software folder before scanning so web uploads and
 /// stale `.7z`/`.zip` files are imported through the same pipeline as the document picker.
 static void ProcessOrphanedArchivesBeforeRescan(void) {
   NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
+  PurgeAppleDoubleSidecars(softwareFolder);
   DOLArchiveBatchImportResult* batch = [DOLZipImportHelper processOrphanedArchivesInFolder:softwareFolder];
   if (batch.archivesProcessed > 0) {
     NSLog(@"[ArchiveImport] Recovered %ld archive(s), imported %ld game(s), skipped %ld existing, %ld failed",
