@@ -78,3 +78,4 @@ __pycache__/
 .cache/clangd
 # Ignore CMake user presets
 CMakeUserPresets.json
+/Source/iOS/App/build-Xcode
