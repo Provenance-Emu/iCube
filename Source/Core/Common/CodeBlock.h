@@ -62,7 +62,14 @@ public:
     T::SetCodePtr(region, region + size);
   
 #ifdef IPHONEOS
-    writable_region_diff = Common::AllocateWritableRegionAndGetDiff(region, size);
+    // Only an executable region needs the RX/RW split. A non-executable block (the Cached
+    // Interpreter's record tape) is plain read-write memory; remapping it through the JIT's
+    // writable-alias machinery made the tape be written through one mapping and read through
+    // another, and on non-TXM devices under a debugger (LuckNoTXM) the two were not coherent:
+    // freshly emitted records read back as zeros and every new block became "IntCPU: Unknown
+    // instruction 00000000" at its first PC.
+    if constexpr (executable)
+      writable_region_diff = Common::AllocateWritableRegionAndGetDiff(region, size);
 #endif
 
     T::SetWritableRegionDiff(writable_region_diff);
@@ -80,12 +87,19 @@ public:
   void FreeCodeSpace()
   {
     ASSERT(!m_is_child);
+    if constexpr (executable)
+    {
 #ifdef IPHONEOS
-    Common::FreeWritableRegion(region, total_region_size, writable_region_diff);
-    Common::FreeExecutableMemory(region, total_region_size);
+      Common::FreeWritableRegion(region, total_region_size, writable_region_diff);
+      Common::FreeExecutableMemory(region, total_region_size);
 #else
-    Common::FreeMemoryPages(region, total_region_size);
+      Common::FreeMemoryPages(region, total_region_size);
 #endif
+    }
+    else
+    {
+      Common::FreeMemoryPages(region, total_region_size);
+    }
     region = nullptr;
     region_size = 0;
     total_region_size = 0;
