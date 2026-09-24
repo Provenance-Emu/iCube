@@ -345,7 +345,8 @@ let iCube = Target.target(
         .sdk(name: "CoreMotion", type: .framework, condition: .when([.ios, .catalyst])),
         // appex embed intentionally OFF (faithful to original; see APP_EMBEDS_APPEX note above).
     ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension")] : [])
-      + [.target(name: "iCubeTopShelf", condition: .when([.tvos]))],
+      + [.target(name: "iCubeTopShelf", condition: .when([.tvos]))]
+      + [.target(name: "iCubeThumbnail", condition: .when([.ios, .catalyst]))],
     settings: .settings(
         base: projectBase.merging([
             "ARCHS": "arm64",
@@ -566,6 +567,18 @@ let topShelf = extensionTarget(
     frameworks: []
 )
 
+let thumbnail = extensionTarget(
+    name: "iCubeThumbnail",
+    suffix: "thumbnail",
+    destinations: [.iPhone, .iPad, .macCatalyst],
+    deploymentTargets: .multiplatform(iOS: "17.0"),
+    infoPlist: .file(path: "../Extensions/iCubeThumbnail/Info.plist"),
+    sources: ["../Extensions/iCubeThumbnail/**/*.swift"],
+    resources: ["../Extensions/iCubeThumbnail/PrivacyInfo.xcprivacy"],
+    deviceFamily: "1,2",
+    frameworks: ["QuickLookThumbnailing"]
+)
+
 // MARK: - Schemes
 
 let appStoreEnvVars: [String: EnvironmentVariable] = [ : ]
@@ -653,6 +666,6 @@ let project = Project(
         configurations: projectConfigs,
         defaultSettings: .recommended
     ),
-    targets: [iCube, liveActivity, iCubeTests, topShelf],
+    targets: [iCube, liveActivity, iCubeTests, topShelf, thumbnail],
     schemes: schemes
 )
