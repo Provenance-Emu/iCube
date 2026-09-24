@@ -83,6 +83,7 @@ NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotif
   NSString* destinationPath = [softwareFolder stringByAppendingPathComponent:[sourcePath lastPathComponent]];
 
   NSFileManager* fileManager = [NSFileManager defaultManager];
+  [DOLImportStaging removeStaleStagedImportsInFolder:softwareFolder];
 
   // Archive imports: extract on a background queue so the UI stays responsive.
   // Security-scoped access must remain active for the duration of extraction.
@@ -142,40 +143,44 @@ NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotif
   
   UIAlertController* alert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Import") message:nil preferredStyle:UIAlertControllerStyleAlert];
 
+  // Both actions run the file operation OFF the main thread (a 1.4 GB copy on main is a
+  // watchdog-length hang), through DOLImportStaging (staged + size-verified, so an interrupted
+  // copy never leaves a truncated file under the real name), and inside a background task so
+  // leaving the app mid-copy does not suspend it half-written.
+  void (^runFileOperation)(NSString*, BOOL (^)(NSError**)) = ^(NSString* verb, BOOL (^operation)(NSError**)) {
+    UIBackgroundTaskIdentifier task = [DOLImportStaging beginBackgroundTask];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      NSError* error = nil;
+      const BOOL ok = operation(&error);
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [DOLImportStaging endBackgroundTask:task];
+        if (!ok) {
+          UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:[NSString stringWithFormat:@"The %@ operation failed.\n\n%@", verb, error.localizedDescription] preferredStyle:UIAlertControllerStyleAlert];
+          [errorAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
+            handler:^(UIAlertAction* action) {
+            finish();
+          }]];
+          [self presentViewControllerOnWindow:errorAlert];
+        } else {
+          [LibraryAddedDateStoreBridge recordPath:destinationPath];
+          finish();
+        }
+      });
+    });
+  };
+
   [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Copy") style:UIAlertActionStyleDefault
     handler:^(UIAlertAction* action) {
-    NSError* error = nil;
-    if (![fileManager copyItemAtPath:sourcePath toPath:destinationPath error:&error]) {
-      UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:[NSString stringWithFormat:@"The copy operation failed.\n\n%@", error.localizedDescription] preferredStyle:UIAlertControllerStyleAlert];
-      
-      [errorAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
-        handler:^(UIAlertAction* action) {
-        finish();
-      }]];
-      
-      [self presentViewControllerOnWindow:errorAlert];
-    } else {
-      [LibraryAddedDateStoreBridge recordPath:destinationPath];
-      finish();
-    }
+    runFileOperation(@"copy", ^BOOL(NSError** error) {
+      return [DOLImportStaging stagedCopyFromPath:sourcePath toPath:destinationPath error:error];
+    });
   }]];
   
   [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Move") style:UIAlertActionStyleDefault
     handler:^(UIAlertAction* action) {
-    NSError* error = nil;
-    if (![fileManager moveItemAtPath:sourcePath toPath:destinationPath error:&error]) {
-      UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:[NSString stringWithFormat:@"The move operation failed.\n\n%@", error.localizedDescription] preferredStyle:UIAlertControllerStyleAlert];
-      
-      [errorAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
-        handler:^(UIAlertAction* action) {
-        finish();
-      }]];
-      
-      [self presentViewControllerOnWindow:errorAlert];
-    } else {
-      [LibraryAddedDateStoreBridge recordPath:destinationPath];
-      finish();
-    }
+    runFileOperation(@"move", ^BOOL(NSError** error) {
+      return [DOLImportStaging stagedMoveFromPath:sourcePath toPath:destinationPath error:error];
+    });
   }]];
   
   [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Cancel") style:UIAlertActionStyleCancel

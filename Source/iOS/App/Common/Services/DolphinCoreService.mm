@@ -113,6 +113,11 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
   UICommon::Init();
 
+#if TARGET_OS_IOS
+  // Sweep `.importing` files left by an import that iOS killed mid-copy (see DOLImportStaging).
+  [DOLImportStaging removeStaleStagedImportsInFolder:[UserFolderUtil getSoftwareFolder]];
+#endif
+
   [[MsgAlertManager shared] registerHandler];
 
   Common::RegisterStringTranslator([](const char* text) {

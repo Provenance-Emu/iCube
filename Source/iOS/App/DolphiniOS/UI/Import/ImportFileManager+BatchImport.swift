@@ -1,9 +1,101 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#if os(iOS)
 import Foundation
 import UIKit
+
+/// Staged, verified writes into the library folder.
+///
+/// Why: `copyItem` straight to the final filename is not atomic. iOS killing the app mid-copy
+/// (memory pressure while a 1.4 GB image streams in, or a suspend in the background) leaves a
+/// truncated file under the REAL name, which the library then lists as a valid game and the
+/// title fails inside with "disc read error". Observed 2026-09-23 on an iPad mini 5: three images
+/// at 47-75 % of their size, all stamped one minute after a memory-warning termination. Copies now
+/// land in `<name>.importing` (not a library extension, so never listed), are size-checked
+/// against the source, and are renamed into place only when complete. Leftover `.importing` files
+/// from an interrupted run are swept on the next import and at launch.
+@objc(DOLImportStaging)
+public final class ImportStaging: NSObject {
+  public static let stagingSuffix = ".importing"
+
+  private static func size(ofPath path: String) -> Int64? {
+    (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value
+  }
+
+  private static func commit(staged: String, to destination: String, expectedSize: Int64?) throws {
+    let fm = FileManager.default
+    do {
+      if let expected = expectedSize, let got = size(ofPath: staged), got != expected {
+        throw NSError(domain: "DOLImportStaging", code: 1, userInfo: [
+          NSLocalizedDescriptionKey: "Incomplete copy: \(got) of \(expected) bytes"])
+      }
+      try fm.moveItem(atPath: staged, toPath: destination)
+    } catch {
+      try? fm.removeItem(atPath: staged)
+      throw error
+    }
+  }
+
+  /// Copy `source` to `destination` through a `.importing` sibling; the destination only ever
+  /// appears complete. Throws (and leaves nothing behind) on any failure.
+  @objc public static func stagedCopy(fromPath source: String, toPath destination: String) throws {
+    let fm = FileManager.default
+    let staged = destination + stagingSuffix
+    try? fm.removeItem(atPath: staged)
+    do {
+      try fm.copyItem(atPath: source, toPath: staged)
+    } catch {
+      try? fm.removeItem(atPath: staged)
+      throw error
+    }
+    try commit(staged: staged, to: destination, expectedSize: size(ofPath: source))
+  }
+
+  /// Move `source` to `destination` the same way. A same-volume move is a rename and completes
+  /// instantly; a cross-volume move is a copy + delete underneath, so it gets the same staging.
+  @objc public static func stagedMove(fromPath source: String, toPath destination: String) throws {
+    let fm = FileManager.default
+    let staged = destination + stagingSuffix
+    try? fm.removeItem(atPath: staged)
+    let expected = size(ofPath: source)
+    do {
+      try fm.moveItem(atPath: source, toPath: staged)
+    } catch {
+      try? fm.removeItem(atPath: staged)
+      throw error
+    }
+    try commit(staged: staged, to: destination, expectedSize: expected)
+  }
+
+  /// Delete `.importing` leftovers from an interrupted import. Returns how many were removed.
+  @objc @discardableResult
+  public static func removeStaleStagedImports(inFolder folder: String) -> Int {
+    let fm = FileManager.default
+    guard let names = try? fm.contentsOfDirectory(atPath: folder) else { return 0 }
+    var removed = 0
+    for name in names where name.hasSuffix(stagingSuffix) {
+      if (try? fm.removeItem(atPath: (folder as NSString).appendingPathComponent(name))) != nil {
+        removed += 1
+      }
+    }
+    if removed > 0 {
+      NSLog("[Import] removed %d interrupted import(s) from %@", removed, folder)
+    }
+    return removed
+  }
+
+  /// Keep the process alive while a long copy runs after the user leaves the app; without this a
+  /// background suspend turns into exactly the truncated file this type exists to prevent.
+  @objc public static func beginBackgroundTask() -> UIBackgroundTaskIdentifier {
+    UIApplication.shared.beginBackgroundTask(withName: "iCube.import", expirationHandler: nil)
+  }
+
+  @objc public static func endBackgroundTask(_ task: UIBackgroundTaskIdentifier) {
+    if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
+  }
+}
+
+#if os(iOS)
 
 /// Serializes archive extraction and file copies off the main thread.
 private actor ArchiveImportService {
@@ -47,7 +139,7 @@ private actor ArchiveImportService {
       }
 
       do {
-        try fm.copyItem(atPath: sourcePath, toPath: destinationPath)
+        try ImportStaging.stagedCopy(fromPath: sourcePath, toPath: destinationPath)
         LibraryAddedDateStore.record(path: destinationPath)
         outcome.importedGames += 1
       } catch {
@@ -97,9 +189,12 @@ public extension ImportFileManager {
     }
 
     let softwareFolder = UserFolderUtil.getSoftwareFolder()
+    ImportStaging.removeStaleStagedImports(inFolder: softwareFolder)
+    let backgroundTask = ImportStaging.beginBackgroundTask()
     let outcome = await Task.detached(priority: .userInitiated) {
       await ArchiveImportService.shared.importFiles(files, softwareFolder: softwareFolder)
     }.value
+    ImportStaging.endBackgroundTask(backgroundTask)
 
     for url in accessedURLs {
       url.stopAccessingSecurityScopedResource()
