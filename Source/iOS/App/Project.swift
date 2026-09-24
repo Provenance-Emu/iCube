@@ -346,7 +346,8 @@ let iCube = Target.target(
         // appex embed intentionally OFF (faithful to original; see APP_EMBEDS_APPEX note above).
     ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension")] : [])
       + [.target(name: "iCubeTopShelf", condition: .when([.tvos]))]
-      + [.target(name: "iCubeThumbnail", condition: .when([.ios, .catalyst]))],
+      + [.target(name: "iCubeThumbnail", condition: .when([.ios, .catalyst]))]
+      + [.target(name: "iCubeQuickLookPreview", condition: .when([.ios, .catalyst]))],
     settings: .settings(
         base: projectBase.merging([
             "ARCHS": "arm64",
@@ -579,6 +580,21 @@ let thumbnail = extensionTarget(
     frameworks: ["QuickLookThumbnailing"]
 )
 
+let preview = extensionTarget(
+    name: "iCubeQuickLookPreview",
+    suffix: "preview",
+    destinations: [.iPhone, .iPad, .macCatalyst],
+    deploymentTargets: .multiplatform(iOS: "17.0"),
+    infoPlist: .file(path: "../Extensions/iCubeQuickLookPreview/Info.plist"),
+    sources: [
+        "../Extensions/iCubeQuickLookPreview/**/*.swift",
+        "../Extensions/iCubeThumbnail/PlaceholderRenderer.swift",
+    ],
+    resources: ["../Extensions/iCubeQuickLookPreview/PrivacyInfo.xcprivacy"],
+    deviceFamily: "1,2",
+    frameworks: ["QuickLook"]
+)
+
 // MARK: - Schemes
 
 let appStoreEnvVars: [String: EnvironmentVariable] = [ : ]
@@ -666,6 +682,6 @@ let project = Project(
         configurations: projectConfigs,
         defaultSettings: .recommended
     ),
-    targets: [iCube, liveActivity, iCubeTests, topShelf, thumbnail],
+    targets: [iCube, liveActivity, iCubeTests, topShelf, thumbnail, preview],
     schemes: schemes
 )

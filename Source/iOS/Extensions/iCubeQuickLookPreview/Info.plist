@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>iCube Preview</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>QLSupportedContentTypes</key>
+			<array>
+				<string>me.oatmealdome.dolphinios.generic-software</string>
+				<string>me.oatmealdome.dolphinios.gamecube-software</string>
+				<string>me.oatmealdome.dolphinios.wii-software</string>
+				<string>me.oatmealdome.dolphinios.rvz-image</string>
+				<string>me.oatmealdome.dolphinios.wia-image</string>
+				<string>me.oatmealdome.dolphinios.nkit-image</string>
+				<string>public.iso-image</string>
+			</array>
+			<key>QLIsDataBasedPreview</key>
+			<true/>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.quicklook.preview</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).PreviewProvider</string>
+	</dict>
+</dict>
+</plist>
