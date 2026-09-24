@@ -14,5 +14,9 @@
     <array>
         <string>com.apple.activitykit</string>
     </array>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.joemattiello.icube</string>
+    </array>
 </dict>
 </plist>

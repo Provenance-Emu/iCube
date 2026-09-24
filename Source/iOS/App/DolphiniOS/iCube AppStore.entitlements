@@ -8,6 +8,10 @@
 	<true/>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.joemattiello.icube</string>
+	</array>
 	<key>com.apple.security.assets.movies.read-only</key>
 	<true/>
 	<key>com.apple.security.assets.music.read-only</key>
