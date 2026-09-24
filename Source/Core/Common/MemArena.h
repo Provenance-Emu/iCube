@@ -153,13 +153,12 @@ public:
   //             -> Plain (independent vm_allocate per region, no shared segment, no fastmem arena).
   // Sticky for the process.
   enum class DarwinMode { MachEntry, Remap, Plain };
-  static void SetDarwinMode(DarwinMode mode) { s_mode = mode; }
-  static DarwinMode GetDarwinMode() { return s_mode; }
+  // Out-of-line on purpose: the app and the core dylib must share ONE mode (an inline static gave
+  // each binary its own copy and the app-side self-test never left mach-entry mode).
+  static void SetDarwinMode(DarwinMode mode);
+  static DarwinMode GetDarwinMode();
   static const char* DarwinModeName();
-  static bool UsesPlainViews() { return s_mode == DarwinMode::Plain; }
-
-private:
-  static inline DarwinMode s_mode = DarwinMode::MachEntry;
+  static bool UsesPlainViews();
   vm_address_t m_shm_address = 0;
   vm_size_t m_shm_size = 0;
   mem_entry_name_port_t m_shm_entry = MACH_PORT_NULL;

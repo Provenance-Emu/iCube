@@ -13,6 +13,20 @@ namespace Common
 {
 MemArena::MemArena() = default;
 
+static MemArena::DarwinMode s_mode = MemArena::DarwinMode::MachEntry;
+void MemArena::SetDarwinMode(DarwinMode mode)
+{
+  s_mode = mode;
+}
+MemArena::DarwinMode MemArena::GetDarwinMode()
+{
+  return s_mode;
+}
+bool MemArena::UsesPlainViews()
+{
+  return s_mode == DarwinMode::Plain;
+}
+
 const char* MemArena::DarwinModeName()
 {
   switch (s_mode)
