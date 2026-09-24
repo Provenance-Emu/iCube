@@ -973,21 +973,27 @@ struct EmulationScreen: View {
           case .wii: return true
           }
         }()
-        TouchPadsContainer(forceVisible: true, isWii: isWiiToShow)
+        TouchPadsContainer(forceVisible: true, isWii: isWiiToShow, irMode: irModeRaw)
           .id(touchPadsRefreshToken)
           .ignoresSafeArea()
           .transition(.opacity)
           .onAppear {
-            TVEmulationBridge.setWiiIMUPointEnabled(false)
             // Ensure touch input is always a valid IR source
             TCDeviceMotion.shared.setMotionEnabled(true)
             TCDeviceMotion.shared.setPort(4)
             TCDeviceMotion.shared.statusBarOrientationChanged()
           }
-          .onDisappear {
-            TVEmulationBridge.setWiiIMUPointEnabled(true)
-          }
       }
+    }
+    // Single owner of the core's IMU pointer ("phone as Wii Remote"): ON only while the Wii
+    // touch overlay is hidden. While the overlay is visible the app drives IR itself (touch in
+    // drag/follow, device attitude in gyro mode). This used to be toggled from four places
+    // (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode, the long-press handler, and setup),
+    // and the overlay rebuild on a cursor-mode change could leave it ON with the pads visible,
+    // which reads as "changing Follow to Drag breaks the Wii controls".
+    .onChange(of: isTouchControlsActive) { active in
+      guard isWiiSystem else { return }
+      TVEmulationBridge.setWiiIMUPointEnabled(!active)
     }
     .modifier(SettingsNavigationFallback(showSettings: $showSettings))
     .fullScreenCover(isPresented: $showPauseMenu) {
@@ -1447,7 +1453,7 @@ struct EmulationScreen: View {
                   DOLConfigBridge.setMainTouchPadIRMode(0)
                   isTouchControlsActive = true
                   userOverrideTouchControls = true
-                  touchPadsRefreshToken = UUID()
+                  irModeRaw = 0  // TouchPadsContainer updates the live pad in place
                 } label: {
                   Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
                 }
@@ -1456,7 +1462,7 @@ struct EmulationScreen: View {
                   DOLConfigBridge.setMainTouchPadIRMode(1)
                   isTouchControlsActive = true
                   userOverrideTouchControls = true
-                  touchPadsRefreshToken = UUID()
+                  irModeRaw = 1  // TouchPadsContainer updates the live pad in place
                 } label: {
                   Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
                 }
@@ -1465,7 +1471,7 @@ struct EmulationScreen: View {
                   DOLConfigBridge.setMainTouchPadIRMode(2)
                   isTouchControlsActive = true
                   userOverrideTouchControls = true
-                  touchPadsRefreshToken = UUID()
+                  irModeRaw = 2  // TouchPadsContainer updates the live pad in place
                 } label: {
                   Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
                 }

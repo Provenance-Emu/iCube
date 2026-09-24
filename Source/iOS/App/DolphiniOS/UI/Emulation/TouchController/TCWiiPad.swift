@@ -176,9 +176,6 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
 
     if gesture.state == .began {
       touchStartPoint = point
-      #if os(iOS)
-      TVEmulationBridge.setWiiIMUPointEnabled(false)
-      #endif
       debugLog(String(format: "[TOUCH] Wii IR begin at (%.3f, %.3f) port=%d mode=%d", point.x, point.y, port, mode.rawValue))
       return
     }
@@ -214,10 +211,8 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
 
   @objc func setTouchIRMode(_ newMode: TCWiiTouchIRMode) {
     mode = newMode
-    #if os(iOS)
-    let useIMU = (newMode == .none)
-    TVEmulationBridge.setWiiIMUPointEnabled(useIMU)
-    #endif
+    // The core's IMU pointer is owned by EmulationScreen (on only while the overlay is hidden);
+    // in every touch mode, gyro included, the app synthesizes IR itself.
     // Center between mode changes for predictable handoff
     centerPointer()
     debugLog("[TOUCH] Wii IR mode set to \(newMode.rawValue)")

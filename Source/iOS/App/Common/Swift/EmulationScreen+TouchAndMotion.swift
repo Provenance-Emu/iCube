@@ -150,6 +150,10 @@ extension EmulationScreen {
   struct TouchPadsContainer: UIViewRepresentable {
     let forceVisible: Bool
     let isWii: Bool
+    /// Current touch-IR mode (TCWiiTouchIRMode raw value). Passed as state so a change updates
+    /// the live pad in place instead of tearing the overlay down (which dropped held buttons and
+    /// re-ran every pad's lifecycle hooks).
+    var irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())
     func makeUIView(context: Context) -> UIView {
       let host = UIView()
       host.backgroundColor = .clear
@@ -177,6 +181,33 @@ extension EmulationScreen {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
+      // In-place update when the right kind of pad is already mounted: mode, opacity and the
+      // pointer rect. A full rebuild only happens when the pad kind changes (or on a new
+      // `touchPadsRefreshToken`, which SwiftUI turns into a fresh makeUIView).
+      let wantWii = shouldShowWiiPad()
+      let wantGC = !wantWii && shouldShowGameCubePad()
+      let mountedWii = uiView.subviews.first { findTCWiiPad(in: $0) != nil }
+      if wantWii, let host = mountedWii, let wiiPad = findTCWiiPad(in: host) {
+        if let mode = TCWiiTouchIRMode(rawValue: irMode), wiiPad.mode != mode {
+          wiiPad.setTouchIRMode(mode)
+        }
+        let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+        let vr = TVEmulationBridge.currentVideoContentRect()
+        let inPad: CGRect = {
+          if vr == .zero { return wiiPad.bounds }
+          if let main = EmulationCoordinator.shared().mainDisplayView() {
+            return wiiPad.convert(vr, from: main)
+          }
+          return wiiPad.bounds
+        }()
+        wiiPad.recalculatePointerValues(new_rect: inPad, game_aspect: ar)
+        host.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+        return
+      }
+      if wantGC, mountedWii == nil, let gc = uiView.subviews.first {
+        gc.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+        return
+      }
       uiView.subviews.forEach { $0.removeFromSuperview() }
       if shouldShowWiiPad() {
         let v = makeWiiPadView()
