@@ -15,6 +15,14 @@ NS_ASSUME_NONNULL_BEGIN
 /// read straight from the host mapping without pausing the CPU, so it works while a panic alert has
 /// the CPU thread blocked. nil when no game is running or the range is not RAM.
 + (nullable NSData*)readGuestMemory:(uint32_t)address length:(uint32_t)length;
+/// Memory arena mode plus a live alias matrix of the real guest RAM views (marker written through
+/// each region, looked for in the others). Works whenever a game is running.
++ (NSDictionary<NSString*, id>*)memArenaReport;
+/// Standalone arena self-test: for each Darwin mode, grab a segment of `totalSize`, create views of
+/// every (offset,size) pair like Memmap does (MEM1 24 MB @0, L1 256 KB, MEM2 64 MB), apply the same
+/// paging hints, write a distinct pattern through each view, read back through every view, then tear
+/// down. No game needed. Returns per-mode results.
++ (NSDictionary<NSString*, id>*)memArenaSelfTest;
 
 /// Pauses the running core. Returns NO if the core is not running.
 + (BOOL)pause;

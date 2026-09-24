@@ -33,6 +33,7 @@
 //   GET  /api/debug/render-state     -> render-relevant config/state snapshot
 //   GET  /api/logs                   -> query {"tail":N=200} -> last N log lines
 //   GET  /api/debug/mem              -> query {"addr":"0x..","len":N=64} -> raw guest RAM as hex
+//   GET  /api/debug/memarena         -> arena mode + alias matrix of the real RAM views
 //
 // frame-advance/savestate/loadstate bodies are parsed by `parseBody` below: a
 // non-JSON-object body (including a missing one) returns nil, which callers
@@ -805,6 +806,16 @@ final class DebugAPIRoutes {
         "addr": String(format: "0x%08x", addr), "len": Int(len), "nonzero_bytes": nonZero,
         "hex": data.map { String(format: "%02x", $0) }.joined(),
       ] as [String: Any]]
+    }
+
+    // GET /api/debug/memarena — arena mode + live alias matrix of the real guest RAM views.
+    server.addCustomHandler(forMethod: "GET", path: "/api/debug/memarena") { _, _, _, _ in
+      ["ok": true, "data": DOLDebugBridge.memArenaReport()]
+    }
+
+    // POST /api/debug/memtest — standalone arena self-test in every Darwin mode (no game needed).
+    server.addCustomHandler(forMethod: "POST", path: "/api/debug/memtest") { _, _, _, _ in
+      ["ok": true, "data": DOLDebugBridge.memArenaSelfTest()]
     }
 
     server.addCustomHandler(forMethod: "GET", path: "/api/logs") { _, _, query, _ in

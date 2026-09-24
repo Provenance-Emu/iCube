@@ -104,6 +104,7 @@ public:
   void Shutdown();
   bool InitFastmemArena();
   bool PhysicalViewsAlias();
+  bool IsFastmemArenaInitialized() const { return m_is_fastmem_arena_initialized; }
   void ShutdownFastmemArena();
   void DoState(PointerWrap& p);
 

@@ -160,7 +160,7 @@ void MemoryManager::Init()
   // check is on the actual views: write a marker into each and look for it in the others. On a
   // failure everything is released and recreated in plain mode (independent allocations, no
   // fastmem arena).
-  for (int attempt = 0; attempt < 2; ++attempt)
+  for (int attempt = 0; attempt < 3; ++attempt)
   {
     m_arena.GrabSHMSegment(mem_size, "dolphin-emu");
 
@@ -191,15 +191,20 @@ void MemoryManager::Init()
       *region.out_pointer = nullptr;
     }
     m_arena.ReleaseSHMSegment();
-    if (attempt == 1 || Common::MemArena::UsesPlainViews())
+    using DarwinMode = Common::MemArena::DarwinMode;
+    const DarwinMode current = Common::MemArena::GetDarwinMode();
+    if (current == DarwinMode::Plain)
     {
       PanicAlertFmt("Memory::Init(): emulated memory views alias each other even in plain mode.");
       exit(0);
     }
-    ERROR_LOG_FMT(MEMMAP, "Memory::Init(): emulated memory views alias each other; switching to plain "
-                          "per-region allocations (fastmem arena disabled)");
-    Common::MemArena::SetPlainViews(true);
+    const DarwinMode next = current == DarwinMode::MachEntry ? DarwinMode::Remap : DarwinMode::Plain;
+    Common::MemArena::SetDarwinMode(next);
+    ERROR_LOG_FMT(MEMMAP, "Memory::Init(): emulated memory views alias each other in {} mode; retrying with {}",
+                  current == DarwinMode::MachEntry ? "mach-entry" : "vm-remap",
+                  Common::MemArena::DarwinModeName());
   }
+  INFO_LOG_FMT(MEMMAP, "Memory views created in {} mode", Common::MemArena::DarwinModeName());
 
   // Paging hints and the physical page table for every view.
   for (const PhysicalMemoryRegion& region : m_physical_regions)
@@ -225,7 +230,13 @@ void MemoryManager::Init()
   m_physical_page_mappings_base = reinterpret_cast<u8*>(m_physical_page_mappings.data());
   m_logical_page_mappings_base = reinterpret_cast<u8*>(m_logical_page_mappings.data());
 
+  if (PhysicalViewsAlias())
+    ERROR_LOG_FMT(MEMMAP, "Memory::Init(): views alias AFTER the paging hints ({} mode)", Common::MemArena::DarwinModeName());
+
   Clear();
+
+  if (PhysicalViewsAlias())
+    ERROR_LOG_FMT(MEMMAP, "Memory::Init(): views alias AFTER Clear() ({} mode)", Common::MemArena::DarwinModeName());
 
   INFO_LOG_FMT(MEMMAP, "Memory system initialized. RAM at {}", fmt::ptr(m_ram));
   m_is_initialized = true;
@@ -338,6 +349,11 @@ bool MemoryManager::InitFastmemArena()
   }
 
   m_is_fastmem_arena_initialized = true;
+  if (PhysicalViewsAlias())
+  {
+    ERROR_LOG_FMT(MEMMAP, "Memory::InitFastmemArena(): mapping the fastmem arena made the base views alias "
+                          "each other ({} mode)", Common::MemArena::DarwinModeName());
+  }
   m_fastmem_arena_size = memory_size;
   return true;
 }

@@ -27,6 +27,8 @@
 #include "Core/State.h"
 #include "Core/System.h"
 #include "Core/HW/Memmap.h"
+#include "Common/MemArena.h"
+#include <sys/mman.h>
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/FrameDumper.h"
 
@@ -211,6 +213,106 @@ class RingListener : public Common::Log::LogListener {
   const u8* ptr = memory.GetPointerForRange(address, length);
   if (ptr == nullptr) return nil;
   return [NSData dataWithBytes:ptr length:length];
+}
+
++ (NSDictionary<NSString*, id>*)memArenaReport {
+  auto& system = Core::System::GetInstance();
+  NSMutableDictionary<NSString*, id>* out = [NSMutableDictionary dictionary];
+  out[@"mode"] = @(Common::MemArena::DarwinModeName());
+  if (!Core::IsRunning(system)) {
+    out[@"running"] = @NO;
+    return out;
+  }
+  auto& memory = system.GetMemory();
+  out[@"running"] = @YES;
+  out[@"fastmem_arena"] = @(memory.IsFastmemArenaInitialized());
+  struct View { const char* name; u8* ptr; };
+  std::vector<View> views = {{"MEM1", memory.GetRAM()}, {"MEM2", memory.GetEXRAM()},
+                             {"L1", memory.GetL1Cache()}, {"FakeVMEM", memory.GetFakeVMEM()}};
+  NSMutableArray* regions = [NSMutableArray array];
+  NSMutableArray* aliases = [NSMutableArray array];
+  for (size_t i = 0; i < views.size(); ++i) {
+    if (!views[i].ptr) continue;
+    [regions addObject:@{@"name": @(views[i].name),
+                         @"host": [NSString stringWithFormat:@"%p", views[i].ptr]}];
+    volatile u32* mine = reinterpret_cast<volatile u32*>(views[i].ptr);
+    const u32 saved = *mine;
+    const u32 marker = 0x1C0BE000u + static_cast<u32>(i) * 0x101u + 7u;
+    *mine = marker;
+    for (size_t j = 0; j < views.size(); ++j) {
+      if (j == i || !views[j].ptr) continue;
+      if (*reinterpret_cast<volatile u32*>(views[j].ptr) == marker)
+        [aliases addObject:[NSString stringWithFormat:@"%s aliases %s", views[i].name, views[j].name]];
+    }
+    *mine = saved;
+  }
+  out[@"regions"] = regions;
+  out[@"aliases"] = aliases;
+  return out;
+}
+
++ (NSDictionary<NSString*, id>*)memArenaSelfTest {
+  using DarwinMode = Common::MemArena::DarwinMode;
+  const DarwinMode original = Common::MemArena::GetDarwinMode();
+  // Same layout Memmap builds for a Wii title: MEM1 (24 MB) @0, L1 cache (256 KB), MEM2 (64 MB).
+  struct Region { const char* name; size_t offset; size_t size; };
+  const size_t mem1 = 24 * 1024 * 1024, l1 = 256 * 1024, mem2 = 64 * 1024 * 1024;
+  const std::vector<Region> layout = {{"MEM1", 0, mem1}, {"L1", mem1, l1}, {"MEM2", mem1 + l1, mem2}};
+  const size_t total = mem1 + l1 + mem2;
+  NSMutableDictionary<NSString*, id>* out = [NSMutableDictionary dictionary];
+  for (DarwinMode mode : {DarwinMode::MachEntry, DarwinMode::Remap, DarwinMode::Plain}) {
+    Common::MemArena::SetDarwinMode(mode);
+    NSMutableDictionary* r = [NSMutableDictionary dictionary];
+    Common::MemArena arena;
+    arena.GrabSHMSegment(total, "icube-selftest");
+    std::vector<u8*> views;
+    bool ok = true;
+    for (const Region& reg : layout) {
+      u8* v = static_cast<u8*>(arena.CreateView(reg.offset, reg.size));
+      views.push_back(v);
+      if (!v) { ok = false; r[[NSString stringWithFormat:@"%s", reg.name]] = @"create-view-failed"; }
+    }
+    if (ok) {
+      for (size_t i = 0; i < views.size(); ++i) {
+        madvise(views[i], layout[i].size, MADV_WILLNEED);
+        madvise(views[i], layout[i].size, MADV_RANDOM);
+      }
+      // Distinct pattern at the start, middle and end of every view.
+      auto slots = [](size_t size) { return std::vector<size_t>{0, (size / 2) & ~size_t{0x3FFF}, size - 0x4000}; };
+      for (size_t i = 0; i < views.size(); ++i)
+        for (size_t off : slots(layout[i].size))
+          *reinterpret_cast<volatile u32*>(views[i] + off) = 0xA5000000u | (static_cast<u32>(i) << 16) | static_cast<u32>(off >> 14);
+      NSMutableArray* aliases = [NSMutableArray array];
+      NSMutableArray* bad = [NSMutableArray array];
+      for (size_t i = 0; i < views.size(); ++i) {
+        for (size_t off : slots(layout[i].size)) {
+          const u32 expect = 0xA5000000u | (static_cast<u32>(i) << 16) | static_cast<u32>(off >> 14);
+          const u32 got = *reinterpret_cast<volatile u32*>(views[i] + off);
+          if (got != expect)
+            [bad addObject:[NSString stringWithFormat:@"%s+0x%zx got %08x want %08x", layout[i].name, off, got, expect]];
+        }
+        // Does another view show this view's start pattern at its own start?
+        for (size_t j = 0; j < views.size(); ++j) {
+          if (i == j) continue;
+          const u32 other = *reinterpret_cast<volatile u32*>(views[j]);
+          if ((other & 0xFFFF0000u) == (0xA5000000u | (static_cast<u32>(i) << 16)))
+            [aliases addObject:[NSString stringWithFormat:@"%s shows %s's pattern", layout[j].name, layout[i].name]];
+        }
+      }
+      // Plain mode has no shared segment, so a base/view comparison only applies otherwise.
+      r[@"mismatches"] = bad;
+      r[@"aliases"] = aliases;
+      r[@"result"] = (bad.count == 0 && aliases.count == 0) ? @"pass" : @"FAIL";
+      for (size_t i = 0; i < views.size(); ++i)
+        arena.ReleaseView(views[i], layout[i].size);
+    } else {
+      r[@"result"] = @"FAIL";
+    }
+    arena.ReleaseSHMSegment();
+    out[@(Common::MemArena::DarwinModeName())] = r;
+  }
+  Common::MemArena::SetDarwinMode(original);
+  return out;
 }
 
 + (BOOL)loadStateSlot:(NSInteger)slot {

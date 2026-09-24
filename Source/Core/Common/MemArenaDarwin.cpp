@@ -12,14 +12,39 @@
 namespace Common
 {
 MemArena::MemArena() = default;
+
+const char* MemArena::DarwinModeName()
+{
+  switch (s_mode)
+  {
+  case DarwinMode::MachEntry: return "mach-entry";
+  case DarwinMode::Remap: return "vm-remap";
+  case DarwinMode::Plain: return "plain";
+  }
+  return "?";
+}
 MemArena::~MemArena() = default;
 
 void MemArena::GrabSHMSegment(size_t size, std::string_view base_name)
 {
-  if (s_plain_views)
+  if (s_mode == DarwinMode::Plain)
   {
     // No shared segment at all: CreateView allocates each region independently.
     m_shm_address = 0;
+    m_shm_entry = MACH_PORT_NULL;
+    m_shm_size = size;
+    return;
+  }
+  if (s_mode == DarwinMode::Remap)
+  {
+    // One base region; every view is a vm_remap of a slice of it (no memory entry involved).
+    kern_return_t remap_alloc = vm_allocate(mach_task_self(), &m_shm_address, size, VM_FLAGS_ANYWHERE);
+    if (remap_alloc != KERN_SUCCESS)
+    {
+      ERROR_LOG_FMT(MEMMAP, "GrabSHMSegment (remap): vm_allocate returned {0:#x}", remap_alloc);
+      m_shm_address = 0;
+      return;
+    }
     m_shm_entry = MACH_PORT_NULL;
     m_shm_size = size;
     return;
@@ -200,7 +225,24 @@ void MemArena::ReleaseSHMSegment()
 
 void* MemArena::CreateView(s64 offset, size_t size)
 {
-  if (s_plain_views)
+  if (s_mode == DarwinMode::Remap)
+  {
+    if (m_shm_address == 0)
+      return nullptr;
+    vm_address_t view = 0;
+    vm_prot_t cur = 0, max = 0;
+    const kern_return_t remap_result =
+        vm_remap(mach_task_self(), &view, size, 0, VM_FLAGS_ANYWHERE, mach_task_self(),
+                 m_shm_address + static_cast<vm_address_t>(offset), false, &cur, &max,
+                 VM_INHERIT_DEFAULT);
+    if (remap_result != KERN_SUCCESS)
+    {
+      ERROR_LOG_FMT(MEMMAP, "CreateView (remap) failed: vm_remap returned {0:#x}", remap_result);
+      return nullptr;
+    }
+    return reinterpret_cast<void*>(view);
+  }
+  if (s_mode == DarwinMode::Plain)
   {
     vm_address_t plain = 0;
     const kern_return_t plain_result = vm_allocate(mach_task_self(), &plain, size, VM_FLAGS_ANYWHERE);
@@ -238,7 +280,7 @@ void MemArena::ReleaseView(void* view, size_t size)
 
 u8* MemArena::ReserveMemoryRegion(size_t memory_size)
 {
-  if (s_plain_views)
+  if (s_mode == DarwinMode::Plain)
     return nullptr;  // no mirroring available; the fastmem arena stays off
   vm_address_t address = 0;
 
@@ -286,9 +328,22 @@ void* MemArena::MapInMemoryRegion(s64 offset, size_t size, void* base, bool writ
   if (writeable)
     prot |= VM_PROT_WRITE;
 
-  kern_return_t retval =
-      vm_map(mach_task_self(), &address, size, 0, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, m_shm_entry,
-             offset, false, prot, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_DEFAULT);
+  kern_return_t retval;
+  if (s_mode == DarwinMode::Remap)
+  {
+    vm_prot_t cur = 0, max = 0;
+    retval = vm_remap(mach_task_self(), &address, size, 0, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                      mach_task_self(), m_shm_address + static_cast<vm_address_t>(offset), false,
+                      &cur, &max, VM_INHERIT_DEFAULT);
+    if (retval == KERN_SUCCESS)
+      retval = vm_protect(mach_task_self(), address, size, false, prot);
+  }
+  else
+  {
+    retval = vm_map(mach_task_self(), &address, size, 0, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                    m_shm_entry, offset, false, prot, VM_PROT_READ | VM_PROT_WRITE,
+                    VM_INHERIT_DEFAULT);
+  }
   if (retval != KERN_SUCCESS)
   {
     ERROR_LOG_FMT(MEMMAP, "MapInMemoryRegion failed: vm_map returned {0:#x}", retval);

@@ -290,6 +290,10 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
       ^id{ return @([DOLConfigBridge cirDynTargetCache]); },
       ^(id v){ [DOLConfigBridge setCirDynTargetCache:CoerceBool(v)]; },
       MakeLayerGetter(Config::MAIN_CIR_DYN_TARGET_CACHE), MakeResetBlock(Config::MAIN_CIR_DYN_TARGET_CACHE.GetLocation()));
+    t[@"cirPicLoadstore"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @(Config::Get(Config::MAIN_CIR_PIC_LOADSTORE)); },
+      ^(id v){ Config::SetBaseOrCurrent(Config::MAIN_CIR_PIC_LOADSTORE, [v boolValue]); },
+      MakeLayerGetter(Config::MAIN_CIR_PIC_LOADSTORE), MakeResetBlock(Config::MAIN_CIR_PIC_LOADSTORE.GetLocation()));
 
 t[@"cirGatherPipeCopyFusion"] = mk(DOLSettingTypeBool, NO,
       ^id{ return @([DOLConfigBridge cirGatherPipeCopyFusion]); },
