@@ -473,6 +473,10 @@ static bool ICubeEmulationActive() {
 + (void)setSysconfSensorBarPosition:(NSInteger)pos { Config::SetBase(Config::SYSCONF_SENSOR_BAR_POSITION, (int)pos); }
 + (NSInteger)sysconfSensorBarSensitivity { return (NSInteger)Config::Get(Config::SYSCONF_SENSOR_BAR_SENSITIVITY); }
 + (void)setSysconfSensorBarSensitivity:(NSInteger)sens { Config::SetBase(Config::SYSCONF_SENSOR_BAR_SENSITIVITY, (int)sens); }
++ (void)setCurrentRunGfxWidescreenHack:(BOOL)enabled { Config::SetCurrent(Config::GFX_WIDESCREEN_HACK, (bool)enabled); }
++ (void)setCurrentRunMainTouchPadIRMode:(NSInteger)mode { Config::SetCurrent(Config::MAIN_TOUCH_PAD_IR_MODE, (int)mode); }
++ (void)setCurrentRunMainTouchPadOpacity:(float)opacity { Config::SetCurrent(Config::MAIN_TOUCH_PAD_OPACITY, (float)opacity); }
++ (void)setCurrentRunSysconfSensorBarSensitivity:(NSInteger)sens { Config::SetCurrent(Config::SYSCONF_SENSOR_BAR_SENSITIVITY, (int)sens); }
 + (NSInteger)sysconfSpeakerVolume { return (NSInteger)Config::Get(Config::SYSCONF_SPEAKER_VOLUME); }
 + (void)setSysconfSpeakerVolume:(NSInteger)vol { Config::SetBase(Config::SYSCONF_SPEAKER_VOLUME, (int)vol); }
 + (BOOL)sysconfWiimoteMotor { return Config::Get(Config::SYSCONF_WIIMOTE_MOTOR); }

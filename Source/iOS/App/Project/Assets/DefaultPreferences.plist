@@ -8,5 +8,11 @@
 	<false/>
 	<key>last_version</key>
 	<string>0.0.0 (0)</string>
+	<key>motion_enable_full_6dof</key>
+	<true/>
+	<key>motion_wiimote_imu_enabled</key>
+	<true/>
+	<key>motion_enhanced_shake_detection</key>
+	<true/>
 </dict>
 </plist>

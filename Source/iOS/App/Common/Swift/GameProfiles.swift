@@ -181,6 +181,11 @@ final class GameProfiles {
     setProfile(snap, for: gameID)
   }
 
+  /// Pre-boot part of a per-game profile: only app-side preferences. Dolphin config values are
+  /// applied by `applyRuntimeOverrides(for:)` once the title is running, into the CurrentRun
+  /// layer. Writing them here went through `SetBaseOrCurrent`, which lands in the persisted Base
+  /// config before a boot (no CurrentRun layer yet) — one game's profile silently became every
+  /// other game's global setting, with nothing ever restoring the previous values.
   func applyProfileIfAvailable(for item: TVGameItem) {
     if UserDefaults.standard.object(forKey: "profiles_enabled") as? Bool == false { return }
     let gameID = item.gameID
@@ -189,35 +194,9 @@ final class GameProfiles {
       UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
       return
     }
-    // Widescreen hack
-    if let ws = profile.widescreenHack {
-      if ws != DOLConfigBridge.gfxWidescreenHack() {
-        DOLConfigBridge.setGfxWidescreenHack(ws)
-      }
-    }
-    // Per-game Wii Touch IR mode override (decoupled from global when set)
-    if let mode = profile.wiimoteTouchIRMode, mode >= 0 {
-      if mode != DOLConfigBridge.mainTouchPadIRMode() {
-        DOLConfigBridge.setMainTouchPadIRMode(mode)
-      }
-    }
-    // IR mode legacy field
-    if let mode = profile.irMode, profile.wiimoteTouchIRMode == nil, mode >= 0 {
-      if mode != DOLConfigBridge.mainTouchPadIRMode() {
-        DOLConfigBridge.setMainTouchPadIRMode(mode)
-      }
-    }
-    // IR sensitivity (Wii)
-    if let sens = profile.wiimoteIRSensitivity {
-      if sens != DOLConfigBridge.sysconfSensorBarSensitivity() {
-        DOLConfigBridge.setSysconfSensorBarSensitivity(sens)
-      }
-    }
-    // Touch opacity
-    if let opacity = profile.touchOpacity {
-      if fabsf(opacity - DOLConfigBridge.mainTouchPadOpacity()) > 0.001 {
-        DOLConfigBridge.setMainTouchPadOpacity(opacity)
-      }
+    // A title is already running (Properties sheet from the pause menu): apply live.
+    if TVEmulationBridge.isRunning() {
+      applyConfigOverrides(profile)
     }
     // Shader preset intent
     if let preset = profile.shaderPresetPath {
@@ -232,6 +211,32 @@ final class GameProfiles {
       UserDefaults.standard.set(overridePref.rawValue, forKey: "current_profile_touch_override")
     } else {
       UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
+    }
+  }
+
+  /// Runtime part of a per-game profile. Call once the title is running (emulation-did-start):
+  /// BootManager clears the CurrentRun layer at boot, so these must be written after it, and
+  /// they vanish with the title instead of leaking into the global config.
+  func applyRuntimeOverrides(for item: TVGameItem) {
+    if UserDefaults.standard.object(forKey: "profiles_enabled") as? Bool == false { return }
+    guard let profile = profile(for: item.gameID) else { return }
+    applyConfigOverrides(profile)
+  }
+
+  private func applyConfigOverrides(_ profile: GameProfile) {
+    if let ws = profile.widescreenHack, ws != DOLConfigBridge.gfxWidescreenHack() {
+      DOLConfigBridge.setCurrentRunGfxWidescreenHack(ws)
+    }
+    // Per-game Wii touch IR mode (the legacy `irMode` field applies when the new one is unset)
+    let irOverride = profile.wiimoteTouchIRMode ?? profile.irMode
+    if let mode = irOverride, mode >= 0, mode != DOLConfigBridge.mainTouchPadIRMode() {
+      DOLConfigBridge.setCurrentRunMainTouchPadIRMode(mode)
+    }
+    if let sens = profile.wiimoteIRSensitivity, sens != DOLConfigBridge.sysconfSensorBarSensitivity() {
+      DOLConfigBridge.setCurrentRunSysconfSensorBarSensitivity(sens)
+    }
+    if let opacity = profile.touchOpacity, fabsf(opacity - DOLConfigBridge.mainTouchPadOpacity()) > 0.001 {
+      DOLConfigBridge.setCurrentRunMainTouchPadOpacity(opacity)
     }
   }
 

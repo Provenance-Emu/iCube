@@ -295,6 +295,13 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setSysconfSensorBarPosition:(NSInteger)pos;
 + (NSInteger)sysconfSensorBarSensitivity;
 + (void)setSysconfSensorBarSensitivity:(NSInteger)sens;
+
+// Per-game (CurrentRun layer) overrides. They live only for the running title: BootManager clears
+// the CurrentRun layer at every boot, and nothing here touches the persisted Base config.
++ (void)setCurrentRunGfxWidescreenHack:(BOOL)enabled;
++ (void)setCurrentRunMainTouchPadIRMode:(NSInteger)mode;
++ (void)setCurrentRunMainTouchPadOpacity:(float)opacity;
++ (void)setCurrentRunSysconfSensorBarSensitivity:(NSInteger)sens;
 + (NSInteger)sysconfSpeakerVolume;
 + (void)setSysconfSpeakerVolume:(NSInteger)vol;
 + (BOOL)sysconfWiimoteMotor;

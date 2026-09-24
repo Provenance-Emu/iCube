@@ -22,13 +22,13 @@ struct MotionDebugView: View {
   @State private var motionManager: CMMotionManager?
 
   // Enhanced Motion Controls - Use @AppStorage for automatic UI updates
-  @AppStorage("motion_enhanced_shake_detection") private var enhancedShakeEnabled: Bool = false
+  @AppStorage("motion_enhanced_shake_detection") private var enhancedShakeEnabled: Bool = true
   @AppStorage("motion_enable_ir_cursor") private var gyroIREnabled: Bool = false
   @AppStorage("motion_use_yaw_for_horizontal") private var useYawForHorizontal: Bool = false
   @AppStorage("motion_invert_roll") private var invertRoll: Bool = false
   @AppStorage("motion_invert_pitch") private var invertPitch: Bool = false
-  @AppStorage("motion_enable_full_6dof") private var fullMotionEnabled: Bool = false
-  @AppStorage("motion_wiimote_imu_enabled") private var wiimoteIMUEnabled: Bool = false
+  @AppStorage("motion_enable_full_6dof") private var fullMotionEnabled: Bool = true
+  @AppStorage("motion_wiimote_imu_enabled") private var wiimoteIMUEnabled: Bool = true
   @AppStorage("motion_nunchuck_imu_enabled") private var nunchuckIMUEnabled: Bool = false
 
   // Debug settings
