@@ -54,18 +54,40 @@ func appCfg(_ name: String, debug: Bool, bundleId: String, entitlements: String)
         : .release(name: .configuration(name), settings: settings, xcconfig: xc)
 }
 
-let appConfigs: [Configuration] = [
-    appCfg("Debug (Non-Jailbroken)",         debug: true,  bundleId: "com.joemattiello.iCube-debug",             entitlements: dfEnt),
-    appCfg("Debug (Jailbroken)",             debug: true,  bundleId: "com.joemattiello.iCube-debug-jb",          entitlements: dfEnt),
-    appCfg("Debug (AppStore)",               debug: true,  bundleId: "com.joemattiello.iCube",                   entitlements: appStoreEnt),
-    appCfg("Release (Non-Jailbroken)",       debug: false, bundleId: "com.joemattiello.iCube",                   entitlements: dfEnt),
-    appCfg("Release (Beta, Non-Jailbroken)", debug: false, bundleId: "com.joemattiello.iCube-njb-patreon-beta",  entitlements: dfEnt),
-    appCfg("Release (Jailbroken)",           debug: false, bundleId: "com.joemattiello.iCube-jb",                entitlements: dfEnt),
-    appCfg("Release (TrollStore)",           debug: false, bundleId: "com.joemattiello.iCube-ts",                entitlements: dfEnt),
-    appCfg("Release (AppStore)",             debug: false, bundleId: "com.joemattiello.iCube",                   entitlements: appStoreEnt),
-    appCfg("Release (Beta, Jailbroken)",     debug: false, bundleId: "com.joemattiello.iCube-patreon-beta-jb",   entitlements: dfEnt),
-    appCfg("Release (Beta, TrollStore)",     debug: false, bundleId: "com.joemattiello.iCube-ts-patreon-beta",   entitlements: dfEnt),
+struct AppConfig {
+    let name: String
+    let debug: Bool
+    let bundleId: String
+    let entitlements: String
+}
+
+let configTable: [AppConfig] = [
+    AppConfig(name: "Debug (Non-Jailbroken)",         debug: true,  bundleId: "com.joemattiello.iCube-debug",            entitlements: dfEnt),
+    AppConfig(name: "Debug (Jailbroken)",             debug: true,  bundleId: "com.joemattiello.iCube-debug-jb",         entitlements: dfEnt),
+    AppConfig(name: "Debug (AppStore)",               debug: true,  bundleId: "com.joemattiello.iCube",                  entitlements: appStoreEnt),
+    AppConfig(name: "Release (Non-Jailbroken)",       debug: false, bundleId: "com.joemattiello.iCube",                  entitlements: dfEnt),
+    AppConfig(name: "Release (Beta, Non-Jailbroken)", debug: false, bundleId: "com.joemattiello.iCube-njb-patreon-beta", entitlements: dfEnt),
+    AppConfig(name: "Release (Jailbroken)",           debug: false, bundleId: "com.joemattiello.iCube-jb",               entitlements: dfEnt),
+    AppConfig(name: "Release (TrollStore)",           debug: false, bundleId: "com.joemattiello.iCube-ts",               entitlements: dfEnt),
+    AppConfig(name: "Release (AppStore)",             debug: false, bundleId: "com.joemattiello.iCube",                  entitlements: appStoreEnt),
+    AppConfig(name: "Release (Beta, Jailbroken)",     debug: false, bundleId: "com.joemattiello.iCube-patreon-beta-jb",  entitlements: dfEnt),
+    AppConfig(name: "Release (Beta, TrollStore)",     debug: false, bundleId: "com.joemattiello.iCube-ts-patreon-beta", entitlements: dfEnt),
 ]
+
+let appConfigs: [Configuration] = configTable.map {
+    appCfg($0.name, debug: $0.debug, bundleId: $0.bundleId, entitlements: $0.entitlements)
+}
+
+/// Extension bundle ids are `<app id>.<suffix>` so each of the 8 app ids gets its own
+/// extension id (App Store validation requires the prefix match).
+func extensionConfigs(suffix: String) -> [Configuration] {
+    configTable.map { cfg in
+        let settings: SettingsDictionary = ["PRODUCT_BUNDLE_IDENTIFIER": .string("\(cfg.bundleId).\(suffix)")]
+        return cfg.debug
+            ? .debug(name: .configuration(cfg.name), settings: settings)
+            : .release(name: .configuration(cfg.name), settings: settings)
+    }
+}
 
 // Project-level configs: reuse the same preset xcconfigs (no per-target settings).
 // The project needs the full custom config list or Tuist defaults to Debug/Release
@@ -322,7 +344,8 @@ let iCube = Target.target(
         // iOS/Catalyst to match the MoltenVK pattern above and keep iOS linking unchanged.
         .sdk(name: "CoreMotion", type: .framework, condition: .when([.ios, .catalyst])),
         // appex embed intentionally OFF (faithful to original; see APP_EMBEDS_APPEX note above).
-    ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension")] : []),
+    ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension")] : [])
+      + [.target(name: "iCubeTopShelf", condition: .when([.tvos]))],
     settings: .settings(
         base: projectBase.merging([
             "ARCHS": "arm64",
@@ -470,6 +493,79 @@ let iCubeTests = Target.target(
     )
 )
 
+// MARK: - App extensions (Top Shelf, Quick Look)
+//
+// Tuist 4.x rejects a tvOS-only extension dependency on a multiplatform app, so the
+// Top Shelf target is declared for iOS+tvOS and only EMBEDDED on tvOS via `.when`.
+// All three extensions link PVLibrarySnapshot and system frameworks only. They must
+// never inherit the app's bridging header or the Dolphin core.
+let extensionEntitlements: Path = "Project/Entitlements/Extension.entitlements"
+
+func extensionTarget(
+    name: String,
+    suffix: String,
+    destinations: Destinations,
+    deploymentTargets: DeploymentTargets,
+    infoPlist: InfoPlist,
+    sources: SourceFilesList,
+    resources: ResourceFileElements? = nil,
+    deviceFamily: String,
+    frameworks: [String]
+) -> Target {
+    Target.target(
+        name: name,
+        destinations: destinations,
+        product: .appExtension,
+        bundleId: "com.joemattiello.iCube.\(suffix)", // placeholder; real per-config ids in extensionConfigs
+        deploymentTargets: deploymentTargets,
+        infoPlist: infoPlist,
+        sources: sources,
+        resources: resources,
+        entitlements: .file(path: extensionEntitlements),
+        dependencies: [.package(product: "PVLibrarySnapshot")] + frameworks.map { .sdk(name: $0, type: .framework) },
+        settings: .settings(
+            base: [
+                "SKIP_INSTALL": "YES",
+                "SWIFT_VERSION": "5.0",
+                "SWIFT_OBJC_BRIDGING_HEADER": "",
+                "SWIFT_OBJC_INTEROP_MODE": "objc",
+                "CODE_SIGN_STYLE": "Automatic",
+                "DEVELOPMENT_TEAM": "S32Z3HMYVQ",
+                "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+                "TARGETED_DEVICE_FAMILY": .string(deviceFamily),
+                "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"],
+                "MARKETING_VERSION": "1.0.0",
+                "CURRENT_PROJECT_VERSION": "13",
+                // DEVIATION from brief: without this, Tuist does NOT merge the partial
+                // Info.plist with generated CFBundleIdentifier/CFBundleExecutable/etc:
+                // it copies the .file() plist as-is (INFOPLIST_FILE alone, no
+                // GENERATE_INFOPLIST_FILE). The app target only gets the merge because
+                // its `defaultSettings: .recommended(...)` implies it; extension targets
+                // here use the settings() default, which does not. Without this the
+                // built appex's CFBundleIdentifier is nil and ValidateEmbeddedBinary fails
+                // ("Embedded binary's bundle identifier is not prefixed with the parent
+                // app's bundle identifier"). Confirmed empirically 2026-09-24.
+                "GENERATE_INFOPLIST_FILE": "YES",
+            ],
+            configurations: extensionConfigs(suffix: suffix)
+        )
+    )
+}
+
+let topShelf = extensionTarget(
+    name: "iCubeTopShelf",
+    suffix: "topshelf",
+    destinations: [.iPhone, .iPad, .appleTv],
+    deploymentTargets: .multiplatform(iOS: "17.0", tvOS: "17.0"),
+    infoPlist: .file(path: "../Extensions/iCubeTopShelf/Info.plist"),
+    sources: ["../Extensions/iCubeTopShelf/**/*.swift"],
+    resources: ["../Extensions/iCubeTopShelf/PrivacyInfo.xcprivacy"],
+    deviceFamily: "1,2,3",
+    // TVServices does not exist on the iOS slice; the source imports it under
+    // `#if os(tvOS)` and Xcode auto-links Swift-imported frameworks, so link nothing here.
+    frameworks: []
+)
+
 // MARK: - Schemes
 
 let appStoreEnvVars: [String: EnvironmentVariable] = [ : ]
@@ -557,6 +653,6 @@ let project = Project(
         configurations: projectConfigs,
         defaultSettings: .recommended
     ),
-    targets: [iCube, liveActivity, iCubeTests],
+    targets: [iCube, liveActivity, iCubeTests, topShelf],
     schemes: schemes
 )
