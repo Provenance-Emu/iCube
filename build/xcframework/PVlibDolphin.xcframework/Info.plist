@@ -6,6 +6,22 @@
 	<array>
 		<dict>
 			<key>BinaryPath</key>
+			<string>PVlibDolphin-ios-sim.framework/PVlibDolphin-ios-sim</string>
+			<key>LibraryIdentifier</key>
+			<string>ios-arm64-simulator</string>
+			<key>LibraryPath</key>
+			<string>PVlibDolphin-ios-sim.framework</string>
+			<key>SupportedArchitectures</key>
+			<array>
+				<string>arm64</string>
+			</array>
+			<key>SupportedPlatform</key>
+			<string>ios</string>
+			<key>SupportedPlatformVariant</key>
+			<string>simulator</string>
+		</dict>
+		<dict>
+			<key>BinaryPath</key>
 			<string>PVlibDolphin-tvos.framework/PVlibDolphin-tvos</string>
 			<key>LibraryIdentifier</key>
 			<string>tvos-arm64</string>
@@ -17,22 +33,6 @@
 			</array>
 			<key>SupportedPlatform</key>
 			<string>tvos</string>
-		</dict>
-		<dict>
-			<key>BinaryPath</key>
-			<string>PVlibDolphin-tvos-sim.framework/PVlibDolphin-tvos-sim</string>
-			<key>LibraryIdentifier</key>
-			<string>tvos-arm64-simulator</string>
-			<key>LibraryPath</key>
-			<string>PVlibDolphin-tvos-sim.framework</string>
-			<key>SupportedArchitectures</key>
-			<array>
-				<string>arm64</string>
-			</array>
-			<key>SupportedPlatform</key>
-			<string>tvos</string>
-			<key>SupportedPlatformVariant</key>
-			<string>simulator</string>
 		</dict>
 		<dict>
 			<key>BinaryPath</key>
@@ -50,17 +50,17 @@
 		</dict>
 		<dict>
 			<key>BinaryPath</key>
-			<string>PVlibDolphin-ios-sim.framework/PVlibDolphin-ios-sim</string>
+			<string>PVlibDolphin-tvos-sim.framework/PVlibDolphin-tvos-sim</string>
 			<key>LibraryIdentifier</key>
-			<string>ios-arm64-simulator</string>
+			<string>tvos-arm64-simulator</string>
 			<key>LibraryPath</key>
-			<string>PVlibDolphin-ios-sim.framework</string>
+			<string>PVlibDolphin-tvos-sim.framework</string>
 			<key>SupportedArchitectures</key>
 			<array>
 				<string>arm64</string>
 			</array>
 			<key>SupportedPlatform</key>
-			<string>ios</string>
+			<string>tvos</string>
 			<key>SupportedPlatformVariant</key>
 			<string>simulator</string>
 		</dict>
