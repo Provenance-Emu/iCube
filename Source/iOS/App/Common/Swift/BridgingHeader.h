@@ -4,6 +4,7 @@
 #import "AudioSessionManager.h"
 #import "BootNoticeManager.h"
 #import "PGOFlush.h"
+#import "SharedDefaults.h"
 #import "DolphinCoreService.h"
 #import "EmulationCoordinator.h"
 #import "FirstRunInitializationService.h"

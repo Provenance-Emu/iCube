@@ -304,6 +304,7 @@ let iCube = Target.target(
         // entry too, keep ONE — a duplicate `.local(path:)` fails generation.
         .package(product: "PVSyncRules"),
         .package(product: "PVCloudSync"),
+        .package(product: "PVLibrarySnapshot"),
         .package(product: "Zip"),
         .package(product: "PLzmaSDK"),
         .package(product: "SWCompression"),
@@ -537,6 +538,7 @@ let project = Project(
         .local(path: "../PVContinuity"),
         .local(path: "../PVSyncRules"),
         .local(path: "../PVHelp"),
+        .local(path: "../PVLibrarySnapshot"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
         .local(path: "../PVCloudSync"),

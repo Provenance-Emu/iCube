@@ -15,6 +15,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) NSString *filePath;
 @property (nonatomic, readonly) BOOL isNKit;
 @property (nonatomic, readonly) UIImage *coverImage;
+/// YES when the core has real cover art for this game (custom or GameTDB), NO when
+/// `coverImage` is the NoCover placeholder. The snapshot writer only mirrors real art.
+@property (nonatomic, readonly) BOOL hasCoverArt;
 @property (nonatomic, readonly, nullable) UIImage *bannerImage; // Animated game banner/icon
 @property (nonatomic, readonly) GameFilePtrWrapper *wrapper;
 @property (nonatomic, readonly) NSString *gameID;

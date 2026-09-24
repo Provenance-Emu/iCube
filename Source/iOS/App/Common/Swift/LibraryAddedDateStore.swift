@@ -83,11 +83,11 @@ enum LibraryAddedDateStore {
   }
 
   private static func load() -> [String: TimeInterval] {
-    UserDefaults.standard.dictionary(forKey: defaultsKey) as? [String: TimeInterval] ?? [:]
+    SharedDefaults.suite.dictionary(forKey: defaultsKey) as? [String: TimeInterval] ?? [:]
   }
 
   private static func save(_ map: [String: TimeInterval]) {
-    UserDefaults.standard.set(map, forKey: defaultsKey)
+    SharedDefaults.suite.set(map, forKey: defaultsKey)
   }
 }
 

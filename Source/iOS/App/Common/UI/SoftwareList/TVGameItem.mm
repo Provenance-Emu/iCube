@@ -3,6 +3,7 @@
 
 #import "TVGameItem.h"
 
+#import "SharedDefaults.h"
 #import "GameFilePtrWrapper.h"
 #import "FoundationStringUtil.h"
 #import "UICommon/GameFile.h"
@@ -27,6 +28,7 @@
     NSUInteger _fileSize;
     NSInteger _platform;
     BOOL _demoItem;
+    BOOL _hasCoverArt;
 }
 
 - (instancetype)initWithWrapper:(GameFilePtrWrapper *)wrapper {
@@ -69,6 +71,7 @@
         _isNKit = game.IsNKit();
 
         const UICommon::GameCover &cover = game.GetCoverImage();
+        _hasCoverArt = !cover.buffer.empty();
         UIImage *result = nil;
         if (cover.buffer.empty()) {
             result = [UIImage imageNamed:@"NoCover"];
@@ -210,16 +213,17 @@
 - (NSUInteger)fileSize { return _fileSize; }
 - (NSInteger)platform { return _platform; }
 - (BOOL)isDemoItem { return _demoItem; }
+- (BOOL)hasCoverArt { return _hasCoverArt; }
 
 - (BOOL)isFavorite {
     if (!_gameID) return NO;
-    NSDictionary *fav = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"favorites_by_gameid"] ?: @{};
+    NSDictionary *fav = [DOLSharedUserDefaults() dictionaryForKey:@"favorites_by_gameid"] ?: @{};
     return [fav[_gameID] boolValue];
 }
 
 - (void)setFavorite:(BOOL)favorite {
     if (!_gameID) return;
-    NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+    NSUserDefaults *d = DOLSharedUserDefaults();
     NSMutableDictionary *fav = [[d dictionaryForKey:@"favorites_by_gameid"] mutableCopy];
     if (!fav) fav = [NSMutableDictionary dictionary];
     fav[_gameID] = @(favorite);
@@ -325,6 +329,7 @@ static UIImage *DOLDemoCoverImage(NSString *title, NSString *platformLabel, CGFl
     if (!self) return nil;
 
     _demoItem = YES;
+    _hasCoverArt = YES;  // Procedural cover, but a real one — not the NoCover placeholder.
     _wrapper = nil;  // No GameFile backs a demo item — never boot one.
     _title = [title copy];
     _gameID = [gameID copy];
