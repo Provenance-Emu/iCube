@@ -1469,28 +1469,79 @@ static bool s_backgroundAutoPaused = false;
   }
 }
 
+// iCube: the iOS backend registers EIGHT "Touchscreen" devices (iOS.mm PopulateDevices): ids 0-3
+// carry the GameCube pad inputs, ids 4-7 the Wii Remote inputs (Touchscreen.mm). They share the
+// name, so "the first device called Touchscreen" is always the GC instance for Pad 1 — binding a
+// Wii Remote to it leaves every on-screen Wii control unbound (observed: WiimoteNew.ini
+// `Device = iOS/0/Touchscreen`, Wii touch pad dead). Always resolve the instance by id.
+static constexpr int kTouchscreenWiimoteIdBase = 4;
+
+static bool FindTouchscreenQualifier(int controller_id, ciface::Core::DeviceQualifier* out)
+{
+  for (const auto& dev : g_controller_interface.GetAllDevices())
+  {
+    if (dev && dev->GetSource() == "iOS" && dev->GetName() == std::string("Touchscreen") &&
+        dev->GetId() == controller_id)
+    {
+      out->FromDevice(dev.get());
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool IsTouchscreenQualifier(const ciface::Core::DeviceQualifier& dq)
+{
+  return dq.source == "iOS" && dq.name == "Touchscreen";
+}
+
+// iCube: the emulated Wiimote's own IMU pointer ("IMUIR", enabled by default upstream) folds the
+// gyro/accelerometer it receives into the IR camera transform. That is right for a physical
+// motion controller, wrong for the touchscreen: the app synthesizes the pointer itself (drag /
+// follow from touches, gyro mode from device attitude) and only feeds raw IMU so games can read
+// tilt and shake. With real motion flowing (2026-09-23 motion fix) the core added the phone's
+// actual pitch/roll on top, the virtual sensor bar left the camera's view and the touch pointer
+// went dead ("touch controls not working"; turning the gyro toggle off does not help because the
+// core keeps the last integrated rotation). Disable it on every Wiimote bound to a Touchscreen
+// device so IR comes from the app alone, exactly as it did while the IMU feed was inert.
+static void DisableCoreIMUPointerOnTouchscreenWiimotes()
+{
+  auto* config = Wiimote::GetConfig();
+  if (!config)
+    return;
+  bool changed = false;
+  for (int i = 0; i < config->GetControllerCount(); ++i)
+  {
+    auto* wm = config->GetController(i);
+    if (!wm)
+      continue;
+    const auto& dq = wm->GetDefaultDevice();
+    if (dq.source != "iOS" || dq.name != "Touchscreen")
+      continue;
+    auto* group = Wiimote::GetWiimoteGroup(i, WiimoteEmu::WiimoteGroup::IMUPoint);
+    if (group && group->enabled.GetValue())
+    {
+      group->enabled.SetValue(false);
+      changed = true;
+      NSLog(@"[iCube][Input] Wiimote%d: core IMU pointer disabled (touchscreen drives IR)", i + 1);
+    }
+  }
+  if (changed)
+    config->SaveConfig();
+}
+
 static void EnsurePad1DefaultsToTouchscreen()
 {
   // Bind Pad 1 to iOS Touchscreen unless Touchscreen is explicitly mapped to another player
   if (!Pad::GetConfig() || Pad::GetConfig()->GetControllerCount() == 0)
     return;
 
-  // Locate the iOS Touchscreen virtual device
-  const auto devices = g_controller_interface.GetAllDevices();
-  std::shared_ptr<ciface::Core::Device> touchscreen_dev;
-  for (const auto& dev : devices)
-  {
-    if (dev && dev->GetSource() == "iOS" && dev->GetName() == std::string("Touchscreen"))
-    {
-      touchscreen_dev = dev;
-      break;
-    }
-  }
-  if (!touchscreen_dev)
-    return;
-
+  // Pad 1 binds to Touchscreen instance 0 (GC inputs); Wii Remote 1 to instance 4 (Wii inputs).
   ciface::Core::DeviceQualifier dq_touch;
-  dq_touch.FromDevice(touchscreen_dev.get());
+  if (!FindTouchscreenQualifier(0, &dq_touch))
+    return;
+  ciface::Core::DeviceQualifier dq_touch_wii;
+  const bool have_wii_touch = FindTouchscreenQualifier(kTouchscreenWiimoteIdBase, &dq_touch_wii);
 
   // Otherwise, force Pad 1 (index 0) to Touchscreen and load the Touchscreen stock profile
   auto* pad0 = Pad::GetConfig()->GetController(0);
@@ -1561,20 +1612,47 @@ after_pad1:
     {
       // Set Wiimote source to Emulated for port 0
       Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(0), WiimoteSource::Emulated);
-      // Explicitly disable Wiimote 2-4 to avoid phantom P2 on Wii IR
+      // Disable Wiimote 2-4 to avoid a phantom P2 on Wii IR — but ONLY slots that are not
+      // bound to a connected physical controller. Which controller owns a slot is the Swift
+      // AssignmentEngine's decision; zeroing every slot here (as this loop used to) ran after
+      // reconcile() and silently dropped input from any pad bound to Wiimote 2-4.
       for (int i = 1; i < std::min(4, Wiimote::GetConfig()->GetControllerCount()); ++i)
-        Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(i), WiimoteSource::None);
+      {
+        auto* wmi = Wiimote::GetConfig()->GetController(i);
+        const auto dqi = wmi ? wmi->GetDefaultDevice() : ciface::Core::DeviceQualifier{};
+        const bool bound_to_connected_physical =
+            wmi && !IsTouchscreenQualifier(dqi) && !dqi.ToString().empty() &&
+            g_controller_interface.HasConnectedDevice(dqi);
+        if (!bound_to_connected_physical)
+          Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(i), WiimoteSource::None);
+      }
+      // Respect a CONNECTED physical device already bound to Wiimote 1 (same rule as Pad 1
+      // above): the on-screen pad is only the fallback when nothing physical owns the slot.
+      {
+        const auto dq0 = wm0->GetDefaultDevice();
+        if (!IsTouchscreenQualifier(dq0) && !dq0.ToString().empty() &&
+            g_controller_interface.HasConnectedDevice(dq0))
+        {
+          goto after_wiimote;
+        }
+        if (!have_wii_touch)
+          goto after_wiimote;
+      }
 
       // If Touchscreen is assigned to another Wiimote index, respect it
       const int wcount = Wiimote::GetConfig()->GetControllerCount();
       for (int i = 1; i < wcount; ++i)
       {
         auto* w = Wiimote::GetConfig()->GetController(i);
-        if (w && w->GetDefaultDevice() == dq_touch)
+        // "Explicitly mapped elsewhere" means an ACTIVE (Emulated) slot holding a touchscreen
+        // instance. Every slot's stock default is `iOS/0/Touchscreen` with Source = None, and
+        // treating that as explicit left Wii Remote 1 on the GC instance forever.
+        if (w && IsTouchscreenQualifier(w->GetDefaultDevice()) &&
+            Config::Get(Config::GetInfoForWiimoteSource(i)) == WiimoteSource::Emulated)
           goto after_wiimote;
       }
 
-      wm0->SetDefaultDevice(dq_touch);
+      wm0->SetDefaultDevice(dq_touch_wii);
       // Load stock touchscreen profile if present
       bool loaded_profile_wm = false;
       {
@@ -1611,10 +1689,11 @@ after_pad1:
       }
       wm0->UpdateReferences(g_controller_interface);
       Wiimote::GetConfig()->SaveConfig();
-      NSLog(@"[iCube][Input] Ensured Wiimote1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
+      NSLog(@"[iCube][Input] Ensured Wiimote1 mapped to iOS Touchscreen: %s", dq_touch_wii.ToString().c_str());
     }
   }
 after_wiimote:
+  DisableCoreIMUPointerOnTouchscreenWiimotes();
 }
 
 
@@ -1636,23 +1715,11 @@ after_wiimote:
 
   Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(idx), WiimoteSource::Emulated);
 
-  // Build Touchscreen device qualifier for comparisons and assignment
+  // Wii Remote N binds to Touchscreen instance 4+N-1 (the Wii-input instances), never to the
+  // GC instance that a name-only lookup returns first.
   ciface::Core::DeviceQualifier dq_touch;
-  {
-    const auto devices = g_controller_interface.GetAllDevices();
-    std::shared_ptr<ciface::Core::Device> touchscreen_dev;
-    for (const auto& dev : devices)
-    {
-      if (dev && dev->GetSource() == std::string("iOS") && dev->GetName() == std::string("Touchscreen"))
-      {
-        touchscreen_dev = dev;
-        break;
-      }
-    }
-    if (!touchscreen_dev)
-      return;
-    dq_touch.FromDevice(touchscreen_dev.get());
-  }
+  if (!FindTouchscreenQualifier(kTouchscreenWiimoteIdBase + idx, &dq_touch))
+    return;
 
   // Respect touchscreen if already mapped elsewhere
   const int wcount = Wiimote::GetConfig()->GetControllerCount();
@@ -1660,7 +1727,8 @@ after_wiimote:
   {
     if (i == idx) continue;
     auto* w = Wiimote::GetConfig()->GetController(i);
-    if (w && w->GetDefaultDevice() == dq_touch)
+    if (w && IsTouchscreenQualifier(w->GetDefaultDevice()) &&
+        Config::Get(Config::GetInfoForWiimoteSource(i)) == WiimoteSource::Emulated)
       goto after_set;
   }
 
@@ -1692,6 +1760,7 @@ after_wiimote:
   Wiimote::GetConfig()->SaveConfig();
 after_set:
   NSLog(@"[iCube][Input] Ensured Wiimote%ld mapped to iOS Touchscreen: %s", (long)portOneBased, dq_touch.ToString().c_str());
+  DisableCoreIMUPointerOnTouchscreenWiimotes();
 }
 
 - (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter {

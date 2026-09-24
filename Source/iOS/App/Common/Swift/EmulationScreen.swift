@@ -1039,7 +1039,13 @@ struct EmulationScreen: View {
       irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
       let useIMU = (irModeRaw == 0)
       let wantsMotionForShake = UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") && isWiiSystem
-      TVEmulationBridge.setWiiIMUPointEnabled(useIMU || wantsMotionForShake)
+      // The core's IMU pointer stays OFF while the on-screen pads own the pointer: the app
+      // synthesizes IR itself (touch in drag/follow, device attitude in gyro mode) and shake
+      // detection only needs the accelerometer. Enabling it here for gyro mode or shake made
+      // the core fold the phone's real tilt into the IR transform on top of the app's pointer,
+      // which is the "touch pointer stopped working" report. The Wii pad's own onAppear /
+      // onDisappear (false / true) remains the single runtime owner of this flag.
+      TVEmulationBridge.setWiiIMUPointEnabled(false)
       let wantsMotion = (isTouchControlsActive && useIMU) || wantsMotionForShake
       TCDeviceMotion.shared.setMotionEnabled(wantsMotion)
       if wantsMotion {
@@ -1068,9 +1074,10 @@ struct EmulationScreen: View {
       // Ensure touch controls start visible
       isTouchControlsActive = controllerManager.overlayVisible
       desiredTouchControls = true
-      // Reconcile and ensure Pad 1 defaults to touchscreen if needed
+      // Reconcile port ownership. The touchscreen fallback (ensurePad1DefaultsToTouchscreen)
+      // runs once, pre-boot, inside the coordinator; calling it here too ran the old C++ policy
+      // AFTER the engine and overwrote what reconcile() had just bound.
       ControllerManager.shared.reconcile()
-      EmulationCoordinator.ensurePad1DefaultsToTouchscreen()
       // Configure Wiimote sources based on connected controllers
       ControllerManager.shared.updateWiimoteEmulationForExternalControllers()
       #if os(iOS)
@@ -1138,14 +1145,9 @@ struct EmulationScreen: View {
       if overscanApplicable {
         TVEmulationBridge.setOverscanFullscreenEnabled(overscanFullscreen)
       }
-      // Default Wii IR mode if unset: set to Absolute (1) and schedule one-time deferred recalc
-      let currentIR = DOLConfigBridge.mainTouchPadIRMode()
-      if currentIR == 0 { // None
-        DOLConfigBridge.setMainTouchPadIRMode(1) // Absolute
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-          TVEmulationBridge.resizeSurfaceNow()
-        }
-      }
+      // (Removed) "IR mode 0 means unset -> force Follow": mode 0 is the user's Gyro choice
+      // (TouchIRMode.gyro) and the engine default is 2 (iOSSettings.cpp), so this bounced every
+      // Gyro selection back to Follow on each appearance.
       // Initialize overlay signature for Wii type (extension + sideways)
       let ext0 = Int(DOLWiimoteBridge.selectedExtension(forWiimote: 0))
       let side0 = DOLWiimoteBridge.isSideways(forWiimote: 0)

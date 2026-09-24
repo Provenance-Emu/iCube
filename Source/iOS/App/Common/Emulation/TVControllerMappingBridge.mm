@@ -172,11 +172,14 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
   auto* cfg = Pad::GetConfig();
   if (!cfg)
     return;
-  const auto devices = g_controller_interface.GetAllDevices();
+  // Touchscreen instance ids 0-3 carry the GC pad inputs for ports 1-4 (iOS.mm PopulateDevices);
+  // a name-only lookup always returned instance 0 and aliased every port onto Pad 1.
+  const int port = (int)portOneBased - 1;
   std::shared_ptr<ciface::Core::Device> touchscreen_dev;
-  for (const auto& dev : devices)
+  for (const auto& dev : g_controller_interface.GetAllDevices())
   {
-    if (dev && dev->GetSource() == std::string("iOS") && dev->GetName() == std::string("Touchscreen"))
+    if (dev && dev->GetSource() == std::string("iOS") && dev->GetName() == std::string("Touchscreen") &&
+        dev->GetId() == port)
     {
       touchscreen_dev = dev; break;
     }
@@ -184,7 +187,6 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
   if (!touchscreen_dev)
     return;
   ciface::Core::DeviceQualifier dq; dq.FromDevice(touchscreen_dev.get());
-  const int port = (int)portOneBased - 1;
   auto* pad = cfg->GetController(port);
   if (!pad) return;
   pad->SetDefaultDevice(dq);

@@ -323,6 +323,21 @@ final class ControllerManager: NSObject, ObservableObject {
       }
     }
 
+    // Re-affirm: a slot already bound to a CONNECTED physical controller must be active
+    // (SIDevice / Wiimote source Emulated) even if some other writer deactivated it since
+    // the binding was made. The engine only emits writes for NEW bindings, so without this
+    // pass a slot could stay bound-but-dead until the controller reconnected.
+    let connected = Set(state.connectedQualifiers)
+    func isPhysical(_ q: String) -> Bool { !q.isEmpty && !q.hasPrefix("iOS/") && connected.contains(q) }
+    for slot in state.portAssignments where isPhysical(slot.defaultDeviceQualifier) {
+      assignmentService.activate(port: slot.portOneBased - 1, system: .gamecube)
+    }
+    if state.isWiiSystem {
+      for slot in state.wiimoteAssignments where isPhysical(slot.defaultDeviceQualifier) {
+        assignmentService.activate(port: slot.portOneBased - 1, system: .wii)
+      }
+    }
+
     syncPlayerIndices()
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
   }

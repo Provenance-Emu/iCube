@@ -91,6 +91,20 @@ Severity: **H** breaks input for a user-visible case, **M** wrong but recoverabl
 10. Store and remove every observer registered in `onAppear` (#10). Sync `overlayVisible` on disconnect and give the banner an action (#11).
 11. Mutex or atomics in `StateManager` (#12); generate the `ButtonType` constants once (#17); stable `GetPreferredId` for MFi (#16, after a two-identical-pads test); delete the dead code (#18, #13's tvOS stub).
 
+## 5a. P0 status (2026-09-24)
+
+Landed in one commit, verified on an iPhone 16 Pro Max with Super Mario Galaxy: Wii Remote 1 is
+written as `iOS/4/Touchscreen`, `IMUIR/Enabled = False`, on-screen Wii controls work again.
+1. IMU-pointer fix (working tree -> landed); the emulation-screen setup no longer enables the core
+   IMU pointer for gyro mode or shake detection.
+2. Wii Remote 2-4 zeroing now skips slots bound to a connected physical controller; the Wii Remote 1
+   branch got the Pad 1 "already bound" guard; the post-`reconcile()` call was removed.
+3. "IR mode 0 means unset" heuristic removed.
+4. `reconcile()` re-affirms activation for every slot bound to a connected physical controller.
+5. Extra, found during verification: all three touchscreen lookups now resolve the instance by id
+   (GC 0-3, Wii 4-7) instead of "first device named Touchscreen"; this was defect #9 and was the
+   actual cause of the Wii touch pad being dead in the DEV container (`Device = iOS/0/Touchscreen`).
+
 ## 6. Verified clean by the reviews
 
 `playerIndex` is single-writer; pause-menu requests funnel through one sink and the Start/Menu
