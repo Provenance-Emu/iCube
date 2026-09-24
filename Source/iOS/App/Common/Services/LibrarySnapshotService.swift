@@ -16,12 +16,7 @@ final class LibrarySnapshotService: UIResponder, UIApplicationDelegate {
   }
 
   /// Coalesces bursts (a rescan posts many metadata updates) into one write.
-  /// Always mutates `pending` on the main thread.
   static func requestWrite(after delay: TimeInterval = debounce) {
-    guard Thread.isMainThread else {
-      DispatchQueue.main.async { requestWrite(after: delay) }
-      return
-    }
     pending?.cancel()
     let work = DispatchWorkItem { LibrarySnapshotWriter.writeNow() }
     pending = work

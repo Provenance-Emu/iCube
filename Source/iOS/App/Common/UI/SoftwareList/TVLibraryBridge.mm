@@ -6,6 +6,7 @@
 
 #import "GameFileCacheManager.h"
 #import "GameFilePtrWrapper.h"
+#import "SharedDefaults.h"
 #import "TVGameItem.h"
 #import "Core/Core.h"
 #import "Core/System.h"
@@ -83,7 +84,7 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
 
     // Seed a deterministic Favorites row (the library reads this defaults key
     // directly). Overwrites rather than merges, so repeat runs are identical.
-    [[NSUserDefaults standardUserDefaults] setObject:@{
+    [DOLSharedUserDefaults() setObject:@{
       @"GSRE01": @YES,
       @"RECE01": @YES,
       @"GNCE01": @YES,

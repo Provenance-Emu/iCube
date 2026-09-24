@@ -13,15 +13,14 @@ struct CoverJob: @unchecked Sendable {
 enum CoverMirror {
   static let maxEdge: CGFloat = 1280
   static let jpegQuality: CGFloat = 0.85
-  private static var loggedUnavailable = false
+  private static let unavailableLogged: Void = {
+    NSLog("[Snapshot] App Group container unavailable; cover mirroring skipped")
+  }()
 
   /// Skips files that already exist. Safe to call from any queue.
   static func mirror(_ jobs: [CoverJob]) {
     guard let dir = LibrarySnapshotAppGroup.mediaDirectory else {
-      if !loggedUnavailable {
-        loggedUnavailable = true
-        NSLog("[Snapshot] App Group container unavailable; cover mirroring skipped")
-      }
+      _ = unavailableLogged
       return
     }
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

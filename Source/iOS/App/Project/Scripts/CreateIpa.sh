@@ -19,6 +19,9 @@ cp -R "$APP_BUNDLE_PATH" "$BASE_DIR/Payload/"
 # Sign inside-out: frameworks, then each embedded extension, then the main executable.
 codesign -f -s "$SIGNING_CERTIFICATE" "$BASE_DIR/Payload/iCube.app/Frameworks/"*
 EXTENSION_ENTITLEMENTS="$(dirname "$ENTITLEMENTS_PATH")/Extension.entitlements"
+if [ -d "$BASE_DIR/Payload/iCube.app/PlugIns" ] && ls "$BASE_DIR/Payload/iCube.app/PlugIns/"*.appex >/dev/null 2>&1; then
+  [ -f "$EXTENSION_ENTITLEMENTS" ] || { echo "Missing $EXTENSION_ENTITLEMENTS" >&2; exit 1; }
+fi
 if [ -d "$BASE_DIR/Payload/iCube.app/PlugIns" ]; then
   for appex in "$BASE_DIR/Payload/iCube.app/PlugIns/"*.appex; do
     [ -e "$appex" ] || continue

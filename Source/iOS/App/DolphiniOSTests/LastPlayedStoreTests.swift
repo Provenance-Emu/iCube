@@ -35,10 +35,14 @@ final class LastPlayedStoreTests: XCTestCase {
     let source = UserDefaults(suiteName: suite + ".src")!
     defer { source.removePersistentDomain(forName: suite + ".src") }
     source.set(["GALE01": true], forKey: "favorites_by_gameid")
+    source.set(["GALE01": 1_700_000_000.0], forKey: "last_played_v1")
     SharedDefaults.migrateIfNeeded(from: source, to: defaults)
     XCTAssertEqual(defaults.dictionary(forKey: "favorites_by_gameid") as? [String: Bool], ["GALE01": true])
+    XCTAssertEqual(defaults.dictionary(forKey: "last_played_v1") as? [String: Double], ["GALE01": 1_700_000_000.0])
     source.set(["OTHER1": true], forKey: "favorites_by_gameid")
+    source.set(["OTHER1": 1_800_000_000.0], forKey: "last_played_v1")
     SharedDefaults.migrateIfNeeded(from: source, to: defaults)
     XCTAssertEqual(defaults.dictionary(forKey: "favorites_by_gameid") as? [String: Bool], ["GALE01": true], "second run is a no-op")
+    XCTAssertEqual(defaults.dictionary(forKey: "last_played_v1") as? [String: Double], ["GALE01": 1_700_000_000.0], "second run is a no-op")
   }
 }

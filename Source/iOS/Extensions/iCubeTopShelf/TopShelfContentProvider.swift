@@ -22,10 +22,10 @@ final class TopShelfContentProvider: TVTopShelfContentProvider {
         let snapshot = LibrarySnapshotStore().load()
         var sections: [TVTopShelfItemCollection<TVTopShelfSectionedItem>] = []
 
-        func addSection(_ title: String, _ games: [LibrarySnapshotGame]) {
+        func addSection(_ title: String, _ prefix: String, _ games: [LibrarySnapshotGame]) {
             guard !games.isEmpty else { return }
             let items = games.prefix(Self.maxItemsPerRow).map { game -> TVTopShelfSectionedItem in
-                let item = TVTopShelfSectionedItem(identifier: game.id)
+                let item = TVTopShelfSectionedItem(identifier: "\(prefix)-\(game.id)")
                 item.title = game.title
                 item.imageShape = .poster
                 if let url = game.coverURL, FileManager.default.fileExists(atPath: url.path) {
@@ -44,8 +44,8 @@ final class TopShelfContentProvider: TVTopShelfContentProvider {
             sections.append(collection)
         }
 
-        addSection("Continue Playing", snapshot.recentlyPlayed)
-        addSection("Favorites", snapshot.favorites)
+        addSection("Continue Playing", "recent", snapshot.recentlyPlayed)
+        addSection("Favorites", "favorite", snapshot.favorites)
         log.info("load: recent=\(snapshot.recentlyPlayed.count) favorites=\(snapshot.favorites.count) sections=\(sections.count)")
 
         guard !sections.isEmpty else {

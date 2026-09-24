@@ -5616,6 +5616,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5624,6 +5625,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5640,6 +5642,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5648,6 +5651,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug-jb.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5664,6 +5668,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5672,6 +5677,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5688,6 +5694,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5696,6 +5703,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5712,6 +5720,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5720,6 +5729,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb-patreon-beta.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5736,6 +5746,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5744,6 +5755,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-jb.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5760,6 +5772,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5768,6 +5781,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5784,6 +5798,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5792,6 +5807,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5808,6 +5824,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5816,6 +5833,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-patreon-beta-jb.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5832,6 +5850,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
@@ -5840,6 +5859,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts-patreon-beta.topshelf";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -5856,6 +5876,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -5864,6 +5885,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -5881,6 +5903,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -5889,6 +5912,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug-jb.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -5906,6 +5930,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -5914,6 +5939,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -5931,6 +5957,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -5939,6 +5966,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -5956,6 +5984,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -5964,6 +5993,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb-patreon-beta.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -5981,6 +6011,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -5989,6 +6020,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-jb.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6006,6 +6038,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -6014,6 +6047,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6031,6 +6065,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -6039,6 +6074,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6056,6 +6092,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -6064,6 +6101,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-patreon-beta-jb.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6081,6 +6119,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
@@ -6089,6 +6128,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts-patreon-beta.thumbnail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6106,6 +6146,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6114,6 +6155,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6131,6 +6173,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6139,6 +6182,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug-jb.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6156,6 +6200,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6164,6 +6209,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6181,6 +6227,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6189,6 +6236,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6206,6 +6254,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6214,6 +6263,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb-patreon-beta.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6231,6 +6281,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6239,6 +6290,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-jb.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6256,6 +6308,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6264,6 +6317,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6281,6 +6335,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6289,6 +6344,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6306,6 +6362,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6314,6 +6371,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-patreon-beta-jb.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -6331,6 +6389,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = S32Z3HMYVQ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
@@ -6339,6 +6398,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts-patreon-beta.preview";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

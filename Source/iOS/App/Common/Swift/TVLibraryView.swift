@@ -2793,13 +2793,13 @@ struct TVLibraryView: View {
   }
 
   private func batchSetFavorite(_ favorite: Bool) {
-    var favDict = UserDefaults.standard.dictionary(forKey: "favorites_by_gameid") ?? [:]
+    var favDict = SharedDefaults.suite.dictionary(forKey: "favorites_by_gameid") ?? [:]
     let items = model.games.filter { selectedFilePaths.contains($0.filePath) }
     for item in items where !item.gameID.isEmpty {
       favDict[item.gameID] = favorite
       item.isFavorite = favorite
     }
-    UserDefaults.standard.set(favDict, forKey: "favorites_by_gameid")
+    SharedDefaults.suite.set(favDict, forKey: "favorites_by_gameid")
     favoritesVersion &+= 1
     NotificationCenter.default.post(name: Notification.Name("FavoritesChanged"), object: nil)
   }
@@ -2858,7 +2858,7 @@ struct TVLibraryView: View {
   }
 
   private func favorites() -> [TVGameItem]? {
-    let favDict = UserDefaults.standard.dictionary(forKey: "favorites_by_gameid") ?? [:]
+    let favDict = SharedDefaults.suite.dictionary(forKey: "favorites_by_gameid") ?? [:]
     let set = Set(favDict.compactMap { (k, v) in (v as? Bool) == true ? k : nil })
     guard !set.isEmpty else { return [] }
     var items = model.games.filter { set.contains($0.gameID) }

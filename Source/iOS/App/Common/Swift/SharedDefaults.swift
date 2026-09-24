@@ -11,7 +11,7 @@ enum SharedDefaults {
   static var isAppGroupBacked: Bool { LibrarySnapshotAppGroup.isAvailable }
 
   private static let migratedKey = "shared_defaults_migrated_v1"
-  static let migratedKeys = ["favorites_by_gameid", "library_added_dates_v1"]
+  static let migratedKeys = ["favorites_by_gameid", "library_added_dates_v1", "last_played_v1"]
 
   /// One-time copy of extension-relevant keys from `.standard` into the suite. The
   /// old values are left in place so a downgrade keeps working.
