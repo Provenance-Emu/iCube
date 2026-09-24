@@ -36,6 +36,14 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       // auto-assign is live in library, menus, and in-game on iOS and tvOS — not
       // only from the in-game screen. startObserving() is idempotent.
       ControllerManager.shared.startObserving()
+
+      // Cold launch from a URL (Top Shelf tile, dolphinios:// link). Give the library
+      // view time to mount its DOLLaunchGameByGameID observer, same delay as shortcuts.
+      if let context = connectionOptions.urlContexts.first {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+          _ = ServiceManager.shared.open(url: context.url, options: [:])
+        }
+      }
       #if !os(tvOS)
       // Handle cold-boot quick actions after UI is ready
       if let shortcut = connectionOptions.shortcutItem {
@@ -53,6 +61,12 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func sceneDidDisconnect(_ scene: UIScene) {
     MainSceneCoordinator.shared().mainScene = nil
+  }
+
+  func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    for context in URLContexts {
+      _ = ServiceManager.shared.open(url: context.url, options: [:])
+    }
   }
 
   func sceneDidBecomeActive(_ scene: UIScene) {

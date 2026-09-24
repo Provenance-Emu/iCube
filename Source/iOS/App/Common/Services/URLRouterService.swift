@@ -6,10 +6,20 @@ import UIKit
 final class URLRouterService: NSObject, UIApplicationDelegate {
   func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
     // Supported:
+    // dolphinios://play?id=GALE01                       (Top Shelf / external launch)
     // dolphinios://dsu/add?ip=192.168.1.23&port=26760&desc=My%20iPhone
     // Also accept legacy: dsu://192.168.1.23:26760
+    if handlePlayLink(url) { return true }
     if handleDSULink(url) { return true }
     return false
+  }
+
+  private func handlePlayLink(_ url: URL) -> Bool {
+    guard url.scheme?.lowercased() == "dolphinios", url.host?.lowercased() == "play" else { return false }
+    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    guard let id = items.first(where: { $0.name.lowercased() == "id" })?.value, !id.isEmpty else { return false }
+    Task { @MainActor in GameLaunchRequest.launch(gameID: id) }
+    return true
   }
 
   private func handleDSULink(_ url: URL) -> Bool {
