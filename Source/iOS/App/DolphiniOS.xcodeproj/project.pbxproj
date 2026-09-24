@@ -43,7 +43,6 @@
 		B34ECCFE2E56A52C00301907 /* TVLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */; };
 		B34ECD002E56A57A00301907 /* EmulationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */; };
 		B34ECD022E56A68200301907 /* TVEmulationBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34ECD012E56A68200301907 /* TVEmulationBridge.mm */; };
-		B34ECD042E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECD032E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift */; };
 		B34EDDDD2E57AC9700301907 /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDDB2E57AC9700301907 /* SettingsRootView.swift */; };
 		B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */; };
 		B34EDDE32E57BFEC00301907 /* TVSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */; };
@@ -106,7 +105,6 @@
 		B900A7BD27F4CDD3000361DD /* SwiftStringUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7BC27F4CDD3000361DD /* SwiftStringUtil.swift */; };
 		B900A7D227F5228B000361DD /* UICollectionViewLeftAlignedLayout in Frameworks */ = {isa = PBXBuildFile; productRef = B900A7D127F5228B000361DD /* UICollectionViewLeftAlignedLayout */; };
 		B900A7D527F61F3A000361DD /* GameFileCacheManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7D427F61F3A000361DD /* GameFileCacheManager.mm */; };
-		B904ACDE28863119008B6BE9 /* GraphicsSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACE028863119008B6BE9 /* GraphicsSettings.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B904ACF42886AB06008B6BE9 /* ButtonMapping.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACF32886AB05008B6BE9 /* ButtonMapping.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B904ACF82886AC58008B6BE9 /* MappingRootViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904ACF72886AC58008B6BE9 /* MappingRootViewController.mm */; };
 		B904AD0C28886AE6008B6BE9 /* MappingRootDeviceCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD0B28886AE6008B6BE9 /* MappingRootDeviceCell.m */; };
@@ -138,8 +136,6 @@
 		B950CFA32961696100197719 /* BootNoticeNavigationViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFA22961696100197719 /* BootNoticeNavigationViewController.m */; };
 		B950CFAA29616B4F00197719 /* MainSceneCoordinator.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFA929616B4F00197719 /* MainSceneCoordinator.m */; };
 		B950CFAD296170BC00197719 /* BootNoticeManager.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFAC296170BC00197719 /* BootNoticeManager.m */; };
-		B950CFB2296179A000197719 /* UnofficialBuildNoticeViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B950CFB1296179A000197719 /* UnofficialBuildNoticeViewController.m */; };
-		B950CFB6296179E000197719 /* UnofficialBuildNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B950CFB5296179E000197719 /* UnofficialBuildNotice.xib */; platformFilters = (ios, maccatalyst, ); };
 		B950CFBA296208A900197719 /* UpdateNoticeViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B950CFB9296208A900197719 /* UpdateNoticeViewController.mm */; };
 		B950CFBD296208D400197719 /* UpdateNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B950CFBC296208D400197719 /* UpdateNotice.xib */; platformFilters = (ios, maccatalyst, ); };
 		B950CFBF29620C8900197719 /* UpdateCheckService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B950CFBE29620C8900197719 /* UpdateCheckService.swift */; };
@@ -175,9 +171,6 @@
 		B9809C802A4A190C00877579 /* ActionReplayCodeViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9809C7F2A4A190C00877579 /* ActionReplayCodeViewController.mm */; };
 		B9809C832A4A22EB00877579 /* ActionReplayCodeEditViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9809C822A4A22EB00877579 /* ActionReplayCodeEditViewController.mm */; };
 		B991379E2881F23A00588446 /* Core.strings in Resources */ = {isa = PBXBuildFile; fileRef = B99137A02881F23A00588446 /* Core.strings */; };
-		B99137AC28827AD200588446 /* SettingsRoot.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137AE28827AD200588446 /* SettingsRoot.storyboard */; platformFilters = (ios, maccatalyst, ); };
-		B99137B52882A58000588446 /* SoftwareList.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137B72882A58000588446 /* SoftwareList.storyboard */; platformFilters = (ios, maccatalyst, ); };
-		B99137BF288327AC00588446 /* ConfigSettings.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B99137C1288327AC00588446 /* ConfigSettings.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B99137C928832A0800588446 /* LocalizationUtil.m in Sources */ = {isa = PBXBuildFile; fileRef = B99137C828832A0800588446 /* LocalizationUtil.m */; };
 		B9B1483829642C75002C4BE7 /* UpdateRequiredNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B1483729642C75002C4BE7 /* UpdateRequiredNotice.xib */; platformFilters = (ios, maccatalyst, ); };
 		B9B1483C29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B9B1483A29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.m */; };
@@ -200,7 +193,6 @@
 		B9D9389E283EF7AD00B290FC /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D9389D283EF7AD00B290FC /* MetalKit.framework */; };
 		B9D938A1283F23A000B290FC /* TCButtonType.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D938A0283F239F00B290FC /* TCButtonType.swift */; };
 		B9D938A728418AFE00B290FC /* TCManagerInterface.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9D938A628418AFD00B290FC /* TCManagerInterface.mm */; };
-		B9DC3E0427EFBD2D0084DAA4 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9DC3E0227EFBD2D0084DAA4 /* Main.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9DC3E0627EFBD2F0084DAA4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9DC3E0527EFBD2F0084DAA4 /* Assets.xcassets */; };
 		B9DC3E0927EFBD2F0084DAA4 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B9DC3E0727EFBD2F0084DAA4 /* LaunchScreen.storyboard */; platformFilters = (ios, maccatalyst, ); };
 		B9EC28382D21D429000FAE09 /* ControllersTouchscreenViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9EC28372D21D429000FAE09 /* ControllersTouchscreenViewController.mm */; };
@@ -235,6 +227,90 @@
 		C0C0BEEF0017000000000000 /* WebDAVFileOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0017000000000000 /* WebDAVFileOperations.swift */; };
 		C0C0BEEF0018000000000000 /* ImportFileManager+BatchImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0018000000000000 /* ImportFileManager+BatchImport.swift */; };
 		C0C0BEEF0019000000000000 /* ZipImportHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0019000000000000 /* ZipImportHelper.swift */; };
+		C0C0CAFE0000000000000122 /* iCubeTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000102 /* iCubeTopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C0C0CAFE0000000000000222 /* iCubeThumbnail.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000202 /* iCubeThumbnail.appex */; platformFilters = (ios, maccatalyst, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C0C0CAFE0000000000000322 /* iCubeQuickLookPreview.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000302 /* iCubeQuickLookPreview.appex */; platformFilters = (ios, maccatalyst, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C0C0CAFE0000000000000402 /* PVLibrarySnapshot in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000401 /* PVLibrarySnapshot */; };
+		C0C0CAFE0000000000000406 /* PVLibrarySnapshot in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000403 /* PVLibrarySnapshot */; };
+		C0C0CAFE0000000000000407 /* PVLibrarySnapshot in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000404 /* PVLibrarySnapshot */; };
+		C0C0CAFE0000000000000408 /* PVLibrarySnapshot in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000405 /* PVLibrarySnapshot */; };
+		C0C0CAFE0000000000000410 /* QuickLookThumbnailing.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000409 /* QuickLookThumbnailing.framework */; };
+		C0C0CAFE0000000000000412 /* QuickLook.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000411 /* QuickLook.framework */; };
+		C0C0CAFE0000000000000414 /* PlaceholderRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000413 /* PlaceholderRenderer.swift */; };
+		C0C0CAFE0000000000000502 /* SharedDefaults.m in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000501 /* SharedDefaults.m */; };
+		C0C0CAFE0000000000000504 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000503 /* SharedDefaults.swift */; };
+		C0C0CAFE0000000000000506 /* GameLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000505 /* GameLaunchRequest.swift */; };
+		C0C0CAFE0000000000000508 /* LastPlayedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000507 /* LastPlayedStore.swift */; };
+		C0C0CAFE0000000000000510 /* CoverMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000509 /* CoverMirror.swift */; };
+		C0C0CAFE0000000000000512 /* LibrarySnapshotWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000511 /* LibrarySnapshotWriter.swift */; };
+		C0C0CAFE0000000000000514 /* LibrarySnapshotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000513 /* LibrarySnapshotService.swift */; };
+		C0C0CAFE0000000000000516 /* LastPlayedStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000515 /* LastPlayedStoreTests.swift */; };
+		C0C0CAFE0000000000000608 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000604 /* Sentry */; };
+		C0C0CAFE0000000000000609 /* PLzmaSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000605 /* PLzmaSDK */; };
+		C0C0CAFE0000000000000610 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000606 /* SWCompression */; };
+		C0C0CAFE0000000000000611 /* PVHelp in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000607 /* PVHelp */; };
+		C0C0CAFE0000000000000702 /* DOLDebugBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000701 /* DOLDebugBridge.mm */; };
+		C0C0CAFE0000000000000705 /* DOLPerfBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000704 /* DOLPerfBridge.mm */; };
+		C0C0CAFE0000000000000708 /* DOLSettingsKeyBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000707 /* DOLSettingsKeyBridge.mm */; };
+		C0C0CAFE0000000000000901 /* ContinuityIdentityStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */; };
+		C0C0CAFE0000000000000903 /* ContinuityLibraryBrowseController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */; };
+		C0C0CAFE0000000000000905 /* ContinuityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000904 /* ContinuityManager.swift */; };
+		C0C0CAFE0000000000000907 /* ContinuityPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000906 /* ContinuityPaths.swift */; };
+		C0C0CAFE0000000000000909 /* ContinuityReceiveController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000908 /* ContinuityReceiveController.swift */; };
+		C0C0CAFE000000000000090B /* ContinuityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000090A /* ContinuityService.swift */; };
+		C0C0CAFE000000000000090D /* ICubeContinuityFileProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000090C /* ICubeContinuityFileProvider.swift */; };
+		C0C0CAFE000000000000090F /* ICubeLibraryProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000090E /* ICubeLibraryProvider.swift */; };
+		C0C0CAFE0000000000000911 /* ICubeLibraryQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000910 /* ICubeLibraryQuery.swift */; };
+		C0C0CAFE0000000000000913 /* ICubeSaveStateMinter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000912 /* ICubeSaveStateMinter.swift */; };
+		C0C0CAFE0000000000000915 /* ContinuityBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000914 /* ContinuityBrowseView.swift */; };
+		C0C0CAFE0000000000000917 /* ContinuityHandoffSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000916 /* ContinuityHandoffSheet.swift */; };
+		C0C0CAFE0000000000000919 /* ContinuityLibrarySharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000918 /* ContinuityLibrarySharingView.swift */; };
+		C0C0CAFE000000000000091B /* ContinuityPeerLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000091A /* ContinuityPeerLibraryView.swift */; };
+		C0C0CAFE000000000000091D /* ContinuitySecurityNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000091C /* ContinuitySecurityNotice.swift */; };
+		C0C0CAFE000000000000091F /* CloudSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000091E /* CloudSyncCoordinator.swift */; };
+		C0C0CAFE0000000000000921 /* CloudSyncLifecycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000920 /* CloudSyncLifecycleService.swift */; };
+		C0C0CAFE0000000000000923 /* WebServerLifecycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000922 /* WebServerLifecycleService.swift */; };
+		C0C0CAFE0000000000000925 /* BootWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000924 /* BootWatchdog.swift */; };
+		C0C0CAFE0000000000000927 /* BenchAccessApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000926 /* BenchAccessApproval.swift */; };
+		C0C0CAFE0000000000000929 /* DebugEventBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000928 /* DebugEventBus.swift */; };
+		C0C0CAFE000000000000092B /* SettingsSnapshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000092A /* SettingsSnapshots.swift */; };
+		C0C0CAFE000000000000092D /* WebSocketConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000092C /* WebSocketConnection.swift */; };
+		C0C0CAFE000000000000092F /* WebSocketFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000092E /* WebSocketFrame.swift */; };
+		C0C0CAFE0000000000000931 /* HelpPresentationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000930 /* HelpPresentationBridge.swift */; };
+		C0C0CAFE0000000000000933 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000932 /* MarkdownContentView.swift */; };
+		C0C0CAFE0000000000000935 /* WikiHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000934 /* WikiHelpView.swift */; };
+		C0C0CAFE0000000000000937 /* WikiHelpViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000936 /* WikiHelpViewModel.swift */; };
+		C0C0CAFE0000000000000939 /* WikiPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000938 /* WikiPageView.swift */; };
+		C0C0CAFE000000000000093B /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000093A /* AboutView.swift */; };
+		C0C0CAFE000000000000093D /* AudioEffectEditors.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000093C /* AudioEffectEditors.swift */; };
+		C0C0CAFE000000000000093F /* CloudSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000093E /* CloudSyncSettingsView.swift */; };
+		C0C0CAFE0000000000000941 /* ConfigAchievementsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000940 /* ConfigAchievementsView.swift */; };
+		C0C0CAFE0000000000000943 /* ConfigAdvancedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000942 /* ConfigAdvancedView.swift */; };
+		C0C0CAFE0000000000000945 /* ConfigAudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000944 /* ConfigAudioView.swift */; };
+		C0C0CAFE0000000000000947 /* ConfigGameCubeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000946 /* ConfigGameCubeView.swift */; };
+		C0C0CAFE0000000000000949 /* ConfigGeneralView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000948 /* ConfigGeneralView.swift */; };
+		C0C0CAFE000000000000094B /* ConfigInterfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000094A /* ConfigInterfaceView.swift */; };
+		C0C0CAFE000000000000094D /* ConfigWiiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000094C /* ConfigWiiView.swift */; };
+		C0C0CAFE000000000000094F /* ControllersMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000094E /* ControllersMappingView.swift */; };
+		C0C0CAFE0000000000000951 /* ControllersRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000950 /* ControllersRootView.swift */; };
+		C0C0CAFE0000000000000953 /* DSUDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000952 /* DSUDiscovery.swift */; };
+		C0C0CAFE0000000000000955 /* DebugRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000954 /* DebugRootView.swift */; };
+		C0C0CAFE0000000000000957 /* EnhancedMotionControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000956 /* EnhancedMotionControlsView.swift */; };
+		C0C0CAFE0000000000000959 /* GraphicsAdvancedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000958 /* GraphicsAdvancedView.swift */; };
+		C0C0CAFE000000000000095B /* GraphicsEnhancementsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000095A /* GraphicsEnhancementsView.swift */; };
+		C0C0CAFE000000000000095D /* GraphicsGeneralView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000095C /* GraphicsGeneralView.swift */; };
+		C0C0CAFE000000000000095F /* GraphicsHacksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000095E /* GraphicsHacksView.swift */; };
+		C0C0CAFE0000000000000961 /* PerformanceABView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000960 /* PerformanceABView.swift */; };
+		C0C0CAFE0000000000000963 /* PerformanceTuningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000962 /* PerformanceTuningView.swift */; };
+		C0C0CAFE0000000000000965 /* SafariView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000964 /* SafariView.swift */; };
+		C0C0CAFE0000000000000967 /* SettingsSharedComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000966 /* SettingsSharedComponents.swift */; };
+		C0C0CAFE0000000000000969 /* SyncConflictResolutionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000968 /* SyncConflictResolutionView.swift */; };
+		C0C0CAFE000000000000096B /* SyncStatusIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000096A /* SyncStatusIndicator.swift */; };
+		C0C0CAFE0000000000000971 /* icube.js in Resources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000970 /* icube.js */; };
+		C0C0CAFE0000000000000972 /* LibraryPlatformCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3LIB0012E9000000036EE31 /* LibraryPlatformCategory.swift */; };
+		C0C0CAFE0000000000000986 /* PVCloudSync in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000983 /* PVCloudSync */; };
+		C0C0CAFE0000000000000987 /* PVContinuity in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000984 /* PVContinuity */; };
+		C0C0CAFE0000000000000988 /* PVSyncRules in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000985 /* PVSyncRules */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -244,6 +320,27 @@
 			proxyType = 1;
 			remoteGlobalIDString = B9DC3DF527EFBD2C0084DAA4;
 			remoteInfo = DolphiniOS;
+		};
+		C0C0CAFE0000000000000120 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B9DC3DEE27EFBD2C0084DAA4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0C0CAFE0000000000000101;
+			remoteInfo = iCubeTopShelf;
+		};
+		C0C0CAFE0000000000000220 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B9DC3DEE27EFBD2C0084DAA4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0C0CAFE0000000000000201;
+			remoteInfo = iCubeThumbnail;
+		};
+		C0C0CAFE0000000000000320 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B9DC3DEE27EFBD2C0084DAA4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0C0CAFE0000000000000301;
+			remoteInfo = iCubeQuickLookPreview;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -257,6 +354,19 @@
 				B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */,
 				B31E6DC72E6409F90036EE31 /* PVlibDolphin.xcframework in CopyFiles */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000420 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C0C0CAFE0000000000000122 /* iCubeTopShelf.appex in Embed Foundation Extensions */,
+				C0C0CAFE0000000000000222 /* iCubeThumbnail.appex in Embed Foundation Extensions */,
+				C0C0CAFE0000000000000322 /* iCubeQuickLookPreview.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -303,7 +413,6 @@
 		B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVLibraryView.swift; sourceTree = "<group>"; };
 		B34ECCFF2E56A57A00301907 /* EmulationScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulationScreen.swift; sourceTree = "<group>"; };
 		B34ECD012E56A68200301907 /* TVEmulationBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TVEmulationBridge.mm; sourceTree = "<group>"; };
-		B34ECD032E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVOSUnofficialBuildNotice.swift; sourceTree = "<group>"; };
 		B34EDDDB2E57AC9700301907 /* SettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
 		B34EDDDE2E57B2E200301907 /* DOLConfigBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLConfigBridge.h; sourceTree = "<group>"; };
 		B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLConfigBridge.mm; sourceTree = "<group>"; };
@@ -448,9 +557,6 @@
 		B950CFA929616B4F00197719 /* MainSceneCoordinator.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MainSceneCoordinator.m; sourceTree = "<group>"; };
 		B950CFAB296170BC00197719 /* BootNoticeManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BootNoticeManager.h; sourceTree = "<group>"; };
 		B950CFAC296170BC00197719 /* BootNoticeManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BootNoticeManager.m; sourceTree = "<group>"; };
-		B950CFB0296179A000197719 /* UnofficialBuildNoticeViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UnofficialBuildNoticeViewController.h; sourceTree = "<group>"; };
-		B950CFB1296179A000197719 /* UnofficialBuildNoticeViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UnofficialBuildNoticeViewController.m; sourceTree = "<group>"; };
-		B950CFB5296179E000197719 /* UnofficialBuildNotice.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = UnofficialBuildNotice.xib; sourceTree = "<group>"; };
 		B950CFB8296208A900197719 /* UpdateNoticeViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UpdateNoticeViewController.h; sourceTree = "<group>"; };
 		B950CFB9296208A900197719 /* UpdateNoticeViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = UpdateNoticeViewController.mm; sourceTree = "<group>"; };
 		B950CFBC296208D400197719 /* UpdateNotice.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = UpdateNotice.xib; sourceTree = "<group>"; };
@@ -564,7 +670,6 @@
 		B9D938A528418AFD00B290FC /* TCManagerInterface.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TCManagerInterface.h; sourceTree = "<group>"; };
 		B9D938A628418AFD00B290FC /* TCManagerInterface.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = TCManagerInterface.mm; sourceTree = "<group>"; };
 		B9DC3DF627EFBD2C0084DAA4 /* iCube.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iCube.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		B9DC3E0327EFBD2D0084DAA4 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		B9DC3E0527EFBD2F0084DAA4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B9DC3E0827EFBD2F0084DAA4 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		B9DC3E0A27EFBD2F0084DAA4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -611,6 +716,82 @@
 		C0C0CAFE0017000000000000 /* WebDAVFileOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WebDAVFileOperations.swift"; path = "Common/Swift/WebDAVFileOperations.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0018000000000000 /* ImportFileManager+BatchImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ImportFileManager+BatchImport.swift"; path = "DolphiniOS/UI/Import/ImportFileManager+BatchImport.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0019000000000000 /* ZipImportHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ZipImportHelper.swift"; path = "DolphiniOS/UI/Import/ZipImportHelper.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000102 /* iCubeTopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = iCubeTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0C0CAFE0000000000000202 /* iCubeThumbnail.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = iCubeThumbnail.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0C0CAFE0000000000000302 /* iCubeQuickLookPreview.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = iCubeQuickLookPreview.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0C0CAFE0000000000000409 /* QuickLookThumbnailing.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLookThumbnailing.framework; path = System/Library/Frameworks/QuickLookThumbnailing.framework; sourceTree = SDKROOT; };
+		C0C0CAFE0000000000000411 /* QuickLook.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLook.framework; path = System/Library/Frameworks/QuickLook.framework; sourceTree = SDKROOT; };
+		C0C0CAFE0000000000000413 /* PlaceholderRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PlaceholderRenderer.swift"; path = "../Extensions/iCubeThumbnail/PlaceholderRenderer.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000500 /* SharedDefaults.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "SharedDefaults.h"; path = "Common/SharedDefaults.h"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000501 /* SharedDefaults.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = "SharedDefaults.m"; path = "Common/SharedDefaults.m"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000503 /* SharedDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SharedDefaults.swift"; path = "Common/Swift/SharedDefaults.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000505 /* GameLaunchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "GameLaunchRequest.swift"; path = "Common/Swift/GameLaunchRequest.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000507 /* LastPlayedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LastPlayedStore.swift"; path = "Common/Swift/LastPlayedStore.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000509 /* CoverMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CoverMirror.swift"; path = "Common/Swift/Snapshot/CoverMirror.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000511 /* LibrarySnapshotWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LibrarySnapshotWriter.swift"; path = "Common/Swift/Snapshot/LibrarySnapshotWriter.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000513 /* LibrarySnapshotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LibrarySnapshotService.swift"; path = "Common/Services/LibrarySnapshotService.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000515 /* LastPlayedStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LastPlayedStoreTests.swift"; path = "DolphiniOSTests/LastPlayedStoreTests.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000700 /* DOLDebugBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLDebugBridge.h; sourceTree = "<group>"; };
+		C0C0CAFE0000000000000701 /* DOLDebugBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLDebugBridge.mm; sourceTree = "<group>"; };
+		C0C0CAFE0000000000000703 /* DOLPerfBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLPerfBridge.h; sourceTree = "<group>"; };
+		C0C0CAFE0000000000000704 /* DOLPerfBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLPerfBridge.mm; sourceTree = "<group>"; };
+		C0C0CAFE0000000000000706 /* DOLSettingsKeyBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLSettingsKeyBridge.h; sourceTree = "<group>"; };
+		C0C0CAFE0000000000000707 /* DOLSettingsKeyBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLSettingsKeyBridge.mm; sourceTree = "<group>"; };
+		C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityIdentityStore.swift"; path = "Common/Continuity/ContinuityIdentityStore.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityLibraryBrowseController.swift"; path = "Common/Continuity/ContinuityLibraryBrowseController.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000904 /* ContinuityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityManager.swift"; path = "Common/Continuity/ContinuityManager.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000906 /* ContinuityPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityPaths.swift"; path = "Common/Continuity/ContinuityPaths.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000908 /* ContinuityReceiveController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityReceiveController.swift"; path = "Common/Continuity/ContinuityReceiveController.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000090A /* ContinuityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityService.swift"; path = "Common/Continuity/ContinuityService.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000090C /* ICubeContinuityFileProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ICubeContinuityFileProvider.swift"; path = "Common/Continuity/ICubeContinuityFileProvider.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000090E /* ICubeLibraryProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ICubeLibraryProvider.swift"; path = "Common/Continuity/ICubeLibraryProvider.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000910 /* ICubeLibraryQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ICubeLibraryQuery.swift"; path = "Common/Continuity/ICubeLibraryQuery.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000912 /* ICubeSaveStateMinter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ICubeSaveStateMinter.swift"; path = "Common/Continuity/ICubeSaveStateMinter.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000914 /* ContinuityBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityBrowseView.swift"; path = "Common/Continuity/UI/ContinuityBrowseView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000916 /* ContinuityHandoffSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityHandoffSheet.swift"; path = "Common/Continuity/UI/ContinuityHandoffSheet.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000918 /* ContinuityLibrarySharingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityLibrarySharingView.swift"; path = "Common/Continuity/UI/ContinuityLibrarySharingView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000091A /* ContinuityPeerLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuityPeerLibraryView.swift"; path = "Common/Continuity/UI/ContinuityPeerLibraryView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000091C /* ContinuitySecurityNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ContinuitySecurityNotice.swift"; path = "Common/Continuity/UI/ContinuitySecurityNotice.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000091E /* CloudSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CloudSyncCoordinator.swift"; path = "Common/Services/CloudSyncCoordinator.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000920 /* CloudSyncLifecycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CloudSyncLifecycleService.swift"; path = "Common/Services/CloudSyncLifecycleService.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000922 /* WebServerLifecycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WebServerLifecycleService.swift"; path = "Common/Services/WebServerLifecycleService.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000924 /* BootWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BootWatchdog.swift"; path = "Common/Swift/BootWatchdog.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000926 /* BenchAccessApproval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BenchAccessApproval.swift"; path = "Common/Swift/Debug/BenchAccessApproval.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000928 /* DebugEventBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DebugEventBus.swift"; path = "Common/Swift/Debug/DebugEventBus.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000092A /* SettingsSnapshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SettingsSnapshots.swift"; path = "Common/Swift/Debug/SettingsSnapshots.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000092C /* WebSocketConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WebSocketConnection.swift"; path = "Common/Swift/Debug/WebSocketConnection.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000092E /* WebSocketFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WebSocketFrame.swift"; path = "Common/Swift/Debug/WebSocketFrame.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000930 /* HelpPresentationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HelpPresentationBridge.swift"; path = "Common/Swift/Help/HelpPresentationBridge.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000932 /* MarkdownContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MarkdownContentView.swift"; path = "Common/Swift/Help/MarkdownContentView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000934 /* WikiHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WikiHelpView.swift"; path = "Common/Swift/Help/WikiHelpView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000936 /* WikiHelpViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WikiHelpViewModel.swift"; path = "Common/Swift/Help/WikiHelpViewModel.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000938 /* WikiPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WikiPageView.swift"; path = "Common/Swift/Help/WikiPageView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000093A /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AboutView.swift"; path = "Common/UI/Settings/SwiftUI/AboutView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000093C /* AudioEffectEditors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AudioEffectEditors.swift"; path = "Common/UI/Settings/SwiftUI/AudioEffectEditors.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000093E /* CloudSyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CloudSyncSettingsView.swift"; path = "Common/UI/Settings/SwiftUI/CloudSyncSettingsView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000940 /* ConfigAchievementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfigAchievementsView.swift"; path = "Common/UI/Settings/SwiftUI/ConfigAchievementsView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000942 /* ConfigAdvancedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfigAdvancedView.swift"; path = "Common/UI/Settings/SwiftUI/ConfigAdvancedView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000944 /* ConfigAudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfigAudioView.swift"; path = "Common/UI/Settings/SwiftUI/ConfigAudioView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000946 /* ConfigGameCubeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfigGameCubeView.swift"; path = "Common/UI/Settings/SwiftUI/ConfigGameCubeView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000948 /* ConfigGeneralView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfigGeneralView.swift"; path = "Common/UI/Settings/SwiftUI/ConfigGeneralView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000094A /* ConfigInterfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfigInterfaceView.swift"; path = "Common/UI/Settings/SwiftUI/ConfigInterfaceView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000094C /* ConfigWiiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfigWiiView.swift"; path = "Common/UI/Settings/SwiftUI/ConfigWiiView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000094E /* ControllersMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ControllersMappingView.swift"; path = "Common/UI/Settings/SwiftUI/ControllersMappingView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000950 /* ControllersRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ControllersRootView.swift"; path = "Common/UI/Settings/SwiftUI/ControllersRootView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000952 /* DSUDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DSUDiscovery.swift"; path = "Common/UI/Settings/SwiftUI/DSUDiscovery.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000954 /* DebugRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DebugRootView.swift"; path = "Common/UI/Settings/SwiftUI/DebugRootView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000956 /* EnhancedMotionControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "EnhancedMotionControlsView.swift"; path = "Common/UI/Settings/SwiftUI/EnhancedMotionControlsView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000958 /* GraphicsAdvancedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "GraphicsAdvancedView.swift"; path = "Common/UI/Settings/SwiftUI/GraphicsAdvancedView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000095A /* GraphicsEnhancementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "GraphicsEnhancementsView.swift"; path = "Common/UI/Settings/SwiftUI/GraphicsEnhancementsView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000095C /* GraphicsGeneralView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "GraphicsGeneralView.swift"; path = "Common/UI/Settings/SwiftUI/GraphicsGeneralView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000095E /* GraphicsHacksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "GraphicsHacksView.swift"; path = "Common/UI/Settings/SwiftUI/GraphicsHacksView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000960 /* PerformanceABView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PerformanceABView.swift"; path = "Common/UI/Settings/SwiftUI/PerformanceABView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000962 /* PerformanceTuningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PerformanceTuningView.swift"; path = "Common/UI/Settings/SwiftUI/PerformanceTuningView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000964 /* SafariView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SafariView.swift"; path = "Common/UI/Settings/SwiftUI/SafariView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000966 /* SettingsSharedComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SettingsSharedComponents.swift"; path = "Common/UI/Settings/SwiftUI/SettingsSharedComponents.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000968 /* SyncConflictResolutionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SyncConflictResolutionView.swift"; path = "Common/UI/Settings/SwiftUI/SyncConflictResolutionView.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000096A /* SyncStatusIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SyncStatusIndicator.swift"; path = "Common/UI/Settings/SwiftUI/SyncStatusIndicator.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000970 /* icube.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = icube.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -627,6 +808,27 @@
 				GameActivity.swift,
 			);
 			target = B31E80632E6563530036EE31 /* Live ActivityExtension */;
+		};
+		C0C0CAFE0000000000000123 /* Exceptions for "iCubeTopShelf" folder in "iCubeTopShelf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C0C0CAFE0000000000000101 /* iCubeTopShelf */;
+		};
+		C0C0CAFE0000000000000223 /* Exceptions for "iCubeThumbnail" folder in "iCubeThumbnail" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C0C0CAFE0000000000000201 /* iCubeThumbnail */;
+		};
+		C0C0CAFE0000000000000323 /* Exceptions for "iCubeQuickLookPreview" folder in "iCubeQuickLookPreview" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C0C0CAFE0000000000000301 /* iCubeQuickLookPreview */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -665,6 +867,30 @@
 		B37A7F632E77B7F5001C90F4 /* Controllers */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Controllers;
+			sourceTree = "<group>";
+		};
+		C0C0CAFE0000000000000106 /* iCubeTopShelf */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C0C0CAFE0000000000000123 /* Exceptions for "iCubeTopShelf" folder in "iCubeTopShelf" target */,
+			);
+			path = "../Extensions/iCubeTopShelf";
+			sourceTree = "<group>";
+		};
+		C0C0CAFE0000000000000206 /* iCubeThumbnail */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C0C0CAFE0000000000000223 /* Exceptions for "iCubeThumbnail" folder in "iCubeThumbnail" target */,
+			);
+			path = "../Extensions/iCubeThumbnail";
+			sourceTree = "<group>";
+		};
+		C0C0CAFE0000000000000306 /* iCubeQuickLookPreview */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C0C0CAFE0000000000000323 /* Exceptions for "iCubeQuickLookPreview" folder in "iCubeQuickLookPreview" target */,
+			);
+			path = "../Extensions/iCubeQuickLookPreview";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -707,6 +933,40 @@
 				B34F8D102E6A6FAB007C1005 /* CoreMotion.framework in Frameworks */,
 				B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */,
 				B37102B12E708B3C006C1ED7 /* libobjc.tbd in Frameworks */,
+				C0C0CAFE0000000000000402 /* PVLibrarySnapshot in Frameworks */,
+				C0C0CAFE0000000000000608 /* Sentry in Frameworks */,
+				C0C0CAFE0000000000000609 /* PLzmaSDK in Frameworks */,
+				C0C0CAFE0000000000000610 /* SWCompression in Frameworks */,
+				C0C0CAFE0000000000000611 /* PVHelp in Frameworks */,
+				C0C0CAFE0000000000000986 /* PVCloudSync in Frameworks */,
+				C0C0CAFE0000000000000987 /* PVContinuity in Frameworks */,
+				C0C0CAFE0000000000000988 /* PVSyncRules in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000104 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0C0CAFE0000000000000406 /* PVLibrarySnapshot in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000204 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0C0CAFE0000000000000407 /* PVLibrarySnapshot in Frameworks */,
+				C0C0CAFE0000000000000410 /* QuickLookThumbnailing.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000304 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0C0CAFE0000000000000408 /* PVLibrarySnapshot in Frameworks */,
+				C0C0CAFE0000000000000412 /* QuickLook.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -732,6 +992,12 @@
 				B34EDDDF2E57B2E200301907 /* DOLConfigBridge.mm */,
 				B346BBF72E73E36F00B3C00B /* DSUServerBridge.h */,
 				B346BBF82E73E45800B3C00B /* DSUServerBridge.mm */,
+				C0C0CAFE0000000000000700 /* DOLDebugBridge.h */,
+				C0C0CAFE0000000000000701 /* DOLDebugBridge.mm */,
+				C0C0CAFE0000000000000703 /* DOLPerfBridge.h */,
+				C0C0CAFE0000000000000704 /* DOLPerfBridge.mm */,
+				C0C0CAFE0000000000000706 /* DOLSettingsKeyBridge.h */,
+				C0C0CAFE0000000000000707 /* DOLSettingsKeyBridge.mm */,
 			);
 			path = Bridging;
 			sourceTree = "<group>";
@@ -882,7 +1148,6 @@
 			isa = PBXGroup;
 			children = (
 				B9809C572A48118D00877579 /* Properties */,
-				B99137B72882A58000588446 /* SoftwareList.storyboard */,
 			);
 			path = SoftwareList;
 			sourceTree = "<group>";
@@ -1081,7 +1346,6 @@
 				B31E805B2E6544430036EE31 /* TVFloatStepper.swift */,
 				B34ECCFD2E56A52C00301907 /* TVLibraryView.swift */,
 				B36B48C52E5D0496009A2303 /* TVMultilineTextView.swift */,
-				B34ECD032E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift */,
 				B34ECCF02E5692C900301907 /* TVRootView.swift */,
 				B34EDDE22E57BFEC00301907 /* TVSettingsPage.swift */,
 				B36B48C02E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift */,
@@ -1116,7 +1380,6 @@
 				B9114F952893C5D600B9C57A /* Debug */,
 				B9DC5FA628849467004BD94A /* Graphics */,
 				B904ACF22886AAED008B6BE9 /* Mapping */,
-				B99137AE28827AD200588446 /* SettingsRoot.storyboard */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -1140,7 +1403,6 @@
 		B93986FD287F8F0F008E8E47 /* Config */ = {
 			isa = PBXGroup;
 			children = (
-				B99137C1288327AC00588446 /* ConfigSettings.storyboard */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -1216,6 +1478,7 @@
 				B97492482960F64300794509 /* DefaultPreferences.plist */,
 				B96C5DC82CFE4B200046C029 /* Logger.ini */,
 				B950CA932846A13100F45219 /* Sys */,
+				C0C0CAFE0000000000000970 /* icube.js */,
 			);
 			path = Assets;
 			sourceTree = "<group>";
@@ -1247,8 +1510,6 @@
 		B950CFAF2961798700197719 /* UnofficialBuild */ = {
 			isa = PBXGroup;
 			children = (
-				B950CFB0296179A000197719 /* UnofficialBuildNoticeViewController.h */,
-				B950CFB1296179A000197719 /* UnofficialBuildNoticeViewController.m */,
 			);
 			path = UnofficialBuild;
 			sourceTree = "<group>";
@@ -1267,7 +1528,6 @@
 		B950CFB4296179C200197719 /* UnofficialBuild */ = {
 			isa = PBXGroup;
 			children = (
-				B950CFB5296179E000197719 /* UnofficialBuildNotice.xib */,
 			);
 			path = UnofficialBuild;
 			sourceTree = "<group>";
@@ -1772,6 +2032,73 @@
 				B9DC3DF827EFBD2C0084DAA4 /* DolphiniOS */,
 				B96C9A502A46C1CE002B5ECF /* DolphiniOSTests */,
 				B31E80692E6563540036EE31 /* Live Activity */,
+				C0C0CAFE0000000000000106 /* iCubeTopShelf */,
+				C0C0CAFE0000000000000206 /* iCubeThumbnail */,
+				C0C0CAFE0000000000000306 /* iCubeQuickLookPreview */,
+				C0C0CAFE0000000000000413 /* PlaceholderRenderer.swift */,
+				C0C0CAFE0000000000000500 /* SharedDefaults.h */,
+				C0C0CAFE0000000000000501 /* SharedDefaults.m */,
+				C0C0CAFE0000000000000503 /* SharedDefaults.swift */,
+				C0C0CAFE0000000000000505 /* GameLaunchRequest.swift */,
+				C0C0CAFE0000000000000507 /* LastPlayedStore.swift */,
+				C0C0CAFE0000000000000509 /* CoverMirror.swift */,
+				C0C0CAFE0000000000000511 /* LibrarySnapshotWriter.swift */,
+				C0C0CAFE0000000000000513 /* LibrarySnapshotService.swift */,
+				C0C0CAFE0000000000000515 /* LastPlayedStoreTests.swift */,
+				C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */,
+				C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */,
+				C0C0CAFE0000000000000904 /* ContinuityManager.swift */,
+				C0C0CAFE0000000000000906 /* ContinuityPaths.swift */,
+				C0C0CAFE0000000000000908 /* ContinuityReceiveController.swift */,
+				C0C0CAFE000000000000090A /* ContinuityService.swift */,
+				C0C0CAFE000000000000090C /* ICubeContinuityFileProvider.swift */,
+				C0C0CAFE000000000000090E /* ICubeLibraryProvider.swift */,
+				C0C0CAFE0000000000000910 /* ICubeLibraryQuery.swift */,
+				C0C0CAFE0000000000000912 /* ICubeSaveStateMinter.swift */,
+				C0C0CAFE0000000000000914 /* ContinuityBrowseView.swift */,
+				C0C0CAFE0000000000000916 /* ContinuityHandoffSheet.swift */,
+				C0C0CAFE0000000000000918 /* ContinuityLibrarySharingView.swift */,
+				C0C0CAFE000000000000091A /* ContinuityPeerLibraryView.swift */,
+				C0C0CAFE000000000000091C /* ContinuitySecurityNotice.swift */,
+				C0C0CAFE000000000000091E /* CloudSyncCoordinator.swift */,
+				C0C0CAFE0000000000000920 /* CloudSyncLifecycleService.swift */,
+				C0C0CAFE0000000000000922 /* WebServerLifecycleService.swift */,
+				C0C0CAFE0000000000000924 /* BootWatchdog.swift */,
+				C0C0CAFE0000000000000926 /* BenchAccessApproval.swift */,
+				C0C0CAFE0000000000000928 /* DebugEventBus.swift */,
+				C0C0CAFE000000000000092A /* SettingsSnapshots.swift */,
+				C0C0CAFE000000000000092C /* WebSocketConnection.swift */,
+				C0C0CAFE000000000000092E /* WebSocketFrame.swift */,
+				C0C0CAFE0000000000000930 /* HelpPresentationBridge.swift */,
+				C0C0CAFE0000000000000932 /* MarkdownContentView.swift */,
+				C0C0CAFE0000000000000934 /* WikiHelpView.swift */,
+				C0C0CAFE0000000000000936 /* WikiHelpViewModel.swift */,
+				C0C0CAFE0000000000000938 /* WikiPageView.swift */,
+				C0C0CAFE000000000000093A /* AboutView.swift */,
+				C0C0CAFE000000000000093C /* AudioEffectEditors.swift */,
+				C0C0CAFE000000000000093E /* CloudSyncSettingsView.swift */,
+				C0C0CAFE0000000000000940 /* ConfigAchievementsView.swift */,
+				C0C0CAFE0000000000000942 /* ConfigAdvancedView.swift */,
+				C0C0CAFE0000000000000944 /* ConfigAudioView.swift */,
+				C0C0CAFE0000000000000946 /* ConfigGameCubeView.swift */,
+				C0C0CAFE0000000000000948 /* ConfigGeneralView.swift */,
+				C0C0CAFE000000000000094A /* ConfigInterfaceView.swift */,
+				C0C0CAFE000000000000094C /* ConfigWiiView.swift */,
+				C0C0CAFE000000000000094E /* ControllersMappingView.swift */,
+				C0C0CAFE0000000000000950 /* ControllersRootView.swift */,
+				C0C0CAFE0000000000000952 /* DSUDiscovery.swift */,
+				C0C0CAFE0000000000000954 /* DebugRootView.swift */,
+				C0C0CAFE0000000000000956 /* EnhancedMotionControlsView.swift */,
+				C0C0CAFE0000000000000958 /* GraphicsAdvancedView.swift */,
+				C0C0CAFE000000000000095A /* GraphicsEnhancementsView.swift */,
+				C0C0CAFE000000000000095C /* GraphicsGeneralView.swift */,
+				C0C0CAFE000000000000095E /* GraphicsHacksView.swift */,
+				C0C0CAFE0000000000000960 /* PerformanceABView.swift */,
+				C0C0CAFE0000000000000962 /* PerformanceTuningView.swift */,
+				C0C0CAFE0000000000000964 /* SafariView.swift */,
+				C0C0CAFE0000000000000966 /* SettingsSharedComponents.swift */,
+				C0C0CAFE0000000000000968 /* SyncConflictResolutionView.swift */,
+				C0C0CAFE000000000000096A /* SyncStatusIndicator.swift */,
 				B9DC3DF727EFBD2C0084DAA4 /* Products */,
 				B9D9389C283EF7AD00B290FC /* Frameworks */,
 			);
@@ -1784,6 +2111,9 @@
 				B9DC3DF627EFBD2C0084DAA4 /* iCube.app */,
 				B96C9A4F2A46C1CE002B5ECF /* iCubeTests.xctest */,
 				B31E80642E6563530036EE31 /* Live ActivityExtension.appex */,
+				C0C0CAFE0000000000000102 /* iCubeTopShelf.appex */,
+				C0C0CAFE0000000000000202 /* iCubeThumbnail.appex */,
+				C0C0CAFE0000000000000302 /* iCubeQuickLookPreview.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1792,7 +2122,6 @@
 			isa = PBXGroup;
 			children = (
 				B900A7C427F4D4DE000361DD /* UI */,
-				B9DC3E0227EFBD2D0084DAA4 /* Main.storyboard */,
 				B9DC3E0527EFBD2F0084DAA4 /* Assets.xcassets */,
 				B38B855F2E7CB3D300CFAD6E /* iCube AppStore.entitlements */,
 				B9FCB7E72898FB620020E233 /* DolphiniOS.entitlements */,
@@ -1817,7 +2146,6 @@
 		B9DC5FA628849467004BD94A /* Graphics */ = {
 			isa = PBXGroup;
 			children = (
-				B904ACE028863119008B6BE9 /* GraphicsSettings.storyboard */,
 			);
 			path = Graphics;
 			sourceTree = "<group>";
@@ -1931,12 +2259,16 @@
 				B99137A428825CFA00588446 /* Update Core Strings */,
 				B99137B428829F1400588446 /* Transfer Core Strings to Storyboard Strings */,
 				B9DC3DF427EFBD2C0084DAA4 /* Resources */,
+				C0C0CAFE0000000000000420 /* Embed Foundation Extensions */,
 				B900A7A027F255E0000361DD /* CopyFiles */,
 				B97E4B622966227B00B3EE9C /* Upload dSYM */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C0C0CAFE0000000000000121 /* PBXTargetDependency */,
+				C0C0CAFE0000000000000221 /* PBXTargetDependency */,
+				C0C0CAFE0000000000000321 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
@@ -1954,10 +2286,87 @@
 				B3D89A742E57DEF700EF1CB1 /* Zip */,
 				B37102AD2E70813B006C1ED7 /* NavigationStackBackport */,
 				B38B855D2E7BC80400CFAD6E /* FirebaseAnalytics */,
+				C0C0CAFE0000000000000401 /* PVLibrarySnapshot */,
+				C0C0CAFE0000000000000604 /* Sentry */,
+				C0C0CAFE0000000000000605 /* PLzmaSDK */,
+				C0C0CAFE0000000000000606 /* SWCompression */,
+				C0C0CAFE0000000000000607 /* PVHelp */,
+				C0C0CAFE0000000000000983 /* PVCloudSync */,
+				C0C0CAFE0000000000000984 /* PVContinuity */,
+				C0C0CAFE0000000000000985 /* PVSyncRules */,
 			);
 			productName = DolphiniOS;
 			productReference = B9DC3DF627EFBD2C0084DAA4 /* iCube.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C0C0CAFE0000000000000101 /* iCubeTopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0C0CAFE0000000000000107 /* Build configuration list for PBXNativeTarget "iCubeTopShelf" */;
+			buildPhases = (
+				C0C0CAFE0000000000000103 /* Sources */,
+				C0C0CAFE0000000000000104 /* Frameworks */,
+				C0C0CAFE0000000000000105 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C0C0CAFE0000000000000106 /* iCubeTopShelf */,
+			);
+			name = iCubeTopShelf;
+			packageProductDependencies = (
+				C0C0CAFE0000000000000403 /* PVLibrarySnapshot */,
+			);
+			productName = iCubeTopShelf;
+			productReference = C0C0CAFE0000000000000102 /* iCubeTopShelf.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		C0C0CAFE0000000000000201 /* iCubeThumbnail */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0C0CAFE0000000000000207 /* Build configuration list for PBXNativeTarget "iCubeThumbnail" */;
+			buildPhases = (
+				C0C0CAFE0000000000000203 /* Sources */,
+				C0C0CAFE0000000000000204 /* Frameworks */,
+				C0C0CAFE0000000000000205 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C0C0CAFE0000000000000206 /* iCubeThumbnail */,
+			);
+			name = iCubeThumbnail;
+			packageProductDependencies = (
+				C0C0CAFE0000000000000404 /* PVLibrarySnapshot */,
+			);
+			productName = iCubeThumbnail;
+			productReference = C0C0CAFE0000000000000202 /* iCubeThumbnail.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		C0C0CAFE0000000000000301 /* iCubeQuickLookPreview */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0C0CAFE0000000000000307 /* Build configuration list for PBXNativeTarget "iCubeQuickLookPreview" */;
+			buildPhases = (
+				C0C0CAFE0000000000000303 /* Sources */,
+				C0C0CAFE0000000000000304 /* Frameworks */,
+				C0C0CAFE0000000000000305 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C0C0CAFE0000000000000306 /* iCubeQuickLookPreview */,
+			);
+			name = iCubeQuickLookPreview;
+			packageProductDependencies = (
+				C0C0CAFE0000000000000405 /* PVLibrarySnapshot */,
+			);
+			productName = iCubeQuickLookPreview;
+			productReference = C0C0CAFE0000000000000302 /* iCubeQuickLookPreview.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -1982,6 +2391,15 @@
 						CreatedOnToolsVersion = 13.1;
 						LastSwiftMigration = 1310;
 					};
+					C0C0CAFE0000000000000101 = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					C0C0CAFE0000000000000201 = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					C0C0CAFE0000000000000301 = {
+						CreatedOnToolsVersion = 16.2;
+					};
 				};
 			};
 			buildConfigurationList = B9DC3DF127EFBD2C0084DAA4 /* Build configuration list for PBXProject "DolphiniOS" */;
@@ -2000,6 +2418,14 @@
 				B34ECCF32E5697FF00301907 /* XCLocalSwiftPackageReference "../PVWebServer" */,
 				B3D89A732E57DEF700EF1CB1 /* XCRemoteSwiftPackageReference "Zip" */,
 				B37102AC2E70813B006C1ED7 /* XCRemoteSwiftPackageReference "navigation-stack-backport" */,
+				C0C0CAFE0000000000000400 /* XCLocalSwiftPackageReference "../PVLibrarySnapshot" */,
+				C0C0CAFE0000000000000600 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+				C0C0CAFE0000000000000601 /* XCRemoteSwiftPackageReference "PLzmaSDK" */,
+				C0C0CAFE0000000000000602 /* XCRemoteSwiftPackageReference "SWCompression" */,
+				C0C0CAFE0000000000000603 /* XCLocalSwiftPackageReference "../PVHelp" */,
+				C0C0CAFE0000000000000980 /* XCLocalSwiftPackageReference "../PVCloudSync" */,
+				C0C0CAFE0000000000000981 /* XCLocalSwiftPackageReference "../PVContinuity" */,
+				C0C0CAFE0000000000000982 /* XCLocalSwiftPackageReference "../PVSyncRules" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B9DC3DF727EFBD2C0084DAA4 /* Products */;
@@ -2009,6 +2435,9 @@
 				B9DC3DF527EFBD2C0084DAA4 /* iCube */,
 				B96C9A4E2A46C1CE002B5ECF /* iCubeTests */,
 				B31E80632E6563530036EE31 /* Live ActivityExtension */,
+				C0C0CAFE0000000000000101 /* iCubeTopShelf */,
+				C0C0CAFE0000000000000201 /* iCubeThumbnail */,
+				C0C0CAFE0000000000000301 /* iCubeQuickLookPreview */,
 			);
 		};
 /* End PBXProject section */
@@ -2032,18 +2461,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0C0CAFE0000000000000971 /* icube.js in Resources */,
 				B9809C722A4970A700877579 /* Gecko.storyboard in Resources */,
-				B99137AC28827AD200588446 /* SettingsRoot.storyboard in Resources */,
 				B991379E2881F23A00588446 /* Core.strings in Resources */,
 				B9B2C624288DB62D00CB6569 /* TCWiiPad.xib in Resources */,
 				B904ACF42886AB06008B6BE9 /* ButtonMapping.storyboard in Resources */,
-				B950CFB6296179E000197719 /* UnofficialBuildNotice.xib in Resources */,
 				B950CA942846A13100F45219 /* Sys in Resources */,
-				B99137BF288327AC00588446 /* ConfigSettings.storyboard in Resources */,
 				B9DC3E0927EFBD2F0084DAA4 /* LaunchScreen.storyboard in Resources */,
 				B3AA87CD2E57FCAC00CE68FC /* compiled_shaders in Resources */,
-				B904ACDE28863119008B6BE9 /* GraphicsSettings.storyboard in Resources */,
-				B99137B52882A58000588446 /* SoftwareList.storyboard in Resources */,
 				B9B2C623288DB62D00CB6569 /* TCSidewaysWiiPad.xib in Resources */,
 				B9B1483829642C75002C4BE7 /* UpdateRequiredNotice.xib in Resources */,
 				B950CFBD296208D400197719 /* UpdateNotice.xib in Resources */,
@@ -2054,10 +2479,30 @@
 				B9809C7C2A4A180700877579 /* ActionReplay.storyboard in Resources */,
 				B9B2C654288E400100CB6569 /* ExternalDisplay.storyboard in Resources */,
 				B9B2C621288DB62D00CB6569 /* TCClassicWiiPad.xib in Resources */,
-				B9DC3E0427EFBD2D0084DAA4 /* Main.storyboard in Resources */,
 				B9F41C3C2DC53699006D2434 /* cacert.pem in Resources */,
 				B96C5DC92CFE4B200046C029 /* Logger.ini in Resources */,
 				B933EDC327F8E215004D7DD7 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000105 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000205 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000305 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2201,6 +2646,7 @@
 			files = (
 				B96C9A602A46C2C1002B5ECF /* DOLAppVersionTests.swift in Sources */,
 				CA51A55E000000000000DE01 /* ControllerAssignmentServiceTests.swift in Sources */,
+				C0C0CAFE0000000000000516 /* LastPlayedStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2209,7 +2655,72 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0C0BEEF0000000000000000 /* StikDebugLauncher.swift in Sources */,
+				C0C0CAFE0000000000000972 /* LibraryPlatformCategory.swift in Sources */,
 				C0C0BEEF0001000000000000 /* PGOFlush.c in Sources */,
+				C0C0CAFE0000000000000502 /* SharedDefaults.m in Sources */,
+				C0C0CAFE0000000000000504 /* SharedDefaults.swift in Sources */,
+				C0C0CAFE0000000000000506 /* GameLaunchRequest.swift in Sources */,
+				C0C0CAFE0000000000000508 /* LastPlayedStore.swift in Sources */,
+				C0C0CAFE0000000000000510 /* CoverMirror.swift in Sources */,
+				C0C0CAFE0000000000000512 /* LibrarySnapshotWriter.swift in Sources */,
+				C0C0CAFE0000000000000514 /* LibrarySnapshotService.swift in Sources */,
+				C0C0CAFE0000000000000702 /* DOLDebugBridge.mm in Sources */,
+				C0C0CAFE0000000000000705 /* DOLPerfBridge.mm in Sources */,
+				C0C0CAFE0000000000000708 /* DOLSettingsKeyBridge.mm in Sources */,
+				C0C0CAFE0000000000000901 /* ContinuityIdentityStore.swift in Sources */,
+				C0C0CAFE0000000000000903 /* ContinuityLibraryBrowseController.swift in Sources */,
+				C0C0CAFE0000000000000905 /* ContinuityManager.swift in Sources */,
+				C0C0CAFE0000000000000907 /* ContinuityPaths.swift in Sources */,
+				C0C0CAFE0000000000000909 /* ContinuityReceiveController.swift in Sources */,
+				C0C0CAFE000000000000090B /* ContinuityService.swift in Sources */,
+				C0C0CAFE000000000000090D /* ICubeContinuityFileProvider.swift in Sources */,
+				C0C0CAFE000000000000090F /* ICubeLibraryProvider.swift in Sources */,
+				C0C0CAFE0000000000000911 /* ICubeLibraryQuery.swift in Sources */,
+				C0C0CAFE0000000000000913 /* ICubeSaveStateMinter.swift in Sources */,
+				C0C0CAFE0000000000000915 /* ContinuityBrowseView.swift in Sources */,
+				C0C0CAFE0000000000000917 /* ContinuityHandoffSheet.swift in Sources */,
+				C0C0CAFE0000000000000919 /* ContinuityLibrarySharingView.swift in Sources */,
+				C0C0CAFE000000000000091B /* ContinuityPeerLibraryView.swift in Sources */,
+				C0C0CAFE000000000000091D /* ContinuitySecurityNotice.swift in Sources */,
+				C0C0CAFE000000000000091F /* CloudSyncCoordinator.swift in Sources */,
+				C0C0CAFE0000000000000921 /* CloudSyncLifecycleService.swift in Sources */,
+				C0C0CAFE0000000000000923 /* WebServerLifecycleService.swift in Sources */,
+				C0C0CAFE0000000000000925 /* BootWatchdog.swift in Sources */,
+				C0C0CAFE0000000000000927 /* BenchAccessApproval.swift in Sources */,
+				C0C0CAFE0000000000000929 /* DebugEventBus.swift in Sources */,
+				C0C0CAFE000000000000092B /* SettingsSnapshots.swift in Sources */,
+				C0C0CAFE000000000000092D /* WebSocketConnection.swift in Sources */,
+				C0C0CAFE000000000000092F /* WebSocketFrame.swift in Sources */,
+				C0C0CAFE0000000000000931 /* HelpPresentationBridge.swift in Sources */,
+				C0C0CAFE0000000000000933 /* MarkdownContentView.swift in Sources */,
+				C0C0CAFE0000000000000935 /* WikiHelpView.swift in Sources */,
+				C0C0CAFE0000000000000937 /* WikiHelpViewModel.swift in Sources */,
+				C0C0CAFE0000000000000939 /* WikiPageView.swift in Sources */,
+				C0C0CAFE000000000000093B /* AboutView.swift in Sources */,
+				C0C0CAFE000000000000093D /* AudioEffectEditors.swift in Sources */,
+				C0C0CAFE000000000000093F /* CloudSyncSettingsView.swift in Sources */,
+				C0C0CAFE0000000000000941 /* ConfigAchievementsView.swift in Sources */,
+				C0C0CAFE0000000000000943 /* ConfigAdvancedView.swift in Sources */,
+				C0C0CAFE0000000000000945 /* ConfigAudioView.swift in Sources */,
+				C0C0CAFE0000000000000947 /* ConfigGameCubeView.swift in Sources */,
+				C0C0CAFE0000000000000949 /* ConfigGeneralView.swift in Sources */,
+				C0C0CAFE000000000000094B /* ConfigInterfaceView.swift in Sources */,
+				C0C0CAFE000000000000094D /* ConfigWiiView.swift in Sources */,
+				C0C0CAFE000000000000094F /* ControllersMappingView.swift in Sources */,
+				C0C0CAFE0000000000000951 /* ControllersRootView.swift in Sources */,
+				C0C0CAFE0000000000000953 /* DSUDiscovery.swift in Sources */,
+				C0C0CAFE0000000000000955 /* DebugRootView.swift in Sources */,
+				C0C0CAFE0000000000000957 /* EnhancedMotionControlsView.swift in Sources */,
+				C0C0CAFE0000000000000959 /* GraphicsAdvancedView.swift in Sources */,
+				C0C0CAFE000000000000095B /* GraphicsEnhancementsView.swift in Sources */,
+				C0C0CAFE000000000000095D /* GraphicsGeneralView.swift in Sources */,
+				C0C0CAFE000000000000095F /* GraphicsHacksView.swift in Sources */,
+				C0C0CAFE0000000000000961 /* PerformanceABView.swift in Sources */,
+				C0C0CAFE0000000000000963 /* PerformanceTuningView.swift in Sources */,
+				C0C0CAFE0000000000000965 /* SafariView.swift in Sources */,
+				C0C0CAFE0000000000000967 /* SettingsSharedComponents.swift in Sources */,
+				C0C0CAFE0000000000000969 /* SyncConflictResolutionView.swift in Sources */,
+				C0C0CAFE000000000000096B /* SyncStatusIndicator.swift in Sources */,
 				C0C0BEEF0003000000000000 /* EmulationPerfSessionRecorder.swift in Sources */,
 				C0C0BEEF0004000000000000 /* SentryTelemetryService.swift in Sources */,
 				C0C0BEEF0005000000000000 /* WebUploadImportService.swift in Sources */,
@@ -2230,7 +2741,6 @@
 				B950CFAA29616B4F00197719 /* MainSceneCoordinator.m in Sources */,
 				B9B2C64D288E170600CB6569 /* ServiceManager.swift in Sources */,
 				B904ACF82886AC58008B6BE9 /* MappingRootViewController.mm in Sources */,
-				B950CFB2296179A000197719 /* UnofficialBuildNoticeViewController.m in Sources */,
 				B9FCB7D8289841730020E233 /* MsgAlertManager.mm in Sources */,
 				B9B2C626288DB64700CB6569 /* TCWiiPad.swift in Sources */,
 				B31E92212E667C0F0036EE31 /* SiriShortcutManager.swift in Sources */,
@@ -2344,7 +2854,6 @@
 				B31EAC8B2E67E9050036EE31 /* DOLWiimoteBridge.mm in Sources */,
 				B9447B072841906000BC9110 /* TCView.swift in Sources */,
 				B9809C762A49F78700877579 /* GeckoCodeEditViewController.mm in Sources */,
-				B34ECD042E56AB9B00301907 /* TVOSUnofficialBuildNotice.swift in Sources */,
 				B904AD1D2888AB6B008B6BE9 /* MappingDeviceViewController.mm in Sources */,
 				B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */,
 				B904AD0C28886AE6008B6BE9 /* MappingRootDeviceCell.m in Sources */,
@@ -2389,6 +2898,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C0C0CAFE0000000000000103 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000203 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0C0CAFE0000000000000303 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0C0CAFE0000000000000414 /* PlaceholderRenderer.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -2397,16 +2928,38 @@
 			target = B9DC3DF527EFBD2C0084DAA4 /* iCube */;
 			targetProxy = B96C9A532A46C1CE002B5ECF /* PBXContainerItemProxy */;
 		};
+		C0C0CAFE0000000000000121 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = iCubeTopShelf;
+			platformFilters = (
+				tvos,
+			);
+			target = C0C0CAFE0000000000000101 /* iCubeTopShelf */;
+			targetProxy = C0C0CAFE0000000000000120 /* PBXContainerItemProxy */;
+		};
+		C0C0CAFE0000000000000221 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = iCubeThumbnail;
+			platformFilters = (
+				ios,
+				maccatalyst,
+			);
+			target = C0C0CAFE0000000000000201 /* iCubeThumbnail */;
+			targetProxy = C0C0CAFE0000000000000220 /* PBXContainerItemProxy */;
+		};
+		C0C0CAFE0000000000000321 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = iCubeQuickLookPreview;
+			platformFilters = (
+				ios,
+				maccatalyst,
+			);
+			target = C0C0CAFE0000000000000301 /* iCubeQuickLookPreview */;
+			targetProxy = C0C0CAFE0000000000000320 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
-		B904ACE028863119008B6BE9 /* GraphicsSettings.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-			);
-			name = GraphicsSettings.storyboard;
-			sourceTree = "<group>";
-		};
 		B99137A02881F23A00588446 /* Core.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
@@ -2414,35 +2967,6 @@
 				B99137AB28827A1700588446 /* ja */,
 			);
 			name = Core.strings;
-			sourceTree = "<group>";
-		};
-		B99137AE28827AD200588446 /* SettingsRoot.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-			);
-			name = SettingsRoot.storyboard;
-			sourceTree = "<group>";
-		};
-		B99137B72882A58000588446 /* SoftwareList.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-			);
-			name = SoftwareList.storyboard;
-			sourceTree = "<group>";
-		};
-		B99137C1288327AC00588446 /* ConfigSettings.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-			);
-			name = ConfigSettings.storyboard;
-			sourceTree = "<group>";
-		};
-		B9DC3E0227EFBD2D0084DAA4 /* Main.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				B9DC3E0327EFBD2D0084DAA4 /* Base */,
-			);
-			name = Main.storyboard;
 			sourceTree = "<group>";
 		};
 		B9DC3E0727EFBD2F0084DAA4 /* LaunchScreen.storyboard */ = {
@@ -3111,7 +3635,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -3154,7 +3679,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -3368,7 +3893,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -3413,7 +3939,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -4223,7 +4749,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -4268,7 +4795,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -4332,7 +4859,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -4375,7 +4903,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -4439,7 +4967,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -4482,7 +5011,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -4546,7 +5075,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -4589,7 +5119,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -4653,7 +5183,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -4698,7 +5229,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -4712,7 +5243,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -4755,7 +5287,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -4870,7 +5402,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -4913,7 +5446,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -4977,7 +5510,8 @@
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++23";
+				GCC_PREPROCESSOR_DEFINITIONS = ("$(inherited)", "_M_ARM_64=1", "_ARCH_64=1");
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -5020,7 +5554,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
+				MTL_FAST_MATH = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -5074,6 +5608,746 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,3,6";
 				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = "Release (Beta, TrollStore)";
+		};
+		C0C0CAFE0000000000000110 /* Debug (Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Debug (Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000111 /* Debug (Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug-jb.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Debug (Jailbroken)";
+		};
+		C0C0CAFE0000000000000112 /* Debug (AppStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Debug (AppStore)";
+		};
+		C0C0CAFE0000000000000113 /* Release (Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Release (Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000114 /* Release (Beta, Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb-patreon-beta.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Release (Beta, Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000115 /* Release (Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-jb.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Release (Jailbroken)";
+		};
+		C0C0CAFE0000000000000116 /* Release (TrollStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Release (TrollStore)";
+		};
+		C0C0CAFE0000000000000117 /* Release (AppStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Release (AppStore)";
+		};
+		C0C0CAFE0000000000000118 /* Release (Beta, Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-patreon-beta-jb.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Release (Beta, Jailbroken)";
+		};
+		C0C0CAFE0000000000000119 /* Release (Beta, TrollStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeTopShelf/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts-patreon-beta.topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+			};
+			name = "Release (Beta, TrollStore)";
+		};
+		C0C0CAFE0000000000000210 /* Debug (Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Debug (Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000211 /* Debug (Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug-jb.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Debug (Jailbroken)";
+		};
+		C0C0CAFE0000000000000212 /* Debug (AppStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Debug (AppStore)";
+		};
+		C0C0CAFE0000000000000213 /* Release (Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000214 /* Release (Beta, Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb-patreon-beta.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Beta, Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000215 /* Release (Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-jb.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Jailbroken)";
+		};
+		C0C0CAFE0000000000000216 /* Release (TrollStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (TrollStore)";
+		};
+		C0C0CAFE0000000000000217 /* Release (AppStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (AppStore)";
+		};
+		C0C0CAFE0000000000000218 /* Release (Beta, Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-patreon-beta-jb.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Beta, Jailbroken)";
+		};
+		C0C0CAFE0000000000000219 /* Release (Beta, TrollStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeThumbnail/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts-patreon-beta.thumbnail";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Beta, TrollStore)";
+		};
+		C0C0CAFE0000000000000310 /* Debug (Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Debug (Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000311 /* Debug (Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-debug-jb.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Debug (Jailbroken)";
+		};
+		C0C0CAFE0000000000000312 /* Debug (AppStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Debug (AppStore)";
+		};
+		C0C0CAFE0000000000000313 /* Release (Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000314 /* Release (Beta, Non-Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-njb-patreon-beta.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Beta, Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000315 /* Release (Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-jb.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Jailbroken)";
+		};
+		C0C0CAFE0000000000000316 /* Release (TrollStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (TrollStore)";
+		};
+		C0C0CAFE0000000000000317 /* Release (AppStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (AppStore)";
+		};
+		C0C0CAFE0000000000000318 /* Release (Beta, Jailbroken) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-patreon-beta-jb.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release (Beta, Jailbroken)";
+		};
+		C0C0CAFE0000000000000319 /* Release (Beta, TrollStore) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Project/Entitlements/Extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S32Z3HMYVQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "../Extensions/iCubeQuickLookPreview/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joemattiello.iCube-ts-patreon-beta.preview";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Release (Beta, TrollStore)";
 		};
@@ -5148,12 +6422,83 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "Release (Non-Jailbroken)";
 		};
+		C0C0CAFE0000000000000107 /* Build configuration list for PBXNativeTarget "iCubeTopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0C0CAFE0000000000000110 /* Debug (Non-Jailbroken) */,
+				C0C0CAFE0000000000000111 /* Debug (Jailbroken) */,
+				C0C0CAFE0000000000000112 /* Debug (AppStore) */,
+				C0C0CAFE0000000000000113 /* Release (Non-Jailbroken) */,
+				C0C0CAFE0000000000000114 /* Release (Beta, Non-Jailbroken) */,
+				C0C0CAFE0000000000000115 /* Release (Jailbroken) */,
+				C0C0CAFE0000000000000116 /* Release (TrollStore) */,
+				C0C0CAFE0000000000000117 /* Release (AppStore) */,
+				C0C0CAFE0000000000000118 /* Release (Beta, Jailbroken) */,
+				C0C0CAFE0000000000000119 /* Release (Beta, TrollStore) */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release (Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000207 /* Build configuration list for PBXNativeTarget "iCubeThumbnail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0C0CAFE0000000000000210 /* Debug (Non-Jailbroken) */,
+				C0C0CAFE0000000000000211 /* Debug (Jailbroken) */,
+				C0C0CAFE0000000000000212 /* Debug (AppStore) */,
+				C0C0CAFE0000000000000213 /* Release (Non-Jailbroken) */,
+				C0C0CAFE0000000000000214 /* Release (Beta, Non-Jailbroken) */,
+				C0C0CAFE0000000000000215 /* Release (Jailbroken) */,
+				C0C0CAFE0000000000000216 /* Release (TrollStore) */,
+				C0C0CAFE0000000000000217 /* Release (AppStore) */,
+				C0C0CAFE0000000000000218 /* Release (Beta, Jailbroken) */,
+				C0C0CAFE0000000000000219 /* Release (Beta, TrollStore) */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release (Non-Jailbroken)";
+		};
+		C0C0CAFE0000000000000307 /* Build configuration list for PBXNativeTarget "iCubeQuickLookPreview" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0C0CAFE0000000000000310 /* Debug (Non-Jailbroken) */,
+				C0C0CAFE0000000000000311 /* Debug (Jailbroken) */,
+				C0C0CAFE0000000000000312 /* Debug (AppStore) */,
+				C0C0CAFE0000000000000313 /* Release (Non-Jailbroken) */,
+				C0C0CAFE0000000000000314 /* Release (Beta, Non-Jailbroken) */,
+				C0C0CAFE0000000000000315 /* Release (Jailbroken) */,
+				C0C0CAFE0000000000000316 /* Release (TrollStore) */,
+				C0C0CAFE0000000000000317 /* Release (AppStore) */,
+				C0C0CAFE0000000000000318 /* Release (Beta, Jailbroken) */,
+				C0C0CAFE0000000000000319 /* Release (Beta, TrollStore) */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release (Non-Jailbroken)";
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
 		B34ECCF32E5697FF00301907 /* XCLocalSwiftPackageReference "../PVWebServer" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../PVWebServer;
+		};
+		C0C0CAFE0000000000000400 /* XCLocalSwiftPackageReference "../PVLibrarySnapshot" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../PVLibrarySnapshot;
+		};
+		C0C0CAFE0000000000000603 /* XCLocalSwiftPackageReference "../PVHelp" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../PVHelp;
+		};
+		C0C0CAFE0000000000000980 /* XCLocalSwiftPackageReference "../PVCloudSync" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../PVCloudSync;
+		};
+		C0C0CAFE0000000000000981 /* XCLocalSwiftPackageReference "../PVContinuity" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../PVContinuity;
+		};
+		C0C0CAFE0000000000000982 /* XCLocalSwiftPackageReference "../PVSyncRules" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../PVSyncRules;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -5198,6 +6543,30 @@
 				minimumVersion = 0.0.2;
 			};
 		};
+		C0C0CAFE0000000000000600 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.16.1;
+			};
+		};
+		C0C0CAFE0000000000000601 /* XCRemoteSwiftPackageReference "PLzmaSDK" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/OlehKulykov/PLzmaSDK.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.1;
+			};
+		};
+		C0C0CAFE0000000000000602 /* XCRemoteSwiftPackageReference "SWCompression" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tsolomko/SWCompression.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.9.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -5235,6 +6604,61 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B9FCB7DC28988E7E0020E233 /* XCRemoteSwiftPackageReference "AltKit" */;
 			productName = AltKit;
+		};
+		C0C0CAFE0000000000000401 /* PVLibrarySnapshot */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000400 /* XCLocalSwiftPackageReference "../PVLibrarySnapshot" */;
+			productName = PVLibrarySnapshot;
+		};
+		C0C0CAFE0000000000000403 /* PVLibrarySnapshot */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000400 /* XCLocalSwiftPackageReference "../PVLibrarySnapshot" */;
+			productName = PVLibrarySnapshot;
+		};
+		C0C0CAFE0000000000000404 /* PVLibrarySnapshot */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000400 /* XCLocalSwiftPackageReference "../PVLibrarySnapshot" */;
+			productName = PVLibrarySnapshot;
+		};
+		C0C0CAFE0000000000000405 /* PVLibrarySnapshot */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000400 /* XCLocalSwiftPackageReference "../PVLibrarySnapshot" */;
+			productName = PVLibrarySnapshot;
+		};
+		C0C0CAFE0000000000000604 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000600 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
+		};
+		C0C0CAFE0000000000000605 /* PLzmaSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000601 /* XCRemoteSwiftPackageReference "PLzmaSDK" */;
+			productName = PLzmaSDK;
+		};
+		C0C0CAFE0000000000000606 /* SWCompression */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000602 /* XCRemoteSwiftPackageReference "SWCompression" */;
+			productName = SWCompression;
+		};
+		C0C0CAFE0000000000000607 /* PVHelp */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000603 /* XCLocalSwiftPackageReference "../PVHelp" */;
+			productName = PVHelp;
+		};
+		C0C0CAFE0000000000000983 /* PVCloudSync */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000980 /* XCLocalSwiftPackageReference "../PVCloudSync" */;
+			productName = PVCloudSync;
+		};
+		C0C0CAFE0000000000000984 /* PVContinuity */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000981 /* XCLocalSwiftPackageReference "../PVContinuity" */;
+			productName = PVContinuity;
+		};
+		C0C0CAFE0000000000000985 /* PVSyncRules */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C0CAFE0000000000000982 /* XCLocalSwiftPackageReference "../PVSyncRules" */;
+			productName = PVSyncRules;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
