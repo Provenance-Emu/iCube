@@ -1,0 +1,243 @@
+# Melee (GALE01) 4-player Jungle Japes auto-save, iPhone 16 Pro Max, develop 2606-1884, user's Dolphin.ini (all CIR specialization flags on), CIRProfile on, adaptive clock off, CPU clock 1.0
+# Measured 2026-09-23: speed 0.75-0.85, game presents 25-30 fps of 60 (interpreter delivers ~half of the per-frame CPU work). Flat profile: no single hot loop.
+
+  unique_blocks=13531 total_block_runs=739464563 total_cycles=9527399374
+  dyn_link_hits=183599884 dyn_link_misses=826560 (blr/bctr/bcx-fallthrough exits served from the inline cache vs dispatcher)
+  -- DYN-LINK MISS CENSUS (profiler-gated) --
+     exit          hits           miss:cold      miss:pc        miss:gen       miss:flags     hit%
+     bx                        0            538              0              1              0    0.0%
+     bcx-taken                 0           7053              0              0              0    0.0%
+     blr               170273762           3438         747237           3605              0   99.6%
+     bctr               13326203             96          64471            121              0   99.5%
+     global target cache: 78709121 hits (42.9% of all hits) - keyed by target pc, not by exit site
+     of all misses: cold 1.3%  pc-changed 98.2%  generation 0.5%  (only pc-changed is fixable by a better cache)
+  gp_fused_emitted=0 gp_fused_runs=0 gp_fused_pairs=0 gp_fused_fallbacks=0 (gather-pipe copy fusion; the %cyc column CANNOT show this — it is static guest cycles)
+  -- DISPATCH CLASS DENSITY (dynamic, run-count weighted) --
+     int ALU/other  (specialized)       1429206818   36.8%
+     int load/store (specialized)        965535502   24.8%
+     FP load/store  (GENERIC 2-call)      432394138   11.1%
+     FP arithmetic  (GENERIC 2-call)      318148472    8.2%
+     paired-single  (GENERIC 2-call)       10304574    0.3%
+     branch/terminal                     731400475   18.8%
+     GENERIC FP+PS (2-call tax, specialization/fusion candidates): 19.6%
+  -- FP/PS PER-OPCODE CENSUS (dynamic, run-count weighted) --
+     flags: pic_loadstore=1 spec_ops=1 spec_fp_ls=1 spec_psq=1 spec_fp_arith=1 (ls_fast=1)
+     opcode           path            runs           %all   class
+     lfs              PIC-direct          215494366   5.54%  FP load/store  (GENERIC 2-call)
+     stfs             PIC-direct           92296336   2.37%  FP load/store  (GENERIC 2-call)
+     fmaddsx          specialized          87503063   2.25%  FP arithmetic  (GENERIC 2-call)
+     lfd              PIC-direct           73129817   1.88%  FP load/store  (GENERIC 2-call)
+     fmulsx           specialized          68393037   1.76%  FP arithmetic  (GENERIC 2-call)
+     fsubsx           specialized          37925975   0.98%  FP arithmetic  (GENERIC 2-call)
+     fmrx             specialized          36282313   0.93%  FP arithmetic  (GENERIC 2-call)
+     fcmpo            specialized          29464298   0.76%  FP arithmetic  (GENERIC 2-call)
+     faddsx           specialized          14464503   0.37%  FP arithmetic  (GENERIC 2-call)
+     lfsx             PIC-direct           14188828   0.37%  FP load/store  (GENERIC 2-call)
+     stfsx            PIC-direct           14146209   0.36%  FP load/store  (GENERIC 2-call)
+     stfd             PIC-direct           13136598   0.34%  FP load/store  (GENERIC 2-call)
+     fnmsubsx         specialized          12694967   0.33%  FP arithmetic  (GENERIC 2-call)
+     fctiwzx          specialized          12304793   0.32%  FP arithmetic  (GENERIC 2-call)
+     fmsubsx          specialized           8385193   0.22%  FP arithmetic  (GENERIC 2-call)
+     lfsu             PIC-direct            6458249   0.17%  FP load/store  (GENERIC 2-call)
+     psq_l            PIC-direct            3862513   0.10%  paired-single  (GENERIC 2-call)
+     fdivsx           specialized           3682834   0.09%  FP arithmetic  (GENERIC 2-call)
+     stfiwx           PIC-direct            3543735   0.09%  FP load/store  (GENERIC 2-call)
+     fabsx            specialized           2226980   0.06%  FP arithmetic  (GENERIC 2-call)
+     fnegx            specialized           1593938   0.04%  FP arithmetic  (GENERIC 2-call)
+     psq_st           PIC-direct            1502237   0.04%  paired-single  (GENERIC 2-call)
+     ps_muls0         specialized           1132788   0.03%  paired-single  (GENERIC 2-call)
+     frspx            specialized            771829   0.02%  FP arithmetic  (GENERIC 2-call)
+     ps_madds0        specialized            735170   0.02%  paired-single  (GENERIC 2-call)
+     ps_madds1        specialized            706348   0.02%  paired-single  (GENERIC 2-call)
+     ps_mul           specialized            694326   0.02%  paired-single  (GENERIC 2-call)
+     fmulx            specialized            664076   0.02%  FP arithmetic  (GENERIC 2-call)
+     faddx            specialized            603972   0.02%  FP arithmetic  (GENERIC 2-call)
+     ps_madd          specialized            587635   0.02%  paired-single  (GENERIC 2-call)
+     ps_sum0          specialized            578711   0.01%  paired-single  (GENERIC 2-call)
+     fcmpu            specialized            475000   0.01%  FP arithmetic  (GENERIC 2-call)
+     frsqrtex         specialized            216838   0.01%  FP arithmetic  (GENERIC 2-call)
+     fmaddx           specialized            210623   0.01%  FP arithmetic  (GENERIC 2-call)
+     fsubx            specialized            188961   0.00%  FP arithmetic  (GENERIC 2-call)
+     ps_nmsub         specialized            119749   0.00%  paired-single  (GENERIC 2-call)
+     ps_merge10       specialized             73917   0.00%  paired-single  (GENERIC 2-call)
+     ps_msub          specialized             60346   0.00%  paired-single  (GENERIC 2-call)
+     ps_muls1         specialized             57644   0.00%  paired-single  (GENERIC 2-call)
+     ps_merge00       specialized             40603   0.00%  paired-single  (GENERIC 2-call)
+     ps_add           specialized             40095   0.00%  paired-single  (GENERIC 2-call)
+     fdivx            specialized             34824   0.00%  FP arithmetic  (GENERIC 2-call)
+     fresx            specialized             33283   0.00%  FP arithmetic  (GENERIC 2-call)
+     ps_sum1          specialized             28822   0.00%  paired-single  (GENERIC 2-call)
+     fselx            specialized             25316   0.00%  FP arithmetic  (GENERIC 2-call)
+     ps_merge11       specialized             24681   0.00%  paired-single  (GENERIC 2-call)
+     ps_sub           specialized             18037   0.00%  paired-single  (GENERIC 2-call)
+     ps_merge01       specialized             16270   0.00%  paired-single  (GENERIC 2-call)
+     ps_neg           specialized             15759   0.00%  paired-single  (GENERIC 2-call)
+     ps_nmadd         specialized              8922   0.00%  paired-single  (GENERIC 2-call)
+     fmsubx           specialized              1454   0.00%  FP arithmetic  (GENERIC 2-call)
+     fnmaddsx         specialized               277   0.00%  FP arithmetic  (GENERIC 2-call)
+     fnmsubx          specialized               124   0.00%  FP arithmetic  (GENERIC 2-call)
+     ps_cmpo0         specialized                 1   0.00%  paired-single  (GENERIC 2-call)
+     mffsx            specialized                 1   0.00%  FP arithmetic  (GENERIC 2-call)
+     TOTALS  PIC-direct 11.26%  specialized 8.31%  GENERIC-2call 0.00%  (of all executed instructions)
+     ^ GENERIC-2call is the ONLY bucket specialization can still remove. An opcode that is
+       GENERIC while its whitelist flag is off is a FLAG FLIP, not new code; one that is
+       GENERIC with the flag ON is genuinely missing from the whitelists.
+  rank  entry_pc    runs         cycles        cyc/run   %cyc  hint
+     1  0x8036b590     7274455     281793465     38.74    3.0  
+        0x8036b590: 0x38a00000  li	r5, 0
+        0x8036b594: 0x38850000  addi	r4, r5, 0
+        0x8036b598: 0x807f0004  lwz	r3, 0x0004 (r31)
+        0x8036b59c: 0x38030001  addi	r0, r3, 1
+        0x8036b5a0: 0x901f0004  stw	r0, 0x0004 (r31)
+        0x8036b5a4: 0x88630000  lbz	r3, 0 (r3)
+        0x8036b5a8: 0x54600631  rlwinm.	r0, r3, 0, 24, 24 (00000080)
+        0x8036b5ac: 0x5463067e  rlwinm	r3, r3, 0, 25, 31 (0000007f)
+        0x8036b5b0: 0x7c632030  slw	r3, r3, r4
+        0x8036b5b4: 0x7ca51b78  or	r5, r5, r3
+        0x8036b5b8: 0x38840007  addi	r4, r4, 7
+        0x8036b5bc: 0x4082ffdc  bne+	 ->0x8036B598
+     2  0x80379ad4     2620874     264708274    101.00    2.8  
+        0x80379ad4: 0xc002ec7c  lfs	f0, -0x1384 (rtoc)
+        0x80379ad8: 0xc0430024  lfs	f2, 0x0024 (r3)
+        0x80379adc: 0xec00f824  fdivs	f0, f0, f31
+        0x80379ae0: 0xc0230018  lfs	f1, 0x0018 (r3)
+        0x80379ae4: 0xc0830014  lfs	f4, 0x0014 (r3)
+        0x80379ae8: 0xc0630028  lfs	f3, 0x0028 (r3)
+        0x80379aec: 0xec220072  fmuls	f1, f2, f1
+        0x80379af0: 0xec2408f8  fmsubs	f1, f4, f3, f1
+        0x80379af4: 0xec200072  fmuls	f1, f0, f1
+        0x80379af8: 0xd03f0000  stfs	f1, 0 (r31)
+        0x80379afc: 0xc0430024  lfs	f2, 0x0024 (r3)
+        0x80379b00: 0xc0230008  lfs	f1, 0x0008 (r3)
+     3  0x8036b5f0     9019025     261939059     29.04    2.7  
+        0x8036b5f0: 0xa01f001a  lhz	r0, 0x001A (r31)
+        0x8036b5f4: 0xc03f001c  lfs	f1, 0x001C (r31)
+        0x8036b5f8: 0x90010074  stw	r0, 0x0074 (sp)
+        0x8036b5fc: 0x93a10070  stw	r29, 0x0070 (sp)
+        0x8036b600: 0xc8010070  lfd	f0, 0x0070 (sp)
+        0x8036b604: 0xec00f828  fsubs	f0, f0, f31
+        0x8036b608: 0xfc000840  fcmpo	cr0, f0, f1
+        0x8036b60c: 0x4c401382  cror	2, 0, 2
+     4  0x8036ad0c     7028302     260047174     37.00    2.7  
+        0x8036ad0c: 0x80c30000  lwz	r6, 0 (r3)
+        0x8036ad10: 0x3c804330  lis	r4, 0x4330
+        0x8036ad14: 0xc822eb00  lfd	f1, -0x1500 (rtoc)
+        0x8036ad18: 0x88a60000  lbz	r5, 0 (r6)
+        0x8036ad1c: 0x38060001  addi	r0, r6, 1
+        0x8036ad20: 0x90a1001c  stw	r5, 0x001C (sp)
+        0x8036ad24: 0x90810018  stw	r4, 0x0018 (sp)
+        0x8036ad28: 0xc8010018  lfd	f0, 0x0018 (sp)
+        0x8036ad2c: 0x90030000  stw	r0, 0 (r3)
+        0x8036ad30: 0xec400828  fsubs	f2, f0, f1
+        0x8036ad34: 0x48000080  b	->0x8036ADB4
+     5  0x8036e724     3226423     193585380     60.00    2.0  
+        0x8036e724: 0x80930078  lwz	r4, 0x0078 (r19)
+        0x8036e728: 0x38730044  addi	r3, r19, 68
+        0x8036e72c: 0x38a10028  addi	r5, sp, 40
+        0x8036e730: 0x4bfd3ad5  bl	->0x80342204
+     6  0x8036e77c     3255927     188843766     58.00    2.0  
+        0x8036e77c: 0x387f0000  addi	r3, r31, 0
+        0x8036e780: 0x38930000  addi	r4, r19, 0
+        0x8036e784: 0x38a10028  addi	r5, sp, 40
+        0x8036e788: 0x4bfd3a7d  bl	->0x80342204
+     7  0x8037a54c     3226431     158095119     49.00    1.7  
+        0x8037a54c: 0xc0430000  lfs	f2, 0 (r3)
+        0x8037a550: 0xc0040000  lfs	f0, 0 (r4)
+        0x8037a554: 0xec0100ba  fmadds	f0, f1, f2, f0
+        0x8037a558: 0xd0050000  stfs	f0, 0 (r5)
+        0x8037a55c: 0xc4430004  lfsu	f2, 0x0004 (r3)
+        0x8037a560: 0xc4040004  lfsu	f0, 0x0004 (r4)
+        0x8037a564: 0xec0100ba  fmadds	f0, f1, f2, f0
+        0x8037a568: 0xd0050004  stfs	f0, 0x0004 (r5)
+        0x8037a56c: 0xc0430004  lfs	f2, 0x0004 (r3)
+        0x8037a570: 0xc0040004  lfs	f0, 0x0004 (r4)
+        0x8037a574: 0xec0100ba  fmadds	f0, f1, f2, f0
+        0x8037a578: 0xd0050008  stfs	f0, 0x0008 (r5)
+     8  0x8036e798     3255976     114210402     35.08    1.2  
+        0x8036e798: 0x807b0000  lwz	r3, 0 (r27)
+        0x8036e79c: 0x2c1d0000  cmpwi	r29, 0
+        0x8036e7a0: 0x38030001  addi	r0, r3, 1
+        0x8036e7a4: 0x901b0000  stw	r0, 0 (r27)
+        0x8036e7a8: 0x41820060  beq-	 ->0x8036E808
+     9  0x80326424     2722108     101970156     37.46    1.1  
+        0x80326424: 0xc002e7bc  lfs	f0, -0x1844 (rtoc)
+        0x80326428: 0xec00082a  fadds	f0, f0, f1
+        0x8032642c: 0xfc00001e  fctiwz	f0, f0
+        0x80326430: 0xd8010010  stfd	f0, 0x0010 (sp)
+        0x80326434: 0x80810014  lwz	r4, 0x0014 (sp)
+        0x80326438: 0x5480083c  rlwinm	r0, r4, 1, 0, 30 (7fffffff)
+        0x8032643c: 0xc822e7c8  lfd	f1, -0x1838 (rtoc)
+        0x80326440: 0x6c008000  xoris	r0, r0, 0x8000
+        0x80326444: 0xc0430000  lfs	f2, 0 (r3)
+        0x80326448: 0x90010014  stw	r0, 0x0014 (sp)
+        0x8032644c: 0x3c004330  lis	r0, 0x4330
+        0x80326450: 0xc0630004  lfs	f3, 0x0004 (r3)
+    10  0x80341494     3255836      94419244     29.00    1.0  
+        0x80341494: 0x7c0802a6  mflr	r0
+        0x80341498: 0x90010004  stw	r0, 0x0004 (sp)
+        0x8034149c: 0x9421fff8  stwu	sp, -0x0008 (sp)
+        0x803414a0: 0x38c00010  li	r6, 16
+        0x803414a4: 0x3ca0cc01  lis	r5, 0xCC01
+        0x803414a8: 0x5480103a  rlwinm	r0, r4, 2, 0, 29 (3fffffff)
+        0x803414ac: 0x98c58000  stb	r6, -0x8000 (r5)
+        0x803414b0: 0x6400000b  oris	r0, r0, 0x000B
+        0x803414b4: 0x90058000  stw	r0, -0x8000 (r5)
+        0x803414b8: 0x38858000  subi	r4, r5, 32768
+        0x803414bc: 0x4bffff4d  bl	->0x80341408
+    11  0x80326290     2614217      92019406     35.20    1.0  
+    12  0x8036e7b8     2577041      85042353     33.00    0.9  
+    13  0x8036b184     7155059      84568337     11.82    0.9  
+    14  0x8035d8dc      587128      72179584    122.94    0.8  
+    15  0x8036b6fc     2105269      71579146     34.00    0.8  
+    16  0x8036b24c     6988862      69888620     10.00    0.7  
+    17  0x8036b220     7191437      68001243      9.46    0.7  
+    18  0x8036aeb4      873029      64018246     73.33    0.7  
+    19  0x8036f410     1071323      63567597     59.34    0.7  
+    20  0x8035ca44     3488793      62805054     18.00    0.7  
+    21  0x8036ac98     7976877      59546561      7.46    0.6  SPIN?
+        0x8036ac98: 0x54800634  rlwinm	r0, r4, 0, 24, 26 (000000e0)
+        0x8036ac9c: 0x2c000060  cmpwi	r0, 96
+        0x8036aca0: 0x548406fe  rlwinm	r4, r4, 0, 27, 31 (0000001f)
+        0x8036aca4: 0x38a00001  li	r5, 1
+        0x8036aca8: 0x7ca72030  slw	r7, r5, r4
+        0x8036acac: 0x4182002c  beq-	 ->0x8036ACD8
+    22  0x8036b20c     7191437      57534070      8.00    0.6  
+    23  0x8035cae0     3536865      56636688     16.01    0.6  
+    24  0x8033effc      779207      56533332     72.55    0.6  
+    25  0x8036b66c     2066421      55793367     27.00    0.6  
+    26  0x8037a364      838550      54505750     65.00    0.6  
+    27  0x8037a2e0     1071959      53104942     49.54    0.6  
+    28  0x8036259c     1124283      52841301     47.00    0.6  
+    29  0x8033f4c4      938444      51736688     55.13    0.5  
+    30  0x8036fdc0     1700399      51011970     30.00    0.5  
+    31  0x803625b8     1124280      50592600     45.00    0.5  
+    32  0x8036e598     3256001      48840015     15.00    0.5  
+    33  0x803625ec     1124280      48344040     43.00    0.5  
+    34  0x8036b154     7637808      46060047      6.03    0.5  SPIN?
+        0x8036b154: 0x881f0011  lbz	r0, 0x0011 (r31)
+        0x8036b158: 0x981f0012  stb	r0, 0x0012 (r31)
+        0x8036b15c: 0xa01f0016  lhz	r0, 0x0016 (r31)
+        0x8036b160: 0x28000000  cmplwi	r0, 0
+        0x8036b164: 0x40820020  bne-	 ->0x8036B184
+    35  0x8034012c     1124281      44971240     40.00    0.5  
+    36  0x8036f3f8      837928      44894214     53.58    0.5  
+    37  0x8036b570     7274455      43646730      6.00    0.5  SPIN?
+        0x8036b570: 0x809f0008  lwz	r4, 0x0008 (r31)
+        0x8036b574: 0x807f0004  lwz	r3, 0x0004 (r31)
+        0x8036b578: 0x801f000c  lwz	r0, 0x000C (r31)
+        0x8036b57c: 0x7c641850  sub	r3, r3, r4
+        0x8036b580: 0x7c030040  cmplw	r3, r0
+        0x8036b584: 0x4180000c  blt-	 ->0x8036B590
+    38  0x8036b1d8     7191437      43148622      6.00    0.5  SPIN?
+        0x8036b1d8: 0x881f0010  lbz	r0, 0x0010 (r31)
+        0x8036b1dc: 0x541a073e  rlwinm	r26, r0, 0, 28, 31 (0000000f)
+        0x8036b1e0: 0x381affff  subi	r0, r26, 1
+        0x8036b1e4: 0x28000001  cmplwi	r0, 1
+        0x8036b1e8: 0x38000001  li	r0, 1
+        0x8036b1ec: 0x40810008  ble-	 ->0x8036B1F4
+    39  0x8037e3cc     3256005      42328065     13.00    0.4  
+    40  0x8000320c    10278216      41166688      4.01    0.4  SPIN?
+        0x8000320c: 0x8c040001  lbzu	r0, 0x0001 (r4)
+        0x80003210: 0x9c060001  stbu	r0, 0x0001 (r6)
+        0x80003214: 0x34a5ffff  subic.	r5, r5, 1
+        0x80003218: 0x4082fff4  bne+	 ->0x8000320C
