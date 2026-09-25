@@ -29,7 +29,7 @@
 #include "Core/IOS/USB/Emulated/Skylanders/Skylander.h"
 #include "Core/IOS/USB/Emulated/Skylanders/SkylanderFigure.h"
 #include <atomic>
-#import <iCube-Swift.h>
+#import "Swift.h"
 #import "EmulationCoordinator.h"
 
 // Extern DSU client RX counter for DEBUG HUD (defined in DualShockUDPClient.cpp)

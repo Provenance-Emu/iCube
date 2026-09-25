@@ -24,7 +24,7 @@
 
 #import "UICommon/UICommon.h"
 
-#import "iCube-Swift.h"
+#import "Swift.h"
 #import "EmulationCoordinator.h"
 #import "FastmemManager.h"
 #import "FoundationStringUtil.h"
