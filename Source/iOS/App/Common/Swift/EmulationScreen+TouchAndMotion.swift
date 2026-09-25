@@ -89,7 +89,6 @@ extension EmulationScreen {
   func setupEnhancedMotionControls() {
     // Enable enhanced motion controls by default for touchscreen Wii games
     UserDefaults.standard.set(true, forKey: "motion_enhanced_shake_detection")
-    UserDefaults.standard.set(true, forKey: "motion_enable_ir_cursor")
 
     // Set sensible defaults for axis inversion (can be adjusted by user)
     if UserDefaults.standard.object(forKey: "motion_invert_roll") == nil {

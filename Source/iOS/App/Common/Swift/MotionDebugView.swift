@@ -6,8 +6,6 @@ import CoreMotion
 import GameController
 import SwiftUI
 
-var lastShakeTime: TimeInterval = 0
-
 /// Debug view for motion controls, gyro input, and touch mappings
 struct MotionDebugView: View {
   @State private var isMotionEnabled = false
@@ -18,12 +16,9 @@ struct MotionDebugView: View {
   @State private var debugLoggingEnabled = false
   @State private var refreshTimer: Timer?
   @State private var show3DView = true
-  @State private var shakeHistory: [Double] = []
-  @State private var motionManager: CMMotionManager?
 
   // Enhanced Motion Controls - Use @AppStorage for automatic UI updates
   @AppStorage("motion_enhanced_shake_detection") private var enhancedShakeEnabled: Bool = true
-  @AppStorage("motion_enable_ir_cursor") private var gyroIREnabled: Bool = false
   @AppStorage("motion_use_yaw_for_horizontal") private var useYawForHorizontal: Bool = false
   @AppStorage("motion_invert_roll") private var invertRoll: Bool = false
   @AppStorage("motion_invert_pitch") private var invertPitch: Bool = false
@@ -64,17 +59,14 @@ struct MotionDebugView: View {
           Toggle("", isOn: $isMotionEnabled)
             .onChange(of: isMotionEnabled) { enabled in
               TCDeviceMotion.shared.setMotionEnabled(enabled)
-              if enabled {
-                startMotionMonitoring()
-              }
             }
         }
 
         HStack {
           Text("Core Motion Available")
           Spacer()
-          Image(systemName: (motionManager?.isDeviceMotionAvailable ?? false) ? "checkmark.circle.fill" : "xmark.circle.fill")
-            .foregroundColor((motionManager?.isDeviceMotionAvailable ?? false) ? .green : .red)
+          Image(systemName: TCDeviceMotion.shared.isDeviceMotionAvailable ? "checkmark.circle.fill" : "xmark.circle.fill")
+            .foregroundColor(TCDeviceMotion.shared.isDeviceMotionAvailable ? .green : .red)
         }
 
         HStack {
@@ -91,7 +83,7 @@ struct MotionDebugView: View {
             .foregroundStyle(.secondary)
         }
 
-        if motionManager?.isDeviceMotionAvailable == false {
+        if !TCDeviceMotion.shared.isDeviceMotionAvailable {
           HStack {
             Image(systemName: "exclamationmark.triangle.fill")
               .foregroundColor(.orange)
@@ -185,19 +177,19 @@ struct MotionDebugView: View {
           label: useYawForHorizontal ? "Roll" : "Roll (IR H)",
           value: motionData.attitude.roll * 180 / .pi,
           range: -180 ... 180,
-          isActive: !useYawForHorizontal && gyroIREnabled
+          isActive: !useYawForHorizontal && gyroIRActive
         )
         MotionValueRow(
           label: "Pitch (IR V)",
           value: motionData.attitude.pitch * 180 / .pi,
           range: -90 ... 90,
-          isActive: gyroIREnabled
+          isActive: gyroIRActive
         )
         MotionValueRow(
           label: useYawForHorizontal ? "Yaw (IR H)" : "Yaw",
           value: motionData.attitude.yaw * 180 / .pi,
           range: -180 ... 180,
-          isActive: useYawForHorizontal && gyroIREnabled
+          isActive: useYawForHorizontal && gyroIRActive
         )
       }
 
@@ -262,18 +254,15 @@ struct MotionDebugView: View {
             .font(.system(.body, design: .monospaced))
         }
 
-        Toggle("Enable Shake Detection", isOn: $debugShakeEnabled)
-          .onChange(of: debugShakeEnabled) { enabled in
-            NSLog("[MOTION_DEBUG] Shake detection enabled: %@", enabled ? "YES" : "NO")
-          }
+        // Live detection comes from TCDeviceMotion (Enhanced Shake Detection below); this only
+        // lets the test button drive the emulated Wii Remote.
+        Toggle("Test Button Sends Wii Remote Shake", isOn: $debugShakeEnabled)
       }
 
       // MARK: - Motion Control Settings
 
       Section(header: Text("Enhanced Motion Controls")) {
         Toggle("Enable Enhanced Shake Detection", isOn: $enhancedShakeEnabled)
-
-        Toggle("Enable Gyro IR Cursor", isOn: $gyroIREnabled)
 
         Toggle("Use Yaw for Horizontal Movement", isOn: $useYawForHorizontal)
 
@@ -323,10 +312,6 @@ struct MotionDebugView: View {
           resetMotionSystem()
         }
 
-        Button("Reset IR Cursor to Center") {
-          resetIRCursor()
-        }
-
         Button("Log Current State") {
           logCurrentMotionState()
         }
@@ -358,14 +343,13 @@ struct MotionDebugView: View {
     .navigationTitle("Motion Debug")
     .onAppear {
       setupDebugView()
-      startMotionMonitoring()
+      startRefreshTimer()
     }
     .onDisappear {
-      stopMotionMonitoring()
+      stopRefreshTimer()
     }
     // CRITICAL: Restart motion system when settings change
     .onChange(of: enhancedShakeEnabled) { _ in restartMotionSystemIfRunning() }
-    .onChange(of: gyroIREnabled) { _ in restartMotionSystemIfRunning() }
     .onChange(of: useYawForHorizontal) { _ in restartMotionSystemIfRunning() }
     .onChange(of: invertRoll) { _ in restartMotionSystemIfRunning() }
     .onChange(of: invertPitch) { _ in restartMotionSystemIfRunning() }
@@ -375,6 +359,9 @@ struct MotionDebugView: View {
   }
 
   // MARK: - Helper Methods
+
+  /// Gyro IR mode (TouchIRMode 0) is the only mode in which device attitude drives the pointer.
+  private var gyroIRActive: Bool { currentIRMode == 0 }
 
   private func irModeLabel(_ mode: Int) -> String {
     switch mode {
@@ -395,137 +382,65 @@ struct MotionDebugView: View {
     // Check if touch controls are currently visible
     touchControlsVisible = ControllerManager.shared.overlayVisible
 
-    // Initialize our own motion manager for accurate readings
-    if motionManager == nil {
-      motionManager = CMMotionManager()
-    }
-
     NSLog("[MOTION_DEBUG] Debug view setup complete - IR Mode: %d, Motion: %@, Core Motion Available: %@",
           currentIRMode, isMotionEnabled ? "ON" : "OFF",
-          motionManager?.isDeviceMotionAvailable == true ? "YES" : "NO")
+          TCDeviceMotion.shared.isDeviceMotionAvailable ? "YES" : "NO")
   }
 
-  private func startMotionMonitoring() {
-    // Initialize Core Motion manager
-    motionManager = CMMotionManager()
+  /// The view only polls: the one live CMMotionManager lives in TCDeviceMotion.
+  private static let refreshInterval: TimeInterval = 1.0 / 30.0
 
-    guard let motionManager = motionManager else { return }
-
-    // Configure update intervals
-    motionManager.deviceMotionUpdateInterval = 1.0 / 60.0 // 60Hz
-    motionManager.gyroUpdateInterval = 1.0 / 60.0
-    motionManager.accelerometerUpdateInterval = 1.0 / 60.0
-
-    // Start device motion updates if available
-    if motionManager.isDeviceMotionAvailable {
-      motionManager.startDeviceMotionUpdates(using: .xMagneticNorthZVertical)
-      NSLog("[MOTION_DEBUG] Started Core Motion device motion updates")
-    }
-
-    // Start gyroscope updates if available
-    if motionManager.isGyroAvailable {
-      motionManager.startGyroUpdates()
-      NSLog("[MOTION_DEBUG] Started gyroscope updates")
-    }
-
-    // Start accelerometer updates if available
-    if motionManager.isAccelerometerAvailable {
-      motionManager.startAccelerometerUpdates()
-      NSLog("[MOTION_DEBUG] Started accelerometer updates")
-    }
-
-    // Timer to update UI
-    refreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { _ in
+  private func startRefreshTimer() {
+    refreshTimer?.invalidate()
+    refreshTimer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { _ in
       updateMotionData()
     }
   }
 
-  private func stopMotionMonitoring() {
+  private func stopRefreshTimer() {
     refreshTimer?.invalidate()
     refreshTimer = nil
-
-    // Stop Core Motion updates
-    motionManager?.stopDeviceMotionUpdates()
-    motionManager?.stopGyroUpdates()
-    motionManager?.stopAccelerometerUpdates()
-    motionManager = nil
-
-    NSLog("[MOTION_DEBUG] Stopped Core Motion updates")
   }
 
   private func updateMotionData() {
-    // Get motion data from TCDeviceMotion if available
-    let motionManager = TCDeviceMotion.shared
+    let motion = TCDeviceMotion.shared
+    let sample = motion.latestSample
 
-    // Update basic status
     let now = Date()
     let deltaTime = now.timeIntervalSince(motionData.lastUpdateTime)
     motionData.updateRate = deltaTime > 0 ? 1.0 / deltaTime : 0
     motionData.lastUpdateTime = now
-    motionData.motionActive = motionManager.motionEnabled
+    motionData.motionActive = motion.motionEnabled
 
-    // Get real sensor data from Core Motion
-    updateRealMotionData()
+    motionData.attitude.roll = sample.roll
+    motionData.attitude.pitch = sample.pitch
+    motionData.attitude.yaw = sample.yaw
+    motionData.gyroX = sample.rotationX
+    motionData.gyroY = sample.rotationY
+    motionData.gyroZ = sample.rotationZ
+    motionData.accelX = sample.userAccelX
+    motionData.accelY = sample.userAccelY
+    motionData.accelZ = sample.userAccelZ
+    motionData.shakeIntensity = sample.shakeIntensity
+    motionData.shakeDetected = sample.shakeDetected
 
-    // Calculate acceleration magnitudes
-    motionData.totalAccelMagnitude = sqrt(motionData.accelX * motionData.accelX +
+    // User acceleration has gravity removed; add 1 g back for the "total" display.
+    let userAccelMagnitude = sqrt(motionData.accelX * motionData.accelX +
       motionData.accelY * motionData.accelY +
       motionData.accelZ * motionData.accelZ)
+    motionData.totalAccelMagnitude = userAccelMagnitude + 1.0
+    let filterAlpha = 0.2
+    motionData.filteredAccelMagnitude = filterAlpha * userAccelMagnitude +
+      (1 - filterAlpha) * motionData.filteredAccelMagnitude
 
-    // Improved shake detection algorithm
-    updateShakeDetection()
-
-    // Log debug info if enabled
     if debugLoggingEnabled, Int(now.timeIntervalSince1970) % 2 == 0 {
-      NSLog("[MOTION_DEBUG] Gyro: (%.3f, %.3f, %.3f) Accel: (%.3f, %.3f, %.3f)",
-            motionData.gyroX, motionData.gyroY, motionData.gyroZ,
-            motionData.accelX, motionData.accelY, motionData.accelZ)
-    }
-  }
-
-  /// Gets real motion data from Core Motion sensors
-  private func updateRealMotionData() {
-    guard let motionManager = motionManager else { return }
-
-    // Get device motion data (includes attitude and user acceleration)
-    if let deviceMotion = motionManager.deviceMotion {
-      // Attitude (device orientation in space)
-      let attitude = deviceMotion.attitude
-      motionData.attitude.roll = attitude.roll
-      motionData.attitude.pitch = attitude.pitch
-      motionData.attitude.yaw = attitude.yaw
-
-      // User acceleration (device acceleration minus gravity)
-      let userAccel = deviceMotion.userAcceleration
-      motionData.accelX = userAccel.x
-      motionData.accelY = userAccel.y
-      motionData.accelZ = userAccel.z
-    }
-
-    // Get raw gyroscope data
-    if let gyroData = motionManager.gyroData {
-      let rotationRate = gyroData.rotationRate
-      motionData.gyroX = rotationRate.x
-      motionData.gyroY = rotationRate.y
-      motionData.gyroZ = rotationRate.z
-    }
-
-    // Fallback: if device motion isn't available, use raw accelerometer
-    if motionManager.deviceMotion == nil, let accelData = motionManager.accelerometerData {
-      let acceleration = accelData.acceleration
-      motionData.accelX = acceleration.x
-      motionData.accelY = acceleration.y
-      motionData.accelZ = acceleration.z
-    }
-
-    // Log raw values occasionally for debugging
-    if debugLoggingEnabled, Int(Date().timeIntervalSince1970) % 3 == 0 {
-      NSLog("[MOTION_DEBUG] Raw - Gyro: (%.3f, %.3f, %.3f) UserAccel: (%.3f, %.3f, %.3f) Attitude: R=%.1f° P=%.1f° Y=%.1f°",
+      NSLog("[MOTION_DEBUG] Gyro: (%.3f, %.3f, %.3f) UserAccel: (%.3f, %.3f, %.3f) Attitude: R=%.1f° P=%.1f° Y=%.1f° Shake: %.3f%@",
             motionData.gyroX, motionData.gyroY, motionData.gyroZ,
             motionData.accelX, motionData.accelY, motionData.accelZ,
             motionData.attitude.roll * 180 / .pi,
             motionData.attitude.pitch * 180 / .pi,
-            motionData.attitude.yaw * 180 / .pi)
+            motionData.attitude.yaw * 180 / .pi,
+            motionData.shakeIntensity, motionData.shakeDetected ? " DETECTED" : "")
     }
   }
 
@@ -537,7 +452,7 @@ struct MotionDebugView: View {
 
     // Trigger Wiimote shake if enabled
     if debugShakeEnabled {
-      triggerWiimoteShake()
+      TCDeviceMotion.shared.triggerShake()
     }
 
     // Reset after animation
@@ -553,17 +468,6 @@ struct MotionDebugView: View {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
       TCDeviceMotion.shared.setMotionEnabled(isMotionEnabled)
       TCDeviceMotion.shared.statusBarOrientationChanged()
-    }
-  }
-
-  private func resetIRCursor() {
-    NSLog("[MOTION_DEBUG] Resetting IR cursor to center")
-    if TVEmulationBridge.isRunning() {
-      // Send notification to reset cursor - the core will handle it
-      NotificationCenter.default.post(
-        name: Notification.Name("DOLResetIRCursor"),
-        object: nil
-      )
     }
   }
 
@@ -585,96 +489,9 @@ struct MotionDebugView: View {
     NSLog("[MOTION_DEBUG] ========================")
   }
 
-  /// Improved shake detection using real user acceleration variance over time
-  private func updateShakeDetection() {
-    // Calculate user acceleration magnitude (gravity already removed by Core Motion)
-    let userAccelMagnitude = sqrt(motionData.accelX * motionData.accelX +
-      motionData.accelY * motionData.accelY +
-      motionData.accelZ * motionData.accelZ)
-
-    // Store total acceleration for display (including gravity estimate)
-    motionData.totalAccelMagnitude = userAccelMagnitude + 1.0 // Add gravity estimate for display
-
-    // Add to history for variance calculation
-    shakeHistory.append(userAccelMagnitude)
-    if shakeHistory.count > 15 { // Keep last 15 samples (about 1/2 second at 30fps)
-      shakeHistory.removeFirst()
-    }
-
-    // Calculate variance in acceleration
-    if shakeHistory.count >= 8 {
-      let mean = shakeHistory.reduce(0, +) / Double(shakeHistory.count)
-      let variance = shakeHistory.reduce(0) { acc, val in
-        acc + pow(val - mean, 2)
-      } / Double(shakeHistory.count)
-
-      let standardDeviation = sqrt(variance)
-      motionData.shakeIntensity = standardDeviation * 20 // Scale for better visualization
-
-      // Detect shake when standard deviation is high AND peak acceleration is above threshold
-      let varianceThreshold = 0.15 // Tuned for user acceleration (no gravity)
-      let accelerationThreshold = 0.8 // Lower threshold since gravity is removed
-
-      let hasHighVariance = standardDeviation > varianceThreshold
-      let hasHighAcceleration = userAccelMagnitude > accelerationThreshold
-
-      motionData.shakeDetected = hasHighVariance && hasHighAcceleration
-
-      if motionData.shakeDetected, debugShakeEnabled {
-        // Trigger Wiimote shake in Dolphin (same as core implementation)
-        let currentTime = Date().timeIntervalSinceReferenceDate
-        let shakeCooldown: TimeInterval = 0.5
-
-        if (currentTime - lastShakeTime) > shakeCooldown {
-          triggerWiimoteShake()
-          lastShakeTime = currentTime
-        }
-      }
-
-      // Debug logging for shake detection tuning
-      if debugLoggingEnabled, motionData.shakeDetected || userAccelMagnitude > 0.5 {
-        NSLog("[MOTION_DEBUG] Shake - UserAccel: %.3f StdDev: %.3f Detected: %@",
-              userAccelMagnitude, standardDeviation, motionData.shakeDetected ? "YES" : "NO")
-      }
-    }
-
-    // Low-pass filter for smoother acceleration display
-    let filterAlpha = 0.2
-    motionData.filteredAccelMagnitude = filterAlpha * userAccelMagnitude +
-      (1 - filterAlpha) * motionData.filteredAccelMagnitude
-  }
-
-  /// Triggers a shake event in the Dolphin Wiimote emulation
-  private func triggerWiimoteShake() {
-    NSLog("[MOTION_DEBUG] Triggering Wiimote shake event")
-
-    // Send shake events to TCManagerInterface (same as the core uses)
-    let port = 4 // Wiimote port
-    let shakeDuration: Float = 0.1
-
-    // Trigger shake on all axes for maximum game compatibility
-    TCManagerInterface.setButtonStateFor(132, controller: port, state: true)
-    TCManagerInterface.setButtonStateFor(132, controller: port, state: true) // wiiShakeX
-    TCManagerInterface.setButtonStateFor(133, controller: port, state: true) // wiiShakeY
-    TCManagerInterface.setButtonStateFor(134, controller: port, state: true) // wiiShakeZ
-
-    // Release after short duration
-    DispatchQueue.main.asyncAfter(deadline: .now() + TimeInterval(shakeDuration)) {
-      TCManagerInterface.setButtonStateFor(132, controller: port, state: false) // wiiShakeX
-      TCManagerInterface.setButtonStateFor(133, controller: port, state: false) // wiiShakeY
-      TCManagerInterface.setButtonStateFor(134, controller: port, state: false) // wiiShakeZ
-    }
-  }
-
   /// Restart the motion system when settings change during gameplay
   private func restartMotionSystemIfRunning() {
     NSLog("[MOTION_DEBUG] Settings changed - restarting motion system")
-
-    // Restart our debug motion monitoring
-    stopMotionMonitoring()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-      startMotionMonitoring()
-    }
 
     // Restart the core's motion system if it's running
     if TVEmulationBridge.isRunning() {
@@ -690,7 +507,6 @@ struct MotionDebugView: View {
   private func applyRecommendedSettings() {
     // Set improved defaults based on user feedback
     enhancedShakeEnabled = true
-    gyroIREnabled = true
     fullMotionEnabled = true
     useYawForHorizontal = false // Use roll by default
     wiimoteIMUEnabled = true

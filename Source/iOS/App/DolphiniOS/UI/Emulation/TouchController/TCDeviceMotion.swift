@@ -29,6 +29,36 @@ import Foundation
   // Enhanced motion features
   private var shakeHistory: [Double] = []
   private var lastShakeTime: TimeInterval = 0
+  static let shakeHistoryLength = 15
+  static let shakeMinSamples = 8
+  static let shakeVarianceThreshold = 0.15
+  static let shakeAccelerationThreshold = 0.8
+  static let shakeCooldown: TimeInterval = 0.5
+  /// Standard deviation of the recent user-acceleration magnitude, scaled for display.
+  static let shakeIntensityScale = 20.0
+
+  /// Latest device-motion sample plus the shake statistics derived from it. Published for the
+  /// Motion Debug screen, which observes this feed instead of running a second CMMotionManager
+  /// (that copy also ran its own shake detector and could fire the same shake buttons twice).
+  struct Sample {
+    var roll = 0.0, pitch = 0.0, yaw = 0.0
+    var rotationX = 0.0, rotationY = 0.0, rotationZ = 0.0
+    var userAccelX = 0.0, userAccelY = 0.0, userAccelZ = 0.0
+    var shakeIntensity = 0.0
+    var shakeDetected = false
+    var timestamp: TimeInterval = 0
+  }
+
+  private let sampleLock = NSLock()
+  private var _latestSample = Sample()
+  /// Thread-safe copy of the most recent device-motion sample (written on the motion queue).
+  var latestSample: Sample {
+    sampleLock.lock()
+    defer { sampleLock.unlock() }
+    return _latestSample
+  }
+
+  @objc public var isDeviceMotionAvailable: Bool { motionManager.isDeviceMotionAvailable }
 
   /// Standard gravity, used to convert CoreMotion's g-relative acceleration into the
   /// m/s^2 the core's IMUAccelerometer expects (see `mapAccelToWiimoteFrame`).
@@ -119,10 +149,17 @@ import Foundation
 
   /// Handle enhanced motion features: shake detection, IR cursor, and 6DOF motion mapping
   private func handleEnhancedMotionFeatures(motion: CMDeviceMotion) {
-    // Enhanced shake detection
-    if UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") {
-      handleShakeDetection(motion: motion)
+    // Shake statistics are always kept (they feed the debug view); the Wii Remote shake is only
+    // fired when enhanced shake detection is on.
+    let shake = updateShakeStatistics(motion: motion)
+    if shake.detected, UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") {
+      let currentTime = Date().timeIntervalSinceReferenceDate
+      if (currentTime - lastShakeTime) > Self.shakeCooldown {
+        triggerWiimoteShake()
+        lastShakeTime = currentTime
+      }
     }
+    publishSample(motion: motion, shake: shake)
 
     // IR cursor mapping (when gyro mode is active)
     let irMode = DOLConfigBridge.mainTouchPadIRMode()
@@ -141,37 +178,42 @@ import Foundation
     }
   }
 
-  /// Enhanced shake detection using variance-based algorithm
-  private func handleShakeDetection(motion: CMDeviceMotion) {
+  /// Variance-based shake detection over the recent user-acceleration magnitude (gravity already
+  /// removed by CoreMotion). A shake needs both high variance and a high current magnitude.
+  private func updateShakeStatistics(motion: CMDeviceMotion) -> (intensity: Double, detected: Bool) {
     let userAccel = motion.userAcceleration
     let magnitude = sqrt(userAccel.x * userAccel.x + userAccel.y * userAccel.y + userAccel.z * userAccel.z)
 
     shakeHistory.append(magnitude)
-    if shakeHistory.count > 15 {
+    if shakeHistory.count > Self.shakeHistoryLength {
       shakeHistory.removeFirst()
     }
-
-    guard shakeHistory.count >= 8 else { return }
+    guard shakeHistory.count >= Self.shakeMinSamples else { return (0, false) }
 
     let mean = shakeHistory.reduce(0, +) / Double(shakeHistory.count)
     let variance = shakeHistory.reduce(0) { acc, val in acc + pow(val - mean, 2) } / Double(shakeHistory.count)
     let standardDeviation = sqrt(variance)
+    let detected = standardDeviation > Self.shakeVarianceThreshold && magnitude > Self.shakeAccelerationThreshold
+    return (standardDeviation * Self.shakeIntensityScale, detected)
+  }
 
-    let varianceThreshold = 0.15
-    let accelerationThreshold = 0.8
-
-    let hasHighVariance = standardDeviation > varianceThreshold
-    let hasHighAcceleration = magnitude > accelerationThreshold
-
-    if hasHighVariance, hasHighAcceleration {
-      let currentTime = Date().timeIntervalSinceReferenceDate
-      let shakeCooldown: TimeInterval = 0.5
-
-      if (currentTime - lastShakeTime) > shakeCooldown {
-        triggerWiimoteShake()
-        lastShakeTime = currentTime
-      }
-    }
+  private func publishSample(motion: CMDeviceMotion, shake: (intensity: Double, detected: Bool)) {
+    var sample = Sample()
+    sample.roll = motion.attitude.roll
+    sample.pitch = motion.attitude.pitch
+    sample.yaw = motion.attitude.yaw
+    sample.rotationX = motion.rotationRate.x
+    sample.rotationY = motion.rotationRate.y
+    sample.rotationZ = motion.rotationRate.z
+    sample.userAccelX = motion.userAcceleration.x
+    sample.userAccelY = motion.userAcceleration.y
+    sample.userAccelZ = motion.userAcceleration.z
+    sample.shakeIntensity = shake.intensity
+    sample.shakeDetected = shake.detected
+    sample.timestamp = motion.timestamp
+    sampleLock.lock()
+    _latestSample = sample
+    sampleLock.unlock()
   }
 
   /// Map device attitude to IR cursor movement
@@ -263,6 +305,9 @@ import Foundation
       TCManagerInterface.setButtonStateFor(134, controller: self.port, state: false)
     }
   }
+
+  /// Manual shake (Motion Debug "Test Wii Remote Shake"), sent to the bound slot like a real one.
+  @objc public func triggerShake() { triggerWiimoteShake() }
 
   @objc func setMotionEnabled(_ mode: Bool) {
     if motionEnabled == mode { return }
