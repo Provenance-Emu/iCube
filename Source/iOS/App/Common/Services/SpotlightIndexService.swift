@@ -1,5 +1,6 @@
 import CoreSpotlight
 import Foundation
+import PVLibrarySnapshot
 import UIKit
 import UniformTypeIdentifiers
 
@@ -70,4 +71,42 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
     CSSearchableIndex.default().indexSearchableItems(searchable, completionHandler: nil)
     #endif
   }
+}
+
+/// Indexes snapshot games in Spotlight after every snapshot write (`LibrarySnapshotWriter`, via
+/// `EcosystemSurfaceRefresher`). A plain `enum` rather than a member of `SpotlightIndexService`
+/// above: that class subclasses `UIResponder`, which this SDK annotates `@MainActor` as a whole
+/// (every member, including extension members, inherits the isolation) — so anything added there
+/// cannot run off the main thread. This indexer only touches `Sendable` snapshot data and
+/// `CSSearchableIndex` (thread-safe by design), and its caller already runs off the main thread
+/// inside `Task.detached`, so it deliberately isn't main-actor bound.
+///
+/// Distinct data source from `SpotlightIndexService.indexAllGames()` (which walks
+/// `TVLibraryBridge` on launch and library-change notifications) but writes the same
+/// `dios.game.<id>` / `dios.games` identifiers, so `scene(_:continue:)` handles items from either.
+enum SpotlightSnapshotIndexer {
+  static func indexSnapshotGames(_ snapshot: LibrarySnapshot) {
+    #if !os(tvOS)
+    CSSearchableIndex.default().indexSearchableItems(searchableItems(from: snapshot), completionHandler: nil)
+    #endif
+  }
+
+  #if !os(tvOS)
+  /// Pure item construction, split out for unit testing.
+  static func searchableItems(from snapshot: LibrarySnapshot) -> [CSSearchableItem] {
+    let discType = UTType("me.oatmealdome.dolphinios.generic-software") ?? .data
+    return snapshot.byGameID.values.map { game in
+      let attr = CSSearchableItemAttributeSet(contentType: discType)
+      attr.title = game.title
+      var lines: [String] = [game.platform.displayName]
+      if let region = game.region, !region.isEmpty { lines.append(region) }
+      if let gametdbID = game.gametdbID, !gametdbID.isEmpty { lines.append(gametdbID) }
+      attr.contentDescription = lines.joined(separator: " • ")
+      if let coverURL = game.coverURL, let data = try? Data(contentsOf: coverURL) {
+        attr.thumbnailData = data
+      }
+      return CSSearchableItem(uniqueIdentifier: "dios.game.\(game.id)", domainIdentifier: "dios.games", attributeSet: attr)
+    }
+  }
+  #endif
 }
