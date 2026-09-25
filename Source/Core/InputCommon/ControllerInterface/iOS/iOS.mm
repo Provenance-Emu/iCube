@@ -47,8 +47,14 @@ void InputBackend::PopulateDevices()
   for (int i = 0; i < 8; ++i)
     g_controller_interface.AddDevice(std::make_shared<ciface::iOS::Touchscreen>(
         i, i >= 4));
-  
-  for (GCController* controller in [GCController controllers])
+
+  // Reconcile MFi id bookkeeping against the live controller list BEFORE constructing any
+  // wrapper below, so a device-refresh rebuild (which tears down and recreates every wrapper,
+  // even for pads that never disconnected) doesn't free ordinals out from under still-connected
+  // pads. See MFiController::GetPreferredId / defect #16.
+  NSArray<GCController*>* live_controllers = [GCController controllers];
+  MFiController::PruneStaleIds(live_controllers);
+  for (GCController* controller in live_controllers)
     g_controller_interface.AddDevice(std::make_shared<MFiController>(controller));
 
   for (GCKeyboard* keyboard in [m_mfi_scanner keyboards])

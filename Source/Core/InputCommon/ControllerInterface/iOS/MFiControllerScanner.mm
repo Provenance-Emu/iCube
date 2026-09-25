@@ -57,6 +57,12 @@
         dynamic_cast<const ciface::iOS::MFiController*>(device);
     return controller && controller->IsSameController(gc_controller);
   });
+  // This is a genuine disconnect (as opposed to a device-refresh rebuild, which never fires this
+  // notification), so free this pad's ordinal now: if it -- or another pad sharing its vendor
+  // name -- reconnects before the next full device refresh, it should be able to claim this slot
+  // back immediately rather than finding it still "in use" by a controller that is gone. See
+  // MFiController::GetPreferredId / defect #16.
+  ciface::iOS::MFiController::ReleaseId(gc_controller);
 }
 
 - (void)keyboardConnected:(NSNotification*)notification

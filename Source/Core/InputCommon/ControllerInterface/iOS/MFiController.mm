@@ -3,11 +3,44 @@
 
 #include "InputCommon/ControllerInterface/iOS/MFiController.h"
 
+#include <algorithm>
+#include <mutex>
+#include <vector>
+
 #include "InputCommon/ControllerInterface/iOS/Motor.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 
 namespace ciface::iOS
 {
+namespace
+{
+// Defect #16 (docs/audits/2026-09-24-controller-system-audit.md): without this, AddDevice()
+// (ControllerInterface.cpp) falls back to "first available id" purely from the order
+// [GCController controllers] enumerates devices in, which the GameController framework does not
+// document as stable. Two identical pads (same vendorName, so same GetSource()/GetName(), which
+// is exactly what AddDevice scopes id uniqueness by) can therefore trade ids across an unrelated
+// device refresh, silently moving every binding pointed at "MFi/<id>/<name>".
+//
+// This table remembers, for the lifetime of the process, which ordinal each *live* GCController
+// object (identity, not content) holds within its vendor-name group. A refresh that tears down
+// and rebuilds the C++ device wrappers (ControllerInterface::RefreshDevices ->
+// ClearDevices()+PopulateDevices()) does NOT touch the underlying Objective-C GCController
+// objects for pads that stayed connected, so looking them up by pointer identity here survives
+// that churn regardless of enumeration order. A genuine disconnect hands the ordinal back (see
+// ReleaseId/PruneStaleIds) so a reconnecting pad -- necessarily a new GCController object, since
+// iOS gives us no persistent hardware id to recognize it by -- claims the lowest free ordinal,
+// which in the common single-pad case is the one it just vacated.
+struct AssignedId
+{
+  std::string vendor_name;
+  const void* controller_ptr;
+  int id;
+};
+
+std::mutex s_assigned_ids_mutex;
+std::vector<AssignedId> s_assigned_ids;
+}  // namespace
+
 MFiController::MFiController(GCController* controller) : m_controller(controller)
 {
   if (controller.extendedGamepad != nil)
@@ -217,6 +250,59 @@ bool MFiController::SupportsGyroscope() const
 bool MFiController::IsSameController(GCController* controller) const
 {
   return m_controller == controller;
+}
+
+std::optional<int> MFiController::GetPreferredId() const
+{
+  const std::string name = GetName();
+  const void* ptr = (__bridge const void*)m_controller;
+
+  std::lock_guard<std::mutex> lock(s_assigned_ids_mutex);
+
+  // Still-connected pad seen before (possibly under a different, now-destroyed wrapper object,
+  // e.g. after a device-refresh rebuild) -- keep its ordinal no matter what order this pass
+  // enumerated it in.
+  for (const auto& entry : s_assigned_ids)
+  {
+    if (entry.controller_ptr == ptr)
+      return entry.id;
+  }
+
+  // Either a genuinely new pad, or a reconnect of one that already had ReleaseId() called for it.
+  // Claim the lowest ordinal not already held by another live controller sharing this vendor
+  // name (the same scope AddDevice uses for id-uniqueness), so a lone pad reconnecting lands back
+  // on the id it had before, and two identical pads never contend for the same slot.
+  int id = 0;
+  while (std::ranges::any_of(s_assigned_ids, [&](const AssignedId& entry) {
+    return entry.vendor_name == name && entry.id == id;
+  }))
+  {
+    ++id;
+  }
+
+  s_assigned_ids.push_back({name, ptr, id});
+  return id;
+}
+
+void MFiController::ReleaseId(GCController* controller)
+{
+  const void* ptr = (__bridge const void*)controller;
+  std::lock_guard<std::mutex> lock(s_assigned_ids_mutex);
+  std::erase_if(s_assigned_ids,
+                [ptr](const AssignedId& entry) { return entry.controller_ptr == ptr; });
+}
+
+void MFiController::PruneStaleIds(NSArray<GCController*>* live_controllers)
+{
+  std::lock_guard<std::mutex> lock(s_assigned_ids_mutex);
+  std::erase_if(s_assigned_ids, [&live_controllers](const AssignedId& entry) {
+    for (GCController* controller in live_controllers)
+    {
+      if ((__bridge const void*)controller == entry.controller_ptr)
+        return false;
+    }
+    return true;
+  });
 }
 
 std::string MFiController::Button::GetName() const
