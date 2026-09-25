@@ -19,5 +19,9 @@ struct TVRootView: View {
       // prompt. Since `.askPerGame` is the default grant, that would be the
       // default experience.
       .continuityLibraryPullPrompt()
+      // Same reasoning as the library-pull prompt above: a `requestGame` ask
+      // from a peer ecosystem app (e.g. Provenance) arrives UNSOLICITED, so
+      // this belongs at the root rather than on any one screen.
+      .ecosystemShareApprovalPrompt()
   }
 }

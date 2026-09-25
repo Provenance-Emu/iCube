@@ -11,7 +11,19 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
     // Also accept legacy: dsu://192.168.1.23:26760
     if handlePlayLink(url) { return true }
     if handleDSULink(url) { return true }
+    if handleEcosystemLink(url) { return true }
     return false
+  }
+
+  /// Cross-app (LudiHub-style) requests from a peer app like Provenance:
+  /// answer a library query, launch by game id, or confirm-and-share a game's
+  /// files. Parsing is synchronous so this can claim the URL immediately;
+  /// the actual handling (which may touch UIApplication or present UI) runs
+  /// on the main actor in a detached Task.
+  private func handleEcosystemLink(_ url: URL) -> Bool {
+    guard let request = EcosystemBridge.parse(url) else { return false }
+    Task { @MainActor in EcosystemBridge.perform(request) }
+    return true
   }
 
   private func handlePlayLink(_ url: URL) -> Bool {
