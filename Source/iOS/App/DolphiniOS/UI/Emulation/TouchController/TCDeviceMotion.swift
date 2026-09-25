@@ -235,14 +235,11 @@ import Foundation
     if invertRoll { horizontalValue = -horizontalValue }
     if invertPitch { verticalValue = -verticalValue }
 
-    // Clamp to [-1, 1]
-    horizontalValue = max(-1.0, min(1.0, horizontalValue))
-    verticalValue = max(-1.0, min(1.0, verticalValue))
-
-    TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredLeft.rawValue, controller: port, value: Float(horizontalValue))
-    TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredRight.rawValue, controller: port, value: Float(horizontalValue))
-    TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredUp.rawValue, controller: port, value: Float(verticalValue))
-    TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredDown.rawValue, controller: port, value: Float(verticalValue))
+    // Clamping to [-1, 1] happens inside irCursorWrites so it stays covered by the
+    // pure unit tests below, alongside the sign/single-sided derivation.
+    for (button, value) in Self.irCursorWrites(horizontal: horizontalValue, vertical: verticalValue) {
+      TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
+    }
   }
 
   /// Map full 6DOF motion to Wiimote/Nunchuck IMU axes
@@ -488,6 +485,43 @@ import Foundation
       rollLeft: .wiiGyroRollLeft, rollRight: .wiiGyroRollRight,
       yawLeft: .wiiGyroYawLeft, yawRight: .wiiGyroYawRight
     )
+  }
+
+  /// Single-sided writes for the gyro-mode IR cursor, following the same convention as
+  /// `imuAccelWrites` / `imuGyroWrites` above but derived from a DIFFERENT core combine
+  /// order, so it is NOT a drop-in reuse of either helper.
+  ///
+  /// `ControllerEmu::Cursor::GetReshapableState()` (InputCommon/ControllerEmu/
+  /// ControlGroup/Cursor.cpp:67-68) computes `y = controls[0] - controls[1]` and
+  /// `x = controls[3] - controls[2]`, with `named_directions` ordering the controls
+  /// Up/Down/Left/Right -- i.e. `y = Up.GetState() - Down.GetState()` and
+  /// `x = Right.GetState() - Left.GetState()`. `Touchscreen.mm` (~line 74-77) wires
+  /// `WIIMOTE_IR_RIGHT` / `WIIMOTE_IR_DOWN` with the default `Axis` sign (`m_neg == +1`)
+  /// and `WIIMOTE_IR_UP` / `WIIMOTE_IR_LEFT` with an explicit `m_neg == -1` -- the
+  /// REVERSE of the accelerometer's Up/Left-default-positive convention the comment on
+  /// `imuAccelWrites` describes.
+  ///
+  /// For X, the minuend (Right) already has `m_neg == +1`, so writing `horizontal`
+  /// straight to Right and 0 to Left reproduces `state.x == horizontal` exactly: this
+  /// is the same sign the touch path (`TCWiiPad.sendIR`) already relies on (positive =
+  /// pointer moves right), just without the old code's 2x gain from writing to both
+  /// sides.
+  ///
+  /// For Y, the minuend (Up) has `m_neg == -1`, so reproducing `state.y == vertical`
+  /// (positive = pointer moves up, again the touch path's convention) needs the
+  /// NEGATED value on Up, 0 on Down:
+  /// `Up.GetState() - Down.GetState() == (-vertical * -1) - (0 * 1) == vertical`.
+  /// The old write-both-sides code missed this asymmetry entirely (it reused the same
+  /// value on Up and Down the way `wiimoteAccelWrites` uses the same magnitude on
+  /// opposite-signed pairs), which produced `state.y == -2 * vertical`: doubled AND
+  /// inverted relative to what tilting the phone up should do.
+  static func irCursorWrites(horizontal: Double, vertical: Double) -> [TCButtonType: Float] {
+    let clampedHorizontal = max(-1.0, min(1.0, horizontal))
+    let clampedVertical = max(-1.0, min(1.0, vertical))
+    return [
+      .wiiInfraredRight: Float(clampedHorizontal), .wiiInfraredLeft: 0,
+      .wiiInfraredUp: Float(-clampedVertical), .wiiInfraredDown: 0,
+    ]
   }
 }
 #endif

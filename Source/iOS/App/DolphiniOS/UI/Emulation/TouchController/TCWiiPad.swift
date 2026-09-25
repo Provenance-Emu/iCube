@@ -233,6 +233,12 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   private func sendIR(x: CGFloat, y: CGFloat) {
     #if os(iOS)
     guard mode != .none else { return }
+    // Writes the same value to both members of each antagonist IR pair (Up/Down,
+    // Left/Right), which doubles the gain and, on Y, also flips its sign relative to
+    // a single-sided write -- see `TCDeviceMotion.irCursorWrites` for the corrected,
+    // single-sided derivation and why Y needs negation but X does not. Left as-is here
+    // (drag/follow): the plan is to decide separately whether to migrate touch to
+    // single-sided writes, since users have adapted to the current doubled gain.
     let axisStartIdx = TCButtonType.wiiInfrared
     for (i, axis) in [y, y, x, x].enumerated() {
       let idx = axisStartIdx.rawValue + i + 1

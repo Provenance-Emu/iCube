@@ -170,6 +170,74 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     )
   }
 
+  // MARK: - Gyro-mode IR cursor: single-sided writes, four directions + clamp
+  //
+  // ControllerEmu::Cursor::GetReshapableState() (Cursor.cpp:67-68) combines
+  // y = Up.GetState() - Down.GetState(), x = Right.GetState() - Left.GetState().
+  // Axis::GetState() multiplies by m_neg (Touchscreen.mm ~line 74-77):
+  // WIIMOTE_IR_RIGHT/DOWN default to +1, WIIMOTE_IR_UP/LEFT are explicitly -1 --
+  // the reverse of the accelerometer's Up/Left-positive convention above. These
+  // tests reconstruct the core's combine directly from the write dictionary so a
+  // future change to the sign derivation is caught here, not on a device.
+
+  private func coreCursorState(_ writes: [TCButtonType: Float]) -> (x: Float, y: Float) {
+    let up = (writes[.wiiInfraredUp] ?? 0) * -1.0
+    let down = (writes[.wiiInfraredDown] ?? 0) * 1.0
+    let left = (writes[.wiiInfraredLeft] ?? 0) * -1.0
+    let right = (writes[.wiiInfraredRight] ?? 0) * 1.0
+    return (x: right - left, y: up - down)
+  }
+
+  func testIRCursorTiltUpMovesPointerUp() {
+    let writes = TCDeviceMotion.irCursorWrites(horizontal: 0, vertical: 1.0)
+    XCTAssertEqual(writes[.wiiInfraredUp] ?? 0, -1.0, accuracy: 0.0001)
+    XCTAssertEqual(writes[.wiiInfraredDown], 0)
+    let state = coreCursorState(writes)
+    XCTAssertEqual(state.y, 1.0, accuracy: 0.0001, "positive vertical must yield a positive (up) cursor state")
+    XCTAssertEqual(state.x, 0, accuracy: 0.0001)
+  }
+
+  func testIRCursorTiltDownMovesPointerDown() {
+    let writes = TCDeviceMotion.irCursorWrites(horizontal: 0, vertical: -1.0)
+    XCTAssertEqual(writes[.wiiInfraredUp] ?? 0, 1.0, accuracy: 0.0001)
+    XCTAssertEqual(writes[.wiiInfraredDown], 0)
+    let state = coreCursorState(writes)
+    XCTAssertEqual(state.y, -1.0, accuracy: 0.0001, "negative vertical must yield a negative (down) cursor state")
+  }
+
+  func testIRCursorRollRightMovesPointerRight() {
+    let writes = TCDeviceMotion.irCursorWrites(horizontal: 1.0, vertical: 0)
+    XCTAssertEqual(writes[.wiiInfraredRight] ?? 0, 1.0, accuracy: 0.0001)
+    XCTAssertEqual(writes[.wiiInfraredLeft], 0)
+    let state = coreCursorState(writes)
+    XCTAssertEqual(state.x, 1.0, accuracy: 0.0001, "positive horizontal must yield a positive (right) cursor state")
+    XCTAssertEqual(state.y, 0, accuracy: 0.0001)
+  }
+
+  func testIRCursorRollLeftMovesPointerLeft() {
+    let writes = TCDeviceMotion.irCursorWrites(horizontal: -1.0, vertical: 0)
+    XCTAssertEqual(writes[.wiiInfraredRight] ?? 0, -1.0, accuracy: 0.0001)
+    XCTAssertEqual(writes[.wiiInfraredLeft], 0)
+    let state = coreCursorState(writes)
+    XCTAssertEqual(state.x, -1.0, accuracy: 0.0001, "negative horizontal must yield a negative (left) cursor state")
+  }
+
+  func testIRCursorWritesClampBeyondUnitRange() {
+    let writesHigh = TCDeviceMotion.irCursorWrites(horizontal: 5.0, vertical: 5.0)
+    XCTAssertEqual(writesHigh[.wiiInfraredRight] ?? 0, 1.0, accuracy: 0.0001)
+    XCTAssertEqual(writesHigh[.wiiInfraredUp] ?? 0, -1.0, accuracy: 0.0001)
+    let stateHigh = coreCursorState(writesHigh)
+    XCTAssertEqual(stateHigh.x, 1.0, accuracy: 0.0001)
+    XCTAssertEqual(stateHigh.y, 1.0, accuracy: 0.0001)
+
+    let writesLow = TCDeviceMotion.irCursorWrites(horizontal: -5.0, vertical: -5.0)
+    XCTAssertEqual(writesLow[.wiiInfraredRight] ?? 0, -1.0, accuracy: 0.0001)
+    XCTAssertEqual(writesLow[.wiiInfraredUp] ?? 0, 1.0, accuracy: 0.0001)
+    let stateLow = coreCursorState(writesLow)
+    XCTAssertEqual(stateLow.x, -1.0, accuracy: 0.0001)
+    XCTAssertEqual(stateLow.y, -1.0, accuracy: 0.0001)
+  }
+
   // MARK: - Unknown orientation is a safe no-op
 
   func testUnknownOrientationFoldsIntoPortraitForAccelAndIsZeroForGyro() {
