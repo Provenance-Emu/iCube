@@ -278,7 +278,7 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   return 4.0f / 3.0f;
 }
 
-+ (void)setWiiIMUPointEnabled:(BOOL)enabled {
++ (void)setWiiIMUPointEnabled:(BOOL)enabled forWiimote:(NSInteger)wiimote {
   // Enable/disable Wiimote IMUPoint group to avoid fighting with touch IR.
   //
   // This used to be Core::RunOnCPUThread(..., wait_for_completion = true) and was
@@ -293,10 +293,22 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   // Pausing the core was never needed: emulated-controller settings are guarded
   // by the ControllerEmu state lock, which is how DolphinQt's mapping UI flips
   // the same groups from its own UI thread. Take the lock, set, return.
+  //
+  // `wiimote` is zero-based (0-3) and must match whichever emulated Wii Remote
+  // the on-screen overlay is currently bound to (ControllerManager.touchscreenSlot),
+  // not always slot 0 -- otherwise a port-aware overlay bound to Wii Remote 2-4
+  // leaves that pad's own IMU pointer fighting the app's IR while slot 0's pointer
+  // (which nothing is driving) gets silenced instead.
+  if (wiimote < 0 || wiimote > 3)
+    return;
   const auto lock = ControllerEmu::EmulatedController::GetStateLock();
-  auto* group = Wiimote::GetWiimoteGroup(0, WiimoteEmu::WiimoteGroup::IMUPoint);
+  auto* group = Wiimote::GetWiimoteGroup((int)wiimote, WiimoteEmu::WiimoteGroup::IMUPoint);
   if (group)
     group->enabled.SetValue(enabled);
+}
+
++ (void)setWiiIMUPointEnabled:(BOOL)enabled {
+  [self setWiiIMUPointEnabled:enabled forWiimote:0];
 }
 
 + (CGRect)currentVideoContentRect {

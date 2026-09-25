@@ -995,7 +995,8 @@ struct EmulationScreen: View {
     // which reads as "changing Follow to Drag breaks the Wii controls".
     .onChange(of: isTouchControlsActive) { active in
       guard isWiiSystem else { return }
-      TVEmulationBridge.setWiiIMUPointEnabled(!active)
+      let touchSlot = controllerManager.touchscreenSlot(system: .wii) ?? 0
+      TVEmulationBridge.setWiiIMUPointEnabled(!active, forWiimote: touchSlot)
     }
     .modifier(SettingsNavigationFallback(showSettings: $showSettings))
     .fullScreenCover(isPresented: $showPauseMenu) {
@@ -1045,7 +1046,9 @@ struct EmulationScreen: View {
       // the core fold the phone's real tilt into the IR transform on top of the app's pointer,
       // which is the "touch pointer stopped working" report. The Wii pad's own onAppear /
       // onDisappear (false / true) remains the single runtime owner of this flag.
-      TVEmulationBridge.setWiiIMUPointEnabled(false)
+      // Target whichever Wii Remote the overlay is actually bound to, not always slot 0.
+      let imuTouchSlot = controllerManager.touchscreenSlot(system: .wii) ?? 0
+      TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: imuTouchSlot)
       let wantsMotion = (isTouchControlsActive && useIMU) || wantsMotionForShake
       TCDeviceMotion.shared.setMotionEnabled(wantsMotion)
       if wantsMotion {
