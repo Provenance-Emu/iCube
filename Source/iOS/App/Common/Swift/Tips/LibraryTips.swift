@@ -16,19 +16,4 @@ struct ImportGameTip: Tip {
   var options: [any Tip.Option] { [Tips.MaxDisplayCount(1)] }
 }
 
-@available(iOS 17, tvOS 17, *)
-struct AddRemoteSourceTip: Tip {
-  var title: Text { Text(L("Add Remote Source")) }
-  var message: Text { Text(L("Connect WebDAV or HTTP libraries.")) }
-  var image: Image? { Image(systemName: "externaldrive.badge.plus") }
-  var options: [any Tip.Option] { [Tips.MaxDisplayCount(1)] }
-}
-
-@available(iOS 17, tvOS 17, *)
-struct SearchLibraryTip: Tip {
-  var title: Text { Text(L("Search your library")) }
-  var message: Text { Text(L("Find by title, maker, ID, or filename.")) }
-  var image: Image? { Image(systemName: "magnifyingglass") }
-  var options: [any Tip.Option] { [Tips.MaxDisplayCount(1)] }
-}
 #endif

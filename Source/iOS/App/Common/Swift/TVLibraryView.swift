@@ -3237,17 +3237,13 @@ extension TVLibraryView {
 import TipKit
 @available(iOS 17, tvOS 17, *)
 private struct AttachTipModifier: ViewModifier {
-  enum Kind { case importGame, addSource, search }
+  enum Kind { case importGame }
   let kind: Kind
   static func tip(_ kind: Kind) -> AttachTipModifier { AttachTipModifier(kind: kind) }
   func body(content: Content) -> some View {
     switch kind {
     case .importGame:
       content.popoverTip(ImportGameTip())
-    case .addSource:
-      content.popoverTip(AddRemoteSourceTip())
-    case .search:
-      content.popoverTip(SearchLibraryTip())
     }
   }
 }
@@ -3255,7 +3251,7 @@ private struct AttachTipModifier: ViewModifier {
 
 // MARK: - Compatibility Helpers (iOS 16)
 
-private enum TipKind { case importGame, addSource, search }
+private enum TipKind { case importGame }
 
 private extension View {
   @ViewBuilder
@@ -3283,8 +3279,6 @@ private extension View {
       let mapped: AttachTipModifier.Kind = {
         switch kind {
         case .importGame: return .importGame
-        case .addSource: return .addSource
-        case .search: return .search
         }
       }()
       self.modifier(AttachTipModifier.tip(mapped))
