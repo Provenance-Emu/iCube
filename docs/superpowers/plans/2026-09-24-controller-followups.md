@@ -149,6 +149,13 @@ R3 sends "-"; gyro-mode pointer direction and reach; Motion Debug shows live val
     root become models. Design doc first; then one session for the engine, one per migrated
     screen. This also absorbs 13 (HUD) and the tvOS focus traps.
 
+19. **Library filter pills + search (2026-09-25).** The search icon wraps under the system
+    pills even with horizontal room; iFly's row (animated search pill that expands into the
+    field, system selection inside the field) is the target. `LibraryPlatformFilterBar`
+    (`LibraryPlatformCategory.swift`) + the header in `TVLibraryView.swift`
+    (`LibrarySearchableModifier`, `searchText`, `platformFilter`); keep the L1/R1 stepping from
+    `8b328498eb`. Sonnet subagent dispatched the same day.
+
 ## Session / agent split
 
 - Main session (phone attached over USB): B1, B3 landing, B4, B5, verification of everything.
