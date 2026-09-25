@@ -16,6 +16,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // live Config after resets/external changes).
     DOLConfigBridge.startConfigAutoSyncBridge()
 
+    // Single app-lifetime listener that resolves the resume/boot-into-state decision for
+    // every emulation boot (see SaveStateService.resumeOrBootIntoPendingState()). Installed
+    // once, here, instead of per-`EmulationScreen`-appearance so a navigation transition can
+    // never leave two observers racing to consume the one-shot "Start Fresh" flag.
+    SaveStateService.installDidStartObserver()
+
     return ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

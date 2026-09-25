@@ -1985,8 +1985,14 @@ struct TVLibraryView: View {
           }
         }
       }
-      Button(L("Continue Current Game"), role: .cancel) { if let current = model.currentGame { navigateTo = current } }
-      Button(L("Cancel")) { }
+      Button(L("Continue Current Game"), role: .cancel) {
+        // If the pending selection was a "Start Fresh (Skip Resume)" request, its
+        // one-shot flag is already armed and would otherwise sit there and silently
+        // eat the *next*, unrelated launch's auto-resume. No-op when it wasn't armed.
+        SaveStateService.skipResumeOnce = false
+        if let current = model.currentGame { navigateTo = current }
+      }
+      Button(L("Cancel")) { SaveStateService.skipResumeOnce = false }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
       .sheet(item: $showCheatListFor) { TVCheatListView(item: $0).claimsController() }

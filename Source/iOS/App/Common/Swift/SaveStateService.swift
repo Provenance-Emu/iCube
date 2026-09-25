@@ -125,21 +125,83 @@ public enum SaveStateService {
   /// can never leak into a later, unrelated boot.
   public static var pendingBootStatePath: String?
 
+  /// Pure outcome of `resumeDecision(...)` — no I/O, so the decision table is
+  /// unit-testable without touching `TVEmulationBridge` or `UserDefaults`.
+  enum ResumeDecision: Equatable {
+    /// The previous boot armed the watchdog and never confirmed it survived;
+    /// decline everything and tell the user.
+    case declineWatchdog
+    /// A specific save state was requested (library "boot into a state" or a
+    /// Continuity handoff); load it.
+    case loadPending(path: String)
+    /// "Start Fresh (Skip Resume)" was requested for this boot; load nothing.
+    case skipOnce
+    /// Resume-where-left-off is on and an auto-state exists; load it.
+    case loadAuto(path: String)
+    /// Nothing to do (resume disabled, no auto-state, or a requested state
+    /// vanished from disk).
+    case none
+  }
+
+  /// Decides what a boot should do with no side effects, given a snapshot of
+  /// the flags/files `resumeOrBootIntoPendingState()` would otherwise read
+  /// and mutate live. Kept free of `TVEmulationBridge`/`UserDefaults` so the
+  /// precedence rules (a requested state beats resume, "Start Fresh" beats
+  /// resume, the watchdog beats everything) can be tested directly — see
+  /// `SaveStateServiceResumeDecisionTests`.
+  static func resumeDecision(
+    watchdogArmed: Bool,
+    pendingBootStatePath: String?,
+    pendingStateExists: Bool,
+    skipResumeOnce: Bool,
+    resumeEnabled: Bool,
+    autoStatePath: String?,
+    autoStateExists: Bool
+  ) -> ResumeDecision {
+    if watchdogArmed { return .declineWatchdog }
+    if let path = pendingBootStatePath {
+      return pendingStateExists ? .loadPending(path: path) : .none
+    }
+    if skipResumeOnce { return .skipOnce }
+    guard resumeEnabled, let auto = autoStatePath, autoStateExists else { return .none }
+    return .loadAuto(path: auto)
+  }
+
   /// If resume is enabled and an auto-state exists for the running title (or a
   /// specific save state was requested via `pendingBootStatePath`), load it.
   /// Returns true if a load was issued. Safe to call right after the game boots
   /// (the save side runs in `TVEmulationBridge.stop`, so every quit path is
-  /// covered). Single entry point for the `DOLEmulationDidStartNotification`
-  /// observers (tvOS/iOS `EmulationScreen.swift`): a requested boot state takes
-  /// precedence over resume when both are set, and whichever load actually
-  /// happens is wrapped with the boot watchdog, so a previous attempt that never
-  /// got past this same step is declined instead of repeated.
+  /// covered). Driven by a single app-lifetime observer (`installDidStartObserver()`)
+  /// rather than per-`EmulationScreen`-instance observers: two observers alive for
+  /// the same `DOLEmulationDidStartNotification` — e.g. an outgoing screen's observer
+  /// not yet torn down while an incoming one's is already registered — let the first
+  /// call consume `skipResumeOnce` and the second see it already cleared, loading the
+  /// auto-state right on top of a "Start Fresh" request. A requested boot state takes
+  /// precedence over resume when both are set, and whichever load actually happens is
+  /// wrapped with the boot watchdog, so a previous attempt that never got past this
+  /// same step is declined instead of repeated.
   @discardableResult
   public static func resumeOrBootIntoPendingState() -> Bool {
-    // A previous launch armed the watchdog around this exact step and nothing
-    // ever cleared it - the state (or the auto-state) that step was about to
-    // load never let the app come back up. Don't try it again automatically.
-    if BootWatchdog.previousBootNeverCompleted {
+    let requestedPath = pendingBootStatePath
+    let requestedExists = requestedPath.map { FileManager.default.fileExists(atPath: $0) } ?? false
+    let autoURL = autoStateURL
+    let autoExists = autoURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+
+    let decision = resumeDecision(
+      watchdogArmed: BootWatchdog.previousBootNeverCompleted,
+      pendingBootStatePath: requestedPath,
+      pendingStateExists: requestedExists,
+      skipResumeOnce: skipResumeOnce,
+      resumeEnabled: resumeEnabled,
+      autoStatePath: autoURL?.path,
+      autoStateExists: autoExists
+    )
+
+    switch decision {
+    case .declineWatchdog:
+      // A previous launch armed the watchdog around this exact step and nothing
+      // ever cleared it - the state (or the auto-state) that step was about to
+      // load never let the app come back up. Don't try it again automatically.
       BootWatchdog.clear()
       pendingBootStatePath = nil
       skipResumeOnce = false
@@ -148,26 +210,51 @@ public enum SaveStateService {
         userInfo: ["text": L("Skipped resuming — the last attempt didn't finish loading.")]
       )
       return false
-    }
 
-    if let path = pendingBootStatePath {
+    case .loadPending(let path):
       pendingBootStatePath = nil
-      guard FileManager.default.fileExists(atPath: path) else { return false }
       BootWatchdog.armBeforeBoot()
       TVEmulationBridge.loadState(fromPath: path)
       BootWatchdog.clearAfterLivenessWindow()
       return true
-    }
 
-    if skipResumeOnce {
+    case .skipOnce:
       skipResumeOnce = false
       return false
+
+    case .loadAuto(let path):
+      BootWatchdog.armBeforeBoot()
+      TVEmulationBridge.loadState(fromPath: path)
+      BootWatchdog.clearAfterLivenessWindow()
+      return true
+
+    case .none:
+      // Matches the old behavior of clearing a requested-but-missing state
+      // path unconditionally; a no-op when it was already nil.
+      pendingBootStatePath = nil
+      return false
     }
-    guard resumeEnabled, let url = autoStateURL,
-          FileManager.default.fileExists(atPath: url.path) else { return false }
-    BootWatchdog.armBeforeBoot()
-    TVEmulationBridge.loadState(fromPath: url.path)
-    BootWatchdog.clearAfterLivenessWindow()
-    return true
+  }
+
+  // MARK: - App-lifetime resume observer
+
+  /// Installed exactly once (the `static let` initializer runs at most once no
+  /// matter how many times `installDidStartObserver()` is called) so exactly
+  /// one listener ever resolves the resume/boot-into-state decision, instead of
+  /// one per `EmulationScreen` appearance. See `resumeOrBootIntoPendingState()`
+  /// for why a per-view observer is the wrong lifetime for this specific step.
+  private static let didStartObserverToken: NSObjectProtocol = {
+    NotificationCenter.default.addObserver(
+      forName: Notification.Name("DOLEmulationDidStartNotification"),
+      object: nil, queue: .main
+    ) { _ in
+      resumeOrBootIntoPendingState()
+    }
+  }()
+
+  /// Call once at app startup. Idempotent: repeat calls just re-touch the
+  /// already-initialized `static let` and register nothing further.
+  public static func installDidStartObserver() {
+    _ = didStartObserverToken
   }
 }

@@ -245,6 +245,7 @@
 		C0C0CAFE0000000000000512 /* LibrarySnapshotWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000511 /* LibrarySnapshotWriter.swift */; };
 		C0C0CAFE0000000000000514 /* LibrarySnapshotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000513 /* LibrarySnapshotService.swift */; };
 		C0C0CAFE0000000000000516 /* LastPlayedStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000515 /* LastPlayedStoreTests.swift */; };
+		C0C0CAFE0000000000000991 /* SaveStateServiceResumeDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000990 /* SaveStateServiceResumeDecisionTests.swift */; };
 		C0C0CAFE0000000000000608 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000604 /* Sentry */; };
 		C0C0CAFE0000000000000609 /* PLzmaSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000605 /* PLzmaSDK */; };
 		C0C0CAFE0000000000000610 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000606 /* SWCompression */; };
@@ -731,6 +732,7 @@
 		C0C0CAFE0000000000000511 /* LibrarySnapshotWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LibrarySnapshotWriter.swift"; path = "Common/Swift/Snapshot/LibrarySnapshotWriter.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000513 /* LibrarySnapshotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LibrarySnapshotService.swift"; path = "Common/Services/LibrarySnapshotService.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000515 /* LastPlayedStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LastPlayedStoreTests.swift"; path = "DolphiniOSTests/LastPlayedStoreTests.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000990 /* SaveStateServiceResumeDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateServiceResumeDecisionTests.swift"; path = "DolphiniOSTests/SaveStateServiceResumeDecisionTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000700 /* DOLDebugBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLDebugBridge.h; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000701 /* DOLDebugBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLDebugBridge.mm; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000703 /* DOLPerfBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLPerfBridge.h; sourceTree = "<group>"; };
@@ -2045,6 +2047,7 @@
 				C0C0CAFE0000000000000511 /* LibrarySnapshotWriter.swift */,
 				C0C0CAFE0000000000000513 /* LibrarySnapshotService.swift */,
 				C0C0CAFE0000000000000515 /* LastPlayedStoreTests.swift */,
+				C0C0CAFE0000000000000990 /* SaveStateServiceResumeDecisionTests.swift */,
 				C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */,
 				C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */,
 				C0C0CAFE0000000000000904 /* ContinuityManager.swift */,
@@ -2647,6 +2650,7 @@
 				B96C9A602A46C2C1002B5ECF /* DOLAppVersionTests.swift in Sources */,
 				CA51A55E000000000000DE01 /* ControllerAssignmentServiceTests.swift in Sources */,
 				C0C0CAFE0000000000000516 /* LastPlayedStoreTests.swift in Sources */,
+				C0C0CAFE0000000000000991 /* SaveStateServiceResumeDecisionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

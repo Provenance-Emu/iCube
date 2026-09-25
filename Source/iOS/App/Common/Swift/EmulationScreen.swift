@@ -554,16 +554,19 @@ struct EmulationScreen: View {
       // Keep the token and register once: this observer used to be added anonymously on every
       // appearance and never removed, so launch N ran N copies of the handler. The first copy
       // consumed the one-shot "Start Fresh" skip flag and the next copy loaded the auto-state
-      // anyway (and a normal launch issued N auto-resume loads).
+      // anyway (and a normal launch issued N auto-resume loads). The resume/boot-into-state
+      // decision itself now lives in a single app-lifetime observer
+      // (`SaveStateService.installDidStartObserver()`) instead of here — a per-view observer
+      // can still overlap with the next screen's during a navigation transition (the outgoing
+      // screen's `onDisappear` hasn't removed it yet while the incoming one's `onAppear` already
+      // registered), and two observers firing for one boot reproduces the exact bug this guard
+      // was added to fix. What's left here (controller/profile setup) is idempotent, so a
+      // transient overlap of those doesn't matter the same way.
       if resumeObserver == nil {
         resumeObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { _ in
           ControllerManager.shared.registerGCOverride(forController: 0)
           ControllerManager.shared.refreshInputHandlers()
-          // Resume where I left off, or boot straight into a chosen save state —
-          // whichever was requested. Also arms/consults the boot watchdog so a
-          // launch that never got past this same load is declined next time.
           GameProfiles.shared.applyRuntimeOverrides(for: game)
-          SaveStateService.resumeOrBootIntoPendingState()
         }
       }
       // Auto-pause when app goes to background on tvOS
@@ -714,15 +717,20 @@ struct EmulationScreen: View {
         scheduleARPoll()
       }
       .onAppear {
-        // Resume where I left off (iOS): the tvOS branch wires this via its
-        // start observer; iOS had none, so .auto auto-saved on quit but never
-        // reloaded. Register once (guarded) so it loads on emulation start.
+        // Per-game profile overrides on boot. Resume-where-left-off / boot-into-state
+        // used to be decided here too, but that decision now lives in a single
+        // app-lifetime observer (`SaveStateService.installDidStartObserver()`): this
+        // per-view observer can overlap with the next screen's during a navigation
+        // transition (the outgoing screen's `onDisappear` hasn't fired yet while the
+        // incoming one's `onAppear` already registered), and two observers both
+        // calling into the one-shot "Start Fresh" flag let the second one load the
+        // auto-state right after the first correctly skipped it. Register once
+        // (guarded) regardless, since this still only wants to run once per screen.
         guard resumeObserver == nil else { return }
         resumeObserver = NotificationCenter.default.addObserver(
           forName: Notification.Name("DOLEmulationDidStartNotification"),
           object: nil, queue: .main) { _ in
           GameProfiles.shared.applyRuntimeOverrides(for: game)
-          SaveStateService.resumeOrBootIntoPendingState()
         }
       }
 
