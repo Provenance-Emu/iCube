@@ -70,7 +70,7 @@ import UIKit
 
   private func clearControllerState() {
     #if os(iOS)
-    TCManagerInterface.clearAllForController(_port)
+    TCManagerInterface.clearAll(forController: _port)
     #endif
   }
 
