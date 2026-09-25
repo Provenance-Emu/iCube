@@ -11,12 +11,17 @@ struct SaveStateCardView: View {
 
   var body: some View {
     ZStack(alignment: .bottomLeading) {
-      // Thumbnail or placeholder
+      // Thumbnail or placeholder. `.fit` (not the previous `.fill`) keeps the
+      // saved frame's real aspect ratio intact — GameCube (4:3) and Wii (16:9)
+      // thumbnails mixed in the same grid no longer get corner-cropped to a
+      // fixed 16:9-ish frame; the background fill behind it letterboxes evenly
+      // so every card in the grid stays the same size regardless of the
+      // thumbnail's native aspect ratio.
       Group {
         if let thumbnail {
           Image(uiImage: thumbnail)
             .resizable()
-            .scaledToFill()
+            .scaledToFit()
         } else {
           RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(Color.gray.opacity(0.25))

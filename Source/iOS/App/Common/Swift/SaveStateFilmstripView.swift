@@ -23,24 +23,34 @@ struct SaveStateFilmstripView: View {
       }
       .padding(.horizontal)
 
-      ScrollView(.horizontal) {
-        LazyHStack(spacing: 20) {
+      // A grid, not a filmstrip: cards are a consistent size regardless of how
+      // many states exist, so tapping a specific card is unambiguous even for
+      // a game with a dozen slots. Was previously a `ScrollView(.horizontal) {
+      // LazyHStack }` with no tap target on the card at all — only a
+      // long-press `.contextMenu` — and its "Load" entry only appeared
+      // `if let slot = state.slot`, so an auto/"Continue" state (no slot) had
+      // no way to load it whatsoever.
+      ScrollView {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 20)], spacing: 20) {
           ForEach(vm.states) { state in
-            SaveStateCard(state: state, thumbnail: vm.thumbnails[state.id])
-              .contextMenu {
-                if let slot = state.slot {
-                  Button("Load") { loadOrBoot(state) }
-                  Button("Overwrite") {
-                    _ = SaveStateService.saveSlot(slot)
-                    Task { await vm.load(gameID: gameID) }
-                  }
+            Button(action: { loadOrBoot(state) }) {
+              SaveStateCard(state: state, thumbnail: vm.thumbnails[state.id])
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+              Button("Load") { loadOrBoot(state) }
+              if let slot = state.slot {
+                Button("Overwrite") {
+                  _ = SaveStateService.saveSlot(slot)
+                  Task { await vm.load(gameID: gameID) }
                 }
-                Button("Rename") {
-                  renameText = state.displayName
-                  renameTarget = state
-                }
-                Button(role: .destructive) { vm.delete(state: state, inGameID: gameID) } label: { Text("Delete") }
               }
+              Button("Rename") {
+                renameText = state.displayName
+                renameTarget = state
+              }
+              Button(role: .destructive) { vm.delete(state: state, inGameID: gameID) } label: { Text("Delete") }
+            }
           }
         }
         .padding(.horizontal)
