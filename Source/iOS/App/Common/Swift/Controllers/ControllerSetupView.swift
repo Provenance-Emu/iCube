@@ -13,9 +13,12 @@ enum ControllerSetupSystem {
   case gamecube
   case wii
   case both
+  /// A running Wii title: Wii Remotes first, then the GameCube ports many Wii games also accept.
+  case wiiAndGameCube
 
-  var showsGameCube: Bool { self == .gamecube || self == .both }
-  var showsWii: Bool { self == .wii || self == .both }
+  var showsGameCube: Bool { self == .gamecube || self == .both || self == .wiiAndGameCube }
+  var showsWii: Bool { self == .wii || self == .both || self == .wiiAndGameCube }
+  var wiiFirst: Bool { self == .wiiAndGameCube }
 }
 
 /// The single shared controller-setup surface, hosted by both Settings
@@ -124,20 +127,12 @@ struct ControllerSetupSections: View {
   /// single `onAppear` and one instance of each sheet.
   @ViewBuilder
   var body: some View {
-    if system.showsGameCube {
-      Section(header: Text(L("GameCube Controllers"))) {
-        ForEach(1 ... 4, id: \.self) { port in
-          gcPlayerRow(port)
-        }
-      }
-    }
-
-    if system.showsWii {
-      Section(header: Text(L("Wii Remotes"))) {
-        ForEach(1 ... 4, id: \.self) { w in
-          wiiPlayerRow(w)
-        }
-      }
+    if system.wiiFirst {
+      wiiSection
+      gcSection
+    } else {
+      if system.showsGameCube { gcSection }
+      if system.showsWii { wiiSection }
     }
 
     Section(header: Text(L("Connected Controllers"))) {
@@ -163,23 +158,27 @@ struct ControllerSetupSections: View {
     }
     .sheet(isPresented: Binding(get: { showProfileForGCPort != nil }, set: { if !$0 { showProfileForGCPort = nil } })) {
       profileSheet(profiles: gcProfiles, title: L("GC Profiles")) { name in
-        if let port = showProfileForGCPort {
+        let port = showProfileForGCPort
+        showProfileForGCPort = nil
+        guard let port else { return }
+        DispatchQueue.main.async {
           _ = TVControllerMappingBridge.loadProfile(name, forGCPort: port, restoreDevice: true)
           ControllerManager.shared.reconcile()
-          reloadQualifiers()
+          reloadAll()
         }
-        showProfileForGCPort = nil
       }
     }
     .sheet(isPresented: Binding(get: { showProfileForWiimote != nil }, set: { if !$0 { showProfileForWiimote = nil } })) {
       profileSheet(profiles: wiiProfiles, title: L("Wiimote Profiles")) { name in
-        if let w = showProfileForWiimote {
+        let w = showProfileForWiimote
+        showProfileForWiimote = nil
+        guard let w else { return }
+        DispatchQueue.main.async {
           _ = TVControllerMappingBridge.loadProfile(name, forWiimote: w, restoreDevice: true)
           ControllerManager.shared.reconcile()
           NotificationCenter.default.post(name: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil)
-          reloadQualifiers()
+          reloadAll()
         }
-        showProfileForWiimote = nil
       }
     }
 
@@ -207,6 +206,22 @@ struct ControllerSetupSections: View {
   }
 
   // MARK: Player rows
+
+  private var gcSection: some View {
+    Section(header: Text(L("GameCube Controllers"))) {
+      ForEach(1 ... 4, id: \.self) { port in
+        gcPlayerRow(port)
+      }
+    }
+  }
+
+  private var wiiSection: some View {
+    Section(header: Text(L("Wii Remotes"))) {
+      ForEach(1 ... 4, id: \.self) { w in
+        wiiPlayerRow(w)
+      }
+    }
+  }
 
   @ViewBuilder
   private func gcPlayerRow(_ port: Int) -> some View {
@@ -509,7 +524,7 @@ struct ControllerSetupSections: View {
         ControllerManager.shared.assign(c, toGCPort: port)
       }
     }
-    reloadQualifiers()
+    reloadAll()
   }
 
   private func applyWii(_ tag: DeviceTag, wiimote w: Int) {
@@ -523,7 +538,7 @@ struct ControllerSetupSections: View {
         ControllerManager.shared.assign(c, toWiimote: w)
       }
     }
-    reloadQualifiers()
+    reloadAll()
   }
 
   // MARK: Helpers
@@ -609,10 +624,15 @@ struct ControllerSetupSections: View {
     controllers = GCController.controllers()
   }
 
+  /// A slot is shown as bound only while it is active. Every slot's stock default device is
+  /// `iOS/0/Touchscreen` with the port/source off, so reading the device string alone showed
+  /// "Touchscreen" on all four rows (and made picking it for Player 1 look like it set all four).
   private func reloadQualifiers() {
     for port in 1 ... 4 {
-      gcQualifiers[port] = TVControllerMappingBridge.defaultDevice(forGCPort: port) as String
-      wiiQualifiers[port] = TVControllerMappingBridge.defaultDevice(forWiimote: port) as String
+      let gcActive = DOLConfigBridge.gcPortDevice(forPort: port) != 0
+      let wiiActive = DOLConfigBridge.wiimoteSource(for: port) != 0
+      gcQualifiers[port] = gcActive ? TVControllerMappingBridge.defaultDevice(forGCPort: port) as String : ""
+      wiiQualifiers[port] = wiiActive ? TVControllerMappingBridge.defaultDevice(forWiimote: port) as String : ""
     }
   }
 

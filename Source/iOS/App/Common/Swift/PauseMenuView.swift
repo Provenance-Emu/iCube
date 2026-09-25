@@ -28,6 +28,15 @@ internal struct PauseMenuView: View {
   @State private var showShaders: Bool = false
   @State private var showSettingsSheet: Bool = false
   @State private var showControllersSheet: Bool = false
+  /// Wii titles get the Wii Remote rows first, then the GameCube ports many of them also
+  /// accept; GameCube titles get the ports only. Read from the running core, not from
+  /// `ControllerManager.isWiiSystem`, which nothing kept up to date (the menu was GameCube-only
+  /// for every game).
+  private static var controllerSetupSystem: ControllerSetupSystem {
+    let isWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : ControllerManager.shared.isWiiSystem
+    return isWii ? .wiiAndGameCube : .gamecube
+  }
+
   @State private var showFilmstripSheet: Bool = false
   /// WS-4: "continue this game on another device".
   @State private var showContinuitySheet: Bool = false
@@ -143,7 +152,7 @@ internal struct PauseMenuView: View {
       #if os(tvOS)
       case .controllers:
         NavigationStack {
-          ControllerSetupView(system: ControllerManager.shared.isWiiSystem ? .wii : .gamecube)
+          ControllerSetupView(system: Self.controllerSetupSystem)
             .toolbar {
               ToolbarItem(placement: .navigationBarLeading) { Button(L("Back")) { pane = .main } }
             }
@@ -217,7 +226,7 @@ internal struct PauseMenuView: View {
     }
     .sheet(isPresented: $showControllersSheet) {
       NavigationStack {
-        ControllerSetupView(system: ControllerManager.shared.isWiiSystem ? .wii : .gamecube)
+        ControllerSetupView(system: Self.controllerSetupSystem)
           .navigationTitle(L("Controllers"))
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showControllersSheet = false } } }
       }

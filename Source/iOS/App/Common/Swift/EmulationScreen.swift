@@ -1074,6 +1074,7 @@ struct EmulationScreen: View {
       // Ensure touch controls start visible
       isTouchControlsActive = controllerManager.overlayVisible
       desiredTouchControls = true
+      controllerManager.setSystem(isWii: isWiiSystem)
       // Reconcile port ownership. The touchscreen fallback (ensurePad1DefaultsToTouchscreen)
       // runs once, pre-boot, inside the coordinator; calling it here too ran the old C++ policy
       // AFTER the engine and overwrote what reconcile() had just bound.
@@ -1221,6 +1222,7 @@ struct EmulationScreen: View {
         controllerManager.ensureWiimote1EmulatedTouchscreen()
       }
     }
+    .onChange(of: isWiiSystem) { controllerManager.setSystem(isWii: $0) }
     .onReceive(controllerManager.$overlayVisible) { v in
       isTouchControlsActive = v
       touchPadsRefreshToken = UUID()
