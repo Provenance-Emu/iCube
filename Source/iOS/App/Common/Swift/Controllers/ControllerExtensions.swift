@@ -111,6 +111,38 @@ private func presentPauseMenu(_ reason: String) {
 /// what the old per-screen swallow closures were working around. The gate is in
 /// `requestPauseMenu`, which no-ops unless emulation is actually running, so a
 /// press on the library screen is simply absorbed.
+///
+/// Verified per-family mapping (`MFiController.mm` publishes the GameController
+/// element under the listed MFi input name; `Physical Controller.ini` is the
+/// GCPad profile that consumes it for GameCube Start):
+///
+/// | Physical button           | GC element             | MFi input name | Profile binding      | Route here                          |
+/// |----------------------------|-------------------------|-----------------|------------------------|---------------------------------------|
+/// | PS4/PS5 OPTIONS             | `buttonMenu`            | `"Menu"`        | `Buttons/Start = Menu` | Start only (chord for fast-forward)   |
+/// | PS4 Share / PS5 Create       | `buttonOptions`         | `"Options"`     | not bound in GCPad     | pause menu (`menuButtonChanged`)      |
+/// | PS4/PS5 PS (Home)            | `GCDualShockGamepad`/`GCDualSenseGamepad`.`buttonHome` | `"Home"` | not bound | pause menu directly (`installExtraInputHandlers`) |
+/// | Xbox "≡" (View's counterpart)| `buttonMenu`            | `"Menu"`        | `Buttons/Start = Menu` | Start only                             |
+/// | Xbox View                   | `buttonOptions`         | `"Options"`     | not bound in GCPad     | pause menu                            |
+/// | Xbox Xbox-button (Home)      | `buttonHome`            | `"Home"`        | not bound | pause menu directly                    |
+/// | Switch Pro "+"               | `buttonMenu`            | `"Menu"`        | `Buttons/Start = Menu` | Start only                             |
+/// | Switch Pro "-"                | `buttonOptions`         | `"Options"`     | not bound in GCPad     | pause menu                            |
+/// | Bare MFi controller (no Options/Home) | `buttonMenu`   | `"Menu"`        | `Buttons/Start = Menu` | Start only + shoulder-chord pause     |
+///
+/// GameController has no separate "Share" API: `GCExtendedGamepad.buttonOptions`
+/// is Apple's name for the PS4 Share / PS5 Create button on every deployment
+/// target this app supports (iOS 17+), so there is nothing left to trace there.
+///
+/// Known residual outside this file's ownership: `Data/Sys/Profiles/Wiimote/
+/// Physical Controller.ini` binds `Buttons/- = Options`, so on Wii titles the
+/// same physical Share/Create/View/"-" press both sends the emulated Wii Remote
+/// `-` button AND opens the pause menu on release — the same "one physical
+/// button, two effects" class this function fixed for Start, just not
+/// swallowed. It affects every controller family listed above, not only
+/// DualSense. Fixing it means editing `Data/Sys/Profiles/Wiimote/Physical
+/// Controller.ini` (clear `Buttons/-`, or pick a different physical button for
+/// it) or dropping the Wii Remote `-` binding's overlap with the pause route;
+/// neither belongs in this pass since it touches files outside this task's
+/// ownership.
 func installPauseMenuHandlers(_ c: GCController) {
   if #available(iOS 14.0, tvOS 14.0, *) {
     c.microGamepad?.buttonMenu.preferredSystemGestureState = .disabled
