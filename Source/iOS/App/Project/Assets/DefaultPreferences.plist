@@ -16,5 +16,7 @@
 	<true/>
 	<key>touch_overlay_programmatic</key>
 	<false/>
+	<key>touch_overlay_style</key>
+	<integer>0</integer>
 </dict>
 </plist>

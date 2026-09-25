@@ -124,6 +124,11 @@ struct ControllersRootView: View {
   // Programmatic touch overlay (phase 2, beta): see docs/superpowers/specs/
   // 2026-09-24-programmatic-touch-overlay-design.md. Defaults false (DefaultPreferences.plist).
   @State private var touchOverlayProgrammatic: Bool = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
+  // Phase 3 additions (task item 3). `touchOverlayStyle` is the raw `TouchOverlayArt.Style`
+  // UserDefaults integer, not the enum itself — the Picker below just needs the raw tags.
+  @State private var touchOverlayStyle: Int = UserDefaults.standard.integer(forKey: "touch_overlay_style")
+  @State private var showTouchOverlayEditor = false
+  @State private var touchOverlayEditorPadKind: TouchOverlayPadKind = .gameCube
 #endif
   @State private var touchIRMode: TouchIRMode = .drag
   // Raw SerialInterface::SIDevices values (SI_Device.h): 0 = SIDEVICE_NONE,
@@ -359,6 +364,29 @@ struct ControllersRootView: View {
               UserDefaults.standard.set(newValue, forKey: "touch_overlay_programmatic")
             },
           L("Replaces the on-screen GameCube/Wii pads with the new SwiftUI-rendered, user-editable overlay. Long-press the overlay in-game to move or resize its controls."))
+
+        settingsCaption(
+          Picker(L("Overlay Style"), selection: $touchOverlayStyle) {
+            Text(L("Auto")).tag(0)
+            Text(L("GameCube")).tag(1)
+            Text(L("Wii")).tag(2)
+          }
+          .pickerStyle(.segmented)
+          .onChange(of: touchOverlayStyle) { newValue in UserDefaults.standard.set(newValue, forKey: "touch_overlay_style") },
+          L("Overrides whether the programmatic overlay's button art uses GameCube or Wii coloring, or matches the pad kind automatically."))
+
+        Button {
+          touchOverlayEditorPadKind = .gameCube
+          showTouchOverlayEditor = true
+        } label: {
+          Label(L("Edit Layout…"), systemImage: "rectangle.and.pencil.and.ellipsis")
+        }
+
+        Button(role: .destructive) {
+          for kind in TouchOverlayPadKind.allCases { TouchOverlayLayoutStore.shared.reset(padKind: kind) }
+        } label: {
+          Label(L("Reset All Overlay Layouts"), systemImage: "arrow.counterclockwise")
+        }
 #endif
 
         NavigationLink(destination: EnhancedMotionControlsView()) {
@@ -378,6 +406,11 @@ struct ControllersRootView: View {
       dsuBrowser.start()
     }
     .onDisappear { dsuBrowser.stop() }
+#if os(iOS)
+    .sheet(isPresented: $showTouchOverlayEditor) {
+      TouchOverlayLayoutEditorSheet(padKind: $touchOverlayEditorPadKind)
+    }
+#endif
     .sheet(isPresented: $showAddDsuServer) {
       NavigationStack {
         Form {
@@ -421,6 +454,7 @@ struct ControllersRootView: View {
 #if os(iOS)
     touchOpacity = DOLConfigBridge.mainTouchPadOpacity()
     touchOverlayProgrammatic = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
+    touchOverlayStyle = UserDefaults.standard.integer(forKey: "touch_overlay_style")
 #endif
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
     // DSU
@@ -586,3 +620,44 @@ struct TouchIRModePicker: View {
     .navigationTitle(L("Touch IR Pointer"))
   }
 }
+
+#if os(iOS)
+/// The Settings "Edit Layout…" preview (task item 3): opens the programmatic overlay already in
+/// edit mode, with no live game/device context. `TouchOverlayView.init(initialEditing:)` makes
+/// this safe — every group's input is suppressed while editing, so nothing here can reach
+/// `TCManagerInterface` regardless of the placeholder `deviceId`. There's no live game to infer the
+/// current Wii variant (Classic/sideways/upright) from outside a running emulation session, so the
+/// picker lets the user choose which of the four pad kinds to edit directly.
+struct TouchOverlayLayoutEditorSheet: View {
+  @Binding var padKind: TouchOverlayPadKind
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      VStack(spacing: 0) {
+        Picker(L("Layout"), selection: $padKind) {
+          Text(L("GameCube")).tag(TouchOverlayPadKind.gameCube)
+          Text(L("Wii Remote")).tag(TouchOverlayPadKind.wiiRemote)
+          Text(L("Wii Remote (Sideways)")).tag(TouchOverlayPadKind.wiiRemoteSideways)
+          Text(L("Wii + Classic Controller")).tag(TouchOverlayPadKind.wiiClassic)
+        }
+        .pickerStyle(.segmented)
+        .padding()
+
+        TouchOverlayView(padKind: padKind, deviceId: 0,
+                         irMode: Int(DOLConfigBridge.mainTouchPadIRMode()), initialEditing: true)
+          .id(padKind)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(Color.black.opacity(0.85))
+      }
+      .navigationTitle(L("Edit Layout"))
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button(L("Close")) { dismiss() }
+        }
+      }
+    }
+  }
+}
+#endif

@@ -17,6 +17,28 @@ enum TouchOverlayArt {
     case wii
   }
 
+  /// The Settings "Style" override (task item 3): `auto` keeps today's per-pad-kind palette
+  /// choice, the other two cases force every group (regardless of pad kind) into one palette.
+  /// Raw values are the `touch_overlay_style` UserDefaults integer, registered in
+  /// `DefaultPreferences.plist`.
+  enum Style: Int, CaseIterable, Sendable {
+    case auto = 0
+    case gameCube = 1
+    case wii = 2
+
+    static func current() -> Style {
+      Style(rawValue: UserDefaults.standard.integer(forKey: "touch_overlay_style")) ?? .auto
+    }
+
+    func resolvedVariant(padKind: TouchOverlayPadKind) -> Variant {
+      switch self {
+      case .auto: return padKind == .gameCube ? .gameCube : .wii
+      case .gameCube: return .gameCube
+      case .wii: return .wii
+      }
+    }
+  }
+
   /// Shape family for a face-style button, per the §5 table.
   enum ButtonShape {
     /// GC A / Wii A/B / 1/2 / Nunchuk C — round.
