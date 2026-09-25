@@ -351,6 +351,17 @@ struct CheatsMenuView: View {
     geckoCodeList = TVCheatsBridge.geckoCodes(forGameId: game.gameID, revision: game.revision)
     actionReplayCodeList = TVCheatsBridge.actionReplayCodes(forGameId: game.gameID, revision: game.revision)
   }
+
+  /// D15: cheap count of currently-enabled Gecko + Action Replay codes for a game,
+  /// for the pause menu's "N active" subtitle on the Cheats item. Reads the same
+  /// per-game ini via `TVCheatsBridge` that `loadCheats()` above uses — no core
+  /// involvement, no extra state machine, safe to call every time the pause menu
+  /// appears or the user backs out of the Cheats pane.
+  static func activeCheatCount(forGameId gameId: String, revision: Int) -> Int {
+    let geckoActive = TVCheatsBridge.geckoCodes(forGameId: gameId, revision: revision).filter(\.enabled).count
+    let arActive = TVCheatsBridge.actionReplayCodes(forGameId: gameId, revision: revision).filter(\.enabled).count
+    return geckoActive + arActive
+  }
 }
 
 struct CheatItem {

@@ -76,6 +76,17 @@ internal struct PauseMenuView: View {
   /// Settings > General offers a wider range for the same UserDefaults key.
   private static let fastForwardSpeedChoices: [Int] = [150, 200, 300, 0]
 
+  /// D15: "N active" badge on the Cheats item. Refreshed on appear and whenever the
+  /// pane returns to `.main` (including from the Cheats pane itself), so toggling a
+  /// cheat and backing out updates the count without needing a manual refresh.
+  @State private var activeCheatCount: Int = 0
+  private func refreshActiveCheatCount() {
+    activeCheatCount = CheatsMenuView.activeCheatCount(forGameId: game.gameID, revision: game.revision)
+  }
+  private var cheatsSubtitle: String {
+    activeCheatCount > 0 ? String(format: L("%d active"), activeCheatCount) : L("Game enhancement codes")
+  }
+
   /// iOS controller-driven focus index into `iosMenuItems`. iOS has no focus
   /// engine here, so navigation is driven manually from GCController input,
   /// mirroring the main library view. Unused on tvOS (native focus).
@@ -120,7 +131,7 @@ internal struct PauseMenuView: View {
         tint: .cyan, role: nil
       ) { showFastForwardSpeedPicker = true },
       IOSMenuItem(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple, role: nil) { pane = .saves },
-      IOSMenuItem(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow, role: nil) { pane = .cheats },
+      IOSMenuItem(title: L("Cheats"), subtitle: cheatsSubtitle, icon: "star.circle", tint: .yellow, role: nil) { pane = .cheats },
       IOSMenuItem(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: nil) {
         #if os(iOS)
         showControllersSheet = true
@@ -246,6 +257,7 @@ internal struct PauseMenuView: View {
       TVEmulationBridge.pause()
       isMuted = DOLConfigBridge.audioVolume() <= 0
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
+      refreshActiveCheatCount()
     }
     .onDisappear {
       // `.sheet`/`.fullScreenCover` presentation (Shaders, Settings, Controllers,
@@ -268,6 +280,9 @@ internal struct PauseMenuView: View {
         switch p {
         case .main:
           focused = .resume
+          // D15: covers backing out of Cheats (toggled codes should update the
+          // badge) as well as the other panes, which is a harmless extra read.
+          refreshActiveCheatCount()
         case .saves:
           focused = .back
         case .cheats:
@@ -933,7 +948,7 @@ internal struct PauseMenuView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.white)
 
-                  Text(L("Game enhancement codes"))
+                  Text(cheatsSubtitle)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.7))
                 }
