@@ -235,6 +235,10 @@ struct EmulationScreen: View {
   @State private var exitObserver: NSObjectProtocol?
   @State private var showMotionDebug = false
   @State private var tvPauseObserver: NSObjectProtocol?
+  // Defect #10: these two used to be registered anonymously in onAppear and never
+  // removed, so re-entering a game N times left N copies of each handler running.
+  @State private var obsDidEnterBackground: NSObjectProtocol?
+  @State private var obsWillEnterForeground: NSObjectProtocol?
   #endif
 
   // Pause menu state
@@ -260,9 +264,14 @@ struct EmulationScreen: View {
   @State var showTopBar = false
   @State private var fastForwardEnabled = false
   @State var hideBarWorkItem: DispatchWorkItem?
-  // iOS observer tokens to avoid leaks
-  @State private var obsGCConnect: NSObjectProtocol?
-  @State private var obsGCDisconnect: NSObjectProtocol?
+  // iOS observer tokens to avoid leaks. Defect #10: these three used to be
+  // registered anonymously in onAppear (DOLMotionSettingsChanged,
+  // ControllerManager.assignmentsChanged, DOLWiiOverlayLayoutChangedNotification)
+  // and never removed, so a settings change restarted CoreMotion once per
+  // onAppear that had ever fired for this screen instance.
+  @State private var obsMotionSettingsChanged: NSObjectProtocol?
+  @State private var obsAssignmentsChanged: NSObjectProtocol?
+  @State private var obsWiiOverlayLayoutChanged: NSObjectProtocol?
   @State private var showExitConfirm = false
   @State private var showShaderSheet = false
   @State private var showShaderParams = false
@@ -571,11 +580,11 @@ struct EmulationScreen: View {
         }
       }
       // Auto-pause when app goes to background on tvOS
-      NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
+      obsDidEnterBackground = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
         NSLog("[INPUT] tvOS app backgrounded - showing pause menu")
         showPauseMenu = true
       }
-      NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
+      obsWillEnterForeground = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
         NSLog("[INPUT] tvOS app foregrounded - keeping pause menu visible")
         // Keep pause menu visible when returning to foreground so user can choose to resume
       }
@@ -643,6 +652,12 @@ struct EmulationScreen: View {
       }
       if let token = tvPauseObserver { NotificationCenter.default.removeObserver(token)
         tvPauseObserver = nil
+      }
+      if let token = obsDidEnterBackground { NotificationCenter.default.removeObserver(token)
+        obsDidEnterBackground = nil
+      }
+      if let token = obsWillEnterForeground { NotificationCenter.default.removeObserver(token)
+        obsWillEnterForeground = nil
       }
       #endif
       ControllerManager.shared.unregisterGCOverride(forController: 0)
@@ -1073,7 +1088,7 @@ struct EmulationScreen: View {
       }
 
       // Listen for motion settings changes during gameplay
-      NotificationCenter.default.addObserver(forName: Notification.Name("DOLMotionSettingsChanged"), object: nil, queue: .main) { _ in
+      obsMotionSettingsChanged = NotificationCenter.default.addObserver(forName: Notification.Name("DOLMotionSettingsChanged"), object: nil, queue: .main) { _ in
         restartMotionSystemForSettingsChange()
         // Ensure motion stays on for shake even if touch overlay is hidden but an external controller is connected
         let wantsMotionForShake2 = UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") && isWiiSystem
@@ -1112,7 +1127,7 @@ struct EmulationScreen: View {
       #endif
       // Controller connect/disconnect handled by ControllerManager
       // NotificationCenter bridging for assignments remains
-      NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
+      obsAssignmentsChanged = NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
         if !userOverrideTouchControls {
           let visible = controllerManager.touchscreenSlot(system: isWiiSystem ? .wii : .gamecube) != nil
           controllerManager.overlayVisible = visible
@@ -1120,7 +1135,7 @@ struct EmulationScreen: View {
         }
         touchPadsRefreshToken = UUID()
       }
-      NotificationCenter.default.addObserver(forName: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil, queue: .main) { _ in
+      obsWiiOverlayLayoutChanged = NotificationCenter.default.addObserver(forName: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil, queue: .main) { _ in
         touchPadsRefreshToken = UUID()
       }
       endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
@@ -1203,14 +1218,17 @@ struct EmulationScreen: View {
       if let token = resumeObserver { NotificationCenter.default.removeObserver(token)
         resumeObserver = nil
       }
-      if let t = obsGCConnect { NotificationCenter.default.removeObserver(t)
-        obsGCConnect = nil
-      }
-      if let t = obsGCDisconnect { NotificationCenter.default.removeObserver(t)
-        obsGCDisconnect = nil
-      }
       if let t = obsShowPause { NotificationCenter.default.removeObserver(t)
         obsShowPause = nil
+      }
+      if let t = obsMotionSettingsChanged { NotificationCenter.default.removeObserver(t)
+        obsMotionSettingsChanged = nil
+      }
+      if let t = obsAssignmentsChanged { NotificationCenter.default.removeObserver(t)
+        obsAssignmentsChanged = nil
+      }
+      if let t = obsWiiOverlayLayoutChanged { NotificationCenter.default.removeObserver(t)
+        obsWiiOverlayLayoutChanged = nil
       }
       // Do not stopObserving() here — the controller observer is app-wide (started
       // in MainDisplaySceneDelegate) so auto-assign stays live after exiting a game.
