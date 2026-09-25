@@ -122,7 +122,7 @@ public final class WikiContentProvider: Sendable {
     // MARK: - Bundled resources
 
     /// Resolves a wiki-style path (e.g. `"help/web-import.md"` or `"SUMMARY.md"`) to bundled
-    /// resource content shipped in `Resources/`, mirroring the same relative layout as the
+    /// resource content shipped in `WikiContent/`, mirroring the same relative layout as the
     /// `icube-wiki` repo this will eventually fetch from (see `docs/wiki-seed/` at the repo
     /// root, which is the canonical source these resources are copied from).
     private static func bundledContent(forPath path: String) -> String? {
@@ -138,10 +138,11 @@ public final class WikiContentProvider: Sendable {
         guard let filename = components.last else { return nil }
         let ext = (filename as NSString).pathExtension
         let name = (filename as NSString).deletingPathExtension
-        // `.copy("Resources")` in Package.swift (load-bearing — see the comment there) nests
-        // the whole folder under a top-level "Resources/" directory in the produced bundle,
+        // `.copy("WikiContent")` in Package.swift (load-bearing — see the comment there) nests
+        // the whole folder under a top-level "WikiContent/" directory in the produced bundle,
         // rather than flattening its contents to the bundle root the way `.process` would.
-        let subdirectory = (["Resources"] + components.dropLast()).joined(separator: "/")
+        // (It must not be named "Resources" — see the codesign note in Package.swift.)
+        let subdirectory = (["WikiContent"] + components.dropLast()).joined(separator: "/")
         return Bundle.module.url(
             forResource: name,
             withExtension: ext.isEmpty ? nil : ext,

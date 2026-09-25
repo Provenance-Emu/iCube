@@ -8,7 +8,7 @@ import Foundation
 /// - Note: As of 2026-09-21 the `Provenance-Emu/icube-wiki` repository this points at does
 ///   **not exist yet** — it is created separately by a maintainer, outside this change. Until
 ///   then every raw-content fetch below 404s, and ``WikiContentProvider`` transparently falls
-///   back to the bundled copy of this exact content shipped in this package's `Resources/`
+///   back to the bundled copy of this exact content shipped in this package's `WikiContent/`
 ///   directory (sourced from `docs/wiki-seed/` at the repo root — see that directory's contents
 ///   for the files to push as the new repo's initial commit). Once the repo is live, nothing
 ///   here needs to change: the raw URL starts resolving and the app picks up live content
@@ -44,7 +44,7 @@ public enum WikiConstants {
     }
 
     /// Well-known wiki page paths, so every call site references a name instead of a string
-    /// literal. These paths double as the exact filenames bundled offline in `Resources/` and
+    /// literal. These paths double as the exact filenames bundled offline in `WikiContent/` and
     /// as the future raw-content paths in `icube-wiki` — one path, three uses (bundled fallback,
     /// raw fetch, and the SUMMARY.md nav entry), so none of them can silently drift apart.
     public enum Paths {
