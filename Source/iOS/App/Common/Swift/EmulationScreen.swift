@@ -348,6 +348,7 @@ struct EmulationScreen: View {
       }
 
       // Banner shown while a disconnect-induced pause is active (reconnect resumes).
+      // No "Use Touch Controls" action on tvOS — there is no touchscreen overlay.
       if controllerManager.disconnectPause != nil {
         ControllerDisconnectBanner()
           .zIndex(5)
@@ -746,8 +747,10 @@ struct EmulationScreen: View {
 
       // Banner shown while a disconnect-induced pause is active (reconnect resumes).
       if controllerManager.disconnectPause != nil {
-        ControllerDisconnectBanner()
-          .zIndex(5)
+        ControllerDisconnectBanner(
+          onUseTouchControls: { controllerManager.useTouchControlsForDisconnectedSlot() }
+        )
+        .zIndex(5)
       }
 
       // Top hit area: tap near status bar to reveal overlay (active only when hidden)

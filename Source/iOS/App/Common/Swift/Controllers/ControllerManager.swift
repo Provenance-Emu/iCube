@@ -114,6 +114,22 @@ final class ControllerManager: NSObject, ObservableObject {
     disconnectPause = nil
   }
 
+  /// Resolves an active disconnect-pause by handing the vacated slot to the
+  /// on-screen touchscreen and resuming immediately, instead of waiting for the
+  /// physical controller to reconnect. Backs `ControllerDisconnectBanner`'s
+  /// "Use Touch Controls" action (iOS only — there is no touchscreen on tvOS).
+  func useTouchControlsForDisconnectedSlot() {
+    guard let pending = disconnectPause else { return }
+    if pending.isWii {
+      assignTouchscreen(toWiimote: pending.port + 1)
+    } else {
+      assignTouchscreen(toGCPort: pending.port + 1)
+    }
+    overlayVisible = true
+    disconnectPause = nil
+    TVEmulationBridge.resume()
+  }
+
   /// Returns the 0-based slot and Wii-ness for a controller currently assigned as
   /// a physical device, or nil if it is not bound to any port (touchscreen-only /
   /// unassigned). Matches by bridge qualifier across GC ports then Wiimotes.
@@ -207,6 +223,16 @@ final class ControllerManager: NSObject, ObservableObject {
       self.controllerDisconnectedSubject.send(c)
       self.reconcile()
       self.updateWiimoteEmulationForExternalControllers()
+      // Defect #11: reconcile() can hand a vacated slot back to the on-screen
+      // touchscreen (via AssignmentEngine), but nothing told the overlay's own
+      // visibility flag that happened, so the buttons stayed hidden after a
+      // mid-game disconnect even though the touchscreen was now live again.
+      // Only ever turns the overlay ON here — never hides it — so an explicit
+      // user hide of an unrelated slot is not clobbered.
+      let ownedSystem: EmulatedSystem = self.isWiiSystem ? .wii : .gamecube
+      if self.touchscreenSlot(system: ownedSystem) != nil {
+        self.overlayVisible = true
+      }
     }
     // Boot auto-assign: controllers already connected when a game starts never
     // fire GCControllerDidConnect, so reconcile here. This runs after the
