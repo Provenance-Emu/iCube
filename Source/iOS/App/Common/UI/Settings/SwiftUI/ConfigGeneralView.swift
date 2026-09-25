@@ -115,8 +115,11 @@ struct ConfigGeneralView: View {
     fastDiscSpeed = DOLConfigBridge.mainFastDiscSpeed()
     dspThread = DOLConfigBridge.mainDSPThread()
     speedLimitPercent = DOLConfigBridge.mainEmulationSpeedPercent()
-    let ffSpeed = UserDefaults.standard.integer(forKey: "fast_forward_speed_percent")
-    fastForwardSpeedPercent = (ffSpeed > 0) ? ffSpeed : 300 // Default to 3x speed
+    // `integer(forKey:)` returns 0 both when the key is unset and when the user has
+    // explicitly chosen "Unlimited" (which is stored as 0) — collapsing those cases
+    // mislabels a persisted Unlimited selection as "300%" on the next sync. Use
+    // `object(forKey:)` so only a truly unset key falls back to the 3x default.
+    fastForwardSpeedPercent = (UserDefaults.standard.object(forKey: "fast_forward_speed_percent") as? Int) ?? 300
     let regionRaw = DOLConfigBridge.mainFallbackRegion()
     let regionVal = Region.from(raw: regionRaw)
     if regionVal == .unknown {
