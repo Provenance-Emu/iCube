@@ -408,9 +408,14 @@ struct RemapPlayerView: View {
 
   private func startTicker() {
     stopTicker()
-    ticker = Timer.scheduledTimer(withTimeInterval: Self.tickInterval, repeats: true) { _ in
-      tick()
-    }
+    // Scheduled directly on `.common` (not `.default`, `scheduledTimer`'s
+    // implicit mode) so capture polling and controller-nav keep ticking while
+    // the user is dragging the List — `.default` mode timers are starved
+    // during UIScrollView's `.tracking` run-loop mode, which would otherwise
+    // freeze an armed capture mid-scroll.
+    let timer = Timer(timeInterval: Self.tickInterval, repeats: true) { _ in tick() }
+    RunLoop.main.add(timer, forMode: .common)
+    ticker = timer
   }
 
   private func stopTicker() {
@@ -589,7 +594,13 @@ struct RemapPlayerView: View {
       profileEdited = false
       reloadProfiles()
     } else {
-      showSaveError = true
+      // Deferred a turn: this runs from the "Save" action of the
+      // `showSavePrompt` alert, which SwiftUI is dismissing on this same
+      // turn. Presenting the error alert synchronously here can race that
+      // dismissal and silently fail to appear.
+      DispatchQueue.main.async {
+        showSaveError = true
+      }
     }
   }
 
