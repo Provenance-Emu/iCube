@@ -42,6 +42,7 @@ code, the evidence so far, and who should do it (main session vs. a cheaper suba
 | Wii "-" vs pause | `f2dbcbc494` | `Buttons/- = R Stick` in the physical Wiimote profile; Options stays the pause button |
 | D12 boot fresh resumes auto-save | `44c4114b49` | one app-lifetime DidStart observer (`SaveStateService.installDidStartObserver`, from AppDelegate) instead of one per EmulationScreen instance; two live instances during a navigation transition let the second consume the cleared `skipResumeOnce`. Correction to item 12 below: iCube never arms Dolphin's own savestate boot (`EmulationBootParameter.mm:23`), so there is no coordinator `.auto` load to suppress. `PendingGameLaunchStoreTests.swift` is not wired into any target (pre-existing) |
 | Docs | `e49115b8a4`, `f036c78f9e`, `7e66c0e48e` | package survey, menu-engine + remap designs, overlay design (iFly `Views/Controller/`, not the Delta-skin runtime) |
+| Defect #17 ButtonType drift guard | (this pass) | `Source/iOS/App/Project/Scripts/check_button_types.py` checks `ButtonType.h` (source of truth) against `TCButtonType.swift` (mirror) for numeric drift; run once, found zero mismatches, only the pre-existing dead `wiiInfraredRecenter = 800` case (audit item #18, out of scope) with no C++ backing. Not wired into the build yet. |
 
 Phone checklist for this batch: open Controllers/Settings/Shaders from the pause menu and confirm
 the game stays paused; pick a FF speed and confirm immediate resume at that speed; cheats count on

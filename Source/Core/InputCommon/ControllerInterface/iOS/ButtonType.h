@@ -1,6 +1,14 @@
 // Copyright 2022 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// SOURCE OF TRUTH for touchscreen button/axis ids. This enum is mirrored by hand in
+// Source/iOS/App/DolphiniOS/UI/Emulation/TouchController/TCButtonType.swift (the Swift
+// UI side calls into TCManagerInterface with these same integers). If you add, remove,
+// or renumber a value here, update TCButtonType.swift and its KNOWN_PAIRS entry in
+// Source/iOS/App/Project/Scripts/check_button_types.py, then run that script -- it
+// fails with a diff if the two enums disagree. Never change these values to match
+// Swift; Swift follows this file.
+
 #pragma once
 
 namespace ciface::iOS

@@ -1,6 +1,13 @@
 // Copyright 2022 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// MIRROR of `ciface::iOS::ButtonType` in
+// Source/Core/InputCommon/ControllerInterface/iOS/ButtonType.h, which is the source of
+// truth (values sent here are decoded by that C++ enum via TCManagerInterface). Never
+// renumber a case here to fix a mismatch -- fix it to match ButtonType.h instead, then
+// update the KNOWN_PAIRS entry in Source/iOS/App/Project/Scripts/check_button_types.py
+// and run that script; it fails with a diff if the two enums disagree.
+
 import Foundation
 
 // based off ButtonManager::ButtonType
