@@ -20,29 +20,20 @@ Device-verified: P0 (Galaxy: `[Wiimote1] Device = iOS/4/Touchscreen`, IMUIR off,
 works). **Not** device-exercised: `7ed159f6a5` and `2691df551c` (compiled iOS + tvOS; phone locked).
 The combined develop head compiled for iOS in a worktree; it was not re-gated on tvOS as a whole.
 
-## Remaining P1
+## P1: done (2026-09-24, later session)
 
-1. **Port-aware overlay (defect #3 remainder).** `EmulationScreen+TouchAndMotion.swift:251`
-   hardcodes `view.port = 4` for every Wii pad and the GC path never sets `.port` (defaults to 0,
-   `TCButton.swift:19`). `configureWiiView` / `applyPortRecursively` should take the port the
-   `ControllerAssignmentService` actually bound the touchscreen to (GC: port index; Wii: 4 + index),
-   and `TCDeviceMotion.shared.setPort(4)` (three call sites in `EmulationScreen.swift`) must follow.
-   Also `DOLWiimoteBridge.isClassicActive(forWiimote: 0)` / `isSideways(forWiimote: 0)` at
-   `EmulationScreen+TouchAndMotion.swift:238-239` read index 0 only.
-2. **Deduplicate the touchscreen profile loading.** `EmulationCoordinator.mm`
-   `EnsurePad1DefaultsToTouchscreen` (Pad block ~1580-1600, Wii block ~1658-1690) and
-   `ensureWiimoteDefaultsToTouchscreenForPort:` (~1745-1770) carry the same
-   sys/user `Touchscreen.ini` search and `LoadDefaults` fallback three times, `goto`-laden. Extract
-   one `LoadTouchscreenProfile(EmulatedController*, InputConfig*, ...)` and narrow
-   `user_has_any_profile` (defect #9: any `.ini` in the user profile dir suppresses the stock profile).
-   Long-term the whole policy belongs in `ControllerAssignmentService`; the Objective-C++ function
-   should become mechanical (bind, load profile, save) with no decisions of its own.
-3. **`MotionDebugView` second `CMMotionManager` (defect #14).** `MotionDebugView.swift:399-454,
-   588-645` runs its own manager + shake detector alongside `TCDeviceMotion.shared` and can fire the
-   same shake buttons. Make the debug view observe `TCDeviceMotion.shared` instead. While there,
-   delete the dead `motion_enable_ir_cursor` key (`EmulationScreen+TouchAndMotion.swift:92`,
-   `MotionDebugView.swift:26,188,194,200,276`) and the observer-less `DOLResetIRCursor` post
-   (`MotionDebugView.swift:563-566`) (defect #18).
+| Commit | What |
+|---|---|
+| `ac570cd5b3` | Port-aware overlay: `ControllerManager.touchscreenSlot` / `touchscreenControllerId`, overlay + motion feed + layout query follow the bound slot, in-place port patch in `updateUIView` |
+| `6361096f03` | One `BindTouchscreen()` in `EmulationCoordinator.mm`; profile reloaded only on rebinding / empty mapping; per-port path no longer loads the Bluetooth MotionPlus profile or vetoes itself |
+| `c2f36b3743` | `MotionDebugView` polls `TCDeviceMotion.shared.latestSample`; `triggerShake()`; dead `motion_enable_ir_cursor` / `DOLResetIRCursor` removed |
+
+All three compiled for iOS and tvOS (`iCube (NJB)`, Debug (Non-Jailbroken)); **none exercised on the
+phone yet**, nor were `7ed159f6a5` / `2691df551c`. Phone checklist: Galaxy title cursor with the
+phone flat (drag/follow/gyro via the cursor menu), a Wii pad button press, `WiimoteNew.ini`
+`[Wiimote1] Device = iOS/4/Touchscreen`, then bind the touchscreen to Wii Remote 2 in the controller
+sheet and confirm the overlay drives it (`Device = iOS/5/Touchscreen`, log line
+`Wii Remote 2 -> iOS/5/Touchscreen`), Motion Debug screen shows live values with no second shake.
 
 ## Then P2 (audit §5, items 8-11)
 
@@ -58,6 +49,8 @@ The combined develop head compiled for iOS in a worktree; it was not re-gated on
   ~1083-1088, tvOS ~569/573; dead `obsGCConnect/obsGCDisconnect` ~264-265) (defect #10).
 - Sync `overlayVisible` when the bound controller disconnects; give `ControllerDisconnectBanner`
   an action (defect #11).
+- `ControllerExtensions.swift` `installTouchpadIRHandlers`: a DS4/DS5 touchpad on Wii Remote 2-4
+  is mirrored onto controller id 4 (Wii Remote 1), so player 2's touchpad moves player 1's pointer.
 - `StateManager` mutex/atomics (defect #12); `ButtonType` constants from one source (#17); stable
   `MFiController::GetPreferredId` after a two-identical-pads test (#16); legacy mapping editor:
   tvOS "Save Profile" stub and the on-tap profile load (#13).
@@ -97,12 +90,10 @@ The combined develop head compiled for iOS in a worktree; it was not re-gated on
 
 ```
 Continue the iCube controller work from docs/handoff-2026-09-24-controllers.md and
-docs/audits/2026-09-24-controller-system-audit.md (dolphin-ios develop c0029c9284).
-Finish the remaining P1 items in order: (1) make the touch overlay port-aware, (2) deduplicate
-the touchscreen profile loading in EmulationCoordinator.mm and narrow user_has_any_profile,
-(3) make MotionDebugView observe TCDeviceMotion.shared instead of running its own
-CMMotionManager and delete the dead motion_enable_ir_cursor / DOLResetIRCursor paths.
-Then start P2 with the single-sided IR writes in gyro mode. Work from the develop worktrees
+docs/audits/2026-09-24-controller-system-audit.md (dolphin-ios develop, P1 done in ac570cd5b3 / 6361096f03 / c2f36b3743).
+First get the P1 commits and 7ed159f6a5 / 2691df551c verified on the phone (checklist in the
+handoff), fixing whatever that turns up. Then start P2 with the single-sided IR writes in gyro
+mode, followed by the DS4 touchpad mirror onto Wii Remote 1. Work from the develop worktrees
 described in the handoff, never on the shared checkouts' feature branches; gate iOS and tvOS
 before each commit; commit one logical change at a time on dolphin-ios develop, push, and bump
 the Provenance gitlink from its develop worktree. Verify on the phone as described (the user

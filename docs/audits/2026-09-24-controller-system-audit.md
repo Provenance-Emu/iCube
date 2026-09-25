@@ -105,6 +105,26 @@ written as `iOS/4/Touchscreen`, `IMUIR/Enabled = False`, on-screen Wii controls 
    (GC 0-3, Wii 4-7) instead of "first device named Touchscreen"; this was defect #9 and was the
    actual cause of the Wii touch pad being dead in the DEV container (`Device = iOS/0/Touchscreen`).
 
+## 5b. P1 status (2026-09-24, later)
+
+All compiled for iOS and tvOS; none of these three were exercised on the phone yet.
+5. Port threading (#3 remainder): `ac570cd5b3`. `ControllerManager.touchscreenSlot` /
+   `touchscreenControllerId` read the bound `iOS/<id>/Touchscreen` qualifier; the overlay, the
+   motion feed and the classic/sideways layout query follow it, and `updateUIView` patches the port
+   in place. Profile-loading dedupe (#9): `6361096f03`, one `BindTouchscreen()`; the profile is
+   reloaded only when the binding changes or the slot has no mapping. Found while merging: the
+   per-port path loaded the Bluetooth "MotionPlus Pointing" profile (dead controls, device rebound to
+   `Bluetooth/0/Wii Remote`) and vetoed itself whenever Wii Remote 1 was on the touchscreen.
+   Policy still lives partly in Objective-C++ (the two fallback vetoes); moving it into
+   `ControllerAssignmentService` remains.
+6. Per-game profiles -> CurrentRun layer: `2691df551c`.
+7. Motion defaults in `DefaultPreferences.plist`: `2691df551c`. One `CMMotionManager` (#14) and the
+   dead `motion_enable_ir_cursor` / `DOLResetIRCursor` paths (#18): `c2f36b3743`.
+
+New P2 item found during 5: `ControllerExtensions.swift` `installTouchpadIRHandlers` mirrors a
+DS4/DS5 touchpad bound to Wii Remote 2-4 onto controller id 4 (Wii Remote 1's instance) "to support
+profiles bound to P1 only", so a second player's touchpad moves player 1's pointer.
+
 ## 6. Verified clean by the reviews
 
 `playerIndex` is single-writer; pause-menu requests funnel through one sink and the Start/Menu
