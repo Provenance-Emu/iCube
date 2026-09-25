@@ -34,6 +34,36 @@
 extern std::unique_ptr<VideoCommon::Presenter> g_presenter;
 extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 
+// Fast-forward: file-scope (not function-local) so both +toggleFastForward and
+// +setFastForwardSpeedPercent: can share them — a speed change while FF is already
+// running needs to re-apply the multiplier live without toggling isFastForwarding.
+static float g_fastForwardOriginalSpeed = 1.0f;
+static bool g_isFastForwarding = false;
+static NSString * const kFastForwardSpeedPercentDefaultsKey = @"fast_forward_speed_percent";
+
+// Reads the configured fast-forward speed and applies it to the live config.
+// 0 = unlimited (throttler disabled). Uses -objectForKey: rather than
+// -integerForKey: so an explicit 0 (Unlimited) is distinguishable from the key
+// never having been set (which also reads back as 0 from -integerForKey:) —
+// otherwise Unlimited could never actually take effect.
+static void ApplyConfiguredFastForwardSpeed() {
+  NSNumber* stored = [[NSUserDefaults standardUserDefaults] objectForKey:kFastForwardSpeedPercentDefaultsKey];
+  NSInteger ffSpeedPercent = stored ? stored.integerValue : 300; // Default to 3x speed
+  if (ffSpeedPercent < 0) {
+    ffSpeedPercent = 300;
+  }
+
+  if (ffSpeedPercent == 0) {
+    // Unlimited speed - use throttler disable
+    Core::SetIsThrottlerTempDisabled(true);
+  } else {
+    // Use configured speed multiplier
+    Core::SetIsThrottlerTempDisabled(false);
+    float speedMultiplier = (float)ffSpeedPercent / 100.0f;
+    Config::SetCurrent(Config::MAIN_EMULATION_SPEED, speedMultiplier);
+  }
+}
+
 @implementation TVEmulationBridge
 
 + (void)runWithBootParameter:(EmulationBootParameter*)param {
@@ -212,27 +242,10 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 
 // Fast-forward (configurable speed multiplier)
 + (BOOL)toggleFastForward {
-  static float originalSpeed = 1.0f;
-  static bool isFastForwarding = false;
-
-  if (!isFastForwarding) {
+  if (!g_isFastForwarding) {
     // Store original speed and enable fast forward
-    originalSpeed = Config::Get(Config::MAIN_EMULATION_SPEED);
-
-    // Get configured fast forward speed from UserDefaults
-    NSInteger ffSpeedPercent = [[NSUserDefaults standardUserDefaults] integerForKey:@"fast_forward_speed_percent"];
-    if (ffSpeedPercent <= 0) {
-      ffSpeedPercent = 300; // Default to 3x speed
-    }
-
-    if (ffSpeedPercent == 0) {
-      // Unlimited speed - use throttler disable
-      Core::SetIsThrottlerTempDisabled(true);
-    } else {
-      // Use configured speed multiplier
-      float speedMultiplier = (float)ffSpeedPercent / 100.0f;
-      Config::SetCurrent(Config::MAIN_EMULATION_SPEED, speedMultiplier);
-    }
+    g_fastForwardOriginalSpeed = Config::Get(Config::MAIN_EMULATION_SPEED);
+    ApplyConfiguredFastForwardSpeed();
 
     // Mute audio if configured
     if (!Config::Get(Config::MAIN_AUDIO_MUTED) &&
@@ -240,11 +253,11 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
       Config::SetCurrent(Config::MAIN_AUDIO_MUTED, true);
     }
 
-    isFastForwarding = true;
+    g_isFastForwarding = true;
   } else {
     // Restore original speed and disable fast forward
     Core::SetIsThrottlerTempDisabled(false);
-    Config::SetCurrent(Config::MAIN_EMULATION_SPEED, originalSpeed);
+    Config::SetCurrent(Config::MAIN_EMULATION_SPEED, g_fastForwardOriginalSpeed);
 
     // Unmute audio if we muted it
     if (Config::Get(Config::MAIN_AUDIO_MUTED) &&
@@ -252,13 +265,13 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
       Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_AUDIO_MUTED);
     }
 
-    isFastForwarding = false;
+    g_isFastForwarding = false;
   }
 
   dispatch_async(dispatch_get_main_queue(), ^{
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLFastForwardToggled" object:nil userInfo:@{ @"enabled": @(isFastForwarding) }];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLFastForwardToggled" object:nil userInfo:@{ @"enabled": @(g_isFastForwarding) }];
   });
-  return isFastForwarding;
+  return g_isFastForwarding;
 }
 
 + (BOOL)isFastForwardEnabled {
@@ -266,6 +279,13 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
   float currentSpeed = Config::Get(Config::MAIN_EMULATION_SPEED);
   float baseSpeed = Config::GetBase(Config::MAIN_EMULATION_SPEED);
   return (currentSpeed != baseSpeed) || Core::GetIsThrottlerTempDisabled();
+}
+
++ (void)setFastForwardSpeedPercent:(NSInteger)percent {
+  [[NSUserDefaults standardUserDefaults] setInteger:percent forKey:kFastForwardSpeedPercentDefaultsKey];
+  if (g_isFastForwarding) {
+    ApplyConfiguredFastForwardSpeed();
+  }
 }
 
 + (BOOL)isCurrentSystemWii {

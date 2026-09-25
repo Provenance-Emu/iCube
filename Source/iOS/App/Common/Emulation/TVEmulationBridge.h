@@ -76,6 +76,11 @@ NS_ASSUME_NONNULL_BEGIN
 // Toggle temporary throttler disable (turbo). Returns the new state.
 + (BOOL)toggleFastForward;
 + (BOOL)isFastForwardEnabled;
+// Persists `percent` under the shared "fast_forward_speed_percent" UserDefaults key
+// (0 = unlimited) and, if fast-forward is already running, re-applies it live so a
+// speed change does not require toggling off and back on. Does not itself enable
+// fast-forward; call -toggleFastForward for that when -isFastForwardEnabled is NO.
++ (void)setFastForwardSpeedPercent:(NSInteger)percent;
 
 // System Detection
 + (BOOL)isCurrentSystemWii;

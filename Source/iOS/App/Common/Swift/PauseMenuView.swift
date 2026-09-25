@@ -20,8 +20,10 @@ internal struct PauseMenuView: View {
   internal enum FocusField: Hashable {
     case resume, openSaves, cheats, mapping, settings, shaders, continuity
     case exit, back, slot(Int), save, load, mute, fastForward
+    /// D14: rows in the tvOS fast-forward speed chooser (`tvFastForwardSpeedMenu`).
+    case fastForwardOff, fastForwardChoice(Int)
   }
-  private enum Pane { case main, saves, cheats, controllers }
+  private enum Pane { case main, saves, cheats, controllers, fastForwardSpeed }
   @State private var pane: Pane = .main
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
@@ -62,6 +64,17 @@ internal struct PauseMenuView: View {
   @State private var isMuted: Bool = false
   @State private var fastForwardEnabled: Bool = false
   private static let volumeBeforeMuteKey = "icube_pause_menu_volume_before_mute"
+  /// D14: drives the iOS speed picker (`.confirmationDialog`). Declared unconditionally,
+  /// like `showControllersSheet`/`showSettingsSheet` above, because `iosMenuItems` is
+  /// compiled for both platforms even though it is only presented on iOS.
+  @State private var showFastForwardSpeedPicker: Bool = false
+  /// Same UserDefaults key `TVEmulationBridge` reads when fast-forward is turned on
+  /// (also written by the Settings > General fast-forward speed picker) — kept as one
+  /// named constant here rather than a literal at each pause-menu call site.
+  private static let fastForwardSpeedPercentKey = "fast_forward_speed_percent"
+  /// The choices offered from the pause menu specifically (1.5x/2x/3x/Unlimited).
+  /// Settings > General offers a wider range for the same UserDefaults key.
+  private static let fastForwardSpeedChoices: [Int] = [150, 200, 300, 0]
 
   /// iOS controller-driven focus index into `iosMenuItems`. iOS has no focus
   /// engine here, so navigation is driven manually from GCController input,
@@ -102,10 +115,10 @@ internal struct PauseMenuView: View {
       ) { toggleMute() },
       IOSMenuItem(
         title: L("Fast Forward"),
-        subtitle: fastForwardEnabled ? L("On — tap to disable") : L("Off — tap to enable"),
+        subtitle: fastForwardSubtitle,
         icon: fastForwardEnabled ? "forward.fill" : "forward",
         tint: .cyan, role: nil
-      ) { toggleFastForwardAction() },
+      ) { showFastForwardSpeedPicker = true },
       IOSMenuItem(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple, role: nil) { pane = .saves },
       IOSMenuItem(title: L("Cheats"), subtitle: L("Game enhancement codes"), icon: "star.circle", tint: .yellow, role: nil) { pane = .cheats },
       IOSMenuItem(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: nil) {
@@ -142,8 +155,47 @@ internal struct PauseMenuView: View {
     }
   }
 
-  private func toggleFastForwardAction() {
-    fastForwardEnabled = TVEmulationBridge.toggleFastForward()
+  /// Currently configured fast-forward speed, read from the same UserDefaults key
+  /// `TVEmulationBridge.setFastForwardSpeedPercent(_:)` writes. Falls back to the
+  /// bridge's own default (300 = 3x) before anything has been picked.
+  private var configuredFastForwardPercent: Int {
+    (UserDefaults.standard.object(forKey: Self.fastForwardSpeedPercentKey) as? Int) ?? 300
+  }
+
+  private static func fastForwardSpeedLabel(percent: Int) -> String {
+    if percent == 0 { return L("Unlimited") }
+    let multiplier = Double(percent) / 100.0
+    return multiplier.truncatingRemainder(dividingBy: 1) == 0
+      ? "\(Int(multiplier))x"
+      : String(format: "%.1fx", multiplier)
+  }
+
+  private var fastForwardSubtitle: String {
+    guard fastForwardEnabled else { return L("Off — choose a speed to start") }
+    return String(format: L("On at %@ — choose to change"), Self.fastForwardSpeedLabel(percent: configuredFastForwardPercent))
+  }
+
+  /// Persists `percent`, turns fast-forward on if it wasn't already (a mid-flight
+  /// speed change re-applies live via `setFastForwardSpeedPercent(_:)` without a
+  /// toggle-off/on blip), then leaves the pause menu immediately so the game runs
+  /// at the new speed right away.
+  private func selectFastForwardSpeed(_ percent: Int) {
+    TVEmulationBridge.setFastForwardSpeedPercent(percent)
+    if !TVEmulationBridge.isFastForwardEnabled() {
+      _ = TVEmulationBridge.toggleFastForward()
+    }
+    fastForwardEnabled = true
+    TVEmulationBridge.resume()
+    onClose()
+  }
+
+  /// Turns fast-forward off without leaving the pause menu, mirroring the old
+  /// in-place toggle's off behavior.
+  private func turnOffFastForward() {
+    if TVEmulationBridge.isFastForwardEnabled() {
+      _ = TVEmulationBridge.toggleFastForward()
+    }
+    fastForwardEnabled = false
   }
 
   var body: some View {
@@ -172,8 +224,13 @@ internal struct PauseMenuView: View {
         }
         .onExitCommand { pane = .main }
         .onAppear { NSLog("[PAUSE] Controller setup menu appeared") }
+      case .fastForwardSpeed:
+        tvFastForwardSpeedMenu
+          .onAppear { NSLog("[PAUSE] Fast forward speed menu appeared") }
       #else
       case .controllers:
+        mainMenu
+      case .fastForwardSpeed:
         mainMenu
       #endif
       }
@@ -216,6 +273,8 @@ internal struct PauseMenuView: View {
         case .cheats:
           focused = .back
         case .controllers:
+          focused = .back
+        case .fastForwardSpeed:
           focused = .back
         }
       }
@@ -405,6 +464,20 @@ internal struct PauseMenuView: View {
     } message: {
       Text(L("Do you want to quit the game? Unsaved progress will be lost."))
     }
+    // D14: picking a speed here both starts fast-forward and leaves the pause menu
+    // right away, so the game visibly speeds up instead of leaving the user to guess
+    // whether the tap registered.
+    .confirmationDialog(L("Fast Forward Speed"), isPresented: $showFastForwardSpeedPicker, titleVisibility: .visible) {
+      if fastForwardEnabled {
+        Button(L("Turn Off")) { turnOffFastForward() }
+      }
+      ForEach(Self.fastForwardSpeedChoices, id: \.self) { percent in
+        Button(Self.fastForwardSpeedLabel(percent: percent)) { selectFastForwardSpeed(percent) }
+      }
+      Button(L("Cancel"), role: .cancel) {}
+    } message: {
+      Text(L("Starts fast-forward at this speed and closes the pause menu."))
+    }
   }
 
   /// Styled iOS pause menu row with icon and subtitle
@@ -489,6 +562,125 @@ internal struct PauseMenuView: View {
       .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
     .buttonStyle(.plain)
+  }
+
+  /// D14: one focusable row per fast-forward speed choice (or the "Turn Off" row),
+  /// styled like `tvFastForwardSpeedMenu`'s other rows. `selected` shows a checkmark
+  /// for the speed currently configured while fast-forward is on.
+  @ViewBuilder
+  private func tvFastForwardChoiceRow(icon: String, title: String, subtitle: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      HStack(spacing: 20) {
+        ZStack {
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(.white.opacity(0.1))
+            .frame(width: 48, height: 48)
+          Image(systemName: selected ? "checkmark.circle.fill" : icon)
+            .font(.system(size: 20, weight: .medium))
+            .foregroundColor(selected ? .green : .white)
+        }
+        VStack(alignment: .leading, spacing: 4) {
+          Text(title)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundColor(.white)
+          Text(subtitle)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.white.opacity(0.7))
+        }
+        Spacer()
+      }
+      .padding(.horizontal, 24)
+      .padding(.vertical, 16)
+      .background(.white.opacity(0.05))
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+    .buttonStyle(.plain)
+  }
+
+  /// D14: tvOS focusable speed chooser for Fast Forward, opened by navigating to
+  /// `Pane.fastForwardSpeed` instead of the old in-place toggle (picking a speed
+  /// here also starts FF and leaves the pause menu, which a plain toggle can't do).
+  private var tvFastForwardSpeedMenu: some View {
+    ZStack {
+      Image(uiImage: game.bannerImage ?? game.coverImage)
+        .resizable()
+        .scaledToFill()
+        .blur(radius: 25)
+        .opacity(0.8)
+        .ignoresSafeArea()
+
+      LinearGradient(
+        colors: [
+          Color.black.opacity(0.85),
+          Color.black.opacity(0.4),
+          Color.black.opacity(0.85)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      .ignoresSafeArea()
+
+      VStack(spacing: 32) {
+        HStack {
+          Button(action: { pane = .main }) {
+            HStack(spacing: 12) {
+              Image(systemName: "chevron.left")
+                .font(.system(size: 16, weight: .semibold))
+              Text(L("Back"))
+                .font(.system(size: 18, weight: .semibold))
+            }
+            .foregroundColor(.white.opacity(0.8))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(.white.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          }
+          .buttonStyle(.plain)
+          .focused($focused, equals: .back)
+
+          Spacer()
+
+          Text(L("Fast Forward Speed"))
+            .font(.system(size: 28, weight: .bold))
+            .foregroundColor(.white)
+
+          Spacer()
+        }
+
+        VStack(spacing: 12) {
+          if fastForwardEnabled {
+            tvFastForwardChoiceRow(
+              icon: "forward.slash",
+              title: L("Turn Off"),
+              subtitle: L("Return to normal speed"),
+              selected: false
+            ) {
+              turnOffFastForward()
+              pane = .main
+            }
+            .focused($focused, equals: .fastForwardOff)
+          }
+          ForEach(Self.fastForwardSpeedChoices, id: \.self) { percent in
+            tvFastForwardChoiceRow(
+              icon: "forward.fill",
+              title: Self.fastForwardSpeedLabel(percent: percent),
+              subtitle: L("Start fast-forward and resume"),
+              selected: fastForwardEnabled && configuredFastForwardPercent == percent
+            ) {
+              selectFastForwardSpeed(percent)
+            }
+            .focused($focused, equals: .fastForwardChoice(percent))
+          }
+        }
+        .frame(maxWidth: 480)
+      }
+      .padding(60)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .zIndex(100)
+    }
+    #if os(tvOS)
+    .onExitCommand { pane = .main }
+    #endif
   }
 
   #if !os(tvOS)
@@ -701,10 +893,10 @@ internal struct PauseMenuView: View {
             .buttonStyle(.plain)
             .focused($focused, equals: .openSaves)
 
-            // Quick actions: same row shape as the rest of the list, but these two
-            // toggle in place instead of navigating (mute to take a call,
-            // fast-forward past a cutscene — the things people reach for without
-            // wanting to leave the pause menu).
+            // Quick actions: same row shape as the rest of the list. Mute toggles in
+            // place (mid-call mute without leaving the pause menu); Fast Forward opens
+            // the speed chooser (D14) since picking a speed also starts FF and leaves
+            // the menu right away, which needs its own pane rather than an in-place flip.
             tvMenuToggleRow(
               icon: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
               title: isMuted ? L("Unmute") : L("Mute"),
@@ -716,8 +908,8 @@ internal struct PauseMenuView: View {
             tvMenuToggleRow(
               icon: fastForwardEnabled ? "forward.fill" : "forward",
               title: L("Fast Forward"),
-              subtitle: fastForwardEnabled ? L("On — press to disable") : L("Off — press to enable"),
-              action: { toggleFastForwardAction() }
+              subtitle: fastForwardSubtitle,
+              action: { pane = .fastForwardSpeed }
             )
             .focused($focused, equals: .fastForward)
 
