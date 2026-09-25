@@ -982,7 +982,7 @@ struct EmulationScreen: View {
           .onAppear {
             // Ensure touch input is always a valid IR source
             TCDeviceMotion.shared.setMotionEnabled(true)
-            TCDeviceMotion.shared.setPort(4)
+            syncMotionPortToTouchscreen()
             TCDeviceMotion.shared.statusBarOrientationChanged()
           }
       }
@@ -1049,7 +1049,7 @@ struct EmulationScreen: View {
       let wantsMotion = (isTouchControlsActive && useIMU) || wantsMotionForShake
       TCDeviceMotion.shared.setMotionEnabled(wantsMotion)
       if wantsMotion {
-        TCDeviceMotion.shared.setPort(4)
+        syncMotionPortToTouchscreen()
         TCDeviceMotion.shared.statusBarOrientationChanged()
       }
 
@@ -1066,7 +1066,7 @@ struct EmulationScreen: View {
         if wantsMotionForShake2 {
           Task { @MainActor in
             TCDeviceMotion.shared.setMotionEnabled(true)
-            TCDeviceMotion.shared.setPort(4)
+            syncMotionPortToTouchscreen()
             TCDeviceMotion.shared.statusBarOrientationChanged()
           }
         }
@@ -1080,6 +1080,8 @@ struct EmulationScreen: View {
       ControllerManager.shared.reconcile()
       // Configure Wiimote sources based on connected controllers
       ControllerManager.shared.updateWiimoteEmulationForExternalControllers()
+      // reconcile() may have moved the touchscreen to another slot; follow it.
+      syncMotionPortToTouchscreen()
       #if os(iOS)
       ReplayKitManager.shared.startBufferingIfEnabled()
       if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
@@ -1149,8 +1151,9 @@ struct EmulationScreen: View {
       // (TouchIRMode.gyro) and the engine default is 2 (iOSSettings.cpp), so this bounced every
       // Gyro selection back to Follow on each appearance.
       // Initialize overlay signature for Wii type (extension + sideways)
-      let ext0 = Int(DOLWiimoteBridge.selectedExtension(forWiimote: 0))
-      let side0 = DOLWiimoteBridge.isSideways(forWiimote: 0)
+      let touchSlot = controllerManager.touchscreenSlot(system: .wii) ?? 0
+      let ext0 = Int(DOLWiimoteBridge.selectedExtension(forWiimote: touchSlot))
+      let side0 = DOLWiimoteBridge.isSideways(forWiimote: touchSlot)
       wiiOverlaySignature = (ext0 & 0xFF) | (side0 ? 0x100 : 0)
       // Default touch controls: enabled when no controllers are connected (only if not user-overridden)
       if !userOverrideTouchControls {

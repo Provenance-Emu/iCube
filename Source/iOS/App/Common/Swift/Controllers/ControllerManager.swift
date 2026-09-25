@@ -281,6 +281,54 @@ final class ControllerManager: NSObject, ObservableObject {
     }
   }
 
+  // MARK: Touchscreen slot
+
+  /// First Touchscreen device id the iOS backend registers for Wii Remote inputs. Ids 0-3 carry
+  /// the GameCube pad inputs, 4-7 the Wii Remote inputs (iOS.mm PopulateDevices; mirrored by
+  /// `kTouchscreenWiimoteIdBase` in EmulationCoordinator.mm).
+  static let touchscreenWiimoteIdBase = 4
+
+  /// Zero-based player slot the on-screen overlay is bound to for `system`, or nil when no
+  /// active slot points at a Touchscreen device. GC: the port's SIDevice must not be None;
+  /// Wii: the slot's source must be Emulated. Lowest matching slot wins.
+  func touchscreenSlot(system: EmulatedSystem) -> Int? {
+    for port in 1 ... 4 {
+      let qualifier: String
+      switch system {
+      case .gamecube:
+        guard DOLConfigBridge.gcPortDevice(forPort: port) != 0 else { continue }
+        qualifier = TVControllerMappingBridge.defaultDevice(forGCPort: port) as String
+      case .wii:
+        guard DOLConfigBridge.wiimoteSource(for: port) == 1 else { continue }
+        qualifier = TVControllerMappingBridge.defaultDevice(forWiimote: port) as String
+      }
+      if Self.touchscreenDeviceId(fromQualifier: qualifier) != nil { return port - 1 }
+    }
+    return nil
+  }
+
+  /// Touchscreen device id (the `StateManager` controller index) the overlay and the device
+  /// motion feed must write to. Read from the bound qualifier (`iOS/<id>/Touchscreen`) so it
+  /// matches whatever the core actually reads, with the stock instance (GC 0 / Wii 4) as the
+  /// fallback while nothing is bound yet. The overlay used to hardcode 4 for every Wii pad and 0
+  /// for every GC pad, so a touchscreen bound to any other slot produced no input.
+  func touchscreenControllerId(isWii: Bool) -> Int {
+    let system: EmulatedSystem = isWii ? .wii : .gamecube
+    let fallback = isWii ? Self.touchscreenWiimoteIdBase : 0
+    guard let slot = touchscreenSlot(system: system) else { return fallback }
+    let qualifier: String = isWii
+      ? TVControllerMappingBridge.defaultDevice(forWiimote: slot + 1) as String
+      : TVControllerMappingBridge.defaultDevice(forGCPort: slot + 1) as String
+    return Self.touchscreenDeviceId(fromQualifier: qualifier) ?? fallback
+  }
+
+  /// Parses `iOS/<id>/Touchscreen`; nil for anything else.
+  static func touchscreenDeviceId(fromQualifier qualifier: String) -> Int? {
+    let parts = qualifier.split(separator: "/", omittingEmptySubsequences: false)
+    guard parts.count == 3, parts[0] == "iOS", parts[2] == "Touchscreen" else { return nil }
+    return Int(parts[1])
+  }
+
   // MARK: Ensure Wiimote1 Touchscreen
 
   func ensureWiimote1EmulatedTouchscreen() {

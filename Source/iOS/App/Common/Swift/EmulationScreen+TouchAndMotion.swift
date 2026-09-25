@@ -113,6 +113,12 @@ extension EmulationScreen {
   }
 
   /// Restart motion system when settings change during gameplay
+  /// Points the device-motion feed (gyro/accel/shake, gyro-mode IR) at the Wii Remote slot the
+  /// touch overlay is bound to. Replaces three hardcoded `setPort(4)` calls.
+  func syncMotionPortToTouchscreen() {
+    TCDeviceMotion.shared.setPort(ControllerManager.shared.touchscreenControllerId(isWii: true))
+  }
+
   func restartMotionSystemForSettingsChange() {
     NSLog("[MOTION] Motion settings changed during gameplay - restarting motion system")
 
@@ -172,6 +178,7 @@ extension EmulationScreen {
           v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
           v.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
           host.addSubview(v)
+          applyPort(ControllerManager.shared.touchscreenControllerId(isWii: false), to: v)
           NSLog("[TOUCH] Added GC pad with alpha=%.2f", v.alpha)
         } else {
           NSLog("[TOUCH] Failed to load TCGameCubePad nib")
@@ -191,6 +198,11 @@ extension EmulationScreen {
         if let mode = TCWiiTouchIRMode(rawValue: irMode), wiiPad.mode != mode {
           wiiPad.setTouchIRMode(mode)
         }
+        let wantPort = ControllerManager.shared.touchscreenControllerId(isWii: true)
+        if wiiPad.port != wantPort {
+          wiiPad.port = wantPort
+          TCDeviceMotion.shared.setPort(wantPort)
+        }
         let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
         let vr = TVEmulationBridge.currentVideoContentRect()
         let inPad: CGRect = {
@@ -206,6 +218,8 @@ extension EmulationScreen {
       }
       if wantGC, mountedWii == nil, let gc = uiView.subviews.first {
         gc.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
+        let wantPort = ControllerManager.shared.touchscreenControllerId(isWii: false)
+        if let tc = gc as? TCView, tc.port != wantPort { tc.port = wantPort }
         return
       }
       uiView.subviews.forEach { $0.removeFromSuperview() }
@@ -221,6 +235,7 @@ extension EmulationScreen {
           v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
           v.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
           uiView.addSubview(v)
+          applyPort(ControllerManager.shared.touchscreenControllerId(isWii: false), to: v)
         } else {
           NSLog("[TOUCH] Failed to load TCGameCubePad nib (update)")
         }
@@ -266,8 +281,11 @@ extension EmulationScreen {
     // MARK: - Wii Subclass selection & configuration
 
     private func makeWiiPadView() -> UIView {
-      let classic = DOLWiimoteBridge.isClassicActive(forWiimote: 0)
-      let sideways = DOLWiimoteBridge.isSideways(forWiimote: 0)
+      // Layout (classic / sideways) and the input port both follow the Wii Remote slot the
+      // touchscreen is actually bound to, not slot 1.
+      let slot = ControllerManager.shared.touchscreenSlot(system: .wii) ?? 0
+      let classic = DOLWiimoteBridge.isClassicActive(forWiimote: slot)
+      let sideways = DOLWiimoteBridge.isSideways(forWiimote: slot)
       let view: TCWiiPad
       if classic {
         view = TCClassicWiiPad()
@@ -279,7 +297,7 @@ extension EmulationScreen {
         view = TCWiiPad()
         NSLog("[TOUCH] Using TCWiiPad")
       }
-      view.port = 4
+      view.port = ControllerManager.shared.touchscreenControllerId(isWii: true)
       let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
       if let mode = TCWiiTouchIRMode(rawValue: Int(modeRaw)) { view.setTouchIRMode(mode) }
       return view
@@ -289,7 +307,7 @@ extension EmulationScreen {
       if let wiiPad = findTCWiiPad(in: view) {
         let motion = TCDeviceMotion.shared
         motion.setMotionEnabled(true)
-        motion.setPort(4)
+        motion.setPort(wiiPad.port)
         motion.statusBarOrientationChanged()
         wiiPad.resetPointer()
         let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
@@ -303,8 +321,13 @@ extension EmulationScreen {
         }()
         wiiPad.recalculatePointerValues(new_rect: inPad, game_aspect: ar)
       } else {
-        applyPortRecursively(4, to: view)
+        applyPort(ControllerManager.shared.touchscreenControllerId(isWii: true), to: view)
       }
+    }
+
+    /// A `TCView` propagates `port` to its nib subtree itself; anything else gets the walk.
+    private func applyPort(_ port: Int, to view: UIView) {
+      if let tc = view as? TCView { tc.port = port } else { applyPortRecursively(port, to: view) }
     }
 
     private func loadPad(named name: String) -> UIView? {
