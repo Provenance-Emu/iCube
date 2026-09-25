@@ -14,5 +14,7 @@
 	<true/>
 	<key>motion_enhanced_shake_detection</key>
 	<true/>
+	<key>touch_overlay_programmatic</key>
+	<false/>
 </dict>
 </plist>

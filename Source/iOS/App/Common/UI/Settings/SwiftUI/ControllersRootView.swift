@@ -121,6 +121,9 @@ struct ControllersRootView: View {
   // Touchscreen
 #if os(iOS)
   @State private var touchOpacity: Float = 0.5
+  // Programmatic touch overlay (phase 2, beta): see docs/superpowers/specs/
+  // 2026-09-24-programmatic-touch-overlay-design.md. Defaults false (DefaultPreferences.plist).
+  @State private var touchOverlayProgrammatic: Bool = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
 #endif
   @State private var touchIRMode: TouchIRMode = .drag
   // Raw SerialInterface::SIDevices values (SI_Device.h): 0 = SIDEVICE_NONE,
@@ -349,6 +352,15 @@ struct ControllersRootView: View {
         }
         .onChange(of: touchIRMode) { DOLConfigBridge.setMainTouchPadIRMode($0.rawValue) }
 
+#if os(iOS)
+        settingsCaption(
+          Toggle(L("Programmatic touch overlay (beta)"), isOn: $touchOverlayProgrammatic)
+            .onChange(of: touchOverlayProgrammatic) { newValue in
+              UserDefaults.standard.set(newValue, forKey: "touch_overlay_programmatic")
+            },
+          L("Replaces the on-screen GameCube/Wii pads with the new SwiftUI-rendered, user-editable overlay. Long-press the overlay in-game to move or resize its controls."))
+#endif
+
         NavigationLink(destination: EnhancedMotionControlsView()) {
           Label(L("Advanced Motion Settings"), systemImage: "gyroscope")
         }
@@ -408,6 +420,7 @@ struct ControllersRootView: View {
     connectWiimotes = DOLConfigBridge.connectWiimotesForControllerInterface()
 #if os(iOS)
     touchOpacity = DOLConfigBridge.mainTouchPadOpacity()
+    touchOverlayProgrammatic = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
 #endif
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
     // DSU

@@ -159,10 +159,82 @@ extension EmulationScreen {
     /// the live pad in place instead of tearing the overlay down (which dropped held buttons and
     /// re-ran every pad's lifecycle hooks).
     var irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())
+
+    /// Phase 2 of the programmatic touch overlay (docs/superpowers/specs/
+    /// 2026-09-24-programmatic-touch-overlay-design.md), gated off by default. When on, this
+    /// container mounts a `UIHostingController`-hosted `TouchOverlayView` instead of the xib pad;
+    /// every other path in this file (opacity, IR-mode passthrough, port resolution) is untouched.
+    private static var useProgrammaticOverlay: Bool {
+      UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
+    }
+
+    /// Holds the hosting controller across `updateUIView` calls so a live setting change (pad
+    /// kind, opacity, IR mode) updates its `rootView` in place instead of tearing down and
+    /// rebuilding the whole SwiftUI tree.
+    final class Coordinator {
+      var hosting: UIHostingController<TouchOverlayView>?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// Mirrors `makeWiiPadView()`'s selection exactly (slot -> classic/sideways), so the
+    /// programmatic overlay picks the same variant the xib path would have shown. `nil` when
+    /// neither a Wii nor a GameCube pad should be visible right now (e.g. an external controller
+    /// is connected and `forceVisible` is false).
+    private func programmaticPadKind() -> TouchOverlayPadKind? {
+      if shouldShowWiiPad() {
+        let slot = ControllerManager.shared.touchscreenSlot(system: .wii) ?? 0
+        return .wii(classicActive: DOLWiimoteBridge.isClassicActive(forWiimote: slot),
+                    sideways: DOLWiimoteBridge.isSideways(forWiimote: slot))
+      } else if shouldShowGameCubePad() {
+        return .gameCube
+      }
+      return nil
+    }
+
+    /// Mount or update the programmatic overlay in `container`. Returns without doing anything
+    /// when neither pad should currently show, leaving `container` empty exactly like the legacy
+    /// path does.
+    private func syncProgrammaticOverlay(in container: UIView, context: Context) {
+      guard let kind = programmaticPadKind() else {
+        context.coordinator.hosting?.view.removeFromSuperview()
+        context.coordinator.hosting = nil
+        return
+      }
+      let isWiiKind = kind != .gameCube
+      let deviceId = ControllerManager.shared.touchscreenControllerId(isWii: isWiiKind)
+      if isWiiKind {
+        // The IMU pointer's port must follow the touchscreen device id (§6.3) even though phase 2
+        // doesn't drive IR itself yet — gyro-mode IR keeps working unchanged (design §2 non-goal).
+        TCDeviceMotion.shared.setPort(deviceId)
+      }
+      if let hosting = context.coordinator.hosting {
+        hosting.rootView = TouchOverlayView(padKind: kind, deviceId: deviceId)
+        if hosting.view.superview !== container {
+          hosting.view.frame = container.bounds
+          container.addSubview(hosting.view)
+        }
+      } else {
+        let hosting = UIHostingController(rootView: TouchOverlayView(padKind: kind, deviceId: deviceId))
+        hosting.view.backgroundColor = .clear
+        hosting.view.frame = container.bounds
+        hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        container.addSubview(hosting.view)
+        context.coordinator.hosting = hosting
+      }
+      // TouchOverlayView applies the opacity setting per group itself; the container stays opaque.
+      container.alpha = 1.0
+    }
+
     func makeUIView(context: Context) -> UIView {
       let host = UIView()
       host.backgroundColor = .clear
       host.isUserInteractionEnabled = true
+
+      if Self.useProgrammaticOverlay {
+        syncProgrammaticOverlay(in: host, context: context)
+        return host
+      }
 
       // Decide which pad to show based on current system/controller config
       if shouldShowWiiPad() {
@@ -187,6 +259,22 @@ extension EmulationScreen {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
+      // If the flag flipped (or the hosting view was torn down) since this container was last
+      // mounted, do a full rebuild instead of letting the legacy branch below mistake the
+      // programmatic overlay's UIHostingController view for a plain GC pad subview (or vice
+      // versa) — they're both just "a subview" to the legacy logic's `uiView.subviews.first`.
+      let mountedIsHosting = context.coordinator.hosting?.view.superview === uiView
+      if Self.useProgrammaticOverlay != mountedIsHosting {
+        context.coordinator.hosting?.view.removeFromSuperview()
+        context.coordinator.hosting = nil
+        uiView.subviews.forEach { $0.removeFromSuperview() }
+      }
+
+      if Self.useProgrammaticOverlay {
+        syncProgrammaticOverlay(in: uiView, context: context)
+        return
+      }
+
       // In-place update when the right kind of pad is already mounted: mode, opacity and the
       // pointer rect. A full rebuild only happens when the pad kind changes (or on a new
       // `touchPadsRefreshToken`, which SwiftUI turns into a fresh makeUIView).
