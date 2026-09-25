@@ -168,9 +168,71 @@ enum LibraryGameSystem {
   }
 }
 
-// MARK: - Platform filter tab bar
+// MARK: - Shared pill/glass chrome
 
-/// Floating segmented filter above the search field; hidden when only one platform exists.
+/// "Liquid glass" background shared by every platform-filter/search pill so
+/// the tvOS-only bar and the iOS combined search+filter bar (see
+/// `LibrarySearchFilterBar`) can never visually drift apart.
+@ViewBuilder
+func libraryFilterGlassBackground<S: Shape>(_ shape: S) -> some View {
+  if #available(iOS 26.0, tvOS 26.0, *) {
+    shape
+      .fill(.clear)
+      .glassEffect()
+  } else {
+    shape
+      .fill(.ultraThinMaterial)
+      .overlay(
+        shape.stroke(.white.opacity(0.12), lineWidth: 1)
+      )
+  }
+}
+
+/// Shared pill chrome for a single platform-filter option, used by both the
+/// tvOS-only `LibraryPlatformFilterBar` and the iOS `LibrarySearchFilterBar`.
+@ViewBuilder
+func libraryPlatformFilterPill(
+  category: LibraryPlatformCategory,
+  count: Int,
+  isSelected: Bool,
+  action: @escaping () -> Void
+) -> some View {
+  Button(action: action) {
+    HStack(spacing: 3) {
+      Text(category.displayName)
+        .font(.caption.weight(isSelected ? .semibold : .regular))
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+      if count > 0 {
+        Text("\(count)")
+          .font(.caption2.weight(.medium))
+          .foregroundStyle(.secondary)
+          .monospacedDigit()
+      }
+    }
+    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .fixedSize(horizontal: true, vertical: false)
+    .background {
+      if isSelected {
+        Capsule(style: .continuous)
+          .fill(Color.accentColor.opacity(0.18))
+      }
+    }
+    .contentShape(Capsule(style: .continuous))
+  }
+  .buttonStyle(.plain)
+  .accessibilityLabel("\(category.displayName), \(count) \(L("games"))")
+  .accessibilityAddTraits(isSelected ? .isSelected : [])
+}
+
+// MARK: - Platform filter tab bar (tvOS)
+
+/// Floating segmented filter; hidden when only one platform exists. tvOS keeps
+/// this standalone pill bar (its search is the native `.searchable` field via
+/// the tvOS search sheet). iOS uses the combined `LibrarySearchFilterBar`
+/// instead so the pills and search affordance always share one row.
 struct LibraryPlatformFilterBar: View {
   @Binding var selection: LibraryPlatformCategory
   let games: [TVGameItem]
@@ -191,7 +253,7 @@ struct LibraryPlatformFilterBar: View {
       }
       .padding(.horizontal, 6)
       .padding(.vertical, 5)
-      .background { filterBarBackground }
+      .background { libraryFilterGlassBackground(Capsule(style: .continuous)) }
       .clipShape(Capsule(style: .continuous))
       .padding(.horizontal, 16)
       .padding(.bottom, 4)
@@ -199,71 +261,246 @@ struct LibraryPlatformFilterBar: View {
   }
 
   @ViewBuilder
-  private var filterBarBackground: some View {
-    if #available(iOS 26.0, tvOS 26.0, *) {
-      Capsule(style: .continuous)
-        .fill(.clear)
-        .glassEffect()
-    } else {
-      Capsule(style: .continuous)
-        .fill(.ultraThinMaterial)
-        .overlay(
-          Capsule(style: .continuous)
-            .stroke(.white.opacity(0.12), lineWidth: 1)
-        )
-    }
-  }
-
-  private func compactTitle(for cat: LibraryPlatformCategory) -> String {
-    switch cat {
-    case .all: return L("All")
-    case .gameCube: return L("GameCube")
-    case .wii: return L("Wii")
-    case .wiiWare: return L("WiiWare")
-    }
-  }
-
-  @ViewBuilder
   private func filterButton(for cat: LibraryPlatformCategory) -> some View {
     let count = LibraryPlatformMapper.count(in: games, for: cat, overrides: overrides)
     let isSelected = selection == cat
-
-    Button {
+    libraryPlatformFilterPill(category: cat, count: count, isSelected: isSelected) {
       selection = cat
       #if os(iOS)
       UIImpactFeedbackGenerator(style: .light).impactOccurred()
       #endif
       onSelectionChange?()
-    } label: {
-      HStack(spacing: 3) {
-        Text(compactTitle(for: cat))
-          .font(.caption.weight(isSelected ? .semibold : .regular))
-          .lineLimit(1)
-          .minimumScaleFactor(0.75)
-        if count > 0 {
-          Text("\(count)")
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
-        }
-      }
-      .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
-      .fixedSize(horizontal: true, vertical: false)
-      .background {
-        if isSelected {
-          Capsule(style: .continuous)
-            .fill(Color.accentColor.opacity(0.18))
-        }
-      }
-      .contentShape(Capsule(style: .continuous))
     }
-    .buttonStyle(.plain)
-    .accessibilityLabel("\(cat.displayName), \(count) \(L("games"))")
-    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 }
+
+// MARK: - Combined search + platform filter bar (iOS)
+
+#if os(iOS) || targetEnvironment(macCatalyst)
+/// Unified iOS library search + platform-filter bar, ported from iFly's
+/// `searchFilterBar`/`activeFilterChip`/`searchTextField` pattern (see
+/// iFly/Sources/UI/Views/LibraryView+Grid.swift). Replaces the previous
+/// combination of a top nav-bar `.searchable` field (`LibrarySearchableModifier`)
+/// and a separate bottom pill bar (`LibraryPlatformFilterBar`) — those lived in
+/// two different containers (top vs. bottom), and pre-iOS-26 `.searchable`'s
+/// `.navigationBarDrawer(displayMode: .always)` placement always forced the
+/// search field onto its own row below the title bar, wasting vertical space
+/// even on a wide iPad where the field could sit inline. That's the root cause
+/// of the "search icon renders below when plenty of horizontal space exists"
+/// report.
+///
+/// Collapsed: the horizontally-scrolling platform pills (hidden when only one
+/// platform exists) and a standalone search button share ONE row, with the
+/// search button pinned trailing. Expanded (tap the search button): both morph
+/// into a single glass bar holding a menu-driven "active filter" chip (tap to
+/// change platform without leaving search) and a full-width text field.
+/// Collapsed and expanded states share the same row height so the library
+/// grid's bottom inset never jumps between them.
+struct LibrarySearchFilterBar: View {
+  @Binding var selection: LibraryPlatformCategory
+  @Binding var searchText: String
+  @Binding var isExpanded: Bool
+  var searchFieldFocus: FocusState<Bool>.Binding
+  let games: [TVGameItem]
+  let overrides: [String: LibraryPlatformCategory]
+  var onSelectionChange: (() -> Void)?
+
+  private static let rowMinHeight: CGFloat = 30
+  private static let barCornerRadius: CGFloat = 22
+  private static let searchButtonDimension: CGFloat = 46
+
+  private var visibleCategories: [LibraryPlatformCategory] {
+    let available = LibraryPlatformMapper.availableCategories(in: games, overrides: overrides)
+    return [.all] + LibraryPlatformCategory.filterCases.filter { available.contains($0) }
+  }
+
+  /// Matches `LibraryPlatformFilterBar`'s gating: pills only matter once more
+  /// than one platform is actually present in the library.
+  private var showsPillScroll: Bool {
+    LibraryPlatformMapper.availableCategories(in: games, overrides: overrides).count > 1
+  }
+
+  var body: some View {
+    HStack(spacing: 10) {
+      if isExpanded {
+        expandedBar
+      } else {
+        collapsedBar
+      }
+    }
+    .padding(.horizontal, 16)
+    .padding(.bottom, 4)
+    .animation(.easeInOut(duration: 0.25), value: isExpanded)
+  }
+
+  @ViewBuilder
+  private var expandedBar: some View {
+    HStack(spacing: 8) {
+      if showsPillScroll {
+        activeFilterChip
+      }
+      searchField
+    }
+    .frame(minHeight: Self.rowMinHeight)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 9)
+    .background {
+      libraryFilterGlassBackground(RoundedRectangle(cornerRadius: Self.barCornerRadius, style: .continuous))
+    }
+    .clipShape(RoundedRectangle(cornerRadius: Self.barCornerRadius, style: .continuous))
+    .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+  }
+
+  @ViewBuilder
+  private var collapsedBar: some View {
+    if showsPillScroll {
+      pillScroll
+        .frame(minHeight: Self.rowMinHeight)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background { libraryFilterGlassBackground(Capsule(style: .continuous)) }
+        .clipShape(Capsule(style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+    } else {
+      Spacer(minLength: 0)
+    }
+    searchIconButton
+  }
+
+  private var pillScroll: some View {
+    ScrollViewReader { proxy in
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 4) {
+          ForEach(visibleCategories) { cat in
+            let count = LibraryPlatformMapper.count(in: games, for: cat, overrides: overrides)
+            libraryPlatformFilterPill(category: cat, count: count, isSelected: selection == cat) {
+              selection = cat
+              UIImpactFeedbackGenerator(style: .light).impactOccurred()
+              onSelectionChange?()
+            }
+            .id(cat)
+          }
+        }
+      }
+      .onChange(of: selection) { _, newValue in
+        withAnimation(.easeInOut(duration: 0.2)) {
+          proxy.scrollTo(newValue, anchor: .center)
+        }
+      }
+    }
+  }
+
+  /// Expanded-state chip showing the active platform filter; tap to pick another
+  /// without collapsing the search field.
+  private var activeFilterChip: some View {
+    Menu {
+      ForEach(visibleCategories) { cat in
+        Button {
+          withAnimation(.easeInOut(duration: 0.2)) { selection = cat }
+          onSelectionChange?()
+        } label: {
+          if selection == cat {
+            Label(cat.displayName, systemImage: "checkmark")
+          } else {
+            Text(cat.displayName)
+          }
+        }
+      }
+    } label: {
+      HStack(spacing: 4) {
+        Text(selection.displayName)
+          .font(.subheadline.weight(.semibold))
+          .lineLimit(1)
+        Image(systemName: "chevron.down")
+          .font(.caption2.weight(.semibold))
+      }
+      .foregroundStyle(.white)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 7)
+      .background(Capsule().fill(Color.accentColor))
+    }
+    .buttonStyle(.plain)
+    .fixedSize()
+    .accessibilityLabel("\(L("Platform filter")): \(selection.displayName)")
+  }
+
+  /// Expanded-state full-width text field with leading magnifier and a clear (x).
+  private var searchField: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "magnifyingglass")
+        .foregroundStyle(.secondary)
+      TextField(L("Search Games"), text: $searchText)
+        .textFieldStyle(.plain)
+        .focused(searchFieldFocus)
+        .submitLabel(.search)
+        .autocorrectionDisabled(true)
+        .textInputAutocapitalization(.never)
+        .onSubmit { searchFieldFocus.wrappedValue = false }
+      Button(action: clearOrDismiss) {
+        Image(systemName: "xmark.circle.fill")
+          .foregroundStyle(.secondary)
+          .frame(width: 28, height: 28)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(searchText.isEmpty ? L("Dismiss search") : L("Clear search"))
+    }
+    .frame(maxWidth: .infinity)
+  }
+
+  /// Collapsed-state standalone search button (its own glass pill). Carries an
+  /// accent badge when a query is active, so a filtering search stays visible
+  /// even with the field shut.
+  private var searchIconButton: some View {
+    Button(action: expandSearch) {
+      ZStack(alignment: .topTrailing) {
+        Image(systemName: "magnifyingglass")
+          .font(.title3)
+          .foregroundStyle(searchText.isEmpty ? Color.primary : Color.accentColor)
+        if !searchText.isEmpty {
+          Circle()
+            .fill(Color.accentColor)
+            .frame(width: 7, height: 7)
+            .offset(x: 5, y: -3)
+        }
+      }
+      .frame(width: Self.searchButtonDimension, height: Self.searchButtonDimension)
+      .contentShape(Rectangle())
+      .background { libraryFilterGlassBackground(Circle()) }
+      .clipShape(Circle())
+      .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(
+      searchText.isEmpty
+        ? L("Search games")
+        : String(format: L("Search games (active query: %1$@)"), searchText)
+    )
+  }
+
+  /// Open the inline search field and focus it. Focus is deferred one runloop
+  /// turn: the `TextField` is inserted by the `isExpanded` flip above and
+  /// doesn't exist yet this turn, so a synchronous focus assignment would
+  /// target a not-yet-mounted view and no-op (expand, but no keyboard).
+  private func expandSearch() {
+    withAnimation(.easeInOut(duration: 0.25)) { isExpanded = true }
+    DispatchQueue.main.async { searchFieldFocus.wrappedValue = true }
+  }
+
+  /// The x in the search field, two-step:
+  /// - query present -> clear it, but keep the field open + focused so the
+  ///   user can retype.
+  /// - already empty -> dismiss: resign focus, which collapses the bar via
+  ///   the caller's `onChange(of: searchFieldFocused)`.
+  private func clearOrDismiss() {
+    if searchText.isEmpty {
+      searchFieldFocus.wrappedValue = false
+    } else {
+      searchText = ""
+    }
+  }
+}
+#endif
 
 // MARK: - Multi-select action bar
 
