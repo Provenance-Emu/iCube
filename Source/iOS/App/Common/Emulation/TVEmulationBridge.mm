@@ -327,10 +327,6 @@ static void ApplyConfiguredFastForwardSpeed() {
     group->enabled.SetValue(enabled);
 }
 
-+ (void)setWiiIMUPointEnabled:(BOOL)enabled {
-  [self setWiiIMUPointEnabled:enabled forWiimote:0];
-}
-
 + (CGRect)currentVideoContentRect {
   UIView* view = [[EmulationCoordinator shared] mainDisplayView];
   if (!view) return CGRectZero;

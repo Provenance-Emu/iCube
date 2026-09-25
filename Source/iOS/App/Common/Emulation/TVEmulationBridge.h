@@ -90,9 +90,6 @@ NS_ASSUME_NONNULL_BEGIN
 // pass `ControllerManager.shared.touchscreenSlot(system: .wii) ?? 0` so the right emulated pad
 // is targeted when the on-screen overlay is bound to a port other than Wii Remote 1.
 + (void)setWiiIMUPointEnabled:(BOOL)enabled forWiimote:(NSInteger)wiimote;
-// Convenience wrapper targeting Wii Remote 1 (slot 0), kept for callers that have not been
-// made port-aware yet.
-+ (void)setWiiIMUPointEnabled:(BOOL)enabled;
 
 // Video Geometry
 // Returns the current video content rect in the coordinate space of the registered main display view.
