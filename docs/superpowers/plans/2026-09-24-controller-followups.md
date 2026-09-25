@@ -79,9 +79,58 @@ code, the evidence so far, and who should do it (main session vs. a cheaper suba
    pointer sensitivity), and a pass over the DSU controller code (`DSUServerBridge`, the mirror
    writes in `TCManagerInterface.mm`) so a redesigned overlay does not double-feed DSU clients.
 
+## D. Pause menu, library and HUD (second user list, same evening)
+
+10. **Pause-menu "Save States" screen** (`SaveStateFilmstripView.swift`, opened from
+    `PauseMenuView` `showFilmstripSheet`): redesign as a grid of thumbnails with slot number,
+    timestamp, game-time, and a clear Save-here / Load / Delete per card; large-title previews on
+    tvOS; controller focus rules from `icube-tvos-swiftui-focus`. Sonnet can draft the layout;
+    verify on both platforms.
+11. **Library "Boot Save" picker**: broken artwork layout and tapping a state does nothing.
+    Entry: `TVLibraryView.swift` (the boot-save sheet near the save-state context actions) ->
+    `SaveStateService` pending state. Reproduce on the phone first (tap does not launch), then
+    fix the layout in the same pass. Small, main session.
+12. **"Boot fresh" still resumes the last auto-save.** Trace `GameLaunchRequest.launch` ->
+    `SaveStateService.resumeOrBootIntoPendingState()` (called from the DidStart observers in
+    `EmulationScreen.swift`): the "fresh" path must clear the pending state AND skip the
+    `<gameid>.auto` load (the coordinator loads it on boot; see `SaveStateFilmstripView.swift:77`
+    for the existing "boot fresh then land on state" flow). Also note the debug API's
+    `/api/debug/stop` rewrites `<gameid>.auto` (icube-phone-debug-recipe). Small, main session.
+13. **Top-bar HUD**: janky and not controller-navigable. Options: (a) make the existing bar a
+    focusable `HStack` of buttons with an explicit focus order and a controller shortcut to reveal
+    it; (b) replace with a data-driven HUD (see 18). Evaluate packages before building: e.g. a
+    focus-engine helper / segmented HUD library that supports tvOS focus; list candidates with
+    licenses first (haiku subagent), decide in a design doc.
+14. **Fast Forward from the pause menu**: choose the speed (1.5x / 2x / 3x / unlimited) inline,
+    then dismiss the menu and start immediately. `PauseMenuView` item at line ~92 toggles via
+    `TVEmulationBridge.toggleFastForward()`; needs a `setFastForwardSpeed` bridge (the core's
+    `MAIN_EMULATION_SPEED` / `MAIN_FAST_FORWARD_*`) and a HUD pill showing the active speed.
+15. **Cheats widget in the pause menu**: show "N active" on the menu item and an on/off toggle
+    per cheat inline (`CheatsMenuView.swift`, `PauseMenuView` item at line ~97). Needs a count
+    from the core's enabled AR/Gecko lists for the running game.
+16. **Shader UI**: strip the debug controls, port iFly's quick-preview pause-menu shader picker
+    (live thumbnail per shader, tap to apply, long-press for parameters); keep iCube's visual
+    style. Compare `iFly/iFly/Sources/UI/Views/EmulationPauseMenuSupport.swift` and its shader
+    picker with `Common/Swift/Shaders/`. Sonnet port, main session wiring.
+17. **Library source picker steals focus**: with a controller, booting a game that has more than
+    one source (`TVLibraryView.swift:1988` `sourcePickerItems` sheet) moves focus in the sheet
+    AND in the library behind it. The sheet needs its own focus scope and the library must
+    ignore controller input while a sheet is up (same class as the pause-menu nav in
+    `PauseMenuView` `setupPauseControllerNav`). Small, main session with a controller.
+18. **Data-driven pause menu and settings, fully controller-navigable on iOS.** Both menus are
+    hand-built SwiftUI with per-item focus hacks. Proposal: a `MenuModel` (sections -> items with
+    id, title, subtitle, icon, role, action, badge, submenu) rendered by one `MenuScreen` that
+    owns focus, controller navigation (d-pad/stick, A/B, shoulders for section jumps), search,
+    and reordering; the pause menu, Quick Slots, Controllers, Cheats, Shaders and the Settings
+    root become models. Design doc first; then one session for the engine, one per migrated
+    screen. This also absorbs 13 (HUD) and the tvOS focus traps.
+
 ## Session / agent split
 
 - Main session (phone attached over USB): B1, B3 landing, B4, B5, verification of everything.
 - Sonnet subagent: B3 element-name trace, B2 implementation (touch-free change), the mechanical
   parts of C8 (port of iFly's layout model + persistence) once the design doc exists.
-- New session each: C7 (after a design doc), C8 phases, C9.
+- New session each: C7 (after a design doc), C8 phases, C9, D18 (engine, then per screen).
+- Small main-session items to batch on the next phone day: B1, B4, B5, D11, D12, D14, D17.
+- Sonnet/haiku prep that needs no device: D13 package survey, D10 layout draft, D16 port draft,
+  B2, B3 element trace.

@@ -35,6 +35,17 @@ phone flat (drag/follow/gyro via the cursor menu), a Wii pad button press, `Wiim
 sheet and confirm the overlay drives it (`Device = iOS/5/Touchscreen`, log line
 `Wii Remote 2 -> iOS/5/Touchscreen`), Motion Debug screen shows live values with no second shake.
 
+## User reports after P1 (same evening) and the plan for them
+
+See `docs/superpowers/plans/2026-09-24-controller-followups.md`: pause-menu Controllers was
+GameCube-only (fixed: `ControllerManager.isWiiSystem` was never set), the setup view showed
+Touchscreen on all four rows (fixed: inactive slots now show None), profile pick double-tap
+(fixed: dismiss before load), "no cursor in any mode" (not reproduced; DEV config healthy, likely
+the pre-P0 release build), plus the queue: unpause-while-in-menu (`PauseMenuView.onDisappear`
+resumes), library system filter via paddles, DualSense Share/Options vs GameCube Start, remapping
+UI rewrite, programmatic on-screen controller ported from iFly's skin stack, style/IR-area menus
+and a DSU pass.
+
 ## Then P2 (audit §5, items 8-11)
 
 - Single-sided IR writes: `TCWiiPad.sendIR` (`TCWiiPad.swift:238-247`) and
