@@ -41,6 +41,19 @@ internal struct PauseMenuView: View {
   /// WS-4: "continue this game on another device".
   @State private var showContinuitySheet: Bool = false
 
+  /// True while any sheet, full-screen cover, or non-main pane owned by this menu is
+  /// up. Gates the resume-on-disappear below (B1): every one of these presentations
+  /// can report an onDisappear on the outer ZStack while it is on screen, and none of
+  /// them should resume the game underneath.
+  private var isPauseMenuChildPresented: Bool {
+    if pane != .main { return true }
+    if showShaders || showContinuitySheet || showFilmstripSheet { return true }
+    #if os(iOS)
+    if showSettingsSheet || showControllersSheet { return true }
+    #endif
+    return false
+  }
+
   // Quick actions: the two things people actually reach for mid-game without
   // wanting to leave the pause menu (mute to take a call, fast-forward past a
   // cutscene). Kept as plain toggles on the main pane rather than a settings
@@ -178,6 +191,16 @@ internal struct PauseMenuView: View {
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
     }
     .onDisappear {
+      // `.sheet`/`.fullScreenCover` presentation (Shaders, Settings, Controllers,
+      // Continuity, the save-state Filmstrip) and the tvOS Controllers/Saves/Cheats
+      // panes all report an onDisappear on this outer ZStack while they are the ones
+      // actually on screen — SwiftUI treats the covered presenter as "disappeared"
+      // even though it is still mounted underneath. Resuming unconditionally here
+      // meant opening any of those from the pause menu resumed emulation while the
+      // menu (or its sheet) was still visible. Only resume when nothing else from
+      // this menu is currently presented — i.e. this is a real teardown (Resume,
+      // Exit, or the parent dismissing the whole menu), not a covering child.
+      guard !isPauseMenuChildPresented else { return }
       if TVEmulationBridge.isRunning() && TVEmulationBridge.isPaused() { TVEmulationBridge.resume() }
     }
     #if os(tvOS)
