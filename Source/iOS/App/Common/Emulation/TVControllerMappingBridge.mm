@@ -117,6 +117,39 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
   pad->UpdateReferences(g_controller_interface);
 }
 
+// Mirrors the file-static `HasAnyBoundControl` in EmulationCoordinator.mm (not exported, so
+// duplicated here rather than shared). No state lock: matches the other read-only accessors in
+// this file (e.g. padControlExpressionsForGroup:) rather than the name/translation readers that
+// take `EmulatedController::GetStateLock()`.
+static BOOL ControllerHasAnyBoundControl(const ControllerEmu::EmulatedController* controller)
+{
+  if (!controller)
+    return NO;
+  for (const auto& group : controller->groups)
+    for (const auto& control : group->controls)
+      if (control->control_ref && !control->control_ref->GetExpression().empty())
+        return YES;
+  return NO;
+}
+
++ (BOOL)padHasAnyBinding:(NSInteger)portOneBased
+{
+  auto* cfg = Pad::GetConfig();
+  if (!cfg)
+    return NO;
+  const int port = static_cast<int>(portOneBased - 1);
+  return ControllerHasAnyBoundControl(cfg->GetController(port));
+}
+
++ (BOOL)wiimoteHasAnyBinding:(NSInteger)indexOneBased
+{
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg)
+    return NO;
+  const int idx = static_cast<int>(indexOneBased - 1);
+  return ControllerHasAnyBoundControl(cfg->GetController(idx));
+}
+
 + (void)reconcileAssignments
 {
   auto* cfg = Pad::GetConfig();

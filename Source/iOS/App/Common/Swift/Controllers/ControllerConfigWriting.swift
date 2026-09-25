@@ -35,6 +35,16 @@ protocol ControllerConfigWriting {
   /// Clear the default device binding for a port.
   func clearDefaultDevice(system: EmulatedSystem, port: Int)
 
+  // MARK: Mapping state
+
+  /// True when the slot already has at least one non-empty control mapping
+  /// (a real binding, not just an activated-but-unconfigured default).
+  /// Disconnecting a device only clears its default-device binding — the
+  /// mapping itself is left alone — so this stays true across a reconnect.
+  /// `ControllerAssignmentService.assign` uses this to avoid clobbering a
+  /// user-picked profile every time `AssignmentEngine` re-places a pad.
+  func hasMapping(system: EmulatedSystem, port: Int) -> Bool
+
   // MARK: Profile
 
   /// The default input-profile name for a device qualifier

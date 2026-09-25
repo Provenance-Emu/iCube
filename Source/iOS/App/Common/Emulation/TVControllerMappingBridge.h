@@ -25,6 +25,18 @@ extern NSString* const TVControllerDevicesChangedNotification;
 + (NSString*)defaultDeviceForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(defaultDevice(forGCPort:));
 + (void)clearDefaultDeviceForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(clearDefaultDevice(forGCPort:));
 
+/// True when the GC pad slot's emulated controller has at least one non-empty
+/// control expression bound — i.e. it has a real mapping, not just an
+/// activated-but-unconfigured default. `reconcileAssignments` clears a
+/// disconnected device's default-device binding but never touches these
+/// expressions, so this stays true across a reconnect. Used by
+/// `ControllerAssignmentService.assign` to decide whether re-binding a device
+/// should reload the device-default profile or keep the existing mapping.
++ (BOOL)padHasAnyBinding:(NSInteger)portOneBased NS_SWIFT_NAME(padHasAnyBinding(forGCPort:));
+
+/// Wiimote counterpart of `padHasAnyBinding:`.
++ (BOOL)wiimoteHasAnyBinding:(NSInteger)indexOneBased NS_SWIFT_NAME(wiimoteHasAnyBinding(forWiimote:));
+
 /// Assign the iOS Touchscreen virtual device as the default device for a GC port.
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
 
