@@ -76,13 +76,6 @@ void Reset();
 #include "Core/Config/WiimoteSettings.h"
 #include "Core/System.h"  // 2606: PerformanceMetrics lives on Core::System
 
-static inline bool _EndsWith(const std::string& s, const char* suf)
-{
-  const size_t slen = s.size();
-  const size_t tlen = strlen(suf);
-  return slen >= tlen && 0 == s.compare(slen - tlen, tlen, suf);
-}
-
 // Dump the perf-relevant settings as one readable key=value block, once at game START and once at
 // game EXIT. Goes to both NSLog (device console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so
 // Joe can copy-paste it straight into a bug report. Values are formatted human-readably (true/false,
@@ -1531,169 +1524,155 @@ static void DisableCoreIMUPointerOnTouchscreenWiimotes()
     config->SaveConfig();
 }
 
+// ---- Touchscreen binding: one mechanical helper, three policies -------------------------------
+//
+// The policies (Pad 1 fallback, Wii Remote 1 fallback, explicit per-slot assignment) used to carry
+// three copies of the profile search with three different rules. Long term the policy belongs in
+// the Swift ControllerAssignmentService; what stays here must be mechanical: bind, load profile,
+// save.
+
+static bool HasAnyBoundControl(const ControllerEmu::EmulatedController* controller)
+{
+  for (const auto& group : controller->groups)
+    for (const auto& control : group->controls)
+      if (control->control_ref && !control->control_ref->GetExpression().empty())
+        return true;
+  return false;
+}
+
+// Loads the on-screen profile: the user's Touchscreen.ini first, then the bundled one, then
+// LoadDefaults. Returns the path loaded (empty when defaults were used). The old Wii Remote 1
+// path preferred "Wii Remote with MotionPlus Pointing.ini", a profile for a real Bluetooth
+// remote (`Device = Bluetooth/0/Wii Remote`, inputs named `A`, `Gyro Pitch Up`, ...): loaded into
+// a touchscreen slot it rebinds the slot to that Bluetooth device and leaves every control dead.
+static std::string LoadTouchscreenProfile(ControllerEmu::EmulatedController* controller, InputConfig* config)
+{
+  const auto join = [](const std::string& dir, const char* file) {
+    return dir + (dir.empty() || dir.back() == '/' ? "" : "/") + std::string(file);
+  };
+  for (const std::string& dir : {config->GetUserProfileDirectoryPath(), config->GetSysProfileDirectoryPath()})
+  {
+    const std::string path = join(dir, "Touchscreen.ini");
+    Common::IniFile ini;
+    if (File::Exists(path) && ini.Load(path))
+    {
+      controller->LoadConfig(ini.GetOrCreateSection("Profile"));
+      return path;
+    }
+  }
+  controller->LoadDefaults(g_controller_interface);
+  return {};
+}
+
+// Binds player `index` of `config` to Touchscreen instance `dq_touch` and persists it.
+//
+// The profile is (re)loaded only when the binding actually changes or the slot has no mapping at
+// all, so a touch mapping the user edited survives every boot and pause-menu pass. (Two of the
+// old copies reloaded it unconditionally; the third skipped it whenever ANY .ini existed in the
+// user profile directory, including the user's own Touchscreen.ini -- audit defect #9.)
+// `EmulatedController::LoadConfig` applies the profile's own `Device =` line, and the bundled Wii
+// profile names instance 4, which is only right for Wii Remote 1; the requested instance is
+// therefore set AFTER the load.
+static void BindTouchscreen(InputConfig* config, int index, const ciface::Core::DeviceQualifier& dq_touch)
+{
+  auto* controller = config->GetController(index);
+  if (!controller)
+    return;
+  const bool rebinding = !(controller->GetDefaultDevice() == dq_touch);
+  std::string what = "mapping kept";
+  if (rebinding || !HasAnyBoundControl(controller))
+  {
+    const std::string loaded = LoadTouchscreenProfile(controller, config);
+    what = loaded.empty() ? "defaults" : loaded;
+  }
+  controller->SetDefaultDevice(dq_touch);
+  controller->UpdateReferences(g_controller_interface);
+  config->SaveConfig();
+  NSLog(@"[iCube][Input] %s %d -> %s (%s)", config->GetGUIName().c_str(), index + 1,
+        dq_touch.ToString().c_str(), what.c_str());
+}
+
+// True when some OTHER active slot already holds a touchscreen instance. "Active" matters: every
+// slot's stock default is `iOS/0/Touchscreen` with the port/source off, and treating that as an
+// explicit assignment left Pad 1 / Wii Remote 1 unbound forever.
+static bool TouchscreenOwnedByAnotherPad(int except_index)
+{
+  auto* config = Pad::GetConfig();
+  for (int i = 0; i < config->GetControllerCount(); ++i)
+  {
+    if (i == except_index)
+      continue;
+    auto* p = config->GetController(i);
+    if (p && IsTouchscreenQualifier(p->GetDefaultDevice()) &&
+        Config::Get(Config::GetInfoForSIDevice(i)) != SerialInterface::SIDEVICE_NONE)
+      return true;
+  }
+  return false;
+}
+
+static bool TouchscreenOwnedByAnotherWiimote(int except_index)
+{
+  auto* config = Wiimote::GetConfig();
+  for (int i = 0; i < config->GetControllerCount(); ++i)
+  {
+    if (i == except_index)
+      continue;
+    auto* w = config->GetController(i);
+    if (w && IsTouchscreenQualifier(w->GetDefaultDevice()) &&
+        Config::Get(Config::GetInfoForWiimoteSource(i)) == WiimoteSource::Emulated)
+      return true;
+  }
+  return false;
+}
+
+// A slot whose default device is a CONNECTED physical controller is not ours to take: choosing
+// what owns a slot is the Swift AssignmentEngine's job. The on-screen pad is only the fallback
+// when nothing physical is attached. Without this check the fallback ran after reconcile() on
+// the pause-menu path and overwrote the controller the engine had just bound.
+static bool OwnedByConnectedPhysicalDevice(const ControllerEmu::EmulatedController* controller)
+{
+  const auto dq = controller->GetDefaultDevice();
+  return !IsTouchscreenQualifier(dq) && !dq.ToString().empty() &&
+         g_controller_interface.HasConnectedDevice(dq);
+}
+
 static void EnsurePad1DefaultsToTouchscreen()
 {
-  // Bind Pad 1 to iOS Touchscreen unless Touchscreen is explicitly mapped to another player
+  // Pad 1 binds to Touchscreen instance 0 (GC inputs); Wii Remote 1 to instance 4 (Wii inputs).
   if (!Pad::GetConfig() || Pad::GetConfig()->GetControllerCount() == 0)
     return;
-
-  // Pad 1 binds to Touchscreen instance 0 (GC inputs); Wii Remote 1 to instance 4 (Wii inputs).
   ciface::Core::DeviceQualifier dq_touch;
   if (!FindTouchscreenQualifier(0, &dq_touch))
     return;
-  ciface::Core::DeviceQualifier dq_touch_wii;
-  const bool have_wii_touch = FindTouchscreenQualifier(kTouchscreenWiimoteIdBase, &dq_touch_wii);
 
-  // Otherwise, force Pad 1 (index 0) to Touchscreen and load the Touchscreen stock profile
-  auto* pad0 = Pad::GetConfig()->GetController(0);
-  if (pad0)
+  if (auto* pad0 = Pad::GetConfig()->GetController(0))
   {
-    // Respect a CONNECTED physical device already bound to Pad 1. Choosing what
-    // owns Pad 1 is the Swift AssignmentEngine's job; this helper exists only to
-    // make the on-screen pad the fallback when nothing physical is attached.
-    // Without this check it runs after reconcile() on the pause-menu path and
-    // silently overwrites the controller the engine just bound.
-    {
-      const auto dq0 = pad0->GetDefaultDevice();
-      if (!(dq0 == dq_touch) && !dq0.ToString().empty() &&
-          g_controller_interface.HasConnectedDevice(dq0))
-      {
-        goto after_pad1;
-      }
-    }
-
-    // If Touchscreen is explicitly assigned to any Pad other than 0, respect that and leave Pad1 alone
-    {
-      const int numc = Pad::GetConfig()->GetControllerCount();
-      for (int i = 1; i < numc; ++i)
-      {
-        auto* p = Pad::GetConfig()->GetController(i);
-        if (p && p->GetDefaultDevice() == dq_touch)
-        {
-          // Reserved elsewhere; don't remap Pad1
-          goto after_pad1;
-        }
-      }
-    }
-    pad0->SetDefaultDevice(dq_touch);
-    // Load stock Touchscreen profile if present
-    bool loaded_profile_pad = false;
-    {
-      const std::string sysDir = pad0->GetConfig()->GetSysProfileDirectoryPath();
-      const std::string userDir = pad0->GetConfig()->GetUserProfileDirectoryPath();
-      const std::string sysProfile = sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
-      const std::string userProfile = userDir + (userDir.empty() || userDir.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
-      Common::IniFile ini;
-      if (File::Exists(userProfile) && ini.Load(userProfile))
-      {
-        pad0->LoadConfig(ini.GetOrCreateSection("Profile"));
-        loaded_profile_pad = true;
-      }
-      else if (File::Exists(sysProfile) && ini.Load(sysProfile))
-      {
-        pad0->LoadConfig(ini.GetOrCreateSection("Profile"));
-        loaded_profile_pad = true;
-      }
-    }
-    if (!loaded_profile_pad)
-    {
-      pad0->LoadDefaults(g_controller_interface);
-    }
-    pad0->UpdateReferences(g_controller_interface);
-    Pad::GetConfig()->SaveConfig();
-    NSLog(@"[iCube][Input] Ensured Pad1 mapped to iOS Touchscreen: %s", dq_touch.ToString().c_str());
+    if (!OwnedByConnectedPhysicalDevice(pad0) && !TouchscreenOwnedByAnotherPad(0))
+      BindTouchscreen(Pad::GetConfig(), 0, dq_touch);
   }
-after_pad1:
 
-  // Ensure Wiimote 1 uses Touchscreen and Emulated source unless Touchscreen is explicitly mapped elsewhere
   if (Wiimote::GetConfig() && Wiimote::GetConfig()->GetControllerCount() > 0)
   {
-    auto* wm0 = Wiimote::GetConfig()->GetController(0);
-    if (wm0)
+    if (auto* wm0 = Wiimote::GetConfig()->GetController(0))
     {
-      // Set Wiimote source to Emulated for port 0
       Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(0), WiimoteSource::Emulated);
-      // Disable Wiimote 2-4 to avoid a phantom P2 on Wii IR — but ONLY slots that are not
+      // Disable Wiimote 2-4 to avoid a phantom P2 on Wii IR -- but ONLY slots that are not
       // bound to a connected physical controller. Which controller owns a slot is the Swift
       // AssignmentEngine's decision; zeroing every slot here (as this loop used to) ran after
       // reconcile() and silently dropped input from any pad bound to Wiimote 2-4.
       for (int i = 1; i < std::min(4, Wiimote::GetConfig()->GetControllerCount()); ++i)
       {
         auto* wmi = Wiimote::GetConfig()->GetController(i);
-        const auto dqi = wmi ? wmi->GetDefaultDevice() : ciface::Core::DeviceQualifier{};
-        const bool bound_to_connected_physical =
-            wmi && !IsTouchscreenQualifier(dqi) && !dqi.ToString().empty() &&
-            g_controller_interface.HasConnectedDevice(dqi);
-        if (!bound_to_connected_physical)
+        if (!(wmi && OwnedByConnectedPhysicalDevice(wmi)))
           Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(i), WiimoteSource::None);
       }
-      // Respect a CONNECTED physical device already bound to Wiimote 1 (same rule as Pad 1
-      // above): the on-screen pad is only the fallback when nothing physical owns the slot.
-      {
-        const auto dq0 = wm0->GetDefaultDevice();
-        if (!IsTouchscreenQualifier(dq0) && !dq0.ToString().empty() &&
-            g_controller_interface.HasConnectedDevice(dq0))
-        {
-          goto after_wiimote;
-        }
-        if (!have_wii_touch)
-          goto after_wiimote;
-      }
 
-      // If Touchscreen is assigned to another Wiimote index, respect it
-      const int wcount = Wiimote::GetConfig()->GetControllerCount();
-      for (int i = 1; i < wcount; ++i)
-      {
-        auto* w = Wiimote::GetConfig()->GetController(i);
-        // "Explicitly mapped elsewhere" means an ACTIVE (Emulated) slot holding a touchscreen
-        // instance. Every slot's stock default is `iOS/0/Touchscreen` with Source = None, and
-        // treating that as explicit left Wii Remote 1 on the GC instance forever.
-        if (w && IsTouchscreenQualifier(w->GetDefaultDevice()) &&
-            Config::Get(Config::GetInfoForWiimoteSource(i)) == WiimoteSource::Emulated)
-          goto after_wiimote;
-      }
-
-      wm0->SetDefaultDevice(dq_touch_wii);
-      // Load stock touchscreen profile if present
-      bool loaded_profile_wm = false;
-      {
-        const std::string sysDirWM = wm0->GetConfig()->GetSysProfileDirectoryPath();
-        const std::string userDirWM = wm0->GetConfig()->GetUserProfileDirectoryPath();
-        const std::string sysProfileWM = sysDirWM + (sysDirWM.empty() || sysDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
-        const std::string userProfileWM = userDirWM + (userDirWM.empty() || userDirWM.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
-
-        // If any user Wiimote profile exists, skip auto-loading stock profile to respect user mappings
-        bool user_has_any_profile = false;
-        {
-          auto entries = File::ScanDirectoryTree(userDirWM, false);
-          for (const auto& child : entries.children)
-          {
-            if (!child.isDirectory && _EndsWith(child.physicalName, ".ini")) { user_has_any_profile = true; break; }
-          }
-        }
-
-        Common::IniFile iniWM;
-        if (!user_has_any_profile && File::Exists(userProfileWM) && iniWM.Load(userProfileWM))
-        {
-          wm0->LoadConfig(iniWM.GetOrCreateSection("Profile"));
-          loaded_profile_wm = true;
-        }
-        else if (!user_has_any_profile && File::Exists(sysProfileWM) && iniWM.Load(sysProfileWM))
-        {
-          wm0->LoadConfig(iniWM.GetOrCreateSection("Profile"));
-          loaded_profile_wm = true;
-        }
-      }
-      if (!loaded_profile_wm)
-      {
-        wm0->LoadDefaults(g_controller_interface);
-      }
-      wm0->UpdateReferences(g_controller_interface);
-      Wiimote::GetConfig()->SaveConfig();
-      NSLog(@"[iCube][Input] Ensured Wiimote1 mapped to iOS Touchscreen: %s", dq_touch_wii.ToString().c_str());
+      ciface::Core::DeviceQualifier dq_touch_wii;
+      if (FindTouchscreenQualifier(kTouchscreenWiimoteIdBase, &dq_touch_wii) &&
+          !OwnedByConnectedPhysicalDevice(wm0) && !TouchscreenOwnedByAnotherWiimote(0))
+        BindTouchscreen(Wiimote::GetConfig(), 0, dq_touch_wii);
     }
   }
-after_wiimote:
   DisableCoreIMUPointerOnTouchscreenWiimotes();
 }
 
@@ -1705,62 +1684,24 @@ after_wiimote:
   });
 }
 
+// Explicit assignment: the caller (ControllerAssignmentService / DS4 touchpad slots) has already
+// decided this slot is touchscreen-driven, so no "owned elsewhere" veto here. Each Wii Remote N
+// gets its own Touchscreen instance (4+N-1), so several slots can be touch-driven at once; the old
+// veto made this call a no-op whenever Wii Remote 1 was on the touchscreen, i.e. always.
 + (void)ensureWiimoteDefaultsToTouchscreenForPort:(NSInteger)portOneBased
 {
   const int idx = (int)MAX(1, portOneBased) - 1;
   if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= idx)
     return;
-  auto* wm = Wiimote::GetConfig()->GetController(idx);
-  if (!wm)
+  if (!Wiimote::GetConfig()->GetController(idx))
     return;
 
   Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(idx), WiimoteSource::Emulated);
 
-  // Wii Remote N binds to Touchscreen instance 4+N-1 (the Wii-input instances), never to the
-  // GC instance that a name-only lookup returns first.
   ciface::Core::DeviceQualifier dq_touch;
   if (!FindTouchscreenQualifier(kTouchscreenWiimoteIdBase + idx, &dq_touch))
     return;
-
-  // Respect touchscreen if already mapped elsewhere
-  const int wcount = Wiimote::GetConfig()->GetControllerCount();
-  for (int i = 0; i < wcount; ++i)
-  {
-    if (i == idx) continue;
-    auto* w = Wiimote::GetConfig()->GetController(i);
-    if (w && IsTouchscreenQualifier(w->GetDefaultDevice()) &&
-        Config::Get(Config::GetInfoForWiimoteSource(i)) == WiimoteSource::Emulated)
-      goto after_set;
-  }
-
-  wm->SetDefaultDevice(dq_touch);
-  {
-    const std::string sysDirWM = wm->GetConfig()->GetSysProfileDirectoryPath();
-    const std::string userDirWM = wm->GetConfig()->GetUserProfileDirectoryPath();
-    const auto join = [](const std::string& dir, const char* file) {
-      return dir + (dir.empty() || dir.back() == '/' ? "" : "/") + std::string(file);
-    };
-    // Prefer MotionPlus profile to ensure gyro is enabled by default
-    const std::string sysMP = join(sysDirWM, "Wii Remote with MotionPlus Pointing.ini");
-    const std::string userMP = join(userDirWM, "Wii Remote with MotionPlus Pointing.ini");
-    const std::string sysTS = join(sysDirWM, "Touchscreen.ini");
-    const std::string userTS = join(userDirWM, "Touchscreen.ini");
-    Common::IniFile iniWM;
-    if (File::Exists(userMP) && iniWM.Load(userMP))
-      wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
-    else if (File::Exists(sysMP) && iniWM.Load(sysMP))
-      wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
-    else if (File::Exists(userTS) && iniWM.Load(userTS))
-      wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
-    else if (File::Exists(sysTS) && iniWM.Load(sysTS))
-      wm->LoadConfig(iniWM.GetOrCreateSection("Profile"));
-    else
-      wm->LoadDefaults(g_controller_interface);
-  }
-  wm->UpdateReferences(g_controller_interface);
-  Wiimote::GetConfig()->SaveConfig();
-after_set:
-  NSLog(@"[iCube][Input] Ensured Wiimote%ld mapped to iOS Touchscreen: %s", (long)portOneBased, dq_touch.ToString().c_str());
+  BindTouchscreen(Wiimote::GetConfig(), idx, dq_touch);
   DisableCoreIMUPointerOnTouchscreenWiimotes();
 }
 
