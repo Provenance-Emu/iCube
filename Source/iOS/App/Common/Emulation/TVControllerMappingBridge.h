@@ -58,6 +58,13 @@ extern NSString* const TVControllerDevicesChangedNotification;
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore;
 + (BOOL)loadProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased restoreDevice:(BOOL)restore;
 
+/// Profiles (saving). Writes the live pad/Wiimote config to
+/// `<user profile dir>/<name>.ini` — always the user directory, never the sys
+/// directory, so the bundled profiles are never overwritten in place. Returns
+/// NO when the controller does not exist or the file could not be written.
++ (BOOL)saveProfile:(NSString*)name forGCPort:(NSInteger)portOneBased;
++ (BOOL)saveProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased;
+
 /// Device hotplug notifications
 + (void)beginPostingDevicesChangedNotifications;
 + (void)endPostingDevicesChangedNotifications;

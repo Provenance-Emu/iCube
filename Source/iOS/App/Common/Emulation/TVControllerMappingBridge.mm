@@ -433,6 +433,37 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
   return YES;
 }
 
+// Mirror of loadProfile:… in reverse. `SaveConfig` (ControllerEmu.h:245) writes the
+// device line, every control expression and every numeric setting into the
+// section — the same shape the bundled Data/Sys/Profiles/*.ini files have.
+static BOOL SaveControllerProfile(ControllerEmu::EmulatedController* controller, NSString* name)
+{
+  if (!controller || name.length == 0) return NO;
+  const std::string n = [name UTF8String];
+  std::string userDir = controller->GetConfig()->GetUserProfileDirectoryPath();
+  if (userDir.empty()) return NO;
+  if (userDir.back() != '/') userDir += '/';
+  if (!File::CreateFullPath(userDir)) return NO;
+  const std::string userPath = userDir + n + ".ini";
+  Common::IniFile ini;
+  controller->SaveConfig(ini.GetOrCreateSection("Profile"));
+  return ini.Save(userPath) ? YES : NO;
+}
+
++ (BOOL)saveProfile:(NSString*)name forGCPort:(NSInteger)portOneBased
+{
+  auto* cfg = Pad::GetConfig();
+  if (!cfg) return NO;
+  return SaveControllerProfile(cfg->GetController((int)portOneBased - 1), name);
+}
+
++ (BOOL)saveProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased
+{
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg) return NO;
+  return SaveControllerProfile(cfg->GetController((int)indexOneBased - 1), name);
+}
+
 + (NSArray<NSString*>*)padControlNamesForGroup:(NSInteger)portOneBased group:(NSInteger)groupId
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
