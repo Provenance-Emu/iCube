@@ -46,6 +46,17 @@ resumes), library system filter via paddles, DualSense Share/Options vs GameCube
 UI rewrite, programmatic on-screen controller ported from iFly's skin stack, style/IR-area menus
 and a DSU pass.
 
+## Remap UI rewrite (C7) — landed 2026-09-25, not device-exercised
+
+`RemapPlayerView` (`Common/Swift/Controllers/Remap/`) replaces the storyboard / `TVMappingRootViewController`
+drill-down behind "Customize Buttons…". Capture polls `inputStates(forQualifiedDevice:)` at 60 Hz through
+`RemapCaptureMachine` (release-to-arm, 0.35 threshold, 3-poll debounce, 5 s timeout); profile save is the new
+`saveProfile:forGCPort:/forWiimote:`. Plan + spec corrections: `docs/superpowers/plans/2026-09-25-remap-ui-implementation.md`.
+Compiled iOS + tvOS; `RemapModelTests` (11) green on macOS via a throwaway SwiftPM harness. Needs the phone with a
+controller: arm by touch and by A, bind `Button B`, stick halves, cancel by re-tap and timeout, long-press Clear,
+save → load → Reset to Default, Wii extension/sideways consistency with the pause-menu Controllers screen.
+Open: delete `ButtonMappingView.swift` (legacy stack, now unreferenced) and the iOS `ButtonMapping.storyboard`.
+
 ## Then P2 (audit §5, items 8-11)
 
 - Single-sided IR writes: `TCWiiPad.sendIR` (`TCWiiPad.swift:238-247`) and

@@ -87,6 +87,14 @@ R3 sends "-"; gyro-mode pointer direction and reach; Motion Debug shows live val
    `icube-tvos-swiftui-focus`) and touch. Do a short design doc first (brainstorming skill), then
    an opus/sonnet session with the phone for the capture flow. Delete the dead
    `ControllerMappingView` / `ControllerPickerSheet` GC-only widgets as part of it.
+   **Landed 2026-09-25** (compile-gated iOS + tvOS, unit tests green, NOT device-exercised):
+   `f66a12295c` dead widgets deleted, `6c3659f8dd` `saveProfile:forGCPort:/forWiimote:`,
+   `c77b608f81` pure model + `RemapModelTests`, `03c28b067a` `RemapPlayerView` wired to
+   "Customize Buttons…" (`ControllersMappingView.swift` removed). Spec corrections — the real
+   `PadGroup`/`WiimoteGroup` ids, the release-to-arm gate, why B/Menu cannot cancel — are in
+   `docs/superpowers/plans/2026-09-25-remap-ui-implementation.md`. `ButtonMappingView.swift`
+   (tvOS `TVMappingRootViewController` stack + iOS storyboard wrapper) is now unreferenced and
+   still to be deleted. Phone checklist is at the end of that plan file.
 8. **Programmatic on-screen controller replacing the xib pads.** Port iFly's skin/overlay stack
    (`iFly/iFly/Sources/UI/Views/Skins/`, `DeltaSkinView.swift` `SkinLayout`,
    `EmulationView+Layout.swift`, `EmulationView+Overlays.swift`): draggable buttons, resizable
