@@ -211,6 +211,13 @@ struct RemapPlayerView: View {
     // iOS controller-nav ticker, which already gates on `capture == nil`)
     // could switch the bound device out from under a session still polling
     // the OLD device's input list, producing a nonsense binding.
+    // DEVICE-CHECK: on tvOS, disabling this whole section removes every header
+    // row from the focus engine's candidate set the instant a capture arms.
+    // If the Siri Remote's focus happened to be sitting on a header row at
+    // that moment (e.g. the user free-navigated there right before arming a
+    // control row via touch/AssistiveTouch), confirm the focus engine settles
+    // somewhere sane (the armed control row) rather than showing no focus
+    // ring at all — this can only be observed on a real Apple TV.
     .disabled(capture != nil)
   }
 
