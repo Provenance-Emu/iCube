@@ -70,8 +70,15 @@ enum TouchOverlayAnchor: String, Codable, Sendable {
   case bottomLeading
   case bottomTrailing
   case bottomCenter
-  /// The whole overlay (the IR touch surface). `size` is ignored.
+  /// The whole overlay, non-resizable. `size` is ignored. Kept for API completeness; no group
+  /// uses this today (the Wii IR pad, the one candidate, uses `.fillInset` instead — see below).
   case fill
+  /// The whole overlay minus a uniform `margin` on every side (`TouchOverlayPlacement.margin`),
+  /// stored/normalized and resized exactly like any other group (phase 3, task item 1). Unlike
+  /// `.fill`, this anchor's box IS user-movable/resizable through the normal editor — it just
+  /// starts as "most of the screen" instead of a small fixed-size control. Used by `wiiIRPad` so
+  /// it has a real default rect instead of the phase-2 inert full-bounds placeholder.
+  case fillInset
 }
 
 /// A default placement: the group's CENTER sits `inset.x` points in from the anchored
@@ -80,15 +87,22 @@ struct TouchOverlayPlacement: Equatable, Sendable {
   let anchor: TouchOverlayAnchor
   let inset: CGPoint
   let size: CGSize
+  /// Uniform inset from every edge of `bounds`, used only by `.fillInset`.
+  let margin: CGFloat
 
-  init(_ anchor: TouchOverlayAnchor, inset: CGPoint = .zero, size: CGSize = .zero) {
+  init(_ anchor: TouchOverlayAnchor, inset: CGPoint = .zero, size: CGSize = .zero, margin: CGFloat = 0) {
     self.anchor = anchor
     self.inset = inset
     self.size = size
+    self.margin = margin
   }
 
   func resolvedSize(in bounds: CGRect) -> CGSize {
-    anchor == .fill ? bounds.size : size
+    switch anchor {
+    case .fill: return bounds.size
+    case .fillInset: return CGSize(width: max(0, bounds.width - margin * 2), height: max(0, bounds.height - margin * 2))
+    case .bottomLeading, .bottomTrailing, .bottomCenter: return size
+    }
   }
 
   func center(in bounds: CGRect) -> CGPoint {
@@ -99,7 +113,7 @@ struct TouchOverlayPlacement: Equatable, Sendable {
       return CGPoint(x: bounds.maxX - inset.x, y: bounds.maxY - inset.y)
     case .bottomCenter:
       return CGPoint(x: bounds.midX + inset.x, y: bounds.maxY - inset.y)
-    case .fill:
+    case .fill, .fillInset:
       return CGPoint(x: bounds.midX, y: bounds.midY)
     }
   }

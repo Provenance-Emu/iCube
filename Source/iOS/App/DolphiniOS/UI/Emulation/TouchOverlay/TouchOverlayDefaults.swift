@@ -59,6 +59,12 @@ enum TouchOverlayDefaults {
   private static let smallButton = CGSize(width: 46, height: 30)
   private static let stick = CGSize(width: 128, height: 128)
 
+  /// Phase 3 (task item 1): the Wii IR drag/follow surface's default rect is "the whole overlay
+  /// minus a safe margin" on every side, not the phase-2 placeholder's literal full bounds — that
+  /// margin strip stays reachable for the long-press-to-edit catcher in `TouchOverlayView`, and
+  /// gives the group a real, resizable/movable footprint like every other group (§2.4).
+  static let irPadMargin: CGFloat = 24
+
   private static func button(_ id: String, _ raw: Int, _ x: CGFloat, _ y: CGFloat, size: CGSize = smallButton) -> TouchOverlayControl {
     TouchOverlayControl(id: id, kind: .button(id: raw), frame: CGRect(origin: CGPoint(x: x, y: y), size: size))
   }
@@ -154,10 +160,11 @@ enum TouchOverlayDefaults {
     // Z (309,477,46,30): centre (332,492).
     single(.nunchukZ, .bottomTrailing, inset: CGPoint(x: 43, y: 175), size: smallButton,
            kind: .button(id: ID.nunchukZ), id: "nunchuk.z"),
-    // The drag/follow surface is the whole pad today (TCWiiPad minus the controls above).
+    // The drag/follow surface (phase 3): the whole pad inset by `irPadMargin`, movable/resizable
+    // like any other group (§2.4) instead of the phase-2 placeholder's literal full bounds.
     TouchOverlayGroupLayout(
       group: .wiiIRPad,
-      placement: TouchOverlayPlacement(.fill),
+      placement: TouchOverlayPlacement(.fillInset, margin: irPadMargin),
       controls: [TouchOverlayControl(id: "wii.ir", kind: .irSurface, frame: .zero)]),
   ]
 

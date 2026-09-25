@@ -209,13 +209,13 @@ extension EmulationScreen {
         TCDeviceMotion.shared.setPort(deviceId)
       }
       if let hosting = context.coordinator.hosting {
-        hosting.rootView = TouchOverlayView(padKind: kind, deviceId: deviceId)
+        hosting.rootView = TouchOverlayView(padKind: kind, deviceId: deviceId, irMode: irMode)
         if hosting.view.superview !== container {
           hosting.view.frame = container.bounds
           container.addSubview(hosting.view)
         }
       } else {
-        let hosting = UIHostingController(rootView: TouchOverlayView(padKind: kind, deviceId: deviceId))
+        let hosting = UIHostingController(rootView: TouchOverlayView(padKind: kind, deviceId: deviceId, irMode: irMode))
         hosting.view.backgroundColor = .clear
         hosting.view.frame = container.bounds
         hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]

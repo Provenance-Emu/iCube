@@ -68,6 +68,11 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertEqual(TouchOverlayPlacement(.bottomCenter, inset: CGPoint(x: 0, y: 30), size: size).center(in: bounds), CGPoint(x: 400, y: 570))
     let fill = TouchOverlayPlacement(.fill)
     XCTAssertEqual(fill.box(in: bounds), bounds)
+    // Phase 3 (task item 1): `.fillInset` is `.fill` minus a uniform margin, resizable/movable
+    // like any other group (unlike `.fill`, whose size is fixed to `bounds`).
+    let fillInset = TouchOverlayPlacement(.fillInset, margin: 20)
+    XCTAssertEqual(fillInset.center(in: bounds), CGPoint(x: 400, y: 300))
+    XCTAssertEqual(fillInset.box(in: bounds), bounds.insetBy(dx: 20, dy: 20))
   }
 
   // MARK: Defaults reproduce the xib frames at their design size
@@ -109,7 +114,11 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertEqual(controlFrame("wii.home", .wiiMinusPlusHome, .wiiRemote), CGRect(x: 187, y: 477, width: 46, height: 30))
     XCTAssertEqual(controlFrame("wii.minus", .wiiMinusPlusHome, .wiiRemote), CGRect(x: 248, y: 522, width: 46, height: 30))
     XCTAssertEqual(box(.nunchukZ, .wiiRemote), CGRect(x: 309, y: 477, width: 46, height: 30))
-    XCTAssertEqual(box(.wiiIRPad, .wiiRemote), designBounds(.wiiRemote))
+    // Phase 3 (task item 1): the IR pad's default rect is the whole pad minus a safe margin, not
+    // the phase-2 placeholder's literal full bounds, so it's reachable and resizable like any
+    // other group.
+    XCTAssertEqual(box(.wiiIRPad, .wiiRemote),
+                   designBounds(.wiiRemote).insetBy(dx: TouchOverlayDefaults.irPadMargin, dy: TouchOverlayDefaults.irPadMargin))
   }
 
   func testSidewaysDefaultsMatchXib() {
@@ -138,7 +147,10 @@ final class TouchOverlayLayoutTests: XCTestCase {
         XCTAssertEqual(Set(groups).count, groups.count, "\(kind): duplicate group")
         let ids = layouts.flatMap { $0.controls.map(\.id) }
         XCTAssertEqual(Set(ids).count, ids.count, "\(kind): duplicate control id")
-        for layout in layouts where layout.placement.anchor != .fill {
+        // The IR surface's control has a `.zero` placeholder frame (it isn't a positioned button —
+        // §2.1) and its group's `size` field is likewise unset for a `.fillInset` anchor (the real
+        // size is computed dynamically from bounds), so skip it by CONTROL KIND, not anchor.
+        for layout in layouts where !layout.controls.contains(where: { if case .irSurface = $0.kind { return true }; return false }) {
           for control in layout.controls {
             XCTAssertTrue(CGRect(origin: .zero, size: layout.size).insetBy(dx: -0.5, dy: -0.5).contains(control.frame),
                           "\(kind) \(layout.group) \(control.id) leaves its group box")
@@ -357,6 +369,95 @@ final class TouchOverlayLayoutTests: XCTestCase {
                    "sanity check: without a sticky previous, 20 degrees alone is plain [.right]")
     let dirs = TouchOverlayHitTester.dpadDirections(at: point, in: size, previous: [.down, .right])
     XCTAssertEqual(dirs, [.down, .right])
+  }
+
+  // MARK: Phase 3 — Wii IR pure geometry (task item 1 / design §6.4-6.6)
+
+  private func assertRectEqual(_ a: CGRect, _ b: CGRect, accuracy: CGFloat = 1e-6, file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertEqual(a.minX, b.minX, accuracy: accuracy, file: file, line: line)
+    XCTAssertEqual(a.minY, b.minY, accuracy: accuracy, file: file, line: line)
+    XCTAssertEqual(a.width, b.width, accuracy: accuracy, file: file, line: line)
+    XCTAssertEqual(a.height, b.height, accuracy: accuracy, file: file, line: line)
+  }
+
+  func testLetterboxedGameRectNarrowsToAspectRatio() {
+    // A rect already matching the surface aspect ratio passes through unchanged.
+    let rect = CGRect(x: 0, y: 0, width: 400, height: 300)
+    assertRectEqual(TouchOverlayIRGeometry.letterboxedGameRect(in: rect, aspectRatio: rect.width / rect.height), rect)
+
+    let wideSurface = CGRect(x: 0, y: 0, width: 400, height: 300)
+    let narrowed = TouchOverlayIRGeometry.letterboxedGameRect(in: wideSurface, aspectRatio: 1.0)
+    // 1:1 inside a 4:3 (400x300) surface: height stays 300, width shrinks to 300, centered.
+    assertRectEqual(narrowed, CGRect(x: 50, y: 0, width: 300, height: 300))
+
+    let tallSurface = CGRect(x: 0, y: 0, width: 300, height: 400)
+    let letterboxedTop = TouchOverlayIRGeometry.letterboxedGameRect(in: tallSurface, aspectRatio: 1.0)
+    // 1:1 inside a 3:4 (300x400) surface: width stays 300, height shrinks to 300, centered
+    // vertically (bars on top/bottom).
+    assertRectEqual(letterboxedTop, CGRect(x: 0, y: 50, width: 300, height: 300))
+  }
+
+  func testLetterboxedGameRectFallsBackWhenAspectRatioIsInvalid() {
+    let rect = CGRect(x: 0, y: 0, width: 400, height: 300)
+    XCTAssertEqual(TouchOverlayIRGeometry.letterboxedGameRect(in: rect, aspectRatio: 0), rect)
+    XCTAssertEqual(TouchOverlayIRGeometry.letterboxedGameRect(in: rect, aspectRatio: .nan), rect)
+    XCTAssertEqual(TouchOverlayIRGeometry.letterboxedGameRect(in: .zero, aspectRatio: 4.0 / 3.0), .zero)
+  }
+
+  func testFollowMapsAbsolutePositionToNormalizedCoordsClamped() {
+    let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+    XCTAssertEqual(TouchOverlayIRGeometry.follow(point: CGPoint(x: 100, y: 50), in: rect).x, 0, accuracy: 1e-9)
+    XCTAssertEqual(TouchOverlayIRGeometry.follow(point: CGPoint(x: 100, y: 50), in: rect).y, 0, accuracy: 1e-9)
+    let corner = TouchOverlayIRGeometry.follow(point: CGPoint(x: 200, y: 100), in: rect)
+    XCTAssertEqual(corner.x, 1, accuracy: 1e-9)
+    XCTAssertEqual(corner.y, 1, accuracy: 1e-9)
+    // Past the rect entirely: still clamps to [-1, 1], doesn't overshoot.
+    let beyond = TouchOverlayIRGeometry.follow(point: CGPoint(x: 1000, y: -1000), in: rect)
+    XCTAssertEqual(beyond.x, 1, accuracy: 1e-9)
+    XCTAssertEqual(beyond.y, -1, accuracy: 1e-9)
+  }
+
+  func testDragAccumulatesFromPreviousPositionAndClamps() {
+    let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+    // Half the rect's half-width to the right, from a start at the origin, with no prior offset.
+    let first = TouchOverlayIRGeometry.drag(start: CGPoint(x: 0, y: 0), current: CGPoint(x: 50, y: 0),
+                                            oldX: 0, oldY: 0, in: rect)
+    XCTAssertEqual(first.x, 0.5, accuracy: 1e-9)
+    XCTAssertEqual(first.y, 0, accuracy: 1e-9)
+    // A second drag continues from the persisted (oldX, oldY), not from zero.
+    let second = TouchOverlayIRGeometry.drag(start: CGPoint(x: 0, y: 0), current: CGPoint(x: 50, y: 0),
+                                             oldX: first.x, oldY: first.y, in: rect)
+    XCTAssertEqual(second.x, 1.0, accuracy: 1e-9, "0.5 + 0.5 clamps at the edge, not overshoots")
+    // A large negative delta clamps at -1 rather than wrapping or going out of range.
+    let clamped = TouchOverlayIRGeometry.drag(start: CGPoint(x: 0, y: 0), current: CGPoint(x: -1000, y: 0),
+                                              oldX: 0, oldY: 0, in: rect)
+    XCTAssertEqual(clamped.x, -1, accuracy: 1e-9)
+  }
+
+  func testTouchStartAllowedExcludesPointsInsideOtherGroups() {
+    let otherFrames = [CGRect(x: 0, y: 0, width: 50, height: 50), CGRect(x: 100, y: 100, width: 50, height: 50)]
+    XCTAssertFalse(TouchOverlayIRGeometry.touchStartAllowed(at: CGPoint(x: 10, y: 10), excluding: otherFrames),
+                   "inside the first excluded frame")
+    XCTAssertFalse(TouchOverlayIRGeometry.touchStartAllowed(at: CGPoint(x: 120, y: 120), excluding: otherFrames),
+                   "inside the second excluded frame")
+    XCTAssertTrue(TouchOverlayIRGeometry.touchStartAllowed(at: CGPoint(x: 75, y: 75), excluding: otherFrames),
+                  "empty overlay space between the two excluded frames")
+    XCTAssertTrue(TouchOverlayIRGeometry.touchStartAllowed(at: CGPoint(x: 10, y: 10), excluding: []),
+                 "nothing to exclude")
+  }
+
+  // MARK: Phase 3 — force-sensitive analog trigger pressure (task item 2)
+
+  func testPressureValueFallsBackToOneWithoutForceSupport() {
+    XCTAssertEqual(TouchOverlayInput.pressureValue(force: 0, maximumPossibleForce: 0), 1.0)
+    XCTAssertEqual(TouchOverlayInput.pressureValue(force: 0, maximumPossibleForce: 4.0), 1.0,
+                  "no real sample yet (force == 0) reads as the initial full press, not near-zero")
+  }
+
+  func testPressureValueNormalizesAndClampsToOne() {
+    XCTAssertEqual(TouchOverlayInput.pressureValue(force: 2.0, maximumPossibleForce: 4.0), 0.5, accuracy: 1e-6)
+    XCTAssertEqual(TouchOverlayInput.pressureValue(force: 8.0, maximumPossibleForce: 4.0), 1.0,
+                  "over-max force clamps at 1.0 rather than exceeding it")
   }
 }
 #endif
