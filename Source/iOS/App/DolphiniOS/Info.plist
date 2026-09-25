@@ -90,6 +90,11 @@
 	<array>
 		<string>stikdebug</string>
 		<string>stikjit</string>
+		<!-- Provenance ecosystem integration: base scheme for launching/callbacks,
+		     plus the capability marker scheme that gates "Send to Provenance"
+		     (see Common/Ecosystem/EcosystemSchemes.swift). -->
+		<string>provenance</string>
+		<string>provenance-ecosystem</string>
 	</array>
 	<key>DOLBuildSource</key>
 	<string>$(DOL_BUILD_SOURCE)</string>
