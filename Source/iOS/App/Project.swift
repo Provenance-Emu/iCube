@@ -338,11 +338,19 @@ let iCube = Target.target(
         .sdk(name: "UniformTypeIdentifiers", type: .framework),
         .sdk(name: "MetalKit", type: .framework),
         .sdk(name: "GameController", type: .framework),
+        // App Intents (LaunchGameIntent etc.) — without an explicit AppIntents.framework
+        // dependency, Xcode's appintentsmetadataprocessor skips extraction entirely ("No
+        // AppIntents.framework dependency found"), silently leaving Shortcuts/Siri phrases
+        // unregistered even though the intents compile fine. Available iOS/tvOS 16+.
+        .sdk(name: "AppIntents", type: .framework),
         // CoreMotion is iOS-only: the framework does not exist in the tvOS SDK (ld fails with
         // "framework 'CoreMotion' not found"). All source uses are already #if canImport(CoreMotion)
         // gated, so nothing references it on tvOS — only this link line pulls it in. Gate to
         // iOS/Catalyst to match the MoltenVK pattern above and keep iOS linking unchanged.
         .sdk(name: "CoreMotion", type: .framework, condition: .when([.ios, .catalyst])),
+        // WidgetKit for `EcosystemSurfaceRefresher`'s `WidgetCenter.reloadTimelines(ofKind:)` call
+        // after every snapshot write. iOS/Catalyst only — RecentGamesWidget doesn't exist on tvOS.
+        .sdk(name: "WidgetKit", type: .framework, condition: .when([.ios, .catalyst])),
         // appex embed intentionally OFF (faithful to original; see APP_EMBEDS_APPEX note above).
     ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension")] : [])
       + [.target(name: "iCubeTopShelf", condition: .when([.tvos]))]
@@ -430,17 +438,22 @@ let liveActivity = Target.target(
     infoPlist: .file(path: "Live Activity/Info.plist"),
     sources: [
         .glob("Live Activity/**/*.swift"),
-        // NOTE: the original pbxproj EXCLUDES GameActivity.swift from the appex (it's a
-        // membershipException), yet Live_ActivityLiveActivity.swift references
-        // GameActivityAttributes which is defined there. TODO when re-enabling the appex:
-        // confirm how the appex resolves GameActivityAttributes (shared file vs. duplicate) —
-        // it may need GameActivity.swift here after all, with the app+appex both compiling it.
+        // WS-A (RecentGamesWidget) resolves the TODO below: GameActivityAttributes, referenced by
+        // Live_ActivityLiveActivity.swift, is defined only in GameActivity.swift. That file only
+        // needs Foundation + ActivityKit (no bridging header, no app-only types), so it compiles
+        // standalone into the appex same as it does into the app — added here rather than
+        // duplicated. NOTE: the original pbxproj EXCLUDED it (membershipException); this is a
+        // deliberate deviation, still gated by `APP_EMBEDS_APPEX = false` above so it doesn't
+        // change what the app scheme builds.
+        .glob("Common/Swift/Activity/GameActivity.swift"),
     ],
     resources: ["Live Activity/LiveActivityAssets.xcassets"],
     entitlements: .file(path: "Live ActivityExtension.entitlements"),
     dependencies: [
         .sdk(name: "SwiftUI", type: .framework),
         .sdk(name: "WidgetKit", type: .framework),
+        // RecentGamesWidget reads the App Group snapshot directly.
+        .package(product: "PVLibrarySnapshot"),
     ],
     settings: .settings(
         base: [
@@ -457,6 +470,13 @@ let liveActivity = Target.target(
             // AudioSessionManager.h and the whole Dolphin core header tree). GameActivity.swift
             // only needs Foundation + ActivityKit.
             "SWIFT_OBJC_BRIDGING_HEADER": "",
+            // Same fix as `extensionTarget()` below, same reason: without this, Tuist doesn't
+            // merge in CFBundleIdentifier/CFBundleExecutable, which was latent (the appex isn't
+            // embedded, so nothing validated it) until RecentGamesWidget made
+            // `appintentsmetadataprocessor` write a non-empty Metadata.appintents — the
+            // AppIntentsSSUTraining phase that then runs fails with "Unable to parse Info.plist"
+            // against the under-filled plist. Confirmed empirically 2026-09-24.
+            "GENERATE_INFOPLIST_FILE": "YES",
         ],
         configurations: secondaryConfigs
     )
@@ -472,7 +492,12 @@ let iCubeTests = Target.target(
     deploymentTargets: .multiplatform(iOS: "17.0"),
     infoPlist: .default,
     sources: ["DolphiniOSTests/**/*.swift"],
-    dependencies: [.target(name: "iCube")],
+    dependencies: [
+        .target(name: "iCube"),
+        // `.target(name: "iCube")` alone doesn't make a package the app links importable here —
+        // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
+        .package(product: "PVLibrarySnapshot"),
+    ],
     settings: .settings(
         base: [
             "CLANG_CXX_LANGUAGE_STANDARD": "gnu++17",
