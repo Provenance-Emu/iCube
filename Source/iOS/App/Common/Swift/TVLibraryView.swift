@@ -2700,6 +2700,18 @@ struct TVLibraryView: View {
             let gen = UIImpactFeedbackGenerator(style: .medium)
             gen.impactOccurred()
           }
+          // B2: L1/R1 step the system filter backward/forward. Shares the same
+          // physical `leftShoulder`/`rightShoulder` buttons that `installExtraInputHandlers`
+          // (Controllers/ControllerExtensions.swift) already wires via their per-button
+          // `pressedChangedHandler` for the fast-forward shoulder chord — that slot is
+          // separate from this whole-gamepad `valueChangedHandler`, so both fire on the
+          // same press without either overwriting the other.
+          if element == gamepad.leftShoulder, gamepad.leftShoulder.isPressed {
+            DispatchQueue.main.async { stepPlatformFilter(-1) }
+          }
+          if element == gamepad.rightShoulder, gamepad.rightShoulder.isPressed {
+            DispatchQueue.main.async { stepPlatformFilter(1) }
+          }
         }
       }
       if let mgp = c.microGamepad {
@@ -2766,6 +2778,34 @@ struct TVLibraryView: View {
     }
 #endif
   }
+
+#if !os(tvOS)
+  /// B2: steps `platformFilter` through the same visible-category list
+  /// `LibraryPlatformFilterBar` shows (all categories present in the library,
+  /// `.all` first), wrapping around. No-ops when the bar itself would be
+  /// hidden (0 or 1 categories present) so a controller press never surprises
+  /// the user with a filter bar that isn't on screen. Called only from the
+  /// library's own `extendedGamepad.valueChangedHandler`, which already
+  /// no-ops while a sheet is up (`ControllerFocusCoordinator.isActiveScope`),
+  /// so this never fires behind a presented sheet.
+  private func stepPlatformFilter(_ delta: Int) {
+    guard showPlatformFilterBar else { return }
+    let overrides = platformOverrides
+    let available = LibraryPlatformMapper.availableCategories(in: model.games, overrides: overrides)
+    let visible = [LibraryPlatformCategory.all] + LibraryPlatformCategory.filterCases.filter { available.contains($0) }
+    guard visible.count > 1 else { return }
+    let currentIndex = visible.firstIndex(of: platformFilter) ?? 0
+    let newIndex = (currentIndex + delta + visible.count) % visible.count
+    platformFilter = visible[newIndex]
+    let count = LibraryPlatformMapper.count(in: model.games, for: platformFilter, overrides: overrides)
+    NotificationCenter.default.post(
+      name: NSNotification.Name("DOLShowSnackbar"),
+      object: nil,
+      userInfo: ["text": "\(platformFilter.displayName) · \(count) \(L("games"))"]
+    )
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+  }
+#endif
 
   // MARK: - Selection & batch actions
 
