@@ -235,5 +235,128 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertEqual(writes.map(\.id), [107, 108, 109, 110])
     XCTAssertEqual(writes.map(\.pressed), [true, false, false, true])
   }
+
+  // MARK: Phase 2 — size scale (§2.4)
+
+  @MainActor
+  func testSizeScaleDefaultsToOneAndPersistsA2ElementEntry() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), 1.0)
+    // A plain 2-element move (phase 1 shape) must keep reading scale 1.0.
+    store.setNormalizedCenter(CGPoint(x: 0.3, y: 0.4), for: .gcDpad, padKind: .gameCube, orientation: .portrait)
+    XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), 1.0)
+  }
+
+  @MainActor
+  func testSetSizeScaleRoundTripsAndPreservesCenter() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+    let store = TouchOverlayLayoutStore(fileURL: url)
+    store.setNormalizedCenter(CGPoint(x: 0.2, y: 0.6), for: .gcCStick, padKind: .gameCube, orientation: .portrait)
+    store.setSizeScale(1.5, for: .gcCStick, padKind: .gameCube, orientation: .portrait, defaultCenter: CGPoint(x: 0.9, y: 0.9))
+    XCTAssertEqual(store.sizeScale(for: .gcCStick, padKind: .gameCube, orientation: .portrait), 1.5)
+    // The center set beforehand must survive the resize write.
+    XCTAssertEqual(store.normalizedCenter(for: .gcCStick, padKind: .gameCube, orientation: .portrait), CGPoint(x: 0.2, y: 0.6))
+
+    let reloaded = TouchOverlayLayoutStore(fileURL: url)
+    XCTAssertEqual(reloaded.sizeScale(for: .gcCStick, padKind: .gameCube, orientation: .portrait), 1.5)
+    XCTAssertEqual(reloaded.normalizedCenter(for: .gcCStick, padKind: .gameCube, orientation: .portrait), CGPoint(x: 0.2, y: 0.6))
+  }
+
+  @MainActor
+  func testSetSizeScaleUsesDefaultCenterWhenGroupNeverMoved() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    store.setSizeScale(0.75, for: .gcDpad, padKind: .gameCube, orientation: .portrait, defaultCenter: CGPoint(x: 0.5, y: 0.5))
+    XCTAssertEqual(store.normalizedCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait), CGPoint(x: 0.5, y: 0.5))
+    XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), 0.75)
+  }
+
+  @MainActor
+  func testSetSizeScaleClampsToScaleRange() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    store.setSizeScale(10, for: .gcDpad, padKind: .gameCube, orientation: .portrait, defaultCenter: .zero)
+    XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), TouchOverlayLayoutStore.scaleRange.upperBound)
+    store.setSizeScale(0.01, for: .gcCStick, padKind: .gameCube, orientation: .portrait, defaultCenter: .zero)
+    XCTAssertEqual(store.sizeScale(for: .gcCStick, padKind: .gameCube, orientation: .portrait), TouchOverlayLayoutStore.scaleRange.lowerBound)
+  }
+
+  @MainActor
+  func testResolvedBoxScalesSizeBeforeClamping() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    let bounds = CGRect(x: 0, y: 0, width: 768, height: 1024)
+    let dpad = TouchOverlayDefaults.layout(for: .gcDpad, kind: .gameCube, orientation: .portrait)!
+    store.setSizeScale(2.0, for: .gcDpad, padKind: .gameCube, orientation: .portrait,
+                       defaultCenter: TouchOverlayLayoutEngine.normalize(dpad.placement.center(in: bounds), in: bounds))
+    let box = store.resolvedBox(for: dpad, padKind: .gameCube, orientation: .portrait, in: bounds)
+    XCTAssertEqual(box.width, dpad.size.width * 2, accuracy: 1e-9)
+    XCTAssertEqual(box.height, dpad.size.height * 2, accuracy: 1e-9)
+  }
+
+  // MARK: Hit tester (§3)
+
+  func testUnionMatchesEachTouchToItsOwnRegion() {
+    let regions = [
+      TouchOverlayHitTester.Region(id: "a", frame: CGRect(x: 0, y: 0, width: 10, height: 10)),
+      TouchOverlayHitTester.Region(id: "b", frame: CGRect(x: 20, y: 0, width: 10, height: 10)),
+    ]
+    let hit = TouchOverlayHitTester.union(touches: [CGPoint(x: 5, y: 5), CGPoint(x: 25, y: 5)], regions: regions)
+    XCTAssertEqual(hit, ["a", "b"])
+  }
+
+  func testUnionIgnoresTouchesOutsideEveryRegion() {
+    let regions = [TouchOverlayHitTester.Region(id: "a", frame: CGRect(x: 0, y: 0, width: 10, height: 10))]
+    XCTAssertEqual(TouchOverlayHitTester.union(touches: [CGPoint(x: 50, y: 50)], regions: regions), [])
+  }
+
+  func testDeltaReportsOnlyPressedAndReleasedTransitions() {
+    let (pressed, released) = TouchOverlayHitTester.delta(previous: ["a", "b"], now: ["b", "c"])
+    XCTAssertEqual(pressed, ["c"])
+    XCTAssertEqual(released, ["a"])
+  }
+
+  func testDeltaIsEmptyWhenNothingChanges() {
+    let (pressed, released) = TouchOverlayHitTester.delta(previous: ["a"], now: ["a"])
+    XCTAssertTrue(pressed.isEmpty)
+    XCTAssertTrue(released.isEmpty)
+  }
+
+  // MARK: D-pad angle bucketing (§3 / VCODPad.directions parity, NOT TCDirectionalPad's grid)
+
+  func testDpadDirectionsDeadzoneAtCenter() {
+    let size = CGSize(width: 128, height: 128)
+    XCTAssertEqual(TouchOverlayHitTester.dpadDirections(at: CGPoint(x: 64, y: 64), in: size, previous: []), [])
+  }
+
+  func testDpadDirectionsCardinals() {
+    let size = CGSize(width: 128, height: 128)
+    // Straight up from center (negative y, UIKit coordinates).
+    XCTAssertEqual(TouchOverlayHitTester.dpadDirections(at: CGPoint(x: 64, y: 10), in: size, previous: []), [.up])
+    XCTAssertEqual(TouchOverlayHitTester.dpadDirections(at: CGPoint(x: 64, y: 118), in: size, previous: []), [.down])
+    XCTAssertEqual(TouchOverlayHitTester.dpadDirections(at: CGPoint(x: 10, y: 64), in: size, previous: []), [.left])
+    XCTAssertEqual(TouchOverlayHitTester.dpadDirections(at: CGPoint(x: 118, y: 64), in: size, previous: []), [.right])
+  }
+
+  func testDpadDirectionsDiagonal() {
+    let size = CGSize(width: 128, height: 128)
+    // Down-right octant.
+    let dirs = TouchOverlayHitTester.dpadDirections(at: CGPoint(x: 110, y: 110), in: size, previous: [])
+    XCTAssertEqual(dirs, [.down, .right])
+  }
+
+  func testDpadDirectionsHysteresisStaysStickyNearTheSeam() {
+    let size = CGSize(width: 128, height: 128)
+    // 20 degrees is just PAST the [.down, .right] sector's plain lower bound (22.5) on the
+    // [.right]-only side — without hysteresis this reads as [.right] alone. Coming from
+    // [.down, .right] as `previous`, it's still within the +8 degree sticky margin, so it should
+    // stay put instead of dropping the diagonal.
+    let radians = 20.0 * Double.pi / 180
+    let point = CGPoint(x: 64 + 50 * cos(radians), y: 64 + 50 * sin(radians))
+    XCTAssertEqual(TouchOverlayHitTester.dpadDirections(at: point, in: size, previous: []), [.right],
+                   "sanity check: without a sticky previous, 20 degrees alone is plain [.right]")
+    let dirs = TouchOverlayHitTester.dpadDirections(at: point, in: size, previous: [.down, .right])
+    XCTAssertEqual(dirs, [.down, .right])
+  }
 }
 #endif
