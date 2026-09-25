@@ -785,6 +785,9 @@ struct GameGridItem: View {
     }
     .zIndex(isFocused ? 1 : 0)
     #else
+    // Note: no ecosystem "Send to Provenance" row on this (tvOS) menu —
+    // opening a foreign URL scheme has no tvOS equivalent. See the iOS
+    // context menu below.
     Button(action: { handlePrimaryAction() }) {
       VStack(alignment: .leading, spacing: 12) {
         ZStack(alignment: .topTrailing) {
@@ -1015,6 +1018,10 @@ struct GameGridItem: View {
           Label(L("Favorite"), systemImage: "star")
         }
       }
+      // Ecosystem — push this game to a sibling emulator app (opens a local
+      // share session and hands Provenance a fetch URL; it downloads over
+      // HTTP). iOS-only: see `EcosystemSendButton`.
+      EcosystemSendButton(gameID: item.gameID)
       Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
     #endif
