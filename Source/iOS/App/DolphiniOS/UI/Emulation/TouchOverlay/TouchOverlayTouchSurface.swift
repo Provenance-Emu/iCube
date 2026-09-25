@@ -18,11 +18,15 @@ struct TouchOverlaySurface: UIViewRepresentable {
     case began, moved, ended, cancelled
   }
 
-  /// One live touch's identity (stable for its lifetime) and current location in the surface's
-  /// own coordinate space.
+  /// One live touch's identity (stable for its lifetime), current location in the surface's own
+  /// coordinate space, and its force reading (task item 2, phase 3: force-sensitive analog
+  /// triggers). `force`/`maximumPossibleForce` are `0` on hardware/touch types that don't report
+  /// one (e.g. no 3D/haptic Touch support) — see `TouchOverlayInput.pressureValue`'s fallback.
   struct Touch {
     let id: ObjectIdentifier
     let location: CGPoint
+    let force: CGFloat
+    let maximumPossibleForce: CGFloat
   }
 
   let onTouches: (Phase, [Touch]) -> Void
@@ -62,7 +66,10 @@ struct TouchOverlaySurface: UIViewRepresentable {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { report(.cancelled, touches) }
 
     private func report(_ phase: Phase, _ touches: Set<UITouch>) {
-      let points = touches.map { Touch(id: ObjectIdentifier($0), location: $0.location(in: self)) }
+      let points = touches.map {
+        Touch(id: ObjectIdentifier($0), location: $0.location(in: self),
+              force: $0.force, maximumPossibleForce: $0.maximumPossibleForce)
+      }
       onTouches?(phase, points)
     }
   }
@@ -81,15 +88,23 @@ struct TouchOverlayCluster<ID: Hashable>: View {
   let onChange: (ID, Bool) -> Void
   /// The live covered set, exposed so the caller can drive press-state art off it.
   @Binding var pressed: Set<ID>
+  /// Ids that should report continuous touch-force while held (task item 2, phase 3:
+  /// force-sensitive analog triggers). Empty by default — most clusters (plain buttons, D-pads)
+  /// don't need this.
+  var pressureIds: Set<ID> = []
+  /// Fired on every touch update (NOT gated by the press/release delta `onChange` uses, since
+  /// pressure is continuous data) for a touch whose OWN hit region — not the cluster-wide union —
+  /// is one of `pressureIds`.
+  var onForce: ((ID, Float) -> Void)?
 
-  @State private var liveTouches: [ObjectIdentifier: CGPoint] = [:]
+  @State private var liveTouches: [ObjectIdentifier: TouchOverlaySurface.Touch] = [:]
 
   var body: some View {
     GeometryReader { geo in
       TouchOverlaySurface { phase, touches in
         switch phase {
         case .began, .moved:
-          for touch in touches { liveTouches[touch.id] = touch.location }
+          for touch in touches { liveTouches[touch.id] = touch }
         case .ended, .cancelled:
           for touch in touches { liveTouches.removeValue(forKey: touch.id) }
         }
@@ -102,11 +117,18 @@ struct TouchOverlayCluster<ID: Hashable>: View {
 
   private func recompute(in size: CGSize) {
     var now: Set<ID> = []
-    for location in liveTouches.values { now.formUnion(hitTest(location, size)) }
+    for touch in liveTouches.values { now.formUnion(hitTest(touch.location, size)) }
     let (pressedNow, releasedNow) = TouchOverlayHitTester.delta(previous: pressed, now: now)
     for id in releasedNow { onChange(id, false) }
     for id in pressedNow { onChange(id, true) }
     pressed = now
+
+    guard let onForce, !pressureIds.isEmpty else { return }
+    for touch in liveTouches.values {
+      let hits = hitTest(touch.location, size)
+      guard hits.count == 1, let id = hits.first, pressureIds.contains(id) else { continue }
+      onForce(id, TouchOverlayInput.pressureValue(force: touch.force, maximumPossibleForce: touch.maximumPossibleForce))
+    }
   }
 
   /// Release every currently-covered region — used on `onDisappear` (the surface vanishing mid-

@@ -41,5 +41,19 @@ enum TouchOverlayInput {
   static func dpadWrites(up: Bool, down: Bool, left: Bool, right: Bool, baseId: Int) -> [(id: Int, pressed: Bool)] {
     [up, down, left, right].enumerated().map { (id: baseId + $0.offset, pressed: $0.element) }
   }
+
+  /// Force-sensitive analog trigger pressure (task item 2, phase 3): the touch's force normalized
+  /// to 0...1 when it's reported, else a flat `1.0` (binary press) fallback — the same fallback
+  /// `TCButton.touchesMoved` uses on hardware without force reporting, generalized to check the
+  /// SPECIFIC touch's `maximumPossibleForce` rather than gating on the device-wide
+  /// `UITraitCollection.forceTouchCapability` `TCButton` reads at init: that trait reads
+  /// `.unavailable` on every device shipped since 3D Touch was removed (iPhone XR/XS generation),
+  /// which would dead-code the whole force path on all current hardware. `force == 0` is also
+  /// treated as "not reporting a real sample yet" so the very first touch-down (before force has
+  /// ramped up) doesn't send a near-zero value before the initial 1.0 press write.
+  static func pressureValue(force: CGFloat, maximumPossibleForce: CGFloat) -> Float {
+    guard maximumPossibleForce > 0, force > 0 else { return 1.0 }
+    return Float(min(1.0, force / maximumPossibleForce))
+  }
 }
 #endif

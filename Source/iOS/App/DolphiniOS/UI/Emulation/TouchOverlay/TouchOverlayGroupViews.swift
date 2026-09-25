@@ -33,6 +33,16 @@ struct TouchOverlayButtonClusterView: View {
     CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale)
   }
 
+  /// Axis-button control ids in this cluster (task item 2, phase 3): these report continuous
+  /// touch-force via `TouchOverlayCluster.onForce` instead of the binary press/release
+  /// `TouchOverlayInput`/`onChange` alone provides.
+  private var axisButtonIds: Set<String> {
+    Set(controls.compactMap { control in
+      if case .axisButton = control.kind { return control.id }
+      return nil
+    })
+  }
+
   var body: some View {
     ZStack {
       ForEach(controls, id: \.id) { control in
@@ -54,15 +64,21 @@ struct TouchOverlayButtonClusterView: View {
           case .button(let raw):
             TCManagerInterface.setButtonStateFor(raw, controller: deviceId, state: down)
           case .axisButton(let raw):
-            // Phase 2 simplification: binary 1.0/0.0, not force-sensitive. `TCButton` only takes
-            // this path itself on a non-3D-Touch device; force-sensitive triggers are a phase 3
-            // gap, not a regression (see the phase 2 plan doc).
+            // Initial value on press / final value on release. While held, `onForce` below
+            // overrides this with the touch's actual pressure (task item 2) on force-capable
+            // hardware; 1.0 is also `TouchOverlayInput.pressureValue`'s own fallback, so there's
+            // no jump between this write and the first `onForce` sample.
             TCManagerInterface.setAxisValueFor(raw, controller: deviceId, value: down ? 1.0 : 0.0)
           case .stick, .dpad, .irSurface:
             break
           }
         },
-        pressed: $pressed
+        pressed: $pressed,
+        pressureIds: axisButtonIds,
+        onForce: { id, pressure in
+          guard let control = controls.first(where: { $0.id == id }), case .axisButton(let raw) = control.kind else { return }
+          TCManagerInterface.setAxisValueFor(raw, controller: deviceId, value: pressure)
+        }
       )
       .frame(width: groupSize.width, height: groupSize.height)
       .allowsHitTesting(!isEditing)
@@ -185,20 +201,6 @@ struct TouchOverlayStickView: View {
     for write in TouchOverlayInput.stickWrites(x: x, y: y, baseId: baseId) {
       TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.value)
     }
-  }
-}
-
-/// The Wii IR drag/follow surface. Phase 2 renders it as an INERT translucent region only — no
-/// touch handling, no writes (design §2.1: "at runtime it isn't a button"; phase 3 ports
-/// `TCWiiPad.handleLongPress`/`sendIR` onto it). It must stay non-hit-testable: its box is the
-/// WHOLE overlay (`.fill` anchor), so if it accepted touches it would swallow every other group's
-/// input.
-struct TouchOverlayIRPadView: View {
-  let variant: TouchOverlayArt.Variant
-
-  var body: some View {
-    TouchOverlayArt.irPad(variant: variant)
-      .allowsHitTesting(false)
   }
 }
 #endif
