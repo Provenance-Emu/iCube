@@ -568,7 +568,24 @@ struct TVLibraryView: View {
           .navigationBarTitleDisplayMode(.inline)
       }
       .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
-      .modifier(LibrarySearchableModifier(searchText: $searchText))
+      // Search moved into the combined bottom `LibrarySearchFilterBar` (see
+      // `libraryBottomChrome`) so the platform pills and the search affordance
+      // always share one row. The old `.searchable` field lived in the nav
+      // bar; pre-iOS-26 that used `.navigationBarDrawer(displayMode: .always)`,
+      // which always renders the field on its own row below the title —
+      // wasting vertical space and putting the magnifying glass "below" even
+      // when an iPad in landscape had plenty of width to fit it inline. The
+      // custom bar below never wraps: it's a single HStack row regardless of
+      // width.
+      // Collapse the inline search field when it loses first-responder
+      // (keyboard dismissed, submitted, or its own clear/dismiss button). The
+      // query is kept, so a non-empty `searchText` re-expands the pills view
+      // still filtered and badges the collapsed search button.
+      .onChange(of: searchFieldFocused) { _, focused in
+        if !focused {
+          withAnimation(.easeInOut(duration: 0.25)) { isSearchExpanded = false }
+        }
+      }
 #endif
       .safeAreaInset(edge: .bottom, spacing: 8) {
         libraryBottomChrome
@@ -629,6 +646,16 @@ struct TVLibraryView: View {
   /// Search text for library filtering
   @State private var searchText: String = ""
   @State private var favoritesVersion: Int = 0
+
+#if os(iOS) || targetEnvironment(macCatalyst)
+  /// Whether the combined search+filter bar (`LibrarySearchFilterBar`) is
+  /// showing its expanded text field vs. its collapsed pills+button row.
+  @State private var isSearchExpanded = false
+  /// Drives the search field's first-responder state. Losing focus (keyboard
+  /// dismissed, submitted, or the field's own clear/dismiss button) collapses
+  /// the bar back to pills+button — see the `onChange` in `navigationConfiguration`.
+  @FocusState private var searchFieldFocused: Bool
+#endif
 
   /// Whether emulation is currently running (disables library input)
   @State private var emulationRunning = false
@@ -1785,6 +1812,22 @@ struct TVLibraryView: View {
           onDone: { exitSelectionMode() }
         )
       }
+#if os(iOS) || targetEnvironment(macCatalyst)
+      // Combined search + platform-filter bar. Shown whenever the library has
+      // games — not gated on `showPlatformFilterBar` — because search moved
+      // here from the old top nav-bar `.searchable` field and needs to stay
+      // reachable even in a single-platform library.
+      if !model.games.isEmpty {
+        LibrarySearchFilterBar(
+          selection: $platformFilter,
+          searchText: $searchText,
+          isExpanded: $isSearchExpanded,
+          searchFieldFocus: $searchFieldFocused,
+          games: model.games,
+          overrides: platformOverrides
+        )
+      }
+#else
       if showPlatformFilterBar {
         LibraryPlatformFilterBar(
           selection: $platformFilter,
@@ -1792,6 +1835,7 @@ struct TVLibraryView: View {
           overrides: platformOverrides
         )
       }
+#endif
     }
   }
 
@@ -1809,7 +1853,13 @@ struct TVLibraryView: View {
   /// Extra scroll padding so the last grid row clears bottom filter/selection chrome.
   private var libraryBottomInsetPadding: CGFloat {
     var pad: CGFloat = 0
+#if os(iOS) || targetEnvironment(macCatalyst)
+    // The combined search+filter bar is shown whenever there are games (see
+    // `libraryBottomChrome`), not just when the platform pills apply.
+    if !model.games.isEmpty { pad += 56 }
+#else
     if showPlatformFilterBar { pad += 56 }
+#endif
     if isSelectionMode && !selectedFilePaths.isEmpty { pad += 92 }
     return pad
   }
@@ -3282,34 +3332,6 @@ private struct LibraryNavigationSubtitleModifier: ViewModifier {
   }
 }
 #endif
-
-#if os(iOS) || targetEnvironment(macCatalyst)
-/// Searchable modifier that adopts the iOS 26 "Liquid Glass" floating search
-/// field where available, and otherwise falls back to the iOS 17–25 static
-/// navigation-bar-drawer search. The iOS 26 path uses the system floating
-/// search placement plus `.searchToolbarBehavior(.minimize)`, which collapses
-/// the search field into the toolbar on scroll — reclaiming the header space
-/// the old always-visible drawer wasted. The large title also collapses
-/// natively on scroll under iOS 26, freeing more vertical room for games.
-struct LibrarySearchableModifier: ViewModifier {
-  @Binding var searchText: String
-
-  func body(content: Content) -> some View {
-    if #available(iOS 26.0, *) {
-      // Floating/minimizing search: default placement floats the field and
-      // `.minimize` tucks it into the toolbar on scroll.
-      content
-        .searchable(text: $searchText)
-        .searchToolbarBehavior(.minimize)
-    } else {
-      // iOS 17–25: keep the existing always-visible search drawer unchanged.
-      content
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
-    }
-  }
-}
-#endif
-
 
 /// Stand-in for `EmulationScreen` when a screenshot-mode demo entry is opened.
 /// Demo entries are synthetic (see `TVLibraryBridge.isScreenshotDemoMode`) and
