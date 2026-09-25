@@ -132,17 +132,13 @@ private func presentPauseMenu(_ reason: String) {
 /// is Apple's name for the PS4 Share / PS5 Create button on every deployment
 /// target this app supports (iOS 17+), so there is nothing left to trace there.
 ///
-/// Known residual outside this file's ownership: `Data/Sys/Profiles/Wiimote/
-/// Physical Controller.ini` binds `Buttons/- = Options`, so on Wii titles the
-/// same physical Share/Create/View/"-" press both sends the emulated Wii Remote
-/// `-` button AND opens the pause menu on release — the same "one physical
-/// button, two effects" class this function fixed for Start, just not
-/// swallowed. It affects every controller family listed above, not only
-/// DualSense. Fixing it means editing `Data/Sys/Profiles/Wiimote/Physical
-/// Controller.ini` (clear `Buttons/-`, or pick a different physical button for
-/// it) or dropping the Wii Remote `-` binding's overlap with the pause route;
-/// neither belongs in this pass since it touches files outside this task's
-/// ownership.
+/// Wii titles: `Data/Sys/Profiles/Wiimote/Physical Controller.ini` used to bind
+/// `Buttons/- = Options`, so the same Share/Create/View/"-" press sent the
+/// emulated Wii Remote `-` AND opened the pause menu on release, on every
+/// family above. The profile now puts `-` on the right stick click (`"R Stick"`,
+/// unused by the Wii Remote + Nunchuk layout) and leaves Options to the pause
+/// route, the same split as GameCube Start. Existing bindings pick the new
+/// profile up when the controller is next bound (reconnect / launch).
 func installPauseMenuHandlers(_ c: GCController) {
   if #available(iOS 14.0, tvOS 14.0, *) {
     c.microGamepad?.buttonMenu.preferredSystemGestureState = .disabled
