@@ -31,8 +31,8 @@ enum ControllerSetupSystem {
 /// posts the change notification — so there is no separate "Type" step and
 /// Settings vs. Pause produce identical mappings.
 ///
-/// The body is platform-agnostic (List / Picker / Toggle / the existing
-/// `ControllersMappingView` representable all compile on iOS and tvOS). Hosts
+/// The body is platform-agnostic (List / Picker / Toggle and the SwiftUI
+/// `RemapPlayerView` all compile on iOS and tvOS). Hosts
 /// that need extra sections (Settings keeps DSU Client + Alternate Input
 /// Sources) embed `sections` in their own `List` instead of using `body`.
 /// Thin host wrapper. The Pause menu renders this directly (`body` wraps the
@@ -99,11 +99,6 @@ struct ControllerSetupSections: View {
   /// they outlive the call and finish their pulse before being torn down.
   @State private var identifyEngines: [CHHapticEngine] = []
 
-  /// Posted when a Wiimote's extension or sideways orientation changes, so the
-  /// touch overlay can re-lay-out. Single definition; was duplicated as a literal.
-  private static let wiiOverlayLayoutChanged =
-    Notification.Name("DOLWiiOverlayLayoutChangedNotification")
-
   private struct MappingTarget: Identifiable {
     let isGC: Bool
     let portOneBased: Int
@@ -151,8 +146,7 @@ struct ControllerSetupSections: View {
     .onReceive(NotificationCenter.default.publisher(for: ControllerManager.assignmentsChanged)) { _ in reloadQualifiers() }
     .sheet(item: $mappingTarget) { target in
       NavigationStack {
-        ControllersMappingView(isGC: target.isGC, portOneBased: target.portOneBased)
-          .navigationTitle(L("Customize Buttons"))
+        RemapPlayerView(isGC: target.isGC, portOneBased: target.portOneBased)
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { mappingTarget = nil } } }
       }
     }
@@ -176,7 +170,6 @@ struct ControllerSetupSections: View {
         DispatchQueue.main.async {
           _ = TVControllerMappingBridge.loadProfile(name, forWiimote: w, restoreDevice: true)
           ControllerManager.shared.reconcile()
-          NotificationCenter.default.post(name: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil)
           reloadAll()
         }
       }
@@ -475,24 +468,16 @@ struct ControllerSetupSections: View {
 
   private func setWiiExtension(_ v: Int, for w: Int) {
     wiiExtension[w - 1] = v
-    DOLWiimoteBridge.setExtensionForWiimote(w - 1, extension: v)
-    ControllerManager.shared.reconcile()
-    NotificationCenter.default.post(name: Self.wiiOverlayLayoutChanged, object: nil)
+    WiimoteSlotOptions.setExtension(v, forWiimote: w)
   }
 
   private func setWiiSideways(_ v: Bool, for w: Int) {
     wiiSideways[w - 1] = v
-    DOLWiimoteBridge.setSidewaysForWiimote(w - 1, enabled: v)
-    ControllerManager.shared.reconcile()
-    NotificationCenter.default.post(name: Self.wiiOverlayLayoutChanged, object: nil)
+    WiimoteSlotOptions.setSideways(v, forWiimote: w)
   }
 
   private func extensionName(_ v: Int) -> String {
-    switch v {
-    case 1: return L("Nunchuk")
-    case 2: return L("Classic")
-    default: return L("None")
-    }
+    WiimoteSlotOptions.extensionName(v)
   }
 
   /// Display name for the device currently bound to a port, for the collapsed
@@ -615,8 +600,8 @@ struct ControllerSetupSections: View {
     reloadQualifiers()
     reloadGlobals()
     for i in 0 ..< 4 {
-      wiiExtension[i] = Int(DOLWiimoteBridge.selectedExtension(forWiimote: i))
-      wiiSideways[i] = DOLWiimoteBridge.isSideways(forWiimote: i)
+      wiiExtension[i] = WiimoteSlotOptions.selectedExtension(forWiimote: i + 1)
+      wiiSideways[i] = WiimoteSlotOptions.isSideways(forWiimote: i + 1)
     }
   }
 
