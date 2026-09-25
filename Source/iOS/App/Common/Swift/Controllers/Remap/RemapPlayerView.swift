@@ -509,19 +509,26 @@ struct RemapPlayerView: View {
       else { ControllerManager.shared.clearDefaultDevice(forWiimote: portOneBased) }
     }
     showDeviceOptions = false
-    // Binding a device applies its default profile (ControllerAssignmentService).
-    profileName = nil
-    profileEdited = false
     reloadAll()
+    applyDeviceDefaultProfileName()
   }
 
   private func applyTouchscreen() {
     if isGC { ControllerManager.shared.assignTouchscreen(toGCPort: portOneBased) }
     else { ControllerManager.shared.assignTouchscreen(toWiimote: portOneBased) }
     showDeviceOptions = false
-    profileName = nil
-    profileEdited = false
     reloadAll()
+    applyDeviceDefaultProfileName()
+  }
+
+  /// Binding a device applies its default profile (`ControllerAssignmentService`),
+  /// so the header must show that profile's name, not "Custom" — `reloadAll()`
+  /// above has already refreshed `deviceQualifier` to the just-bound device.
+  private func applyDeviceDefaultProfileName() {
+    profileName = deviceQualifier.isEmpty
+      ? nil
+      : BridgeControllerConfigWriter().defaultProfileName(forQualifier: deviceQualifier)
+    profileEdited = false
   }
 
   private func loadProfile(_ name: String) {
