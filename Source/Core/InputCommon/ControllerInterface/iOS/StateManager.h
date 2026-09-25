@@ -11,6 +11,13 @@
 
 namespace ciface::iOS
 {
+// Defect #12: setters (SetButtonPressed/SetAxisValue/ClearController) are called from the
+// main thread (touch overlay, DSU input), while getters (GetButtonPressed/GetAxisValue) are
+// polled from the CPU/input-sampling thread. m_controllers is a std::vector<std::map<...>>
+// with no synchronization of its own, so a concurrent read/write pair is undefined behavior
+// (torn reads of a std::map, or a read racing a rehash/insert). m_mutex now serializes every
+// accessor, not just ClearController; contention is not a concern here (input rate is low
+// relative to lock/unlock cost).
 class StateManager
 {
 private:
@@ -29,9 +36,6 @@ private:
   static StateManager s_instance;
 
   std::vector<ControllerState> m_controllers;
-  // Guards ClearController below (and, once thread-safety lands for the rest of
-  // this class, every accessor). Declared here so ClearController's reset can
-  // never interleave with a setter mid-update.
   mutable std::mutex m_mutex;
 public:
   static StateManager* GetInstance() { return &s_instance; }

@@ -163,6 +163,7 @@ StateManager::StateManager()
 
 void StateManager::Init()
 {
+  std::lock_guard<std::mutex> lock(m_mutex);
   for (size_t i = 0; i < m_controllers.size(); i++)
   {
     for (auto& button : m_controllers[i].m_buttons)
@@ -183,21 +184,25 @@ void StateManager::DeInit()
 
 bool StateManager::GetButtonPressed(int controller_id, ButtonType button) const
 {
+  std::lock_guard<std::mutex> lock(m_mutex);
   return m_controllers[controller_id].m_buttons.at(button);
 }
 
 void StateManager::SetButtonPressed(int controller_id, ButtonType button, bool pressed)
 {
+  std::lock_guard<std::mutex> lock(m_mutex);
   m_controllers[controller_id].m_buttons[button] = pressed;
 }
 
 float StateManager::GetAxisValue(int controller_id, ButtonType axis) const
 {
+  std::lock_guard<std::mutex> lock(m_mutex);
   return m_controllers[controller_id].m_axes.at(axis);
 }
 
 void StateManager::SetAxisValue(int controller_id, ButtonType axis, float value)
 {
+  std::lock_guard<std::mutex> lock(m_mutex);
   m_controllers[controller_id].m_axes[axis] = value;
 }
 
