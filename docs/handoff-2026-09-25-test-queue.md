@@ -45,6 +45,22 @@ be booted without it via `devicectl ... --payload-url 'dolphinios://play?id=<Gam
 10. **Extensions / ecosystem** — Top Shelf, Quick Look, App Intents, Send to Provenance
     (device gates owed from the other sessions; see icube-extensions-next-steps memory).
 
+## A2. Controls batch landed 2026-09-25 (subagents, NOT yet gated or device-tested)
+
+- Profile persistence: `assign()` keeps a non-empty mapping (`3613078adb`).
+- ButtonType drift guard script + stable MFi ids across refresh/reconnect (`26ce575e43`, `a133981932`;
+  two identical pads unverified).
+- Remap review fixes (`165d401717`..`8e25d3627a`): extension/sideways toggles and both
+  profile-load sheets no longer run auto-assign; header rows disabled while a capture is armed;
+  ticker on `.common` run loop; one `DEVICE-CHECK` for tvOS focus when the header disables.
+- Audit P2 (`7e911c95d6`..`d846e2398c`): touchUpOutside/cancel release, `StateManager::ClearController`
+  on pad teardown, StateManager mutex, stored onAppear observers, disconnect banner with
+  "Use Touch Controls".
+- Overlay phase 3 part 1 (`06842eec02`..`5b81dd853f`): IR drag/follow on the new pad (editable
+  `.fillInset` rect), force-sensitive triggers, Style / Edit Layout… / Reset rows.
+Phone: rerun items 0-1 above on this build; on Wii with the beta overlay on, drag/follow pointer
+and three-finger recenter; trigger pressure on GC; the Edit Layout preview from Settings.
+
 ## B. Work remaining (after the next prompt)
 
 - **C8 touch overlay phase 3** — phase 2 landed (`42f9ea462b`..`0eb552233e`, flag
