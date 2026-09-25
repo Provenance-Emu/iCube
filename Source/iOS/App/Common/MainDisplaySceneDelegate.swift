@@ -71,6 +71,8 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func sceneDidBecomeActive(_ scene: UIScene) {
     ServiceManager.shared.applicationDidBecomeActive()
+    // Consume a game id an App Intent (Siri/Shortcuts) queued while the app was launching.
+    PendingGameLaunchStore.consumeAndLaunch()
 
     // Resume emulation if we auto-paused it when the app was backgrounded/interrupted.
     // iOS only: tvOS handles backgrounding via the pause menu (EmulationScreen observer).
@@ -137,6 +139,13 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     case "dios.quick.settings":
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Opening Settings…")])
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSettings"), object: nil)
+      completion(true)
+    case QuickActionsUpdater.shortcutType:
+      guard let gameID = shortcutItem.userInfo?["id"] as? String, !gameID.isEmpty else {
+        completion(false)
+        return
+      }
+      Task { @MainActor in GameLaunchRequest.launch(gameID: gameID) }
       completion(true)
     default:
       completion(false)
