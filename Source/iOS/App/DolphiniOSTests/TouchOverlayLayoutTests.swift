@@ -230,16 +230,17 @@ final class TouchOverlayLayoutTests: XCTestCase {
   }
 
   func testStickWritesKeepTCJoystickConvention() {
-    // Up: negative to Up id, 0 to Down id. Base 10 (GC main stick) -> ids 11...14.
+    // Up: min(y, 0) and min(y, 1) are BOTH y when y is negative, so the negative value lands on
+    // the Up and the Down id alike; only a positive y is one-sided. Base 10 -> ids 11...14.
     let up = TouchOverlayInput.stickWrites(x: 0, y: -0.5, baseId: 10)
     XCTAssertEqual(up.map(\.id), [11, 12, 13, 14])
-    XCTAssertEqual(up.map(\.value), [-0.5, 0, 0, 0])
+    XCTAssertEqual(up.map(\.value), [-0.5, -0.5, 0, 0])
     // Down-right: 0 to Up, positive to Down; 0 to Left, positive to Right.
     let downRight = TouchOverlayInput.stickWrites(x: 0.75, y: 1, baseId: 202)
     XCTAssertEqual(downRight.map(\.id), [203, 204, 205, 206])
     XCTAssertEqual(downRight.map(\.value), [0, 1, 0, 0.75])
-    // Left: negative to Left id.
-    XCTAssertEqual(TouchOverlayInput.stickWrites(x: -1, y: 0, baseId: 15).map(\.value), [0, 0, -1, 0])
+    // Left: the negative value reaches both horizontal ids for the same reason.
+    XCTAssertEqual(TouchOverlayInput.stickWrites(x: -1, y: 0, baseId: 15).map(\.value), [0, 0, -1, -1])
   }
 
   func testDpadWritesUseUpDownLeftRightOrder() {

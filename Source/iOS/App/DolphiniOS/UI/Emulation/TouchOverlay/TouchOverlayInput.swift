@@ -28,9 +28,10 @@ enum TouchOverlayInput {
 
   /// The four half-axis writes for a stick with `baseId` (`TCJoystick`'s
   /// `[min(y, 0), min(y, 1), min(x, 0), min(x, 1)]` sent to `baseId + 1 ... baseId + 4`).
-  /// "Up" writes a negative value to the Up id and 0 to Down; "down" writes positive to Down
-  /// and 0 to Up. `TCManagerInterface.mm`'s `combUD` / `combLR` compensate for this asymmetry
-  /// when re-deriving a signed DSU axis, so it must stay exactly like this.
+  /// A negative value (up / left) lands on BOTH ids of its pair because `min(v, 1) == v` there;
+  /// a positive value (down / right) lands only on the Down / Right id. `TCManagerInterface.mm`'s
+  /// `combUD` / `combLR` compensate for this asymmetry when re-deriving a signed DSU axis, so it
+  /// must stay exactly like this.
   static func stickWrites(x: CGFloat, y: CGFloat, baseId: Int) -> [(id: Int, value: Float)] {
     let axes = [min(y, 0), min(y, 1), min(x, 0), min(x, 1)]
     return axes.enumerated().map { (id: baseId + $0.offset + 1, value: Float($0.element)) }
