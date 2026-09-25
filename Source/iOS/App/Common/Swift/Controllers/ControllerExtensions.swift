@@ -186,7 +186,7 @@ private func installMotionHandler(_ c: GCController) {
       let az = Float(m.userAcceleration.z)
       // Accelerometer -> Wii accel axes
       if let slot = ControllerManager.shared.wiimoteIndex(for: c) {
-        let controllerId = 3 + slot
+        let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: controllerId, value: ax)
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: controllerId, value: ax)
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: controllerId, value: ay)
@@ -199,7 +199,7 @@ private func installMotionHandler(_ c: GCController) {
       let gy = Float(m.rotationRate.y)
       let gz = Float(m.rotationRate.z)
       if let slot = ControllerManager.shared.wiimoteIndex(for: c) {
-        let controllerId = 3 + slot
+        let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: controllerId, value: gx)
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: controllerId, value: gx)
         TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: controllerId, value: gy)
@@ -260,25 +260,25 @@ private func installTouchpadIRHandlers(_ c: GCController, eg: GCExtendedGamepad)
   let irMode = DOLConfigBridge.mainTouchPadIRMode() // 1 = follow, 2 = drag
 
   // Internal func
+  //
+  // Used to also mirror onto controller 4 (Wii Remote 1's touchscreen instance)
+  // "to support profiles bound to P1 only" -- which meant a DS4/DS5 touchpad
+  // bound to Wii Remote 2-4 also moved player 1's pointer. Each touchpad now
+  // writes only to its own slot's instance; a profile bound to Wii Remote 1
+  // is driven by Wii Remote 1's own device (touch overlay or its own pad), not
+  // by every other player's touchpad.
   func setIR(controllerId: Int, x: Float, y: Float) {
     TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredLeft.rawValue, controller: controllerId, value: x)
     TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredRight.rawValue, controller: controllerId, value: x)
     TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredUp.rawValue, controller: controllerId, value: y)
     TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredDown.rawValue, controller: controllerId, value: y)
-    // Also mirror to Wiimote 1 to support profiles bound to P1 only
-    if controllerId != 4 {
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredLeft.rawValue, controller: 4, value: x)
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredRight.rawValue, controller: 4, value: x)
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredUp.rawValue, controller: 4, value: y)
-      TCManagerInterface.setAxisValueFor(TCButtonType.wiiInfraredDown.rawValue, controller: 4, value: y)
-    }
   }
 
   // Internal func
   func mapTouch(_ touchpad: GCControllerDirectionPad?) {
     NSLog("mapTouch: \(String(describing: touchpad))")
     guard let slot = ControllerManager.shared.wiimoteIndex(for: c) else { return }
-    let controllerId = 3 + slot
+    let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
 
     let id = ObjectIdentifier(c)
     if touchpadIRStates[id] == nil { touchpadIRStates[id] = TouchpadIRState() }
