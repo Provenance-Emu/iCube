@@ -228,10 +228,14 @@ final class ControllerManager: NSObject, ObservableObject {
       // visibility flag that happened, so the buttons stayed hidden after a
       // mid-game disconnect even though the touchscreen was now live again.
       // Only ever turns the overlay ON here — never hides it — so an explicit
-      // user hide of an unrelated slot is not clobbered.
-      let ownedSystem: EmulatedSystem = self.isWiiSystem ? .wii : .gamecube
-      if self.touchscreenSlot(system: ownedSystem) != nil {
-        self.overlayVisible = true
+      // user hide of an unrelated slot is not clobbered. Ask the core directly
+      // for Wii-ness (matches the PauseMenuView / ControllerStateStore pattern)
+      // rather than `isWiiSystem`, which only iOS keeps in sync from the view.
+      if TVEmulationBridge.isRunning() {
+        let ownedSystem: EmulatedSystem = TVEmulationBridge.isCurrentSystemWii() ? .wii : .gamecube
+        if self.touchscreenSlot(system: ownedSystem) != nil {
+          self.overlayVisible = true
+        }
       }
     }
     // Boot auto-assign: controllers already connected when a game starts never
