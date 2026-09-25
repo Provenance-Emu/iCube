@@ -7,6 +7,14 @@ be booted without it via `devicectl ... --payload-url 'dolphinios://play?id=<Gam
 
 ## A. Phone tests owed (in priority order)
 
+0. **Assignment fixes (`311fb54add`)** — with a pad connected: pick Touchscreen for Player 1 in
+   Settings → Controllers, then confirm the on-screen pad appears and works and that the Wii
+   Remote rows did not change; assign the pad to a GameCube port and confirm the Wii rows stay
+   put (and vice versa); relaunch and confirm the pad did not take the touchscreen's slot back.
+   Then flip Settings → Controllers → "Programmatic touch overlay (beta)" and boot a GC and a
+   Wii title: all buttons/sticks/d-pad work, multi-touch (hold d-pad + press A), slide between
+   buttons, long-press empty space enters edit mode (drag groups, corner-drag resize, Reset,
+   Done); the IR pad is inert in this phase (Wii pointer still needs the flag off).
 1. **Remap UI (C7)** — Controllers → Customize Buttons with a real controller on Player 1:
    arm by touch then press (row updates, nothing else arms); arm with A (that press is not
    captured, the next is); bind Button B; each stick half lands on its control; cancel by re-tap
@@ -39,9 +47,16 @@ be booted without it via `devicectl ... --payload-url 'dolphinios://play?id=<Gam
 
 ## B. Work remaining (after the next prompt)
 
-- **C8 touch overlay phase 2** — chip pending (click it): rendering, multi-touch input, editing
-  mode, styling, behind a feature flag, on top of the landed `TouchOverlay/` phase 1. Phase 1's
-  unit tests have not been executed on a simulator. Phase 3 (IR, xib removal) after that.
+- **C8 touch overlay phase 3** — phase 2 landed (`42f9ea462b`..`0eb552233e`, flag
+  `touch_overlay_programmatic` default OFF): port Wii IR drag/follow onto the IR pad, analog
+  trigger pressure, Style / IR-area / Edit Layout settings rows, then flip the default and remove
+  the xibs after the device checklist in the design doc §8. Unit tests for phases 1-2 have NOT
+  been executed: simulator builds fail on a pre-existing PVHelp resource-bundle codesign error
+  ("bundle format unrecognized") — fix that first (likely a `Bundle` resource in the SPM
+  package needing CODE_SIGNING_ALLOWED=NO or an explicit bundle-format fix).
+- **Profile survives reconnect** — `ControllerAssignmentService.assign` reloads the device-default
+  profile whenever the engine re-places a pad (every reconnect/boot), overwriting a user-picked
+  profile; add a "keep mapping if non-empty" rule (needs a writer read for the slot's mapping).
 - **D18 data-driven menus + controller-navigable Settings/pause menu** — design at
   `docs/superpowers/specs/2026-09-24-data-driven-menus-design.md`; `RemapControllerNav` is to be
   renamed into its `MenuScreen`, not rewritten. Absorbs the top-bar HUD item (D13; package survey
