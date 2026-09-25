@@ -532,7 +532,12 @@ struct RemapPlayerView: View {
       let ok = isGC
         ? TVControllerMappingBridge.loadProfile(name, forGCPort: portOneBased, restoreDevice: true)
         : TVControllerMappingBridge.loadProfile(name, forWiimote: portOneBased, restoreDevice: true)
-      ControllerManager.shared.reconcile()
+      // autoAssign: false — loading a profile for THIS port must not let the
+      // assignment engine re-decide every other port's device binding (see
+      // ControllerManager.reconcile(autoAssign:)'s doc comment). That was the
+      // "profiles loading weird" bug: loading a profile for one player could
+      // silently reassign a different player's controller.
+      ControllerManager.shared.reconcile(autoAssign: false)
       if ok {
         profileName = name
         profileEdited = false

@@ -22,12 +22,17 @@ enum WiimoteSlotOptions {
 
   static func setExtension(_ value: Int, forWiimote indexOneBased: Int) {
     DOLWiimoteBridge.setExtensionForWiimote(indexOneBased - 1, extension: value)
-    ControllerManager.shared.reconcile()
+    // autoAssign: false — this is an explicit per-slot action, not a device
+    // connect/disconnect. Running the full assignment engine here is exactly
+    // the anti-pattern `ControllerManager.reconcile(autoAssign:)` documents:
+    // toggling one Wiimote's extension must not re-decide every other port's
+    // device binding.
+    ControllerManager.shared.reconcile(autoAssign: false)
   }
 
   static func setSideways(_ enabled: Bool, forWiimote indexOneBased: Int) {
     DOLWiimoteBridge.setSidewaysForWiimote(indexOneBased - 1, enabled: enabled)
-    ControllerManager.shared.reconcile()
+    ControllerManager.shared.reconcile(autoAssign: false)
   }
 
   static func extensionName(_ value: Int) -> String {

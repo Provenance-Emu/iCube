@@ -157,7 +157,10 @@ struct ControllerSetupSections: View {
         guard let port else { return }
         DispatchQueue.main.async {
           _ = TVControllerMappingBridge.loadProfile(name, forGCPort: port, restoreDevice: true)
-          ControllerManager.shared.reconcile()
+          // autoAssign: false — see RemapPlayerView.loadProfile: loading a
+          // profile for one port must not let the engine re-decide every
+          // other port's device binding.
+          ControllerManager.shared.reconcile(autoAssign: false)
           reloadAll()
         }
       }
@@ -169,7 +172,8 @@ struct ControllerSetupSections: View {
         guard let w else { return }
         DispatchQueue.main.async {
           _ = TVControllerMappingBridge.loadProfile(name, forWiimote: w, restoreDevice: true)
-          ControllerManager.shared.reconcile()
+          // autoAssign: false — see RemapPlayerView.loadProfile.
+          ControllerManager.shared.reconcile(autoAssign: false)
           reloadAll()
         }
       }
