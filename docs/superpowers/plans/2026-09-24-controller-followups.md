@@ -25,6 +25,29 @@ code, the evidence so far, and who should do it (main session vs. a cheaper suba
   DEV build, or a USB session (`/api/debug/screenshot`; the DEBUG bench is loopback-only so it is
   unreachable over Wi-Fi).
 
+## Landed by subagents on 2026-09-24 (late; compile-gated iOS + tvOS, NOT device-exercised)
+
+| Item | Commit | Note |
+|---|---|---|
+| B1 unpause while in menu | `eb758371c1` | resume gated on `isPauseMenuChildPresented` (sheets + tvOS panes made the ZStack "disappear") |
+| D14 FF speed picker | `3d730e036b` | `setFastForwardSpeedPercent:`; also fixed Unlimited (0) never engaging because `integerForKey` cannot see "unset" |
+| D15 cheats badge | `0c38e19ab9` | `CheatsMenuView.activeCheatCount` |
+| B2 L1/R1 step the library system filter | `8b328498eb` | inside the existing `valueChangedHandler`, iOS only |
+| D17 sheets own the controller | `a4baa043e2` | `.claimsController()` on every library sheet; `SourcePickerView` has its own d-pad/A/B |
+| D11 boot-save picker | `245a18fcd3` | cards were never tappable (only a long-press menu); grid + aspect-fit thumbnails |
+| B4 IMU pointer per slot | `653259adc9` | `setWiiIMUPointEnabled:forWiimote:` |
+| B5 DS4 touchpad mirror | `1141083a7d` | removed |
+| Defect #4 gyro-mode IR | `6adae68fca` | single-sided, sign-corrected; sensitivity may now feel halved (was doubled) |
+| B3 DualSense mapping | `90ecbf62c4` | already shipped earlier; doc table only |
+| Wii "-" vs pause | `f2dbcbc494` | `Buttons/- = R Stick` in the physical Wiimote profile; Options stays the pause button |
+| Docs | `e49115b8a4`, `f036c78f9e`, `7e66c0e48e` | package survey, menu-engine + remap designs, overlay design (iFly `Views/Controller/`, not the Delta-skin runtime) |
+
+Phone checklist for this batch: open Controllers/Settings/Shaders from the pause menu and confirm
+the game stays paused; pick a FF speed and confirm immediate resume at that speed; cheats count on
+the item; L1/R1 in the library steps the system filter; source picker no longer moves the library
+behind it; boot-save cards launch on tap; on a Wii title with a DualSense, Share pauses only and
+R3 sends "-"; gyro-mode pointer direction and reach; Motion Debug shows live values.
+
 ## B. Bugs to fix next (main session, small)
 
 1. **Game unpauses while the pause menu is still up.** Lead: `PauseMenuView` `.onDisappear`
