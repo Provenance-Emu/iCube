@@ -108,6 +108,32 @@ The legacy stack (`ButtonMappingView.swift`, `ButtonMapping.storyboard`, ObjC `C
   'Debug (Non-Jailbroken)' -destination generic/platform=tvOS CODE_SIGNING_ALLOWED=NO
   -derivedDataPath build-Xcode-tvos` (separate derived data so it cannot race the iOS build).
 
+## Prompt for the remap (C7) follow-up session
+
+```
+Continue the iCube remap UI (C7) work from docs/handoff-2026-09-24-controllers.md and
+docs/superpowers/plans/2026-09-25-remap-ui-implementation.md (dolphin-ios develop at c93c800edd or
+later; Provenance develop edf2324b80). RemapPlayerView, RemapModel (capture + nav state machines),
+WiimoteSlotOptions and the saveProfile bridge methods are compile-gated on iOS + tvOS with
+RemapModelTests green, but the capture flow has never run on a device. Install the signed build on
+the iPhone 16 Pro Max (coredevice 5BD0518D-E8D9-5115-919A-A7C12481E82D, recipe in the handoff) and,
+with a real controller bound to Player 1, run the checklist at the end of the plan file: arm a row by
+touch and by A (the arming press must not be captured, the next press must), bind Button B, stick
+halves land on the right control, cancel by re-tap and by the 5 s timeout, long-press Clear,
+Save -> Load -> Reset to Default round-trip against the live Pad/Wiimote config, and on a Wii title
+extension + sideways staying consistent with the pause-menu Controllers screen. Then on iOS with a
+controller: d-pad/stick moves the highlight, A arms, B goes back, no double activation after a
+capture ends; then the same screen on Apple TV with a pad (native focus only, Menu swallowed while
+armed). Tune RemapCaptureMachine.Config (threshold 0.35, rest 0.15, 3 polls, 300-poll timeout) and
+RemapControllerNav.Config (0.4 s / 0.08 s repeat, 0.6 / 0.3 stick hysteresis) against real drift
+and keep RemapModelTests green (runnable on macOS via a throwaway SwiftPM package: RemapModel.swift
++ a one-line L() shim, target iCube / test target iCubeTests). Fix what turns up in small
+conventional commits, gate iOS + tvOS 'iCube (NJB)' Debug (Non-Jailbroken) before each, run
+`git checkout -- build/xcframework` before committing, push develop, bump the Provenance gitlink
+from its develop checkout. When D18's MenuScreen lands, RemapControllerNav is meant to be replaced by
+it (rename, not rewrite). Report device-verified vs compiled.
+```
+
 ## Prompt for the next session
 
 ```
