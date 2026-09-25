@@ -124,7 +124,9 @@
 	shallow = true
 [submodule "Externals/bzip2/bzip2"]
 	path = Externals/bzip2/bzip2
-	url = https://gitlab.com/bzip2/bzip2.git
+	# Mirror of https://gitlab.com/bzip2/bzip2 — gitlab.com 5xx outages broke CI
+	# submodule init for the whole Provenance build (it recursed into this tree).
+	url = https://github.com/Provenance-Emu/bzip2.git
 	shallow = true
 [submodule "Externals/imgui/imgui"]
 	path = Externals/imgui/imgui
