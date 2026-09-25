@@ -205,6 +205,13 @@ struct RemapPlayerView: View {
     } footer: {
       Text(captureHint)
     }
+    // Per the design spec: while a control is armed, every other row in the
+    // screen is disabled for activation. Without this, tapping the Device row
+    // mid-capture (touch, or native tvOS select — neither goes through the
+    // iOS controller-nav ticker, which already gates on `capture == nil`)
+    // could switch the bound device out from under a session still polling
+    // the OLD device's input list, producing a nonsense binding.
+    .disabled(capture != nil)
   }
 
   @ViewBuilder
@@ -281,6 +288,13 @@ struct RemapPlayerView: View {
         }
       }
       .opacity(capture != nil && !armed ? 0.5 : 1)
+      // Explicit gate, not just the dimming above: `contextMenu`/`swipeActions`
+      // are separate gesture recognizers that are not reliably silenced by
+      // SwiftUI's `isEnabled` environment, and `toggleCapture`'s own no-op
+      // guard only covers the primary tap. Without this, long-pressing (or
+      // swiping) a DIFFERENT row than the one armed could still clear it
+      // while a capture was in flight.
+      .disabled(capture != nil && !armed)
       .contextMenu {
         Button(L("Clear"), role: .destructive) { clear(row) }
       }
@@ -372,7 +386,11 @@ struct RemapPlayerView: View {
   }
 
   private func clear(_ row: RemapControlRow) {
-    if capture?.rowID == row.id { endCapture() }
+    // A capture in flight for a DIFFERENT row must not be raced by a
+    // long-press/swipe Clear on this one — the `.disabled` on the row only
+    // gates the tap gesture, not the context menu / swipe action.
+    if let capture, capture.rowID != row.id { return }
+    if capture != nil { endCapture() }
     write(expression: "", groupId: row.groupId, index: row.index)
   }
 
