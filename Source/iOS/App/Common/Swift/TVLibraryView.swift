@@ -1825,6 +1825,7 @@ struct TVLibraryView: View {
     // SaveStatesBrowserView presention
     .sheet(isPresented: $showSaveStatesBrowser) {
       NavigationStack { SaveStatesBrowserView() }
+        .claimsController()
     }
     // About iCube sheet (presented from the tappable toolbar Dolphin logo on iOS)
 #if os(iOS) || targetEnvironment(macCatalyst)
@@ -1837,16 +1838,20 @@ struct TVLibraryView: View {
             }
           }
       }
+      .claimsController()
     }
 #endif
     // DSU controller session (iOS only)
 #if os(iOS)
     .sheet(isPresented: $showDSUSession) {
-      if #available(iOS 17.0, *) {
-        DSUSessionView()
-      } else {
-        // Fallback on earlier versions
+      Group {
+        if #available(iOS 17.0, *) {
+          DSUSessionView()
+        } else {
+          // Fallback on earlier versions
+        }
       }
+      .claimsController()
     }
 #endif
     .onAppear {
@@ -1983,20 +1988,28 @@ struct TVLibraryView: View {
       Button(L("Continue Current Game"), role: .cancel) { if let current = model.currentGame { navigateTo = current } }
       Button(L("Cancel")) { }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
-      .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0) }
-      .sheet(item: $showCheatListFor) { TVCheatListView(item: $0) }
+      .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
+      .sheet(item: $showCheatListFor) { TVCheatListView(item: $0).claimsController() }
+      // D17: while this sheet is up, `.claimsController()` pushes a new
+      // controller-ownership scope, which makes the library's own
+      // `extendedGamepad.valueChangedHandler` (gated on
+      // `ControllerFocusCoordinator.isActiveScope`) stop moving grid focus or
+      // relaunching whatever was focused underneath. `SourcePickerView` installs
+      // its own d-pad/A/B handling so the sheet remains fully controller-navigable.
       .sheet(isPresented: Binding(get: { sourcePickerItems != nil }, set: { if !$0 { sourcePickerItems = nil } })) {
         if let items = sourcePickerItems {
           SourcePickerView(items: items) { chosen in
             sourcePickerItems = nil
             launchGame(chosen)
           }
+          .claimsController()
         }
       }
     // Sources sheet
-      .sheet(isPresented: $showSources) { SourcesView() }
+      .sheet(isPresented: $showSources) { SourcesView().claimsController() }
       .sheet(isPresented: $showWebImportSheet) {
         LibraryWebImportView()
+          .claimsController()
       }
 #if os(iOS)
       .fileImporter(
@@ -2038,6 +2051,7 @@ struct TVLibraryView: View {
           )
           .navigationTitle(L("Import Game"))
         }
+        .claimsController()
       }
       .sheet(isPresented: $showImportNANDPicker) {
         NavigationStack {
@@ -2050,6 +2064,7 @@ struct TVLibraryView: View {
           )
           .navigationTitle(L("Import BootMii NAND Backup"))
         }
+        .claimsController()
       }
 #endif
     /// Delete confirmation and action
@@ -2088,6 +2103,7 @@ struct TVLibraryView: View {
       } message: { Text(storageAlertMessage) }
       .sheet(item: $showCacheInfoFor) { item in
         CacheInfoView(item: item, showSubtitles: showSubtitles)
+          .claimsController()
       }
       .overlay(blockingPrecacheOverlay)
       .overlay(offlineBanner)
@@ -2100,10 +2116,10 @@ struct TVLibraryView: View {
       .overlay(onboardingOverlay)
 #if os(iOS)
       .sheet(isPresented: Binding(get: { showGeckoEditorFor != nil }, set: { if !$0 { showGeckoEditorFor = nil } })) {
-        if let item = showGeckoEditorFor { GeckoCodesModal(item: item) }
+        if let item = showGeckoEditorFor { GeckoCodesModal(item: item).claimsController() }
       }
       .sheet(isPresented: Binding(get: { showAREditorFor != nil }, set: { if !$0 { showAREditorFor = nil } })) {
-        if let item = showAREditorFor { ActionReplayCodesModal(item: item) }
+        if let item = showAREditorFor { ActionReplayCodesModal(item: item).claimsController() }
       }
 #endif
   }
@@ -2941,6 +2957,20 @@ private struct SourcePickerView: View {
   let onPick: (TVGameItem) -> Void
   @Environment(\.dismiss) private var dismiss
 
+#if !os(tvOS)
+  // D17: this sheet is presented over the library with `.claimsController()`,
+  // which silences the library's own raw GCController handlers, but that alone
+  // leaves the picker with no nav of its own — iOS does not drive SwiftUI focus
+  // from a game controller. So the picker installs its own dpad/A/B handling,
+  // the same self-contained pattern PauseMenuView uses
+  // (setupPauseControllerNav/teardownPauseControllerNav): up/down step
+  // `focusIndex`, A picks the focused source, B cancels.
+  @State private var focusIndex: Int = 0
+  @State private var controllerNavActive: Bool = false
+  @State private var prevEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
+  @State private var lastMoveTime: TimeInterval = 0
+#endif
+
   private func label(for item: TVGameItem) -> String {
     if let scheme = URL(string: item.filePath)?.scheme?.lowercased() {
       switch scheme {
@@ -2962,7 +2992,7 @@ private struct SourcePickerView: View {
     NavigationStack {
       List {
         Section(L("Choose Source")) {
-          ForEach(items, id: \.filePath) { item in
+          ForEach(Array(items.enumerated()), id: \.element.filePath) { idx, item in
             Button(action: { onPick(item) }) {
               HStack {
                 Text(label(for: item))
@@ -2971,6 +3001,11 @@ private struct SourcePickerView: View {
                   .foregroundStyle(.secondary)
               }
             }
+#if !os(tvOS)
+            .listRowBackground(
+              (controllerNavActive && focusIndex == idx) ? Color.accentColor.opacity(0.18) : Color.clear
+            )
+#endif
           }
         }
       }
@@ -2983,7 +3018,69 @@ private struct SourcePickerView: View {
         }
       }
     }
+#if !os(tvOS)
+    .onAppear { refreshControllerNav() }
+    .onReceive(ControllerManager.shared.controllerConnectedPublisher) { _ in refreshControllerNav() }
+    .onReceive(ControllerManager.shared.controllerDisconnectedPublisher) { _ in refreshControllerNav() }
+    .onDisappear { teardownControllerNav() }
+#endif
   }
+
+#if !os(tvOS)
+  private func refreshControllerNav() {
+    teardownControllerNav()
+    let active = GCController.controllers().contains { $0.extendedGamepad != nil }
+    controllerNavActive = active
+    guard active else { return }
+    focusIndex = min(focusIndex, max(0, items.count - 1))
+    GCController.shouldMonitorBackgroundEvents = false
+    for c in GCController.controllers() {
+      guard let egp = c.extendedGamepad else { continue }
+      let cid = ObjectIdentifier(c)
+      if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
+      egp.valueChangedHandler = { gamepad, element in
+        func move(_ delta: Int) {
+          let now = Date().timeIntervalSince1970
+          if now - lastMoveTime < 0.18 { return }
+          lastMoveTime = now
+          guard !items.isEmpty else { return }
+          DispatchQueue.main.async {
+            focusIndex = max(0, min(focusIndex + delta, items.count - 1))
+          }
+        }
+        let dpad = gamepad.dpad
+        if element == dpad.up, dpad.up.isPressed { move(-1) }
+        if element == dpad.down, dpad.down.isPressed { move(1) }
+        if element == gamepad.leftThumbstick {
+          let vy = gamepad.leftThumbstick.yAxis.value
+          if vy > 0.6 { move(-1) }
+          if vy < -0.6 { move(1) }
+        }
+        if element == gamepad.buttonA, gamepad.buttonA.isPressed {
+          guard items.indices.contains(focusIndex) else { return }
+          let chosen = items[focusIndex]
+          DispatchQueue.main.async { onPick(chosen) }
+        }
+        if element == gamepad.buttonB, gamepad.buttonB.isPressed {
+          DispatchQueue.main.async { dismiss() }
+        }
+      }
+    }
+  }
+
+  private func teardownControllerNav() {
+    for c in GCController.controllers() {
+      guard let egp = c.extendedGamepad else { continue }
+      let cid = ObjectIdentifier(c)
+      if let prev = prevEGPHandlers[cid] {
+        egp.valueChangedHandler = prev
+      } else {
+        egp.valueChangedHandler = nil
+      }
+      prevEGPHandlers.removeValue(forKey: cid)
+    }
+  }
+#endif
 }
 
 #if os(iOS)
