@@ -40,8 +40,11 @@ enum LibrarySnapshotWriter {
       let saved = LibrarySnapshotStore().save(snapshot)
       NSLog("[Snapshot] wrote %d games (%d recent, %d favorites) saved=%d",
             snapshot.byGameID.count, snapshot.recentlyPlayed.count, snapshot.favorites.count, saved ? 1 : 0)
+      guard saved else { return }
       #if os(tvOS)
-      if saved { TVTopShelfContentProvider.topShelfContentDidChange() }
+      TVTopShelfContentProvider.topShelfContentDidChange()
+      #else
+      await EcosystemSurfaceRefresher.refresh(with: snapshot)
       #endif
     }
   }
