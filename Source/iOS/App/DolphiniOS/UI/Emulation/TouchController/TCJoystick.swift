@@ -57,7 +57,11 @@ class TCJoystick: UIView, UIGestureRecognizerDelegate {
     var point: CGPoint
     var joyAxises: [CGFloat] = [0, 0, 0, 0]
 
-    if gesture.state == .ended {
+    // Defect #7: .cancelled/.failed (a system interruption, e.g. an incoming call or
+    // the overlay rebuilding under the finger) used to fall into the "still panning"
+    // branch below and compute axes from the gesture's last known location instead of
+    // recentering, leaving the stick pinned after the touch was gone.
+    if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed {
       // Reset to center
       point = convert(center, from: superview)
     } else {

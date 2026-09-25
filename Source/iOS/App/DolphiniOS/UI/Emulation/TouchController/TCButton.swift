@@ -34,6 +34,12 @@ class TCButton: UIButton {
     setTitle("", for: .normal)
     addTarget(self, action: #selector(buttonPressed), for: .touchDown)
     addTarget(self, action: #selector(buttonReleased), for: .touchUpInside)
+    // Defect #7: touchUpInside alone misses a finger that slides off the button
+    // (touchDragExit -> touchUpOutside) or a touch the system cancels mid-press
+    // (an incoming call, a system gesture, the overlay rebuilding under the
+    // finger). Either left the emulated button/axis pressed forever.
+    addTarget(self, action: #selector(buttonReleased), for: .touchUpOutside)
+    addTarget(self, action: #selector(buttonReleased), for: .touchCancel)
 
     // TODO: Setting for hapic touch analog triggers enabled
     useHapicTouch = traitCollection.forceTouchCapability == .available

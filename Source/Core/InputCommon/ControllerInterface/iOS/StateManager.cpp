@@ -169,7 +169,7 @@ void StateManager::Init()
     {
       button.second = false;
     }
-    
+
     for (auto& axis : m_controllers[i].m_axes)
     {
       axis.second = 0.0f;
@@ -199,5 +199,15 @@ float StateManager::GetAxisValue(int controller_id, ButtonType axis) const
 void StateManager::SetAxisValue(int controller_id, ButtonType axis, float value)
 {
   m_controllers[controller_id].m_axes[axis] = value;
+}
+
+void StateManager::ClearController(int controller_id)
+{
+  std::lock_guard<std::mutex> lock(m_mutex);
+  auto& state = m_controllers[controller_id];
+  for (auto& button : state.m_buttons)
+    button.second = false;
+  for (auto& axis : state.m_axes)
+    axis.second = 0.0f;
 }
 }  // namespace ciface::iOS

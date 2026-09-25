@@ -48,6 +48,34 @@
   if (button == 5) { [DSUServerBridge setTouch:controllerId state:state]; }
 }
 
++ (void)clearAllForController:(NSInteger)controllerId {
+  ciface::iOS::StateManager::GetInstance()->ClearController((int)controllerId);
+  // Release every DSU mirror this class writes in setButtonStateFor:/setAxisValueFor:
+  // too, so a torn-down overlay cannot leave a DSU client's view of the pad stuck
+  // even though the core-facing StateManager has already released it.
+  [DSUServerBridge setDPadUpForController:controllerId state:NO];
+  [DSUServerBridge setDPadDownForController:controllerId state:NO];
+  [DSUServerBridge setDPadLeftForController:controllerId state:NO];
+  [DSUServerBridge setDPadRightForController:controllerId state:NO];
+  for (NSInteger shape = 0; shape < 4; shape++) {
+    [DSUServerBridge setButton:shape controller:controllerId state:NO];
+  }
+  [DSUServerBridge setShare:controllerId state:NO];
+  [DSUServerBridge setOptions:controllerId state:NO];
+  [DSUServerBridge setPS:controllerId state:NO];
+  [DSUServerBridge setShoulderL:controllerId state:NO];
+  [DSUServerBridge setShoulderR:controllerId state:NO];
+  [DSUServerBridge setTouch:controllerId state:NO];
+  [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
+  [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
+  [DSUServerBridge setAxis:2 controller:controllerId value:0.f];
+  [DSUServerBridge setAxis:3 controller:controllerId value:0.f];
+  // GC analog triggers map [0..1] -> [-1..1] (t = v*2-1); rest (v=0) is t=-1.
+  [DSUServerBridge setAxis:4 controller:controllerId value:-1.f];
+  [DSUServerBridge setAxis:5 controller:controllerId value:-1.f];
+  [DSUServerBridge setTouchPoint:0 controller:controllerId active:NO x:0 y:0];
+}
+
 // Aggregate split stick inputs (Up/Down/Left/Right) into full X/Y for DSU
 static float s_splitAxes[4][256] = {{0}}; // [controller][axisIndex] last values in [-1,1] (size covers up to 255)
 static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); }

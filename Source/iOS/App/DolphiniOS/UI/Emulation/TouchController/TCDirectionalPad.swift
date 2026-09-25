@@ -64,7 +64,10 @@ class TCDirectionalPad: UIView {
     let point = gesture.location(in: self)
     var buttonPresses: [Bool] = [false, false, false, false]
 
-    if gesture.state == .ended {
+    // Defect #7: a system-cancelled touch (interruption, overlay rebuild under the
+    // finger) reports .cancelled/.failed, not .ended; treating those the same as
+    // .ended releases the pad instead of leaving the last-pressed direction held.
+    if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed {
       imageView.image = dpadNoPressed
       isPressed = false
     } else {

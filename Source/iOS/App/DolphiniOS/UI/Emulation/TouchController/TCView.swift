@@ -50,6 +50,30 @@ import UIKit
     }
   }
 
+  /// Defect #7: SwiftUI rebuilds `TouchPadsContainer`'s subtree (a new `TCWiiPad`/
+  /// `TCGameCubePad`/`TCView`) on nearly every update — see `touchPadsRefreshToken` in
+  /// `EmulationScreen` — so a finger that was mid-press when the old overlay disappeared
+  /// left `StateManager` (and its DSU mirrors) holding that button/axis forever, because
+  /// the new overlay's buttons start from a fresh, un-pressed UIKit state and never send
+  /// the matching release. Clearing this view's controller id whenever it leaves the
+  /// hierarchy (or is deallocated outright) guarantees a release is always sent.
+  override func willMove(toSuperview newSuperview: UIView?) {
+    super.willMove(toSuperview: newSuperview)
+    if newSuperview == nil {
+      clearControllerState()
+    }
+  }
+
+  deinit {
+    clearControllerState()
+  }
+
+  private func clearControllerState() {
+    #if os(iOS)
+    TCManagerInterface.clearAllForController(_port)
+    #endif
+  }
+
   func SetPort(_ port: Int, view: UIView) {
     for subview in view.subviews {
       switch subview {
