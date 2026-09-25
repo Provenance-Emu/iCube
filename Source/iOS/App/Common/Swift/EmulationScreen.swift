@@ -1110,6 +1110,11 @@ struct EmulationScreen: View {
       // Controller connect/disconnect handled by ControllerManager
       // NotificationCenter bridging for assignments remains
       NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
+        if !userOverrideTouchControls {
+          let visible = controllerManager.touchscreenSlot(system: isWiiSystem ? .wii : .gamecube) != nil
+          controllerManager.overlayVisible = visible
+          isTouchControlsActive = visible
+        }
         touchPadsRefreshToken = UUID()
       }
       NotificationCenter.default.addObserver(forName: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil, queue: .main) { _ in
@@ -1167,9 +1172,11 @@ struct EmulationScreen: View {
       let ext0 = Int(DOLWiimoteBridge.selectedExtension(forWiimote: touchSlot))
       let side0 = DOLWiimoteBridge.isSideways(forWiimote: touchSlot)
       wiiOverlaySignature = (ext0 & 0xFF) | (side0 ? 0x100 : 0)
-      // Default touch controls: enabled when no controllers are connected (only if not user-overridden)
+      // Default touch controls: shown while some active slot of the running system is bound to the
+      // on-screen Touchscreen (only if not user-overridden). "Hidden whenever any controller is
+      // connected" made an explicit Touchscreen assignment with a pad attached look dead.
       if !userOverrideTouchControls {
-        let visible = GCController.controllers().isEmpty
+        let visible = controllerManager.touchscreenSlot(system: isWiiSystem ? .wii : .gamecube) != nil
         controllerManager.overlayVisible = visible
         isTouchControlsActive = visible
       }

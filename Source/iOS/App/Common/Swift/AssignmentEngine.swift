@@ -12,6 +12,14 @@ struct ControllerAssignment: Equatable {
   let system: EmulatedSystem
 }
 
+/// A slot the user chose explicitly in the setup / remap UI. Auto-assignment never takes a
+/// pinned slot: before this, picking Touchscreen for Player 1 with a pad connected was undone by
+/// the very next reconcile, because a slot holding the on-screen pad counted as free.
+struct PinnedSlot: Hashable {
+  let system: EmulatedSystem
+  let playerZeroBased: Int
+}
+
 /// The complete set of writes to apply for one reconcile pass. An empty list
 /// means the current configuration is already correct — the engine is
 /// idempotent, so a second pass over an unchanged state decides nothing.
@@ -42,24 +50,26 @@ final class AssignmentEngine {
   static let firstWiimoteSlotOneBased = 2
   static let firstGCPortOneBased = 1
 
-  func decide(from state: ControllerStateStore.State) -> AssignmentDecision {
+  func decide(from state: ControllerStateStore.State, pinned: Set<PinnedSlot> = []) -> AssignmentDecision {
     let connected = Set(state.connectedQualifiers)
     let physical = state.connectedQualifiers.filter { !Self.isVirtual($0) }
     var out: [ControllerAssignment] = []
+    let pinnedGC = Set(pinned.filter { $0.system == .gamecube }.map(\.playerZeroBased))
+    let pinnedWii = Set(pinned.filter { $0.system == .wii }.map(\.playerZeroBased))
 
     // MARK: GameCube pads
 
     var gcSlots = Self.slots(from: state.portAssignments)
     for qualifier in physical where !gcSlots.contains(qualifier) {
       guard let slot = Self.firstFreeSlot(in: gcSlots, connected: connected,
-                                          startingAt: Self.firstGCPortOneBased) else { break }
+                                          startingAt: Self.firstGCPortOneBased, pinned: pinnedGC) else { break }
       gcSlots[slot] = qualifier
       out.append(ControllerAssignment(qualifier: qualifier, playerZeroBased: slot, system: .gamecube))
     }
 
     // With nothing physical attached, Pad 1 falls back to the on-screen pad so
-    // the game is still playable.
-    if physical.isEmpty, let pad1 = gcSlots.first, !Self.isVirtual(pad1) {
+    // the game is still playable (unless the user pinned something else there).
+    if physical.isEmpty, let pad1 = gcSlots.first, !Self.isVirtual(pad1), !pinnedGC.contains(0) {
       out.append(ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .gamecube))
     }
 
@@ -74,7 +84,7 @@ final class AssignmentEngine {
     var wiiSlots = Self.slots(from: state.wiimoteAssignments)
     for qualifier in physical where !wiiSlots.contains(qualifier) {
       guard let slot = Self.firstFreeSlot(in: wiiSlots, connected: connected,
-                                          startingAt: Self.firstWiimoteSlotOneBased) else { break }
+                                          startingAt: Self.firstWiimoteSlotOneBased, pinned: pinnedWii) else { break }
       wiiSlots[slot] = qualifier
       out.append(ControllerAssignment(qualifier: qualifier, playerZeroBased: slot, system: .wii))
     }
@@ -99,10 +109,11 @@ final class AssignmentEngine {
   /// device that is no longer enumerated. Slots below `startingAt` are reserved
   /// and never considered.
   private static func firstFreeSlot(in slots: [String], connected: Set<String>,
-                                    startingAt oneBased: Int) -> Int? {
+                                    startingAt oneBased: Int, pinned: Set<Int> = []) -> Int? {
     let start = max(0, oneBased - 1)
     guard start < slots.count else { return nil }
     return (start ..< slots.count).first { index in
+      guard !pinned.contains(index) else { return false }
       let qualifier = slots[index]
       return qualifier.isEmpty || isVirtual(qualifier) || !connected.contains(qualifier)
     }

@@ -28,7 +28,43 @@ final class ControllerManager: NSObject, ObservableObject {
   /// reconcile()/change-notification stay in this manager's wrappers, not the service.
   private let assignmentService = ControllerAssignmentService(writer: BridgeControllerConfigWriter())
 
-  override private init() {}
+  /// Slots the user assigned explicitly (setup / remap UI). Persisted so a pad that connects at
+  /// the next launch cannot take over a slot the user gave to the touchscreen or another pad.
+  static let pinnedSlotsDefaultsKey = "controller_pinned_slots"
+  private(set) var pinnedSlots: Set<PinnedSlot> = []
+
+  override private init() {
+    super.init()
+    pinnedSlots = Self.loadPinnedSlots()
+  }
+
+  private static func loadPinnedSlots() -> Set<PinnedSlot> {
+    let raw = UserDefaults.standard.stringArray(forKey: pinnedSlotsDefaultsKey) ?? []
+    return Set(raw.compactMap { entry -> PinnedSlot? in
+      let parts = entry.split(separator: ":")
+      guard parts.count == 2, let player = Int(parts[1]) else { return nil }
+      switch parts[0] {
+      case "gamecube": return PinnedSlot(system: .gamecube, playerZeroBased: player)
+      case "wii": return PinnedSlot(system: .wii, playerZeroBased: player)
+      default: return nil
+      }
+    })
+  }
+
+  private func savePinnedSlots() {
+    let raw = pinnedSlots.map { "\($0.system == .gamecube ? "gamecube" : "wii"):\($0.playerZeroBased)" }.sorted()
+    UserDefaults.standard.set(raw, forKey: Self.pinnedSlotsDefaultsKey)
+  }
+
+  private func pin(_ system: EmulatedSystem, player: Int) {
+    pinnedSlots.insert(PinnedSlot(system: system, playerZeroBased: player))
+    savePinnedSlots()
+  }
+
+  private func unpin(_ system: EmulatedSystem, player: Int) {
+    pinnedSlots.remove(PinnedSlot(system: system, playerZeroBased: player))
+    savePinnedSlots()
+  }
 
   // ObjC proxies for wrapped Swift properties
   var overlayVisibleObjc: Bool {
@@ -348,7 +384,12 @@ final class ControllerManager: NSObject, ObservableObject {
   /// `ControllerAssignmentService`, then mirror the result onto `playerIndex`.
   /// The engine is idempotent, so calling this repeatedly is free and port
   /// assignments stay put across connect/disconnect cycles.
-  func reconcile() {
+  /// `autoAssign: false` is for explicit user actions: apply the drop-vanished-devices pass,
+  /// re-affirm activation and sync player indices, but make no new placement decisions. Running
+  /// the engine after every explicit choice is what made a GameCube assignment also rewrite the
+  /// Wii Remotes (and vice versa) and put a connected pad straight back onto a slot the user had
+  /// just given to the touchscreen.
+  func reconcile(autoAssign: Bool = true) {
     // Re-entrancy guard. Connect used to run auto-assign, which called
     // reconcile, which assigned, which called reconcile again — so one connect
     // event could decide, re-decide and reassign the same controller several
@@ -360,14 +401,16 @@ final class ControllerManager: NSObject, ObservableObject {
     TVControllerMappingBridge.reconcileAssignments()
 
     let state = ControllerStateStore.shared.snapshot()
-    for assignment in AssignmentEngine().decide(from: state).assignments {
-      if let qualifier = assignment.qualifier {
-        assignmentService.assign(qualifier: qualifier,
-                                 toPlayer: assignment.playerZeroBased,
-                                 system: assignment.system)
-      } else {
-        assignmentService.assignTouchscreen(toPlayer: assignment.playerZeroBased,
-                                            system: assignment.system)
+    if autoAssign {
+      for assignment in AssignmentEngine().decide(from: state, pinned: pinnedSlots).assignments {
+        if let qualifier = assignment.qualifier {
+          assignmentService.assign(qualifier: qualifier,
+                                   toPlayer: assignment.playerZeroBased,
+                                   system: assignment.system)
+        } else {
+          assignmentService.assignTouchscreen(toPlayer: assignment.playerZeroBased,
+                                              system: assignment.system)
+        }
       }
     }
 
@@ -410,7 +453,8 @@ final class ControllerManager: NSObject, ObservableObject {
 
   func assignTouchscreen(toGCPort portOneBased: Int) {
     assignmentService.assignTouchscreen(toPlayer: portOneBased - 1, system: .gamecube)
-    reconcile()
+    pin(.gamecube, player: portOneBased - 1)
+    reconcile(autoAssign: false)
   }
 
   func assign(_ controller: GCController, toGCPort portOneBased: Int) {
@@ -421,7 +465,8 @@ final class ControllerManager: NSObject, ObservableObject {
 
   func assignTouchscreen(toWiimote indexOneBased: Int) {
     assignmentService.assignTouchscreen(toPlayer: indexOneBased - 1, system: .wii)
-    reconcile()
+    pin(.wii, player: indexOneBased - 1)
+    reconcile(autoAssign: false)
   }
 
   func assign(_ controller: GCController, toWiimote indexOneBased: Int) {
@@ -444,12 +489,14 @@ final class ControllerManager: NSObject, ObservableObject {
       return
     }
     assignmentService.assign(qualifier: qualifier, toPlayer: portZeroBased, system: system)
-    reconcile()
+    pin(system, player: portZeroBased)
+    reconcile(autoAssign: false)
   }
 
   func clearDefaultDevice(forWiimote indexOneBased: Int) {
     assignmentService.clear(player: indexOneBased - 1, system: .wii)
-    reconcile()
+    unpin(.wii, player: indexOneBased - 1)
+    reconcile(autoAssign: false)
   }
 
   func defaultDeviceQualifier(forWiimote indexOneBased: Int) -> String {
@@ -460,7 +507,8 @@ final class ControllerManager: NSObject, ObservableObject {
 
   func clearDefaultDevice(forGCPort portOneBased: Int) {
     assignmentService.clear(player: portOneBased - 1, system: .gamecube)
-    reconcile()
+    unpin(.gamecube, player: portOneBased - 1)
+    reconcile(autoAssign: false)
   }
 
   func defaultDeviceQualifier(forGCPort portOneBased: Int) -> String {
