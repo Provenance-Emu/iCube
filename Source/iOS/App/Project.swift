@@ -248,9 +248,8 @@ let iCube = Target.target(
         // APIs). The live tvOS settings UI is SwiftUI (SettingsRootView.swift / TVRootView). These
         // ObjC sources are not used on tvOS, so exclude the ObjC sources (*.m/*.mm) from the tvOS
         // build and re-add them iOS/Catalyst-only. We keep the *.swift and *.h files unconditional:
-        // the SwiftUI settings views live under these dirs, and the headers (e.g.
-        // MappingRootViewController.h, which declares DOLMappingType used by the programmatic Swift
-        // MappingRootViewController in ButtonMappingView.swift) must stay on the bridging header path.
+        // the SwiftUI settings views live under these dirs, and the headers must stay on the
+        // bridging header path.
         .glob("DolphiniOS/**/*.{swift,h}"),
         .glob(
             "DolphiniOS/**/*.{m,mm}",

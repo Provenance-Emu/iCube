@@ -5,9 +5,9 @@ import GameController
 import SwiftUI
 
 /// One screen per player (GameCube port or Wii Remote) for button remapping.
-/// Replaces the storyboard / `TVMappingRootViewController` drill-down that
-/// needed three taps before the first "capture" (which then only accepted
-/// typed expression text). Design: `docs/superpowers/specs/2026-09-24-remap-ui-design.md`.
+/// Replaced the legacy storyboard / `TVMappingRootViewController` drill-down
+/// (deleted) that needed three taps before the first "capture", which then only
+/// accepted typed expression text. Design: `docs/superpowers/specs/2026-09-24-remap-ui-design.md`.
 ///
 /// Layout is one `List`: a header (device, profile, save/reset, Wii extension +
 /// sideways) followed by every control group inline. Tapping a control arms a

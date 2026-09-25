@@ -55,7 +55,7 @@ drill-down behind "Customize Buttons…". Capture polls `inputStates(forQualifie
 Compiled iOS + tvOS; `RemapModelTests` (11) green on macOS via a throwaway SwiftPM harness. Needs the phone with a
 controller: arm by touch and by A, bind `Button B`, stick halves, cancel by re-tap and timeout, long-press Clear,
 save → load → Reset to Default, Wii extension/sideways consistency with the pause-menu Controllers screen.
-Open: delete `ButtonMappingView.swift` (legacy stack, now unreferenced) and the iOS `ButtonMapping.storyboard`.
+The legacy stack (`ButtonMappingView.swift`, `ButtonMapping.storyboard`, ObjC `Common/UI/Settings/Mapping/`) is deleted.
 
 ## Then P2 (audit §5, items 8-11)
 

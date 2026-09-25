@@ -33,7 +33,6 @@
 		B3LIB0012E9000001036EE31 /* LibraryPlatformCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3LIB0012E9000000036EE31 /* LibraryPlatformCategory.swift */; };
 		B346CDE02E75E4CF00B3C00B /* CacheInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */; };
 		B346CDE22E75E52900B3C00B /* DSUSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDE12E75E52900B3C00B /* DSUSessionView.swift */; };
-		B346CDE82E75F04100B3C00B /* ButtonMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */; };
 		B34ECCEE2E567EE100301907 /* MoltenVK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilter = ios; };
 		B34ECCEF2E567EE100301907 /* MoltenVK.xcframework in CopyFiles */ = {isa = PBXBuildFile; fileRef = B900A7B327F2D3AF000361DD /* MoltenVK.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34ECCF02E5692C900301907 /* TVRootView.swift */; };
@@ -105,21 +104,6 @@
 		B900A7BD27F4CDD3000361DD /* SwiftStringUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900A7BC27F4CDD3000361DD /* SwiftStringUtil.swift */; };
 		B900A7D227F5228B000361DD /* UICollectionViewLeftAlignedLayout in Frameworks */ = {isa = PBXBuildFile; productRef = B900A7D127F5228B000361DD /* UICollectionViewLeftAlignedLayout */; };
 		B900A7D527F61F3A000361DD /* GameFileCacheManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = B900A7D427F61F3A000361DD /* GameFileCacheManager.mm */; };
-		B904ACF42886AB06008B6BE9 /* ButtonMapping.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B904ACF32886AB05008B6BE9 /* ButtonMapping.storyboard */; platformFilters = (ios, maccatalyst, ); };
-		B904ACF82886AC58008B6BE9 /* MappingRootViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904ACF72886AC58008B6BE9 /* MappingRootViewController.mm */; };
-		B904AD0C28886AE6008B6BE9 /* MappingRootDeviceCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD0B28886AE6008B6BE9 /* MappingRootDeviceCell.m */; };
-		B904AD0F28886AF8008B6BE9 /* MappingRootGroupCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD0E28886AF8008B6BE9 /* MappingRootGroupCell.m */; };
-		B904AD1228886B0D008B6BE9 /* MappingRootExtensionCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD1128886B0D008B6BE9 /* MappingRootExtensionCell.m */; };
-		B904AD1A2888AB5E008B6BE9 /* MappingDeviceCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD192888AB5E008B6BE9 /* MappingDeviceCell.m */; };
-		B904AD1D2888AB6B008B6BE9 /* MappingDeviceViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904AD1C2888AB6B008B6BE9 /* MappingDeviceViewController.mm */; };
-		B904AD272888D346008B6BE9 /* MappingUtil.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904AD262888D346008B6BE9 /* MappingUtil.mm */; };
-		B904AD2B2888D72F008B6BE9 /* MappingExtensionViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904AD2A2888D72F008B6BE9 /* MappingExtensionViewController.mm */; };
-		B904AD2E2888D75F008B6BE9 /* MappingExtensionCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD2D2888D75F008B6BE9 /* MappingExtensionCell.m */; };
-		B904AD322888FF17008B6BE9 /* MappingGroupEditViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B904AD312888FF17008B6BE9 /* MappingGroupEditViewController.mm */; };
-		B904AD3528890477008B6BE9 /* MappingGroupEditEnabledCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD3428890477008B6BE9 /* MappingGroupEditEnabledCell.m */; };
-		B904AD3828890489008B6BE9 /* MappingGroupEditControlCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD3728890489008B6BE9 /* MappingGroupEditControlCell.m */; };
-		B904AD3B288904AC008B6BE9 /* MappingGroupEditBoolCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD3A288904AC008B6BE9 /* MappingGroupEditBoolCell.m */; };
-		B904AD3E288904D9008B6BE9 /* MappingGroupEditDoubleCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B904AD3D288904D9008B6BE9 /* MappingGroupEditDoubleCell.m */; };
 		B9114FA02893C71E00B9C57A /* VirtualMFiControllerManager.m in Sources */ = {isa = PBXBuildFile; fileRef = B9114F9F2893C71E00B9C57A /* VirtualMFiControllerManager.m */; };
 		B933EDBE27F6A7BF004D7DD7 /* GameFileCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B933EDBD27F6A7BF004D7DD7 /* GameFileCacheService.swift */; };
 		B933EDC127F77D1E004D7DD7 /* GameFilePtrWrapper.mm in Sources */ = {isa = PBXBuildFile; fileRef = B933EDC027F77D1E004D7DD7 /* GameFilePtrWrapper.mm */; };
@@ -147,8 +131,6 @@
 		B95AC52E2D29C49F0048E48B /* AudioSessionCategoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B95AC52D2D29C48F0048E48B /* AudioSessionCategoryService.swift */; };
 		B95AC5302D29C7FD0048E48B /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B95AC52F2D29C7FD0048E48B /* AVFoundation.framework */; };
 		B960AFF1295FB45500A246F0 /* TCDeviceMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B960AFF0295FB45500A246F0 /* TCDeviceMotion.swift */; };
-		B9661F332D2318D300FB2AAB /* MappingInputDisplayViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9661F322D2318D300FB2AAB /* MappingInputDisplayViewController.mm */; };
-		B9661F362D23190300FB2AAB /* MappingInputDisplayInputCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B9661F352D23190300FB2AAB /* MappingInputDisplayInputCell.m */; };
 		B96C5DC92CFE4B200046C029 /* Logger.ini in Resources */ = {isa = PBXBuildFile; fileRef = B96C5DC82CFE4B200046C029 /* Logger.ini */; };
 		B96C9A4A2A46501C002B5ECF /* DOLAppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C9A492A46501B002B5ECF /* DOLAppVersion.swift */; };
 		B96C9A602A46C2C1002B5ECF /* DOLAppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C9A5F2A46C2C1002B5ECF /* DOLAppVersionTests.swift */; };
@@ -174,8 +156,6 @@
 		B99137C928832A0800588446 /* LocalizationUtil.m in Sources */ = {isa = PBXBuildFile; fileRef = B99137C828832A0800588446 /* LocalizationUtil.m */; };
 		B9B1483829642C75002C4BE7 /* UpdateRequiredNotice.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B1483729642C75002C4BE7 /* UpdateRequiredNotice.xib */; platformFilters = (ios, maccatalyst, ); };
 		B9B1483C29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B9B1483A29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.m */; };
-		B9B2C5E2288D0A9800CB6569 /* MappingLoadProfileViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C5E1288D0A9800CB6569 /* MappingLoadProfileViewController.mm */; };
-		B9B2C5E5288D0C5500CB6569 /* MappingLoadProfileIniCell.m in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C5E4288D0C5500CB6569 /* MappingLoadProfileIniCell.m */; };
 		B9B2C620288DB62D00CB6569 /* TCClassicWiiPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C61B288DB62D00CB6569 /* TCClassicWiiPad.swift */; };
 		B9B2C621288DB62D00CB6569 /* TCClassicWiiPad.xib in Resources */ = {isa = PBXBuildFile; fileRef = B9B2C61C288DB62D00CB6569 /* TCClassicWiiPad.xib */; platformFilters = (ios, maccatalyst, ); };
 		B9B2C622288DB62D00CB6569 /* TCSidewaysWiiPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2C61D288DB62D00CB6569 /* TCSidewaysWiiPad.swift */; };
@@ -404,7 +384,6 @@
 		B3LIB0012E9000000036EE31 /* LibraryPlatformCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPlatformCategory.swift; sourceTree = "<group>"; };
 		B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheInfoView.swift; sourceTree = "<group>"; };
 		B346CDE12E75E52900B3C00B /* DSUSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSUSessionView.swift; sourceTree = "<group>"; };
-		B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ButtonMappingView.swift; sourceTree = "<group>"; };
 		B34ECCF02E5692C900301907 /* TVRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRootView.swift; sourceTree = "<group>"; };
 		B34ECCF22E5693EB00301907 /* Info-TV.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-TV.plist"; sourceTree = "<group>"; };
 		B34ECCF62E56A2EB00301907 /* TVGameItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TVGameItem.h; sourceTree = "<group>"; };
@@ -494,43 +473,8 @@
 		B900A7BC27F4CDD3000361DD /* SwiftStringUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftStringUtil.swift; sourceTree = "<group>"; };
 		B900A7D327F61F3A000361DD /* GameFileCacheManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GameFileCacheManager.h; sourceTree = "<group>"; };
 		B900A7D427F61F3A000361DD /* GameFileCacheManager.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = GameFileCacheManager.mm; sourceTree = "<group>"; };
-		B904ACF32886AB05008B6BE9 /* ButtonMapping.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = ButtonMapping.storyboard; sourceTree = "<group>"; };
-		B904ACF62886AC58008B6BE9 /* MappingRootViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingRootViewController.h; sourceTree = "<group>"; };
-		B904ACF72886AC58008B6BE9 /* MappingRootViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MappingRootViewController.mm; sourceTree = "<group>"; };
-		B904AD0A28886AE6008B6BE9 /* MappingRootDeviceCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingRootDeviceCell.h; sourceTree = "<group>"; };
-		B904AD0B28886AE6008B6BE9 /* MappingRootDeviceCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingRootDeviceCell.m; sourceTree = "<group>"; };
-		B904AD0D28886AF8008B6BE9 /* MappingRootGroupCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingRootGroupCell.h; sourceTree = "<group>"; };
-		B904AD0E28886AF8008B6BE9 /* MappingRootGroupCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingRootGroupCell.m; sourceTree = "<group>"; };
-		B904AD1028886B0D008B6BE9 /* MappingRootExtensionCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingRootExtensionCell.h; sourceTree = "<group>"; };
-		B904AD1128886B0D008B6BE9 /* MappingRootExtensionCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingRootExtensionCell.m; sourceTree = "<group>"; };
-		B904AD182888AB5E008B6BE9 /* MappingDeviceCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingDeviceCell.h; sourceTree = "<group>"; };
-		B904AD192888AB5E008B6BE9 /* MappingDeviceCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingDeviceCell.m; sourceTree = "<group>"; };
-		B904AD1B2888AB6B008B6BE9 /* MappingDeviceViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingDeviceViewController.h; sourceTree = "<group>"; };
-		B904AD1C2888AB6B008B6BE9 /* MappingDeviceViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MappingDeviceViewController.mm; sourceTree = "<group>"; };
-		B904AD252888D346008B6BE9 /* MappingUtil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingUtil.h; sourceTree = "<group>"; };
-		B904AD262888D346008B6BE9 /* MappingUtil.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MappingUtil.mm; sourceTree = "<group>"; };
-		B904AD292888D72F008B6BE9 /* MappingExtensionViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingExtensionViewController.h; sourceTree = "<group>"; };
-		B904AD2A2888D72F008B6BE9 /* MappingExtensionViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MappingExtensionViewController.mm; sourceTree = "<group>"; };
-		B904AD2C2888D75F008B6BE9 /* MappingExtensionCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingExtensionCell.h; sourceTree = "<group>"; };
-		B904AD2D2888D75F008B6BE9 /* MappingExtensionCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingExtensionCell.m; sourceTree = "<group>"; };
-		B904AD302888FF17008B6BE9 /* MappingGroupEditViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditViewController.h; sourceTree = "<group>"; };
-		B904AD312888FF17008B6BE9 /* MappingGroupEditViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MappingGroupEditViewController.mm; sourceTree = "<group>"; };
-		B904AD3328890477008B6BE9 /* MappingGroupEditEnabledCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditEnabledCell.h; sourceTree = "<group>"; };
-		B904AD3428890477008B6BE9 /* MappingGroupEditEnabledCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingGroupEditEnabledCell.m; sourceTree = "<group>"; };
-		B904AD3628890489008B6BE9 /* MappingGroupEditControlCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditControlCell.h; sourceTree = "<group>"; };
-		B904AD3728890489008B6BE9 /* MappingGroupEditControlCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingGroupEditControlCell.m; sourceTree = "<group>"; };
-		B904AD39288904AC008B6BE9 /* MappingGroupEditBoolCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditBoolCell.h; sourceTree = "<group>"; };
-		B904AD3A288904AC008B6BE9 /* MappingGroupEditBoolCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingGroupEditBoolCell.m; sourceTree = "<group>"; };
-		B904AD3C288904D9008B6BE9 /* MappingGroupEditDoubleCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditDoubleCell.h; sourceTree = "<group>"; };
-		B904AD3D288904D9008B6BE9 /* MappingGroupEditDoubleCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingGroupEditDoubleCell.m; sourceTree = "<group>"; };
-		B904AD3F2889CC86008B6BE9 /* MappingGroupEditEnabledCellDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditEnabledCellDelegate.h; sourceTree = "<group>"; };
-		B904AD40288A2706008B6BE9 /* MappingGroupEditViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditViewControllerDelegate.h; sourceTree = "<group>"; };
-		B904AD41288A54B0008B6BE9 /* MappingGroupEditDoubleCellDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditDoubleCellDelegate.h; sourceTree = "<group>"; };
-		B904AD42288B4C80008B6BE9 /* MappingGroupEditBoolCellDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingGroupEditBoolCellDelegate.h; sourceTree = "<group>"; };
-		B904AD43288B5426008B6BE9 /* MappingExtensionViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingExtensionViewControllerDelegate.h; sourceTree = "<group>"; };
 		B9114F9E2893C71E00B9C57A /* VirtualMFiControllerManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VirtualMFiControllerManager.h; sourceTree = "<group>"; };
 		B9114F9F2893C71E00B9C57A /* VirtualMFiControllerManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VirtualMFiControllerManager.m; sourceTree = "<group>"; };
-		B9114FA12893D10B00B9C57A /* MappingDeviceViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingDeviceViewControllerDelegate.h; sourceTree = "<group>"; };
 		B933EDBC27F6A61B004D7DD7 /* Swift.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Swift.h; sourceTree = "<group>"; };
 		B933EDBD27F6A7BF004D7DD7 /* GameFileCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameFileCacheService.swift; sourceTree = "<group>"; };
 		B933EDBF27F77D1E004D7DD7 /* GameFilePtrWrapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GameFilePtrWrapper.h; sourceTree = "<group>"; };
@@ -576,10 +520,6 @@
 		B95AC52D2D29C48F0048E48B /* AudioSessionCategoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSessionCategoryService.swift; sourceTree = "<group>"; };
 		B95AC52F2D29C7FD0048E48B /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		B960AFF0295FB45500A246F0 /* TCDeviceMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCDeviceMotion.swift; sourceTree = "<group>"; };
-		B9661F312D2318D300FB2AAB /* MappingInputDisplayViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingInputDisplayViewController.h; sourceTree = "<group>"; };
-		B9661F322D2318D300FB2AAB /* MappingInputDisplayViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MappingInputDisplayViewController.mm; sourceTree = "<group>"; };
-		B9661F342D23190300FB2AAB /* MappingInputDisplayInputCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingInputDisplayInputCell.h; sourceTree = "<group>"; };
-		B9661F352D23190300FB2AAB /* MappingInputDisplayInputCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingInputDisplayInputCell.m; sourceTree = "<group>"; };
 		B96C5DC82CFE4B200046C029 /* Logger.ini */ = {isa = PBXFileReference; lastKnownFileType = text; path = Logger.ini; sourceTree = "<group>"; };
 		B96C9A492A46501B002B5ECF /* DOLAppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOLAppVersion.swift; sourceTree = "<group>"; };
 		B96C9A4F2A46C1CE002B5ECF /* iCubeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iCubeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -642,11 +582,6 @@
 		B9B1483729642C75002C4BE7 /* UpdateRequiredNotice.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = UpdateRequiredNotice.xib; sourceTree = "<group>"; };
 		B9B1483A29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = UpdateRequiredNoticeViewController.m; sourceTree = "<group>"; };
 		B9B1483B29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = UpdateRequiredNoticeViewController.h; sourceTree = "<group>"; };
-		B9B2C5E0288D0A9800CB6569 /* MappingLoadProfileViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingLoadProfileViewController.h; sourceTree = "<group>"; };
-		B9B2C5E1288D0A9800CB6569 /* MappingLoadProfileViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MappingLoadProfileViewController.mm; sourceTree = "<group>"; };
-		B9B2C5E3288D0C5500CB6569 /* MappingLoadProfileIniCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingLoadProfileIniCell.h; sourceTree = "<group>"; };
-		B9B2C5E4288D0C5500CB6569 /* MappingLoadProfileIniCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MappingLoadProfileIniCell.m; sourceTree = "<group>"; };
-		B9B2C5E6288D1BF400CB6569 /* MappingLoadProfileViewControllerDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MappingLoadProfileViewControllerDelegate.h; sourceTree = "<group>"; };
 		B9B2C61B288DB62D00CB6569 /* TCClassicWiiPad.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TCClassicWiiPad.swift; sourceTree = "<group>"; };
 		B9B2C61C288DB62D00CB6569 /* TCClassicWiiPad.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = TCClassicWiiPad.xib; sourceTree = "<group>"; };
 		B9B2C61D288DB62D00CB6569 /* TCSidewaysWiiPad.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TCSidewaysWiiPad.swift; sourceTree = "<group>"; };
@@ -1052,7 +987,6 @@
 				B974923D296035E500794509 /* Fastmem */,
 				B900A7BB27F4CD16000361DD /* FoundationUtil */,
 				B9FCB7B6289658FC0020E233 /* Jit */,
-				B9749241296039BF00794509 /* Mapping */,
 				B900A7A827F27EB9000361DD /* Services */,
 				B933EDBB27F6A5C7004D7DD7 /* Swift */,
 				B900A7BF27F4D2E4000361DD /* UI */,
@@ -1196,86 +1130,11 @@
 			path = Controllers;
 			sourceTree = "<group>";
 		};
-		B904ACF22886AAED008B6BE9 /* Mapping */ = {
-			isa = PBXGroup;
-			children = (
-				B904ACF32886AB05008B6BE9 /* ButtonMapping.storyboard */,
-			);
-			path = Mapping;
-			sourceTree = "<group>";
-		};
-		B904ACF52886AC2F008B6BE9 /* Mapping */ = {
-			isa = PBXGroup;
-			children = (
-				B904AD172888AB3B008B6BE9 /* Device */,
-				B904AD282888D719008B6BE9 /* Extension */,
-				B904AD2F2888FEDE008B6BE9 /* GroupEdit */,
-				B9661F302D2318AD00FB2AAB /* InputDisplay */,
-				B9B2C5DF288D0A7900CB6569 /* LoadProfile */,
-				B904AD0A28886AE6008B6BE9 /* MappingRootDeviceCell.h */,
-				B904AD0B28886AE6008B6BE9 /* MappingRootDeviceCell.m */,
-				B904AD1028886B0D008B6BE9 /* MappingRootExtensionCell.h */,
-				B904AD1128886B0D008B6BE9 /* MappingRootExtensionCell.m */,
-				B904AD0D28886AF8008B6BE9 /* MappingRootGroupCell.h */,
-				B904AD0E28886AF8008B6BE9 /* MappingRootGroupCell.m */,
-				B904ACF62886AC58008B6BE9 /* MappingRootViewController.h */,
-				B904ACF72886AC58008B6BE9 /* MappingRootViewController.mm */,
-				B904AD252888D346008B6BE9 /* MappingUtil.h */,
-				B904AD262888D346008B6BE9 /* MappingUtil.mm */,
-			);
-			path = Mapping;
-			sourceTree = "<group>";
-		};
 		B904AD032887D65A008B6BE9 /* Port */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = Port;
-			sourceTree = "<group>";
-		};
-		B904AD172888AB3B008B6BE9 /* Device */ = {
-			isa = PBXGroup;
-			children = (
-				B904AD182888AB5E008B6BE9 /* MappingDeviceCell.h */,
-				B904AD192888AB5E008B6BE9 /* MappingDeviceCell.m */,
-				B904AD1B2888AB6B008B6BE9 /* MappingDeviceViewController.h */,
-				B904AD1C2888AB6B008B6BE9 /* MappingDeviceViewController.mm */,
-				B9114FA12893D10B00B9C57A /* MappingDeviceViewControllerDelegate.h */,
-			);
-			path = Device;
-			sourceTree = "<group>";
-		};
-		B904AD282888D719008B6BE9 /* Extension */ = {
-			isa = PBXGroup;
-			children = (
-				B904AD2C2888D75F008B6BE9 /* MappingExtensionCell.h */,
-				B904AD2D2888D75F008B6BE9 /* MappingExtensionCell.m */,
-				B904AD292888D72F008B6BE9 /* MappingExtensionViewController.h */,
-				B904AD2A2888D72F008B6BE9 /* MappingExtensionViewController.mm */,
-				B904AD43288B5426008B6BE9 /* MappingExtensionViewControllerDelegate.h */,
-			);
-			path = Extension;
-			sourceTree = "<group>";
-		};
-		B904AD2F2888FEDE008B6BE9 /* GroupEdit */ = {
-			isa = PBXGroup;
-			children = (
-				B904AD39288904AC008B6BE9 /* MappingGroupEditBoolCell.h */,
-				B904AD3A288904AC008B6BE9 /* MappingGroupEditBoolCell.m */,
-				B904AD42288B4C80008B6BE9 /* MappingGroupEditBoolCellDelegate.h */,
-				B904AD3628890489008B6BE9 /* MappingGroupEditControlCell.h */,
-				B904AD3728890489008B6BE9 /* MappingGroupEditControlCell.m */,
-				B904AD3C288904D9008B6BE9 /* MappingGroupEditDoubleCell.h */,
-				B904AD3D288904D9008B6BE9 /* MappingGroupEditDoubleCell.m */,
-				B904AD41288A54B0008B6BE9 /* MappingGroupEditDoubleCellDelegate.h */,
-				B904AD3328890477008B6BE9 /* MappingGroupEditEnabledCell.h */,
-				B904AD3428890477008B6BE9 /* MappingGroupEditEnabledCell.m */,
-				B904AD3F2889CC86008B6BE9 /* MappingGroupEditEnabledCellDelegate.h */,
-				B904AD302888FF17008B6BE9 /* MappingGroupEditViewController.h */,
-				B904AD312888FF17008B6BE9 /* MappingGroupEditViewController.mm */,
-				B904AD40288A2706008B6BE9 /* MappingGroupEditViewControllerDelegate.h */,
-			);
-			path = GroupEdit;
 			sourceTree = "<group>";
 		};
 		B9114F952893C5D600B9C57A /* Debug */ = {
@@ -1314,7 +1173,6 @@
 				B900A7B227F2CF8A000361DD /* BridgingHeader.h */,
 				B933EDBC27F6A61B004D7DD7 /* Swift.h */,
 				B31EAC6D2E6697FD0036EE31 /* AssignmentEngine.swift */,
-				B346CDE72E75F04100B3C00B /* ButtonMappingView.swift */,
 				B346CDDF2E75E4CF00B3C00B /* CacheInfoView.swift */,
 				B36B51902E5D8760009A2303 /* CheatsMenuView.swift */,
 				B31E6DBC2E63C0240036EE31 /* DocumentPickerView.swift */,
@@ -1383,7 +1241,6 @@
 				B904ACE5288666D3008B6BE9 /* Controllers */,
 				B9114F952893C5D600B9C57A /* Debug */,
 				B9DC5FA628849467004BD94A /* Graphics */,
-				B904ACF22886AAED008B6BE9 /* Mapping */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -1399,7 +1256,6 @@
 				B904ACE628866E12008B6BE9 /* Controllers */,
 				B9114F982893C69E00B9C57A /* Debug */,
 				B9DC5FA52884945C004BD94A /* Graphics */,
-				B904ACF52886AC2F008B6BE9 /* Mapping */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -1592,17 +1448,6 @@
 			path = Audio;
 			sourceTree = "<group>";
 		};
-		B9661F302D2318AD00FB2AAB /* InputDisplay */ = {
-			isa = PBXGroup;
-			children = (
-				B9661F342D23190300FB2AAB /* MappingInputDisplayInputCell.h */,
-				B9661F352D23190300FB2AAB /* MappingInputDisplayInputCell.m */,
-				B9661F312D2318D300FB2AAB /* MappingInputDisplayViewController.h */,
-				B9661F322D2318D300FB2AAB /* MappingInputDisplayViewController.mm */,
-			);
-			path = InputDisplay;
-			sourceTree = "<group>";
-		};
 		B96C9A502A46C1CE002B5ECF /* DolphiniOSTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -1690,13 +1535,6 @@
 				B974923F296035F500794509 /* FastmemManager.m */,
 			);
 			path = Fastmem;
-			sourceTree = "<group>";
-		};
-		B9749241296039BF00794509 /* Mapping */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Mapping;
 			sourceTree = "<group>";
 		};
 		B97C49AC297E6CE400E30877 /* About */ = {
@@ -1886,18 +1724,6 @@
 				B9B1483A29642CB8002C4BE7 /* UpdateRequiredNoticeViewController.m */,
 			);
 			path = UpdateRequired;
-			sourceTree = "<group>";
-		};
-		B9B2C5DF288D0A7900CB6569 /* LoadProfile */ = {
-			isa = PBXGroup;
-			children = (
-				B9B2C5E3288D0C5500CB6569 /* MappingLoadProfileIniCell.h */,
-				B9B2C5E4288D0C5500CB6569 /* MappingLoadProfileIniCell.m */,
-				B9B2C5E0288D0A9800CB6569 /* MappingLoadProfileViewController.h */,
-				B9B2C5E1288D0A9800CB6569 /* MappingLoadProfileViewController.mm */,
-				B9B2C5E6288D1BF400CB6569 /* MappingLoadProfileViewControllerDelegate.h */,
-			);
-			path = LoadProfile;
 			sourceTree = "<group>";
 		};
 		B9B2C655288E40A400CB6569 /* ExternalDisplay */ = {
@@ -2471,7 +2297,6 @@
 				B9809C722A4970A700877579 /* Gecko.storyboard in Resources */,
 				B991379E2881F23A00588446 /* Core.strings in Resources */,
 				B9B2C624288DB62D00CB6569 /* TCWiiPad.xib in Resources */,
-				B904ACF42886AB06008B6BE9 /* ButtonMapping.storyboard in Resources */,
 				B950CA942846A13100F45219 /* Sys in Resources */,
 				B9DC3E0927EFBD2F0084DAA4 /* LaunchScreen.storyboard in Resources */,
 				B3AA87CD2E57FCAC00CE68FC /* compiled_shaders in Resources */,
@@ -2748,7 +2573,6 @@
 				C0C0BEEF0019000000000000 /* ZipImportHelper.swift in Sources */,
 				B950CFAA29616B4F00197719 /* MainSceneCoordinator.m in Sources */,
 				B9B2C64D288E170600CB6569 /* ServiceManager.swift in Sources */,
-				B904ACF82886AC58008B6BE9 /* MappingRootViewController.mm in Sources */,
 				B9FCB7D8289841730020E233 /* MsgAlertManager.mm in Sources */,
 				B9B2C626288DB64700CB6569 /* TCWiiPad.swift in Sources */,
 				B31E92212E667C0F0036EE31 /* SiriShortcutManager.swift in Sources */,
@@ -2757,7 +2581,6 @@
 				B36B51912E5D8760009A2303 /* CheatsMenuView.swift in Sources */,
 				B95AC52A2D29BA5C0048E48B /* AudioSessionManager.mm in Sources */,
 				B9FCB7BE28967C130020E233 /* JitAcquisitionService.swift in Sources */,
-				B9661F362D23190300FB2AAB /* MappingInputDisplayInputCell.m in Sources */,
 				B9FCB7B9289670830020E233 /* JitManager.m in Sources */,
 				B346BBF62E73C27000B3C00B /* DolphinBlogView.swift in Sources */,
 				B3F216672E5F6DEC00AF38F3 /* RemoteSourceFactory.swift in Sources */,
@@ -2771,7 +2594,6 @@
 				B9809C6F2A49707900877579 /* CheatCell.swift in Sources */,
 				B950CFBF29620C8900197719 /* UpdateCheckService.swift in Sources */,
 				B9809C792A4A166D00877579 /* DOLSwitch.swift in Sources */,
-				B904AD322888FF17008B6BE9 /* MappingGroupEditViewController.mm in Sources */,
 				B95AC52C2D29BA7F0048E48B /* AudioMuteSwitchMode.swift in Sources */,
 				B9809C802A4A190C00877579 /* ActionReplayCodeViewController.mm in Sources */,
 				B34ECCF92E56A2EB00301907 /* TVGameItem.mm in Sources */,
@@ -2786,15 +2608,12 @@
 				B933EDC127F77D1E004D7DD7 /* GameFilePtrWrapper.mm in Sources */,
 				B933EDBE27F6A7BF004D7DD7 /* GameFileCacheService.swift in Sources */,
 				B382061A2E58004100D4853F /* PixelBuffer.swift in Sources */,
-				B904AD3E288904D9008B6BE9 /* MappingGroupEditDoubleCell.m in Sources */,
 				B93986FB287F45A3008E8E47 /* SettingsRootViewController.swift in Sources */,
 				B38206182E58002000D4853F /* CompilerEnums.swift in Sources */,
 				B9114FA02893C71E00B9C57A /* VirtualMFiControllerManager.m in Sources */,
 				B3B149572E594A8C009C7049 /* InputOverriderBridge.mm in Sources */,
-				B904AD3528890477008B6BE9 /* MappingGroupEditEnabledCell.m in Sources */,
 				B34F8D0E2E6A6D7A007C1005 /* AudioFXBridge.mm in Sources */,
 				B34EDDE12E57B2E200301907 /* DOLConfigBridge.mm in Sources */,
-				B904AD0F28886AF8008B6BE9 /* MappingRootGroupCell.m in Sources */,
 				B950CFC92962562200197719 /* main.m in Sources */,
 				B960AFF1295FB45500A246F0 /* TCDeviceMotion.swift in Sources */,
 				B382061C2E58008800D4853F /* ShaderParameter.swift in Sources */,
@@ -2825,21 +2644,16 @@
 				B34ECCFB2E56A33E00301907 /* TVLibraryBridge.mm in Sources */,
 				B36B48C42E5D0056009A2303 /* TVCheatsBridge.mm in Sources */,
 				B9749240296035F500794509 /* FastmemManager.m in Sources */,
-				B904AD3B288904AC008B6BE9 /* MappingGroupEditBoolCell.m in Sources */,
 				B9809C832A4A22EB00877579 /* ActionReplayCodeEditViewController.mm in Sources */,
 				B9B2C64F288E1C4F00CB6569 /* MainDisplaySceneDelegate.swift in Sources */,
 				B36B48C12E5CFDAA009A2303 /* TVSoftwarePropertiesView.swift in Sources */,
 				B34ECD022E56A68200301907 /* TVEmulationBridge.mm in Sources */,
-				B904AD272888D346008B6BE9 /* MappingUtil.mm in Sources */,
-				B904AD2E2888D75F008B6BE9 /* MappingExtensionCell.m in Sources */,
 				B9EC283A2D21DA56000FAE09 /* TCWiiTouchIRMode.swift in Sources */,
 				B36B519F2E5E4700009A2303 /* SourcesView.swift in Sources */,
 				B97492472960CD2B00794509 /* FirstRunInitializationService.mm in Sources */,
 				B346BBFF2E73FA5400B3C00B /* URLRouterService.swift in Sources */,
 				B9447B052841901200BC9110 /* TCGameCubePad.swift in Sources */,
-				B9B2C5E5288D0C5500CB6569 /* MappingLoadProfileIniCell.m in Sources */,
 				B3F2166A2E5F73B900AF38F3 /* DOLPathsBridge.mm in Sources */,
-				B904AD3828890489008B6BE9 /* MappingGroupEditControlCell.m in Sources */,
 				B900A7AE27F27F36000361DD /* DolphinCoreService.mm in Sources */,
 				B900A7D527F61F3A000361DD /* GameFileCacheManager.mm in Sources */,
 				B3F216742E5F742400AF38F3 /* SaveStatesViewModel.swift in Sources */,
@@ -2851,8 +2665,6 @@
 				B950CFC3296219C800197719 /* WiiSystemUpdateViewController.mm in Sources */,
 				B9809C6C2A49705500877579 /* GeckoCodeViewController.mm in Sources */,
 				B346CDDC2E75E42F00B3C00B /* GameGridItem.swift in Sources */,
-				B9661F332D2318D300FB2AAB /* MappingInputDisplayViewController.mm in Sources */,
-				B346CDE82E75F04100B3C00B /* ButtonMappingView.swift in Sources */,
 				B31E6DC52E63C0CD0036EE31 /* AppConsts.swift in Sources */,
 				B9B2C65B288E454700CB6569 /* ExternalDisplaySceneDelegate.swift in Sources */,
 				B3F216762E5F746600AF38F3 /* SaveStateFilmstripView.swift in Sources */,
@@ -2862,23 +2674,17 @@
 				B31EAC8B2E67E9050036EE31 /* DOLWiimoteBridge.mm in Sources */,
 				B9447B072841906000BC9110 /* TCView.swift in Sources */,
 				B9809C762A49F78700877579 /* GeckoCodeEditViewController.mm in Sources */,
-				B904AD1D2888AB6B008B6BE9 /* MappingDeviceViewController.mm in Sources */,
 				B34ECCF12E5692C900301907 /* TVRootView.swift in Sources */,
-				B904AD0C28886AE6008B6BE9 /* MappingRootDeviceCell.m in Sources */,
 				B9EC283D2D21DE2F000FAE09 /* ControllersTouchscreenIRModeViewController.mm in Sources */,
 				B96C9A4A2A46501C002B5ECF /* DOLAppVersion.swift in Sources */,
 				B31E804C2E64FCA50036EE31 /* SpotlightIndexService.swift in Sources */,
 				B31E80522E6504940036EE31 /* GameProfiles.swift in Sources */,
 				B346BBF92E73E45800B3C00B /* DSUServerBridge.mm in Sources */,
-				B904AD1A2888AB5E008B6BE9 /* MappingDeviceCell.m in Sources */,
 				B900A7BD27F4CDD3000361DD /* SwiftStringUtil.swift in Sources */,
 				B9D9388C283DD86100B290FC /* EmulationBootParameter.mm in Sources */,
-				B904AD1228886B0D008B6BE9 /* MappingRootExtensionCell.m in Sources */,
-				B9B2C5E2288D0A9800CB6569 /* MappingLoadProfileViewController.mm in Sources */,
 				B36B48C62E5D0496009A2303 /* TVMultilineTextView.swift in Sources */,
 				B99137C928832A0800588446 /* LocalizationUtil.m in Sources */,
 				B9FCB7DB28988E4C0020E233 /* JitManager+AltServer.m in Sources */,
-				B904AD2B2888D72F008B6BE9 /* MappingExtensionViewController.mm in Sources */,
 				B9FCB7E12898D1E80020E233 /* SwiftLocalizationUtil.swift in Sources */,
 				B31E6DC32E63C08F0036EE31 /* NANDImportManager.mm in Sources */,
 				B9447AFD28418D7600BC9110 /* TCButton.swift in Sources */,

@@ -53,11 +53,12 @@ commit sequence. Gate for every commit: iOS + tvOS `iCube (NJB)` Debug
    stick hysteresis 0.6/0.3, latch-and-rearm A) driven from
    `valueChangedHandler`, gated on `ControllerFocusCoordinator.isActiveScope`.
    Swapping to D18's `MenuScreen` later is a rename.
-10. **Deletions now:** `Widgets/ControllerMappingView.swift`,
-    `Widgets/ControllerPickerSheet.swift`, `ControllersMappingView.swift`.
-    `ButtonMappingView.swift` (tvOS `TVMappingRootViewController` stack + iOS
-    storyboard wrapper) becomes unreferenced but stays for a later pass, as
-    instructed.
+10. **Deletions:** `Widgets/ControllerMappingView.swift`,
+    `Widgets/ControllerPickerSheet.swift`, `ControllersMappingView.swift`, then
+    (follow-up commit, same day) `ButtonMappingView.swift`, `ButtonMapping.storyboard`
+    and the ObjC `Common/UI/Settings/Mapping/` tree — only the storyboard
+    instantiated those classes, and only `ButtonMappingView.swift` used
+    `DOLMappingType` from the bridging header.
 
 ## Commits
 

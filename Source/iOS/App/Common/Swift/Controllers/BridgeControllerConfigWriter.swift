@@ -47,7 +47,7 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
   // MARK: Profile
 
   func defaultProfileName(forQualifier qualifier: String) -> String? {
-    // Mirrors ButtonMappingView.swift's defaultProfileName(forQualified:).
+    // The device-default profile picked when a device is bound to a port.
     if qualifier.hasPrefix("DSUClient/") { return "DSU" }
     if qualifier.hasPrefix("iOS/") { return "Touchscreen" }
     // Every other real hardware device (MFi and any generic/HID source) gets the

@@ -92,9 +92,10 @@ R3 sends "-"; gyro-mode pointer direction and reach; Motion Debug shows live val
    `c77b608f81` pure model + `RemapModelTests`, `03c28b067a` `RemapPlayerView` wired to
    "Customize Buttons…" (`ControllersMappingView.swift` removed). Spec corrections — the real
    `PadGroup`/`WiimoteGroup` ids, the release-to-arm gate, why B/Menu cannot cancel — are in
-   `docs/superpowers/plans/2026-09-25-remap-ui-implementation.md`. `ButtonMappingView.swift`
-   (tvOS `TVMappingRootViewController` stack + iOS storyboard wrapper) is now unreferenced and
-   still to be deleted. Phone checklist is at the end of that plan file.
+   `docs/superpowers/plans/2026-09-25-remap-ui-implementation.md`. The legacy stack —
+   `ButtonMappingView.swift` (tvOS `TVMappingRootViewController` + iOS storyboard wrapper),
+   `ButtonMapping.storyboard` and the whole ObjC `Common/UI/Settings/Mapping/` tree it
+   instantiated — is deleted (closes audit item #13). Phone checklist is at the end of that plan file.
 8. **Programmatic on-screen controller replacing the xib pads.** Port iFly's skin/overlay stack
    (`iFly/iFly/Sources/UI/Views/Skins/`, `DeltaSkinView.swift` `SkinLayout`,
    `EmulationView+Layout.swift`, `EmulationView+Overlays.swift`): draggable buttons, resizable
