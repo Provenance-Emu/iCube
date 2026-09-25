@@ -10,5 +10,6 @@ struct Live_ActivityBundle: WidgetBundle {
     Live_Activity()
     Live_ActivityControl()
     Live_ActivityLiveActivity()
+    RecentGamesWidget()
   }
 }
