@@ -6,7 +6,7 @@
 #
 #   cd Source/iOS/App && make testflight
 #
-.PHONY: help xcframework generate dev open lint format testflight testflight-tvos \
+.PHONY: help xcframework generate dev open lint format test testflight testflight-tvos \
 	testflight-all release-dry clean mcp-install mcp-test mcp-smoke webserver-bench
 
 # Repo root — BuildiOSXCFramework.py and ExportOptions/ live there, not here.
@@ -30,6 +30,7 @@ help:
 	@echo "iCube tasks (run from Source/iOS/App):"
 	@echo "  make xcframework  — build PVlibDolphin.xcframework (iOS + tvOS, device + sim)"
 	@echo "  make generate     — tuist generate (needs the xcframework first)"
+	@echo "  make test         — run iCubeTests on an iOS simulator (SIM=\"iPhone 17 Pro\")"
 	@echo "  make dev          — generate + open the workspace"
 	@echo "  make lint         — SwiftLint"
 	@echo "  make format       — SwiftFormat (check only, no writes)"
@@ -77,6 +78,17 @@ format:
 # The build number auto-bumps to an epoch timestamp inside the script and is
 # passed on the xcodebuild command line — no file to edit, no commit, no manual
 # bump (iCube's version lives in Project.swift, not an xcconfig).
+
+# Unit tests on the iOS simulator. CODE_SIGNING_ALLOWED=NO does NOT work here: the vendored
+# Externals/MoltenVK-iOS xcframework is unsigned and current simulator runtimes refuse to dyld-load
+# an unsigned image ("Trying to load an unsigned library"), so let the embed phase ad-hoc sign it.
+# iCubeTests is iOS-only (no tvOS platform on the test target). 182 tests green on 2026-09-26.
+SIM ?= iPhone 17 Pro
+test:
+	xcodebuild test -workspace iCube.xcworkspace -scheme "iCube (NJB)" \
+	  -configuration "Debug (Non-Jailbroken)" -destination "platform=iOS Simulator,name=$(SIM)" \
+	  -derivedDataPath build-Xcode-ios \
+	  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=""
 
 testflight:
 	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform ios
