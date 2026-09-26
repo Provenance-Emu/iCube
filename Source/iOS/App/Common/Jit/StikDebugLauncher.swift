@@ -43,7 +43,11 @@ enum StikDebugLauncher {
       return false
     }
     // Explicit user intent: re-arm the handshake even if a previous attempt died on the brk.
-    JitManager.shared().clearTXMHandshakeCookie()
+    let manager = JitManager.shared()
+    SentryTelemetryService.recordJitStep(
+      "StikDebug hand-off",
+      data: ["cookie_was_set": manager.txmHandshakeBlocked, "debugger_attached": manager.debuggerAttached])
+    manager.clearTXMHandshakeCookie()
     UIApplication.shared.open(url, options: [:], completionHandler: nil)
     return true
     #else

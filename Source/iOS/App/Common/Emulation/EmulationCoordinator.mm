@@ -1727,6 +1727,8 @@ static void EnsurePad1DefaultsToTouchscreen()
     // memory typing (no brk required, writes go through RW alias) but force
     // CachedInterpreter + Software VertexLoader so nothing ever executes from JIT pages.
     bool txmInterpreterFallback = false;
+    // Sentry tag for which JIT path this boot took (see DOLSentryTelemetryBridge).
+    NSString* jitMode = @"none";
 
     // Fresh CS_DEBUGGED / P_TRACED read: StikDebug attaches after launch (URL hand-off)
     // and detaches once the handshake below has been answered.
@@ -1759,7 +1761,11 @@ static void EnsurePad1DefaultsToTouchscreen()
             // is an uncatchable EXC_BREAKPOINT and this process dies here. The cookie makes the
             // NEXT launch decline the handshake instead of crashing on every boot forever.
             if (!regionAlreadyAuthorized)
+            {
               [jitManager beginTXMHandshake];
+              [DOLSentryTelemetryBridge recordJitStep:@"TXM handshake begin"
+                                                 data:@{ @"debugger_attached" : @(jitManager.debuggerAttached) }];
+            }
 
             Common::SetJitType(Common::JitType::LuckTXM);
             Common::AllocateExecutableMemoryRegion();
@@ -1777,6 +1783,11 @@ static void EnsurePad1DefaultsToTouchscreen()
           }
 
           [jitManager noteTXMHandshakeResult:!txmInterpreterFallback];
+          jitMode = txmInterpreterFallback ? @"txm-interpreter-fallback" : @"txm";
+          [DOLSentryTelemetryBridge recordJitStep:@"TXM boot decided"
+                                             data:@{ @"authorized" : @(jitManager.txmAuthorized),
+                                                     @"region_reused" : @(regionAlreadyAuthorized),
+                                                     @"fallback" : @(txmInterpreterFallback) }];
           NSLog(@"[JitManager] TXM boot: attached=%d authorized=%d fallback=%d",
                 (int)jitManager.debuggerAttached, (int)jitManager.txmAuthorized,
                 (int)txmInterpreterFallback);
@@ -1786,12 +1797,14 @@ static void EnsurePad1DefaultsToTouchscreen()
           // Non-TXM iOS 26 device: dual-mapping works fine.
           Common::SetJitType(Common::JitType::LuckNoTXM);
           Common::AllocateExecutableMemoryRegion(); // no-op for LuckNoTXM
+          jitMode = @"luck-no-txm";
         }
       }
       else
       {
         Common::SetJitType(Common::JitType::Legacy);
         Common::AllocateExecutableMemoryRegion(); // no-op for Legacy
+        jitMode = @"legacy";
       }
 
       Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE,
@@ -1818,6 +1831,11 @@ static void EnsurePad1DefaultsToTouchscreen()
         Config::SetCurrent(Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
       }
     }
+
+    [DOLSentryTelemetryBridge
+        recordEmulationBootWithJitMode:jitMode
+                               cpuCore:(NSInteger)Config::Get(Config::MAIN_CPU_CORE)
+                            gfxBackend:@(Config::Get(Config::MAIN_GFX_BACKEND).c_str())];
 
     __block std::unique_ptr<BootParameters> boot = [bootParameter generateDolphinBootParameter];
 

@@ -106,6 +106,14 @@ private final class EmuContainerViewController: UIViewController {
       let message = txmNeedsBroker
         ? "This device uses TXM, so JIT needs StikDebug attached when a game boots. You can continue with a slower, no-JIT mode."
         : "iCube may need a remote debugger to enable JIT. You can continue with a slower, no-JIT mode."
+      SentryTelemetryService.recordJitStep(
+        "waiting-for-JIT prompt",
+        data: [
+          "txm_needs_broker": txmNeedsBroker,
+          "acquired": manager.acquiredJit,
+          "debugger_attached": manager.debuggerAttached,
+          "handshake_blocked": manager.txmHandshakeBlocked,
+        ])
       let alert = UIAlertController(title: "Waiting for JIT", message: message, preferredStyle: .alert)
       #if os(iOS)
       // iOS 26 TXM devices: offer a one-tap hand-off to StikDebug. iCube ships its own broker
