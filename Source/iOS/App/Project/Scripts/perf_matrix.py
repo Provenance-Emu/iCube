@@ -155,7 +155,12 @@ def main():
     for k, v in pre.items():
         call(args.base, f"/api/settings/{k}", {"value": v})
     restore_after = {}
-    last_sweep = None
+    # A finished result from an EARLIER process (e.g. an aborted run) can still sit on the endpoint
+    # with the same key; snapshot it so wait_sweep never mistakes it for this run's first sweep.
+    try:
+        last_sweep = call(args.base, "/api/bench/sweep/result")["data"].get("result")
+    except Exception:  # noqa: BLE001
+        last_sweep = None
     try:
         for spec in args.factors:
             key, _, raw = spec.partition("=")
