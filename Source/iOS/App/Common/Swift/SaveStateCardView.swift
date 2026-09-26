@@ -139,7 +139,7 @@ struct SaveStateCardView: View {
     return formatter.localizedString(for: date, relativeTo: Date())
   }
 
-  /// e.g. "1:24:07" or "12:03" for a state with recorded in-game play time.
+  /// e.g. "01:24:07" or "12:03" for a state with recorded in-game play time.
   /// Nil (and hidden) for legacy saves with no sidecar, or one written before
   /// this field existed.
   private var gameTimeString: String? {
@@ -152,8 +152,11 @@ struct SaveStateCardView: View {
 /// reachable from `@testable import` unit tests) so the slot-card duration
 /// formatting has direct test coverage -- see `SaveStateFormattingTests`.
 enum SaveStateFormatting {
-  /// e.g. "1:24:07" for >= 1 hour, "12:03" under an hour. Nil for a missing,
-  /// negative, or non-finite value (legacy saves have no recorded play time).
+  /// e.g. "01:24:07" for >= 1 hour, "12:03" under an hour. `DateComponentsFormatter`'s
+  /// `.positional` style with `.pad` zero-pads every component, including the
+  /// leading one (verified empirically, not just from docs) -- so this is
+  /// "01:24:07", not "1:24:07". Nil for a missing, negative, or non-finite
+  /// value (legacy saves have no recorded play time).
   static func gameTimeString(seconds: Double?) -> String? {
     guard let seconds, seconds.isFinite, seconds >= 0 else { return nil }
     let formatter = DateComponentsFormatter()

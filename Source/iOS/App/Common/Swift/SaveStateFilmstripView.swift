@@ -95,7 +95,11 @@ struct SaveStateFilmstripView: View {
           loadOrBoot(target)
           actionTarget = nil
         }
-        if let slot = target.slot {
+        // Only offered when THIS game is the one actually running: SaveStateService.saveSlot
+        // calls straight into TVEmulationBridge.saveState, which is a silent no-op with no
+        // running core to save from (e.g. reached from the library's "View Save States" on a
+        // game that isn't booted, or the cross-game SaveStatesBrowserView).
+        if let slot = target.slot, isThisGameRunning {
           Button(String(format: L("Save Here (Slot %d)"), slot)) {
             _ = SaveStateService.saveSlot(slot)
             actionTarget = nil
@@ -213,7 +217,7 @@ struct SaveStateFilmstripView: View {
   /// thread that does not exist yet -- a silent no-op with no running game to load
   /// into. Boot the game fresh instead and land directly on the requested state.
   private func loadOrBoot(_ state: SaveStateInfo) {
-    if TVEmulationBridge.isRunning(), SaveStateService.currentGameID == gameID {
+    if isThisGameRunning {
       TVEmulationBridge.loadState(fromPath: state.path.path)
       return
     }
@@ -223,6 +227,13 @@ struct SaveStateFilmstripView: View {
     }
     SaveStateService.pendingBootStatePath = state.path.path
     bootTarget = item
+  }
+
+  /// True when the running core's game matches `gameID` -- i.e. this screen
+  /// can hot-swap into the live core (load or overwrite a slot) rather than
+  /// only being able to boot into a state or read a legacy file on disk.
+  private var isThisGameRunning: Bool {
+    TVEmulationBridge.isRunning() && SaveStateService.currentGameID == gameID
   }
 }
 

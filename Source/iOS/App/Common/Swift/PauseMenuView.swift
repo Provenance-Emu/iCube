@@ -20,6 +20,9 @@ internal struct PauseMenuView: View {
   internal enum FocusField: Hashable {
     case resume, openSaves, cheats, mapping, settings, shaders, continuity
     case exit, back, slot(Int), save, load, mute, fastForward
+    /// D10: the tvOS saves pane's "View All States" button, into the redesigned
+    /// grid (`SaveStateFilmstripView`) -- previously iOS-only.
+    case filmstrip
     /// D14: rows in the tvOS fast-forward speed chooser (`tvFastForwardSpeedMenu`).
     case fastForwardOff, fastForwardChoice(Int)
   }
@@ -1252,6 +1255,7 @@ internal struct PauseMenuView: View {
           })
           .sheet(isPresented: $showFilmstripSheet) {
             NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
+              .claimsController()
           }
         }
       } else {
@@ -1403,6 +1407,29 @@ internal struct PauseMenuView: View {
               }
               .buttonStyle(.plain)
               .focused($focused, equals: .load)
+
+              // D10: tvOS previously had no way to reach the redesigned grid at
+              // all -- showFilmstripSheet was only ever set from the iOS pane.
+              Button(action: { showFilmstripSheet = true }) {
+                HStack(spacing: 12) {
+                  Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 16, weight: .semibold))
+                  Text(L("View All States"))
+                    .font(.system(size: 16, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+                .background(.white.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                  RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(.white.opacity(0.25), lineWidth: 1)
+                )
+              }
+              .buttonStyle(.plain)
+              .focused($focused, equals: .filmstrip)
             }
             .frame(maxWidth: 600)
           }
@@ -1413,6 +1440,10 @@ internal struct PauseMenuView: View {
         #if os(tvOS)
         .onExitCommand { pane = .main }
         #endif
+        .sheet(isPresented: $showFilmstripSheet) {
+          NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
+            .claimsController()
+        }
       }
     }
   }
