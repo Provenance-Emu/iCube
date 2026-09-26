@@ -142,11 +142,10 @@ jobs:
       # ships). Must run after "Select Xcode" so DEVELOPER_DIR/xcrun agree
       # with the pinned version. Walks eligible runtimes newest-first and
       # picks the first one that actually has an iPhone (falls back to an
-      # older eligible runtime if the newest has none), and pins the exact
-      # `id=<udid>` on the result alongside the name -- `-destination
-      # name=X` alone lets xcodebuild re-resolve X against a DIFFERENT
-      # installed runtime than the one just validated, whereas a udid names
-      # one specific simulator unambiguously.
+      # older eligible runtime if the newest has none), and passes ONLY the
+      # exact `id=<udid>` as the destination -- a udid names one specific
+      # simulator unambiguously, while any `name=` makes xcodebuild re-resolve
+      # against OS:latest (a DIFFERENT runtime than the one just validated).
       - name: Pick an available iPhone simulator
         id: pick_sim
         run: |
@@ -177,9 +176,11 @@ jobs:
           fi
           name="${picked%%|*}"
           udid="${picked##*|}"
-          sim="${name},id=${udid}"
-          echo "Picked simulator: $sim"
-          echo "sim=$sim" >> "$GITHUB_OUTPUT"
+          # id ONLY: any name= in the specifier makes xcodebuild add OS:latest, and the
+          # runner's latest runtime (26.5) is newer than the one picked above, so a
+          # name+id destination never matched ("Unable to find a device ...").
+          echo "Picked simulator: ${name} (${udid})"
+          echo "dest=platform=iOS Simulator,id=${udid}" >> "$GITHUB_OUTPUT"
 
       # No xcbeautify: build.yml doesn't use it either (its own comment
       # explains why -- it filters out Run Script phase output, which is
@@ -193,13 +194,13 @@ jobs:
         # a cancelled job does not reliably run `if: failure()` steps.
         timeout-minutes: 75
         env:
-          SIM: ${{ steps.pick_sim.outputs.sim }}
+          DEST: ${{ steps.pick_sim.outputs.dest }}
           RESULT_BUNDLE: ${{ runner.temp }}/iCubeTests.xcresult
           LOG_FILE: ${{ runner.temp }}/iCubeTests.log
         run: |
           set -o pipefail
           rm -rf "$RESULT_BUNDLE"
-          make test SIM="$SIM" TEST_ARGS="-resultBundlePath $RESULT_BUNDLE" 2>&1 | tee "$LOG_FILE"
+          make test DEST="$DEST" TEST_ARGS="-resultBundlePath $RESULT_BUNDLE" 2>&1 | tee "$LOG_FILE"
 
       - name: Upload xcresult + raw log on failure
         if: failure()

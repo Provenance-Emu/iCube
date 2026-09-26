@@ -88,11 +88,16 @@ format:
 # TEST_ARGS is an escape hatch for extra xcodebuild flags without duplicating this recipe
 # elsewhere — CI (.github/workflows/tests.yml) passes `-resultBundlePath` through it so the
 # xcresult bundle lands somewhere it can upload as an artifact; local runs leave it empty.
+#
+# DEST overrides the whole -destination. CI passes `platform=iOS Simulator,id=<udid>`: any
+# `name=` in the specifier makes xcodebuild add OS:latest, so a udid on an older runtime (the
+# newest one the pinned Xcode supports) never matches and the run dies before building.
 SIM ?= iPhone 17 Pro
+DEST ?= platform=iOS Simulator,name=$(SIM)
 TEST_ARGS ?=
 test:
 	xcodebuild test -workspace iCube.xcworkspace -scheme "iCube (NJB)" \
-	  -configuration "Debug (Non-Jailbroken)" -destination "platform=iOS Simulator,name=$(SIM)" \
+	  -configuration "Debug (Non-Jailbroken)" -destination "$(DEST)" \
 	  -derivedDataPath build-Xcode-ios \
 	  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" \
 	  $(TEST_ARGS)
