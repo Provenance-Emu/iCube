@@ -134,13 +134,35 @@ forever in `DOLHostQueueRunSync` after the reboot (watchdog kill), the user also
 (Gather-Pipe Copy Fusion) and the reversed-order confirmation of the two candidates did not complete.
 Raw: `docs/perf/data/2026-09-26-GGTE01-slot1-run5-cir-optimizations.json`.
 
+### Run 6 — Chibi-Robo confirmation, reversed value order (0,1,1,0), plus the missing knob; combined with run 5
+
+| Knob | legs ON | legs OFF | ON mean | OFF mean | ON vs OFF | pairs favouring ON |
+|---|---|---|---|---|---|---|
+| `cirSpecializedFpArith` | 1.578 1.552 1.545 1.478 | 1.435 1.529 1.584 1.388 | 1.538 | 1.484 | +3.7 % | 3/4 |
+| `cirDynTargetCache` | 1.551 1.531 1.348 1.441 | 1.825 1.561 1.720 1.436 | 1.468 | 1.635 | -10.3 % | 1/4 |
+| `cirGatherPipeCopyFusion` | 1.406 1.438 | 1.428 1.391 | 1.422 | 1.409 | +0.9 % | 1/2 |
+
+Read: FP/paired-single arithmetic specialization ON is a probable small win on Chibi-Robo (+3.6 % over
+8 legs, 3 of 4 pairs) — worth promoting to the recommended set once a 40 s-leg run agrees. Dynamic
+Target Cache ON is a probable LOSS on Chibi-Robo (−10 % over 8 legs, 3 of 4 pairs) while it was +1.1 %
+on Wind Waker in September: keep it OFF (the compiled default) and turn it off on the test phone.
+Gather-Pipe Copy Fusion: noise, as on Wind Waker.
+
+**Bench bug found:** all three app kills during the Chibi-Robo runs are the same report — the host
+thread blocked forever in `DOLHostQueueRunSync` from `DOLDebugBridge.loadStateSlot` inside
+`DebugBenchmarkManager.runBenchmark` right after the sweep's stop→boot, then the watchdog killed the
+process (EXC_CRASH). `loadStateSlot` must wait for the core to be running (or time out) before queuing
+the synchronous host job. Raw: `docs/perf/data/2026-09-26-GGTE01-slot1-run6-confirm.json`.
+
 ## Decision
 
 | Knob | Today | Data | Recommendation |
 |---|---|---|---|
 | Shader compilation | Specialized | hybrid = specialized on throughput (+0.5 %, noise); exclusive −4.5 % consistently; stutter unmeasured | **Flip to Hybrid Ubershaders on iOS + tvOS**: zero measured cost, removes first-compile stutter by construction. Never Exclusive |
 | CachedInterpreter Prefetch | OFF | ON −1.0 %, mixed sign | keep OFF (matches the core comment) |
-| Paired-single NEON (`cirPsNeon`) | OFF (this phone had it ON) | ON −1.2 %, worse 1 % low | keep OFF; do not promote |
+| Paired-single NEON (`cirPsNeon`) | OFF (this phone had it ON) | WW: ON −1.2 %, worse 1 % low; Chibi: ON +2.7 % mixed | keep OFF; do not promote |
+| FP arithmetic specialization (`cirSpecializedFpArith`) | OFF | WW: noise; Chibi: ON +3.6 % over 8 legs (3/4 pairs) | candidate for recommended; confirm with 40 s legs |
+| Dynamic Target Cache (`cirDynTargetCache`) | OFF (phone ON) | WW: +1.1 % (Sept); Chibi: ON −10 % over 8 legs (3/4 pairs) | keep OFF; turn off on the phone |
 | NEON texture decode | ON | OFF −3.1 %, both pairs | keep ON (confirmed win) |
 | Vertex loader | NEON | software ±0 after repeat | keep NEON |
 
