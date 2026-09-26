@@ -2137,7 +2137,7 @@ struct TVLibraryView: View {
       .alert(L("Delete Game?"), isPresented: Binding(get: { itemPendingDelete != nil }, set: { if !$0 { itemPendingDelete = nil } })) {
         Button(L("Delete"), role: .destructive) {
           if let toDelete = itemPendingDelete {
-            if deleteLocalGame(toDelete) { model.rescan() }
+            deleteLocalGame(toDelete)
             itemPendingDelete = nil
           }
         }
@@ -2941,34 +2941,38 @@ struct TVLibraryView: View {
     showSnackbar(L("Controller assignment updated"))
   }
 
-  private func deleteLocalGame(_ item: TVGameItem) -> Bool {
+  /// The file removal runs in `LocalGameDeleter`, off the main thread (ICUBE-2F: a multi-GB image
+  /// or a Wii folder title blocked the delete alert's action for 3-4 s); the rescan and snackbar
+  /// follow on main.
+  private func deleteLocalGame(_ item: TVGameItem) {
     guard let path = Self.localPath(for: item) else {
       showSnackbar(L("Remote games cannot be deleted from the library."))
-      return false
+      return
     }
-    do {
-      try FileManager.default.removeItem(atPath: path)
-      return true
-    } catch {
-      showSnackbar(String(format: L("Delete failed: %1$@"), error.localizedDescription))
-      return false
+    Task { @MainActor in
+      let outcome = await LocalGameDeleter.delete(paths: [path])
+      if !outcome.deleted.isEmpty { model.rescan() }
+      if let failure = outcome.failures.first {
+        showSnackbar(String(format: L("Delete failed: %1$@"), failure.message))
+      }
     }
   }
 
   private func performBatchDelete(paths: Set<String>) {
-    var deleted = 0
-    var skippedRemote = 0
-    for path in paths {
-      guard let item = model.games.first(where: { $0.filePath == path }) else { continue }
-      if deleteLocalGame(item) { deleted += 1 } else { skippedRemote += 1 }
-    }
-    if deleted > 0 { model.rescan() }
-    if skippedRemote > 0 {
-      showSnackbar("\(skippedRemote) \(L("remote items could not be deleted."))")
-    } else if deleted > 0 {
-      showSnackbar("\(L("Deleted")) \(deleted) \(L("games."))")
-    }
+    let items = paths.compactMap { path in model.games.first(where: { $0.filePath == path }) }
+    let localPaths = items.compactMap(Self.localPath(for:))
+    let skippedRemote = items.count - localPaths.count
     exitSelectionMode()
+    Task { @MainActor in
+      let outcome = await LocalGameDeleter.delete(paths: localPaths)
+      let notDeleted = skippedRemote + outcome.failures.count
+      if !outcome.deleted.isEmpty { model.rescan() }
+      if notDeleted > 0 {
+        showSnackbar("\(notDeleted) \(L("remote items could not be deleted."))")
+      } else if !outcome.deleted.isEmpty {
+        showSnackbar("\(L("Deleted")) \(outcome.deleted.count) \(L("games."))")
+      }
+    }
   }
 
   private func showSnackbar(_ text: String) {
