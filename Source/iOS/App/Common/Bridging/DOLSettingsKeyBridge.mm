@@ -507,6 +507,53 @@ t[@"cirGatherPipeCopyFusion"] = mk(DOLSettingTypeBool, NO,
         return YES;
       });
 
+    // ---- Remaining Cached Interpreter / IR optimization toggles (boot-time; CachedInterpreter::Init
+    // and the IR engine read them once). Added 2026-09-26 for the default-settings matrix. ----
+    t[@"cirMicroOpFusion"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirMicroOpFusion]); },
+      ^(id v){ [DOLConfigBridge setCirMicroOpFusion:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_MICROOP_FUSION), MakeResetBlock(Config::MAIN_CIR_MICROOP_FUSION.GetLocation()));
+
+    t[@"cirDeadFlagElim"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirDeadFlagElim]); },
+      ^(id v){ [DOLConfigBridge setCirDeadFlagElim:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_DEAD_FLAG_ELIM), MakeResetBlock(Config::MAIN_CIR_DEAD_FLAG_ELIM.GetLocation()));
+
+    t[@"cirDeadFprfElim"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirDeadFprfElim]); },
+      ^(id v){ [DOLConfigBridge setCirDeadFprfElim:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_DEAD_FPRF_ELIM), MakeResetBlock(Config::MAIN_CIR_DEAD_FPRF_ELIM.GetLocation()));
+
+    t[@"cirPsqFastPath"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirPsqFastPath]); },
+      ^(id v){ [DOLConfigBridge setCirPsqFastPath:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_PSQ_FASTPATH), MakeResetBlock(Config::MAIN_CIR_PSQ_FASTPATH.GetLocation()));
+
+    t[@"cirStoreLoopFF"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirStoreLoopFF]); },
+      ^(id v){ [DOLConfigBridge setCirStoreLoopFF:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_STORE_LOOP_FF), MakeResetBlock(Config::MAIN_CIR_STORE_LOOP_FF.GetLocation()));
+
+    t[@"cirCacheLoopFF"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirCacheLoopFF]); },
+      ^(id v){ [DOLConfigBridge setCirCacheLoopFF:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_CACHE_LOOP_FF), MakeResetBlock(Config::MAIN_CIR_CACHE_LOOP_FF.GetLocation()));
+
+    t[@"cirIrConstFusion"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirIrConstFusion]); },
+      ^(id v){ [DOLConfigBridge setCirIrConstFusion:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_IR_CONST_FUSION), MakeResetBlock(Config::MAIN_CIR_IR_CONST_FUSION.GetLocation()));
+
+    t[@"cirIrMicroOpFusion"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirIrMicroOpFusion]); },
+      ^(id v){ [DOLConfigBridge setCirIrMicroOpFusion:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_IR_MICROOP_FUSION), MakeResetBlock(Config::MAIN_CIR_IR_MICROOP_FUSION.GetLocation()));
+
+    t[@"cirIrDeadFlagElim"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirIrDeadFlagElim]); },
+      ^(id v){ [DOLConfigBridge setCirIrDeadFlagElim:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM), MakeResetBlock(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM.GetLocation()));
+
     table = [t copy];
   });
   return table;
