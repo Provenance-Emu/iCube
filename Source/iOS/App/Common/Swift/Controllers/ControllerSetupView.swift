@@ -223,20 +223,8 @@ struct ControllerSetupSections: View {
   @ViewBuilder
   private func gcPlayerRow(_ port: Int) -> some View {
 #if os(tvOS)
-    tvPlayerLink(title: String(format: L("Player %d"), port),
-                 current: gcQualifiers[port] ?? "") {
-      Section(header: Text(L("Device"))) {
-        tvDeviceRows(current: gcQualifiers[port] ?? "") { tag in applyGC(tag, port: port) }
-      }
-      Section {
-        Button(L("Profiles…")) {
-          gcProfiles = TVControllerMappingBridge.profiles(forGCPort: port)
-          showProfileForGCPort = port
-        }
-        Button(L("Customize Buttons…")) {
-          mappingTarget = MappingTarget(isGC: true, portOneBased: port)
-        }
-      }
+    tvPlayerLink(title: String(format: L("Player %d"), port), current: gcQualifiers[port] ?? "") {
+      RemapPlayerView(isGC: true, portOneBased: port)
     }
 #else
     VStack(alignment: .leading, spacing: 14) {
@@ -265,31 +253,8 @@ struct ControllerSetupSections: View {
   @ViewBuilder
   private func wiiPlayerRow(_ w: Int) -> some View {
 #if os(tvOS)
-    tvPlayerLink(title: String(format: L("Wii Remote %d"), w),
-                 current: wiiQualifiers[w] ?? "") {
-      Section(header: Text(L("Device"))) {
-        tvDeviceRows(current: wiiQualifiers[w] ?? "") { tag in applyWii(tag, wiimote: w) }
-      }
-      Section(header: Text(L("Extension"))) {
-        ForEach(0 ... 2, id: \.self) { v in
-          tvOptionRow(extensionName(v), isSelected: wiiExtension[w - 1] == v) {
-            setWiiExtension(v, for: w)
-          }
-        }
-      }
-      Section {
-        Toggle(L("Sideways"), isOn: Binding(
-          get: { wiiSideways[w - 1] },
-          set: { setWiiSideways($0, for: w) }
-        ))
-        Button(L("Profiles…")) {
-          wiiProfiles = TVControllerMappingBridge.profiles(forWiimote: w)
-          showProfileForWiimote = w
-        }
-        Button(L("Customize Buttons…")) {
-          mappingTarget = MappingTarget(isGC: false, portOneBased: w)
-        }
-      }
+    tvPlayerLink(title: String(format: L("Wii Remote %d"), w), current: wiiQualifiers[w] ?? "") {
+      RemapPlayerView(isGC: false, portOneBased: w)
     }
 #else
     VStack(alignment: .leading, spacing: 14) {
@@ -333,27 +298,28 @@ struct ControllerSetupSections: View {
 #if os(tvOS)
   // MARK: tvOS player layout
   //
-  // On tvOS a List row is a SINGLE focus target, so the iOS layout — a VStack of
-  // a Picker, a Picker, a Toggle and two Buttons inside one row — collapsed each
-  // player into one focusable element. In practice only the Sideways toggle
-  // responded; the device picker, the extension picker, Profiles and Customize
-  // Buttons were all unreachable. SwiftUI `Picker` has no usable tvOS
-  // presentation here either, the same reason the library toolbar's `Menu`s were
-  // dead. So each player drills into its own screen where every control is its
-  // own row, and the option lists are explicit focusable Buttons.
+  // On tvOS a List row is a SINGLE focus target and SwiftUI `Picker` / `Menu`
+  // have no usable presentation, so the iOS row (a VStack of pickers, a toggle
+  // and two buttons) cannot work here. Each player is one row that pushes
+  // `RemapPlayerView`, which already lays out device, profile, save/reset,
+  // Wii extension and sideways as individually focusable rows above the
+  // button captures. Remapping and profiles used to sit at the bottom of an
+  // intermediate device screen and open in a `.sheet` anchored on this parent
+  // List, two navigation levels above the visible screen, on top of the
+  // Settings `fullScreenCover`; opening it dropped the user back to the
+  // library or pause menu. Pushing keeps everything in one NavigationStack.
 
   /// A collapsed player row: the port's name plus the device bound to it,
-  /// pushing a detail screen built from `content`.
+  /// pushing `destination`.
   @ViewBuilder
-  private func tvPlayerLink<Content: View>(
+  private func tvPlayerLink<Destination: View>(
     title: String,
     current: String,
-    @ViewBuilder content: () -> Content
+    @ViewBuilder destination: () -> Destination
   ) -> some View {
     let summary = deviceSummary(current)
     NavigationLink {
-      List { content() }
-        .navigationTitle(title)
+      destination()
     } label: {
       HStack {
         Text(title)
@@ -362,36 +328,6 @@ struct ControllerSetupSections: View {
       }
     }
     .accessibilityLabel("\(title), \(summary)")
-  }
-
-  /// One selectable option, checked when current. A plain Button so tvOS gives
-  /// it a focus ring.
-  @ViewBuilder
-  private func tvOptionRow(_ title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      HStack {
-        Text(title)
-        Spacer()
-        if isSelected { Image(systemName: "checkmark") }
-      }
-    }
-    .accessibilityLabel(title)
-    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-  }
-
-  /// The device options — None / Touchscreen / each connected controller —
-  /// as individually focusable rows, replacing the unreachable `Picker`.
-  @ViewBuilder
-  private func tvDeviceRows(current: String, onSelect: @escaping (DeviceTag) -> Void) -> some View {
-    let selection = tag(forQualifier: current)
-    tvOptionRow(L("None"), isSelected: selection == .none) { onSelect(.none) }
-    tvOptionRow(L("Touchscreen"), isSelected: selection == .touchscreen) { onSelect(.touchscreen) }
-    ForEach(Array(controllers.enumerated()), id: \.offset) { _, c in
-      let q = TVControllerMappingBridge.qualifiedName(for: c) as String
-      tvOptionRow(friendlyName(c), isSelected: selection == .controller(q)) {
-        onSelect(.controller(q))
-      }
-    }
   }
 #endif
 
