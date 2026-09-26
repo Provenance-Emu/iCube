@@ -460,5 +460,201 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertEqual(TouchOverlayInput.pressureValue(force: 8.0, maximumPossibleForce: 4.0), 1.0,
                   "over-max force clamps at 1.0 rather than exceeding it")
   }
+
+  // MARK: Phase 3 — overlay opacity (task item 1, C9)
+
+  func testResolvedOpacityIsFullWhileEditingRegardlessOfConfiguredValue() {
+    XCTAssertEqual(TouchOverlayInput.resolvedOpacity(isEditing: true, configuredOpacity: 0.1), 1.0)
+    XCTAssertEqual(TouchOverlayInput.resolvedOpacity(isEditing: true, configuredOpacity: 1.0), 1.0)
+  }
+
+  func testResolvedOpacityFloorsAtPointTwoWhenNotEditing() {
+    XCTAssertEqual(TouchOverlayInput.resolvedOpacity(isEditing: false, configuredOpacity: 0.0), 0.2)
+    XCTAssertEqual(TouchOverlayInput.resolvedOpacity(isEditing: false, configuredOpacity: 0.05), 0.2)
+  }
+
+  func testResolvedOpacityPassesThroughConfiguredValueAboveTheFloor() {
+    XCTAssertEqual(TouchOverlayInput.resolvedOpacity(isEditing: false, configuredOpacity: 0.6), 0.6, accuracy: 1e-6)
+  }
+
+  // MARK: Phase 3 — IR pointer sensitivity gain (task item 1, C9)
+
+  func testClampDragGainFoldsInvalidValuesToNeutral() {
+    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(0), 1.0)
+    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(-1), 1.0)
+    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(.nan), 1.0)
+    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(.infinity), TouchOverlayIRGeometry.dragGainRange.upperBound)
+  }
+
+  func testClampDragGainClampsToRange() {
+    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(100), TouchOverlayIRGeometry.dragGainRange.upperBound)
+    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(0.001), TouchOverlayIRGeometry.dragGainRange.lowerBound)
+    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(1.5), 1.5, accuracy: 1e-9)
+  }
+
+  func testDragGainScalesTheDeltaNotTheAccumulatedOutput() {
+    let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+    // With gain 1.0 (the default / every existing caller), behavior is byte-for-bit unchanged
+    // from `testDragAccumulatesFromPreviousPositionAndClamps` above.
+    let unity = TouchOverlayIRGeometry.drag(start: .zero, current: CGPoint(x: 50, y: 0), oldX: 0, oldY: 0, in: rect)
+    XCTAssertEqual(unity.x, 0.5, accuracy: 1e-9)
+
+    // Gain 2.0 doubles a SINGLE delta...
+    let doubled = TouchOverlayIRGeometry.drag(start: .zero, current: CGPoint(x: 50, y: 0), oldX: 0, oldY: 0, in: rect, gain: 2.0)
+    XCTAssertEqual(doubled.x, 1.0, accuracy: 1e-9)
+
+    // ...and, critically, a SECOND successive drag at the same gain adds another equally-scaled
+    // delta on top of the first drag's OUTPUT, rather than re-scaling that output — i.e. linear
+    // accumulation (0.25 + 0.5 = 0.75 at gain 2, from two 25%-of-half-width deltas), not
+    // geometric compounding (which would read 0.25, then 2 * (2*0.25) = 1.0 after only two drags
+    // of the smaller size). Uses a smaller delta than `unity`/`doubled` above specifically so the
+    // sum doesn't hit the [-1, 1] clamp before the assertion can distinguish the two shapes.
+    let firstOfTwo = TouchOverlayIRGeometry.drag(start: .zero, current: CGPoint(x: 25, y: 0), oldX: 0, oldY: 0, in: rect, gain: 2.0)
+    XCTAssertEqual(firstOfTwo.x, 0.5, accuracy: 1e-9)
+    let secondOfTwo = TouchOverlayIRGeometry.drag(start: .zero, current: CGPoint(x: 25, y: 0), oldX: firstOfTwo.x, oldY: firstOfTwo.y, in: rect, gain: 2.0)
+    XCTAssertEqual(secondOfTwo.x, 1.0, accuracy: 1e-9, "linear: 0.5 + (2 * 0.25) = 1.0, not 2 * 0.5 = 1.0-that-would-also-pass by coincidence")
+
+    // Explicitly distinguish from the compounding shape using deltas that would diverge before
+    // hitting the clamp: at gain 3, delta 10/100 (half-width) = 0.1 unscaled, 0.3 scaled.
+    let smallRect = CGRect(x: 0, y: 0, width: 2000, height: 100)
+    let firstSmall = TouchOverlayIRGeometry.drag(start: .zero, current: CGPoint(x: 100, y: 0), oldX: 0, oldY: 0, in: smallRect, gain: 3.0)
+    XCTAssertEqual(firstSmall.x, 0.3, accuracy: 1e-9)
+    let secondSmall = TouchOverlayIRGeometry.drag(start: .zero, current: CGPoint(x: 100, y: 0), oldX: firstSmall.x, oldY: firstSmall.y, in: smallRect, gain: 3.0)
+    // Linear: 0.3 + 0.3 = 0.6. Compounding (scaling the sum) would instead give 3 * (0.1 + 0.1) = 0.6
+    // too by coincidence at this ratio, so also check a THIRD drag, where linear keeps adding 0.3
+    // (-> 0.9) but compounding would multiply the running total by gain again (-> 1.8, clamped to 1).
+    XCTAssertEqual(secondSmall.x, 0.6, accuracy: 1e-9)
+    let thirdSmall = TouchOverlayIRGeometry.drag(start: .zero, current: CGPoint(x: 100, y: 0), oldX: secondSmall.x, oldY: secondSmall.y, in: smallRect, gain: 3.0)
+    XCTAssertEqual(thirdSmall.x, 0.9, accuracy: 1e-9,
+                  "linear accumulation: 0.6 + 0.3 = 0.9; a bug that re-scales the accumulated total would clamp to 1.0 here instead")
+  }
+
+  // MARK: Phase 3 — IR area fill-inset scale clamp (task item 1, C9)
+
+  func testClampFillInsetScaleUsesGenericRangeWhenBoundsAreDegenerate() {
+    XCTAssertEqual(TouchOverlayIRGeometry.clampFillInsetScale(5.0, baseExtent: 0, boundsExtent: 0), 2.0)
+    XCTAssertEqual(TouchOverlayIRGeometry.clampFillInsetScale(0.01, baseExtent: 100, boundsExtent: 0), 0.5)
+  }
+
+  func testClampFillInsetScaleCapsAtBoundsEvenBelowGenericUpperBound() {
+    // A `.fillInset` base of 342pt inside a 390pt-wide overlay can grow at most ~1.14x before it
+    // exceeds the screen — far below the generic 2.0 upper bound `TouchOverlayLayoutStore.
+    // scaleRange` allows for the small, fixed-size groups it's calibrated for.
+    let clamped = TouchOverlayIRGeometry.clampFillInsetScale(2.0, baseExtent: 342, boundsExtent: 390)
+    XCTAssertEqual(clamped, 390.0 / 342.0, accuracy: 1e-9)
+    XCTAssertLessThan(clamped, 2.0)
+  }
+
+  func testClampFillInsetScaleRespectsGenericLowerBoundWhenRoomy() {
+    // Bounds much larger than base: the hard bounds-based max is generous, so the generic 0.5
+    // lower bound is still the binding constraint on the small side.
+    XCTAssertEqual(TouchOverlayIRGeometry.clampFillInsetScale(0.1, baseExtent: 100, boundsExtent: 1000), 0.5)
+  }
+
+  // MARK: Phase 3 — independent width/height store entry (task item 1, C9)
+
+  @MainActor
+  func testSizeScaleXYReadsUniformFromThreeElementEntry() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    store.setSizeScale(1.4, for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait, defaultCenter: CGPoint(x: 0.5, y: 0.5))
+    XCTAssertEqual(store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait), CGSize(width: 1.4, height: 1.4))
+  }
+
+  @MainActor
+  func testSetIRSizeScaleRoundTripsIndependentAxesAndSurvivesReload() throws {
+    let url = temporaryFile()
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+    let store = TouchOverlayLayoutStore(fileURL: url)
+    let bounds = CGRect(x: 0, y: 0, width: 400, height: 800)
+    let baseSize = CGSize(width: 350, height: 750)
+    store.setIRSizeScale(CGSize(width: 1.2, height: 0.7), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
+                        bounds: bounds, baseSize: baseSize, defaultCenter: CGPoint(x: 0.5, y: 0.5))
+    let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
+    XCTAssertEqual(scale.width, 1.2, accuracy: 1e-6)
+    XCTAssertEqual(scale.height, 0.7, accuracy: 1e-6)
+    // The single-axis `sizeScale` reader (used by every OTHER group's uniform resize) reads the
+    // WIDTH component of an asymmetric entry.
+    XCTAssertEqual(store.sizeScale(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait), 1.2, accuracy: 1e-6)
+
+    let reloaded = TouchOverlayLayoutStore(fileURL: url)
+    let reloadedScale = reloaded.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
+    XCTAssertEqual(reloadedScale.width, 1.2, accuracy: 1e-6)
+    XCTAssertEqual(reloadedScale.height, 0.7, accuracy: 1e-6)
+  }
+
+  @MainActor
+  func testSetIRSizeScaleClampsEachAxisAgainstBounds() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+    let baseSize = CGSize(width: 342, height: 796) // `TouchOverlayDefaults.irPadMargin` (24) inset.
+    store.setIRSizeScale(CGSize(width: 5.0, height: 5.0), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
+                        bounds: bounds, baseSize: baseSize, defaultCenter: CGPoint(x: 0.5, y: 0.5))
+    let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
+    XCTAssertEqual(scale.width, bounds.width / baseSize.width, accuracy: 1e-6)
+    XCTAssertEqual(scale.height, bounds.height / baseSize.height, accuracy: 1e-6)
+  }
+
+  @MainActor
+  func testSetNormalizedCenterPreservesAllTrailingElementsIncludingAsymmetricScale() {
+    // Regression test (task item 2's DSU-adjacent store fix): moving a `wiiIRPad` with an
+    // asymmetric `[x, y, sx, sy]` entry used to drop `sy` back to "unset" because
+    // `setNormalizedCenter` only ever preserved a single trailing element.
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    let bounds = CGRect(x: 0, y: 0, width: 400, height: 800)
+    let baseSize = CGSize(width: 350, height: 750)
+    store.setIRSizeScale(CGSize(width: 1.3, height: 0.6), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
+                        bounds: bounds, baseSize: baseSize, defaultCenter: CGPoint(x: 0.5, y: 0.5))
+    store.setNormalizedCenter(CGPoint(x: 0.2, y: 0.3), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
+    let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
+    XCTAssertEqual(scale.width, 1.3, accuracy: 1e-6)
+    XCTAssertEqual(scale.height, 0.6, accuracy: 1e-6, "sy must survive a plain move, not collapse back to sx")
+    XCTAssertEqual(store.normalizedCenter(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait), CGPoint(x: 0.2, y: 0.3))
+  }
+
+  @MainActor
+  func testResetGroupClearsOnlyThatGroup() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    store.setNormalizedCenter(CGPoint(x: 0.1, y: 0.1), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
+    store.setNormalizedCenter(CGPoint(x: 0.2, y: 0.2), for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait)
+    store.resetGroup(.wiiIRPad, padKind: .wiiRemote)
+    XCTAssertNil(store.normalizedCenter(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait))
+    XCTAssertEqual(store.normalizedCenter(for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait), CGPoint(x: 0.2, y: 0.2),
+                  "resetting the IR pad must not discard the rest of the layout")
+  }
+
+  // MARK: Phase 3 — edit-mode mutual exclusion (task item 1, C9, design §9)
+
+  func testEditModeNoneShowsNoChromeAnywhere() {
+    for group in TouchOverlayGroup.allCases {
+      XCTAssertFalse(TouchOverlayEditMode.none.showsChrome(for: group))
+    }
+    XCTAssertFalse(TouchOverlayEditMode.none.inputSuppressed)
+  }
+
+  func testEditModeLayoutShowsChromeForEveryGroup() {
+    for group in TouchOverlayGroup.allCases {
+      XCTAssertTrue(TouchOverlayEditMode.layout.showsChrome(for: group))
+    }
+    XCTAssertTrue(TouchOverlayEditMode.layout.inputSuppressed)
+  }
+
+  func testEditModeIRAreaShowsChromeOnlyForTheIRPad() {
+    XCTAssertTrue(TouchOverlayEditMode.irArea.showsChrome(for: .wiiIRPad))
+    for group in TouchOverlayGroup.allCases where group != .wiiIRPad {
+      XCTAssertFalse(TouchOverlayEditMode.irArea.showsChrome(for: group),
+                    "\(group) must not show layout-editor chrome while editing the IR area")
+    }
+    XCTAssertTrue(TouchOverlayEditMode.irArea.inputSuppressed,
+                 "every group's INPUT must still be suppressed in .irArea mode, even the ones with no chrome")
+  }
+
+  func testEditModesAreMutuallyExclusiveByConstruction() {
+    // There is exactly one `TouchOverlayEditMode` value at a time (it's an enum, not two
+    // independent Bools), so ".layout chrome" and ".irArea chrome" can never both be showing for
+    // the SAME group at once — the case list itself is the proof, not a runtime check.
+    XCTAssertEqual(TouchOverlayEditMode.allCases, [.none, .layout, .irArea])
+  }
 }
 #endif
