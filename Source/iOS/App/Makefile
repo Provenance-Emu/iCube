@@ -6,7 +6,7 @@
 #
 #   cd Source/iOS/App && make testflight
 #
-.PHONY: help xcframework generate dev open lint format test testflight testflight-tvos \
+.PHONY: help xcframework generate dev open lint format test gate-release testflight testflight-tvos \
 	testflight-all release-dry clean mcp-install mcp-test mcp-smoke webserver-bench
 
 # Repo root — BuildiOSXCFramework.py and ExportOptions/ live there, not here.
@@ -31,6 +31,7 @@ help:
 	@echo "  make xcframework  — build PVlibDolphin.xcframework (iOS + tvOS, device + sim)"
 	@echo "  make generate     — tuist generate (needs the xcframework first)"
 	@echo "  make test         — run iCubeTests on an iOS simulator (SIM=\"iPhone 17 Pro\")"
+	@echo "  make gate-release — compile Release (Non-Jailbroken) for iOS and tvOS (what CI archives)"
 	@echo "  make dev          — generate + open the workspace"
 	@echo "  make lint         — SwiftLint"
 	@echo "  make format       — SwiftFormat (check only, no writes)"
@@ -95,6 +96,14 @@ test:
 	  -derivedDataPath build-Xcode-ios \
 	  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" \
 	  $(TEST_ARGS)
+
+# CI and TestFlight archive the Release configuration; the Debug gates and `make test` never
+# compile it, so #if DEBUG mistakes only surface here. Run before pushing UI/Swift changes.
+gate-release:
+	xcodebuild build -workspace iCube.xcworkspace -scheme "iCube (NJB)" -configuration "Release (Non-Jailbroken)" \
+	  -destination generic/platform=iOS  -derivedDataPath build-Xcode-ios  CODE_SIGNING_ALLOWED=NO 2>&1 | grep -E ": error:|BUILD (SUCCEEDED|FAILED)"
+	xcodebuild build -workspace iCube.xcworkspace -scheme "iCube (NJB)" -configuration "Release (Non-Jailbroken)" \
+	  -destination generic/platform=tvOS -derivedDataPath build-Xcode-tvos CODE_SIGNING_ALLOWED=NO 2>&1 | grep -E ": error:|BUILD (SUCCEEDED|FAILED)"
 
 testflight:
 	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform ios
