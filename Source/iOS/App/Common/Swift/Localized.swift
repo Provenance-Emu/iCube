@@ -1,7 +1,11 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-internal func L(_ key: String) -> String { NSLocalizedString(key, comment: "") }
+/// UI strings live in the "Core" table (Common/UI/Localization/<lang>.lproj/Core.strings),
+/// the same table DOLCoreLocalizedString reads; there is no Localizable.strings in the app.
+internal func L(_ key: String) -> String {
+  NSLocalizedString(key, tableName: "Core", bundle: .main, value: key, comment: "")
+}
 
 // Localized labels for controller types (mirrors ControllersSettingsUtil)
 internal func localizedSIDevice(_ device: Int) -> String {
