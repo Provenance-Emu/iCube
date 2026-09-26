@@ -1254,6 +1254,16 @@ internal struct PauseMenuView: View {
             }
           })
           .sheet(isPresented: $showFilmstripSheet) {
+            // NOTE: this pushes the grid's scope onto ControllerFocusCoordinator, but
+            // setupPauseControllerNav() below (this file's OWN raw GCController dpad
+            // handler for iOS pause-menu nav) does not check the coordinator at all --
+            // unlike TVLibraryView/RemapPlayerView, which gate their own handlers on
+            // isActiveScope(). So on iOS with a controller connected, dpad input can
+            // still drive the pause menu behind this sheet while it's up. Fixing that
+            // means giving PauseMenuView its own controllerScope(_:) + isActiveScope
+            // gate, which is out of scope here (tracked under D18's controller-nav
+            // rewrite) -- .claimsController() is still correct to add now so nothing
+            // extra needs doing when that gate lands.
             NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
               .claimsController()
           }

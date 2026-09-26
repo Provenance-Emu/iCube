@@ -228,6 +228,7 @@
 		C0C0CAFE0000000000000991 /* SaveStateServiceResumeDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000990 /* SaveStateServiceResumeDecisionTests.swift */; };
 		C0C0CAFE0000000000000993 /* RemapModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000992 /* RemapModelTests.swift */; };
 		C0C0CAFE0000000000000995 /* PendingGameLaunchStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000994 /* PendingGameLaunchStoreTests.swift */; };
+		C0C0CAFE0000000000000997 /* SaveStateFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */; };
 		C0C0CAFE0000000000000608 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000604 /* Sentry */; };
 		C0C0CAFE0000000000000609 /* PLzmaSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000605 /* PLzmaSDK */; };
 		C0C0CAFE0000000000000610 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000606 /* SWCompression */; };
@@ -672,6 +673,7 @@
 		C0C0CAFE0000000000000990 /* SaveStateServiceResumeDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateServiceResumeDecisionTests.swift"; path = "DolphiniOSTests/SaveStateServiceResumeDecisionTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000992 /* RemapModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RemapModelTests.swift"; path = "DolphiniOSTests/RemapModelTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000994 /* PendingGameLaunchStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PendingGameLaunchStoreTests.swift"; path = "DolphiniOSTests/PendingGameLaunchStoreTests.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateFormattingTests.swift"; path = "DolphiniOSTests/SaveStateFormattingTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000700 /* DOLDebugBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLDebugBridge.h; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000701 /* DOLDebugBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLDebugBridge.mm; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000703 /* DOLPerfBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLPerfBridge.h; sourceTree = "<group>"; };
@@ -1880,6 +1882,7 @@
 				C0C0CAFE0000000000000990 /* SaveStateServiceResumeDecisionTests.swift */,
 				C0C0CAFE0000000000000992 /* RemapModelTests.swift */,
 				C0C0CAFE0000000000000994 /* PendingGameLaunchStoreTests.swift */,
+				C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */,
 				C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */,
 				C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */,
 				C0C0CAFE0000000000000904 /* ContinuityManager.swift */,
@@ -2484,6 +2487,7 @@
 				C0C0CAFE0000000000000991 /* SaveStateServiceResumeDecisionTests.swift in Sources */,
 				C0C0CAFE0000000000000993 /* RemapModelTests.swift in Sources */,
 				C0C0CAFE0000000000000995 /* PendingGameLaunchStoreTests.swift in Sources */,
+				C0C0CAFE0000000000000997 /* SaveStateFormattingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
