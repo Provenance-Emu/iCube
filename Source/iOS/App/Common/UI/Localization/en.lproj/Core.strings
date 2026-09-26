@@ -4641,3 +4641,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Ignores small stick movements to reduce drift." = "Ignores small stick movements to reduce drift.";
 "Scales on-screen analog stick and trigger travel. Higher values reach full deflection sooner. Motion (gyro/accelerometer) and physical controllers are never scaled." = "Scales on-screen analog stick and trigger travel. Higher values reach full deflection sooner. Motion (gyro/accelerometer) and physical controllers are never scaled.";
 "Sticks" = "Sticks";
+"Adds software-prefetch hints to the Cached Interpreter hot loop on Apple Silicon. OFF by default: on A18 the hints measured slower (removing them gained about a third). A/B knob; applies on next game launch." = "Adds software-prefetch hints to the Cached Interpreter hot loop on Apple Silicon. OFF by default: on A18 the hints measured slower (removing them gained about a third). A/B knob; applies on next game launch.";

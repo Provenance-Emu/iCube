@@ -465,6 +465,48 @@ t[@"cirGatherPipeCopyFusion"] = mk(DOLSettingTypeBool, NO,
       ^(id v){ [DOLConfigBridge setGfxHackFastMath:CoerceBool(v)]; },
       MakeLayerGetter(Config::GFX_HACK_FAST_MATH), MakeResetBlock(Config::GFX_HACK_FAST_MATH.GetLocation()));
 
+    // ---- Perf-default evaluation knobs (2026-09-26). All boot-time except the NEON texture
+    // decoder, which VideoConfig::Refresh re-reads on every config change. ----
+    t[@"gfxShaderCompilationMode"] = mk(DOLSettingTypeInt, NO,
+      ^id{ return @([DOLConfigBridge gfxShaderCompilationMode]); },
+      ^(id v){ [DOLConfigBridge setGfxShaderCompilationMode:CoerceInt(v)]; },
+      MakeLayerGetter(Config::GFX_SHADER_COMPILATION_MODE),
+      MakeResetBlock(Config::GFX_SHADER_COMPILATION_MODE.GetLocation()));
+
+    // Read once in CachedInterpreter::Init; the core comment records that the hints were
+    // measured SLOWER (+33 % by removal), hence default false.
+    t[@"mainCachedInterpreterPrefetch"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge mainCachedInterpreterPrefetch]); },
+      ^(id v){ [DOLConfigBridge setMainCachedInterpreterPrefetch:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CACHED_INTERPRETER_PREFETCH),
+      MakeResetBlock(Config::MAIN_CACHED_INTERPRETER_PREFETCH.GetLocation()));
+
+    // Interpreter::RefreshNeonPairedConfig runs at boot.
+    t[@"cirPsNeon"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirPsNeon]); },
+      ^(id v){ [DOLConfigBridge setCirPsNeon:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_PS_NEON), MakeResetBlock(Config::MAIN_CIR_PS_NEON.GetLocation()));
+
+    t[@"gfxHackNeonTextureDecode"] = mk(DOLSettingTypeBool, YES,
+      ^id{ return @([DOLConfigBridge gfxHackNeonTextureDecode]); },
+      ^(id v){ [DOLConfigBridge setGfxHackNeonTextureDecode:CoerceBool(v)]; },
+      MakeLayerGetter(Config::GFX_HACK_NEON_TEXTURE_DECODE),
+      MakeResetBlock(Config::GFX_HACK_NEON_TEXTURE_DECODE.GetLocation()));
+
+    // NSUserDefaults-backed, read when the jitless vertex loaders are created at boot
+    // (EmulationCoordinator ICubeJitlessVertexLoaderType): 0 = Software, 1 = NEON, 2 = Compare.
+    t[@"vertexLoaderMode"] = mk(DOLSettingTypeInt, NO,
+      ^id{
+        NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
+        return @([d objectForKey:@"icube_vertex_loader_mode"] == nil ? 1 : [d integerForKey:@"icube_vertex_loader_mode"]);
+      },
+      ^(id v){ [[NSUserDefaults standardUserDefaults] setInteger:CoerceInt(v) forKey:@"icube_vertex_loader_mode"]; },
+      nil,
+      ^BOOL{
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"icube_vertex_loader_mode"];
+        return YES;
+      });
+
     table = [t copy];
   });
   return table;

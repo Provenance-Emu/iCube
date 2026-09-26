@@ -131,7 +131,7 @@ struct PerformanceTuningView: View {
         rowWithCaption(
           Toggle(L("CachedInterpreter Prefetch (Apple Silicon)"), isOn: $cachedInterpreterPrefetch)
             .onChange(of: cachedInterpreterPrefetch) { DOLConfigBridge.setMainCachedInterpreterPrefetch($0) },
-          L("Adds software-prefetch hints to the Cached Interpreter hot loop on Apple Silicon. ON by default and generally a small win on the CPU-bound path; an A/B knob you can turn off to compare. Applies on next game launch."))
+          L("Adds software-prefetch hints to the Cached Interpreter hot loop on Apple Silicon. OFF by default: on A18 the hints measured slower (removing them gained about a third). A/B knob; applies on next game launch."))
         rowWithCaption(
           Toggle(L("NEON Texture Decoder"), isOn: $neonTextureDecode)
             .onChange(of: neonTextureDecode) { DOLConfigBridge.setGfxHackNeonTextureDecode($0) },
