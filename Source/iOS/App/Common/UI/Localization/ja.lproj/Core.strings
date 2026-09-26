@@ -4654,3 +4654,12 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "This save state will be permanently deleted. This cannot be undone." = "This save state will be permanently deleted. This cannot be undone.";
 "View All States" = "View All States";
 "Why Incompatible?" = "Why Incompatible?";
+"Adjust analog stick gain, deadzone and smoothing" = "Adjust analog stick gain, deadzone and smoothing";
+"Analog Stick Deadzone" = "Analog Stick Deadzone";
+"Analog Stick Gain" = "Analog Stick Gain";
+"Analog Stick Settings" = "Analog Stick Settings";
+"Analog Stick Smoothing" = "Analog Stick Smoothing";
+"Applies exponential smoothing to analog triggers. Sticks and motion are never smoothed. 0 disables smoothing." = "Applies exponential smoothing to analog triggers. Sticks and motion are never smoothed. 0 disables smoothing.";
+"Ignores small stick movements to reduce drift." = "Ignores small stick movements to reduce drift.";
+"Scales on-screen analog stick and trigger travel. Higher values reach full deflection sooner. Motion (gyro/accelerometer) and physical controllers are never scaled." = "Scales on-screen analog stick and trigger travel. Higher values reach full deflection sooner. Motion (gyro/accelerometer) and physical controllers are never scaled.";
+"Sticks" = "Sticks";

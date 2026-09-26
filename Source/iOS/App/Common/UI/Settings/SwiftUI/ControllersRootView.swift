@@ -18,15 +18,15 @@ import GameController
 #endif
 import Foundation
 
-// MARK: - Motion Settings (DSU)
+// MARK: - Analog Stick Settings (dsu_* keys, applied in TCManagerInterface.setAxisValueFor:)
 
-private struct MotionSettingsView: View {
+private struct AnalogStickSettingsView: View {
   @State private var gain: Double = UserDefaults.standard.object(forKey: "dsu_gyro_gain") as? Double ?? 1.0
   @State private var deadzone: Double = UserDefaults.standard.object(forKey: "dsu_deadzone") as? Double ?? 0.05
   @State private var smoothing: Double = UserDefaults.standard.object(forKey: "dsu_smoothing") as? Double ?? 0.0
   var body: some View {
     Form {
-      Section(header: Text(L("Gyro Gain"))) {
+      Section(header: Text(L("Analog Stick Gain"))) {
         settingsCaption(
           Group {
 #if os(tvOS)
@@ -45,9 +45,9 @@ private struct MotionSettingsView: View {
             }
 #endif
           },
-          L("Scales motion intensity. Higher values increase sensitivity."))
+          L("Scales on-screen analog stick and trigger travel. Higher values reach full deflection sooner. Motion (gyro/accelerometer) and physical controllers are never scaled."))
       }
-      Section(header: Text(L("Deadzone"))) {
+      Section(header: Text(L("Analog Stick Deadzone"))) {
         settingsCaption(
           Group {
 #if os(tvOS)
@@ -66,9 +66,9 @@ private struct MotionSettingsView: View {
             }
 #endif
           },
-          L("Ignores small movements to reduce jitter."))
+          L("Ignores small stick movements to reduce drift."))
       }
-      Section(header: Text(L("Smoothing"))) {
+      Section(header: Text(L("Analog Stick Smoothing"))) {
         settingsCaption(
           Group {
 #if os(tvOS)
@@ -87,10 +87,10 @@ private struct MotionSettingsView: View {
             }
 #endif
           },
-          L("Applies exponential smoothing. 0 disables smoothing."))
+          L("Applies exponential smoothing to analog triggers. Sticks and motion are never smoothed. 0 disables smoothing."))
       }
     }
-    .navigationTitle(L("Advanced Motion Settings"))
+    .navigationTitle(L("Analog Stick Settings"))
     .onChange(of: gain) { UserDefaults.standard.set($0, forKey: "dsu_gyro_gain") }
     .onChange(of: deadzone) { UserDefaults.standard.set($0, forKey: "dsu_deadzone") }
     .onChange(of: smoothing) { UserDefaults.standard.set($0, forKey: "dsu_smoothing") }
@@ -274,8 +274,8 @@ struct ControllersRootView: View {
           Label(L("Add Server"), systemImage: "plus")
         }
 
-        NavigationLink(destination: MotionSettingsView()) {
-          Label(L("Advanced Motion Settings"), systemImage: "gyroscope")
+        NavigationLink(destination: AnalogStickSettingsView()) {
+          Label(L("Analog Stick Settings"), systemImage: "l.joystick")
         }
       }
 

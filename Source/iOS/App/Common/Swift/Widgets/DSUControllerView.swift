@@ -253,9 +253,9 @@ struct DSUControllerView: View {
         }
         ToolbarItem(placement: .navigationBarTrailing) {
           Button(action: { showMotionSheet = true }) {
-            Label(L("Motion"), systemImage: "slider.horizontal.3")
+            Label(L("Sticks"), systemImage: "l.joystick")
           }
-          .modifier(TooltipModifier(text: L("Adjust motion sensitivity and deadzone settings"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+          .modifier(TooltipModifier(text: L("Adjust analog stick gain, deadzone and smoothing"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
         }
         ToolbarItem(placement: .navigationBarTrailing) {
           Button(action: { showTouchArea.toggle() }) {
@@ -449,26 +449,26 @@ private struct MotionQuickSettingsView: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section(header: Text(L("Gyro Gain"))) {
+        Section(header: Text(L("Analog Stick Gain"))) {
           HStack {
             Slider(value: $gain, in: 0.1 ... 3.0, step: 0.05)
             Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
           }
         }
-        Section(header: Text(L("Deadzone"))) {
+        Section(header: Text(L("Analog Stick Deadzone"))) {
           HStack {
             Slider(value: $deadzone, in: 0.0 ... 0.49, step: 0.01)
             Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
           }
         }
-        Section(header: Text(L("Smoothing"))) {
+        Section(header: Text(L("Analog Stick Smoothing"))) {
           HStack {
             Slider(value: $smoothing, in: 0.0 ... 0.9, step: 0.05)
             Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
           }
         }
       }
-      .navigationTitle(L("Motion Settings"))
+      .navigationTitle(L("Analog Stick Settings"))
       .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { dismiss() } } }
       .onChange(of: gain) { UserDefaults.standard.set($0, forKey: "dsu_gyro_gain") }
       .onChange(of: deadzone) { UserDefaults.standard.set($0, forKey: "dsu_deadzone") }
