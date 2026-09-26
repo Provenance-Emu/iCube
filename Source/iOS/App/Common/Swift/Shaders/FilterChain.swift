@@ -553,6 +553,7 @@ public final class FilterChain {
     renderOffscreenPasses(sourceTexture: sourceTexture, commandBuffer: commandBuffer)
     if let rce = commandBuffer.makeRenderCommandEncoder(descriptor: rpd) {
       if !didLogOnce {
+        #if DEBUG
         // Log a compact summary only once per load
         if UserDefaults.standard.object(forKey: "shader_debug_log_once") as? Bool ?? true {
           var missingTotals = [Int](repeating: 0, count: passCount)
@@ -580,6 +581,7 @@ public final class FilterChain {
                  outputColorPixelFormat.rawValue, sourceTexture.pixelFormat.rawValue, String(describing: missingTotals),
                  missingDetail.joined(separator: " | "))
         }
+        #endif
         didLogOnce = true
       }
       renderFinalPass(withCommandEncoder: rce, flipVertically: flipVertically)
@@ -680,6 +682,7 @@ public final class FilterChain {
       _renderSamplers[binding] = samplers[bind.filter][bind.wrap]
     }
 
+    #if DEBUG
     // Debug: force previous pass output at binding 0 (for passes > 0)
     if i > 0, UserDefaults.standard.bool(forKey: "shader_debug_force_prev_output_binding0") {
       if let prev = pass[i - 1].renderTarget.view {
@@ -716,6 +719,7 @@ public final class FilterChain {
         }
       }
     }
+    #endif
 
     // Compatibility fallback: ensure binding 0 carries a valid source
     let compatPass0 = (UserDefaults.standard.object(forKey: "shader_compat_pass0_source_b0") as? Bool) ?? true
@@ -742,6 +746,7 @@ public final class FilterChain {
 //            os_log("pass %d: substituted %d missing textures with checker", log: .default, type: .debug, i, missing)
 //        }
 
+    #if DEBUG
     // Debug: force binding 0 to checkerboard for pass 0 to validate sampling
     if i == 0, UserDefaults.standard.bool(forKey: "shader_debug_binding0_checker") {
       _renderTextures[0] = checkers
@@ -767,6 +772,7 @@ public final class FilterChain {
       }
       os_log("pass %d: forced all bindings to checker and patched size uniforms", log: .default, type: .debug, i)
     }
+    #endif
 
     // enqueue commands
     rce.setRenderPipelineState(pass[i].state!)
@@ -1012,10 +1018,12 @@ public final class FilterChain {
                      pass: pass)
       self.pass[passNumber].bindings = bindings
       self.pass[passNumber].format = .init(pass.format)
+      #if DEBUG
       // Debug: force all pass formats to BGRA8Unorm
       if UserDefaults.standard.bool(forKey: "shader_debug_force_bgra8") {
         self.pass[passNumber].format = .bgra8Unorm
       }
+      #endif
       self.pass[passNumber].frameCountMod = UInt32(pass.frameCountMod)
 
       // update scaling
@@ -1111,10 +1119,12 @@ public final class FilterChain {
     }
 
     if !didLogOnce {
+      #if DEBUG
       if UserDefaults.standard.object(forKey: "shader_debug_log_once") as? Bool ?? true {
         let lutsCount = container.shader.luts.count
         os_log("[Shaders] Loaded: passes=%d history=%d luts=%d", log: .default, type: .info, passCount, historyCount, lutsCount)
       }
+      #endif
     }
   }
 

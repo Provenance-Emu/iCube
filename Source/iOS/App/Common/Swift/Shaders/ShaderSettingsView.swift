@@ -7,8 +7,31 @@ struct ShaderPreset: Identifiable, Equatable {
   let name: String
 }
 
+extension ShaderPreset {
+  /// The preset's containing folder name, used as a lightweight grouping label
+  /// in the pause-menu quick picker (e.g. "CRT", "Smoothing").
+  var category: String {
+    let parent = id.deletingLastPathComponent().lastPathComponent
+    return parent.isEmpty ? L("Shader") : parent
+  }
+}
+
 /// Discovers shader preset files. Looks in app bundle and user folder recursively for compiled containers
 final class ShaderLibrary {
+  /// Single source of truth for turning an absolute on-disk preset path into the
+  /// bundle-relative form persisted to `shader_preset_path` (so a reinstall with a
+  /// different bundle UUID doesn't orphan the stored preset). Previously reimplemented
+  /// at three separate call sites (`ShaderPickerView.normalizedPath`, its `allItems`
+  /// loop, and `ShaderSettingsView.onChange(of:)`), which is exactly the kind of drift
+  /// that lets one of them fall out of sync with the others.
+  static func normalizedPath(_ absPath: String) -> String {
+    let bundleBase = Bundle.main.bundleURL.path
+    if absPath.hasPrefix(bundleBase), let dotApp = absPath.range(of: ".app/") {
+      return String(absPath[dotApp.upperBound...])
+    }
+    return absPath
+  }
+
   static func discoverPresets() -> [ShaderPreset] {
     var results: [ShaderPreset] = []
     let fm = FileManager.default
@@ -44,11 +67,7 @@ struct ShaderPickerView: View {
   @State private var searchText: String = ""
 
   private func normalizedPath(_ absPath: String) -> String {
-    let bundleBase = Bundle.main.bundleURL.path
-    if absPath.hasPrefix(bundleBase), let dotApp = absPath.range(of: ".app/") {
-      return String(absPath[dotApp.upperBound...])
-    }
-    return absPath
+    ShaderLibrary.normalizedPath(absPath)
   }
 
   private func toggleFavorite(_ norm: String) {
@@ -133,14 +152,7 @@ struct ShaderPickerView: View {
         ForEach(allItems) { preset in
           Group {
             let absPath = preset.id.path
-            let bundleBase = Bundle.main.bundleURL.path
-            let normalized: String = {
-              if absPath.hasPrefix(bundleBase), let dotApp = absPath.range(of: ".app/") {
-                return String(absPath[dotApp.upperBound...])
-              } else {
-                return absPath
-              }
-            }()
+            let normalized = ShaderLibrary.normalizedPath(absPath)
             HStack {
               SelectRow(label: preset.name, checked: (selectedPresetPath == normalized) || (selectedPresetPath == absPath)) {
                 selectedPresetPath = normalized
@@ -196,30 +208,22 @@ struct ShaderPickerView: View {
   }
 }
 
-/// Full settings page with enable toggle and picker
+/// Full settings page with enable toggle and picker.
+///
+/// D16: the debug/diagnostic toggles that used to live in a "Debug" section here
+/// (checkerboard/bypass/forced-binding hacks used to bring up shader pipeline bugs)
+/// moved to `ShaderDeveloperDebugView`, which only exists in `#if DEBUG` builds — see
+/// that file for which keys are dead code (deleted outright) vs. still read by
+/// `FilterChain`/`ShaderPostProcessor` (gated there too, so a stray `true` from an
+/// old debug build can't linger into a Release one). "Flip vertically" and "Enable
+/// pre-copy (compat)" are real device-compatibility knobs rather than engineering
+/// diagnostics, so they stayed user-visible in the "Advanced" section below instead
+/// of moving behind `#if DEBUG`.
 struct ShaderSettingsView: View {
   @State private var enabled: Bool = false
   @State private var presetPath: String?
-  @State private var dbgBypass: Bool = false
-  @State private var dbgChecker: Bool = false
-  @State private var dbgFlip: Bool = true
-  @State private var dbgShowPass: Bool = false
-  @State private var dbgPassIndex: Int = 0
+  @State private var flipVertically: Bool = false
   @AppStorage("shader_precopy_enabled") private var compatPreCopyEnabled: Bool = false
-
-  // Persisted toggles using @AppStorage for immediate UI updates
-  @AppStorage("shader_debug_checker_apply") private var dbgCheckerApply: Bool = false
-  @AppStorage("shader_debug_binding0_checker") private var dbgBinding0Checker: Bool = false
-  @AppStorage("shader_debug_force_all_checker") private var dbgForceAllChecker: Bool = false
-  @AppStorage("shader_debug_force_bgra8") private var dbgForceBGRA8: Bool = false
-  @AppStorage("shader_debug_positions_index0") private var dbgPositionsIndex0: Bool = false
-  @AppStorage("shader_debug_log_once") private var dbgLogOnce: Bool = true
-  @AppStorage("shader_debug_force_offscreen_last") private var dbgOffscreenLast: Bool = false
-  @AppStorage("shader_debug_disable_precopy") private var dbgDisablePreCopy: Bool = false
-  @AppStorage("shader_debug_force_source_binding0") private var dbgForceSourceBinding0: Bool = false
-  @AppStorage("shader_debug_force_prev_output_binding0") private var dbgForcePrevOutputBinding0: Bool = false
-  @AppStorage("shader_debug_map_source_semantics") private var dbgMapSourceSemantics: Bool = false
-  @AppStorage("shader_debug_clear_passes") private var dbgClearPasses: Bool = false
 
   var body: some View {
     List {
@@ -240,69 +244,26 @@ struct ShaderSettingsView: View {
         .disabled(!enabled)
       }
 
-      Section(header: Text(L("Debug"))) {
-        Toggle(L("Bypass (show source)"), isOn: $dbgBypass)
-          .onChange(of: dbgBypass) {
-            UserDefaults.standard.set($0, forKey: "shader_bypass")
-            NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-          }
-        Toggle(L("Show checkerboard"), isOn: $dbgChecker)
-          .onChange(of: dbgChecker) {
-            UserDefaults.standard.set($0, forKey: "shader_debug_checker")
-            NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-          }
-        Toggle(L("Apply shader over checkerboard"), isOn: $dbgCheckerApply)
-        Toggle(L("Flip vertically"), isOn: $dbgFlip)
-          .onChange(of: dbgFlip) {
+      Section(header: Text(L("Advanced")), footer: Text(L("Compatibility options for specific devices or shaders. Most people never need these."))) {
+        Toggle(L("Flip vertically"), isOn: $flipVertically)
+          .onChange(of: flipVertically) {
             UserDefaults.standard.set($0, forKey: "shader_flip_vertical")
             NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
           }
-        Toggle(L("Force binding 0 = checker (pass 0)"), isOn: $dbgBinding0Checker)
-        Toggle(L("Force all bindings = checker"), isOn: $dbgForceAllChecker)
-        Toggle(L("Force BGRA8 formats"), isOn: $dbgForceBGRA8)
-        Toggle(L("Vertex positions at buffer index 0"), isOn: $dbgPositionsIndex0)
-        Toggle(L("One-shot diagnostics"), isOn: $dbgLogOnce)
-        Toggle(L("Force last pass offscreen"), isOn: $dbgOffscreenLast)
-        Toggle(L("Disable pre-copy (debug)"), isOn: $dbgDisablePreCopy)
         Toggle(L("Enable pre-copy (compat)"), isOn: $compatPreCopyEnabled)
-        Toggle(L("Force pass 0 Source at binding 0"), isOn: $dbgForceSourceBinding0)
-        Toggle(L("Force prev pass output at binding 0"), isOn: $dbgForcePrevOutputBinding0)
-        Toggle(L("Map 'source' semantics to expected binding"), isOn: $dbgMapSourceSemantics)
-        Toggle(L("Clear each pass (debug)"), isOn: $dbgClearPasses)
-        Toggle(L("Preview intermediate pass"), isOn: $dbgShowPass)
-          .onChange(of: dbgShowPass) {
-            UserDefaults.standard.set($0, forKey: "shader_debug_show_pass_enabled")
-            NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-          }
-        HStack {
-          Text(L("Pass index"))
-          Spacer()
-          #if os(tvOS)
-          TVIntStepper(value: $dbgPassIndex, range: 0 ... 32, step: 1)
-          #else
-          Stepper(value: $dbgPassIndex, in: 0 ... 32) {
-            Text("\(dbgPassIndex)")
-          }
-          #endif
-        }
-        .onChange(of: dbgPassIndex) {
-          UserDefaults.standard.set($0, forKey: "shader_debug_show_pass")
-          NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-        }
       }
+
+      #if DEBUG
+      Section(header: Text(L("Developer"))) {
+        NavigationLink(L("Shader Debug Tools"), destination: ShaderDeveloperDebugView())
+      }
+      #endif
     }
     .navigationTitle(L("Shaders"))
     .onAppear { sync() }
     .onChange(of: presetPath) { p in
       if let p {
-        let bundleBase = Bundle.main.bundleURL.path
-        let pathToStore: String
-        if p.hasPrefix(bundleBase), let dotApp = p.range(of: ".app/") {
-          let suffix = String(p[dotApp.upperBound...])
-          pathToStore = suffix
-        } else {
-          pathToStore = p
-        }
+        let pathToStore = ShaderLibrary.normalizedPath(p)
         UserDefaults.standard.set(pathToStore, forKey: "shader_preset_path")
       } else {
         UserDefaults.standard.removeObject(forKey: "shader_preset_path")
@@ -322,11 +283,7 @@ struct ShaderSettingsView: View {
   private func sync() {
     enabled = UserDefaults.standard.bool(forKey: "shader_enabled")
     presetPath = UserDefaults.standard.string(forKey: "shader_preset_path")
-    dbgBypass = UserDefaults.standard.bool(forKey: "shader_bypass")
-    dbgChecker = UserDefaults.standard.bool(forKey: "shader_debug_checker")
-    dbgFlip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
-    dbgShowPass = UserDefaults.standard.bool(forKey: "shader_debug_show_pass_enabled")
-    dbgPassIndex = (UserDefaults.standard.object(forKey: "shader_debug_show_pass") as? NSNumber)?.intValue ?? 0
+    flipVertically = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
   }
 }
 
@@ -505,11 +462,38 @@ struct ShaderParameterEditor: View {
   }
 }
 
-private extension Compiled.Parameter {
+/// Not `private`: also used by `ShaderQuickParameterView` (Shaders/ShaderQuickPickerView.swift),
+/// which needs the same Decimal->CGFloat clamping for a preset that may not be the
+/// live pipeline's current one.
+extension Compiled.Parameter {
   var initialCGFloat: CGFloat { (initial as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: initial as NSDecimalNumber) : 0 }
   var minimumCGFloat: CGFloat { (minimum as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: minimum as NSDecimalNumber) : 0 }
   var maximumCGFloat: CGFloat { (maximum as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: maximum as NSDecimalNumber) : 1 }
   var stepCGFloat: CGFloat { (step as NSDecimalNumber).doubleValue.isFinite ? CGFloat(truncating: step as NSDecimalNumber) : 0.01 }
+}
+
+/// Safe (min...max, step) for a shader parameter's slider, guarding against the
+/// non-finite / zero-width ranges some compiled shaders report. Factored out of
+/// `ShaderParameterEditor`'s inline Slider bindings below so `ShaderQuickParameterView`
+/// (Shaders/ShaderQuickPickerView.swift) doesn't reimplement the same clamping a
+/// third time.
+enum ShaderParameterRangeHelper {
+  static func safeRange(_ p: Compiled.Parameter) -> (range: ClosedRange<CGFloat>, step: CGFloat) {
+    let rawMin = p.minimumCGFloat
+    let rawMax = p.maximumCGFloat
+    let minVal = rawMin.isFinite ? rawMin : 0
+    var width = (rawMax.isFinite ? rawMax : minVal) - minVal
+    if !width.isFinite { width = 0 }
+    let minWidth: CGFloat = 0.01
+    if width <= 0 { width = minWidth }
+    let maxVal = minVal + width
+    let rawStep = p.stepCGFloat
+    var step = (rawStep.isFinite && rawStep > 0) ? rawStep : (width / 100)
+    let minStep = width / 1000
+    if !step.isFinite || step <= 0 { step = minStep }
+    if step >= width { step = width / 100 }
+    return (minVal ... maxVal, max(step, minStep))
+  }
 }
 
 // tvOS-friendly selectable row (duplicate of SettingsRootView's private helper)

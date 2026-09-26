@@ -15,7 +15,9 @@ import MetalKit
   private var cachedPresetPath: String?
   private var lastDrawableSize: CGSize = .zero
   private var needsReload: Bool = false
+  #if DEBUG
   private var debugChecker: MTLTexture?
+  #endif
 
   @objc private func _shaderSettingsChanged(_ note: Notification) {
     // Flag a reload for the next frame to avoid mutating while GPU encoders are active
@@ -207,6 +209,7 @@ import MetalKit
     }
   }
 
+  #if DEBUG
   private func makeCheckerTexture(tile: Int = 16, tiles: Int = 16) -> MTLTexture? {
     guard let device else { return nil }
     let width = tile * tiles
@@ -233,6 +236,7 @@ import MetalKit
     let loader = MTKTextureLoader(device: device)
     return try? loader.newTexture(cgImage: img, options: [MTKTextureLoader.Option.SRGB: false])
   }
+  #endif
 
   @objc func renderSource(_ source: MTLTexture, commandBuffer cb: MTLCommandBuffer, drawable: CAMetalDrawable) {
     guard let device else { return }
@@ -261,6 +265,7 @@ import MetalKit
     let dstSize = CGSize(width: dst.width, height: dst.height)
     // print("[Shaders] Swift: render begin hasShader=\(filter.hasShader) src=\(Int(srcSize.width))x\(Int(srcSize.height)) dst=\(Int(dstSize.width))x\(Int(dstSize.height)) fmt src=\(source.pixelFormat.rawValue) dst=\(dst.pixelFormat.rawValue)")
 
+    #if DEBUG
     // Debug checkerboard: bypass compiled shader and draw a known pattern
     if UserDefaults.standard.bool(forKey: "shader_debug_checker") {
       if debugChecker == nil { debugChecker = makeCheckerTexture() }
@@ -288,6 +293,7 @@ import MetalKit
       }
       return
     }
+    #endif
 
     guard filter.hasShader else {
       if let blit = cb.makeBlitCommandEncoder() {
@@ -305,13 +311,19 @@ import MetalKit
 
     // Pre-copy is bandwidth-heavy; keep it opt-in via a setting, and allow debug override to disable
     let preCopyEnabled = (UserDefaults.standard.object(forKey: "shader_precopy_enabled") as? Bool) ?? false
-    if preCopyEnabled, !(UserDefaults.standard.bool(forKey: "shader_debug_disable_precopy")) {
+    #if DEBUG
+    let preCopyDebugDisabled = UserDefaults.standard.bool(forKey: "shader_debug_disable_precopy")
+    #else
+    let preCopyDebugDisabled = false
+    #endif
+    if preCopyEnabled, !preCopyDebugDisabled {
       let preMarker = cb.makeBlitCommandEncoder()
       preMarker?.label = "PostProcess preCopy"
       preMarker?.copy(from: source, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x: 0, y: 0, z: 0), sourceSize: .init(width: source.width, height: source.height, depth: 1), to: dst, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init(x: 0, y: 0, z: 0))
       preMarker?.endEncoding()
     }
 
+    #if DEBUG
     // Debug bypass: show the source without applying the compiled shader
     if UserDefaults.standard.bool(forKey: "shader_bypass") {
       // print("[Shaders] Swift: bypass enabled -> showing source only")
@@ -330,12 +342,14 @@ import MetalKit
       }
       // print("[Shaders] Swift: debug fill applied")
     }
+    #endif
 
     // Pipe sizes/pixelFormat into the filter
     filter.setOutputPixelFormat(dst.pixelFormat)
     filter.drawableSize = dstSize
     filter.setSourceRect(CGRect(origin: .zero, size: srcSize), aspect: srcSize)
 
+    #if DEBUG
     // Optional: show an intermediate pass
     if UserDefaults.standard.bool(forKey: "shader_debug_show_pass_enabled"),
        let idx = UserDefaults.standard.object(forKey: "shader_debug_show_pass") as? NSNumber {
@@ -347,6 +361,7 @@ import MetalKit
         // print("[Shaders] Swift: invalid pass index #\(passIndex) (count=\(filter.debugPassCount))")
       }
     }
+    #endif
 
     // Invoke the filter
     /// Default to no vertical flip to match OpenEmu orientation assumptions
@@ -374,5 +389,65 @@ import MetalKit
       let key = persistenceKey(for: path, index: index)
       UserDefaults.standard.set(value, forKey: key)
     }
+  }
+
+  // MARK: - Preset-scoped parameter access (D16)
+  //
+  // The three methods below let the pause-menu quick picker's parameter editor
+  // work for ANY preset the user just tapped, not only the one that happens to be
+  // loaded into the live pipeline. That distinction matters because `renderSource`
+  // — and therefore `ensurePresetLoaded()`, which is what actually decodes a newly
+  // picked preset into `library`/`filter` — only runs while a frame is being
+  // presented. The pause menu stops presenting frames while it's up (see
+  // `SaveStateService.capturePausePreview`'s comment on why the pause-preview
+  // screenshot has to be grabbed on the way in rather than live), so picking a
+  // *different* preset while paused does not reload the live pipeline until the
+  // game resumes and a frame actually renders. Routing parameter reads/writes for
+  // a not-yet-loaded preset through `currentParameters()`/`setValue(_:forParameterIndex:)`
+  // would silently do the wrong thing: `currentParameters()` would return the
+  // OLD preset's parameter list, and `setValue` would persist the edit under the
+  // OLD preset's `persistenceKey`, corrupting a shader the user didn't touch.
+
+  /// Parameter metadata for `path`, whether or not it's the preset currently
+  /// loaded into the live pipeline. If it is, this is a free lookup against
+  /// `library`. Otherwise it does a one-off decode of that preset's container —
+  /// the same decode `ensurePresetLoaded()` does — without touching `library`,
+  /// `filter`, or `cachedPresetPath`, so it can't step on whatever preset is
+  /// actually loaded.
+  func parameters(forPresetPath path: String) -> [Compiled.Parameter] {
+    if path == cachedPresetPath, let lib = library { return lib.shader.parameters }
+    guard let url = resolvePresetURL(from: path) else { return [] }
+    if let data = try? Data(contentsOf: url), let container = try? ZipCompiledShaderContainer.Decoder(data: data) {
+      return container.shader.parameters
+    }
+    if let container = try? ZipCompiledShaderContainer.Decoder(url: url) {
+      return container.shader.parameters
+    }
+    return []
+  }
+
+  /// Current value of parameter `index` for `path`. Live preset -> the running
+  /// filter's value (reflects any edit made this session, persisted or not).
+  /// Any other preset -> the persisted value if one was saved earlier, else
+  /// `fallback` (the shader's own default for that parameter).
+  func parameterValue(forPresetPath path: String, index: Int, fallback: CGFloat) -> CGFloat {
+    if path == cachedPresetPath, let f = filter { return f.getValue(forParameterIndex: index) }
+    let key = persistenceKey(for: path, index: index)
+    if let saved = UserDefaults.standard.object(forKey: key) as? NSNumber { return CGFloat(truncating: saved) }
+    return fallback
+  }
+
+  /// Set parameter `index` for `path`. Live preset -> applies immediately
+  /// through the running filter, same as `setValue(_:forParameterIndex:)`. Any
+  /// other preset -> persists only, under the exact key `restorePersistedParameters`
+  /// reads from when that preset next loads (e.g. after Resume) — so an edit made
+  /// to a freshly-picked, not-yet-loaded preset isn't lost, it just doesn't have
+  /// anything to visually preview until the pipeline actually loads it.
+  func setParameterValue(_ value: CGFloat, forPresetPath path: String, index: Int) {
+    if path == cachedPresetPath {
+      setValue(value, forParameterIndex: index)
+      return
+    }
+    UserDefaults.standard.set(value, forKey: persistenceKey(for: path, index: index))
   }
 }
