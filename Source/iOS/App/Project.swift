@@ -136,6 +136,21 @@ let secondaryConfigs: [Configuration] = [
 // MARK: - Scripts (pre-compile; core build MUST precede Sources)
 
 let preScripts: [TargetScript] = [
+    // Guards against ButtonType.h (C++ source of truth) and TCButtonType.swift (Swift mirror)
+    // drifting numerically apart -- see the script's header comment for the history (audit
+    // defect #17, commit b32af2a26e). Runs first and fails fast, before the ~6 minute core
+    // build, on a plain system python3 (no venv dependency).
+    .pre(
+        script: #"""
+        python3 "$SRCROOT/Project/Scripts/check_button_types.py" || { echo "error: ButtonType.h (C++) and TCButtonType.swift (Swift) have drifted -- see the drift linter output above"; exit 1; }
+        """#,
+        name: "Check Button Type Drift",
+        inputPaths: [
+            "$(SRCROOT)/../../Core/InputCommon/ControllerInterface/iOS/ButtonType.h",
+            "$(SRCROOT)/DolphiniOS/UI/Emulation/TouchController/TCButtonType.swift",
+        ],
+        basedOnDependencyAnalysis: false
+    ),
     .pre(
         path: "Project/Scripts/SetUpPython.sh",
         name: "Setup Python",
