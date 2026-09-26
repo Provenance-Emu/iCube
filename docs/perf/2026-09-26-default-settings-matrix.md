@@ -155,6 +155,21 @@ process (EXC_CRASH). **Fixed in `782e7f2e18`:** `loadStateSlotAsync:completion:`
 free during the load (the emulation loop dispatch_syncs to main during boot); validated with eight
 consecutive stop→boot→load cycles on Chibi-Robo with no kill. Raw: `docs/perf/data/2026-09-26-GGTE01-slot1-run6-confirm.json`.
 
+### Run 7 — Chibi-Robo, 40 s legs, 8 legs per knob (1,0,1,0,0,1,0,1), fixed bench build 2606-2072
+(Phone in **"serious"** thermal state for every leg; uncapped speed 1.0–1.23 instead of 1.5–1.8.)
+
+| Knob | ON mean | OFF mean | ON vs OFF | per-pair | legs (value:speed) |
+|---|---|---|---|---|---|
+| `cirSpecializedFpArith` | 1.135 | 1.164 | −2.6 % | −7.8 % / +0.8 % | 1:1.112 0:1.025 1:1.001 0:1.219 0:1.196 1:1.221 0:1.215 1:1.205 |
+| `cirDynTargetCache` | 1.200 | 1.198 | +0.2 % | agree | 1:1.218 0:1.200 1:1.184 0:1.187 0:1.233 1:1.199 0:1.173 1:1.200 |
+
+Read: the run-5/6 signals did **not** replicate. Dynamic Target Cache's −10 % is gone (±0.2 % over 8
+long legs) — it was drift. FP arithmetic specialization is noise again (pairs disagree). Caveat: the
+phone was throttled ("serious") the whole time, which compresses CPU-bound differences, so this is
+"not confirmed", not "disproved" — but two runs out of three see nothing, so nothing is promoted.
+Raw: `docs/perf/data/2026-09-26-GGTE01-slot1-run7-40s-confirm.json`. The bench survived all 16
+stop→boot→load cycles on the fixed build.
+
 ## Decision
 
 | Knob | Today | Data | Recommendation |
@@ -162,8 +177,8 @@ consecutive stop→boot→load cycles on Chibi-Robo with no kill. Raw: `docs/per
 | Shader compilation | Specialized | hybrid = specialized on throughput (+0.5 %, noise); exclusive −4.5 % consistently; stutter unmeasured | **Flip to Hybrid Ubershaders on iOS + tvOS**: zero measured cost, removes first-compile stutter by construction. Never Exclusive |
 | CachedInterpreter Prefetch | OFF | ON −1.0 %, mixed sign | keep OFF (matches the core comment) |
 | Paired-single NEON (`cirPsNeon`) | OFF (this phone had it ON) | WW: ON −1.2 %, worse 1 % low; Chibi: ON +2.7 % mixed | keep OFF; do not promote |
-| FP arithmetic specialization (`cirSpecializedFpArith`) | OFF | WW: noise; Chibi: ON +3.6 % over 8 legs (3/4 pairs) | candidate for recommended; confirm with 40 s legs |
-| Dynamic Target Cache (`cirDynTargetCache`) | OFF (phone ON) | WW: +1.1 % (Sept); Chibi: ON −10 % over 8 legs (3/4 pairs) | keep OFF; turn off on the phone |
+| FP arithmetic specialization (`cirSpecializedFpArith`) | OFF | WW: noise; Chibi 20 s: ON +3.6 %; Chibi 40 s (throttled): −2.6 % mixed | not confirmed; leave OFF |
+| Dynamic Target Cache (`cirDynTargetCache`) | OFF (phone ON) | WW: +1.1 % (Sept); Chibi 20 s: −10 %; Chibi 40 s: ±0.2 % | the −10 % was drift; no effect either way, keep OFF |
 | NEON texture decode | ON | OFF −3.1 %, both pairs | keep ON (confirmed win) |
 | Vertex loader | NEON | software ±0 after repeat | keep NEON |
 
