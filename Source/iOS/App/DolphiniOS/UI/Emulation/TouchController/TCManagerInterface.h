@@ -9,6 +9,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)setButtonStateFor:(NSInteger)button controller:(NSInteger)controllerId state:(BOOL)state;
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value;
+/// The value the core will read for `axis` after setAxisValueFor:'s processing (test seam;
+/// 0 for an axis that has never been written).
++ (float)axisValueFor:(NSInteger)axis controller:(NSInteger)controllerId;
 
 /// Releases every button/axis for one touchscreen controller id (including the DSU
 /// mirrors), for use when a touch overlay view is torn down or rebuilt so a finger

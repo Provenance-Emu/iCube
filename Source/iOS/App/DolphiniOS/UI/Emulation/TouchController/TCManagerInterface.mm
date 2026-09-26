@@ -48,6 +48,15 @@
   if (button == 5) { [DSUServerBridge setTouch:controllerId state:state]; }
 }
 
++ (float)axisValueFor:(NSInteger)axis controller:(NSInteger)controllerId {
+  // StateManager::GetAxisValue uses std::map::at, which throws for an axis never written.
+  try {
+    return ciface::iOS::StateManager::GetInstance()->GetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis);
+  } catch (const std::out_of_range&) {
+    return 0.f;
+  }
+}
+
 + (void)clearAllForController:(NSInteger)controllerId {
   ciface::iOS::StateManager::GetInstance()->ClearController((int)controllerId);
   // Release every DSU mirror this class writes in setButtonStateFor:/setAxisValueFor:
@@ -89,32 +98,39 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
   float dead = (float)[defs floatForKey:@"dsu_deadzone"]; if (dead < 0.f) dead = 0.f; if (dead > 0.49f) dead = 0.49f;
   float alpha = (float)[defs floatForKey:@"dsu_smoothing"]; if (alpha < 0.f) alpha = 0.f; if (alpha > 0.95f) alpha = 0.0f; // 0 = off
 
-  // Axis classification
+  // Axis classification. Classify against the UNCLAMPED `axis`: the IMU ranges (625-636,
+  // 900-905) sit above the 256-entry smoothing tables, so testing the clamped index `ai`
+  // could never match them and every gyro/accel write fell through as an ordinary analog
+  // axis (deadzone, gain, EMA, and a +/-1 clamp that cut gravity from ~9.8 to 1 m/s^2).
+  // `ai` is ONLY an array index, valid solely for axes below 256.
   int ci = (int)MAX(0, MIN(3, (int)controllerId));
-  int ai = (int)MAX(0, MIN(255, (int)axis));
-  const bool is_split_stick = ((ai >= 11 && ai <= 14) || (ai >= 16 && ai <= 19) || (ai >= 203 && ai <= 206));
-  const bool is_ir_axis = (ai >= 112 && ai <= 115); // Wii IR Up/Down/Left/Right
-  const bool is_imu_axis = ((ai >= 625 && ai <= 636) || (ai >= 900 && ai <= 905)); // Wiimote+Nunchuk IMU
+  const bool is_split_stick = ((axis >= 11 && axis <= 14) || (axis >= 16 && axis <= 19) || (axis >= 203 && axis <= 206));
+  const bool is_ir_axis = (axis >= 112 && axis <= 115); // Wii IR Up/Down/Left/Right
+  const bool is_imu_axis = ((axis >= 625 && axis <= 636) || (axis >= 900 && axis <= 905)); // Wiimote+Nunchuk IMU
+  const bool has_smoothing_cell = (axis >= 0 && axis < 256);
+  int ai = has_smoothing_cell ? (int)axis : 0;
 
-  // Deadzone/gain only for standard analog axes; IMU + IR should be raw
+  // IMU axes carry m/s^2 and rad/s and go to the core raw, exactly as upstream DolphiniOS
+  // forwarded them: no deadzone, no gain, no smoothing, no unit-range clamp.
   float v = value;
-  if (!(is_ir_axis || is_imu_axis)) {
-    if (fabsf(v) < dead) v = 0.f; else {
-      float sign = (v >= 0.f) ? 1.f : -1.f;
-      float mag = (fabsf(v) - dead) / (1.f - dead);
-      v = sign * mag;
+  if (!is_imu_axis) {
+    // Deadzone/gain only for standard analog axes; IR is already normalized by its writer.
+    if (!is_ir_axis) {
+      if (fabsf(v) < dead) v = 0.f; else {
+        float sign = (v >= 0.f) ? 1.f : -1.f;
+        float mag = (fabsf(v) - dead) / (1.f - dead);
+        v = sign * mag;
+      }
+      v *= gain;
     }
-    v *= gain;
-  }
-  if (v > 1.f) v = 1.f; if (v < -1.f) v = -1.f;
+    if (v > 1.f) v = 1.f; if (v < -1.f) v = -1.f;
 
-  // Smoothing (EMA). Disable for split-stick, IMU and IR axes
-  const bool allow_smoothing = (alpha > 0.f) && !(is_split_stick || is_ir_axis || is_imu_axis);
-  if (allow_smoothing) {
-    v = alpha * s_last[ci][ai] + (1.f - alpha) * v;
-    s_last[ci][ai] = v;
-  } else {
-    s_last[ci][ai] = v;
+    // Smoothing (EMA). Disable for split-stick and IR axes.
+    const bool allow_smoothing = (alpha > 0.f) && has_smoothing_cell && !(is_split_stick || is_ir_axis);
+    if (allow_smoothing) {
+      v = alpha * s_last[ci][ai] + (1.f - alpha) * v;
+    }
+    if (has_smoothing_cell) s_last[ci][ai] = v;
   }
 
   ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis, v);
