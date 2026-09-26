@@ -1,5 +1,7 @@
 # Test queue and remaining work — 2026-09-25 (develop `ab7f68f64c`, Provenance `439db0ea52`)
 
+> Superseded in part by `docs/handoff-2026-09-26-fixes-batch.md` (2026-09-26 batch: shaders, save states, IMU fix, overlay editor, l10n bundling).
+
 Everything below is compile-gated (iOS + tvOS) and NOT device-verified unless marked. The DEV
 build of `ab7f68f64c` is installed on the iPhone 16 Pro Max. The debug bench is loopback-only in
 DEBUG, so logs/screenshots need USB (`iproxy 8726 8723 -u 00008140-001C1C540A12801C`); a game can
