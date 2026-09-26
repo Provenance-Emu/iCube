@@ -30,6 +30,7 @@ enum LibrarySnapshotWriter {
         region: item.countryName.isEmpty ? nil : item.countryName,
         lastPlayed: lastPlayed[gameID],
         isFavorite: item.isFavorite,
+        dateAdded: LibraryAddedDateStore.resolvedAddedDate(forPath: item.filePath),
         coverFilename: hasCover ? LibrarySnapshotAppGroup.coverFilename(gameID: gameID) : nil))
       if hasCover { jobs.append(CoverJob(gameID: gameID, image: item.coverImage)) }
     }

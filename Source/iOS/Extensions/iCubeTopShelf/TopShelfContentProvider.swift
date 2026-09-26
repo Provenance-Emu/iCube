@@ -44,9 +44,21 @@ final class TopShelfContentProvider: TVTopShelfContentProvider {
             sections.append(collection)
         }
 
-        addSection("Continue Playing", "recent", snapshot.recentlyPlayed)
-        addSection("Favorites", "favorite", snapshot.favorites)
-        log.info("load: recent=\(snapshot.recentlyPlayed.count) favorites=\(snapshot.favorites.count) sections=\(sections.count)")
+        // When nothing has been played yet on this install, lead with what was just
+        // imported so the shelf isn't empty on a fresh library; once something has been
+        // played, Continue Playing takes the lead spot as usual.
+        if snapshot.recentlyPlayed.isEmpty {
+            addSection("Recently Added", "added", snapshot.recentlyAdded)
+            addSection("Favorites", "favorite", snapshot.favorites)
+        } else {
+            addSection("Continue Playing", "recent", snapshot.recentlyPlayed)
+            addSection("Favorites", "favorite", snapshot.favorites)
+            addSection("Recently Added", "added", snapshot.recentlyAdded)
+        }
+        log.info("""
+            load: recent=\(snapshot.recentlyPlayed.count) favorites=\(snapshot.favorites.count) \
+            added=\(snapshot.recentlyAdded.count) sections=\(sections.count)
+            """)
 
         guard !sections.isEmpty else {
             completionHandler(nil)   // tvOS falls back to the static Top Shelf brand image
