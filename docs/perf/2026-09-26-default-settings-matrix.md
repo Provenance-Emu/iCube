@@ -151,8 +151,9 @@ Gather-Pipe Copy Fusion: noise, as on Wind Waker.
 **Bench bug found:** all three app kills during the Chibi-Robo runs are the same report — the host
 thread blocked forever in `DOLHostQueueRunSync` from `DOLDebugBridge.loadStateSlot` inside
 `DebugBenchmarkManager.runBenchmark` right after the sweep's stop→boot, then the watchdog killed the
-process (EXC_CRASH). `loadStateSlot` must wait for the core to be running (or time out) before queuing
-the synchronous host job. Raw: `docs/perf/data/2026-09-26-GGTE01-slot1-run6-confirm.json`.
+process (EXC_CRASH). **Fixed in `782e7f2e18`:** `loadStateSlotAsync:completion:` + `BenchAwait.withTimeout` keep the main actor
+free during the load (the emulation loop dispatch_syncs to main during boot); validated with eight
+consecutive stop→boot→load cycles on Chibi-Robo with no kill. Raw: `docs/perf/data/2026-09-26-GGTE01-slot1-run6-confirm.json`.
 
 ## Decision
 
