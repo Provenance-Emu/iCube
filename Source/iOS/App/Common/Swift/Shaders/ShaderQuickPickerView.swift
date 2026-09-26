@@ -11,22 +11,23 @@
 // there). `ShaderSettingsView`/`ShaderPickerView`/`ShaderParameterEditor` are untouched
 // and still serve Settings and the in-game FX sheet in `EmulationScreen`.
 //
-// Thumbnails — read this before assuming these are live per-shader previews, they
-// are NOT: iFly's `ShaderPreviewGenerator` renders every candidate preset through
-// its OWN offscreen `FilterChain` instance, so its cards show what each shader
-// actually looks like. iCube's `DOLShaderPostProcessor` is a singleton bound to the
-// one live render pipeline (see the long comment above the preset-scoped parameter
-// helpers in `ShaderPostProcessor.swift`) — there is no second, isolated FilterChain
-// to render an arbitrary preset off to the side without touching whatever is
-// actually driving the screen, and building one safely was out of scope for this
-// pass. Instead, cards use the last live game frame — `SaveStateService.pausePreviewURL`,
-// already captured the moment the pause menu opened — as a shared backdrop (real
-// game content, not a placeholder), but it is the SAME frame under every card, not
-// a per-shader render. Visual distinction between cards comes from the preset's
-// name, its containing-folder category, and a name-derived icon/tint badge. The
-// hero card is the only place the frame appears at full strength; grid cards dim
-// it further specifically so they don't read as implying a per-shader effect
-// preview that doesn't exist.
+// Thumbnails — cards now show REAL per-preset previews. Each card renders its
+// preset through `ShaderPreviewRenderer`, an isolated `FilterChain` on its own
+// `MTLCommandQueue` that never touches the live `DOLShaderPostProcessor`
+// singleton, against the last live game frame (`SaveStateService.pausePreviewURL`,
+// captured the moment the pause menu opened) as the common source image — so
+// every card shows what that preset actually does to the current frame, not a
+// shared, un-shaded backdrop. Rendering is lazy (`.task(id:)` per card, so only
+// visible/near-visible cards in the `LazyVGrid` do any work), bounded to a
+// couple of renders in flight at once, and cached by `ShaderPreviewCache`
+// (keyed on preset + source-frame mtime) so reopening the sheet or rescrolling
+// doesn't re-render anything. A card falls back to today's name-derived
+// icon/tint badge until its render lands — or forever, if rendering fails or
+// times out (see `ShaderPreviewRenderer`'s header for the isolation/fail-soft
+// design and why it's a fundamentally different approach from iFly's
+// `ShaderPreviewGenerator`, which mutates the shared singleton's state under
+// the hood despite looking isolated). The hero card previews the CURRENTLY
+// SELECTED preset the same way, independent of the "Enabled" toggle.
 import SwiftUI
 import UIKit
 
@@ -42,6 +43,10 @@ struct ShaderQuickPickerView: View {
   @State private var favorites: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "shader_favorites") ?? [])
   @State private var mru: [String] = UserDefaults.standard.stringArray(forKey: "shader_mru") ?? []
   @State private var heroImage: UIImage?
+  @State private var heroPreviewImage: UIImage?
+  /// The pause frame, downscaled once and shared by every card's preview
+  /// render (plus the hero's) — see `ShaderPreviewRenderer.sourceDownscaleMaxWidth`.
+  @State private var previewSource: PreviewSourceFrame?
   @State private var pushedParameterPath: String?
 
   @FocusState private var focusedCardID: String?
@@ -97,9 +102,43 @@ struct ShaderQuickPickerView: View {
       // off the main actor so opening the sheet doesn't hitch the still-visible
       // (if paused) pause menu behind it.
       presets = await Task.detached(priority: .userInitiated) { ShaderLibrary.discoverPresets() }.value
-      heroImage = Self.loadFreshPausePreview()
+      let fresh = Self.loadFreshPausePreview()
+      heroImage = fresh?.image
+      if let fresh, let cg = fresh.image.cgImage {
+        let downscaled = ShaderPreviewRenderer.downscaledCGImage(cg, maxWidth: ShaderPreviewRenderer.sourceDownscaleMaxWidth)
+        previewSource = PreviewSourceFrame(image: downscaled, mtime: fresh.mtime)
+      }
       isLoading = false
     }
+    .task(id: currentPath) {
+      // Hero preview: the currently SELECTED preset, applied to the same
+      // shared source frame every grid card uses — independent of the
+      // "Enabled" toggle, since flipping that doesn't change which preset is
+      // picked. Shares its cache key with the matching grid card (same
+      // preset path + source mtime + thumbnail size), so whichever renders
+      // first "pays" for both.
+      heroPreviewImage = nil
+      guard let currentPath, let previewSource,
+            let presetURL = presets.first(where: { ShaderLibrary.normalizedPath($0.id.path) == currentPath })?.id
+      else { return }
+      guard let rendered = await ShaderPreviewCache.shared.preview(
+        presetPath: currentPath,
+        presetURL: presetURL,
+        sourceImage: previewSource.image,
+        sourceMTime: previewSource.mtime
+      ) else { return }
+      guard !Task.isCancelled else { return }
+      heroPreviewImage = UIImage(cgImage: rendered)
+    }
+  }
+
+  /// The shared source frame handed to `ShaderPreviewRenderer` for every card
+  /// (and the hero) in this sheet — downscaled once up front rather than per
+  /// card. `fileprivate` for the same reason as `PickerItem`: `ShaderQuickCard`
+  /// (a sibling top-level type in this file) needs to reference it by name.
+  fileprivate struct PreviewSourceFrame {
+    let image: CGImage
+    let mtime: TimeInterval
   }
 
   // MARK: - Item model
@@ -204,7 +243,14 @@ struct ShaderQuickPickerView: View {
 
   @ViewBuilder
   private var heroBackdrop: some View {
-    if let heroImage {
+    // Prefer the rendered preview of the currently selected preset; fall back
+    // to the raw pause frame while it's still rendering (or if there's no
+    // preset selected, or the render failed/timed out).
+    if let heroPreviewImage {
+      Image(uiImage: heroPreviewImage)
+        .resizable()
+        .aspectRatio(contentMode: .fill)
+    } else if let heroImage {
       Image(uiImage: heroImage)
         .resizable()
         .aspectRatio(contentMode: .fill)
@@ -218,18 +264,20 @@ struct ShaderQuickPickerView: View {
     }
   }
 
-  /// Loads `SaveStateService.pausePreviewURL` if it was captured recently enough
-  /// to plausibly be THIS pause (not a leftover from a much older session, or a
-  /// different game, since the file lives in `NSTemporaryDirectory()` and isn't
-  /// scoped per-game). Mirrors `SaveStateService.adoptPausePreviewIfFresh`'s own
-  /// 60-second window.
-  private static func loadFreshPausePreview() -> UIImage? {
+  /// Loads `SaveStateService.pausePreviewURL` (image + its modification time,
+  /// the latter doubling as `ShaderPreviewCacheKey.sourceMTime`) if it was
+  /// captured recently enough to plausibly be THIS pause (not a leftover from a
+  /// much older session, or a different game, since the file lives in
+  /// `NSTemporaryDirectory()` and isn't scoped per-game). Mirrors
+  /// `SaveStateService.adoptPausePreviewIfFresh`'s own 60-second window.
+  private static func loadFreshPausePreview() -> (image: UIImage, mtime: TimeInterval)? {
     let url = SaveStateService.pausePreviewURL
     guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
           let modified = attrs[.modificationDate] as? Date,
-          Date().timeIntervalSince(modified) < pausePreviewFreshnessWindow
+          Date().timeIntervalSince(modified) < pausePreviewFreshnessWindow,
+          let image = UIImage(contentsOfFile: url.path)
     else { return nil }
-    return UIImage(contentsOfFile: url.path)
+    return (image, modified.timeIntervalSinceReferenceDate)
   }
 
   // MARK: - Grid
@@ -250,6 +298,7 @@ struct ShaderQuickPickerView: View {
           isSelected: item.id == (currentPath ?? PickerItem.noneID),
           isFavorite: item.preset != nil && favorites.contains(item.id),
           focusedCardID: $focusedCardID,
+          previewSource: previewSource,
           onApply: { apply(item.preset) },
           onToggleFavorite: {
             if let preset = item.preset { toggleFavorite(preset) }
@@ -287,9 +336,10 @@ struct ShaderQuickPickerView: View {
     UserDefaults.standard.set(true, forKey: "shader_enabled")
     UserDefaults.standard.set(normalized, forKey: "shader_preset_path")
     NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-    // Immediate apply — takes visual effect once the game resumes and a frame
-    // actually renders; see the big comment atop this file re: no live preview
-    // while the pause menu (and therefore the render loop) is stopped.
+    // Immediate apply to the LIVE pipeline — takes visual effect in the actual
+    // game view once it resumes and a frame actually renders, since the render
+    // loop is stopped while paused. This is separate from (and does not touch)
+    // the offscreen preview rendering the cards use — see `ShaderPreviewRenderer`.
     DOLShaderPostProcessor.shared.applyPresetPath(normalized)
     pushMRU(normalized)
   }
@@ -332,9 +382,15 @@ private struct ShaderQuickCard: View {
   let isSelected: Bool
   let isFavorite: Bool
   var focusedCardID: FocusState<String?>.Binding
+  /// Shared source frame for rendering this card's preview — `nil` when there's
+  /// no fresh pause frame to render against (falls back to the name-derived
+  /// badge, same as a failed/slow render).
+  let previewSource: ShaderQuickPickerView.PreviewSourceFrame?
   let onApply: () -> Void
   let onToggleFavorite: () -> Void
   let onOpenParameters: () -> Void
+
+  @State private var previewImage: UIImage?
 
   private var isFocused: Bool { focusedCardID.wrappedValue == item.id }
 
@@ -414,28 +470,54 @@ private struct ShaderQuickCard: View {
       .padding(6)
     }
     .animation(.easeInOut(duration: 0.15), value: isFocused)
+    .task(id: item.id) {
+      // Fresh identity each time `item.id` changes (including when this card
+      // is reused by `ForEach` for a different preset) — start clean rather
+      // than briefly showing the previous card's thumbnail.
+      previewImage = nil
+      guard let preset = item.preset, let previewSource else { return }
+      guard let rendered = await ShaderPreviewCache.shared.preview(
+        presetPath: ShaderLibrary.normalizedPath(preset.id.path),
+        presetURL: preset.id,
+        sourceImage: previewSource.image,
+        sourceMTime: previewSource.mtime
+      ) else { return }
+      // SwiftUI cancels this Task automatically if the card scrolls out and
+      // `ForEach` tears it down (or the whole sheet closes) before the render
+      // lands — this guard just avoids a pointless `@State` write on the way
+      // out; the render itself already ran and is cached for next time.
+      guard !Task.isCancelled else { return }
+      previewImage = UIImage(cgImage: rendered)
+    }
   }
 
   @ViewBuilder
   private var thumbnail: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(tint.opacity(0.22))
-      Image(systemName: iconName)
-        .font(.system(size: 26, weight: .medium))
-        .foregroundColor(tint)
+      if let previewImage {
+        Image(uiImage: previewImage)
+          .resizable()
+          .aspectRatio(contentMode: .fill)
+      } else {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .fill(tint.opacity(0.22))
+        Image(systemName: iconName)
+          .font(.system(size: 26, weight: .medium))
+          .foregroundColor(tint)
+      }
     }
     .frame(height: 78)
+    .frame(maxWidth: .infinity)
+    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     .padding(8)
   }
 
   private var tint: Color { Self.tint(forName: item.preset?.name) }
   private var iconName: String { Self.icon(forName: item.preset?.name) }
 
-  /// Deterministic-per-launch color from the preset's name, purely for grid
-  /// scannability (this is NOT derived from the shader's actual visual effect —
-  /// see the file-level comment on `ShaderQuickPickerView` re: no per-shader
-  /// render pipeline to preview from).
+  /// Deterministic-per-launch color from the preset's name — the fallback
+  /// look while a real preview is rendering (or if it never lands: rendering
+  /// failed, timed out, or there's no source frame to render against).
   private static func tint(forName name: String?) -> Color {
     guard let name, !name.isEmpty else { return .gray }
     let palette: [Color] = [.orange, .purple, .teal, .pink, .indigo, .mint, .cyan, .blue]
