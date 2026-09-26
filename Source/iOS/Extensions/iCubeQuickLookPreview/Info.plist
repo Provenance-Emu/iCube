@@ -8,6 +8,8 @@
 	<dict>
 		<key>NSExtensionAttributes</key>
 		<dict>
+			<key>QLIsDataBasedPreview</key>
+			<true/>
 			<key>QLSupportedContentTypes</key>
 			<array>
 				<string>me.oatmealdome.dolphinios.generic-software</string>
@@ -18,13 +20,15 @@
 				<string>me.oatmealdome.dolphinios.nkit-image</string>
 				<string>public.iso-image</string>
 			</array>
-			<key>QLIsDataBasedPreview</key>
-			<true/>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.quicklook.preview</string>
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).PreviewProvider</string>
 	</dict>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
 </dict>
 </plist>
