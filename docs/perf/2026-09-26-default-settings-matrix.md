@@ -34,7 +34,22 @@ speed at 1.00; long cooldowns auto-lock the phone; `icube.cirProfile` re-enables
 
 ## Results
 
-_(fill in: per key, per title, per platform — paste the `== key` tables)_
+### Run 1 — Wind Waker (GZLE01), Outset Island slot 1, iPhone 16 Pro Max, DEV build 2606-2042,
+20 s per leg, palindrome order, speed uncapped, adaptive clock off, thermal "fair" throughout
+
+| Factor | A (current) | B | speed A | speed B | Δ | per-pair Δ | verdict |
+|---|---|---|---|---|---|---|---|
+| gfxShaderCompilationMode | 0 specialized | 2 hybrid uber | 1.298 | 1.357 | **+4.6 %** | +6.7 % / +2.6 % | consistent win; p95 29.1 → 26.6 ms |
+| gfxShaderCompilationMode | 0 specialized | 1 exclusive uber | 1.298 | 1.262 | −2.8 % | −1.6 % / −3.9 % | consistently worse (GPU cost every frame) |
+| mainCachedInterpreterPrefetch | 0 | 1 | 1.332 | 1.319 | −1.0 % | +0.5 % / −2.5 % | noise; keep OFF |
+| cirPsNeon | 0 | 1 | 1.325 | 1.309 | −1.2 % | −2.5 % / 0.0 % | noise-to-negative; 1 % low worse (34 vs 28 ms) |
+| gfxHackNeonTextureDecode | 1 | 0 | 1.339 | 1.298 | −3.1 % | −3.6 % / −2.5 % | NEON ON is a consistent win; keep ON |
+| vertexLoaderMode | 1 NEON | 0 software | 1.303 | 1.356 | +4.0 % | +7.6 % / +0.7 % | first NEON leg (1.264) looks like an outlier; repeat below |
+
+Capped control (100 % throttle, warm shader cache): every mode holds 30.0 fps, p95 34.3–35.0 ms,
+so on a warm cache the shader mode does not change stutter on Outset; the win is throughput/headroom.
+
+Raw: `perf_matrix_GZLE01.json` (scratch; copy next to this file if kept).
 
 ## Decision
 

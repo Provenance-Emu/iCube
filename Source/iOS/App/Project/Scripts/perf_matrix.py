@@ -48,11 +48,19 @@ def coerce(v):
         return v
 
 
+def normalize(v):
+    """The device echoes booleans back as "0"/"1"; use that form everywhere so tables line up."""
+    return {"true": "1", "false": "0"}.get(str(v).lower(), str(v))
+
+
 def palindrome(values):
     return values + list(reversed(values))
 
 
-def wait_sweep(base, poll=5, limit=3600):
+def wait_sweep(base, key, previous, poll=5, limit=3600, grace=90):
+    """Block until /api/bench/sweep/result holds a FINISHED result for `key` that differs from
+    `previous`. Right after POST /api/bench/sweep the endpoint still returns "no-result" or the
+    previous sweep's finished result for a moment, so neither may be taken as this sweep's."""
     t0 = time.time()
     while time.time() - t0 < limit:
         try:
@@ -60,7 +68,15 @@ def wait_sweep(base, poll=5, limit=3600):
         except (urllib.error.URLError, TimeoutError, OSError):
             time.sleep(poll)
             continue
-        if r.get("status") == "running":
+        status = r.get("status")
+        if status == "running":
+            time.sleep(poll)
+            continue
+        # Finished form: {"status": "done", "result": {key, hotSwappable, runs: [...]}}
+        r = r.get("result") or {}
+        if status == "no-result" or r.get("key") != key or r == previous:
+            if time.time() - t0 > grace and status != "running":
+                sys.exit(f"sweep for {key} never started (endpoint shows {status or r.get('key')})")
             time.sleep(poll)
             continue
         return r
@@ -72,9 +88,9 @@ def summarize(sweep):
     by = {}
     for run in sweep.get("runs", []):
         if run.get("error") or not run.get("result"):
-            by.setdefault(run["value"], []).append(None)
+            by.setdefault(normalize(run["value"]), []).append(None)
             continue
-        by.setdefault(run["value"], []).append(run["result"]["summary"])
+        by.setdefault(normalize(run["value"]), []).append(run["result"]["summary"])
     rows = {}
     for value, sums in by.items():
         ok = [s for s in sums if s]
@@ -125,17 +141,23 @@ def main():
     known = call(args.base, "/api/settings")["data"]
     results = {"health": h, "factors": {}}
     call(args.base, "/api/bench/preset", {"preset": "benchmarkBase"})
+    # The preset pins the adaptive clock; speed must be uncapped separately or `speed`
+    # saturates at 1.00 on any scene the core can keep up with. Hot key, persisted, so it
+    # survives the per-value reboots; restored in `finally`.
+    call(args.base, "/api/settings/mainEmulationSpeedPercent", {"value": 0})
+    last_sweep = None
     try:
         for spec in args.factors:
             key, _, raw = spec.partition("=")
-            values = raw.split(",")
+            values = [normalize(v) for v in raw.split(",")]
             if key not in known:
                 print(f"skip {key}: unknown to this build")
                 continue
             order = palindrome(values)
             call(args.base, "/api/bench/sweep",
                  {"key": key, "values": [coerce(v) for v in order], "slot": args.slot, "seconds": args.seconds})
-            sweep = wait_sweep(args.base)
+            sweep = wait_sweep(args.base, key, last_sweep)
+            last_sweep = sweep
             rows = summarize(sweep)
             results["factors"][key] = {"order": order, "sweep": sweep, "rows": rows}
             print_rows(key, rows, values[0])
@@ -152,13 +174,15 @@ def main():
                 call(args.base, "/api/bench/sweep",
                      {"key": "gfxHackNeonTextureDecode", "values": [known["gfxHackNeonTextureDecode"]["value"]],
                       "slot": args.slot, "seconds": args.seconds})
-                sweep = wait_sweep(args.base)
+                sweep = wait_sweep(args.base, "gfxHackNeonTextureDecode", last_sweep)
+                last_sweep = sweep
                 run = sweep["runs"][0]
                 legs.append({"leg": leg, "summary": run.get("result", {}).get("summary"), "error": run.get("error")})
                 print(leg, legs[-1]["summary"])
             results["pair"] = legs
             call(args.base, "/api/settings/bulk", {"values": {k: coerce(str(v)) for k, v in before.items()}, "mode": "merge"})
     finally:
+        call(args.base, "/api/settings/mainEmulationSpeedPercent", {"value": 100})
         call(args.base, "/api/bench/preset", {"preset": "restore"})
         json.dump(results, open(args.out, "w"), indent=1)
         print(f"\nwrote {args.out}")
