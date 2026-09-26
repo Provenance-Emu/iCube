@@ -281,3 +281,161 @@ mechanism it needs, but 17's actual sheet content is not touched here.
   explicitly ("This also absorbs 13 (HUD) and the tvOS focus traps"). This
   spec gives 17 its mechanism (§2) but does not redesign the HUD (13); a
   follow-up spec is still needed for the HUD's own visual/interaction design.
+
+## 9. Implementation status (2026-09-26 — engine pass)
+
+The engine (§0 of §6's migration order) landed with one proof-of-life screen.
+**No other screen was touched** — `PauseMenuView.swift`, `SettingsRootView.swift`,
+`ControllerSetupView.swift`, `Shaders/ShaderSettingsView.swift` and
+`SaveStateFilmstripView.swift` are all unchanged.
+
+### What landed
+
+- **`RemapControllerNav` moved, not rewritten.** The struct now lives at
+  `Common/Swift/Menu/MenuControllerNav.swift` as `MenuControllerNav`, with two
+  additions: `Input.leftShoulder`/`rightShoulder` and `Event.jumpSection(Int)`,
+  both added *after* the existing fields/cases so every pre-existing
+  `RemapModelTests` call site keeps compiling unchanged.
+  `Controllers/Remap/RemapModel.swift` now reads
+  `typealias RemapControllerNav = MenuControllerNav`; `RemapPlayerView.swift`
+  needed exactly one change, an added `case .jumpSection: break` in its
+  (now non-exhaustive) event switch, since it wires no shoulder input.
+- **`MenuModel` / `MenuSection` / `MenuItem` / `MenuItemRole`**
+  (`Menu/MenuModel.swift`) — matches §1 exactly, plus lookup helpers
+  (`allItems`, `focusableIDs`, `item(id:)`, `section(containing:)`,
+  `firstFocusableID(sectionOffsetFrom:by:)`) that `MenuFocusRouter` and the
+  model-construction tests are built on.
+- **`MenuFocusRouter`** (`Menu/MenuFocusRouter.swift`) — the pure router §7
+  asks for, composing `MenuControllerNav` with a `MenuModel`. Two behaviors
+  the spec's prose didn't spell out, added after review and covered by
+  regression tests in `MenuFocusRouterTests`:
+  - **Claim-ignore resyncs, it doesn't just drop input.** A naive "skip the
+    tick while another scope owns the controller" leaves the B/A latches
+    stuck at their last-seen state; if the same physical press that
+    dismissed a covering screen is still held the instant this screen
+    regains ownership, that reads as a brand-new edge and double-fires
+    (e.g. a double pop). `update(..., isActive: false)` calls
+    `MenuControllerNav.resync` every inactive tick instead.
+  - **Open-press leak.** The press that activated a `.navigation` item in a
+    parent screen is still held on the child's first tick, and unlike
+    `RemapPlayerView` (which starts with no highlight), a `MenuScreen`
+    defaults focus to its first item immediately — so an `update` there
+    would self-activate. `MenuScreen` calls `router.resync(...)` once,
+    instead of `update(...)`, on the first tick after appearing.
+  - `MenuFocusRouter.reconcile(focusedID:previousOrder:model:)` handles a
+    model rebuilt out from under a live focus (the id it names may no
+    longer exist): keeps focus if the id survived, else falls back to
+    whatever now sits at the same flat index, else the first item.
+    `MenuScreen` wires this via `.onChange(of: model.focusableIDs)`.
+- **`MenuScreen`** (`Menu/MenuScreen.swift`) — renders a `MenuModel` with a
+  `MenuStyle` of `.grid` (pause-menu card look, §5 tokens — **visually
+  unverified**, no consumer yet) or `.list` (plain `List`, what Settings/
+  Cheats/Controllers already look like). Every instance self-claims a
+  `ControllerFocusCoordinator` scope via `.controllerScope(_:)`. `.navigation`
+  items push a child `MenuScreen` via `.navigationDestination(item:)` on both
+  platforms. `onBack` is a plain optional closure, not `dismiss()` — the host
+  decides what "back" means (see the Cheats migration below).
+  - **Deviation from §2's prose:** iOS polls `GCController` state on a
+    `.common`-mode `Timer`, the same mechanism `RemapPlayerView` already
+    uses — it does **not** install a `valueChangedHandler`. The design doc's
+    §2 describes the router as consuming `valueChangedHandler` callbacks;
+    that would fight `PauseMenuView.setupPauseControllerNav`'s handler for
+    the same process-wide slot the moment both are alive at once (true for a
+    `MenuScreen` presented as a `.sheet`/`.fullScreenCover` over the pause
+    menu, though not for a pane swapped in via `switch pane` the way Cheats
+    is today — see below). Polling structurally cannot contend for that slot
+    regardless of presentation style, so it was kept as the one deliberate
+    behavioral deviation from the doc's wording. Revisit once/if
+    `PauseMenuView` itself adopts the coordinator.
+  - **tvOS** installs zero GameController code: `List`, one `Button`/
+    `NavigationLink` per item, `.picker` explodes into one row per option
+    (checkmark for the selection) instead of an embedded control,
+    `.defaultFocus` on the first focusable item, `.onExitCommand` calls
+    `onBack`. No section-jump on tvOS — there is no shoulder input path to
+    wire it to; native focus traversal is unchanged either way.
+- **Proof of life: Cheats (iOS list only).** `CheatsMenuView.swift`'s iOS
+  `body` now renders `MenuScreen(model: cheatsMenuModel, style: .list,
+  onBack: onBack)` instead of a plain `List`. `CheatsMenuState` /
+  `CheatsMenuActions` / `CheatsMenuModelBuilder` (bottom of the same file)
+  build the model from a snapshot + actions struct with no `TVCheatsBridge`
+  calls inside the builder, per §1. Preserved exactly as before: the
+  Download/Refresh section keys off the *unfiltered* cheat-list emptiness,
+  not the search-filtered one (a pre-existing quirk, not fixed here); the
+  enable-global-cheats intercept lives in the toggle binding's setter; the
+  empty state is a non-focusable `.custom` item with the original icon/
+  headline/subtitle. Search stays a host concern (`.searchable` outside
+  `MenuScreen`), matching the design doc's Settings-root precedent — it is
+  not part of the engine. **tvOS's Cheats body is completely untouched**: its
+  layout (cover-image background, two-column panel, `@FocusState` buttons in
+  a `ScrollView`/`LazyVStack`) predates and does not match the `tvPlayerLink`/
+  `tvOptionRow` `List`-row shape the design doc's §2 contract assumes, so
+  migrating it would be a visual rewrite, not a mechanical one — out of scope
+  for an engine-proof pass that must keep behavior identical. It is still the
+  next natural step (§6 step 4 says "Cheats", not "Cheats (iOS)").
+- **Tests**: `MenuModelTests.swift` (construction/lookup — allItems ordering,
+  focusableIDs excluding disabled items, section lookup, section-jump lookup
+  including the "already at the edge" no-op case, badge pass-through, binding
+  plumbing) and `MenuFocusRouterTests.swift` (move/clamp, section-jump
+  including the double-press-doesn't-refire case, activate/back, the
+  claim-ignore double-back regression, the open-press-leak regression,
+  reconcile). Both wired into `DolphiniOS.xcodeproj/project.pbxproj`'s
+  `iCubeTests` target at ids `...0973`–`...0976`. The existing
+  `RemapModelTests.swift` needed no changes and still exercises the moved
+  engine under its old name.
+- **Fallback pbxproj**: `Common/Swift/Menu/` was added as a new
+  `PBXFileSystemSynchronizedRootGroup` (id `...0977`), mirroring how
+  `Common/Swift/Controllers/` is already wired — new files dropped into
+  `Menu/` in the future need no further pbxproj edits. `CheatsMenuView.swift`
+  itself was already an explicit (non-synced) reference, so its edits needed
+  no pbxproj change. The Tuist project (the actual CI/build system) globs
+  `Common/**/*.swift` and `DolphiniOSTests/**/*.swift` already, so it picked
+  up every new file with a plain `tuist generate`.
+
+### What each remaining screen migration needs (§6, unchanged order)
+
+1. **Cheats — tvOS.** Port the existing two-column layout onto `MenuScreen`'s
+   tvOS `List` contract, or accept the layout is intentionally bespoke and
+   leave it outside the engine permanently — needs a design call, not just
+   an implementation.
+2. **Pause menu main pane.** The highest-value step (§6 step 2) and the one
+   most likely to need `PauseMenuView` adopting `ControllerFocusCoordinator`
+   first, since its raw handler is a single global slot that must stop
+   fighting `MenuScreen`'s polling the moment both can be alive together
+   (currently avoided only because Cheats/Saves are `switch pane` swaps that
+   genuinely tear down `iosMainMenu`'s `onAppear`/`onDisappear`, not
+   sheets). Also where B1 gets fixed per §3.
+3. **Controllers.** Wrap `ControllerSetupSections`; delete `tvPlayerLink`/
+   `tvOptionRow`/`tvDeviceRows` in favor of `MenuScreen`'s tvOS renderer,
+   which already implements the picker-explosion contract those three
+   hand-roll today.
+4. **Shaders.** Sections need `.custom` leaves for the live thumbnail
+   preview per row — `MenuItemRole.custom` already supports this; no engine
+   changes anticipated.
+5. **Save States / Quick Slots.** Lives in `PauseMenuView.savesMenu`
+   (`PauseMenuView.swift`) — blocked on the pause-menu-pane migration (step
+   2 above) landing first, or on a decision to touch `PauseMenuView.swift`
+   in isolation for just this section.
+6. **Settings root.** Lowest risk per §6, but note `MenuItemRole.destination`
+   already round-trips correctly through both `MenuScreen` renderers in this
+   pass (proven by `.destination` support in `MenuScreen.listRow`/`tvRow`,
+   though no screen exercises it yet) — the adapter itself is still unwritten.
+
+### Needs a device (not exercised by this pass's tests or builds)
+
+- iOS: any real `GCController` input against `MenuScreen`/Cheats — the ticker,
+  `navGamepad()`'s "any connected extended gamepad" selection, the
+  scroll-to-focus behavior, and the reconcile-on-model-change path (toggle a
+  cheat, confirm focus survives; delete the last cheat via a fresh download,
+  confirm focus falls back sanely).
+- iOS: `ControllerFocusCoordinator` interaction between `MenuScreen` and
+  anything else that claims a scope while Cheats is open (there is no such
+  sheet today from this pane, so untested in practice, only in the router's
+  unit tests).
+- tvOS: focus traversal through `MenuScreen`'s `List`/`.defaultFocus`/
+  `.onExitCommand` — no consumer of the tvOS renderer exists yet in a real
+  screen (Cheats' tvOS body was deliberately left untouched), so this is
+  compiled but never focus-tested on a real Apple TV or simulator with the
+  Siri Remote.
+- Both: the `.grid` `MenuStyle` (pause-menu card look) has no consumer and no
+  device/screenshot comparison against `menuButtonIOS`/`menuRowIOS` — treat
+  it as a draft until the pause-menu migration (step 2 above) adopts it.
