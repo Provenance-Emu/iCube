@@ -18,6 +18,32 @@ enum MenuStyle {
   case list
 }
 
+/// D18 engine gap: a generic hook so a native `.alert`/`.confirmationDialog`
+/// presented by a `MenuScreen`'s HOST (e.g. `CheatsMenuView`'s "Enable
+/// Cheats?" prompt) can be answered by a game controller on iOS, where
+/// `MenuScreen` polls raw `GCController` state instead of going through the
+/// UIKit responder chain a real alert view controller would otherwise
+/// intercept. Without this, A/d-pad silently keeps acting on the rows
+/// *behind* the alert while it is up.
+///
+/// While `MenuScreen.modal` is non-nil, the underlying model's rows are
+/// frozen -- no move/section-jump/activate reaches them -- but A/B still
+/// drive `onConfirm`/`onCancel` through the SAME per-pad `MenuFocusRouter`
+/// latch state the row navigation already uses (not a reset/fresh one), so:
+/// - the press that toggled a row and thereby opened the modal is still
+///   latched down on the modal's first tick, so it does not replay as an
+///   instant confirm;
+/// - the press that confirms/cancels is latched too, so it does not replay
+///   onto a row the instant the modal clears.
+///
+/// tvOS does not need this: its `.alert` is answered by the native focus
+/// engine like any other tvOS UI, and `MenuScreen` installs no
+/// `GCController` code there to begin with.
+struct MenuModal {
+  var onConfirm: () -> Void
+  var onCancel: () -> Void
+}
+
 /// D18: one view that renders a `MenuModel`, owning focus and controller
 /// navigation. See `docs/superpowers/specs/2026-09-24-data-driven-menus-design.md`.
 ///
@@ -46,6 +72,13 @@ struct MenuScreen: View {
   /// `@State` pane enum, as `PauseMenuView`'s `CheatsMenuView(onBack:)` does).
   var onBack: (() -> Void)?
 
+  /// D18 engine gap #2 (see `MenuModal`'s doc comment): non-`nil` while a
+  /// host-presented modal (e.g. a confirmation alert) must intercept A/B
+  /// instead of the underlying rows. Defaulted and declared after `onBack`
+  /// so existing `MenuScreen(model:style:onBack:)` call sites keep compiling
+  /// unchanged.
+  var modal: MenuModal? = nil
+
   /// `.navigationDestination(item:)` requires `Hashable`, not just
   /// `Identifiable` — `MenuModel` itself can't be `Hashable` (it holds
   /// closures/`Binding`s), so identity is keyed on `id` alone.
@@ -60,6 +93,15 @@ struct MenuScreen: View {
   @State private var pushedChild: PushedMenu?
 
   #if os(iOS)
+  /// Owns one `MenuControllerNav` per connected extended gamepad (D18 engine
+  /// gap #3: "MenuScreen listens only to the first connected extended
+  /// gamepad"). A pad `tick()` has never fed to this router before -- true
+  /// for every pad on the screen's very first tick, or for a controller that
+  /// connects mid-session -- is `resync`ed rather than `update`d the first
+  /// time, so a button already held the instant a pad is first observed
+  /// (e.g. the A that pushed this screen from a parent `.navigation` item,
+  /// still physically down on this screen's first tick) never reads as a
+  /// fresh press. See `MenuFocusRouter.update(padInputs:...)`'s doc comment.
   @State private var router = MenuFocusRouter()
   /// `nil` until a controller actually moves focus. Kept `nil` for a
   /// touch-only session so `.listRowBackground`'s focus tint never appears
@@ -67,12 +109,6 @@ struct MenuScreen: View {
   /// which only draws its ring while `pauseMenuControllerNavActive`.
   @State private var focusedID: String?
   @State private var scopeID = UUID()
-  /// The first tick after appearing must `resync`, not `update` — the A that
-  /// pushed this screen (from a parent `.navigation` item) is still
-  /// physically held, and this screen defaults focus to its first item on
-  /// that same tick (unlike `RemapPlayerView`, which starts with no
-  /// highlight). See `MenuFocusRouter.resync`'s doc comment.
-  @State private var hasSyncedInitialInput = false
   /// Single shared 60 Hz publisher rather than a per-instance `Timer`. This
   /// matters for correctness, not just efficiency: a `Timer(... ) { tick() }`
   /// closure captures `self` — and therefore `model`, a `let` — from
@@ -92,7 +128,6 @@ struct MenuScreen: View {
       }
       #if os(iOS)
       .controllerScope(scopeID)
-      .onAppear { hasSyncedInitialInput = false }
       .onReceive(Self.navTick) { _ in tick() }
       .onChange(of: model.focusableIDs) { oldOrder, _ in
         // Only reconciles a focus that already exists — a touch-only session
@@ -275,8 +310,14 @@ struct MenuScreen: View {
 
   // MARK: iOS — controller polling
 
-  private func navGamepad() -> GCExtendedGamepad? {
-    GCController.controllers().first { $0.extendedGamepad != nil }?.extendedGamepad
+  /// Every connected extended gamepad, not just the first (D18 engine gap
+  /// #3) — keyed by `ObjectIdentifier(GCController)` for `MenuFocusRouter`'s
+  /// per-pad latch state.
+  private func connectedGamepads() -> [(AnyHashable, GCExtendedGamepad)] {
+    GCController.controllers().compactMap { controller in
+      guard let pad = controller.extendedGamepad else { return nil }
+      return (AnyHashable(ObjectIdentifier(controller)), pad)
+    }
   }
 
   private func navInput(_ pad: GCExtendedGamepad) -> MenuControllerNav.Input {
@@ -292,20 +333,34 @@ struct MenuScreen: View {
   }
 
   private func tick() {
-    guard let pad = navGamepad() else { return }
-    let input = navInput(pad)
+    let pads = connectedGamepads()
+    guard !pads.isEmpty else { return }
+    let padInputs = pads.map { padID, pad in (padID, navInput(pad)) }
     let time = CACurrentMediaTime()
-    guard hasSyncedInitialInput else {
-      hasSyncedInitialInput = true
-      router.resync(input, at: time)
-      // Focus only ever appears once a controller is actually present —
-      // never seeded in `.onAppear`, so a touch-only session shows no tint.
-      if focusedID == nil { focusedID = model.focusableIDs.first }
+
+    let isActive = ControllerFocusCoordinator.isActiveScope(scopeID)
+
+    if let modal {
+      // Rows are frozen; A/B drive the modal instead, through the SAME
+      // per-pad latch state row navigation uses (see `MenuModal`'s doc
+      // comment for why this must not resync/reset at the modal boundary).
+      // Still gated on `isActive`: if some other coordinator scope owns the
+      // controller (e.g. this screen is itself covered), the modal is not
+      // answered either -- `router.update` just resyncs every pad instead.
+      let result = router.update(padInputs: padInputs, at: time, model: model, focusedID: focusedID, isActive: isActive)
+      if result.activatedID != nil { modal.onConfirm() }
+      if result.didGoBack { modal.onCancel() }
       return
     }
-    let isActive = ControllerFocusCoordinator.isActiveScope(scopeID)
-    let result = router.update(input, at: time, model: model, focusedID: focusedID, isActive: isActive)
-    focusedID = result.focusedID
+
+    let result = router.update(padInputs: padInputs, at: time, model: model, focusedID: focusedID, isActive: isActive)
+    // Focus only ever appears once a controller is actually present — never
+    // seeded in `.onAppear`, so a touch-only session shows no tint. A brand
+    // new pad emits no events on its first tick (it gets `resync`ed, see
+    // `MenuFocusRouter.update(padInputs:...)`), so `result.focusedID` stays
+    // whatever was passed in; fall back to the model's first item exactly
+    // once, the same moment the single-pad path used to seed it.
+    focusedID = result.focusedID ?? model.focusableIDs.first
     if let activatedID = result.activatedID, let item = model.item(id: activatedID) {
       performActivate(item)
     }
@@ -325,11 +380,24 @@ struct MenuScreen: View {
         tvSection(section)
       }
     }
-    if let first = model.focusableIDs.first {
+    if let first = defaultTVFocusID {
       list.defaultFocus($tvFocusedID, first)
     } else {
       list
     }
+  }
+
+  /// `.defaultFocus` needs a ROW id, not necessarily `MenuItem.id` — a
+  /// `.picker` item explodes into one row per option (`tvRow` below), each
+  /// with its own composite `"\(item.id)#\(index)"` focus id, so if the
+  /// first focusable item happens to be a picker this must target its first
+  /// option's row, not an id no row ever binds `.focused(equals:)` to.
+  private var defaultTVFocusID: String? {
+    guard let firstID = model.focusableIDs.first, let item = model.item(id: firstID) else { return nil }
+    if case .picker(let options, _) = item.role, !options.isEmpty {
+      return "\(item.id)#0"
+    }
+    return firstID
   }
 
   @ViewBuilder
@@ -354,7 +422,7 @@ struct MenuScreen: View {
   private func tvRow(_ item: MenuItem) -> some View {
     switch item.role {
     case .picker(let options, let selection):
-      ForEach(options, id: \.1) { option in
+      ForEach(Array(options.enumerated()), id: \.offset) { index, option in
         Button {
           selection.wrappedValue = option.1
         } label: {
@@ -367,6 +435,7 @@ struct MenuScreen: View {
           }
         }
         .disabled(!item.isEnabled)
+        .focused($tvFocusedID, equals: "\(item.id)#\(index)")
       }
     case .toggle(let binding):
       Button {
@@ -381,14 +450,17 @@ struct MenuScreen: View {
         }
       }
       .disabled(!item.isEnabled)
+      .focused($tvFocusedID, equals: item.id)
     case .destination(let destinationView):
       NavigationLink { destinationView } label: { rowLabel(item) }
         .disabled(!item.isEnabled)
+        .focused($tvFocusedID, equals: item.id)
     case .custom(let customView):
       customView
     case .navigation, .action, .destructive:
       Button { performActivate(item) } label: { rowLabel(item) }
         .disabled(!item.isEnabled)
+        .focused($tvFocusedID, equals: item.id)
     }
   }
   #endif

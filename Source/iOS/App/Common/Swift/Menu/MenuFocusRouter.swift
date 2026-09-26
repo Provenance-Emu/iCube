@@ -12,8 +12,14 @@ import Foundation
 /// each tick and applies the returned `MenuFocusUpdate`.
 struct MenuFocusRouter {
   private var nav: MenuControllerNav
+  /// Per-pad state for the multi-pad `update(padInputs:...)` below. Kept
+  /// entirely separate from `nav` (the single-pad path's state) so the
+  /// existing single-pad API/tests are untouched by the multi-pad addition.
+  private var navByPad: [AnyHashable: MenuControllerNav] = [:]
+  private let config: MenuControllerNav.Config
 
   init(config: MenuControllerNav.Config = MenuControllerNav.Config()) {
+    self.config = config
     nav = MenuControllerNav(config: config)
   }
 
@@ -42,25 +48,61 @@ struct MenuFocusRouter {
       nav.resync(input, at: time)
       return MenuFocusUpdate(focusedID: focusedID)
     }
+    return MenuFocusRouter.apply(nav.update(input, at: time), model: model, focusedID: focusedID)
+  }
+
+  /// Multi-pad variant (D18 gap: "MenuScreen listens only to the first
+  /// connected extended gamepad"). One `MenuControllerNav` per pad, keyed by
+  /// caller-supplied identity (`MenuScreen` uses `ObjectIdentifier(GCController)`;
+  /// tests use plain strings) -- mirrors `PauseMenuView.pauseNavGates`'s
+  /// `[ObjectIdentifier: PauseMenuInputGate]` keying, for the same reason: a
+  /// single shared latch would let one pad's button-up clear or set another
+  /// pad's latch, and OR-ing raw booleans together before edge-detection can
+  /// never register a fresh press from pad B while pad A is still holding
+  /// the same button down.
+  ///
+  /// Events from every connected pad drain into ONE focus timeline in
+  /// `padInputs` order: each pad's own edges apply against whatever
+  /// `focusedID` the previous pad's events already produced this tick, so a
+  /// pad that only moves and a pad that only activates combine correctly
+  /// without either pad's input being dropped. At most one `.activate` (and
+  /// one `.back`) is honoured per tick -- the first pad to report a fresh
+  /// edge wins -- so two pads independently pressing A in the same tick
+  /// still yields exactly one activation, not two.
+  ///
+  /// A pad seen for the first time (this screen's very first tick, or a
+  /// controller that connects mid-session) is `resync`ed instead of
+  /// `update`d, exactly like the single-pad `resync(_:at:)` this composes:
+  /// otherwise a pad that is already holding A the instant it is first
+  /// observed would read as a fresh press-edge and fire a phantom activate.
+  mutating func update(
+    padInputs: [(AnyHashable, MenuControllerNav.Input)],
+    at time: TimeInterval,
+    model: MenuModel,
+    focusedID: String?,
+    isActive: Bool
+  ) -> MenuFocusUpdate {
+    let connected = Set(padInputs.map(\.0))
+    navByPad = navByPad.filter { connected.contains($0.key) }
 
     var current = focusedID
     var activated: String?
     var didGoBack = false
-    for event in nav.update(input, at: time) {
-      switch event {
-      case .move(let step):
-        current = MenuFocusRouter.move(current, by: step, in: model)
-      case .jumpSection(let step):
-        if let existing = current, let jumped = model.firstFocusableID(sectionOffsetFrom: existing, by: step) {
-          current = jumped
-        } else if current == nil {
-          current = model.focusableIDs.first
-        }
-      case .activate:
-        if let current { activated = current }
-      case .back:
-        didGoBack = true
+
+    for (padID, input) in padInputs {
+      let isNewPad = navByPad[padID] == nil
+      var padNav = navByPad[padID] ?? MenuControllerNav(config: config)
+      guard isActive, !isNewPad else {
+        padNav.resync(input, at: time)
+        navByPad[padID] = padNav
+        continue
       }
+      let events = padNav.update(input, at: time)
+      navByPad[padID] = padNav
+      let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current)
+      current = padResult.focusedID
+      if activated == nil { activated = padResult.activatedID }
+      if padResult.didGoBack { didGoBack = true }
     }
     return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack)
   }
@@ -77,6 +119,32 @@ struct MenuFocusRouter {
   /// interactive counts.
   mutating func resync(_ input: MenuControllerNav.Input, at time: TimeInterval) {
     nav.resync(input, at: time)
+  }
+
+  /// Shared event-application core for both the single-pad `update` above
+  /// and the multi-pad `update(padInputs:...)` -- kept as one function so
+  /// the two paths cannot silently drift apart.
+  private static func apply(_ events: [MenuControllerNav.Event], model: MenuModel, focusedID: String?) -> MenuFocusUpdate {
+    var current = focusedID
+    var activated: String?
+    var didGoBack = false
+    for event in events {
+      switch event {
+      case .move(let step):
+        current = MenuFocusRouter.move(current, by: step, in: model)
+      case .jumpSection(let step):
+        if let existing = current, let jumped = model.firstFocusableID(sectionOffsetFrom: existing, by: step) {
+          current = jumped
+        } else if current == nil {
+          current = model.focusableIDs.first
+        }
+      case .activate:
+        if let current { activated = current }
+      case .back:
+        didGoBack = true
+      }
+    }
+    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack)
   }
 
   /// Move within the flat focusable order, clamped — no wraparound (matches

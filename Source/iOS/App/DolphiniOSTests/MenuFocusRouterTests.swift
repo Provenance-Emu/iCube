@@ -186,4 +186,96 @@ final class MenuFocusRouterTests: XCTestCase {
     let model = twoSectionModel()
     XCTAssertEqual(MenuFocusRouter.reconcile(focusedID: nil, previousOrder: [], model: model), "a")
   }
+
+  // MARK: Multi-pad merge (D18 engine gap #3 — "MenuScreen listens only to
+  // the first connected extended gamepad")
+
+  /// One pad moves, another activates, in the same tick: both edges must
+  /// apply -- the move against the tick's starting focus, the activate
+  /// against whatever `focusedID` was passed in (not the just-moved one,
+  /// since pad order here is activate-then-move) -- with no edge dropped.
+  func test_multiPad_oneHoldsA_otherMoves_bothEdgesApply() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    let p1 = AnyHashable("p1")
+    let p2 = AnyHashable("p2")
+
+    // Seed both pads as "known" (idle) first, so the next tick's edges are
+    // genuine presses, not first-sight resyncs.
+    _ = router.update(padInputs: [(p1, .init()), (p2, .init())], at: 0, model: model, focusedID: nil, isActive: true)
+
+    // p1 holds A on the currently-focused item; p2 presses down.
+    let result = router.update(
+      padInputs: [(p1, .init(a: true)), (p2, .init(down: true))],
+      at: 0.1, model: model, focusedID: "a", isActive: true
+    )
+    XCTAssertEqual(result.activatedID, "a", "p1's activate fires against the focus at the start of the tick")
+    XCTAssertEqual(result.focusedID, "b", "p2's move still applies in the same tick")
+  }
+
+  /// Two pads pressing A in the very same tick must not double-activate --
+  /// and once both are latched down, holding on a later tick must not
+  /// re-fire either.
+  func test_multiPad_bothPressAInSameTick_exactlyOneActivation_noReplayWhileHeld() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    let p1 = AnyHashable("p1")
+    let p2 = AnyHashable("p2")
+    _ = router.update(padInputs: [(p1, .init()), (p2, .init())], at: 0, model: model, focusedID: nil, isActive: true)
+
+    let result = router.update(
+      padInputs: [(p1, .init(a: true)), (p2, .init(a: true))],
+      at: 0.1, model: model, focusedID: "b", isActive: true
+    )
+    XCTAssertEqual(result.activatedID, "b", "the first pad's edge wins; the second is not a second activation")
+
+    let held = router.update(
+      padInputs: [(p1, .init(a: true)), (p2, .init(a: true))],
+      at: 0.2, model: model, focusedID: result.focusedID, isActive: true
+    )
+    XCTAssertNil(held.activatedID, "both pads' latches are already down; holding never replays")
+  }
+
+  /// A pad seen for the very first time, already holding A, must not read
+  /// that hold as a fresh press-edge (mirrors the single-pad open-press-leak
+  /// regression, per-pad).
+  func test_multiPad_newPadFirstSeenWithAHeld_noPhantomActivation() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    let p1 = AnyHashable("p1")
+
+    let result = router.update(padInputs: [(p1, .init(a: true))], at: 0, model: model, focusedID: "a", isActive: true)
+    XCTAssertNil(result.activatedID, "a pad's very first tick is a resync, never treated as a fresh edge")
+
+    let released = router.update(padInputs: [(p1, .init())], at: 0.1, model: model, focusedID: "a", isActive: true)
+    XCTAssertNil(released.activatedID)
+    let pressed = router.update(padInputs: [(p1, .init(a: true))], at: 0.2, model: model, focusedID: "a", isActive: true)
+    XCTAssertEqual(pressed.activatedID, "a", "release then press activates normally")
+  }
+
+  /// A second pad connecting mid-session (after the first pad is already
+  /// known) must be resynced on ITS first sighting too, even though the
+  /// first pad is not new -- a controller woken mid-screen must not produce
+  /// a phantom edge just because other pads are already established.
+  func test_multiPad_padConnectingMidSession_isResyncedNotUpdated() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    let p1 = AnyHashable("p1")
+    let p2 = AnyHashable("p2")
+
+    // p1 already known and idle.
+    _ = router.update(padInputs: [(p1, .init())], at: 0, model: model, focusedID: "a", isActive: true)
+
+    // p2 connects mid-session already holding A; p1 stays idle this tick.
+    let result = router.update(
+      padInputs: [(p1, .init()), (p2, .init(a: true))],
+      at: 0.5, model: model, focusedID: "a", isActive: true
+    )
+    XCTAssertNil(result.activatedID, "p2's first sighting resyncs rather than reading the held A as a fresh press")
+
+    let released = router.update(padInputs: [(p1, .init()), (p2, .init())], at: 0.6, model: model, focusedID: "a", isActive: true)
+    XCTAssertNil(released.activatedID)
+    let pressed = router.update(padInputs: [(p1, .init()), (p2, .init(a: true))], at: 0.7, model: model, focusedID: "a", isActive: true)
+    XCTAssertEqual(pressed.activatedID, "a", "once p2 is known, a genuine release-then-press activates normally")
+  }
 }
