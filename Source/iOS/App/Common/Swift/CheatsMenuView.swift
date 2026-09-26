@@ -14,14 +14,6 @@ struct CheatsMenuView: View {
   @State private var geckoCodeList: [TVGeckoCodeInfo] = []
   @State private var actionReplayCodeList: [TVActionReplayCodeInfo] = []
   @State private var searchText: String = ""
-  @FocusState private var focused: FocusField?
-
-  enum FocusField: Hashable {
-    case back
-    case downloadCheats
-    case refreshCheats
-    case cheat(String)
-  }
 
   /// Tracks whether global cheats are enabled
   @State private var cheatsEnabledGlobal: Bool = false
@@ -30,27 +22,19 @@ struct CheatsMenuView: View {
   /// Holds the cheat the user attempted to toggle before enabling cheats
   @State private var pendingCheat: CheatItem? = nil
 
-  /// D18 proof-of-life (`docs/superpowers/specs/2026-09-24-data-driven-menus-design.md`
-  /// §4 "Cheats"): the iOS list as a `MenuModel`, rendered by `MenuScreen` —
-  /// this is the part of the screen that previously had zero controller
-  /// navigation (plain `List`, touch-only). Search stays a host concern
-  /// (`.searchable` below), matching the design doc's Settings-root
-  /// precedent; it is not part of the engine.
+  /// D18 (`docs/superpowers/specs/2026-09-24-data-driven-menus-design.md`
+  /// §4 "Cheats"): the SAME `MenuModel` for both platforms, rendered by
+  /// `MenuScreen` — iOS and tvOS previously had two separate bodies (a plain
+  /// touch-only `List` on iOS, a bespoke two-column layout on tvOS). Search
+  /// stays a host concern (`.searchable` below, iOS-only), matching the
+  /// design doc's Settings-root precedent; it is not part of the engine.
   private var cheatsMenuModel: MenuModel {
     let filtered = createCombinedCheatList().filter { c in
       let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !q.isEmpty else { return true }
       return c.name.localizedCaseInsensitiveContains(q) || c.type.localizedCaseInsensitiveContains(q)
     }
-    let state = CheatsMenuState(
-      cheatsEnabledGlobal: cheatsEnabledGlobal,
-      cheats: filtered,
-      // Quirk preserved verbatim from the pre-D18 body: this is the
-      // UNFILTERED emptiness (not `filtered.isEmpty`), so Download/Refresh
-      // stay hidden while a search happens to match nothing even though
-      // cheats exist. Looks like a bug; not this pass's job to fix it.
-      hasAnyCheats: !(geckoCodeList.isEmpty && actionReplayCodeList.isEmpty)
-    )
+    let state = CheatsMenuState(cheatsEnabledGlobal: cheatsEnabledGlobal, cheats: filtered)
     let actions = CheatsMenuActions(
       setEnabledGlobal: { newValue in
         DOLConfigBridge.setMainEnableCheats(newValue)
@@ -71,26 +55,49 @@ struct CheatsMenuView: View {
     return CheatsMenuModelBuilder.make(state: state, actions: actions)
   }
 
+  /// Shared by the alert's own "Turn On Cheats" button AND (iOS only)
+  /// `MenuScreen`'s `modal:` hook below. Must flip `showEnableCheatsPrompt`
+  /// itself: the alert path gets that for free from `isPresented`'s
+  /// auto-reset, but the modal path calls this directly with no alert-button
+  /// tap involved to reset anything.
+  private func confirmEnableCheats() {
+    DOLConfigBridge.setMainEnableCheats(true)
+    cheatsEnabledGlobal = true
+    if let cheat = pendingCheat {
+      toggleCheat(cheat)
+      pendingCheat = nil
+    }
+    showEnableCheatsPrompt = false
+  }
+
+  private func cancelEnableCheats() {
+    pendingCheat = nil
+    showEnableCheatsPrompt = false
+  }
+
   var body: some View {
     #if os(iOS)
     NavigationStack {
-      MenuScreen(model: cheatsMenuModel, style: .list, onBack: onBack)
-        .navigationTitle(L("Cheat Codes"))
-        .searchable(text: $searchText)
-        .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Back")) { onBack() } } }
-        .onAppear { cheatsEnabledGlobal = DOLConfigBridge.mainEnableCheats()
-          loadCheats()
-        }
+      MenuScreen(
+        model: cheatsMenuModel,
+        style: .list,
+        onBack: onBack,
+        // D18 engine gap #2: without this, A/d-pad keep acting on the rows
+        // behind this alert while it's up. See `MenuModal`'s doc comment.
+        modal: showEnableCheatsPrompt
+          ? MenuModal(onConfirm: confirmEnableCheats, onCancel: cancelEnableCheats)
+          : nil
+      )
+      .navigationTitle(L("Cheat Codes"))
+      .searchable(text: $searchText)
+      .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Back")) { onBack() } } }
+      .onAppear { cheatsEnabledGlobal = DOLConfigBridge.mainEnableCheats()
+        loadCheats()
+      }
     }
     .alert(L("Enable Cheats?"), isPresented: $showEnableCheatsPrompt) {
-      Button(L("Turn On Cheats")) {
-        DOLConfigBridge.setMainEnableCheats(true)
-        cheatsEnabledGlobal = true
-        if let c = pendingCheat { toggleCheat(c)
-          pendingCheat = nil
-        }
-      }
-      Button(L("Cancel"), role: .cancel) { pendingCheat = nil }
+      Button(L("Turn On Cheats")) { confirmEnableCheats() }
+      Button(L("Cancel"), role: .cancel) { cancelEnableCheats() }
     } message: {
       Text(L("Cheats can affect performance and stability. Enable global cheats to apply this code?"))
     }
@@ -117,7 +124,10 @@ struct CheatsMenuView: View {
 
       // Match parent content structure
       HStack(spacing: 80) {
-        // Left column — game cover + info, same as parent
+        // Left column — game cover + info, same as parent. Non-focusable
+        // host chrome around `MenuScreen`: the design doc's §2 tvOS
+        // contract bars a compound ROW, not a hero slot alongside the list
+        // (the "keep the cover-image flavour" option this migration took).
         VStack(alignment: .leading, spacing: 16) {
           Image(uiImage: game.coverImage)
             .resizable()
@@ -139,170 +149,38 @@ struct CheatsMenuView: View {
         }
         .frame(width: 180)
 
-        // Right column — cheats UI
-        VStack(alignment: .leading, spacing: 24) {
-          // Back button + title
-          HStack(alignment: .center, spacing: 20) {
-            Button(action: onBack) {
-              HStack(spacing: 12) {
-                Image(systemName: "chevron.left")
-                  .font(.system(size: 18, weight: .medium))
-                Text(L("Back"))
-                  .font(.system(size: 18, weight: .medium))
-              }
-              .foregroundColor(.white)
-              .padding(.horizontal, 24)
-              .padding(.vertical, 12)
-              .background(.white.opacity(0.15))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .back)
+        // Right column — title + the SAME `MenuModel`/`MenuScreen` iOS
+        // renders. This used to be a bespoke layout (Enable Cheats toggle,
+        // search, Download/Refresh buttons and `CheatRowView` rows all
+        // hand-laid with `@FocusState`, no `MenuFocusRouter` involvement);
+        // now it is one `List` -- every `MenuItem` a single-control row per
+        // §2's tvOS contract -- sharing its model, its Download-always-
+        // visible fix, and its toggle behaviour with iOS instead of
+        // drifting from it. The bespoke Back button is also gone: Menu
+        // (`MenuScreen`'s own `.onExitCommand`) is back, matching every
+        // other tvOS pane in the app. Search is dropped for tvOS -- no host
+        // affordance replaces it, so `searchText` stays "" and every cheat
+        // is always listed; a `TextField` sibling's on-screen-keyboard
+        // detour isn't worth the focus-order risk on a 10-foot UI for a
+        // filter this screen can live without.
+        VStack(alignment: .leading, spacing: 20) {
+          Text(L("Cheat Codes"))
+            .font(.system(size: 28, weight: .bold))
+            .foregroundColor(.white)
 
-            Text(L("Cheat Codes"))
-              .font(.system(size: 28, weight: .bold))
-              .foregroundColor(.white)
-          }
-
-          // Global Cheats toggle
-          HStack(spacing: 12) {
-            Text(L("Enable Cheats")).foregroundColor(.white)
-            Spacer()
-            Toggle("", isOn: Binding(get: { cheatsEnabledGlobal }, set: { newValue in
-              DOLConfigBridge.setMainEnableCheats(newValue)
-              cheatsEnabledGlobal = newValue
-            }))
-            .labelsHidden()
-          }
-
-          // Search & actions
-          HStack(spacing: 24) {
-            // Search field (tvOS-friendly)
-            HStack(spacing: 10) {
-              Image(systemName: "magnifyingglass")
-                .foregroundColor(.white.opacity(0.7))
-              TextField(L("Search cheats"), text: $searchText)
-                .textCase(.none)
-                .disableAutocorrection(true)
-                .textInputAutocapitalization(.never)
-                .foregroundColor(.white)
-                .tint(.white)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.white.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .frame(maxWidth: 360)
-
-            Button(action: {
-              TVCheatsBridge.downloadGeckoCodes(forGameId: game.gameID, revision: game.revision, gametdbId: game.gametdbID) { _, _, _ in
-                DispatchQueue.main.async { loadCheats() }
-              }
-            }) {
-              HStack(spacing: 12) {
-                Image(systemName: "arrow.down.circle.fill")
-                  .font(.system(size: 22))
-                  .foregroundColor(.blue)
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(L("Download Cheats"))
-                    .font(.system(size: 16, weight: .semibold))
-                  Text(L("Get latest codes"))
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-                .foregroundColor(.white)
-              }
-              .padding(.horizontal, 20)
-              .padding(.vertical, 14)
-              .background(.white.opacity(0.1))
-              .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .downloadCheats)
-
-            Button(action: { loadCheats() }) {
-              HStack(spacing: 12) {
-                Image(systemName: "arrow.clockwise.circle.fill")
-                  .font(.system(size: 22))
-                  .foregroundColor(.green)
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(L("Refresh List"))
-                    .font(.system(size: 16, weight: .semibold))
-                  Text(L("Reload codes"))
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-                .foregroundColor(.white)
-              }
-              .padding(.horizontal, 20)
-              .padding(.vertical, 14)
-              .background(.white.opacity(0.1))
-              .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .refreshCheats)
-          }
-
-          // Combined cheats list — clamped size like a page panel
-          ScrollView {
-            LazyVStack(spacing: 14) {
-              let allCheats = createCombinedCheatList().filter { searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? true : $0.name.localizedCaseInsensitiveContains(searchText) || $0.type.localizedCaseInsensitiveContains(searchText) }
-              if allCheats.isEmpty {
-                VStack(spacing: 16) {
-                  Image(systemName: "gamecontroller")
-                    .font(.system(size: 40))
-                    .foregroundColor(.white.opacity(0.5))
-                  Text(L("No Cheats Available"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                  Text(L("Download cheats to get started"))
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-                .padding(30)
-              } else {
-                ForEach(allCheats, id: \.id) { cheat in
-                  CheatRowView(
-                    cheat: cheat,
-                    isFocused: focused == .cheat(cheat.id),
-                    onToggle: {
-                      if !cheatsEnabledGlobal {
-                        pendingCheat = cheat
-                        showEnableCheatsPrompt = true
-                      } else {
-                        toggleCheat(cheat)
-                      }
-                    }
-                  )
-                  .focused($focused, equals: .cheat(cheat.id))
-                }
-              }
-            }
-            .padding(.trailing, 10)
-          }
-          .frame(maxWidth: 820, maxHeight: 520) // clamp like a panel
+          MenuScreen(model: cheatsMenuModel, style: .list, onBack: onBack)
+            .frame(maxWidth: 860, maxHeight: 620)
         }
-        .frame(maxWidth: 900, alignment: .leading) // clamp right column width
+        .frame(maxWidth: 900, alignment: .leading)
       }
       .padding(.horizontal, 60)
     }
-    #if os(tvOS)
-    .onExitCommand { onBack() }
-    .focusSection()
-    #endif
-    .defaultFocus($focused, .back)
     .onAppear { cheatsEnabledGlobal = DOLConfigBridge.mainEnableCheats()
       loadCheats()
     }
     .alert(L("Enable Cheats?"), isPresented: $showEnableCheatsPrompt) {
-      Button(L("Turn On Cheats")) {
-        DOLConfigBridge.setMainEnableCheats(true)
-        cheatsEnabledGlobal = true
-        if let c = pendingCheat { toggleCheat(c)
-          pendingCheat = nil
-        }
-      }
-      Button(L("Cancel"), role: .cancel) { pendingCheat = nil }
+      Button(L("Turn On Cheats")) { confirmEnableCheats() }
+      Button(L("Cancel"), role: .cancel) { cancelEnableCheats() }
     } message: {
       Text(L("Cheats can affect performance and stability. Enable global cheats to apply this code?"))
     }
@@ -355,14 +233,13 @@ struct CheatItem {
   let index: Int
 }
 
-// MARK: - D18 model (iOS list only — see `CheatsMenuView.cheatsMenuModel`)
+// MARK: - D18 model (shared by iOS and tvOS — see `CheatsMenuView.cheatsMenuModel`)
 
 /// Plain snapshot — no `TVCheatsBridge` reads inside `CheatsMenuModelBuilder`,
 /// so it is constructible from a test with a synthetic cheat list.
 struct CheatsMenuState {
   var cheatsEnabledGlobal: Bool
   var cheats: [CheatItem]
-  var hasAnyCheats: Bool
 }
 
 /// Plain closures — no `TVCheatsBridge`/`DOLConfigBridge` calls inside
@@ -391,12 +268,17 @@ enum CheatsMenuModelBuilder {
       ),
     ]))
 
-    if state.hasAnyCheats {
-      sections.append(MenuSection(id: "actions", items: [
-        MenuItem(id: "download-cheats", title: L("Download Cheats"), icon: "arrow.down.circle", role: .action(actions.downloadCheats)),
-        MenuItem(id: "refresh-cheats", title: L("Refresh List"), role: .action(actions.refreshCheats)),
-      ]))
-    }
+    // Always shown, even with zero cheats — fixed here (was gated on
+    // `hasAnyCheats` in the D18 proof-of-life pass, verbatim from the
+    // pre-D18 iOS body it replaced): Download is the ONLY way to bootstrap
+    // cheats for a game that doesn't have any yet, on either platform, so
+    // hiding it made a fresh game's cheats unreachable — invisible on iOS
+    // (no other affordance existed there either) but a real regression for
+    // tvOS's pre-D18 bespoke body, which always showed Download regardless.
+    sections.append(MenuSection(id: "actions", items: [
+      MenuItem(id: "download-cheats", title: L("Download Cheats"), icon: "arrow.down.circle", role: .action(actions.downloadCheats)),
+      MenuItem(id: "refresh-cheats", title: L("Refresh List"), role: .action(actions.refreshCheats)),
+    ]))
 
     if state.cheats.isEmpty {
       sections.append(MenuSection(id: "empty", items: [
@@ -435,47 +317,5 @@ enum CheatsMenuModelBuilder {
       .frame(maxWidth: .infinity)
       .padding(.vertical, 24)
     )
-  }
-}
-
-struct CheatRowView: View {
-  let cheat: CheatItem
-  let isFocused: Bool
-  let onToggle: () -> Void
-
-  var body: some View {
-    Button(action: onToggle) {
-      HStack(spacing: 20) {
-        Image(systemName: cheat.enabled ? "checkmark.circle.fill" : "circle")
-          .font(.system(size: 22))
-          .foregroundColor(cheat.enabled ? .green : .white.opacity(0.5))
-        VStack(alignment: .leading, spacing: 4) {
-          Text(cheat.name)
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundColor(.white)
-            .multilineTextAlignment(.leading)
-          Text(cheat.type)
-            .font(.system(size: 13))
-            .foregroundColor(cheat.isGecko ? .blue.opacity(0.8) : .orange.opacity(0.8))
-        }
-        Spacer()
-        Text(cheat.enabled ? L("Enabled") : L("Disabled"))
-          .font(.system(size: 15, weight: .medium))
-          .foregroundColor(cheat.enabled ? .green : .white.opacity(0.6))
-      }
-      .padding(16)
-      .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(.white.opacity(isFocused ? 0.15 : 0.08))
-          .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-              .stroke(.white.opacity(isFocused ? 0.35 : 0.1), lineWidth: isFocused ? 2 : 1)
-          )
-      )
-      .zIndex(isFocused ? 10 : 0)
-    }
-    .buttonStyle(.plain)
-    .scaleEffect(isFocused ? 1.02 : 1.0)
-    .animation(.easeInOut(duration: 0.2), value: isFocused)
   }
 }

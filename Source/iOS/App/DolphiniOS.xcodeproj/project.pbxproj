@@ -236,6 +236,7 @@
 		C0C0CAFE000000000000099B /* PauseMenuInputGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */; };
 		C0C0CAFE0000000000000974 /* MenuModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000973 /* MenuModelTests.swift */; };
 		C0C0CAFE0000000000000976 /* MenuFocusRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */; };
+		C0C0CAFE00000000000009A7 /* CheatsMenuModelBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A6 /* CheatsMenuModelBuilderTests.swift */; };
 		C0C0CAFE0000000000000608 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000604 /* Sentry */; };
 		C0C0CAFE0000000000000609 /* PLzmaSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000605 /* PLzmaSDK */; };
 		C0C0CAFE0000000000000610 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000606 /* SWCompression */; };
@@ -688,6 +689,7 @@
 		C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PauseMenuInputGateTests.swift"; path = "DolphiniOSTests/PauseMenuInputGateTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000973 /* MenuModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MenuModelTests.swift"; path = "DolphiniOSTests/MenuModelTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MenuFocusRouterTests.swift"; path = "DolphiniOSTests/MenuFocusRouterTests.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE00000000000009A6 /* CheatsMenuModelBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CheatsMenuModelBuilderTests.swift"; path = "DolphiniOSTests/CheatsMenuModelBuilderTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000700 /* DOLDebugBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLDebugBridge.h; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000701 /* DOLDebugBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLDebugBridge.mm; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000703 /* DOLPerfBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLPerfBridge.h; sourceTree = "<group>"; };
@@ -1910,6 +1912,7 @@
 				C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */,
 				C0C0CAFE0000000000000973 /* MenuModelTests.swift */,
 				C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */,
+				C0C0CAFE00000000000009A6 /* CheatsMenuModelBuilderTests.swift */,
 				C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */,
 				C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */,
 				C0C0CAFE0000000000000904 /* ContinuityManager.swift */,
@@ -2521,6 +2524,7 @@
 				C0C0CAFE000000000000099B /* PauseMenuInputGateTests.swift in Sources */,
 				C0C0CAFE0000000000000974 /* MenuModelTests.swift in Sources */,
 				C0C0CAFE0000000000000976 /* MenuFocusRouterTests.swift in Sources */,
+				C0C0CAFE00000000000009A7 /* CheatsMenuModelBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
