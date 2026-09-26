@@ -146,13 +146,19 @@ func installPauseMenuHandlers(_ c: GCController) {
     c.extendedGamepad?.buttonOptions?.preferredSystemGestureState = .disabled
   }
 
-  c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, pressed in
-    Task { @MainActor in
-      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "microGamepad.buttonMenu")
+  // On tvOS an extended gamepad ALSO exposes a micro profile, and its `buttonMenu` is the same
+  // physical button as `extendedGamepad.buttonMenu` (Xbox "≡", PlayStation OPTIONS, Switch "+").
+  // Wiring the micro handler on such a pad made that one press send the emulated Start AND open
+  // the pause menu, so Start was unreachable. The ungated micro route is for pads that have
+  // nothing else: the Siri Remote and bare micro gamepads.
+  guard let eg = c.extendedGamepad else {
+    c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, pressed in
+      Task { @MainActor in
+        PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "microGamepad.buttonMenu")
+      }
     }
+    return
   }
-
-  guard let eg = c.extendedGamepad else { return }
 
   // Menu maps to the emulated Start/+ (see the profile comment above) — do
   // NOT route a plain press to the pause menu. Only the gated shoulder-chord
