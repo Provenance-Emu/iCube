@@ -304,10 +304,13 @@ internal struct PauseMenuView: View {
     }
     #endif
     .modifier(DefaultFocusCompat(focused: $focused, value: .resume))
+    // D16: the pause menu gets the quick-preview picker (tap a card to apply,
+    // long-press or its gear button for parameters) rather than the full
+    // Settings-style `ShaderSettingsView` list — that view (and its debug tools)
+    // is still reachable from Settings > Shaders and the in-game FX sheet.
     .sheet(isPresented: $showShaders) {
       NavigationStack {
-        ShaderSettingsView()
-          .navigationTitle(L("Shaders"))
+        ShaderQuickPickerView()
       }
       #if os(tvOS)
       .focusSection()
