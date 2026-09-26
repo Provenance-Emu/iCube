@@ -33,18 +33,23 @@ internal enum PlatformKind { case ios, tvos }
 internal struct PauseMenuInputGate: Equatable {
   private var aLatched = false
 
-  /// Call on every raw `valueChangedHandler` callback with the CURRENT claim
-  /// state and the live `buttonA.isPressed` reading -- valid regardless of
-  /// which element actually triggered the callback, since `GCExtendedGamepad`
-  /// exposes a live snapshot of every button. Returns whether this call
-  /// should be treated as a fresh `buttonA` down-edge that the caller should
-  /// act on (e.g. by activating the focused row).
+  /// Call ONLY from the `element == gamepad.buttonA` callback (never fed
+  /// speculatively from an unrelated element's callback -- doing so could
+  /// latch or drop an edge a beat early/late relative to the real transition)
+  /// with the CURRENT claim state and `buttonA.isPressed`. Returns whether
+  /// this call should be treated as a fresh `buttonA` down-edge that the
+  /// caller should act on (e.g. by activating the focused row).
+  ///
+  /// One `PauseMenuInputGate` per controller -- a single shared instance
+  /// would let one controller's callback clear or set another's latch.
   @discardableResult
   internal mutating func consumeButtonA(claimed: Bool, isPressed: Bool) -> Bool {
     guard !claimed else {
       // While a child owns the controller, just track physical state so a
       // press held across the claim boundary doesn't fire once we're
-      // unclaimed again.
+      // unclaimed again -- released while claimed, or still down when
+      // reclaimed (in which case nothing re-invokes this until the button
+      // actually transitions, so no stale replay ever fires).
       aLatched = isPressed
       return false
     }
@@ -55,6 +60,17 @@ internal struct PauseMenuInputGate: Equatable {
     guard !aLatched else { return false }
     aLatched = true
     return true
+  }
+
+  /// Adopt `isPressed` as the current latch state without emitting an edge,
+  /// mirroring `RemapControllerNav.resync`. Call once per controller at the
+  /// top of `setupPauseControllerNav` with the live `buttonA.isPressed`
+  /// reading: reassigning `valueChangedHandler` does not retroactively fire
+  /// for an element that is already non-idle, but this guards against the
+  /// handler nonetheless treating an already-held button as a fresh edge the
+  /// next time it changes.
+  internal mutating func resync(isPressed: Bool) {
+    aLatched = isPressed
   }
 }
 
@@ -157,9 +173,13 @@ internal struct PauseMenuView: View {
   /// handler below instead of fighting it for the shared `valueChangedHandler`
   /// slot.
   @State private var pauseMenuScopeID = UUID()
-  /// Edge/latch state for `buttonA`, including the reclaim case described on
-  /// `PauseMenuInputGate`.
-  @State private var pauseNavGate = PauseMenuInputGate()
+  /// Per-controller edge/latch state for `buttonA` (see `PauseMenuInputGate`).
+  /// Keyed by controller so one pad's press can't clear or set another's
+  /// latch. Deliberately NOT reset in `teardownPauseControllerNav` -- doing
+  /// so could turn an already-held button into a spurious fresh edge the
+  /// next time `setupPauseControllerNav` reinstalls the handler; `resync`
+  /// there re-syncs it from the live `isPressed` reading instead.
+  @State private var pauseNavGates: [ObjectIdentifier: PauseMenuInputGate] = [:]
   #endif
 
   /// A single iOS pause-menu entry, modeled so the grid can be indexed for
@@ -820,6 +840,10 @@ internal struct PauseMenuView: View {
       guard let egp = c.extendedGamepad else { continue }
       let cid = ObjectIdentifier(c)
       if prevPauseEGPHandlers[cid] == nil { prevPauseEGPHandlers[cid] = egp.valueChangedHandler }
+      // Adopt the current physical reading before installing, so reassigning
+      // `valueChangedHandler` below can't misread an already-held button as a
+      // fresh edge on its first callback (see `PauseMenuInputGate.resync`).
+      pauseNavGates[cid, default: PauseMenuInputGate()].resync(isPressed: egp.buttonA.isPressed)
       egp.valueChangedHandler = { gamepad, element in
         // A child sheet (Save States, Shaders, Continuity, Controllers,
         // Settings) claims the controller via `.claimsController()` while it
@@ -827,11 +851,15 @@ internal struct PauseMenuView: View {
         // must self-gate here rather than rely on onAppear/onDisappear -- the
         // same pattern `TVLibraryView.setupControllerNavigation` uses.
         let claimed = !ControllerFocusCoordinator.isActiveScope(scope)
-        // Feed the gate every callback (regardless of `element`) so its latch
-        // tracks buttonA's live state and the reclaim case is handled even
-        // when the callback that flips `claimed` isn't the buttonA one.
-        let activateA = pauseNavGate.consumeButtonA(claimed: claimed, isPressed: gamepad.buttonA.isPressed)
-        guard !claimed else { return }
+        guard !claimed else {
+          // Still track buttonA's physical state while claimed (per-controller,
+          // so a second pad can't perturb this one) so a press held across the
+          // claim boundary can't replay as an activate once we're unclaimed.
+          if element == gamepad.buttonA {
+            pauseNavGates[cid, default: PauseMenuInputGate()].consumeButtonA(claimed: true, isPressed: gamepad.buttonA.isPressed)
+          }
+          return
+        }
         let dpad = gamepad.dpad
         if element == dpad.up, dpad.up.isPressed { movePauseFocus(-1) }
         if element == dpad.down, dpad.down.isPressed { movePauseFocus(1) }
@@ -842,7 +870,13 @@ internal struct PauseMenuView: View {
           if vy > 0.6 { movePauseFocus(-1) }
           if vy < -0.6 { movePauseFocus(1) }
         }
-        if activateA { activatePauseFocus() }
+        // Only ever fed from the buttonA callback itself -- never
+        // speculatively from an unrelated element's callback, which could
+        // latch or drop the real edge a beat early/late.
+        if element == gamepad.buttonA {
+          let activateA = pauseNavGates[cid, default: PauseMenuInputGate()].consumeButtonA(claimed: false, isPressed: gamepad.buttonA.isPressed)
+          if activateA { activatePauseFocus() }
+        }
       }
     }
   }
@@ -859,10 +893,9 @@ internal struct PauseMenuView: View {
       }
       prevPauseEGPHandlers.removeValue(forKey: cid)
     }
-    // Reset latch state so a stale held-button reading from before teardown
-    // (e.g. a controller reconnect mid-press) doesn't leak into the next
-    // setup cycle.
-    pauseNavGate = PauseMenuInputGate()
+    // pauseNavGates is deliberately left alone here -- see its declaration.
+    // setupPauseControllerNav's resync(isPressed:) re-syncs it from the live
+    // reading the next time a controller is (re)installed.
   }
   #endif
 

@@ -84,4 +84,38 @@ final class PauseMenuInputGateTests: XCTestCase {
     XCTAssertFalse(gate.consumeButtonA(claimed: true, isPressed: false))
     XCTAssertFalse(gate.consumeButtonA(claimed: false, isPressed: false), "nothing to replay; button is up")
   }
+
+  // MARK: resync
+
+  /// `setupPauseControllerNav` calls this with the live reading before
+  /// (re)installing the handler, guarding against a reassigned
+  /// `valueChangedHandler` treating an already-held button as a fresh edge.
+  func test_resync_adoptsHeldState_withoutEmittingAnEdge() {
+    var gate = PauseMenuInputGate()
+    gate.resync(isPressed: true)
+    XCTAssertFalse(gate.consumeButtonA(claimed: false, isPressed: true), "still held -- not a new edge")
+    XCTAssertFalse(gate.consumeButtonA(claimed: false, isPressed: false))
+    XCTAssertTrue(gate.consumeButtonA(claimed: false, isPressed: true), "genuine press after release activates")
+  }
+
+  func test_resync_adoptsReleasedState_soNextPressActivates() {
+    var gate = PauseMenuInputGate()
+    gate.resync(isPressed: false)
+    XCTAssertTrue(gate.consumeButtonA(claimed: false, isPressed: true))
+  }
+
+  // MARK: Per-controller independence
+
+  /// `PauseMenuView` keeps one gate per controller (`[ObjectIdentifier:
+  /// PauseMenuInputGate]`) precisely so this can't happen: one pad's callback
+  /// must never clear or set another pad's latch.
+  func test_independentGates_oneControllerHoldingDoesNotAffectAnother() {
+    var gate1 = PauseMenuInputGate()
+    var gate2 = PauseMenuInputGate()
+    XCTAssertTrue(gate1.consumeButtonA(claimed: false, isPressed: true), "controller 1 presses and holds A")
+    XCTAssertTrue(gate2.consumeButtonA(claimed: false, isPressed: true), "controller 2's independent press also activates")
+    XCTAssertFalse(gate2.consumeButtonA(claimed: false, isPressed: false), "controller 2 releases")
+    // Controller 1 is still held; its own gate is unaffected by controller 2's release.
+    XCTAssertFalse(gate1.consumeButtonA(claimed: false, isPressed: true), "controller 1's hold must not re-fire")
+  }
 }
