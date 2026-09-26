@@ -87,6 +87,28 @@ scene that introduces shaders during the window** (a scripted camera pan / area 
 input injection the debug API does not have yet). Until then the stutter claim rests on Dolphin's
 design (hybrid = ubershader while the specialized one compiles), not on a number from this phone.
 
+### Run 4 — the ten Cached Interpreter optimizations that are OFF in the compiled defaults but ON on this phone
+(same state, DEV build 2606-2057, 20 s legs, palindrome 1,0,0,1, thermal nominal→fair)
+
+| Knob | ON (your phone) | OFF (compiled default) | OFF vs ON | per-pair | legs |
+|---|---|---|---|---|---|
+| `cirSpecializedFpLs` | 1.459 | 1.429 | -2.1 % | -5.9 % / +2.1 % | 1.519 1.43 1.428 1.399 |
+| `cirSpecializedPsq` | 1.334 | 1.317 | -1.3 % | +1.5 % / -4.0 % | 1.331 1.351 1.283 1.337 |
+| `cirSpecializedFpArith` | 1.294 | 1.328 | +2.6 % | -0.3 % / +5.7 % | 1.336 1.332 1.324 1.253 |
+| `cirDynTargetCache` | 1.327 | 1.333 | +0.5 % | -1.2 % / +2.2 % | 1.324 1.308 1.359 1.33 |
+| `cirGatherPipeCopyFusion` | 1.314 | 1.288 | -1.9 % | -2.5 % / -1.4 % | 1.313 1.28 1.297 1.315 |
+| `cirDeadFlagElim` | 1.286 | 1.297 | +0.8 % | -0.3 % / +2.0 % | 1.301 1.297 1.297 1.272 |
+| `cirDeadFprfElim` | 1.303 | 1.327 | +1.8 % | +3.2 % / +0.5 % | 1.294 1.335 1.319 1.312 |
+| `cirPsqFastPath` | 1.285 | 1.310 | +1.9 % | -3.4 % / +7.7 % | 1.33 1.285 1.335 1.24 |
+| `cirStoreLoopFF` | 1.274 | 1.323 | +3.8 % | +6.5 % / +1.1 % | 1.244 1.325 1.32 1.305 |
+| `cirCacheLoopFF` | 1.312 | 1.308 | -0.3 % | +0.0 % / -0.5 % | 1.308 1.308 1.309 1.316 |
+
+Read: nothing here clears the ±4 % leg scatter with n=2. Store-Loop fast-path OFF read +3.8 % with both
+pairs agreeing and Dead-FPRF OFF +1.8 % with both agreeing — weakly negative for those two on Wind
+Waker; every other knob is a wash on this scene. Chibi-Robo / F-Zero (paired-single-heavy) are the
+titles these were written for and are the right place to re-run before promoting any of them.
+Raw: `docs/perf/data/2026-09-26-GZLE01-outset-run4-cir-optimizations.json`.
+
 ## Decision
 
 | Knob | Today | Data | Recommendation |
@@ -97,7 +119,9 @@ design (hybrid = ubershader while the specialized one compiles), not on a number
 | NEON texture decode | ON | OFF −3.1 %, both pairs | keep ON (confirmed win) |
 | Vertex loader | NEON | software ±0 after repeat | keep NEON |
 
-Flipping the shader default = `GFX_SHADER_COMPILATION_MODE` default in
-`Source/Core/Core/Config/GraphicsSettings.cpp` (core rebuild + tracked xcframework refresh) plus the
-"Specialized (default)" wording in `GraphicsGeneralView.swift`; needs the user's go. Next measurement
+**Done 2026-09-26:** shader default flipped to Hybrid Ubershaders (`7e68d54562`), xcframework
+refreshed (`0d46deaa76`), Provenance gitlink bumped. A device whose config already stores
+`ShaderCompilationMode` keeps its value; "Reset Optimizations to Recommended" clears it.
+The ten CIR optimizations (run 4) stay at their compiled defaults (off): no measured gain on
+Wind Waker; captions now carry the measured note. Next measurement
 worth doing: the same five factors on Galaxy (Wii, GPU-heavier) and on the Apple TV.

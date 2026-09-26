@@ -94,3 +94,9 @@ working in the submodule, expect this.
 `iproxy 8726 8723 -u <udid> -n` kept accepting TCP and resetting; a fresh `iproxy 8726 8723 -u <udid>` (no `-n`)
 answered 200 at once. Restart the tunnel without `-n` after every reinstall; "Connection reset by peer" from
 curl means the tunnel, not the app. DEBUG builds bind the bench unconditionally at scene connect.
+
+## Perf-defaults round (same day) — see `docs/perf/2026-09-26-default-settings-matrix.md`
+- Shader default flipped to **Hybrid Ubershaders** (`7e68d54562`, xcframework `0d46deaa76`, Provenance `0a5175205b`): equal throughput to Specialized over 8 legs, no first-compile stutter by design; Exclusive −4.5 %. Devices with the key already stored keep it; "Reset Optimizations to Recommended" clears it.
+- Prefetch / NEON paired-single / vertex loader: no gain, unchanged. NEON texture decode: +3 %, stays on.
+- Ten CIR optimizations that are OFF by default but ON on Joe's phone: all inside ±4 % on Wind Waker Outset (Store-Loop FF and Dead-FPRF weakly negative). Defaults unchanged; captions carry the measured note. Re-run on Chibi-Robo / F-Zero before promoting any.
+- Bench: 14 new settings keys, `perf_matrix.py` (palindrome sweeps, `--capped`, `--pre`, per-key restore), `make gate-release`. Stutter is NOT measurable yet (bench settles before sampling; needs a scene transition or input injection).

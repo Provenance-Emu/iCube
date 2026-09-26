@@ -186,36 +186,36 @@ struct PerformanceTuningView: View {
                  caption: "Extends Block Linking to function returns and virtual calls (blr/bctr) and to the not-taken side of conditional branches: each exit remembers the last block it went to and jumps straight there when it repeats. Big win on call-heavy games (Wind Waker, Chibi-Robo). Requires Block Linking. Applies on next game launch.")
           optRow("NEON Paired-Single Math", isOn: $cirPsNeon,
                  set: { DOLConfigBridge.setCirPsNeon($0) },
-                 caption: "Computes GameCube paired-single FP ops (ps_mul/add/madd/…) both lanes at once with ARM NEON instead of two scalar ops — the trick the JIT uses. Only fires for finite/normal values in IEEE mode; otherwise falls back to scalar. Experimental. Applies on next game launch.")
+                 caption: "Computes GameCube paired-single FP ops (ps_mul/add/madd/…) both lanes at once with ARM NEON instead of two scalar ops — the trick the JIT uses. Only fires for finite/normal values in IEEE mode; otherwise falls back to scalar. Experimental. Measured 2026-09-26 on Wind Waker: no throughput gain (−1 %, worse 1 % low). Applies on next game launch.")
 
           if showCIROpts {
             optRow("FP Load/Store Specialization", isOn: $cirSpecializedFpLs,
                    set: { DOLConfigBridge.setCirSpecializedFpLs($0) },
-                   caption: "Routes FP loads/stores (lfs/lfd/stfs/stfd + update/indexed) through the same direct jump-table dispatch the integer ops use, removing one indirect call per op. Targets FP-heavy games (e.g. Chibi-Robo). Only specializes when FP exceptions and MMU are off (so it's identical to the generic handler). Experimental; verify with Specialized Ops: Validate. Applies on next game launch.")
+                   caption: "Routes FP loads/stores (lfs/lfd/stfs/stfd + update/indexed) through the same direct jump-table dispatch the integer ops use, removing one indirect call per op. Targets FP-heavy games (e.g. Chibi-Robo). Only specializes when FP exceptions and MMU are off (so it's identical to the generic handler). Experimental; verify with Specialized Ops: Validate. Measured 2026-09-26 on Wind Waker: within noise (±2 %). Applies on next game launch.")
             optRow("Paired-Single Load/Store Specialization", isOn: $cirSpecializedPsq,
                    set: { DOLConfigBridge.setCirSpecializedPsq($0) },
-                   caption: "Routes quantized paired-single loads/stores (psq_l/psq_st + update/indexed) through direct dispatch — the single hottest op class in paired-single-heavy games like Chibi-Robo. Composes with the Paired-Single Float Fast-Path (that speeds the handler body; this speeds how it's called). Experimental; verify with Specialized Ops: Validate. Applies on next game launch.")
+                   caption: "Routes quantized paired-single loads/stores (psq_l/psq_st + update/indexed) through direct dispatch — the single hottest op class in paired-single-heavy games like Chibi-Robo. Composes with the Paired-Single Float Fast-Path (that speeds the handler body; this speeds how it's called). Experimental; verify with Specialized Ops: Validate. Measured 2026-09-26 on Wind Waker: within noise (±1 %). Applies on next game launch.")
             optRow("FP / Paired-Single Arithmetic Specialization", isOn: $cirSpecializedFpArith,
                    set: { DOLConfigBridge.setCirSpecializedFpArith($0) },
-                   caption: "Routes FP and paired-single ARITHMETIC ops (fadd/fmul/fmadd…, ps_add/ps_mul/ps_madd…) through the same direct jump-table dispatch the integer ops use — one fewer indirect call per op. Composes with NEON Paired-Single Math (that speeds the math; this speeds how it's called). Targets FP/3D-heavy games (e.g. Tony Hawk). Dispatch-only, so identical to the generic handler. Experimental. Applies on next game launch.")
+                   caption: "Routes FP and paired-single ARITHMETIC ops (fadd/fmul/fmadd…, ps_add/ps_mul/ps_madd…) through the same direct jump-table dispatch the integer ops use — one fewer indirect call per op. Composes with NEON Paired-Single Math (that speeds the math; this speeds how it's called). Targets FP/3D-heavy games (e.g. Tony Hawk). Dispatch-only, so identical to the generic handler. Experimental. Measured 2026-09-26 on Wind Waker: within noise (±3 %). Applies on next game launch.")
             optRow("Micro-Op Fusion", recommended: true, isOn: $cirMicroOpFusion,
                    set: { DOLConfigBridge.setCirMicroOpFusion($0) },
                    caption: "Fuses runs of integer ops into one dispatched block, cutting per-op dispatch overhead. The fused handlers are code-audited and self-validating. Applies on next game launch.")
             optRow("Dead Flag Elimination", isOn: $cirDeadFlagElim,
                    set: { DOLConfigBridge.setCirDeadFlagElim($0) },
-                   caption: "Skips computing condition-flag (CR0/CR1) results the analyzer proves are overwritten before any branch reads them. Experimental; run its Validate pass before trusting it. Applies on next game launch.")
+                   caption: "Skips computing condition-flag (CR0/CR1) results the analyzer proves are overwritten before any branch reads them. Experimental; run its Validate pass before trusting it. Measured 2026-09-26 on Wind Waker: within noise (±1 %). Applies on next game launch.")
             optRow("Dead FPRF Elimination", isOn: $cirDeadFprfElim,
                    set: { DOLConfigBridge.setCirDeadFprfElim($0) },
-                   caption: "Skips computing FP result flags (FPRF) for FP/paired-single ops when proven dead — a win on the FP-heavy hot path. FP accuracy is sensitive; experimental, run its Validate pass first. Applies on next game launch.")
+                   caption: "Skips computing FP result flags (FPRF) for FP/paired-single ops when proven dead — a win on the FP-heavy hot path. FP accuracy is sensitive; experimental, run its Validate pass first. Measured 2026-09-26 on Wind Waker: ~2 % slower ON. Applies on next game launch.")
             optRow("Paired-Single Float Fast-Path", isOn: $cirPsqFastPath,
                    set: { DOLConfigBridge.setCirPsqFastPath($0) },
-                   caption: "Speeds up quantized paired-single load/stores (psq_l/psq_st) for the common plain-float, no-scale case (the hot path in titles like Chibi-Robo). The live quantization register is checked each execution, so other cases fall back unchanged. Experimental. Applies on next game launch.")
+                   caption: "Speeds up quantized paired-single load/stores (psq_l/psq_st) for the common plain-float, no-scale case (the hot path in titles like Chibi-Robo). The live quantization register is checked each execution, so other cases fall back unchanged. Experimental. Measured 2026-09-26 on Wind Waker: within noise (±2 %); written for Chibi-Robo-class titles, unmeasured there. Applies on next game launch.")
             optRow("Store-Loop (memset) Fast-Path", isOn: $cirStoreLoopFF,
                    set: { DOLConfigBridge.setCirStoreLoopFF($0) },
-                   caption: "Detects tight byte-fill loops (the stb + addi + bdnz memset pattern) and performs the whole fill in one bulk write. The range is verified to be contiguous normal RAM first. Experimental. Applies on next game launch.")
+                   caption: "Detects tight byte-fill loops (the stb + addi + bdnz memset pattern) and performs the whole fill in one bulk write. The range is verified to be contiguous normal RAM first. Experimental. Measured 2026-09-26 on Wind Waker: ~4 % slower ON. Applies on next game launch.")
             optRow("Cache-Management Loop Fast-Forward", isOn: $cirCacheLoopFF,
                    set: { DOLConfigBridge.setCirCacheLoopFF($0) },
-                   caption: "Fast-forwards tight cache-management CTR loops (dcbf/dcbi/dcbst + addi + bdnz) that just invalidate a memory range line-by-line — common before DMA. Skips the per-op dispatch and does the invalidation in one pass. Only engages when accurate CPU cache is off. Experimental. Applies on next game launch.")
+                   caption: "Fast-forwards tight cache-management CTR loops (dcbf/dcbi/dcbst + addi + bdnz) that just invalidate a memory range line-by-line — common before DMA. Skips the per-op dispatch and does the invalidation in one pass. Only engages when accurate CPU cache is off. Experimental. Measured 2026-09-26 on Wind Waker: no change. Applies on next game launch.")
           }
 
           if showIROpts {
