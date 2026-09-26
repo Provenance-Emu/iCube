@@ -238,6 +238,46 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     XCTAssertEqual(stateLow.y, -1.0, accuracy: 0.0001)
   }
 
+  // MARK: - Gyro pointer is relative to a captured baseline
+
+  private let base = TCDeviceMotion.PointerAttitude(roll: 0.4, pitch: 0.6, yaw: 1.2)
+
+  func testGyroPointerIsCenteredAtTheBaseline() {
+    let offsets = TCDeviceMotion.gyroPointerOffsets(current: base, baseline: base, useYawForHorizontal: false)
+    XCTAssertEqual(offsets.horizontal, 0, accuracy: 0.0001)
+    XCTAssertEqual(offsets.vertical, 0, accuracy: 0.0001)
+  }
+
+  /// The old mapping used the absolute attitude: a phone held at a normal ~35 degree tilt read
+  /// pitch 0.6 and pinned the pointer at the top edge before the user moved at all.
+  func testGyroPointerIgnoresHowTheDeviceIsHeld() {
+    let tilted = TCDeviceMotion.PointerAttitude(roll: 1.5, pitch: 0.6, yaw: -2.0)
+    let offsets = TCDeviceMotion.gyroPointerOffsets(current: tilted, baseline: tilted, useYawForHorizontal: true)
+    XCTAssertEqual(offsets.horizontal, 0, accuracy: 0.0001)
+    XCTAssertEqual(offsets.vertical, 0, accuracy: 0.0001)
+  }
+
+  func testGyroPointerScalesTheChangeSinceTheBaseline() {
+    let moved = TCDeviceMotion.PointerAttitude(roll: base.roll + 0.1, pitch: base.pitch - 0.2, yaw: base.yaw)
+    let offsets = TCDeviceMotion.gyroPointerOffsets(current: moved, baseline: base, useYawForHorizontal: false)
+    XCTAssertEqual(offsets.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
+    XCTAssertEqual(offsets.vertical, -0.2 * TCDeviceMotion.gyroPointerVerticalSensitivity, accuracy: 0.0001)
+  }
+
+  func testGyroPointerUsesYawForHorizontalWhenAsked() {
+    let moved = TCDeviceMotion.PointerAttitude(roll: base.roll + 0.3, pitch: base.pitch, yaw: base.yaw + 0.1)
+    let offsets = TCDeviceMotion.gyroPointerOffsets(current: moved, baseline: base, useYawForHorizontal: true)
+    XCTAssertEqual(offsets.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
+  }
+
+  /// Yaw and roll wrap at +-pi: a small turn across the seam must stay small, not become ~2*pi.
+  func testGyroPointerWrapsAcrossPi() {
+    let nearSeam = TCDeviceMotion.PointerAttitude(roll: 0, pitch: 0, yaw: .pi - 0.05)
+    let acrossSeam = TCDeviceMotion.PointerAttitude(roll: 0, pitch: 0, yaw: -.pi + 0.05)
+    let offsets = TCDeviceMotion.gyroPointerOffsets(current: acrossSeam, baseline: nearSeam, useYawForHorizontal: true)
+    XCTAssertEqual(offsets.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
+  }
+
   // MARK: - Unknown orientation is a safe no-op
 
   func testUnknownOrientationFoldsIntoPortraitForAccelAndIsZeroForGyro() {

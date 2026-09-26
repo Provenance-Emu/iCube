@@ -60,6 +60,82 @@ import Foundation
 
   @objc public var isDeviceMotionAvailable: Bool { motionManager.isDeviceMotionAvailable }
 
+  // MARK: Gyro pointer baseline
+
+  /// Euler angles (radians) in CoreMotion's attitude convention.
+  struct PointerAttitude: Equatable {
+    var roll: Double, pitch: Double, yaw: Double
+  }
+
+  /// Radians of tilt from the baseline to a full-width / full-height pointer swing (1 / gain).
+  static let gyroPointerHorizontalSensitivity = 2.66
+  static let gyroPointerVerticalSensitivity = 2.0
+  /// How often (in gyro-pointer samples, 60 Hz) `input_debug` logs the pointer, about once a second.
+  private static let gyroPointerLogInterval = 60
+
+  /// Attitude the gyro pointer treats as "center". Only touched on the serial motion queue.
+  private var pointerBaseline: PointerAttitude?
+  /// IR mode seen on the previous device-motion sample (motion queue only), to catch a switch
+  /// into gyro mode from any of the places that set it.
+  private var lastIRMode: Int?
+  private var gyroPointerSampleCount = 0
+  /// Set from any thread by `recenterPointer()`, consumed on the motion queue.
+  private let recenterLock = NSLock()
+  private var recenterRequested = true
+
+  /// Makes the device's current attitude the pointer's center on the next motion sample. Called on
+  /// a recenter gesture or action; the motion queue also recenters itself when motion (re)starts and
+  /// when the IR mode switches into gyro.
+  @objc public func recenterPointer() {
+    recenterLock.lock()
+    recenterRequested = true
+    recenterLock.unlock()
+  }
+
+  /// The user-facing "Recenter Pointer" action: recenters the gyro pointer and tells the touch IR
+  /// pads (drag mode keeps its own offset) to center too.
+  @MainActor
+  static func requestPointerRecenter() {
+    shared.recenterPointer()
+    NotificationCenter.default.post(name: .DOLRecenterPointer, object: nil)
+  }
+
+  private func takeRecenterRequest() -> Bool {
+    recenterLock.lock()
+    defer { recenterLock.unlock() }
+    let requested = recenterRequested
+    recenterRequested = false
+    return requested
+  }
+
+  /// Pointer offsets for `current` relative to `baseline`, before inversion and clamping.
+  ///
+  /// The pointer used to be driven by the ABSOLUTE attitude (referenced to magnetic north with Z
+  /// vertical), so "center" meant lying flat, facing north: a phone held at a normal tilt already
+  /// read past the clamp and pinned the pointer at the screen edge, and nothing could re-center it.
+  /// Differences of Euler angles are enough for the small swings a pointer needs; roll and yaw are
+  /// wrapped so a turn across +-pi stays small.
+  static func gyroPointerOffsets(
+    current: PointerAttitude,
+    baseline: PointerAttitude,
+    useYawForHorizontal: Bool
+  ) -> (horizontal: Double, vertical: Double) {
+    let horizontalDelta = useYawForHorizontal
+      ? wrappedAngle(current.yaw - baseline.yaw)
+      : wrappedAngle(current.roll - baseline.roll)
+    let verticalDelta = wrappedAngle(current.pitch - baseline.pitch)
+    return (horizontalDelta * gyroPointerHorizontalSensitivity, verticalDelta * gyroPointerVerticalSensitivity)
+  }
+
+  /// `angle` folded into (-pi, pi].
+  private static func wrappedAngle(_ angle: Double) -> Double {
+    let twoPi = 2 * Double.pi
+    var wrapped = angle.truncatingRemainder(dividingBy: twoPi)
+    if wrapped > .pi { wrapped -= twoPi }
+    if wrapped <= -.pi { wrapped += twoPi }
+    return wrapped
+  }
+
   /// Standard gravity, used to convert CoreMotion's g-relative acceleration into the
   /// m/s^2 the core's IMUAccelerometer expects (see `mapAccelToWiimoteFrame`).
   static let gravityToMetersPerSecondSquared: Double = 9.80665
@@ -69,6 +145,9 @@ import Foundation
   }
 
   @objc func registerMotionHandlers() {
+    // Motion is (re)starting: emulation start or resume. Center on however the device is held now.
+    recenterPointer()
+
     // Set our orientation properly
     Task { @MainActor in
       statusBarOrientationChanged()
@@ -163,6 +242,10 @@ import Foundation
 
     // IR cursor mapping (when gyro mode is active)
     let irMode = DOLConfigBridge.mainTouchPadIRMode()
+    if irMode == 0, lastIRMode != 0 {
+      recenterPointer()
+    }
+    lastIRMode = irMode
     if irMode == 0 {
       handleIRCursorMapping(motion: motion)
     }
@@ -218,22 +301,30 @@ import Foundation
 
   /// Map device attitude to IR cursor movement
   private func handleIRCursorMapping(motion: CMDeviceMotion) {
-    let attitude = motion.attitude
+    let attitude = PointerAttitude(roll: motion.attitude.roll, pitch: motion.attitude.pitch, yaw: motion.attitude.yaw)
     let useYawForHorizontal = UserDefaults.standard.bool(forKey: "motion_use_yaw_for_horizontal")
     let invertRoll = UserDefaults.standard.bool(forKey: "motion_invert_roll")
     let invertPitch = UserDefaults.standard.bool(forKey: "motion_invert_pitch")
+    let debug = UserDefaults.standard.bool(forKey: "input_debug")
 
-    let horizontalAxis = useYawForHorizontal ? attitude.yaw : attitude.roll
-    let verticalAxis = attitude.pitch
+    if takeRecenterRequest() || pointerBaseline == nil {
+      pointerBaseline = attitude
+      if debug {
+        NSLog("[MOTION] gyro pointer baseline roll=%.3f pitch=%.3f yaw=%.3f", attitude.roll, attitude.pitch, attitude.yaw)
+      }
+    }
+    guard let baseline = pointerBaseline else { return }
 
-    let horizontalSensitivity = 2.66
-    let verticalSensitivity = 2.0
-
-    var horizontalValue = horizontalAxis * horizontalSensitivity
-    var verticalValue = verticalAxis * verticalSensitivity
+    var (horizontalValue, verticalValue) = Self.gyroPointerOffsets(
+      current: attitude, baseline: baseline, useYawForHorizontal: useYawForHorizontal)
 
     if invertRoll { horizontalValue = -horizontalValue }
     if invertPitch { verticalValue = -verticalValue }
+
+    gyroPointerSampleCount += 1
+    if debug, gyroPointerSampleCount % Self.gyroPointerLogInterval == 0 {
+      NSLog("[MOTION] gyro pointer h=%.3f v=%.3f (before clamp)", horizontalValue, verticalValue)
+    }
 
     // Clamping to [-1, 1] happens inside irCursorWrites so it stays covered by the
     // pure unit tests below, alongside the sign/single-sided derivation.

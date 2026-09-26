@@ -22,7 +22,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     PauseMenuActions(
       resume: {}, toggleMute: {}, openFastForwardPicker: {}, openSaveStates: {},
       openCheats: {}, openControllers: {}, openShaders: {}, openContinuity: {},
-      openSettings: {}, requestReset: {}, requestExit: {}
+      openSettings: {}, requestReset: {}, requestExit: {}, recenterPointer: {}
     )
   }
 
@@ -30,13 +30,15 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     isMuted: Bool = false,
     fastForwardEnabled: Bool = false,
     fastForwardSubtitle: String = "Off — choose a speed to start",
-    cheatsSubtitle: String = "Game enhancement codes"
+    cheatsSubtitle: String = "Game enhancement codes",
+    showsRecenterPointer: Bool = false
   ) -> PauseMenuState {
     PauseMenuState(
       isMuted: isMuted,
       fastForwardEnabled: fastForwardEnabled,
       fastForwardSubtitle: fastForwardSubtitle,
-      cheatsSubtitle: cheatsSubtitle
+      cheatsSubtitle: cheatsSubtitle,
+      showsRecenterPointer: showsRecenterPointer
     )
   }
 
@@ -142,7 +144,8 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     let actions = PauseMenuActions(
       resume: { resumed = true }, toggleMute: {}, openFastForwardPicker: {}, openSaveStates: {},
       openCheats: {}, openControllers: {}, openShaders: {}, openContinuity: {},
-      openSettings: {}, requestReset: { reset = true }, requestExit: { exited = true }
+      openSettings: {}, requestReset: { reset = true }, requestExit: { exited = true },
+      recenterPointer: {}
     )
     let model = PauseMenuModelBuilder.make(state: makeState(), actions: actions)
 
@@ -153,6 +156,27 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertTrue(resumed)
     XCTAssertTrue(reset)
     XCTAssertTrue(exited)
+  }
+
+  // MARK: Recenter Pointer (Wii pointer games only)
+
+  func test_recenterPointer_followsControllers_whenShown() {
+    var recentered = false
+    var actions = noopActions()
+    actions.recenterPointer = { recentered = true }
+    let model = PauseMenuModelBuilder.make(state: makeState(showsRecenterPointer: true), actions: actions)
+
+    var expected = Self.expectedItemOrder
+    expected.insert("recenter-pointer", at: expected.firstIndex(of: "controllers")! + 1)
+    XCTAssertEqual(model.allItems.map(\.id), expected)
+
+    if case .action(let action) = model.item(id: "recenter-pointer")!.role { action() }
+    XCTAssertTrue(recentered)
+  }
+
+  func test_recenterPointer_absent_whenNotShown() {
+    let model = PauseMenuModelBuilder.make(state: makeState(showsRecenterPointer: false), actions: noopActions())
+    XCTAssertNil(model.item(id: "recenter-pointer"))
   }
 
   // MARK: Every item carries an icon and a non-empty title

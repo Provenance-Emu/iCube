@@ -1531,6 +1531,13 @@ struct EmulationScreen: View {
                 } label: {
                   Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
                 }
+                Divider()
+                Button {
+                  hasTopBarInteraction = true
+                  TCDeviceMotion.requestPointerRecenter()
+                } label: {
+                  Label("Recenter Pointer", systemImage: "scope")
+                }
               } label: {
                 Label("Touch Cursor Mode", systemImage: "cursor.rays")
               }

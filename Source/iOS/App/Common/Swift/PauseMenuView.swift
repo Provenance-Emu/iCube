@@ -41,6 +41,15 @@ internal struct PauseMenuView: View {
     return isWii ? .wiiAndGameCube : .gamecube
   }
 
+  /// Recenter Pointer is offered for a running Wii title on iOS, where touch or the gyro drives it.
+  private static var showsRecenterPointer: Bool {
+    #if os(iOS)
+    return TVEmulationBridge.isRunning() && TVEmulationBridge.isCurrentSystemWii()
+    #else
+    return false
+    #endif
+  }
+
   @State private var showFilmstripSheet: Bool = false
   /// WS-4: "continue this game on another device".
   @State private var showContinuitySheet: Bool = false
@@ -1322,7 +1331,8 @@ internal struct PauseMenuView: View {
       isMuted: isMuted,
       fastForwardEnabled: fastForwardEnabled,
       fastForwardSubtitle: fastForwardSubtitle,
-      cheatsSubtitle: cheatsSubtitle
+      cheatsSubtitle: cheatsSubtitle,
+      showsRecenterPointer: Self.showsRecenterPointer
     )
     let actions = PauseMenuActions(
       resume: { TVEmulationBridge.resume(); onClose() },
@@ -1341,7 +1351,16 @@ internal struct PauseMenuView: View {
       openContinuity: { showContinuitySheet = true },
       openSettings: { showSettingsSheet = true },
       requestReset: { showResetDialog = true },
-      requestExit: { showExitDialog = true }
+      requestExit: { showExitDialog = true },
+      recenterPointer: {
+        #if os(iOS)
+        // The baseline is captured on the next motion sample, so resuming right away takes it from
+        // how the device is held while playing, not from the pause-menu posture.
+        TCDeviceMotion.requestPointerRecenter()
+        TVEmulationBridge.resume()
+        onClose()
+        #endif
+      }
     )
     return PauseMenuModelBuilder.make(state: state, actions: actions)
   }
@@ -1419,6 +1438,8 @@ struct PauseMenuState {
   var fastForwardEnabled: Bool
   var fastForwardSubtitle: String
   var cheatsSubtitle: String
+  /// Wii title on iOS, where the pointer is driven by touch or the gyro.
+  var showsRecenterPointer: Bool
 }
 
 /// Plain closures -- no bridge calls inside `PauseMenuModelBuilder` either.
@@ -1434,6 +1455,7 @@ struct PauseMenuActions {
   var openSettings: () -> Void
   var requestReset: () -> Void
   var requestExit: () -> Void
+  var recenterPointer: () -> Void
 }
 
 /// D18 (design doc §6 step 2): builds the iOS pause menu's root `MenuModel`.
@@ -1449,7 +1471,7 @@ struct PauseMenuActions {
 /// tvOS even though the type must still compile there.
 enum PauseMenuModelBuilder {
   static func make(state: PauseMenuState, actions: PauseMenuActions) -> MenuModel {
-    let items: [MenuItem] = [
+    var items: [MenuItem] = [
       MenuItem(id: "resume", title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue, role: .action(actions.resume)),
       MenuItem(
         id: "mute",
@@ -1470,6 +1492,14 @@ enum PauseMenuModelBuilder {
       MenuItem(id: "save-states", title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates)),
       MenuItem(id: "cheats", title: L("Cheats"), subtitle: state.cheatsSubtitle, icon: "star.circle", tint: .yellow, role: .action(actions.openCheats)),
       MenuItem(id: "controllers", title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers)),
+    ]
+    if state.showsRecenterPointer {
+      items.append(MenuItem(
+        id: "recenter-pointer", title: L("Recenter Pointer"),
+        subtitle: L("Center the Wii pointer on how you hold the device"),
+        icon: "scope", tint: .green, role: .action(actions.recenterPointer)))
+    }
+    items += [
       MenuItem(id: "shaders", title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange, role: .action(actions.openShaders)),
       MenuItem(id: "continuity", title: L("Continue Elsewhere"), subtitle: L("Hand this game to a nearby device"), icon: "arrow.triangle.branch", tint: .teal, role: .action(actions.openContinuity)),
       MenuItem(id: "settings", title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray, role: .action(actions.openSettings)),

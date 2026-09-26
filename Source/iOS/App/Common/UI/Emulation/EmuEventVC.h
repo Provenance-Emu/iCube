@@ -11,6 +11,11 @@
 /// press, and pauses the core before showing the overlay.
 FOUNDATION_EXPORT NSNotificationName const DOLRequestPauseMenuNotification;
 
+/// Posted when the user asks to recenter the Wii pointer (pause menu / top bar action). The touch
+/// IR pads observe it to drop their drag state; the gyro pointer is recentered directly through
+/// `TCDeviceMotion.recenterPointer`.
+FOUNDATION_EXPORT NSNotificationName const DOLRecenterPointerNotification;
+
 /// How long Menu must be held to exit to the library. A release before this is a
 /// short press and opens the pause menu instead. Exported so the GCController
 /// Menu handlers use the same threshold as the UIPress path.

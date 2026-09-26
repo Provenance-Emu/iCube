@@ -5,6 +5,7 @@
 #import <UIKit/UIKit.h>
 
 NSNotificationName const DOLRequestPauseMenuNotification = @"DOLRequestPauseMenu";
+NSNotificationName const DOLRecenterPointerNotification = @"DOLRecenterPointer";
 const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 
 #if TARGET_OS_TV

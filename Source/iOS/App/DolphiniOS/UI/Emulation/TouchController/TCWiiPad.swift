@@ -50,6 +50,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     centerHoldRecognizer.cancelsTouchesInView = false
     centerHoldRecognizer.delegate = self
     real_view!.addGestureRecognizer(centerHoldRecognizer)
+    observeRecenterRequests()
 
     debugLog("[TOUCH] TCWiiPad initialized; gesture recognizer installed")
   }
@@ -74,8 +75,18 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     centerHoldRecognizer.cancelsTouchesInView = false
     centerHoldRecognizer.delegate = self
     real_view!.addGestureRecognizer(centerHoldRecognizer)
+    observeRecenterRequests()
 
     debugLog("[TOUCH] TCWiiPad init(frame:) gesture recognizer installed")
+  }
+
+  private func observeRecenterRequests() {
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleRecenterRequest), name: .DOLRecenterPointer, object: nil)
+  }
+
+  @objc private func handleRecenterRequest() {
+    centerPointer()
   }
 
   @objc func recalculatePointerValues(new_rect: CGRect, game_aspect: CGFloat) {
@@ -164,6 +175,10 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
     if gesture.state == .began {
       debugLog("[TOUCH] Three-finger hold detected; centering IR")
       centerPointer()
+      #if canImport(CoreMotion)
+      // In gyro mode the next motion sample would overwrite the (0, 0) above; move the baseline.
+      TCDeviceMotion.shared.recenterPointer()
+      #endif
     }
   }
 

@@ -97,6 +97,12 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     private func sharedInit() {
       isMultipleTouchEnabled = true
       backgroundColor = .clear
+      NotificationCenter.default.addObserver(
+        self, selector: #selector(handleRecenterRequest), name: .DOLRecenterPointer, object: nil)
+    }
+
+    @objc private func handleRecenterRequest() {
+      forceReleaseAndCenter()
     }
 
     /// Mirrors `TCView`'s own `willMove(toSuperview:)`/`deinit` pair (its "Defect #7" comment) so
@@ -228,6 +234,10 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
       let work = DispatchWorkItem { [weak self] in
         guard let self, self.activeTouches == heldTouches else { return }
         self.forceReleaseAndCenter()
+        #if canImport(CoreMotion)
+        // In gyro mode the next motion sample would overwrite the (0, 0); move the baseline.
+        TCDeviceMotion.shared.recenterPointer()
+        #endif
       }
       threeFingerWorkItem = work
       DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
