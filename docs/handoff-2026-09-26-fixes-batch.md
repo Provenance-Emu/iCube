@@ -49,3 +49,27 @@ are wrong — decide whether to rename them or make Gain apply to gyro. Regressi
 - iOS pause menu's raw GCController d-pad handler ignores `ControllerFocusCoordinator`, so a controller can drive the menu behind Save States / Shaders / Continuity sheets (pre-existing; D18).
 - Per-shader live thumbnails need an isolated FilterChain (not built).
 - Push develop + bump the Provenance gitlink; the tvOS TestFlight rerun will exercise the arm64 plist fix.
+
+## Round 2 (same day, develop `5882d010c3`, iOS 266 tests green, tvOS green, pushed)
+
+| Item | Notes |
+|---|---|
+| CI unit tests | `.github/workflows/tests.yml`: ButtonType drift + localized-key checks (both blocking), then `make test` on a simulator picked by SDK version; ~30-50 min estimate, untested on a runner until the next push triggers it |
+| Analog stick sliders | the `dsu_*` sliders are now "Analog Stick Gain / Deadzone / Smoothing" under "Analog Stick Settings" (ControllersRootView + DSU widget); keys unchanged |
+| Shader live previews | `ShaderPreviewRenderer` renders each preset through its own FilterChain on its own command queue from the pause frame (raw XFB, pre-post-processing), `ShaderPreviewCache` LRU, hero card previews the selection. iFly's generator was NOT ported because it mutates the live singleton's UserDefaults. Cleanup scoped to the decoder's own temp dir (a snapshot/diff version raced live preset reloads) |
+| Pause menu vs sheets | raw `GCController` handler now gated on `ControllerFocusCoordinator.isActiveScope`; Shaders/Settings/Controllers/Continuity sheets claim the controller; per-pad A latch with resync (`PauseMenuInputGate`, 10 tests). Exit/Reset alerts and the FF dialog still do NOT claim |
+| D18 menu engine | `Common/Swift/Menu/`: `MenuModel`, `MenuFocusRouter`, `MenuControllerNav` (moved `RemapControllerNav`), `MenuScreen` (iOS polls GCController on a timer + coordinator scope; tvOS native List focus, NO consumer yet). Cheats iOS list migrated; Cheats tvOS body untouched. Design doc §9 lists what each remaining screen needs |
+
+### Round-2 phone tests owed
+1. Pause menu with a pad: open Save States / Shaders / Continuity / Controllers / Settings, d-pad and A must not move the menu behind; close with B, nothing activates; two pads: hold A on one while moving the other.
+2. Cheats (iOS) with a pad: reach every row, toggle repeatedly, B back; touch-only shows no focus tint; the "Enable Cheats?" alert is still not controller-answerable (known).
+3. Shader picker: cards show real previews of the pause frame (orientation, colours), heavy CRT presets included; scrolling ~20 presets does not spike memory; tapping a card while previews render still applies the preset.
+4. Analog Stick Settings: labels, and that the sliders change on-screen stick feel only.
+5. Apple TV regression pass only (no tvOS screen changed behaviour).
+
+### Incident to know about
+While round 2 was landing, the parent Provenance checkout received an outside "update dolphin core" commit
+(`6b325bb5dd`, pushed) pointing the gitlink at an unpushed local SHA, then a hard reset + pull re-checked
+out the submodule detached at that SHA mid-gate. Recovered with `git checkout develop` (nothing lost) and
+pushed iCube develop so the gitlink resolves. If you use a GUI git client on Provenance while a session is
+working in the submodule, expect this.
