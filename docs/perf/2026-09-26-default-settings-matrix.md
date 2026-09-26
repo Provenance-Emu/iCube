@@ -49,8 +49,55 @@ speed at 1.00; long cooldowns auto-lock the phone; `icube.cirProfile` re-enables
 Capped control (100 % throttle, warm shader cache): every mode holds 30.0 fps, p95 34.3–35.0 ms,
 so on a warm cache the shader mode does not change stutter on Outset; the win is throughput/headroom.
 
-Raw: `perf_matrix_GZLE01.json` (scratch; copy next to this file if kept).
+Raw: `docs/perf/data/2026-09-26-GZLE01-outset-run{1,2,3-coldcache}.json`.
+
+### Run 2 — same state, reversed value order (confirmation)
+
+| Factor | values (order) | speed | per-pair Δ | verdict |
+|---|---|---|---|---|
+| vertexLoaderMode | 0 software vs 1 NEON | 1.310 vs 1.308 | +3.1 % / −3.4 % | **no difference**; run 1's +4 % was one slow NEON leg. Keep NEON |
+| gfxShaderCompilationMode | 2 hybrid vs 0 specialized | 1.319 vs 1.364 | −1.0 % / +8.1 % | did **not** replicate run 1's +4.6 % |
+| gfxShaderCompilationMode | 1 exclusive vs 0 specialized | 1.276 vs 1.364 | −6.7 % / +0.4 % | below specialized again |
+
+### Combined, all legs (uncapped throughput, Outset)
+
+| Mode | legs | mean speed |
+|---|---|---|
+| 0 specialized | 1.247 1.349 1.337 1.391 | 1.331 |
+| 2 hybrid uber | 1.331 1.384 1.351 1.287 | 1.338 |
+| 1 exclusive uber | 1.227 1.296 1.260 1.292 | 1.269 |
+
+Read: with a warm shader cache the scene is CPU-bound and specialized vs hybrid is a wash (+0.5 %,
+inside the ±4 % leg-to-leg scatter); exclusive ubershaders cost a consistent ~4.5 % (every exclusive
+leg is below every specialized leg but one). The perceived "hybrid/exclusive feel faster" is therefore
+not throughput — it has to be first-compile stutter, which the warm-cache capped control cannot show
+(all modes 30.0 fps, p95 within 0.7 ms). Run 3 disables the disk shader cache to force cold compiles.
+
+### Run 3 — cold shader cache (`--pre gfxShaderCache=false --capped`), same state
+
+| Mode | fps | p95 ms | 1 % low ms | max ms |
+|---|---|---|---|---|
+| 0 specialized | 29.8 | 34.8 / 34.7 | 42.8 / 41.2 | 44 |
+| 2 hybrid uber | 29.9 | 34.9 / 35.3 | 43.0 / 43.6 | 44 |
+| 1 exclusive uber | 29.9 / 30.0 | 34.9 / 35.0 | 39.4 / 42.7 | 44 |
+
+No difference: the bench settles after the state load, so Outset's shaders are compiled before
+sampling starts and nothing new appears while standing still. **Measuring compile stutter needs a
+scene that introduces shaders during the window** (a scripted camera pan / area transition, or
+input injection the debug API does not have yet). Until then the stutter claim rests on Dolphin's
+design (hybrid = ubershader while the specialized one compiles), not on a number from this phone.
 
 ## Decision
 
-_(defaults to flip, with the numbers that justify each)_
+| Knob | Today | Data | Recommendation |
+|---|---|---|---|
+| Shader compilation | Specialized | hybrid = specialized on throughput (+0.5 %, noise); exclusive −4.5 % consistently; stutter unmeasured | **Flip to Hybrid Ubershaders on iOS + tvOS**: zero measured cost, removes first-compile stutter by construction. Never Exclusive |
+| CachedInterpreter Prefetch | OFF | ON −1.0 %, mixed sign | keep OFF (matches the core comment) |
+| Paired-single NEON (`cirPsNeon`) | OFF (this phone had it ON) | ON −1.2 %, worse 1 % low | keep OFF; do not promote |
+| NEON texture decode | ON | OFF −3.1 %, both pairs | keep ON (confirmed win) |
+| Vertex loader | NEON | software ±0 after repeat | keep NEON |
+
+Flipping the shader default = `GFX_SHADER_COMPILATION_MODE` default in
+`Source/Core/Core/Config/GraphicsSettings.cpp` (core rebuild + tracked xcframework refresh) plus the
+"Specialized (default)" wording in `GraphicsGeneralView.swift`; needs the user's go. Next measurement
+worth doing: the same five factors on Galaxy (Wii, GPU-heavier) and on the Apple TV.
