@@ -223,6 +223,24 @@ final class DOLSentryTelemetryBridge: NSObject {
     SentryTelemetryService.handleEmulationWillStart()
   }
 
+  /// Records a Dolphin MsgAlert (PanicAlert / ASSERT dialog) as a breadcrumb. Without this, crash
+  /// reports only show a UIAlertController titled "Warning": an ASSERT answered "No" calls
+  /// Crash() (brk -> EXC_BREAKPOINT), and the assert's condition/file/line never reached Sentry.
+  @objc(recordMsgAlertWithCaption:text:question:)
+  static func recordMsgAlert(caption: String, text: String, question: Bool) {
+    let crumb = Breadcrumb(level: .warning, category: "dolphin.msgalert")
+    crumb.message = "\(caption)\(question ? " (question)" : ""): \(text)"
+    SentrySDK.addBreadcrumb(crumb)
+  }
+
+  /// Records the user's answer to a MsgAlert question. "No" on an ASSERT dialog crashes on purpose.
+  @objc(recordMsgAlertAnswer:)
+  static func recordMsgAlertAnswer(_ confirmed: Bool) {
+    let crumb = Breadcrumb(level: .warning, category: "dolphin.msgalert")
+    crumb.message = confirmed ? "answered Yes/OK" : "answered No"
+    SentrySDK.addBreadcrumb(crumb)
+  }
+
   @objc(traceSyncWithName:operation:tags:work:)
   static func traceSync(
     name: String,

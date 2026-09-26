@@ -53,6 +53,9 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
 
   // Log to console as a backup
   NSLog(@"MsgAlert - %@: %@ (question: %d)", foundationCaption, foundationText, question ? 1 : 0);
+  [DOLSentryTelemetryBridge recordMsgAlertWithCaption:foundationCaption ?: @""
+                                                 text:foundationText ?: @""
+                                             question:question];
 
   // iCube: the GameCube BIOS/IPL "could not be found" panic is confusing on its own — the user has no
   // idea what an IPL is or where to get one. Detect it and (a) replace the generic message with a
@@ -154,6 +157,10 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
   } else {
     dispatch_async(dispatch_get_main_queue(), presentAlert);
     _waitEvent.Wait();
+  }
+
+  if (question) {
+    [DOLSentryTelemetryBridge recordMsgAlertAnswer:confirmed];
   }
 
   return confirmed;
