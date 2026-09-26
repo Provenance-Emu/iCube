@@ -173,6 +173,10 @@ extension EmulationScreen {
     /// rebuilding the whole SwiftUI tree.
     final class Coordinator {
       var hosting: UIHostingController<TouchOverlayView>?
+      /// The hosting view's teardown-safe wrapper (task item 2, DSU pass) — see
+      /// `TouchOverlayHostContainer`'s doc comment for why the hosting view can't guarantee its
+      /// own release-on-teardown via SwiftUI alone.
+      var hostContainer: TouchOverlayHostContainer?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -197,8 +201,7 @@ extension EmulationScreen {
     /// path does.
     private func syncProgrammaticOverlay(in container: UIView, context: Context) {
       guard let kind = programmaticPadKind() else {
-        context.coordinator.hosting?.view.removeFromSuperview()
-        context.coordinator.hosting = nil
+        teardownProgrammaticOverlay(context: context)
         return
       }
       let isWiiKind = kind != .gameCube
@@ -208,22 +211,41 @@ extension EmulationScreen {
         // doesn't drive IR itself yet — gyro-mode IR keeps working unchanged (design §2 non-goal).
         TCDeviceMotion.shared.setPort(deviceId)
       }
-      if let hosting = context.coordinator.hosting {
+      // Kept current on every sync (task item 2's DSU pass), not just at creation: the overlay can
+      // switch device ids in place (e.g. a controller connects mid-session) without ever
+      // disappearing, so a LATER teardown must clear whichever id was actually live.
+      context.coordinator.hostContainer?.deviceId = deviceId
+      if let hosting = context.coordinator.hosting, let hostContainer = context.coordinator.hostContainer {
         hosting.rootView = TouchOverlayView(padKind: kind, deviceId: deviceId, irMode: irMode)
-        if hosting.view.superview !== container {
-          hosting.view.frame = container.bounds
-          container.addSubview(hosting.view)
+        if hostContainer.superview !== container {
+          hostContainer.frame = container.bounds
+          container.addSubview(hostContainer)
         }
       } else {
         let hosting = UIHostingController(rootView: TouchOverlayView(padKind: kind, deviceId: deviceId, irMode: irMode))
         hosting.view.backgroundColor = .clear
-        hosting.view.frame = container.bounds
         hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        container.addSubview(hosting.view)
+        let hostContainer = TouchOverlayHostContainer(frame: container.bounds)
+        hostContainer.deviceId = deviceId
+        hostContainer.backgroundColor = .clear
+        hostContainer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        hosting.view.frame = hostContainer.bounds
+        hostContainer.addSubview(hosting.view)
+        container.addSubview(hostContainer)
         context.coordinator.hosting = hosting
+        context.coordinator.hostContainer = hostContainer
       }
       // TouchOverlayView applies the opacity setting per group itself; the container stays opaque.
       container.alpha = 1.0
+    }
+
+    /// Removes the hosting view via its teardown-safe wrapper (task item 2's DSU pass) and drops
+    /// both coordinator references, so the NEXT sync (if any) creates a fresh hosting controller
+    /// rather than reusing a torn-down one.
+    private func teardownProgrammaticOverlay(context: Context) {
+      context.coordinator.hostContainer?.removeFromSuperview()
+      context.coordinator.hostContainer = nil
+      context.coordinator.hosting = nil
     }
 
     func makeUIView(context: Context) -> UIView {
@@ -263,10 +285,12 @@ extension EmulationScreen {
       // mounted, do a full rebuild instead of letting the legacy branch below mistake the
       // programmatic overlay's UIHostingController view for a plain GC pad subview (or vice
       // versa) — they're both just "a subview" to the legacy logic's `uiView.subviews.first`.
-      let mountedIsHosting = context.coordinator.hosting?.view.superview === uiView
+      let mountedIsHosting = context.coordinator.hostContainer?.superview === uiView
       if Self.useProgrammaticOverlay != mountedIsHosting {
-        context.coordinator.hosting?.view.removeFromSuperview()
-        context.coordinator.hosting = nil
+        // Going FROM the programmatic overlay TO the legacy path: tear down through the
+        // wrapper (task item 2's DSU pass) so whatever the overlay was mid-holding gets released,
+        // exactly like `TCView`'s own teardown does for the path this is switching TO.
+        if mountedIsHosting { teardownProgrammaticOverlay(context: context) }
         uiView.subviews.forEach { $0.removeFromSuperview() }
       }
 

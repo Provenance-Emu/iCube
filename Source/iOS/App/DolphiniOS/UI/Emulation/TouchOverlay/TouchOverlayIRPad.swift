@@ -25,7 +25,14 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
   /// offset by the IR pad's own box origin) — the belt-and-braces exclusion check
   /// (`TouchOverlayIRGeometry.touchStartAllowed`). Empty when there's nothing to exclude.
   let excludedFrames: [CGRect]
+  /// `TouchOverlayEditMode.inputSuppressed` — true in EITHER edit mode (`.layout` or `.irArea`),
+  /// not just when the IR pad itself is the thing being edited, so a layout-editor drag over some
+  /// OTHER group can't also nudge the pointer underneath it.
   let isEditing: Bool
+  /// Drag-mode pointer sensitivity (task item 1's "Pointer Sensitivity" setting,
+  /// `touch_overlay_ir_pointer_gain`, already clamped by `TouchOverlayIRGeometry.clampDragGain`).
+  /// Follow mode ignores this (see `TouchOverlayIRGeometry.follow`'s doc comment).
+  let dragGain: CGFloat
 
   func makeUIView(context: Context) -> IRSurfaceView { IRSurfaceView() }
 
@@ -33,7 +40,21 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     uiView.mode = mode
     uiView.deviceId = deviceId
     uiView.excludedFrames = excludedFrames
+    uiView.dragGain = dragGain
     uiView.isEditingFlag = isEditing
+  }
+
+  /// Mirrors `TCView`'s `willMove(toSuperview:)`/`deinit` clear-on-teardown pattern
+  /// (TCView.swift's "Defect #7" comment) for this raw `UIViewRepresentable`: SwiftUI doesn't
+  /// guarantee `dismantleUIView` runs on every path that removes this view (in particular
+  /// `TouchPadsContainer` dropping the WHOLE hosting view when the overlay stops being the right
+  /// pad to show), but `IRSurfaceView.willMove(toSuperview:)`/`deinit` (below) catch that case
+  /// independently. This override handles the path SwiftUI DOES own: the `.irSurface` layout
+  /// entry disappearing from the `ForEach` (e.g. a `padKind` switch away from Wii) while the
+  /// hosting view itself stays mounted, which `willMove`/`deinit` alone would miss since the
+  /// `UIView` doesn't leave a superview in that case.
+  static func dismantleUIView(_ uiView: IRSurfaceView, coordinator: ()) {
+    uiView.forceReleaseAndCenter()
   }
 
   final class IRSurfaceView: UIView {
@@ -47,6 +68,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     }
     var deviceId: Int = 0
     var excludedFrames: [CGRect] = []
+    var dragGain: CGFloat = 1.0
     var isEditingFlag: Bool = false {
       didSet {
         guard isEditingFlag != oldValue else { return }
@@ -75,6 +97,27 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     private func sharedInit() {
       isMultipleTouchEnabled = true
       backgroundColor = .clear
+    }
+
+    /// Mirrors `TCView`'s own `willMove(toSuperview:)`/`deinit` pair (its "Defect #7" comment) so
+    /// a mid-drag IR pointer can never stick at a stale non-center value if `TouchPadsContainer`
+    /// removes the hosting view directly (task item 2's DSU pass): per-group SwiftUI teardown
+    /// (`TouchOverlayCluster.releaseAll()` on `onDisappear`, `dismantleUIView` above) covers the
+    /// overlay's own internal transitions, but not the hosting view being torn out from under
+    /// SwiftUI entirely.
+    override func willMove(toSuperview newSuperview: UIView?) {
+      super.willMove(toSuperview: newSuperview)
+      if newSuperview == nil { forceReleaseAndCenter() }
+    }
+
+    deinit {
+      // Covers deallocation WITHOUT a preceding `willMove(toSuperview: nil)` (e.g. the whole
+      // hosting view tree being released at once, which doesn't necessarily walk each subview's
+      // `willMove` first). `forceReleaseAndCenter` only reads plain stored properties
+      // (`mode`/`deviceId`, already fully initialized) and calls a static method, so it's safe to
+      // run this late; it's a private cancel/reset timer plus a handful of `TCManagerInterface`
+      // writes, nothing that re-enters `self` through ARC.
+      forceReleaseAndCenter()
     }
 
     // MARK: Geometry (read live, never cached — see TouchOverlayIRGeometry's header comment)
@@ -137,8 +180,18 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
       super.touchesCancelled(touches, with: event)
       activeTouches.subtract(touches)
       scheduleThreeFingerCheckIfNeeded()
-      if let primary = primaryTouch, touches.contains(primary) {
-        primaryTouch = nil
+      guard let primary = primaryTouch, touches.contains(primary) else { return }
+      primaryTouch = nil
+      // Unlike `touchesEnded`, a cancellation (an incoming call, the app backgrounding mid-drag,
+      // the system reassigning the touch to a gesture recognizer elsewhere) has no meaningful
+      // "released position" to persist — recentering matches `TCWiiPad.setTouchIRMode`'s own
+      // handoff behavior and, more importantly, guarantees the pointer isn't left stuck at
+      // whatever off-center value it last held (task item 2's DSU pass: that stale value would
+      // otherwise keep being mirrored to `DSUServerBridge.setTouchPoint` indefinitely).
+      sendIR((0, 0))
+      if mode == .drag {
+        oldX = 0
+        oldY = 0
       }
     }
 
@@ -154,7 +207,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
       case .follow:
         return TouchOverlayIRGeometry.follow(point: point, in: rect)
       case .drag:
-        return TouchOverlayIRGeometry.drag(start: touchStartPoint, current: point, oldX: oldX, oldY: oldY, in: rect)
+        return TouchOverlayIRGeometry.drag(start: touchStartPoint, current: point, oldX: oldX, oldY: oldY, in: rect, gain: dragGain)
       }
     }
 
