@@ -131,6 +131,10 @@ def main():
     ap.add_argument("--out", default="perf_matrix_results.json")
     ap.add_argument("--factors", nargs="*", default=DEFAULT_FACTORS)
     ap.add_argument("--pair", nargs="*", default=[], help="KEY=v overrides for a final all-on vs current ABBA")
+    ap.add_argument("--capped", action="store_true",
+                    help="keep the 100%% throttle (stutter runs: read p95/1%% low, speed saturates at 1.00)")
+    ap.add_argument("--pre", nargs="*", default=[],
+                    help="KEY=v applied before the factors and restored after (e.g. gfxShaderCache=false for a cold cache)")
     args = ap.parse_args()
 
     h = call(args.base, "/api/health")["data"]
@@ -144,7 +148,13 @@ def main():
     # The preset pins the adaptive clock; speed must be uncapped separately or `speed`
     # saturates at 1.00 on any scene the core can keep up with. Hot key, persisted, so it
     # survives the per-value reboots; restored in `finally`.
-    call(args.base, "/api/settings/mainEmulationSpeedPercent", {"value": 0})
+    if not args.capped:
+        call(args.base, "/api/settings/mainEmulationSpeedPercent", {"value": 0})
+    pre = {k: coerce(normalize(v)) for k, v in (p.partition("=")[::2] for p in args.pre)}
+    pre_before = {k: known[k]["value"] for k in pre if k in known}
+    for k, v in pre.items():
+        call(args.base, f"/api/settings/{k}", {"value": v})
+    restore_after = {}
     last_sweep = None
     try:
         for spec in args.factors:
@@ -154,6 +164,9 @@ def main():
                 print(f"skip {key}: unknown to this build")
                 continue
             order = palindrome(values)
+            # The sweep leaves the device on the LAST value it applied (the list's first value),
+            # not on what was set before; remember the original and put it back afterwards.
+            restore_after[key] = known[key]["value"]
             call(args.base, "/api/bench/sweep",
                  {"key": key, "values": [coerce(v) for v in order], "slot": args.slot, "seconds": args.seconds})
             sweep = wait_sweep(args.base, key, last_sweep)
@@ -161,6 +174,7 @@ def main():
             rows = summarize(sweep)
             results["factors"][key] = {"order": order, "sweep": sweep, "rows": rows}
             print_rows(key, rows, values[0])
+            call(args.base, f"/api/settings/{key}", {"value": restore_after[key]})
             json.dump(results, open(args.out, "w"), indent=1)
         if args.pair:
             # "All overrides" vs "current": apply the bundle, sweep a no-op hot key so the bench
@@ -182,6 +196,13 @@ def main():
             results["pair"] = legs
             call(args.base, "/api/settings/bulk", {"values": {k: coerce(str(v)) for k, v in before.items()}, "mode": "merge"})
     finally:
+        for k, v in restore_after.items():
+            try:
+                call(args.base, f"/api/settings/{k}", {"value": v})
+            except Exception as e:  # noqa: BLE001 - best-effort restore
+                print(f"restore {k} failed: {e}")
+        for k, v in pre_before.items():
+            call(args.base, f"/api/settings/{k}", {"value": v})
         call(args.base, "/api/settings/mainEmulationSpeedPercent", {"value": 100})
         call(args.base, "/api/bench/preset", {"preset": "restore"})
         json.dump(results, open(args.out, "w"), indent=1)
