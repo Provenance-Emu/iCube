@@ -233,7 +233,7 @@
 		C0C0CAFE0000000000000995 /* PendingGameLaunchStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000994 /* PendingGameLaunchStoreTests.swift */; };
 		C0C0CAFE0000000000000997 /* SaveStateFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */; };
 		C0C0CAFE0000000000000999 /* TCManagerInterfaceAxisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */; };
-		C0C0CAFE00000000000009A7 /* PauseMenuModelBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A6 /* PauseMenuModelBuilderTests.swift */; };
+		C0C0CAFE00000000000009A9 /* PauseMenuModelBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A8 /* PauseMenuModelBuilderTests.swift */; };
 		C0C0CAFE0000000000000974 /* MenuModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000973 /* MenuModelTests.swift */; };
 		C0C0CAFE0000000000000976 /* MenuFocusRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */; };
 		C0C0CAFE00000000000009A7 /* CheatsMenuModelBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A6 /* CheatsMenuModelBuilderTests.swift */; };
@@ -686,7 +686,7 @@
 		C0C0CAFE0000000000000994 /* PendingGameLaunchStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PendingGameLaunchStoreTests.swift"; path = "DolphiniOSTests/PendingGameLaunchStoreTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateFormattingTests.swift"; path = "DolphiniOSTests/SaveStateFormattingTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TCManagerInterfaceAxisTests.swift"; path = "DolphiniOSTests/TCManagerInterfaceAxisTests.swift"; sourceTree = SOURCE_ROOT; };
-		C0C0CAFE00000000000009A6 /* PauseMenuModelBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PauseMenuModelBuilderTests.swift"; path = "DolphiniOSTests/PauseMenuModelBuilderTests.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE00000000000009A8 /* PauseMenuModelBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PauseMenuModelBuilderTests.swift"; path = "DolphiniOSTests/PauseMenuModelBuilderTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000973 /* MenuModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MenuModelTests.swift"; path = "DolphiniOSTests/MenuModelTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MenuFocusRouterTests.swift"; path = "DolphiniOSTests/MenuFocusRouterTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE00000000000009A6 /* CheatsMenuModelBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CheatsMenuModelBuilderTests.swift"; path = "DolphiniOSTests/CheatsMenuModelBuilderTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -1909,7 +1909,7 @@
 				C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */,
 				C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */,
 				C0C0CAFE00000000000009A4 /* ShaderPreviewCacheTests.swift */,
-				C0C0CAFE00000000000009A6 /* PauseMenuModelBuilderTests.swift */,
+				C0C0CAFE00000000000009A8 /* PauseMenuModelBuilderTests.swift */,
 				C0C0CAFE0000000000000973 /* MenuModelTests.swift */,
 				C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */,
 				C0C0CAFE00000000000009A6 /* CheatsMenuModelBuilderTests.swift */,
@@ -2521,7 +2521,7 @@
 				C0C0CAFE0000000000000997 /* SaveStateFormattingTests.swift in Sources */,
 				C0C0CAFE0000000000000999 /* TCManagerInterfaceAxisTests.swift in Sources */,
 				C0C0CAFE00000000000009A5 /* ShaderPreviewCacheTests.swift in Sources */,
-				C0C0CAFE00000000000009A7 /* PauseMenuModelBuilderTests.swift in Sources */,
+				C0C0CAFE00000000000009A9 /* PauseMenuModelBuilderTests.swift in Sources */,
 				C0C0CAFE0000000000000974 /* MenuModelTests.swift in Sources */,
 				C0C0CAFE0000000000000976 /* MenuFocusRouterTests.swift in Sources */,
 				C0C0CAFE00000000000009A7 /* CheatsMenuModelBuilderTests.swift in Sources */,
