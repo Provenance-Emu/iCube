@@ -10,8 +10,12 @@
 #import "UICommon/GameFile.h"
 
 #import "UICommon/GameFileCache.h"
+#include <memory>
+#include <os/lock.h>
 #include <string_view>
 #include <vector>
+
+using GameFileSnapshot = std::vector<std::shared_ptr<const UICommon::GameFile>>;
 
 // 2603: UICommon::FindAllGamePaths takes std::span<const std::string_view>; the bridge keeps
 // std::vector<std::string> lists, so hand it a view vector that lives for the call expression.
@@ -77,6 +81,16 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   }
 }
 
+@interface GameFileCacheManager () {
+  // The game list as of the last cache-queue job. Readers copy this instead of dispatch_sync'ing
+  // onto the queue, which a rescan can hold for seconds (ICUBE-F: main-thread Library, Spotlight
+  // and ecosystem reads hung 3-5 s). Sharing the pointers is safe because GameFileCache never
+  // mutates a GameFile it has handed out: UpdateAdditionalMetadata swaps in an updated copy.
+  GameFileSnapshot _published;
+  os_unfair_lock _publishedLock;
+}
+@end
+
 @implementation GameFileCacheManager
 
 + (GameFileCacheManager*)sharedManager {
@@ -92,11 +106,34 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 
 - (id)init {
   if (self = [super init]) {
+    self->_publishedLock = OS_UNFAIR_LOCK_INIT;
     self->_cache = new UICommon::GameFileCache();
     self->_cache->Load();
+    [self publishSnapshot];
   }
 
   return self;
+}
+
+/// Republishes `_cache` for readers. Call on the cache queue after anything that can change the
+/// cache, and before posting a completion or notification that makes someone read the list.
+- (void)publishSnapshot {
+  GameFileSnapshot next;
+  next.reserve(self->_cache->GetSize());
+  self->_cache->ForEach([&next](const std::shared_ptr<const UICommon::GameFile>& game) {
+    next.push_back(game);
+  });
+  os_unfair_lock_lock(&self->_publishedLock);
+  self->_published.swap(next);
+  os_unfair_lock_unlock(&self->_publishedLock);
+  // The previous list is released here, outside the lock.
+}
+
+- (GameFileSnapshot)publishedSnapshot {
+  os_unfair_lock_lock(&self->_publishedLock);
+  GameFileSnapshot snapshot = self->_published;
+  os_unfair_lock_unlock(&self->_publishedLock);
+  return snapshot;
 }
 
 - (void)updateCacheWithShouldUpdateMetadata:(bool)updateMetadata {
@@ -111,6 +148,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     if (cacheUpdated) {
       self->_cache->Save();
     }
+    [self publishSnapshot];
   });
 }
 
@@ -127,6 +165,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     if (updated) {
       self->_cache->Save();
     }
+    [self publishSnapshot];
   });
 }
 
@@ -172,6 +211,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     if (updated) {
       self->_cache->Save();
     }
+    [self publishSnapshot];
 
     if (completion_handler) {
       completion_handler();
@@ -249,6 +289,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     if (updated) {
       self->_cache->Save();
     }
+    [self publishSnapshot];
 
     if (completion_handler) {
       completion_handler();
@@ -259,60 +300,50 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 
 - (NSArray<GameFilePtrWrapper*>*)getGames {
   NSMutableArray<GameFilePtrWrapper*>* array = [[NSMutableArray alloc] init];
-  dispatch_sync(GameFileCacheQueue(), ^{
-    self->_cache->ForEach([array](const std::shared_ptr<const UICommon::GameFile>& game) {
-      GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
-      wrapper.gameFile = game;
-      [array addObject:wrapper];
-    });
-  });
+  for (const std::shared_ptr<const UICommon::GameFile>& game : [self publishedSnapshot]) {
+    GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
+    wrapper.gameFile = game;
+    [array addObject:wrapper];
+  }
 
   return array;
 }
 
 - (NSArray<TVGameItem*>*)currentGames {
-  if (!self->_cache) { return nil; }
-  __block NSArray<TVGameItem*>* result = nil;
-  __block size_t countLogged = 0;
+  NSMutableArray<TVGameItem*>* localItems = [[NSMutableArray alloc] init];
+  size_t localCount = 0;
+  for (const std::shared_ptr<const UICommon::GameFile>& game : [self publishedSnapshot]) {
+    // Protect against null GameFile shared_ptr in cache
+    if (!game) {
+      printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
+      continue;
+    }
 
-  dispatch_sync(GameFileCacheQueue(), ^{
-    NSMutableArray<TVGameItem*>* localItems = [[NSMutableArray alloc] init];
-    size_t localCount = 0;
-    self->_cache->ForEach([&](const std::shared_ptr<const UICommon::GameFile>& game) {
-      // Protect against null GameFile shared_ptr in cache
-      if (!game) {
-        printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
-        return;
-      }
-
-      // Additional safety check - ensure GameFile is valid
-      if (!game->IsValid()) {
+    // Additional safety check - ensure GameFile is valid
+    if (!game->IsValid()) {
 #ifdef DEBUG
-        printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
+      printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
 #endif
-        return;
-      }
+      continue;
+    }
 
-      GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
-      wrapper.gameFile = game;
-      TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];
-      [localItems addObject:item];
+    GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
+    wrapper.gameFile = game;
+    TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];
+    [localItems addObject:item];
 
 #ifdef DEBUG
-      if (localCount < 20) {
-        NSLog(@"  [%zu]: %s (isRemote: %s)", localCount, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
-      }
+    if (localCount < 20) {
+      NSLog(@"  [%zu]: %s (isRemote: %s)", localCount, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
+    }
 #endif
-      localCount++;
-    });
-    result = [localItems copy];
-    countLogged = localCount;
-  });
+    localCount++;
+  }
 
 #ifdef DEBUG
-  NSLog(@"GameFileCacheManager: currentGames returning %lu game files from cache", (unsigned long)countLogged);
+  NSLog(@"GameFileCacheManager: currentGames returning %lu game files from cache", (unsigned long)localCount);
 #endif
-  return result;
+  return [localItems copy];
 }
 
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
@@ -321,13 +352,9 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     printf("DEBUG CACHE MGR:   input[%lu]: %s\n", (unsigned long)i, [extraPaths[i] UTF8String]);
   }
 
-  static dispatch_queue_t _updateQueue;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{ _updateQueue = dispatch_queue_create("org.dolphin-ios.gamefilecache.update", DISPATCH_QUEUE_SERIAL); });
-  dispatch_async(_updateQueue, ^{
-    dispatch_sync(GameFileCacheQueue(), ^{
-      ProcessOrphanedArchivesBeforeRescan();
-    });
+  // All of this runs on the cache queue: it mutates _cache, and the cache queue is its only writer.
+  dispatch_async(GameFileCacheQueue(), ^{
+    ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Expand only local folders via FindAllGamePaths
@@ -392,14 +419,21 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
       if (updated) {
         self->_cache->Save();
         NSLog(@"GameFileCacheManager: Cache saved");
-        dispatch_async(dispatch_get_main_queue(), ^{
-          [[NSNotificationCenter defaultCenter] postNotificationName:@"RemoteLibraryUpdated" object:nil];
-        });
       }
     } @catch (NSException* exception) {
       NSLog(@"GameFileCache update failed: %@", exception);
     }
+    [self publishSnapshot];
+    if (updated) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"RemoteLibraryUpdated" object:nil];
+      });
+    }
   });
+}
+
+- (void)enqueueOnCacheQueueForTesting:(void (^)(void))block {
+  dispatch_async(GameFileCacheQueue(), block);
 }
 
 @end

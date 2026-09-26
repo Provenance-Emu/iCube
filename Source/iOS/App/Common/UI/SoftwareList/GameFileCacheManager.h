@@ -34,6 +34,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// Updates the cache by merging local scan paths with the provided extra absolute paths (file or URL strings).
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch;
 
+/// Test hook: runs `block` on the serial cache queue behind any scan already queued, so a test can
+/// hold the queue busy the way a long rescan does.
+- (void)enqueueOnCacheQueueForTesting:(void (^)(void))block NS_SWIFT_NAME(enqueueOnCacheQueueForTesting(_:));
+
 @end
 
 NS_ASSUME_NONNULL_END
