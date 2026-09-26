@@ -114,22 +114,23 @@ Raw: `docs/perf/data/2026-09-26-GZLE01-outset-run4-cir-optimizations.json`.
 
 | Knob | ON | OFF | OFF vs ON | per-pair | legs |
 |---|---|---|---|---|---|
-| `cirPsNeon` | 1.802 | 1.753 | -0.0 % | -7.1 % / +2.2 % | 1.902 1.767 1.740 1.703 |
-| `cirSpecializedFpLs` | 1.539 | 1.548 | +0.0 % | -4.8 % / +6.4 % | 1.613 1.536 1.560 1.466 |
-| `cirSpecializedPsq` | 1.597 | 1.705 | +0.1 % | -2.0 % / +15.9 % | 1.617 1.584 1.826 1.576 |
-| `cirSpecializedFpArith` | 1.565 | 1.482 | -0.1 % | -9.1 % / -1.5 % | 1.578 1.435 1.529 1.552 |
-| `cirPsqFastPath` | 1.681 | 1.691 | +0.0 % | +0.5 % / +0.6 % | 1.553 1.561 1.820 1.810 |
-| `cirDeadFprfElim` | 1.535 | 1.556 | +0.0 % | +0.2 % / +2.5 % | 1.535 1.538 1.574 1.536 |
-| `cirDeadFlagElim` | 1.578 | 1.678 | +0.1 % | +15.9 % / -3.2 % | 1.574 1.825 1.531 1.582 |
-| `cirStoreLoopFF` | 1.665 | 1.544 | -0.1 % | -14.7 % / +1.8 % | 1.825 1.556 1.532 1.505 |
-| `cirCacheLoopFF` | 1.509 | 1.527 | +0.0 % | -1.5 % / +4.1 % | 1.557 1.534 1.521 1.461 |
-| `cirDynTargetCache` | 1.541 | 1.693 | +0.1 % | +17.7 % / +2.0 % | 1.551 1.825 1.561 1.531 |
+| `cirPsNeon` | 1.802 | 1.753 | -2.7 % | -7.1 % / +2.2 % | 1.902 1.767 1.740 1.703 |
+| `cirSpecializedFpLs` | 1.539 | 1.548 | +0.6 % | -4.8 % / +6.4 % | 1.613 1.536 1.560 1.466 |
+| `cirSpecializedPsq` | 1.597 | 1.705 | +6.8 % | -2.0 % / +15.9 % | 1.617 1.584 1.826 1.576 |
+| `cirSpecializedFpArith` | 1.565 | 1.482 | -5.3 % | -9.1 % / -1.5 % | 1.578 1.435 1.529 1.552 |
+| `cirPsqFastPath` | 1.681 | 1.691 | +0.5 % | +0.5 % / +0.6 % | 1.553 1.561 1.820 1.810 |
+| `cirDeadFprfElim` | 1.535 | 1.556 | +1.3 % | +0.2 % / +2.5 % | 1.535 1.538 1.574 1.536 |
+| `cirDeadFlagElim` | 1.578 | 1.678 | +6.3 % | +15.9 % / -3.2 % | 1.574 1.825 1.531 1.582 |
+| `cirStoreLoopFF` | 1.665 | 1.544 | -7.3 % | -14.7 % / +1.8 % | 1.825 1.556 1.532 1.505 |
+| `cirCacheLoopFF` | 1.509 | 1.527 | +1.2 % | -1.5 % / +4.1 % | 1.557 1.534 1.521 1.461 |
+| `cirDynTargetCache` | 1.541 | 1.693 | +9.9 % | +17.7 % / +2.0 % | 1.551 1.825 1.561 1.531 |
 
 Read: FP/paired-single arithmetic specialization ON is the only knob with agreeing pairs in its favour
 (+5.3 %); Dynamic Target Cache ON read −9.9 % with agreeing pairs, the opposite of the +1.1 % measured on
 Wind Waker on 2026-09-22. Everything else flips sign between pairs. Chibi-Robo's scatter is too wide for
 n=2 legs of 20 s — use 40 s legs and two repeats before believing either number. The bench's
-stop→boot cycle crashed Chibi-Robo twice with EXC_BAD_INSTRUCTION ("rapid reboot"); the eleventh knob
+stop→boot cycle killed the app twice: one report is the bench's own `DOLDebugBridge.loadStateSlot` blocking
+forever in `DOLHostQueueRunSync` after the reboot (watchdog kill), the user also saw a bad-instruction crash; the eleventh knob
 (Gather-Pipe Copy Fusion) and the reversed-order confirmation of the two candidates did not complete.
 Raw: `docs/perf/data/2026-09-26-GGTE01-slot1-run5-cir-optimizations.json`.
 
