@@ -17,6 +17,7 @@
 #include "Core/System.h"
 #include "Core/State.h"
 #include "Core/ConfigManager.h"
+#include "Core/TimePlayed.h"
 #include "Common/FileUtil.h"
 #include "Common/Version.h"
 #include "Core/Config/MainSettings.h"
@@ -154,6 +155,14 @@ static void ApplyConfiguredFastForwardSpeed() {
   NSString* dir = [NSString stringWithUTF8String:File::GetUserPath(D_STATESAVES_IDX).c_str()];
   NSString* gid = [NSString stringWithUTF8String:game_id.c_str()];
   return [NSString stringWithFormat:@"%@%@.s%02ld", dir, gid, (long)slot];
+}
+
++ (NSInteger)currentGamePlayTimeSeconds {
+  const std::string game_id = SConfig::GetInstance().GetGameID();
+  if (game_id.empty())
+    return 0;
+  const std::chrono::milliseconds ms = TimePlayed().GetTimePlayed(game_id);
+  return static_cast<NSInteger>(ms.count() / 1000);
 }
 
 + (nullable NSString*)autoStateFilePath {

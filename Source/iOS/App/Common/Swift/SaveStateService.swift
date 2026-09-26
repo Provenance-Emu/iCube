@@ -37,6 +37,7 @@ public enum SaveStateService {
       gameID: currentGameID ?? "UNKNOWN",
       gameTitle: gameTitle,
       savedAt: now,
+      playTimeSeconds: Double(TVEmulationBridge.currentGamePlayTimeSeconds()),
       isAuto: false
     )
     let ok = SaveStateMetadataStore.write(metadata, forStateFile: stateURL)

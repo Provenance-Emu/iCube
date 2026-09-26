@@ -41,6 +41,14 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString*)currentGameID;
 + (nullable NSString*)stateFilePathForSlot:(NSInteger)slot;
 
+// Running title's cumulative play time (TimePlayed.ini via Core/TimePlayed.h),
+// in whole seconds. The core's "Play Time Tracker" thread (CPUManager, gated
+// by Config::MAIN_TIME_TRACKING, default on) flushes to the ini in <= 30s
+// increments while running, so this can lag the true elapsed time by up to
+// ~30s. 0 when nothing is running or tracking is disabled. Used to stamp
+// SaveStateMetadata.playTimeSeconds at save time (see SaveStateService).
++ (NSInteger)currentGamePlayTimeSeconds;
+
 // Resume / auto-state. A dedicated "{StateSavesDir}{GameID}.auto" file, separate
 // from the numbered slots, used by "resume where I left off". Uses State::SaveAs/
 // LoadAs directly so it never collides with the slot scheme. autoStateFilePath

@@ -30,9 +30,11 @@ final class SaveStateFormattingTests: XCTestCase {
   }
 
   func testAtLeastAnHourIncludesHourComponent() {
-    // Exactly 1 hour, 24 minutes, 7 seconds
+    // 1 hour, 24 minutes, 7 seconds. DateComponentsFormatter's .positional
+    // style with .pad zero-pads every component, including the leading one
+    // (verified empirically: 5047 -> "01:24:07", not "1:24:07").
     let seconds: Double = 1 * 3600 + 24 * 60 + 7
-    XCTAssertEqual(SaveStateFormatting.gameTimeString(seconds: seconds), "1:24:07")
+    XCTAssertEqual(SaveStateFormatting.gameTimeString(seconds: seconds), "01:24:07")
   }
 
   func testJustUnderAnHourStillOmitsHourComponent() {
@@ -40,6 +42,6 @@ final class SaveStateFormattingTests: XCTestCase {
   }
 
   func testExactlyAnHourIncludesHourComponent() {
-    XCTAssertEqual(SaveStateFormatting.gameTimeString(seconds: 3600), "1:00:00")
+    XCTAssertEqual(SaveStateFormatting.gameTimeString(seconds: 3600), "01:00:00")
   }
 }
