@@ -339,48 +339,54 @@ internal struct PauseMenuView: View {
     return ZStack {
       // `MenuScreen(.grid)` is its own `ScrollView` (design doc §5's card
       // grid), so the header (Close button, cover, title) sits in a plain
-      // `VStack` above it rather than nesting two scroll views.
+      // `VStack` above it rather than nesting two scroll views. The header
+      // gets its own `.padding(16)` rather than sharing one with the
+      // `MenuScreen` below -- `gridBody` already applies its own 16pt
+      // padding internally, so wrapping both in one shared padding would
+      // double the grid's inset to 32pt.
       VStack(alignment: .leading, spacing: 16) {
-        HStack {
-          Button(action: { onClose() }) {
-            Text(L("Close"))
-              .font(.system(size: 16, weight: .semibold))
-              .foregroundColor(.white)
-              .padding(.horizontal, 18)
-              .padding(.vertical, 10)
-              .background(
-                Capsule(style: .continuous)
-                  .fill(.ultraThinMaterial)
-              )
-              .overlay(
-                Capsule(style: .continuous)
-                  .stroke(Color.white.opacity(0.08), lineWidth: 1)
-              )
+        VStack(alignment: .leading, spacing: 16) {
+          HStack {
+            Button(action: { onClose() }) {
+              Text(L("Close"))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(
+                  Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+                )
+                .overlay(
+                  Capsule(style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            Spacer()
           }
-          .buttonStyle(.plain)
-          Spacer()
-        }
 
-        HStack(alignment: .top, spacing: 12) {
-          Image(uiImage: game.coverImage)
-            .resizable()
-            .aspectRatio(2.0 / 3.0, contentMode: .fit)
-            .frame(width: 96)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-          VStack(alignment: .leading, spacing: 4) {
-            Text(game.title)
-              .font(.headline)
-              .foregroundStyle(.white)
-            Text(game.gameID)
-              .font(.subheadline)
-              .foregroundStyle(.white.opacity(0.7))
+          HStack(alignment: .top, spacing: 12) {
+            Image(uiImage: game.coverImage)
+              .resizable()
+              .aspectRatio(2.0 / 3.0, contentMode: .fit)
+              .frame(width: 96)
+              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+              Text(game.title)
+                .font(.headline)
+                .foregroundStyle(.white)
+              Text(game.gameID)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.7))
+            }
+            Spacer(minLength: 0)
           }
-          Spacer(minLength: 0)
         }
+        .padding(16)
 
         MenuScreen(model: pauseMenuModel, style: .grid, onBack: nil)
       }
-      .padding(16)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
       .background(backgroundView)
 
@@ -395,6 +401,7 @@ internal struct PauseMenuView: View {
       // the outer `ZStack` never disappears.
       if showResetDialog {
         confirmOverlay(
+          title: L("Reset System"),
           message: L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."),
           model: resetConfirmModel,
           onBack: { showResetDialog = false }
@@ -402,6 +409,7 @@ internal struct PauseMenuView: View {
       }
       if showExitDialog {
         confirmOverlay(
+          title: L("Exit Game"),
           message: L("Do you want to quit the game? Unsaved progress will be lost."),
           model: exitConfirmModel,
           onBack: { showExitDialog = false }
@@ -409,6 +417,7 @@ internal struct PauseMenuView: View {
       }
       if showFastForwardSpeedPicker {
         confirmOverlay(
+          title: L("Fast Forward Speed"),
           message: L("Starts fast-forward at this speed and closes the pause menu."),
           model: fastForwardConfirmModel,
           onBack: { showFastForwardSpeedPicker = false }
@@ -421,30 +430,43 @@ internal struct PauseMenuView: View {
     // titles/subtitles stay legible over the always-dark blurred cover
     // background regardless of system appearance, the same fix already used
     // for other dark-background screens (`DolphinBlogView`, `SaveStateCardView`).
-    .preferredColorScheme(.dark)
+    // `.environment(_:_:)`, not `.preferredColorScheme(_:)` -- the latter
+    // applies to the nearest enclosing presentation (this view's whole
+    // `fullScreenCover`), which would also force dark mode on the Settings/
+    // Controllers/Shaders sheets opened from here on a light-mode device.
+    // `.environment` only affects this subtree.
+    .environment(\.colorScheme, .dark)
   }
 
   /// Shared wrapper for the Reset/Exit/Fast-Forward confirm overlays: a
-  /// translucent scrim behind a card whose title comes from the model's own
-  /// section header (`MenuScreen`'s grid style already renders that in white
-  /// bold, design doc §5) and whose body is the confirm/cancel row list.
+  /// translucent scrim behind a card with an explicit title/message above
+  /// the confirm/cancel row list (the model's own `MenuSection.header` is
+  /// left `nil` for these three models specifically so `MenuScreen`'s grid
+  /// doesn't render a second, differently-styled title below this one).
   @ViewBuilder
-  private func confirmOverlay(message: String, model: MenuModel, onBack: @escaping () -> Void) -> some View {
+  private func confirmOverlay(title: String, message: String, model: MenuModel, onBack: @escaping () -> Void) -> some View {
     ZStack {
       Color.black.opacity(0.55).ignoresSafeArea()
       VStack(alignment: .leading, spacing: 8) {
+        Text(title)
+          .font(.system(size: 18, weight: .bold))
+          .foregroundColor(.white)
         Text(message)
           .font(.system(size: 14, weight: .medium))
           .foregroundColor(.white.opacity(0.8))
-          .padding(.horizontal, 16)
-          .padding(.top, 16)
         // `.grid`'s `ScrollView` has no natural height of its own here, so it
-        // greedily fills whatever the VStack offers -- clamp to the row
-        // count (2-4 rows for these three overlays) instead of letting a
-        // 2-button confirm card stretch to the screen's height.
+        // greedily fills whatever the VStack offers -- clamp using `gridCard`'s
+        // actual row math (44pt icon + 12pt padding top/bottom = 68pt per
+        // card, 12pt inter-row spacing, `gridBody`'s own 16pt top+bottom
+        // padding = 80n + 20 for n rows) instead of letting a 2-button
+        // confirm card stretch to the screen's height. `maxHeight`, not a
+        // fixed `height`, so it can still shrink (and `MenuScreen.grid`
+        // scroll) in landscape or under Dynamic Type, where the 6-row
+        // Fast-Forward overlay may not fit.
         MenuScreen(model: model, style: .grid, onBack: onBack)
-          .frame(height: CGFloat(model.allItems.count) * 76)
+          .frame(maxHeight: CGFloat(model.allItems.count) * 80 + 20)
       }
+      .padding(16)
       .frame(maxWidth: 380)
       .background(
         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1328,7 +1350,7 @@ internal struct PauseMenuView: View {
   /// non-destructive default focus/first-A target, matching the original
   /// `.alert`'s button order), Reset second and `.destructive`.
   private var resetConfirmModel: MenuModel {
-    MenuModel(sections: [MenuSection(id: "reset-confirm", header: L("Reset System"), items: [
+    MenuModel(sections: [MenuSection(id: "reset-confirm", items: [
       MenuItem(id: "reset-cancel", title: L("Cancel"), icon: "xmark", role: .action { showResetDialog = false }),
       MenuItem(id: "reset-do", title: L("Reset"), icon: "arrow.counterclockwise.circle", tint: .orange, role: .destructive {
         showResetDialog = false
@@ -1343,7 +1365,7 @@ internal struct PauseMenuView: View {
   /// Confirm overlay shown for `showExitDialog` -- Cancel first, matching the
   /// original `.alert`'s order (Cancel, Quit, Save & Quit).
   private var exitConfirmModel: MenuModel {
-    MenuModel(sections: [MenuSection(id: "exit-confirm", header: L("Exit Game"), items: [
+    MenuModel(sections: [MenuSection(id: "exit-confirm", items: [
       MenuItem(id: "exit-cancel", title: L("Cancel"), icon: "xmark", role: .action { showExitDialog = false }),
       MenuItem(id: "exit-quit", title: L("Quit"), icon: "xmark.circle", tint: .red, role: .destructive {
         showExitDialog = false
@@ -1386,7 +1408,7 @@ internal struct PauseMenuView: View {
         }
       )
     })
-    return MenuModel(sections: [MenuSection(id: "fast-forward-speed", header: L("Fast Forward Speed"), items: items)])
+    return MenuModel(sections: [MenuSection(id: "fast-forward-speed", items: items)])
   }
 }
 

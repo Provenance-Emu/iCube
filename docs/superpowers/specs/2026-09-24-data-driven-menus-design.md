@@ -495,10 +495,11 @@ unchanged; only `iosMainMenu` and the iOS-only confirm dialogs moved.
   `pauseNavGates`) are all deleted — `import GameController` is gone from the
   file entirely. `MenuScreen` self-claims its own
   `ControllerFocusCoordinator` scope and polls, so `iosMainMenu` no longer
-  claims a scope of its own either (an outer claim racing `MenuScreen`'s own
-  would fight over which is topmost — see the design note this pass added to
-  §2's Implementation Status). One input path drives the root pane now, not
-  two. Confirmed safe: `installPauseMenuHandlers`
+  claims a scope of its own either — the two claims would race over which
+  ends up topmost on the coordinator's stack, and if `iosMainMenu`'s own
+  claim won, `MenuScreen.isActiveScope` would read permanently false and the
+  root pane would never respond to the controller at all. One input path
+  drives the root pane now, not two. Confirmed safe: `installPauseMenuHandlers`
   (`Controllers/ControllerExtensions.swift`) uses per-button
   `pressedChangedHandler`, a different callback slot than the deleted
   handler's whole-gamepad `valueChangedHandler` — retiring the raw handler
@@ -534,10 +535,14 @@ unchanged; only `iosMainMenu` and the iOS-only confirm dialogs moved.
   `menuRowIOS` had both. This pass did not touch `MenuScreen.swift` to fix
   it (another agent was touching that file's input-polling this round, and
   `gridCard`/`rowLabel` are shared with any future `.grid` consumer); instead
-  `iosMainMenu`/`confirmOverlay` add `.preferredColorScheme(.dark)` at the
-  call site (the same fix already used for other always-dark screens,
-  `DolphinBlogView`/`SaveStateCardView`) so `.primary`/`.secondary` at least
-  resolve to legible colors regardless of system appearance. Font
+  `iosMainMenu` sets `.environment(\.colorScheme, .dark)` on its own subtree
+  (the same fix already used for other always-dark screens,
+  `DolphinBlogView`/`SaveStateCardView`, though those use
+  `.preferredColorScheme` — deliberately not used here, since it applies to
+  the nearest enclosing *presentation*, i.e. this view's whole
+  `fullScreenCover`, which would also force dark mode on the Settings/
+  Controllers/Shaders sheets opened from it) so `.primary`/`.secondary` at
+  least resolve to legible colors regardless of system appearance. Font
   weight/size and the missing chevron remain a small, known visual gap
   versus the deleted rows — flagged for whoever next touches `gridCard`.
 - **Tests**: `PauseMenuModelBuilderTests.swift` (construction/order — the
