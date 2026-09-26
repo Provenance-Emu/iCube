@@ -9,6 +9,55 @@ import SwiftUI
 
 internal enum PlatformKind { case ios, tvos }
 
+/// Pure decision logic for the iOS pause menu's raw `GCController` handler
+/// (`PauseMenuView.setupPauseControllerNav`): whether a `buttonA` reading
+/// should be treated as a fresh activate edge, given whether a child sheet
+/// (Save States, Shaders, Continuity, Controllers, Settings) currently owns
+/// the controller via `ControllerFocusCoordinator`.
+///
+/// The raw handler is never torn down while a child sheet merely covers this
+/// view -- SwiftUI does not reliably fire `onDisappear` on a descendant that
+/// is only covered, not removed (see `PauseMenuView.isPauseMenuChildPresented`)
+/// -- so it keeps receiving every gamepad callback and must self-gate instead
+/// of relying on teardown/reinstall timing, exactly like `TVLibraryView`'s own
+/// `extendedGamepad.valueChangedHandler` gates on
+/// `ControllerFocusCoordinator.isActiveScope`.
+///
+/// `buttonA` is latch-and-rearm, mirroring `RemapControllerNav`: one activate
+/// per physical press, re-armed only once the button reports released. This
+/// also covers the reclaim race -- if a child sheet claims the controller
+/// while A is held (e.g. the same press that opened it) and the claim is
+/// released again before A comes back up, that held press does not replay as
+/// a fresh activate the instant this menu regains the controller; it is
+/// swallowed until an actual release is observed.
+internal struct PauseMenuInputGate: Equatable {
+  private var aLatched = false
+
+  /// Call on every raw `valueChangedHandler` callback with the CURRENT claim
+  /// state and the live `buttonA.isPressed` reading -- valid regardless of
+  /// which element actually triggered the callback, since `GCExtendedGamepad`
+  /// exposes a live snapshot of every button. Returns whether this call
+  /// should be treated as a fresh `buttonA` down-edge that the caller should
+  /// act on (e.g. by activating the focused row).
+  @discardableResult
+  internal mutating func consumeButtonA(claimed: Bool, isPressed: Bool) -> Bool {
+    guard !claimed else {
+      // While a child owns the controller, just track physical state so a
+      // press held across the claim boundary doesn't fire once we're
+      // unclaimed again.
+      aLatched = isPressed
+      return false
+    }
+    guard isPressed else {
+      aLatched = false
+      return false
+    }
+    guard !aLatched else { return false }
+    aLatched = true
+    return true
+  }
+}
+
 internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
   let onClose: () -> Void
@@ -101,6 +150,16 @@ internal struct PauseMenuView: View {
   /// Saved pre-existing gamepad handlers, restored on teardown so the emulation
   /// input path is left exactly as it was.
   @State private var prevPauseEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
+  /// This menu's controller-ownership scope (`ControllerFocusCoordinator`).
+  /// Claimed while the iOS row list is on screen so any of this menu's own
+  /// child sheets (Save States, Shaders, Continuity, Controllers, Settings)
+  /// that call `.claimsController()` silence `setupPauseControllerNav`'s raw
+  /// handler below instead of fighting it for the shared `valueChangedHandler`
+  /// slot.
+  @State private var pauseMenuScopeID = UUID()
+  /// Edge/latch state for `buttonA`, including the reclaim case described on
+  /// `PauseMenuInputGate`.
+  @State private var pauseNavGate = PauseMenuInputGate()
   #endif
 
   /// A single iOS pause-menu entry, modeled so the grid can be indexed for
@@ -318,6 +377,9 @@ internal struct PauseMenuView: View {
       #if os(tvOS)
       .focusSection()
       #endif
+      // Claims the controller so the pause menu's own raw handler
+      // (`setupPauseControllerNav`) stops driving the row list underneath.
+      .claimsController()
     }
     #if os(iOS)
     .sheet(isPresented: $showSettingsSheet) {
@@ -326,6 +388,7 @@ internal struct PauseMenuView: View {
           .navigationTitle(L("Settings"))
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showSettingsSheet = false } } }
       }
+      .claimsController()
     }
     .sheet(isPresented: $showControllersSheet) {
       NavigationStack {
@@ -333,6 +396,7 @@ internal struct PauseMenuView: View {
           .navigationTitle(L("Controllers"))
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showControllersSheet = false } } }
       }
+      .claimsController()
     }
     #endif
     // WS-4 sender surface. Unconditional (not #if os(iOS)): tvOS has no system
@@ -340,6 +404,7 @@ internal struct PauseMenuView: View {
     // to another device.
     .sheet(isPresented: $showContinuitySheet) {
       ContinuityHandoffSheet(game: game)
+        .claimsController()
     }
   }
 
@@ -443,6 +508,14 @@ internal struct PauseMenuView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .background(backgroundView)
+    #if !os(tvOS)
+    // Claims controller ownership for as long as this row list is around,
+    // including while covered by one of this menu's own child sheets (which
+    // never sends a real `onDisappear` here -- see the doc on
+    // `pauseMenuScopeID`). `setupPauseControllerNav`'s handler self-gates on
+    // `ControllerFocusCoordinator.isActiveScope(pauseMenuScopeID)`.
+    .controllerScope(pauseMenuScopeID)
+    #endif
     .onDisappear {
       #if !os(tvOS)
       teardownPauseControllerNav()
@@ -742,11 +815,23 @@ internal struct PauseMenuView: View {
 
   private func setupPauseControllerNav() {
     GCController.shouldMonitorBackgroundEvents = false
+    let scope = pauseMenuScopeID
     for c in GCController.controllers() {
       guard let egp = c.extendedGamepad else { continue }
       let cid = ObjectIdentifier(c)
       if prevPauseEGPHandlers[cid] == nil { prevPauseEGPHandlers[cid] = egp.valueChangedHandler }
       egp.valueChangedHandler = { gamepad, element in
+        // A child sheet (Save States, Shaders, Continuity, Controllers,
+        // Settings) claims the controller via `.claimsController()` while it
+        // is up. This handler is never torn down while merely covered, so it
+        // must self-gate here rather than rely on onAppear/onDisappear -- the
+        // same pattern `TVLibraryView.setupControllerNavigation` uses.
+        let claimed = !ControllerFocusCoordinator.isActiveScope(scope)
+        // Feed the gate every callback (regardless of `element`) so its latch
+        // tracks buttonA's live state and the reclaim case is handled even
+        // when the callback that flips `claimed` isn't the buttonA one.
+        let activateA = pauseNavGate.consumeButtonA(claimed: claimed, isPressed: gamepad.buttonA.isPressed)
+        guard !claimed else { return }
         let dpad = gamepad.dpad
         if element == dpad.up, dpad.up.isPressed { movePauseFocus(-1) }
         if element == dpad.down, dpad.down.isPressed { movePauseFocus(1) }
@@ -757,7 +842,7 @@ internal struct PauseMenuView: View {
           if vy > 0.6 { movePauseFocus(-1) }
           if vy < -0.6 { movePauseFocus(1) }
         }
-        if element == gamepad.buttonA, gamepad.buttonA.isPressed { activatePauseFocus() }
+        if activateA { activatePauseFocus() }
       }
     }
   }
@@ -774,6 +859,10 @@ internal struct PauseMenuView: View {
       }
       prevPauseEGPHandlers.removeValue(forKey: cid)
     }
+    // Reset latch state so a stale held-button reading from before teardown
+    // (e.g. a controller reconnect mid-press) doesn't leak into the next
+    // setup cycle.
+    pauseNavGate = PauseMenuInputGate()
   }
   #endif
 
@@ -1254,16 +1343,11 @@ internal struct PauseMenuView: View {
             }
           })
           .sheet(isPresented: $showFilmstripSheet) {
-            // NOTE: this pushes the grid's scope onto ControllerFocusCoordinator, but
-            // setupPauseControllerNav() below (this file's OWN raw GCController dpad
-            // handler for iOS pause-menu nav) does not check the coordinator at all --
-            // unlike TVLibraryView/RemapPlayerView, which gate their own handlers on
-            // isActiveScope(). So on iOS with a controller connected, dpad input can
-            // still drive the pause menu behind this sheet while it's up. Fixing that
-            // means giving PauseMenuView its own controllerScope(_:) + isActiveScope
-            // gate, which is out of scope here (tracked under D18's controller-nav
-            // rewrite) -- .claimsController() is still correct to add now so nothing
-            // extra needs doing when that gate lands.
+            // This pushes the grid's scope onto ControllerFocusCoordinator.
+            // setupPauseControllerNav() below (this file's OWN raw GCController
+            // dpad handler for iOS pause-menu nav) gates on
+            // ControllerFocusCoordinator.isActiveScope(pauseMenuScopeID), so
+            // dpad/A input no longer drives the pause menu behind this sheet.
             NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
               .claimsController()
           }

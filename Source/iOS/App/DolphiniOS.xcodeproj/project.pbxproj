@@ -233,6 +233,7 @@
 		C0C0CAFE0000000000000995 /* PendingGameLaunchStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000994 /* PendingGameLaunchStoreTests.swift */; };
 		C0C0CAFE0000000000000997 /* SaveStateFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */; };
 		C0C0CAFE0000000000000999 /* TCManagerInterfaceAxisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */; };
+		C0C0CAFE000000000000099B /* PauseMenuInputGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */; };
 		C0C0CAFE0000000000000608 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000604 /* Sentry */; };
 		C0C0CAFE0000000000000609 /* PLzmaSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000605 /* PLzmaSDK */; };
 		C0C0CAFE0000000000000610 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000606 /* SWCompression */; };
@@ -682,6 +683,7 @@
 		C0C0CAFE0000000000000994 /* PendingGameLaunchStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PendingGameLaunchStoreTests.swift"; path = "DolphiniOSTests/PendingGameLaunchStoreTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateFormattingTests.swift"; path = "DolphiniOSTests/SaveStateFormattingTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TCManagerInterfaceAxisTests.swift"; path = "DolphiniOSTests/TCManagerInterfaceAxisTests.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PauseMenuInputGateTests.swift"; path = "DolphiniOSTests/PauseMenuInputGateTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000700 /* DOLDebugBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLDebugBridge.h; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000701 /* DOLDebugBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLDebugBridge.mm; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000703 /* DOLPerfBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLPerfBridge.h; sourceTree = "<group>"; };
@@ -1895,6 +1897,7 @@
 				C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */,
 				C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */,
 				C0C0CAFE00000000000009A4 /* ShaderPreviewCacheTests.swift */,
+				C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */,
 				C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */,
 				C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */,
 				C0C0CAFE0000000000000904 /* ContinuityManager.swift */,
@@ -2502,6 +2505,7 @@
 				C0C0CAFE0000000000000997 /* SaveStateFormattingTests.swift in Sources */,
 				C0C0CAFE0000000000000999 /* TCManagerInterfaceAxisTests.swift in Sources */,
 				C0C0CAFE00000000000009A5 /* ShaderPreviewCacheTests.swift in Sources */,
+				C0C0CAFE000000000000099B /* PauseMenuInputGateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
