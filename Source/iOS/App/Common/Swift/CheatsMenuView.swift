@@ -30,75 +30,57 @@ struct CheatsMenuView: View {
   /// Holds the cheat the user attempted to toggle before enabling cheats
   @State private var pendingCheat: CheatItem? = nil
 
+  /// D18 proof-of-life (`docs/superpowers/specs/2026-09-24-data-driven-menus-design.md`
+  /// §4 "Cheats"): the iOS list as a `MenuModel`, rendered by `MenuScreen` —
+  /// this is the part of the screen that previously had zero controller
+  /// navigation (plain `List`, touch-only). Search stays a host concern
+  /// (`.searchable` below), matching the design doc's Settings-root
+  /// precedent; it is not part of the engine.
+  private var cheatsMenuModel: MenuModel {
+    let filtered = createCombinedCheatList().filter { c in
+      let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !q.isEmpty else { return true }
+      return c.name.localizedCaseInsensitiveContains(q) || c.type.localizedCaseInsensitiveContains(q)
+    }
+    let state = CheatsMenuState(
+      cheatsEnabledGlobal: cheatsEnabledGlobal,
+      cheats: filtered,
+      // Quirk preserved verbatim from the pre-D18 body: this is the
+      // UNFILTERED emptiness (not `filtered.isEmpty`), so Download/Refresh
+      // stay hidden while a search happens to match nothing even though
+      // cheats exist. Looks like a bug; not this pass's job to fix it.
+      hasAnyCheats: !(geckoCodeList.isEmpty && actionReplayCodeList.isEmpty)
+    )
+    let actions = CheatsMenuActions(
+      setEnabledGlobal: { newValue in
+        DOLConfigBridge.setMainEnableCheats(newValue)
+        cheatsEnabledGlobal = newValue
+      },
+      requestEnableGlobalCheats: { cheat in
+        pendingCheat = cheat
+        showEnableCheatsPrompt = true
+      },
+      toggleCheat: { cheat in toggleCheat(cheat) },
+      downloadCheats: {
+        TVCheatsBridge.downloadGeckoCodes(forGameId: game.gameID, revision: game.revision, gametdbId: game.gametdbID) { _, _, _ in
+          DispatchQueue.main.async { loadCheats() }
+        }
+      },
+      refreshCheats: { loadCheats() }
+    )
+    return CheatsMenuModelBuilder.make(state: state, actions: actions)
+  }
+
   var body: some View {
     #if os(iOS)
     NavigationStack {
-      List {
-        Section {
-          Toggle(L("Enable Cheats"), isOn: Binding(get: { cheatsEnabledGlobal }, set: { newValue in
-            DOLConfigBridge.setMainEnableCheats(newValue)
-            cheatsEnabledGlobal = newValue
-          }))
+      MenuScreen(model: cheatsMenuModel, style: .list, onBack: onBack)
+        .navigationTitle(L("Cheat Codes"))
+        .searchable(text: $searchText)
+        .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Back")) { onBack() } } }
+        .onAppear { cheatsEnabledGlobal = DOLConfigBridge.mainEnableCheats()
+          loadCheats()
         }
-        if !(geckoCodeList.isEmpty && actionReplayCodeList.isEmpty) {
-          Section {
-            Button {
-              TVCheatsBridge.downloadGeckoCodes(forGameId: game.gameID, revision: game.revision, gametdbId: game.gametdbID) { _, _, _ in
-                DispatchQueue.main.async { loadCheats() }
-              }
-            } label: {
-              Label(L("Download Cheats"), systemImage: "arrow.down.circle")
-            }
-            Button(L("Refresh List")) { loadCheats() }
-          }
-        }
-
-        let all = createCombinedCheatList().filter { c in
-          let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-          guard !q.isEmpty else { return true }
-          return c.name.localizedCaseInsensitiveContains(q) || c.type.localizedCaseInsensitiveContains(q)
-        }
-
-        if all.isEmpty {
-          Section {
-            VStack(spacing: 12) {
-              Image(systemName: "gamecontroller").font(.title)
-                .foregroundColor(.secondary)
-              Text(L("No Cheats Available")).font(.headline)
-              Text(L("Download cheats to get started")).font(.subheadline).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
-          }
-        } else {
-          Section(L("Cheat Codes")) {
-            ForEach(all, id: \.id) { cheat in
-              HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(cheat.name)
-                  Text(cheat.type).font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Toggle("", isOn: Binding(get: { cheat.enabled }, set: { newValue in
-                  if newValue, !cheatsEnabledGlobal {
-                    pendingCheat = cheat
-                    showEnableCheatsPrompt = true
-                  } else {
-                    toggleCheat(cheat)
-                  }
-                }))
-                .labelsHidden()
-              }
-            }
-          }
-        }
-      }
-      .navigationTitle(L("Cheat Codes"))
-      .searchable(text: $searchText)
-      .toolbar { ToolbarItem(placement: .topBarLeading) { Button(L("Back")) { onBack() } } }
-      .onAppear { cheatsEnabledGlobal = DOLConfigBridge.mainEnableCheats()
-        loadCheats()
-      }
     }
     .alert(L("Enable Cheats?"), isPresented: $showEnableCheatsPrompt) {
       Button(L("Turn On Cheats")) {
@@ -371,6 +353,89 @@ struct CheatItem {
   let enabled: Bool
   let isGecko: Bool
   let index: Int
+}
+
+// MARK: - D18 model (iOS list only — see `CheatsMenuView.cheatsMenuModel`)
+
+/// Plain snapshot — no `TVCheatsBridge` reads inside `CheatsMenuModelBuilder`,
+/// so it is constructible from a test with a synthetic cheat list.
+struct CheatsMenuState {
+  var cheatsEnabledGlobal: Bool
+  var cheats: [CheatItem]
+  var hasAnyCheats: Bool
+}
+
+/// Plain closures — no `TVCheatsBridge`/`DOLConfigBridge` calls inside
+/// `CheatsMenuModelBuilder` either. Mirrors `ControllerAssignmentService`'s
+/// "provider, not inline bridge calls" split (design doc §1).
+struct CheatsMenuActions {
+  var setEnabledGlobal: (Bool) -> Void
+  var requestEnableGlobalCheats: (CheatItem) -> Void
+  var toggleCheat: (CheatItem) -> Void
+  var downloadCheats: () -> Void
+  var refreshCheats: () -> Void
+}
+
+enum CheatsMenuModelBuilder {
+  static func make(state: CheatsMenuState, actions: CheatsMenuActions) -> MenuModel {
+    var sections: [MenuSection] = []
+
+    sections.append(MenuSection(id: "enable", items: [
+      MenuItem(
+        id: "enable-cheats",
+        title: L("Enable Cheats"),
+        role: .toggle(Binding(
+          get: { state.cheatsEnabledGlobal },
+          set: { actions.setEnabledGlobal($0) }
+        ))
+      ),
+    ]))
+
+    if state.hasAnyCheats {
+      sections.append(MenuSection(id: "actions", items: [
+        MenuItem(id: "download-cheats", title: L("Download Cheats"), icon: "arrow.down.circle", role: .action(actions.downloadCheats)),
+        MenuItem(id: "refresh-cheats", title: L("Refresh List"), role: .action(actions.refreshCheats)),
+      ]))
+    }
+
+    if state.cheats.isEmpty {
+      sections.append(MenuSection(id: "empty", items: [
+        MenuItem(id: "empty-state", title: L("No Cheats Available"), role: .custom(emptyStateView), isEnabled: false),
+      ]))
+    } else {
+      sections.append(MenuSection(id: "cheats", header: L("Cheat Codes"), items: state.cheats.map { cheat in
+        MenuItem(
+          id: "cheat-\(cheat.id)",
+          title: cheat.name,
+          subtitle: cheat.type,
+          role: .toggle(Binding(
+            get: { cheat.enabled },
+            set: { newValue in
+              if newValue, !state.cheatsEnabledGlobal {
+                actions.requestEnableGlobalCheats(cheat)
+              } else {
+                actions.toggleCheat(cheat)
+              }
+            }
+          ))
+        )
+      }))
+    }
+    return MenuModel(sections: sections)
+  }
+
+  private static var emptyStateView: AnyView {
+    AnyView(
+      VStack(spacing: 12) {
+        Image(systemName: "gamecontroller").font(.title)
+          .foregroundColor(.secondary)
+        Text(L("No Cheats Available")).font(.headline)
+        Text(L("Download cheats to get started")).font(.subheadline).foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 24)
+    )
+  }
 }
 
 struct CheatRowView: View {
