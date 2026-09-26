@@ -39,7 +39,7 @@ struct GraphicsGeneralView: View {
   @State private var clipSeconds: Int = 15
 #endif
 
-  // Shader compilation. Default Specialized(0) — matches the core default and the
+  // Shader compilation. Default Hybrid Ubershaders(2) — matches the core default (GraphicsSettings.cpp) and the
   // iCube reset target (DOLConfigBridge.mm resetGameplayConfigKeys).
   @State private var shaderType: ShaderCompileType = .specialized
   @State private var compileBeforeStart: Bool = true
@@ -159,7 +159,7 @@ struct GraphicsGeneralView: View {
       Section(header: Text(L("Shader Compilation"))) {
         settingsNavCaption(
           destination: GraphicsShaderTypeView(selected: $shaderType),
-          L("Specialized (default) compiles each shader on first use — low GPU cost, may briefly stutter. Ubershader modes trade GPU power for fewer hitches. On the CPU-bound iCube path Specialized is recommended.")
+          L("Hybrid Ubershaders (default) draw new materials with a generic shader while the exact one compiles in the background, so nothing stutters on first sight. Specialized has the lowest GPU cost but can hitch when a shader is new. Exclusive Ubershaders always use the generic shader and measured about 5% slower.")
         ) {
           Text("\(L("Type")): \(shaderType.label)")
         }
