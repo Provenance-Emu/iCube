@@ -744,8 +744,14 @@ struct TVLibraryView: View {
   /// Follows the appearance: a fixed black here put light-mode (black) titles on black.
   @ViewBuilder
   private var cleanBackground: some View {
+#if os(tvOS)
+    // tvOS has no .systemBackground; this is what it resolves to on iOS.
+    Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? .black : .white })
+      .ignoresSafeArea()
+#else
     Color(uiColor: .systemBackground)
       .ignoresSafeArea()
+#endif
   }
 
   @ViewBuilder
