@@ -87,7 +87,8 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
         isCompatible: isCompatible,
         path: url,
         thumbnailURL: hasThumb ? thumbURL : nil,
-        isAuto: isAuto
+        isAuto: isAuto,
+        playTimeSeconds: meta?.playTimeSeconds
       )
       result[gameID, default: []].append(info)
     }
