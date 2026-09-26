@@ -80,6 +80,9 @@ void FreeExecutableMemory_LuckTXM(void* ptr);
 void AllocateExecutableMemoryRegion_LuckTXM();
 ptrdiff_t AllocateWritableRegionAndGetDiff_LuckTXM();
 bool IsTXMJITAvailable_LuckTXM();
+// Where the kernel last mapped the RX region (0 if never), including a mapping rejected for
+// sitting past the broker's 36-bit address limit. For diagnostics only.
+uintptr_t GetTXMRegionMappedAddress_LuckTXM();
 
 // Returns true when LuckTXM is in use and TXM authorization succeeded (StikDebug
 // intercepted brk #0x69).  Returns false when running under Xcode (LLDB script

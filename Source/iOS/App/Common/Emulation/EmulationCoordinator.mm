@@ -1787,7 +1787,9 @@ static void EnsurePad1DefaultsToTouchscreen()
           [DOLSentryTelemetryBridge recordJitStep:@"TXM boot decided"
                                              data:@{ @"authorized" : @(jitManager.txmAuthorized),
                                                      @"region_reused" : @(regionAlreadyAuthorized),
-                                                     @"fallback" : @(txmInterpreterFallback) }];
+                                                     @"fallback" : @(txmInterpreterFallback),
+                                                     @"region_address" : [NSString stringWithFormat:@"0x%lx",
+                                                         (unsigned long)Common::GetTXMRegionMappedAddress_LuckTXM()] }];
           NSLog(@"[JitManager] TXM boot: attached=%d authorized=%d fallback=%d",
                 (int)jitManager.debuggerAttached, (int)jitManager.txmAuthorized,
                 (int)txmInterpreterFallback);

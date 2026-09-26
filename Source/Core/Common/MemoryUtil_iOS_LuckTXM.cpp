@@ -138,6 +138,48 @@ static void TxmUniversalDetach()
   asm volatile("brk #0xf00d" : "+r"(x16) : : "memory");
 }
 
+// Keep the region where a broker can address it.
+//
+// StikDebug blesses the region by sending one gdb-remote `$M<addr>,1:69` packet per page, and it
+// formats <addr> as exactly nine hex digits (fillAddress in JSDebugSupport.swift masks with
+// 0xf00000000). A page at or above 64 GiB is therefore blessed at `addr & 0xFFFFFFFFF` instead, and
+// StikDebug drains the replies without checking them, so the handshake reports success. The first
+// instruction fetch from the real, unblessed page is then a CODESIGNING "Invalid Page" SIGKILL,
+// which no signal handler sees and Sentry files as a watchdog termination. This app has
+// extended-virtual-addressing, so mmap(nullptr) is free to put the region up there.
+constexpr uintptr_t TXM_BROKER_ADDRESS_LIMIT = uintptr_t{1} << 36;
+// Where the search for a low mapping starts: the first address above arm64 iOS's 4 GiB __PAGEZERO.
+// Without MAP_FIXED this is a hint, and the kernel takes the first free range at or above it.
+constexpr uintptr_t TXM_REGION_HINT = uintptr_t{1} << 32;
+
+// The address the kernel last handed out for the region, kept even when it was rejected so the app
+// can report where it landed.
+static uintptr_t g_rx_region_mapped_at = 0;
+
+static u8* MapRXRegionForBroker(size_t size)
+{
+  void* ptr = mmap(reinterpret_cast<void*>(TXM_REGION_HINT), size, PROT_READ | PROT_EXEC,
+                   MAP_ANON | MAP_PRIVATE, -1, 0);
+  if (ptr == MAP_FAILED)
+  {
+    ERROR_LOG_FMT(COMMON, "LuckTXM: mmap of the RX region failed: {}", Common::LastStrerrorString());
+    return nullptr;
+  }
+
+  const uintptr_t start = reinterpret_cast<uintptr_t>(ptr);
+  g_rx_region_mapped_at = start;
+  if (start + size > TXM_BROKER_ADDRESS_LIMIT)
+  {
+    ERROR_LOG_FMT(COMMON,
+                  "LuckTXM: RX region mapped at {:#x}, past the broker's 36-bit address limit; "
+                  "not attempting the handshake",
+                  start);
+    munmap(ptr, size);
+    return nullptr;
+  }
+  return static_cast<u8*>(ptr);
+}
+
 // --------------------------------------------------------------------------
 // EXPERIMENT: brk-free TXM JIT path (env DOL_JIT_TXM_NOBRK=1).
 //
@@ -311,13 +353,11 @@ void AllocateExecutableMemoryRegion_LuckTXM()
   }
 
   const size_t size = EXECUTABLE_REGION_SIZE;
-  u8* rx_ptr = static_cast<u8*>(mmap(nullptr, size, PROT_READ | PROT_EXEC, MAP_ANON | MAP_PRIVATE, -1, 0));
-
+  // A failure here is not fatal: without g_rx_region, IsTXMAvailable() is false and the caller
+  // falls back to the Cached Interpreter. No brk is issued, so nothing is left for a broker to hang on.
+  u8* rx_ptr = MapRXRegionForBroker(size);
   if (!rx_ptr)
-  {
-    PanicAlertFmt("AllocateExecutableMemoryRegion failed! mmap returned {}", LastStrerrorString());
     return;
-  }
 
   // Install a SIGTRAP net so an unhandled handshake brk (no broker attached)
   // longjmps us out to the interpreter fallback instead of crashing. When a
@@ -479,5 +519,10 @@ void FreeExecutableMemory_LuckTXM(void* ptr)
 bool IsTXMJITAvailable_LuckTXM()
 {
   return g_rx_region != nullptr;
+}
+
+uintptr_t GetTXMRegionMappedAddress_LuckTXM()
+{
+  return g_rx_region_mapped_at;
 }
 }  // namespace Common
