@@ -82,13 +82,19 @@ format:
 # Unit tests on the iOS simulator. CODE_SIGNING_ALLOWED=NO does NOT work here: the vendored
 # Externals/MoltenVK-iOS xcframework is unsigned and current simulator runtimes refuse to dyld-load
 # an unsigned image ("Trying to load an unsigned library"), so let the embed phase ad-hoc sign it.
-# iCubeTests is iOS-only (no tvOS platform on the test target). 182 tests green on 2026-09-26.
+# iCubeTests is iOS-only (no tvOS platform on the test target). 213 tests green on 2026-09-26.
+#
+# TEST_ARGS is an escape hatch for extra xcodebuild flags without duplicating this recipe
+# elsewhere — CI (.github/workflows/tests.yml) passes `-resultBundlePath` through it so the
+# xcresult bundle lands somewhere it can upload as an artifact; local runs leave it empty.
 SIM ?= iPhone 17 Pro
+TEST_ARGS ?=
 test:
 	xcodebuild test -workspace iCube.xcworkspace -scheme "iCube (NJB)" \
 	  -configuration "Debug (Non-Jailbroken)" -destination "platform=iOS Simulator,name=$(SIM)" \
 	  -derivedDataPath build-Xcode-ios \
-	  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=""
+	  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" \
+	  $(TEST_ARGS)
 
 testflight:
 	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform ios

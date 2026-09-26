@@ -1,0 +1,194 @@
+name: Unit Tests
+
+# Runs iCubeTests (213 unit tests) on an iOS simulator. Nothing in CI has ever
+# executed them -- Source/iOS/App/Makefile's `test` target is the only place
+# they've run, and only ever by hand on a developer's machine.
+#
+# Separate workflow rather than a job inside build.yml on purpose: it gets its
+# own concurrency group (so a rerun of build.yml's slow archive jobs doesn't
+# cancel or get cancelled by this), and GitHub Actions caches are repo-scoped,
+# not workflow-scoped, so it can still reuse cache state build.yml warms up
+# without sharing a job or a workflow file.
+
+on:
+  push:
+    branches: [ develop, master ]
+    paths-ignore:
+      - 'docs/**'
+      - 'Tools/mcp/**'
+      - '**/*.md'
+  pull_request:
+    branches: [ develop, master ]
+    paths-ignore:
+      - 'docs/**'
+      - 'Tools/mcp/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: iCubeTests (iOS Simulator)
+    # GitHub-hosted, matching build.yml -- see that file's comment on why this
+    # repo has no self-hosted runners any more.
+    runs-on: macos-26
+    # A hung simulator (nextDrawable deadlock class of bug, or a wedged
+    # xcodebuild) must not burn hours of runner time silently.
+    timeout-minutes: 90
+
+    env:
+      # Keep in lockstep with build.yml's pins -- same Xcode, same Tuist.
+      TUIST_VERSION: '4.200.0'
+      XCODE_VERSION: '26.3'
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      # --- Cheap fail-fast checks first; neither needs Xcode -----------------
+
+      # Blocking: exits 0 today (the one drift it flags, wiiInfraredRecenter,
+      # is a warning, not a failure).
+      - name: Check ButtonType drift (ButtonType.h vs TCButtonType.swift)
+        working-directory: Source/iOS/App
+        run: python3 Project/Scripts/check_button_types.py
+
+      # Advisory only, for now: this already fails on develop as of 2026-09-26
+      # with 27 pre-existing keys missing from en.lproj/Core.strings (Shader
+      # quick-picker/settings/debug views, SaveState filmstrip/card views,
+      # ControllersRootView's IR-area editor, PauseMenuView's "View All
+      # States"). Making it blocking today would turn every PR red without
+      # ever reaching the unit tests this workflow exists to run. Flip
+      # continue-on-error to false once those 27 keys are added to
+      # Core.strings (or the call sites are rewritten). This script shells out
+      # to `plutil`, so it stays macOS-only and can't move to a cheaper
+      # ubuntu-latest job on its own.
+      - name: Check localized-key coverage (advisory -- see comment)
+        working-directory: Source/iOS/App
+        continue-on-error: true
+        run: python3 Project/Scripts/check_localized_keys.py --check
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1.6.0
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Install Tuist
+        run: |
+          set -euo pipefail
+          curl -fsSL https://mise.run | sh
+          MISE="$HOME/.local/bin/mise"
+          "$MISE" use -g "tuist@${TUIST_VERSION}"
+          echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
+          "$HOME/.local/share/mise/shims/tuist" version
+
+      # No `tuist install` for a from-scratch xcframework build here (unlike
+      # build.yml): build/xcframework/*.framework is a git-tracked binary
+      # (.gitignore carves it out with `!/build/xcframework/`), so it's already
+      # on disk after checkout and `tuist generate` resolves the binary target
+      # straight from that.
+      - name: Generate Xcode project
+        working-directory: Source/iOS/App
+        run: |
+          set -euo pipefail
+          tuist install
+          tuist generate --no-open
+          ls -d iCube.xcworkspace iCube.xcodeproj
+
+      # The app target's "Build Dolphin Core" pre-script (Project.swift) has
+      # `basedOnDependencyAnalysis: false`, so it unconditionally re-runs
+      # BuildiOSXCFramework.py for whatever platform Xcode is building --
+      # SIMULATORARM64 here -- on every `xcodebuild test`, even though the
+      # tracked xcframework slice already exists. That script's real work
+      # lands in build-iphonesimulator-Release/ (CMake+Ninja, incremental),
+      # a directory .gitignore excludes via `/build-*/` and which build.yml's
+      # own "dolphin-xcf-*" cache does NOT cover (that cache's path is `build`,
+      # i.e. the already git-tracked build/xcframework output -- caching it
+      # again is redundant with checkout, not a compile-time win). Cache the
+      # actual CMake build dir here instead, under a cache key namespaced away
+      # from build.yml's so a save from this job can never race or evict its
+      # unrelated `dolphin-xcf-*` entries.
+      - name: Restore Dolphin simulator-core build cache
+        id: simcore-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build-iphonesimulator-Release
+          key: dolphin-simcore-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            dolphin-simcore-${{ runner.os }}-
+
+      # Runner images vary which simulator runtimes they ship, so a hardcoded
+      # "iPhone 17 Pro" is one image update away from breaking the job. Pick
+      # any available iPhone whose iOS runtime the pinned Xcode actually
+      # supports -- capped at `xcrun --sdk iphonesimulator --show-sdk-version`,
+      # since a runner can carry simulator runtimes newer than this job's
+      # Xcode (this machine had iOS 27 installed as its newest runtime
+      # alongside 26.5; Xcode 26.3 cannot target a runtime newer than it
+      # ships). Must run after "Select Xcode" so DEVELOPER_DIR/xcrun agree
+      # with the pinned version.
+      - name: Pick an available iPhone simulator
+        id: pick_sim
+        run: |
+          set -euo pipefail
+          command -v jq >/dev/null || brew install jq
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          echo "iphonesimulator SDK for the pinned Xcode: $sdk"
+          sim="$(xcrun simctl list devices available -j | jq -r --arg sdk "$sdk" '
+            def verparts: capture("iOS-(?<a>[0-9]+)-(?<b>[0-9]+)") | [(.a|tonumber),(.b|tonumber)];
+            ($sdk | split(".") | map(tonumber)) as $max
+            | .devices | to_entries
+            | map(select(.key | contains("iOS")))
+            | map(. + {ver: (.key | verparts)})
+            | map(select(.ver[0] < $max[0] or (.ver[0] == $max[0] and .ver[1] <= $max[1])))
+            | sort_by(.ver) | reverse
+            | (.[0].value // [])
+            | map(select(.name | startswith("iPhone")))
+            | (.[0].name // empty)
+          ')"
+          if [ -z "$sim" ]; then
+            echo "::error::No available iPhone simulator found with an iOS runtime <= $sdk"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Picked simulator: $sim"
+          echo "sim=$sim" >> "$GITHUB_OUTPUT"
+
+      # No xcbeautify: build.yml doesn't use it either (its own comment
+      # explains why -- it filters out Run Script phase output, which is
+      # exactly where a pre-script failure like the ones above would surface).
+      # `tee` keeps the raw log for the failure-artifact upload below.
+      - name: Run iCubeTests
+        working-directory: Source/iOS/App
+        env:
+          SIM: ${{ steps.pick_sim.outputs.sim }}
+          RESULT_BUNDLE: ${{ runner.temp }}/iCubeTests.xcresult
+          LOG_FILE: ${{ runner.temp }}/iCubeTests.log
+        run: |
+          set -o pipefail
+          rm -rf "$RESULT_BUNDLE"
+          make test SIM="$SIM" TEST_ARGS="-resultBundlePath $RESULT_BUNDLE" 2>&1 | tee "$LOG_FILE"
+
+      # Own key/path, so this can save unconditionally without any risk to
+      # build.yml's cache -- see the restore step's comment.
+      - name: Save Dolphin simulator-core build cache
+        if: always() && steps.simcore-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build-iphonesimulator-Release
+          key: dolphin-simcore-${{ runner.os }}-${{ github.sha }}
+
+      - name: Upload xcresult + raw log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: icube-tests-xcresult
+          path: |
+            ${{ runner.temp }}/iCubeTests.xcresult
+            ${{ runner.temp }}/iCubeTests.log
+          retention-days: 7
+          if-no-files-found: warn
