@@ -1,78 +1,12 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import GameController
 import SwiftUI
 
 #if os(iOS)
 #endif
 
 internal enum PlatformKind { case ios, tvos }
-
-/// Pure decision logic for the iOS pause menu's raw `GCController` handler
-/// (`PauseMenuView.setupPauseControllerNav`): whether a `buttonA` reading
-/// should be treated as a fresh activate edge, given whether a child sheet
-/// (Save States, Shaders, Continuity, Controllers, Settings) currently owns
-/// the controller via `ControllerFocusCoordinator`.
-///
-/// The raw handler is never torn down while a child sheet merely covers this
-/// view -- SwiftUI does not reliably fire `onDisappear` on a descendant that
-/// is only covered, not removed (see `PauseMenuView.isPauseMenuChildPresented`)
-/// -- so it keeps receiving every gamepad callback and must self-gate instead
-/// of relying on teardown/reinstall timing, exactly like `TVLibraryView`'s own
-/// `extendedGamepad.valueChangedHandler` gates on
-/// `ControllerFocusCoordinator.isActiveScope`.
-///
-/// `buttonA` is latch-and-rearm, mirroring `RemapControllerNav`: one activate
-/// per physical press, re-armed only once the button reports released. This
-/// also covers the reclaim race -- if a child sheet claims the controller
-/// while A is held (e.g. the same press that opened it) and the claim is
-/// released again before A comes back up, that held press does not replay as
-/// a fresh activate the instant this menu regains the controller; it is
-/// swallowed until an actual release is observed.
-internal struct PauseMenuInputGate: Equatable {
-  private var aLatched = false
-
-  /// Call ONLY from the `element == gamepad.buttonA` callback (never fed
-  /// speculatively from an unrelated element's callback -- doing so could
-  /// latch or drop an edge a beat early/late relative to the real transition)
-  /// with the CURRENT claim state and `buttonA.isPressed`. Returns whether
-  /// this call should be treated as a fresh `buttonA` down-edge that the
-  /// caller should act on (e.g. by activating the focused row).
-  ///
-  /// One `PauseMenuInputGate` per controller -- a single shared instance
-  /// would let one controller's callback clear or set another's latch.
-  @discardableResult
-  internal mutating func consumeButtonA(claimed: Bool, isPressed: Bool) -> Bool {
-    guard !claimed else {
-      // While a child owns the controller, just track physical state so a
-      // press held across the claim boundary doesn't fire once we're
-      // unclaimed again -- released while claimed, or still down when
-      // reclaimed (in which case nothing re-invokes this until the button
-      // actually transitions, so no stale replay ever fires).
-      aLatched = isPressed
-      return false
-    }
-    guard isPressed else {
-      aLatched = false
-      return false
-    }
-    guard !aLatched else { return false }
-    aLatched = true
-    return true
-  }
-
-  /// Adopt `isPressed` as the current latch state without emitting an edge,
-  /// mirroring `RemapControllerNav.resync`. Call once per controller at the
-  /// top of `setupPauseControllerNav` with the live `buttonA.isPressed`
-  /// reading: reassigning `valueChangedHandler` does not retroactively fire
-  /// for an element that is already non-idle, but this guards against the
-  /// handler nonetheless treating an already-held button as a fresh edge the
-  /// next time it changes.
-  internal mutating func resync(isPressed: Bool) {
-    aLatched = isPressed
-  }
-}
 
 internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
@@ -132,9 +66,11 @@ internal struct PauseMenuView: View {
   @State private var isMuted: Bool = false
   @State private var fastForwardEnabled: Bool = false
   private static let volumeBeforeMuteKey = "icube_pause_menu_volume_before_mute"
-  /// D14: drives the iOS speed picker (`.confirmationDialog`). Declared unconditionally,
-  /// like `showControllersSheet`/`showSettingsSheet` above, because `iosMenuItems` is
-  /// compiled for both platforms even though it is only presented on iOS.
+  /// D14: drives the iOS speed picker, a `MenuScreen`-backed confirm overlay
+  /// (`PauseMenuView.fastForwardConfirmModel`, D18). Declared unconditionally,
+  /// like `showControllersSheet`/`showSettingsSheet` above, because
+  /// `iosMainMenu` is compiled for both platforms even though it is only
+  /// presented on iOS.
   @State private var showFastForwardSpeedPicker: Bool = false
   /// Same UserDefaults key `TVEmulationBridge` reads when fast-forward is turned on
   /// (also written by the Settings > General fast-forward speed picker) — kept as one
@@ -153,83 +89,6 @@ internal struct PauseMenuView: View {
   }
   private var cheatsSubtitle: String {
     activeCheatCount > 0 ? String(format: L("%d active"), activeCheatCount) : L("Game enhancement codes")
-  }
-
-  /// iOS controller-driven focus index into `iosMenuItems`. iOS has no focus
-  /// engine here, so navigation is driven manually from GCController input,
-  /// mirroring the main library view. Unused on tvOS (native focus).
-  @State private var iosFocusIndex: Int = 0
-  /// When false, no row shows the controller-navigation ring (touch-only use).
-  @State private var pauseMenuControllerNavActive: Bool = false
-  @State private var lastPauseNavMoveTime: TimeInterval = 0
-  #if !os(tvOS)
-  /// Saved pre-existing gamepad handlers, restored on teardown so the emulation
-  /// input path is left exactly as it was.
-  @State private var prevPauseEGPHandlers: [ObjectIdentifier: (GCExtendedGamepad, GCControllerElement) -> Void] = [:]
-  /// This menu's controller-ownership scope (`ControllerFocusCoordinator`).
-  /// Claimed while the iOS row list is on screen so any of this menu's own
-  /// child sheets (Save States, Shaders, Continuity, Controllers, Settings)
-  /// that call `.claimsController()` silence `setupPauseControllerNav`'s raw
-  /// handler below instead of fighting it for the shared `valueChangedHandler`
-  /// slot.
-  @State private var pauseMenuScopeID = UUID()
-  /// Per-controller edge/latch state for `buttonA` (see `PauseMenuInputGate`).
-  /// Keyed by controller so one pad's press can't clear or set another's
-  /// latch. Deliberately NOT reset in `teardownPauseControllerNav` -- doing
-  /// so could turn an already-held button into a spurious fresh edge the
-  /// next time `setupPauseControllerNav` reinstalls the handler; `resync`
-  /// there re-syncs it from the live `isPressed` reading instead.
-  @State private var pauseNavGates: [ObjectIdentifier: PauseMenuInputGate] = [:]
-  #endif
-
-  /// A single iOS pause-menu entry, modeled so the grid can be indexed for
-  /// controller focus while keeping each row's action with its presentation.
-  private struct IOSMenuItem: Identifiable {
-    let id = UUID()
-    let title: String
-    let subtitle: String
-    let icon: String
-    let tint: Color
-    let role: ButtonRole?
-    let action: () -> Void
-  }
-
-  private var iosMenuItems: [IOSMenuItem] {
-    var items: [IOSMenuItem] = [
-      IOSMenuItem(title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue, role: nil) {
-        TVEmulationBridge.resume()
-        onClose()
-      },
-      IOSMenuItem(
-        title: isMuted ? L("Unmute") : L("Mute"),
-        subtitle: isMuted ? L("Restore audio volume") : L("Silence audio"),
-        icon: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-        tint: .cyan, role: nil
-      ) { toggleMute() },
-      IOSMenuItem(
-        title: L("Fast Forward"),
-        subtitle: fastForwardSubtitle,
-        icon: fastForwardEnabled ? "forward.fill" : "forward",
-        tint: .cyan, role: nil
-      ) { showFastForwardSpeedPicker = true },
-      IOSMenuItem(title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple, role: nil) { pane = .saves },
-      IOSMenuItem(title: L("Cheats"), subtitle: cheatsSubtitle, icon: "star.circle", tint: .yellow, role: nil) { pane = .cheats },
-      IOSMenuItem(title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: nil) {
-        #if os(iOS)
-        showControllersSheet = true
-        #else
-        pane = .controllers
-        #endif
-      },
-      IOSMenuItem(title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange, role: nil) { showShaders = true },
-      IOSMenuItem(title: L("Continue Elsewhere"), subtitle: L("Hand this game to a nearby device"), icon: "arrow.triangle.branch", tint: .teal, role: nil) { showContinuitySheet = true },
-    ]
-    #if os(iOS)
-    items.append(IOSMenuItem(title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray, role: nil) { showSettingsSheet = true })
-    #endif
-    items.append(IOSMenuItem(title: L("Reset System"), subtitle: L("Restart the game from power-on"), icon: "arrow.counterclockwise.circle", tint: .orange, role: nil) { showResetDialog = true })
-    items.append(IOSMenuItem(title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red, role: .destructive) { showExitDialog = true })
-    return items
   }
 
   /// Mutes by zeroing the volume, remembering the prior level so unmute restores it
@@ -448,7 +307,14 @@ internal struct PauseMenuView: View {
     }
   }
 
-  // iOS: compact layout with adaptive grid and safe-area background
+  // iOS: compact layout, background unchanged; the row list itself is now a
+  // `MenuModel` rendered by `MenuScreen` (D18, design doc §6 step 2) instead
+  // of a hand-built `LazyVGrid` of `menuButtonIOS` rows. `MenuScreen` self-
+  // claims a `ControllerFocusCoordinator` scope and polls `GCController` on
+  // its own timer, so this view no longer installs a raw `valueChangedHandler`
+  // (the deleted `setupPauseControllerNav`/`PauseMenuInputGate` machinery) --
+  // see the design doc's Implementation Status for why `MenuScreen` polls
+  // instead of using a handler.
   private var iosMainMenu: some View {
     let backgroundView = ZStack {
       // Use cover image for iOS (better aspect ratio fit)
@@ -470,7 +336,10 @@ internal struct PauseMenuView: View {
       .ignoresSafeArea()
     }
 
-    return ScrollView {
+    return ZStack {
+      // `MenuScreen(.grid)` is its own `ScrollView` (design doc §5's card
+      // grid), so the header (Close button, cover, title) sits in a plain
+      // `VStack` above it rather than nesting two scroll views.
       VStack(alignment: .leading, spacing: 16) {
         HStack {
           Button(action: { onClose() }) {
@@ -509,140 +378,85 @@ internal struct PauseMenuView: View {
           Spacer(minLength: 0)
         }
 
-        // Adaptive grid: 1 column portrait, 2+ landscape based on width automatically
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12)], spacing: 12) {
-          ForEach(Array(iosMenuItems.enumerated()), id: \.offset) { idx, item in
-            menuButtonIOS(
-              title: item.title,
-              subtitle: item.subtitle,
-              icon: item.icon,
-              tint: item.tint,
-              role: item.role,
-              focused: pauseMenuControllerNavActive && iosFocusIndex == idx,
-              action: item.action
-            )
-          }
-        }
+        MenuScreen(model: pauseMenuModel, style: .grid, onBack: nil)
       }
       .padding(16)
-      .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    .background(backgroundView)
-    #if !os(tvOS)
-    // Claims controller ownership for as long as this row list is around,
-    // including while covered by one of this menu's own child sheets (which
-    // never sends a real `onDisappear` here -- see the doc on
-    // `pauseMenuScopeID`). `setupPauseControllerNav`'s handler self-gates on
-    // `ControllerFocusCoordinator.isActiveScope(pauseMenuScopeID)`.
-    .controllerScope(pauseMenuScopeID)
-    #endif
-    .onDisappear {
-      #if !os(tvOS)
-      teardownPauseControllerNav()
-      pauseMenuControllerNavActive = false
-      #endif
-    }
-    #if os(iOS)
-    .onAppear {
-      refreshPauseMenuControllerNav()
-    }
-    .onReceive(ControllerManager.shared.controllerConnectedPublisher) { _ in
-      refreshPauseMenuControllerNav()
-    }
-    .onReceive(ControllerManager.shared.controllerDisconnectedPublisher) { _ in
-      refreshPauseMenuControllerNav()
-    }
-    #endif
-    .alert(L("Reset System"), isPresented: $showResetDialog) {
-      Button(L("Cancel"), role: .cancel) { showResetDialog = false }
-      Button(L("Reset"), role: .destructive) {
-        // Same as the console's reset button. It does not reload the auto-resume state, so it is also
-        // the way out of a game that resumed into a bad save.
-        TVEmulationBridge.resetSystem()
-        onClose()
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+      .background(backgroundView)
+
+      // Reset/Exit/Fast-Forward used to be `.alert`/`.confirmationDialog`,
+      // which a raw `valueChangedHandler` had no way to know about -- A/d-pad
+      // kept driving `iosMenuItems` underneath (the gap this migration closes,
+      // design doc's Implementation Status item 2). As in-place `MenuScreen`
+      // overlays instead, each one self-claims its own coordinator scope on
+      // appear, so the root `MenuScreen` above resyncs (not moves/activates)
+      // for as long as one of these is up -- no extra wiring needed, and
+      // unlike a `.sheet` this never touches `isPauseMenuChildPresented` since
+      // the outer `ZStack` never disappears.
+      if showResetDialog {
+        confirmOverlay(
+          message: L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."),
+          model: resetConfirmModel,
+          onBack: { showResetDialog = false }
+        )
       }
-    } message: {
-      Text(L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."))
+      if showExitDialog {
+        confirmOverlay(
+          message: L("Do you want to quit the game? Unsaved progress will be lost."),
+          model: exitConfirmModel,
+          onBack: { showExitDialog = false }
+        )
+      }
+      if showFastForwardSpeedPicker {
+        confirmOverlay(
+          message: L("Starts fast-forward at this speed and closes the pause menu."),
+          model: fastForwardConfirmModel,
+          onBack: { showFastForwardSpeedPicker = false }
+        )
+      }
     }
-    .alert(L("Exit Game"), isPresented: $showExitDialog) {
-      Button(L("Cancel"), role: .cancel) { showExitDialog = false }
-      Button(L("Quit"), role: .destructive) {
-        TVEmulationBridge.stop()
-        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
-      }
-      Button(L("Save & Quit")) {
-        SaveStateService.saveSlot(selectedSlot)
-        TVEmulationBridge.stop()
-        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
-      }
-    } message: {
-      Text(L("Do you want to quit the game? Unsaved progress will be lost."))
-    }
-    // D14: picking a speed here both starts fast-forward and leaves the pause menu
-    // right away, so the game visibly speeds up instead of leaving the user to guess
-    // whether the tap registered.
-    .confirmationDialog(L("Fast Forward Speed"), isPresented: $showFastForwardSpeedPicker, titleVisibility: .visible) {
-      if fastForwardEnabled {
-        Button(L("Turn Off")) { turnOffFastForward() }
-      }
-      ForEach(Self.fastForwardSpeedChoices, id: \.self) { percent in
-        Button(Self.fastForwardSpeedLabel(percent: percent)) { selectFastForwardSpeed(percent) }
-      }
-      Button(L("Cancel"), role: .cancel) {}
-    } message: {
-      Text(L("Starts fast-forward at this speed and closes the pause menu."))
-    }
+    // `MenuScreen`'s row `Text`s take no explicit color (design doc's grid
+    // style is otherwise unstyled outside the §5 token constants it does
+    // apply) -- this pins `.primary`/`.secondary` to their dark-mode values so
+    // titles/subtitles stay legible over the always-dark blurred cover
+    // background regardless of system appearance, the same fix already used
+    // for other dark-background screens (`DolphinBlogView`, `SaveStateCardView`).
+    .preferredColorScheme(.dark)
   }
 
-  /// Styled iOS pause menu row with icon and subtitle
+  /// Shared wrapper for the Reset/Exit/Fast-Forward confirm overlays: a
+  /// translucent scrim behind a card whose title comes from the model's own
+  /// section header (`MenuScreen`'s grid style already renders that in white
+  /// bold, design doc §5) and whose body is the confirm/cancel row list.
   @ViewBuilder
-  private func menuRowIOS(title: String, subtitle: String, icon: String, tint: Color) -> some View {
-    HStack(spacing: 14) {
-      ZStack {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(tint.opacity(0.15))
-          .frame(width: 44, height: 44)
-        Image(systemName: icon)
-          .font(.system(size: 18, weight: .semibold))
-          .foregroundColor(tint)
+  private func confirmOverlay(message: String, model: MenuModel, onBack: @escaping () -> Void) -> some View {
+    ZStack {
+      Color.black.opacity(0.55).ignoresSafeArea()
+      VStack(alignment: .leading, spacing: 8) {
+        Text(message)
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(.white.opacity(0.8))
+          .padding(.horizontal, 16)
+          .padding(.top, 16)
+        // `.grid`'s `ScrollView` has no natural height of its own here, so it
+        // greedily fills whatever the VStack offers -- clamp to the row
+        // count (2-4 rows for these three overlays) instead of letting a
+        // 2-button confirm card stretch to the screen's height.
+        MenuScreen(model: model, style: .grid, onBack: onBack)
+          .frame(height: CGFloat(model.allItems.count) * 76)
       }
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title)
-          .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(.white)
-        Text(subtitle)
-          .font(.system(size: 13, weight: .medium))
-          .foregroundColor(.white.opacity(0.7))
-      }
-      Spacer()
-      Image(systemName: "chevron.right")
-        .font(.system(size: 12, weight: .medium))
-        .foregroundColor(.white.opacity(0.5))
+      .frame(maxWidth: 380)
+      .background(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(.ultraThinMaterial)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .stroke(Color.white.opacity(0.08), lineWidth: 1)
+      )
+      .padding(24)
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 12)
-  }
-
-  /// Reusable iOS menu button applying consistent styling. `focused` draws the
-  /// controller-navigation indicator (iOS has no focus engine in this menu).
-  @ViewBuilder
-  private func menuButtonIOS(title: String, subtitle: String, icon: String, tint: Color, role: ButtonRole? = nil, focused: Bool = false, action: @escaping () -> Void) -> some View {
-    Button(role: role, action: action) {
-      menuRowIOS(title: title, subtitle: subtitle, icon: icon, tint: tint)
-        .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-            )
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(focused ? Color.accentColor : Color.clear, lineWidth: 3)
-        )
-    }
-    .buttonStyle(.plain)
+    .transition(.opacity)
   }
 
   /// tvOS pause-menu row for an in-place toggle (mute, fast-forward) rather than a
@@ -796,108 +610,6 @@ internal struct PauseMenuView: View {
     .onExitCommand { pane = .main }
     #endif
   }
-
-  #if !os(tvOS)
-  /// True when at least one connected controller can drive pause-menu navigation.
-  private static func hasPauseMenuNavController() -> Bool {
-    GCController.controllers().contains { $0.extendedGamepad != nil }
-  }
-
-  private func refreshPauseMenuControllerNav() {
-    teardownPauseControllerNav()
-    let active = Self.hasPauseMenuNavController()
-    pauseMenuControllerNavActive = active
-    if active {
-      iosFocusIndex = min(iosFocusIndex, max(0, iosMenuItems.count - 1))
-      setupPauseControllerNav()
-    }
-  }
-
-  /// Throttled focus move through `iosMenuItems`, mirroring the library's repeat
-  /// guard so a held d-pad doesn't skip rows.
-  private func movePauseFocus(_ delta: Int) {
-    guard pauseMenuControllerNavActive else { return }
-    let now = Date().timeIntervalSince1970
-    if now - lastPauseNavMoveTime < 0.18 { return }
-    lastPauseNavMoveTime = now
-    let count = iosMenuItems.count
-    guard count > 0 else { return }
-    DispatchQueue.main.async {
-      iosFocusIndex = max(0, min(iosFocusIndex + delta, count - 1))
-    }
-  }
-
-  private func activatePauseFocus() {
-    let items = iosMenuItems
-    guard items.indices.contains(iosFocusIndex) else { return }
-    DispatchQueue.main.async { items[iosFocusIndex].action() }
-  }
-
-  private func setupPauseControllerNav() {
-    GCController.shouldMonitorBackgroundEvents = false
-    let scope = pauseMenuScopeID
-    for c in GCController.controllers() {
-      guard let egp = c.extendedGamepad else { continue }
-      let cid = ObjectIdentifier(c)
-      if prevPauseEGPHandlers[cid] == nil { prevPauseEGPHandlers[cid] = egp.valueChangedHandler }
-      // Adopt the current physical reading before installing, so reassigning
-      // `valueChangedHandler` below can't misread an already-held button as a
-      // fresh edge on its first callback (see `PauseMenuInputGate.resync`).
-      pauseNavGates[cid, default: PauseMenuInputGate()].resync(isPressed: egp.buttonA.isPressed)
-      egp.valueChangedHandler = { gamepad, element in
-        // A child sheet (Save States, Shaders, Continuity, Controllers,
-        // Settings) claims the controller via `.claimsController()` while it
-        // is up. This handler is never torn down while merely covered, so it
-        // must self-gate here rather than rely on onAppear/onDisappear -- the
-        // same pattern `TVLibraryView.setupControllerNavigation` uses.
-        let claimed = !ControllerFocusCoordinator.isActiveScope(scope)
-        guard !claimed else {
-          // Still track buttonA's physical state while claimed (per-controller,
-          // so a second pad can't perturb this one) so a press held across the
-          // claim boundary can't replay as an activate once we're unclaimed.
-          if element == gamepad.buttonA {
-            pauseNavGates[cid, default: PauseMenuInputGate()].consumeButtonA(claimed: true, isPressed: gamepad.buttonA.isPressed)
-          }
-          return
-        }
-        let dpad = gamepad.dpad
-        if element == dpad.up, dpad.up.isPressed { movePauseFocus(-1) }
-        if element == dpad.down, dpad.down.isPressed { movePauseFocus(1) }
-        if element == dpad.left, dpad.left.isPressed { movePauseFocus(-1) }
-        if element == dpad.right, dpad.right.isPressed { movePauseFocus(1) }
-        if element == gamepad.leftThumbstick {
-          let vy = gamepad.leftThumbstick.yAxis.value
-          if vy > 0.6 { movePauseFocus(-1) }
-          if vy < -0.6 { movePauseFocus(1) }
-        }
-        // Only ever fed from the buttonA callback itself -- never
-        // speculatively from an unrelated element's callback, which could
-        // latch or drop the real edge a beat early/late.
-        if element == gamepad.buttonA {
-          let activateA = pauseNavGates[cid, default: PauseMenuInputGate()].consumeButtonA(claimed: false, isPressed: gamepad.buttonA.isPressed)
-          if activateA { activatePauseFocus() }
-        }
-      }
-    }
-  }
-
-  private func teardownPauseControllerNav() {
-    for c in GCController.controllers() {
-      let cid = ObjectIdentifier(c)
-      if let egp = c.extendedGamepad {
-        if let prev = prevPauseEGPHandlers[cid] {
-          egp.valueChangedHandler = prev
-        } else {
-          egp.valueChangedHandler = nil
-        }
-      }
-      prevPauseEGPHandlers.removeValue(forKey: cid)
-    }
-    // pauseNavGates is deliberately left alone here -- see its declaration.
-    // setupPauseControllerNav's resync(isPressed:) re-syncs it from the live
-    // reading the next time a controller is (re)installed.
-  }
-  #endif
 
   // Platform-specific Settings button row
   @ViewBuilder
@@ -1376,11 +1088,14 @@ internal struct PauseMenuView: View {
             }
           })
           .sheet(isPresented: $showFilmstripSheet) {
-            // This pushes the grid's scope onto ControllerFocusCoordinator.
-            // setupPauseControllerNav() below (this file's OWN raw GCController
-            // dpad handler for iOS pause-menu nav) gates on
-            // ControllerFocusCoordinator.isActiveScope(pauseMenuScopeID), so
-            // dpad/A input no longer drives the pause menu behind this sheet.
+            // `.claimsController()` pushes this sheet's own scope onto
+            // `ControllerFocusCoordinator` while it is up. Nothing underneath
+            // needs to gate on it explicitly here: `pane == .saves` already
+            // means the root pane's own `MenuScreen` (D18) was torn down when
+            // `pane` left `.main`, so there is no raw handler left to fight
+            // over dpad/A -- this sheet's claim only matters for anything
+            // else that might still be listening (e.g. a future D18
+            // migration of this very list, design doc §6 step 5).
             NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
               .claimsController()
           }
@@ -1573,6 +1288,173 @@ internal struct PauseMenuView: View {
         }
       }
     }
+  }
+
+  // MARK: - D18 model (iOS root pane only)
+
+  /// The iOS root pane's `MenuModel` (design doc §6 step 2). Pure builder,
+  /// live closures -- no bridge calls inside `PauseMenuModelBuilder` itself,
+  /// mirroring `CheatsMenuView.cheatsMenuModel`/`CheatsMenuModelBuilder`.
+  private var pauseMenuModel: MenuModel {
+    let state = PauseMenuState(
+      isMuted: isMuted,
+      fastForwardEnabled: fastForwardEnabled,
+      fastForwardSubtitle: fastForwardSubtitle,
+      cheatsSubtitle: cheatsSubtitle
+    )
+    let actions = PauseMenuActions(
+      resume: { TVEmulationBridge.resume(); onClose() },
+      toggleMute: { toggleMute() },
+      openFastForwardPicker: { showFastForwardSpeedPicker = true },
+      openSaveStates: { pane = .saves },
+      openCheats: { pane = .cheats },
+      openControllers: {
+        #if os(iOS)
+        showControllersSheet = true
+        #else
+        pane = .controllers
+        #endif
+      },
+      openShaders: { showShaders = true },
+      openContinuity: { showContinuitySheet = true },
+      openSettings: { showSettingsSheet = true },
+      requestReset: { showResetDialog = true },
+      requestExit: { showExitDialog = true }
+    )
+    return PauseMenuModelBuilder.make(state: state, actions: actions)
+  }
+
+  /// Confirm overlay shown for `showResetDialog` -- Cancel first (the safe,
+  /// non-destructive default focus/first-A target, matching the original
+  /// `.alert`'s button order), Reset second and `.destructive`.
+  private var resetConfirmModel: MenuModel {
+    MenuModel(sections: [MenuSection(id: "reset-confirm", header: L("Reset System"), items: [
+      MenuItem(id: "reset-cancel", title: L("Cancel"), icon: "xmark", role: .action { showResetDialog = false }),
+      MenuItem(id: "reset-do", title: L("Reset"), icon: "arrow.counterclockwise.circle", tint: .orange, role: .destructive {
+        showResetDialog = false
+        // Same as the console's reset button. It does not reload the auto-resume state, so it is also
+        // the way out of a game that resumed into a bad save.
+        TVEmulationBridge.resetSystem()
+        onClose()
+      }),
+    ])])
+  }
+
+  /// Confirm overlay shown for `showExitDialog` -- Cancel first, matching the
+  /// original `.alert`'s order (Cancel, Quit, Save & Quit).
+  private var exitConfirmModel: MenuModel {
+    MenuModel(sections: [MenuSection(id: "exit-confirm", header: L("Exit Game"), items: [
+      MenuItem(id: "exit-cancel", title: L("Cancel"), icon: "xmark", role: .action { showExitDialog = false }),
+      MenuItem(id: "exit-quit", title: L("Quit"), icon: "xmark.circle", tint: .red, role: .destructive {
+        showExitDialog = false
+        TVEmulationBridge.stop()
+        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+      }),
+      MenuItem(id: "exit-save-quit", title: L("Save & Quit"), icon: "square.and.arrow.down", tint: .blue, role: .action {
+        showExitDialog = false
+        SaveStateService.saveSlot(selectedSlot)
+        TVEmulationBridge.stop()
+        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+      }),
+    ])])
+  }
+
+  /// Confirm overlay shown for `showFastForwardSpeedPicker` -- Cancel first
+  /// (uniform with the other two overlays above), then "Turn Off" (only while
+  /// FF is already on, matching the original `.confirmationDialog`), then the
+  /// speed choices. `selectFastForwardSpeed(_:)` already resumes and closes
+  /// the pause menu; `turnOffFastForward()` deliberately does not.
+  private var fastForwardConfirmModel: MenuModel {
+    var items: [MenuItem] = [
+      MenuItem(id: "ff-cancel", title: L("Cancel"), icon: "xmark", role: .action { showFastForwardSpeedPicker = false }),
+    ]
+    if fastForwardEnabled {
+      items.append(MenuItem(id: "ff-off", title: L("Turn Off"), icon: "forward.slash", role: .action {
+        showFastForwardSpeedPicker = false
+        turnOffFastForward()
+      }))
+    }
+    items.append(contentsOf: Self.fastForwardSpeedChoices.map { percent in
+      MenuItem(
+        id: "ff-\(percent)",
+        title: Self.fastForwardSpeedLabel(percent: percent),
+        subtitle: L("Start fast-forward and resume"),
+        icon: "forward.fill",
+        role: .action {
+          showFastForwardSpeedPicker = false
+          selectFastForwardSpeed(percent)
+        }
+      )
+    })
+    return MenuModel(sections: [MenuSection(id: "fast-forward-speed", header: L("Fast Forward Speed"), items: items)])
+  }
+}
+
+/// Plain snapshot -- no bridge reads inside `PauseMenuModelBuilder`, mirroring
+/// `CheatsMenuState`'s split (design doc §1).
+struct PauseMenuState {
+  var isMuted: Bool
+  var fastForwardEnabled: Bool
+  var fastForwardSubtitle: String
+  var cheatsSubtitle: String
+}
+
+/// Plain closures -- no bridge calls inside `PauseMenuModelBuilder` either.
+struct PauseMenuActions {
+  var resume: () -> Void
+  var toggleMute: () -> Void
+  var openFastForwardPicker: () -> Void
+  var openSaveStates: () -> Void
+  var openCheats: () -> Void
+  var openControllers: () -> Void
+  var openShaders: () -> Void
+  var openContinuity: () -> Void
+  var openSettings: () -> Void
+  var requestReset: () -> Void
+  var requestExit: () -> Void
+}
+
+/// D18 (design doc §6 step 2): builds the iOS pause menu's root `MenuModel`.
+/// Item order matches the pre-migration `iosMenuItems` exactly: Resume, Mute,
+/// Fast Forward, Save States, Cheats, Controllers, Shaders, Continue
+/// Elsewhere, Settings, Reset, Exit. Reset and Exit are both `.destructive`
+/// here (Exit already was a SwiftUI `ButtonRole.destructive`; Reset is newly
+/// marked to match -- both are irreversible and both are now gated by their
+/// own confirm overlay, so treating them the same is more consistent, not a
+/// behavior change: `MenuScreen.performActivate` runs `.action` and
+/// `.destructive` identically). Settings is unconditional here -- this
+/// builder's only caller, `PauseMenuView.iosMainMenu`, never actually runs on
+/// tvOS even though the type must still compile there.
+enum PauseMenuModelBuilder {
+  static func make(state: PauseMenuState, actions: PauseMenuActions) -> MenuModel {
+    let items: [MenuItem] = [
+      MenuItem(id: "resume", title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue, role: .action(actions.resume)),
+      MenuItem(
+        id: "mute",
+        title: state.isMuted ? L("Unmute") : L("Mute"),
+        subtitle: state.isMuted ? L("Restore audio volume") : L("Silence audio"),
+        icon: state.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+        tint: .cyan,
+        role: .action(actions.toggleMute)
+      ),
+      MenuItem(
+        id: "fast-forward",
+        title: L("Fast Forward"),
+        subtitle: state.fastForwardSubtitle,
+        icon: state.fastForwardEnabled ? "forward.fill" : "forward",
+        tint: .cyan,
+        role: .action(actions.openFastForwardPicker)
+      ),
+      MenuItem(id: "save-states", title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates)),
+      MenuItem(id: "cheats", title: L("Cheats"), subtitle: state.cheatsSubtitle, icon: "star.circle", tint: .yellow, role: .action(actions.openCheats)),
+      MenuItem(id: "controllers", title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers)),
+      MenuItem(id: "shaders", title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange, role: .action(actions.openShaders)),
+      MenuItem(id: "continuity", title: L("Continue Elsewhere"), subtitle: L("Hand this game to a nearby device"), icon: "arrow.triangle.branch", tint: .teal, role: .action(actions.openContinuity)),
+      MenuItem(id: "settings", title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray, role: .action(actions.openSettings)),
+      MenuItem(id: "reset", title: L("Reset System"), subtitle: L("Restart the game from power-on"), icon: "arrow.counterclockwise.circle", tint: .orange, role: .destructive(actions.requestReset)),
+      MenuItem(id: "exit", title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red, role: .destructive(actions.requestExit)),
+    ]
+    return MenuModel(sections: [MenuSection(id: "main", items: items)])
   }
 }
 
