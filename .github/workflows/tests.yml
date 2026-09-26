@@ -5,10 +5,12 @@ name: Unit Tests
 # they've run, and only ever by hand on a developer's machine.
 #
 # Separate workflow rather than a job inside build.yml on purpose: it gets its
-# own concurrency group (so a rerun of build.yml's slow archive jobs doesn't
-# cancel or get cancelled by this), and GitHub Actions caches are repo-scoped,
-# not workflow-scoped, so it can still reuse cache state build.yml warms up
-# without sharing a job or a workflow file.
+# own concurrency group, so a rerun of build.yml's slow archive jobs can never
+# cancel or be cancelled by this job or vice versa.
+#
+# No shared build cache with build.yml -- see the "No build cache" comment
+# below for why an object-dir cache doesn't actually help here, and why
+# build.yml's own dolphin-xcf-* cache doesn't either.
 
 on:
   push:
@@ -87,11 +89,11 @@ jobs:
           echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
           "$HOME/.local/share/mise/shims/tuist" version
 
-      # No `tuist install` for a from-scratch xcframework build here (unlike
-      # build.yml): build/xcframework/*.framework is a git-tracked binary
-      # (.gitignore carves it out with `!/build/xcframework/`), so it's already
-      # on disk after checkout and `tuist generate` resolves the binary target
-      # straight from that.
+      # No `BuildiOSXCFramework.py` step here, unlike build.yml (unlike, i.e.,
+      # its "Build PVlibDolphin xcframework" step): build/xcframework/*.framework
+      # is a git-tracked binary (.gitignore carves it out with
+      # `!/build/xcframework/`), so it's already on disk after checkout and
+      # `tuist generate` resolves the binary target straight from that.
       - name: Generate Xcode project
         working-directory: Source/iOS/App
         run: |
@@ -100,27 +102,34 @@ jobs:
           tuist generate --no-open
           ls -d iCube.xcworkspace iCube.xcodeproj
 
+      # No build cache for the Dolphin core compile itself, deliberately.
       # The app target's "Build Dolphin Core" pre-script (Project.swift) has
       # `basedOnDependencyAnalysis: false`, so it unconditionally re-runs
       # BuildiOSXCFramework.py for whatever platform Xcode is building --
-      # SIMULATORARM64 here -- on every `xcodebuild test`, even though the
-      # tracked xcframework slice already exists. That script's real work
-      # lands in build-iphonesimulator-Release/ (CMake+Ninja, incremental),
-      # a directory .gitignore excludes via `/build-*/` and which build.yml's
-      # own "dolphin-xcf-*" cache does NOT cover (that cache's path is `build`,
-      # i.e. the already git-tracked build/xcframework output -- caching it
-      # again is redundant with checkout, not a compile-time win). Cache the
-      # actual CMake build dir here instead, under a cache key namespaced away
-      # from build.yml's so a save from this job can never race or evict its
-      # unrelated `dolphin-xcf-*` entries.
-      - name: Restore Dolphin simulator-core build cache
-        id: simcore-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: build-iphonesimulator-Release
-          key: dolphin-simcore-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            dolphin-simcore-${{ runner.os }}-
+      # SIMULATORARM64 here -- on every `xcodebuild test`, into an untracked
+      # CMake+Ninja dir (build-iphonesimulator-Release/, excluded by
+      # .gitignore's `/build-*/`) that build.yml's own "dolphin-xcf-*" cache
+      # does NOT cover (that cache's path is `build`, i.e. the already
+      # git-tracked build/xcframework output -- restoring it again is
+      # redundant with checkout, not a compile-time win; its own comment
+      # claiming it "restores the previous object files" does not hold for a
+      # from-scratch checkout).
+      #
+      # Caching build-iphonesimulator-Release/ directly was tried and
+      # dropped: actions/cache preserves the object files' OLD mtimes, but
+      # `actions/checkout` gives every source/header file a fresh mtime at
+      # clone time, so Ninja sees every input as newer than the restored
+      # outputs and does a full rebuild anyway -- paying multi-GB
+      # upload/download for no compile-time benefit. The correct fix is
+      # content-addressed caching (ccache), which the root CMakeLists.txt
+      # already supports via `-DENABLE_CCACHE=ON` (see CMakeLists.txt:122,
+      # CCache.cmake), but BuildiOSXCFramework.py does not currently pass
+      # that flag. Wiring it through (env-gated, so archive/testflight builds
+      # are unaffected) and caching $CCACHE_DIR instead is a follow-up, not
+      # part of this change -- it touches the shared build script every other
+      # workflow also depends on.
+      # See the runtime note in the PR/commit description for how long a cold
+      # compile of just this one platform takes.
 
       # Runner images vary which simulator runtimes they ship, so a hardcoded
       # "iPhone 17 Pro" is one image update away from breaking the job. Pick
@@ -130,7 +139,11 @@ jobs:
       # Xcode (this machine had iOS 27 installed as its newest runtime
       # alongside 26.5; Xcode 26.3 cannot target a runtime newer than it
       # ships). Must run after "Select Xcode" so DEVELOPER_DIR/xcrun agree
-      # with the pinned version.
+      # with the pinned version. Walks eligible runtimes newest-first and
+      # picks the first one that actually has an iPhone (falls back to an
+      # older eligible runtime if the newest has none), and pins `OS=` on the
+      # result -- `-destination name=X` alone lets xcodebuild re-resolve X
+      # against a DIFFERENT installed runtime than the one just validated.
       - name: Pick an available iPhone simulator
         id: pick_sim
         run: |
@@ -138,7 +151,7 @@ jobs:
           command -v jq >/dev/null || brew install jq
           sdk="$(xcrun --sdk iphonesimulator --show-sdk-version)"
           echo "iphonesimulator SDK for the pinned Xcode: $sdk"
-          sim="$(xcrun simctl list devices available -j | jq -r --arg sdk "$sdk" '
+          picked="$(xcrun simctl list devices available -j | jq -r --arg sdk "$sdk" '
             def verparts: capture("iOS-(?<a>[0-9]+)-(?<b>[0-9]+)") | [(.a|tonumber),(.b|tonumber)];
             ($sdk | split(".") | map(tonumber)) as $max
             | .devices | to_entries
@@ -146,15 +159,19 @@ jobs:
             | map(. + {ver: (.key | verparts)})
             | map(select(.ver[0] < $max[0] or (.ver[0] == $max[0] and .ver[1] <= $max[1])))
             | sort_by(.ver) | reverse
-            | (.[0].value // [])
-            | map(select(.name | startswith("iPhone")))
-            | (.[0].name // empty)
+            | map({ver: .ver, name: ([.value[] | select(.name | startswith("iPhone"))][0].name // "")})
+            | map(select(.name != ""))
+            | .[0]
+            | if . == null then empty else "\(.name)|\(.ver[0]).\(.ver[1])" end
           ')"
-          if [ -z "$sim" ]; then
+          if [ -z "$picked" ]; then
             echo "::error::No available iPhone simulator found with an iOS runtime <= $sdk"
             xcrun simctl list devices available
             exit 1
           fi
+          name="${picked%%|*}"
+          ver="${picked##*|}"
+          sim="${name},OS=${ver}"
           echo "Picked simulator: $sim"
           echo "sim=$sim" >> "$GITHUB_OUTPUT"
 
@@ -172,15 +189,6 @@ jobs:
           set -o pipefail
           rm -rf "$RESULT_BUNDLE"
           make test SIM="$SIM" TEST_ARGS="-resultBundlePath $RESULT_BUNDLE" 2>&1 | tee "$LOG_FILE"
-
-      # Own key/path, so this can save unconditionally without any risk to
-      # build.yml's cache -- see the restore step's comment.
-      - name: Save Dolphin simulator-core build cache
-        if: always() && steps.simcore-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: build-iphonesimulator-Release
-          key: dolphin-simcore-${{ runner.os }}-${{ github.sha }}
 
       - name: Upload xcresult + raw log on failure
         if: failure()
