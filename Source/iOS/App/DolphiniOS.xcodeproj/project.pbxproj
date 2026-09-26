@@ -74,6 +74,7 @@
 		B38206112E57FF0E00D4853F /* ShaderPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206082E57FF0E00D4853F /* ShaderPostProcessor.swift */; };
 		C0C0CAFE00000000000009A1 /* ShaderPreviewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A0 /* ShaderPreviewRenderer.swift */; };
 		C0C0CAFE00000000000009A3 /* ShaderPreviewCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A2 /* ShaderPreviewCache.swift */; };
+		C0C0CAFE00000000000009A5 /* ShaderPreviewCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A4 /* ShaderPreviewCacheTests.swift */; };
 		B38206122E57FF0E00D4853F /* FilterChain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206022E57FF0E00D4853F /* FilterChain.swift */; };
 		B38206132E57FF0E00D4853F /* CompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */; };
 		B38206142E57FF0E00D4853F /* Matrix.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206042E57FF0E00D4853F /* Matrix.swift */; };
@@ -439,6 +440,7 @@
 		B38206082E57FF0E00D4853F /* ShaderPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPostProcessor.swift; sourceTree = "<group>"; };
 		C0C0CAFE00000000000009A0 /* ShaderPreviewRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPreviewRenderer.swift; sourceTree = "<group>"; };
 		C0C0CAFE00000000000009A2 /* ShaderPreviewCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPreviewCache.swift; sourceTree = "<group>"; };
+		C0C0CAFE00000000000009A4 /* ShaderPreviewCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ShaderPreviewCacheTests.swift"; path = "DolphiniOSTests/ShaderPreviewCacheTests.swift"; sourceTree = SOURCE_ROOT; };
 		B38206092E57FF0E00D4853F /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipCompiledShaderContainer.swift; sourceTree = "<group>"; };
 		B38206172E58002000D4853F /* CompilerEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompilerEnums.swift; sourceTree = "<group>"; };
@@ -1892,6 +1894,7 @@
 				C0C0CAFE0000000000000994 /* PendingGameLaunchStoreTests.swift */,
 				C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */,
 				C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */,
+				C0C0CAFE00000000000009A4 /* ShaderPreviewCacheTests.swift */,
 				C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */,
 				C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */,
 				C0C0CAFE0000000000000904 /* ContinuityManager.swift */,
@@ -2498,6 +2501,7 @@
 				C0C0CAFE0000000000000995 /* PendingGameLaunchStoreTests.swift in Sources */,
 				C0C0CAFE0000000000000997 /* SaveStateFormattingTests.swift in Sources */,
 				C0C0CAFE0000000000000999 /* TCManagerInterfaceAxisTests.swift in Sources */,
+				C0C0CAFE00000000000009A5 /* ShaderPreviewCacheTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
