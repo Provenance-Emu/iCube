@@ -124,10 +124,26 @@ struct TouchOverlayCluster<ID: Hashable>: View {
     pressed = now
 
     guard let onForce, !pressureIds.isEmpty else { return }
+    // Task item 2 (DSU pass): a newly-pressed `pressureIds` member gets EXACTLY ONE analog write
+    // this pass, from `onForce` — never also the caller's own `onChange(id, true)` fallback (see
+    // `TouchOverlayGroupViews.axisButton`'s onChange case, which now writes 0.0 on release only).
+    // Before this, `onChange`'s synthetic 1.0 and this loop's real force sample raced within the
+    // SAME pass: on force-reporting hardware (Apple Pencil, 3D-Touch-era iPhones) a light press
+    // sent a full-value DSU packet immediately followed by a lower one, an edge a DSU client could
+    // read as a full press-then-release of the mirrored shoulder button.
+    var coveredThisPass: Set<ID> = []
     for touch in liveTouches.values {
       let hits = hitTest(touch.location, size)
       guard hits.count == 1, let id = hits.first, pressureIds.contains(id) else { continue }
       onForce(id, TouchOverlayInput.pressureValue(force: touch.force, maximumPossibleForce: touch.maximumPossibleForce))
+      coveredThisPass.insert(id)
+    }
+    // A `pressureIds` member that just became pressed but wasn't covered above (e.g. two touches
+    // landed on the SAME region in the same instant, so `hits.count != 1` for both) still needs an
+    // initial analog value — `onChange`'s own axisButton write is gone now, so nothing else will
+    // ever send one. `1.0` matches `TouchOverlayInput.pressureValue`'s own no-force convention.
+    for id in pressedNow where pressureIds.contains(id) && !coveredThisPass.contains(id) {
+      onForce(id, 1.0)
     }
   }
 

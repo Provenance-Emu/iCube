@@ -64,11 +64,17 @@ struct TouchOverlayButtonClusterView: View {
           case .button(let raw):
             TCManagerInterface.setButtonStateFor(raw, controller: deviceId, state: down)
           case .axisButton(let raw):
-            // Initial value on press / final value on release. While held, `onForce` below
-            // overrides this with the touch's actual pressure (task item 2) on force-capable
-            // hardware; 1.0 is also `TouchOverlayInput.pressureValue`'s own fallback, so there's
-            // no jump between this write and the first `onForce` sample.
-            TCManagerInterface.setAxisValueFor(raw, controller: deviceId, value: down ? 1.0 : 0.0)
+            // RELEASE only. The press write is `TouchOverlayCluster.recompute`'s job now (task
+            // item 2's DSU pass): this control's id is always a member of `pressureIds` (see
+            // `axisButtonIds` below), so `onForce` — which runs in the SAME `recompute()` pass,
+            // right after the press/release transitions this closure reacts to — is guaranteed to
+            // supply the initial value (real pressure, or its own 1.0 fallback for a multi-touch
+            // ambiguity or non-force hardware). Writing a synthetic 1.0 here too raced `onForce`'s
+            // real sample within that same pass and produced a spurious full-press-then-release
+            // blip on the DSU-mirrored shoulder button for any force-reporting touch.
+            if !down {
+              TCManagerInterface.setAxisValueFor(raw, controller: deviceId, value: 0.0)
+            }
           case .stick, .dpad, .irSurface:
             break
           }
@@ -85,6 +91,22 @@ struct TouchOverlayButtonClusterView: View {
     }
     .onChange(of: isEditing) { _, editing in
       guard editing else { return }
+      // Release every currently-held control's write BEFORE clearing `pressed` (task item 2's DSU
+      // pass): `pressed` is a plain `@State` bound into `TouchOverlayCluster` below, so just
+      // setting it to `[]` here only resets the SwiftUI highlight — it does NOT retrigger the
+      // cluster's `onChange` callback (that only fires from `recompute()`, driven by touch events,
+      // never by an external write to the binding), so the actual `TCManagerInterface` release
+      // this loop performs would otherwise never happen. A button held when the user long-presses
+      // into edit mode was left "down" in `StateManager` (and its DSU mirror) for as long as the
+      // editor stayed open.
+      for id in pressed {
+        guard let control = controls.first(where: { $0.id == id }) else { continue }
+        switch control.kind {
+        case .button(let raw): TCManagerInterface.setButtonStateFor(raw, controller: deviceId, state: false)
+        case .axisButton(let raw): TCManagerInterface.setAxisValueFor(raw, controller: deviceId, value: 0.0)
+        case .stick, .dpad, .irSurface: break
+        }
+      }
       pressed = []
     }
   }
