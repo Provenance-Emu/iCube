@@ -741,9 +741,10 @@ struct TVLibraryView: View {
     }
   }
 
+  /// Follows the appearance: a fixed black here put light-mode (black) titles on black.
   @ViewBuilder
   private var cleanBackground: some View {
-    Color.black
+    Color(uiColor: .systemBackground)
       .ignoresSafeArea()
   }
 
@@ -910,7 +911,10 @@ struct TVLibraryView: View {
           .animation(Animation.linear(duration: Double.random(in: 20...30)).repeatForever(autoreverses: false).delay(Double(index) * 2), value: UUID())
       }
     }
-    .clipped()
+    // No .clipped(): it cut the whole effect off at the safe area, leaving plain bands behind the
+    // navigation bar and the bottom search bar. The orbs move by .offset, which never affects
+    // layout, and this is the bottom layer, so nothing needs clipping.
+    .ignoresSafeArea()
   }
 
   private enum CheatType { case gecko, ar }
@@ -3305,7 +3309,8 @@ struct iOS16NavigationStyleModifier: ViewModifier {
   func body(content: Content) -> some View {
     content
       .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      // No .toolbarColorScheme(.dark): the library has light-mode backgrounds now, and a forced
+      // dark bar made the status bar white on them (clock unreadable on Clean/Gradient light).
 #if !os(tvOS)
       .scrollContentBackground(.hidden)
 #endif
