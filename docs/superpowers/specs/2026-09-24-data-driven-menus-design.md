@@ -459,6 +459,99 @@ The engine (§0 of §6's migration order) landed with one proof-of-life screen.
   `Common/**/*.swift` and `DolphiniOSTests/**/*.swift` already, so it picked
   up every new file with a plain `tuist generate`.
 
+### Pause menu main pane (2026-09-26, second pass)
+
+§6 step 2 landed. **iOS only** — `PauseMenuView.tvMainMenu` is byte-for-byte
+unchanged; only `iosMainMenu` and the iOS-only confirm dialogs moved.
+
+- **`iosMainMenu` renders a `MenuModel` via `MenuScreen(style: .grid)`.**
+  `PauseMenuModelBuilder.make(state:actions:)` (bottom of `PauseMenuView.swift`)
+  builds the root pane's 11-item model — Resume, Mute, Fast Forward, Save
+  States, Cheats, Controllers, Shaders, Continue Elsewhere, Settings, Reset,
+  Exit, same order as the deleted `iosMenuItems` — from a `PauseMenuState`
+  snapshot + `PauseMenuActions` closures, mirroring `CheatsMenuState`/
+  `CheatsMenuActions`/`CheatsMenuModelBuilder`. No bridge calls inside the
+  builder. Reset and Exit are both `MenuItemRole.destructive` now (Exit
+  already was a SwiftUI `ButtonRole.destructive`; Reset is newly marked to
+  match — `MenuScreen.performActivate` runs `.action`/`.destructive`
+  identically, so this is a labeling change, not a behavior change). Settings
+  is unconditional in the builder itself (no `#if os(iOS)`) since the
+  builder's only caller never actually runs on tvOS even though it must
+  still compile there — simpler than threading a platform conditional through
+  a pure/testable type.
+- **Save States stays `.action { pane = .saves }`, not a `.navigation`
+  submodel** — the smaller diff; `.navigation` would need `savesMenu`
+  re-homed under a `NavigationStack` it does not otherwise need. Controllers/
+  Shaders/Continue Elsewhere/Settings likewise stay `.action` triggering the
+  existing `@State` sheet flags — the pause contract (`isPauseMenuChildPresented`,
+  ~line 52) did not need to change, since none of this migration's new
+  presentations are `.sheet`s (see below).
+- **The raw `GCController` handler is fully retired for this pane.**
+  `setupPauseControllerNav`/`teardownPauseControllerNav`/`movePauseFocus`/
+  `activatePauseFocus`/`refreshPauseMenuControllerNav`/`hasPauseMenuNavController`,
+  the `PauseMenuInputGate` struct (+ its 10-case test file), and the state it
+  closed over (`iosFocusIndex`, `pauseMenuControllerNavActive`,
+  `lastPauseNavMoveTime`, `prevPauseEGPHandlers`, `pauseMenuScopeID`,
+  `pauseNavGates`) are all deleted — `import GameController` is gone from the
+  file entirely. `MenuScreen` self-claims its own
+  `ControllerFocusCoordinator` scope and polls, so `iosMainMenu` no longer
+  claims a scope of its own either (an outer claim racing `MenuScreen`'s own
+  would fight over which is topmost — see the design note this pass added to
+  §2's Implementation Status). One input path drives the root pane now, not
+  two. Confirmed safe: `installPauseMenuHandlers`
+  (`Controllers/ControllerExtensions.swift`) uses per-button
+  `pressedChangedHandler`, a different callback slot than the deleted
+  handler's whole-gamepad `valueChangedHandler` — retiring the raw handler
+  doesn't disturb it, and `PauseGestureTracker` never touched
+  `valueChangedHandler` either.
+- **Exit/Reset/Fast-Forward are `MenuScreen`-backed in-place overlays, not
+  `.alert`/`.confirmationDialog`.** This is the actual gap-closer: a native
+  alert has no relationship to `ControllerFocusCoordinator`, so the old raw
+  handler kept driving the row list underneath it. Each of
+  `resetConfirmModel`/`exitConfirmModel`/`fastForwardConfirmModel` is a tiny
+  `MenuModel` (Cancel always first — the safe, non-destructive default focus/
+  first-A target, matching every one of the original alerts' own button
+  order) rendered by its own `MenuScreen` inside a translucent card
+  (`PauseMenuView.confirmOverlay`), toggled by the *same* `@State` flags the
+  original alerts used (`showExitDialog`/`showResetDialog`/
+  `showFastForwardSpeedPicker`). Because each is a plain conditional child
+  view (`if showExitDialog { confirmOverlay(...) }`), not a `.sheet`, it gets
+  real `onAppear`/`onDisappear` — so its `MenuScreen` correctly pushes/pops
+  its own coordinator scope, the root pane's `MenuScreen` resyncs (not
+  moves/activates) for as long as one is up, and `isPauseMenuChildPresented`
+  needed no new cases (unlike a `.sheet`, which would have needed the
+  predicate extended, since a `.sheet` fires the outer `onDisappear`). B (or
+  the overlay's own Cancel row) closes it; A confirms whatever row is
+  focused. The existing `MenuFocusRouter`/`MenuScreen` "claim-ignore resyncs"
+  and "open-press leak" protections (§9 above) are exactly what make the
+  transition in and out of these overlays safe with no new engine code — the
+  same physical press that opened or dismissed an overlay cannot double-fire
+  on the screen it exposes.
+- **Visual note, not fixed here (see the note on `.grid` below).**
+  `MenuScreen.gridCard`'s `Text(title)`/`Text(subtitle)` (via the shared
+  `rowLabel`) take no explicit color or the §5 token table's exact font
+  weights/sizes, and render no trailing chevron — `menuButtonIOS`/
+  `menuRowIOS` had both. This pass did not touch `MenuScreen.swift` to fix
+  it (another agent was touching that file's input-polling this round, and
+  `gridCard`/`rowLabel` are shared with any future `.grid` consumer); instead
+  `iosMainMenu`/`confirmOverlay` add `.preferredColorScheme(.dark)` at the
+  call site (the same fix already used for other always-dark screens,
+  `DolphinBlogView`/`SaveStateCardView`) so `.primary`/`.secondary` at least
+  resolve to legible colors regardless of system appearance. Font
+  weight/size and the missing chevron remain a small, known visual gap
+  versus the deleted rows — flagged for whoever next touches `gridCard`.
+- **Tests**: `PauseMenuModelBuilderTests.swift` (construction/order — the
+  11-item sequence for two different `PauseMenuState` snapshots shaped like a
+  GameCube title's vs. a Wii title's live state, since the root pane has no
+  per-system branching to begin with — same invariance `tvMainMenu` already
+  has; cheats/fast-forward subtitle pass-through; mute title/icon flip;
+  Reset/Exit `.destructive` marking vs. every other item `.action`; action
+  closures actually wired through, not recomputed). Wired into
+  `DolphiniOS.xcodeproj`'s `iCubeTests` target at ids `...09A6`–`...09A7`,
+  replacing the deleted `PauseMenuInputGateTests.swift` entry at the freed
+  `...099A`–`...099B` slot (test count net +1: 10 old tests removed, 11 new
+  ones added).
+
 ### What each remaining screen migration needs (§6, unchanged order)
 
 1. **Pause menu main pane.** The highest-value step (§6 step 2) and the one
@@ -469,6 +562,15 @@ The engine (§0 of §6's migration order) landed with one proof-of-life screen.
    genuinely tear down `iosMainMenu`'s `onAppear`/`onDisappear`, not
    sheets). Also where B1 gets fixed per §3.
 2. **Controllers.** Wrap `ControllerSetupSections`; delete `tvPlayerLink`/
+1. **Cheats — tvOS.** Port the existing two-column layout onto `MenuScreen`'s
+   tvOS `List` contract, or accept the layout is intentionally bespoke and
+   leave it outside the engine permanently — needs a design call, not just
+   an implementation.
+2. ~~**Pause menu main pane.**~~ **Done** (iOS root pane only — see "Pause
+   menu main pane (2026-09-26, second pass)" above). B1 (§3) was already
+   handled by the pre-existing `isPauseMenuChildPresented` predicate, which
+   this pass left unchanged since none of its new presentations are sheets.
+3. **Controllers.** Wrap `ControllerSetupSections`; delete `tvPlayerLink`/
    `tvOptionRow`/`tvDeviceRows` in favor of `MenuScreen`'s tvOS renderer,
    which already implements the picker-explosion contract those three
    hand-roll today (and, as of the 2026-09-26 fix above, actually binds
@@ -481,6 +583,12 @@ The engine (§0 of §6's migration order) landed with one proof-of-life screen.
    1 above) landing first, or on a decision to touch `PauseMenuView.swift`
    in isolation for just this section.
 5. **Settings root.** Lowest risk per §6, but note `MenuItemRole.destination`
+5. **Save States / Quick Slots.** Lives in `PauseMenuView.savesMenu`
+   (`PauseMenuView.swift`) — no longer blocked now that step 2 has landed,
+   but deliberately left untouched by that pass (smaller diff, per its own
+   notes above): `savesMenu` is still a plain iOS `List`/tvOS hand-rolled
+   pane with no `MenuScreen` involvement.
+6. **Settings root.** Lowest risk per §6, but note `MenuItemRole.destination`
    already round-trips correctly through both `MenuScreen` renderers in this
    pass (proven by `.destination` support in `MenuScreen.listRow`/`tvRow`,
    though no screen exercises it yet) — the adapter itself is still unwritten.
@@ -510,3 +618,21 @@ The engine (§0 of §6's migration order) landed with one proof-of-life screen.
 - Both: the `.grid` `MenuStyle` (pause-menu card look) has no consumer and no
   device/screenshot comparison against `menuButtonIOS`/`menuRowIOS` — treat
   it as a draft until the pause-menu migration (step 1 above) adopts it.
+  `.onExitCommand` — no consumer of the tvOS renderer exists yet in a real
+  screen (Cheats' tvOS body was deliberately left untouched), so this is
+  compiled but never focus-tested on a real Apple TV or simulator with the
+  Siri Remote.
+- iOS: the pause menu's root pane and its three confirm overlays
+  (`resetConfirmModel`/`exitConfirmModel`/`fastForwardConfirmModel`) now DO
+  consume `.grid`, but this pass has no device/screenshot comparison against
+  the deleted `menuButtonIOS`/`menuRowIOS` — the known font-weight/chevron
+  gap noted above is unverified beyond "compiles and passes unit tests", and
+  the confirm overlays' A-confirms/B-cancels behavior against a real
+  controller (including the claim-ignore/open-press-leak protections this
+  migration leans on to avoid double-firing across the overlay
+  boundary) has only been reasoned through, not exercised on hardware.
+- iOS: `ControllerFocusCoordinator` interaction between the pause menu's root
+  `MenuScreen` and its own child sheets (Shaders/Settings/Controllers/
+  Continuity, all still `.claimsController()`) — same mechanism Cheats
+  already relies on, but this specific pane combination is untested on
+  a real controller.
