@@ -48,7 +48,9 @@ import MetalKit
       filter = try? FilterChain(device: device)
       library = nil
       cachedPresetPath = nil
+      #if DEBUG
       debugChecker = nil
+      #endif
     }
   }
 
