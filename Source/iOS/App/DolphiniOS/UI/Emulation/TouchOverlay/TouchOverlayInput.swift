@@ -56,5 +56,18 @@ enum TouchOverlayInput {
     guard maximumPossibleForce > 0, force > 0 else { return 1.0 }
     return Float(min(1.0, force / maximumPossibleForce))
   }
+
+  /// The overlay's rendered opacity (task item 1's "Overlay Opacity" setting): REUSES
+  /// `DOLConfigBridge.mainTouchPadOpacity()`/`setMainTouchPadOpacity` — the same key and Settings
+  /// row (`ControllersRootView`'s "Alternate Input Sources > Opacity" slider, already unconditional
+  /// on both the legacy xib pads and this overlay) rather than adding a second, overlay-specific
+  /// opacity control. Full opacity while any edit mode is active, so the editor's own chrome
+  /// (highlight border, resize handles) is always clearly visible regardless of how transparent
+  /// the user has set gameplay opacity; otherwise the configured value, floored at 0.2 so the
+  /// overlay can never be dragged to fully invisible (matching the legacy pads' own
+  /// `max(0.2, ...)` floor in `EmulationScreen+TouchAndMotion.swift`).
+  static func resolvedOpacity(isEditing: Bool, configuredOpacity: Float) -> Double {
+    isEditing ? 1.0 : max(0.2, Double(configuredOpacity))
+  }
 }
 #endif

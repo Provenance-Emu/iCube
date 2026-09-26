@@ -18,5 +18,7 @@
 	<false/>
 	<key>touch_overlay_style</key>
 	<integer>0</integer>
+	<key>touch_overlay_ir_pointer_gain</key>
+	<real>1.0</real>
 </dict>
 </plist>

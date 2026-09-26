@@ -129,6 +129,14 @@ struct ControllersRootView: View {
   @State private var touchOverlayStyle: Int = UserDefaults.standard.integer(forKey: "touch_overlay_style")
   @State private var showTouchOverlayEditor = false
   @State private var touchOverlayEditorPadKind: TouchOverlayPadKind = .gameCube
+  @State private var showTouchOverlayIRAreaEditor = false
+  /// Drag-mode IR pointer sensitivity gain (task item 1): a NEW setting — neither the legacy
+  /// `TCWiiPad` drag math nor gyro mode (`TCDeviceMotion.handleIRCursorMapping`'s hardcoded
+  /// 2.66/2.0) exposed a user-facing gain to reuse, despite this feature's original design doc
+  /// (docs/superpowers/specs/2026-09-24-programmatic-touch-overlay-design.md §7) assuming one
+  /// already existed. See `TouchOverlayIRGeometry.clampDragGain`/`.drag` for why this only
+  /// affects Drag mode, never Follow (absolute) or gyro mode.
+  @State private var touchOverlayIRPointerGain: Double = UserDefaults.standard.double(forKey: "touch_overlay_ir_pointer_gain")
 #endif
   @State private var touchIRMode: TouchIRMode = .drag
   // Raw SerialInterface::SIDevices values (SI_Device.h): 0 = SIDEVICE_NONE,
@@ -387,6 +395,30 @@ struct ControllersRootView: View {
         } label: {
           Label(L("Reset All Overlay Layouts"), systemImage: "arrow.counterclockwise")
         }
+
+        // Task item 1's three new rows — gated on the beta flag (unlike Style/Edit Layout/Reset
+        // above, which apply even with the flag off since they only touch stored settings, not
+        // live rendering). Opacity is intentionally NOT duplicated here: it already exists, and
+        // already applies to this overlay, via the generic "Opacity" slider above
+        // (`DOLConfigBridge.mainTouchPadOpacity`/`setMainTouchPadOpacity`, read by
+        // `TouchOverlayView` through `TouchOverlayInput.resolvedOpacity`).
+        if touchOverlayProgrammatic {
+          Button {
+            showTouchOverlayIRAreaEditor = true
+          } label: {
+            Label(L("Edit IR Area…"), systemImage: "scope")
+          }
+
+          settingsCaption(
+            HStack {
+              Text(L("Pointer Sensitivity"))
+              Spacer()
+              Slider(value: $touchOverlayIRPointerGain, in: Double(TouchOverlayIRGeometry.dragGainRange.lowerBound)...Double(TouchOverlayIRGeometry.dragGainRange.upperBound))
+                .frame(width: 220)
+                .onChange(of: touchOverlayIRPointerGain) { UserDefaults.standard.set($0, forKey: "touch_overlay_ir_pointer_gain") }
+            },
+            L("Scales how far the Wii Remote pointer moves per drag in Drag mode. Doesn't affect Follow or Gyro mode."))
+        }
 #endif
 
         NavigationLink(destination: EnhancedMotionControlsView()) {
@@ -409,6 +441,9 @@ struct ControllersRootView: View {
 #if os(iOS)
     .sheet(isPresented: $showTouchOverlayEditor) {
       TouchOverlayLayoutEditorSheet(padKind: $touchOverlayEditorPadKind)
+    }
+    .sheet(isPresented: $showTouchOverlayIRAreaEditor) {
+      TouchOverlayIRAreaEditorSheet()
     }
 #endif
     .sheet(isPresented: $showAddDsuServer) {
@@ -455,6 +490,7 @@ struct ControllersRootView: View {
     touchOpacity = DOLConfigBridge.mainTouchPadOpacity()
     touchOverlayProgrammatic = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
     touchOverlayStyle = UserDefaults.standard.integer(forKey: "touch_overlay_style")
+    touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(UserDefaults.standard.double(forKey: "touch_overlay_ir_pointer_gain")))
 #endif
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
     // DSU
@@ -623,11 +659,20 @@ struct TouchIRModePicker: View {
 
 #if os(iOS)
 /// The Settings "Edit Layout…" preview (task item 3): opens the programmatic overlay already in
-/// edit mode, with no live game/device context. `TouchOverlayView.init(initialEditing:)` makes
-/// this safe — every group's input is suppressed while editing, so nothing here can reach
-/// `TCManagerInterface` regardless of the placeholder `deviceId`. There's no live game to infer the
-/// current Wii variant (Classic/sideways/upright) from outside a running emulation session, so the
-/// picker lets the user choose which of the four pad kinds to edit directly.
+/// `.layout` edit mode, with no live game/device context. `TouchOverlayView.init(initialEditMode:)`
+/// makes this safe — every group's input is suppressed while any edit mode is active, so nothing
+/// here can reach `TCManagerInterface` through the ordinary button/D-pad/stick paths regardless of
+/// the placeholder `deviceId`. There's no live game to infer the current Wii variant
+/// (Classic/sideways/upright) from outside a running emulation session, so the picker lets the
+/// user choose which of the four pad kinds to edit directly.
+///
+/// `irMode: .none` (task item 2's DSU pass) rather than the live `DOLConfigBridge.
+/// mainTouchPadIRMode()`: `TouchOverlayIRPadView`'s `mode`/`isEditingFlag` `didSet`s both call
+/// `forceReleaseAndCenter()` on mount (a legitimate "recenter on mode change" behavior during real
+/// play), but mounting THIS preview with any mode other than `.none` fired that write twice in a
+/// row to the placeholder `deviceId: 0` purely from `updateUIView`'s property-assignment order —
+/// contradicting this comment's own former claim that nothing here reaches `TCManagerInterface`.
+/// `.none` makes both call sites true no-ops (`sendIR`'s own `mode != .none` guard).
 struct TouchOverlayLayoutEditorSheet: View {
   @Binding var padKind: TouchOverlayPadKind
   @Environment(\.dismiss) private var dismiss
@@ -645,7 +690,7 @@ struct TouchOverlayLayoutEditorSheet: View {
         .padding()
 
         TouchOverlayView(padKind: padKind, deviceId: 0,
-                         irMode: Int(DOLConfigBridge.mainTouchPadIRMode()), initialEditing: true)
+                         irMode: TCWiiTouchIRMode.none.rawValue, initialEditMode: .layout)
           .id(padKind)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(Color.black.opacity(0.85))
@@ -657,6 +702,37 @@ struct TouchOverlayLayoutEditorSheet: View {
           Button(L("Close")) { dismiss() }
         }
       }
+    }
+  }
+}
+
+/// The Settings "Edit IR Area…" preview (task item 1): opens the SAME `TouchOverlayView` the
+/// "Edit Layout…" sheet above does, seeded into `.irArea` mode instead of `.layout` — see
+/// `TouchOverlayEditMode`'s doc comment for why a single enum, not a second independent flag,
+/// is what actually satisfies design §9's "entering IR-area edit disables layout edit and vice
+/// versa": there is exactly one edit mode active per sheet, so the two can't overlap. Forces
+/// `padKind: .wiiRemote` with no picker, unlike the layout sheet — `wiiIRPad` (the only group
+/// `.irArea` mode ever shows chrome for) exists ONLY in that one pad kind's default layout
+/// (`TouchOverlayDefaults.wiiRemote`), so a picker offering the other three would just open an
+/// editor with nothing editable in it.
+struct TouchOverlayIRAreaEditorSheet: View {
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      // `irMode: .none` for the same reason as `TouchOverlayLayoutEditorSheet` above — this
+      // preview has no live game/device context, so nothing should reach `TCManagerInterface`.
+      TouchOverlayView(padKind: .wiiRemote, deviceId: 0,
+                       irMode: TCWiiTouchIRMode.none.rawValue, initialEditMode: .irArea)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.85))
+        .navigationTitle(L("Edit IR Area"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          ToolbarItem(placement: .topBarTrailing) {
+            Button(L("Close")) { dismiss() }
+          }
+        }
     }
   }
 }

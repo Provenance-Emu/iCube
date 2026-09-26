@@ -89,11 +89,29 @@ final class TouchOverlayLayoutStore: ObservableObject {
   }
 
   /// The stored size scale for a group, or 1.0 (the default footprint) when absent — either
-  /// because the entry predates phase 2, or the user has never resized this group.
+  /// because the entry predates phase 2, or the user has never resized this group. For a group
+  /// with an independent width/height entry (phase 3, `[x, y, sx, sy]` — currently only
+  /// `wiiIRPad`, written by `setIRSizeScale`), this returns the WIDTH component (`sx`); use
+  /// `sizeScaleXY` to read both.
   func sizeScale(for group: TouchOverlayGroup, padKind: TouchOverlayPadKind,
                  orientation: TouchOverlayOrientation) -> CGFloat {
     guard let xy = layouts[Self.key(padKind, orientation)]?[group.rawValue], xy.count >= 3 else { return 1.0 }
     return CGFloat(xy[2])
+  }
+
+  /// The stored (width, height) size scale for a group, phase 3 extension (task item 1's "Edit IR
+  /// Area" editor, design §7's "the one group needing a size dimension, not just position").
+  /// Accepts every on-disk shape: `[x, y]` -> (1, 1); `[x, y, s]` (phase 2, every group EXCEPT the
+  /// IR pad, and the IR pad's own uniform resize via the general "Edit Layout" editor) -> (s, s);
+  /// `[x, y, sx, sy]` (phase 3, written only by `setIRSizeScale`) -> (sx, sy).
+  func sizeScaleXY(for group: TouchOverlayGroup, padKind: TouchOverlayPadKind,
+                   orientation: TouchOverlayOrientation) -> CGSize {
+    guard let xy = layouts[Self.key(padKind, orientation)]?[group.rawValue], xy.count >= 3 else {
+      return CGSize(width: 1, height: 1)
+    }
+    let sx = CGFloat(xy[2])
+    let sy = xy.count >= 4 ? CGFloat(xy[3]) : sx
+    return CGSize(width: sx, height: sy)
   }
 
   func hasCustomLayout(padKind: TouchOverlayPadKind, orientation: TouchOverlayOrientation) -> Bool {
@@ -107,8 +125,12 @@ final class TouchOverlayLayoutStore: ObservableObject {
   func resolvedBox(for layout: TouchOverlayGroupLayout, padKind: TouchOverlayPadKind,
                    orientation: TouchOverlayOrientation, in bounds: CGRect) -> CGRect {
     let baseSize = layout.placement.resolvedSize(in: bounds)
-    let scale = layout.placement.anchor == .fill ? 1.0 : sizeScale(for: layout.group, padKind: padKind, orientation: orientation)
-    let size = CGSize(width: baseSize.width * scale, height: baseSize.height * scale)
+    // `sizeScaleXY` collapses to a uniform (s, s) for every group that has never gone through
+    // `setIRSizeScale` (i.e. everything except a `wiiIRPad` the user resized via "Edit IR Area"),
+    // so this is behavior-preserving for every group but that one.
+    let scaleXY = layout.placement.anchor == .fill ? CGSize(width: 1, height: 1)
+      : sizeScaleXY(for: layout.group, padKind: padKind, orientation: orientation)
+    let size = CGSize(width: baseSize.width * scaleXY.width, height: baseSize.height * scaleXY.height)
     let center: CGPoint
     if let stored = normalizedCenter(for: layout.group, padKind: padKind, orientation: orientation) {
       center = TouchOverlayLayoutEngine.denormalize(stored, in: bounds)
@@ -122,14 +144,16 @@ final class TouchOverlayLayoutStore: ObservableObject {
   // MARK: Writes
 
   /// Store a normalized center (clamped to 0-1) and bump `revision`. Preserves any existing size
-  /// scale for the group (a drag shouldn't reset a resize).
+  /// entry for the group (a drag shouldn't reset a resize) — EVERY trailing element, not just a
+  /// single scale, so a `wiiIRPad` with an independent `[x, y, sx, sy]` entry (`setIRSizeScale`)
+  /// keeps both `sx` AND `sy` across a move instead of silently dropping `sy` back to "unset".
   func setNormalizedCenter(_ point: CGPoint, for group: TouchOverlayGroup, padKind: TouchOverlayPadKind,
                            orientation: TouchOverlayOrientation) {
     let x = min(max(Double(point.x), 0), 1)
     let y = min(max(Double(point.y), 0), 1)
-    let existingScale = layouts[Self.key(padKind, orientation)]?[group.rawValue].flatMap { $0.count >= 3 ? $0[2] : nil }
+    let existingTrailing = layouts[Self.key(padKind, orientation)]?[group.rawValue].flatMap { $0.count >= 3 ? Array($0[2...]) : nil } ?? []
     var entry = [x, y]
-    if let existingScale { entry.append(existingScale) }
+    entry.append(contentsOf: existingTrailing)
     layouts[Self.key(padKind, orientation), default: [:]][group.rawValue] = entry
     save()
     revision += 1
@@ -156,10 +180,44 @@ final class TouchOverlayLayoutStore: ObservableObject {
                         for: group, padKind: padKind, orientation: orientation)
   }
 
+  /// Store an independent (width, height) size scale, phase 3 extension (task item 1's "Edit IR
+  /// Area" editor; design §7's "[x, y, w, h]" ask, expressed as a 4th array element rather than a
+  /// separate on-disk key so it round-trips through the SAME `wiiIRPad` entry `setSizeScale`/
+  /// `setNormalizedCenter` already use). Each axis is independently clamped by
+  /// `TouchOverlayIRGeometry.clampFillInsetScale` against `bounds`/`baseSize` on that axis, NOT
+  /// the generic `scaleRange` `setSizeScale` uses — see that function's doc comment for why a
+  /// `.fillInset` group needs a tighter, bounds-aware cap. Keeps the group's current (or default)
+  /// center, exactly like `setSizeScale`.
+  func setIRSizeScale(_ scale: CGSize, for group: TouchOverlayGroup, padKind: TouchOverlayPadKind,
+                      orientation: TouchOverlayOrientation, bounds: CGRect, baseSize: CGSize,
+                      defaultCenter: CGPoint) {
+    let clampedX = TouchOverlayIRGeometry.clampFillInsetScale(scale.width, baseExtent: baseSize.width, boundsExtent: bounds.width)
+    let clampedY = TouchOverlayIRGeometry.clampFillInsetScale(scale.height, baseExtent: baseSize.height, boundsExtent: bounds.height)
+    let key = Self.key(padKind, orientation)
+    let existing = layouts[key]?[group.rawValue]
+    let x = (existing?.count ?? 0) >= 1 ? existing![0] : Double(defaultCenter.x)
+    let y = (existing?.count ?? 0) >= 2 ? existing![1] : Double(defaultCenter.y)
+    layouts[key, default: [:]][group.rawValue] = [x, y, Double(clampedX), Double(clampedY)]
+    save()
+    revision += 1
+  }
+
   /// The editor's "Reset": clear every custom position of a pad kind, both orientations.
   func reset(padKind: TouchOverlayPadKind) {
     for orientation in TouchOverlayOrientation.allCases {
       layouts.removeValue(forKey: Self.key(padKind, orientation))
+    }
+    save()
+    revision += 1
+  }
+
+  /// A narrower reset for the "Edit IR Area" editor's own Reset button (task item 1): clears only
+  /// ONE group's stored entry, both orientations, instead of every group in the pad kind — the
+  /// editor should not silently discard the user's face-button/D-pad/stick layout just because
+  /// they were resetting the IR pad's rectangle.
+  func resetGroup(_ group: TouchOverlayGroup, padKind: TouchOverlayPadKind) {
+    for orientation in TouchOverlayOrientation.allCases {
+      layouts[Self.key(padKind, orientation)]?.removeValue(forKey: group.rawValue)
     }
     save()
     revision += 1

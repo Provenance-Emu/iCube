@@ -80,4 +80,35 @@ struct TouchOverlayGroupLayout: Sendable {
 
   var size: CGSize { placement.size }
 }
+
+/// `TouchOverlayView`'s editing state (task item 1, design §7/§9). A single enum rather than two
+/// independent `Bool`s ("editing the layout" / "editing the IR area") so the §9 risk — "IR-area
+/// edit vs layout edit: confirm entering one visibly disables the other" — is answered
+/// STRUCTURALLY: there is exactly one `TouchOverlayEditMode` value at a time, so there is no state
+/// in which both a `.layout`-style "every group is draggable" chrome AND an `.irArea`-style
+/// "only the IR pad is" chrome can be showing at once. The "Edit Layout…" and "Edit IR Area…"
+/// Settings rows each open `TouchOverlayView` already seeded into the matching mode
+/// (`initialEditMode:`); there is no in-overlay control that switches between them.
+enum TouchOverlayEditMode: Equatable, Sendable, CaseIterable {
+  case none
+  case layout
+  case irArea
+
+  /// True whenever ANY edit mode is active. Every group's own input must be suppressed in BOTH
+  /// `.layout` and `.irArea` — not just the group(s) `showsChrome(for:)` makes editable — so a
+  /// face button doesn't stay live and tappable underneath the editor while the user is dragging
+  /// the IR pad's rectangle (or vice versa). Kept separate from `showsChrome` for exactly this
+  /// reason: they used to be the same `Bool` (`PositionedTouchGroup`'s old single `isEditing`),
+  /// which is what made the two modes' input isolation easy to get wrong.
+  var inputSuppressed: Bool { self != .none }
+
+  /// Whether `group` shows the editor's drag/resize chrome in this mode.
+  func showsChrome(for group: TouchOverlayGroup) -> Bool {
+    switch self {
+    case .none: return false
+    case .layout: return true
+    case .irArea: return group == .wiiIRPad
+    }
+  }
+}
 #endif
