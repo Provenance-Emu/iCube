@@ -60,19 +60,11 @@ jobs:
         working-directory: Source/iOS/App
         run: python3 Project/Scripts/check_button_types.py
 
-      # Advisory only, for now: this already fails on develop as of 2026-09-26
-      # with 27 pre-existing keys missing from en.lproj/Core.strings (Shader
-      # quick-picker/settings/debug views, SaveState filmstrip/card views,
-      # ControllersRootView's IR-area editor, PauseMenuView's "View All
-      # States"). Making it blocking today would turn every PR red without
-      # ever reaching the unit tests this workflow exists to run. Flip
-      # continue-on-error to false once those 27 keys are added to
-      # Core.strings (or the call sites are rewritten). This script shells out
-      # to `plutil`, so it stays macOS-only and can't move to a cheaper
-      # ubuntu-latest job on its own.
-      - name: Check localized-key coverage (advisory -- see comment)
+      # Every L("...") key must exist in en.lproj/Core.strings. Add missing keys as
+      # identity entries (`"key" = "key";`) to en and ja Core.strings; the "Update Core
+      # Strings" build pre-script preserves them. Shells out to plutil, so macOS-only.
+      - name: Check localized-key coverage
         working-directory: Source/iOS/App
-        continue-on-error: true
         run: python3 Project/Scripts/check_localized_keys.py --check
 
       - name: Select Xcode
