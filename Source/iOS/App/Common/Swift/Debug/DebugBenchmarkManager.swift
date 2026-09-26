@@ -128,6 +128,9 @@ final class DebugBenchmarkManager {
   private static let bootPostInterval: TimeInterval = 0.5
   /// How long to wait for the core to reach "running" once a boot has visibly started.
   private static let bootRunningTimeout: TimeInterval = 30
+  /// State::Load on the host queue after a reboot: generous (a cold boot may still be compiling
+  /// shaders) but finite, so a wedged host thread fails the run instead of hanging it.
+  private static let loadStateTimeout: TimeInterval = 30
 
   /// Run a single benchmark: wait for the core to be running, load `slot`, let it settle, then
   /// sample for `seconds` at display rate. Returns nil if a run is already in progress, the core
@@ -146,8 +149,17 @@ final class DebugBenchmarkManager {
     // completes and returns NO if the core isn't running — unlike
     // TVEmulationBridge.loadState(fromSlot:), which only queues an async host job with no
     // completion signal, so sampling could start before the state was actually in memory.
-    guard DOLDebugBridge.loadStateSlot(slot) else {
-      NSLog("[Bench] runBenchmark: loadStateSlot(\(slot)) failed (state=\(DOLDebugBridge.coreState()))")
+    // ...but WITHOUT blocking the main actor: the emulation loop dispatch_syncs to the main queue
+    // during boot, so a synchronous host-queue hop from here right after a reboot deadlocked until
+    // the watchdog killed the app (all three EXC_CRASH reports from the 2026-09-26 Chibi-Robo
+    // sweeps). The completion-based bridge call keeps main free; the timeout turns a wedged load
+    // into a failed run instead of a kill.
+    let loaded = await BenchAwait.withTimeout(seconds: Self.loadStateTimeout) { finish in
+      DOLDebugBridge.loadStateSlotAsync(slot) { ok in finish(ok) }
+    }
+    guard loaded == true else {
+      NSLog("[Bench] runBenchmark: loadStateSlot(\(slot)) \(loaded == nil ? "timed out" : "failed") "
+            + "(state=\(DOLDebugBridge.coreState()))")
       return nil
     }
     // Let frame pacing settle after the state reload before sampling.

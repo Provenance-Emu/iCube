@@ -42,6 +42,12 @@ NS_ASSUME_NONNULL_BEGIN
 + (nullable NSData*)screenshotPNGWithTimeout:(double)timeout;
 
 + (BOOL)loadStateSlot:(NSInteger)slot;
+/// Non-blocking variant: queues State::Load on the host queue and calls `completion` (on the
+/// host queue) once it has run, or immediately with NO if the core is not running. Callers on
+/// the main actor MUST use this one: the emulation loop dispatch_syncs to the main queue during
+/// boot, so blocking main inside `loadStateSlot:` right after a reboot deadlocks until the
+/// watchdog kills the process (three EXC_CRASH reports, 2026-09-26).
++ (void)loadStateSlotAsync:(NSInteger)slot completion:(void (^)(BOOL ok))completion;
 + (BOOL)loadStatePath:(NSString*)path;
 + (BOOL)saveStateSlot:(NSInteger)slot;
 

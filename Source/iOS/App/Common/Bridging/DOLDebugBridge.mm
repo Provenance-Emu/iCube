@@ -323,6 +323,17 @@ class RingListener : public Common::Log::LogListener {
   });
   return YES;
 }
+
++ (void)loadStateSlotAsync:(NSInteger)slot completion:(void (^)(BOOL ok))completion {
+  if (!Core::IsRunning(Core::System::GetInstance())) {
+    completion(NO);
+    return;
+  }
+  DOLHostQueueRunAsync(^{
+    State::Load(Core::System::GetInstance(), (int)slot);
+    completion(YES);
+  });
+}
 + (BOOL)loadStatePath:(NSString*)path {
   if (!Core::IsRunning(Core::System::GetInstance()) || ![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
   DOLHostQueueRunSync(^{
