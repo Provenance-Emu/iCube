@@ -419,13 +419,18 @@ import MetalKit
   func parameters(forPresetPath path: String) -> [Compiled.Parameter] {
     if path == cachedPresetPath, let lib = library { return lib.shader.parameters }
     guard let url = resolvePresetURL(from: path) else { return [] }
-    if let data = try? Data(contentsOf: url), let container = try? ZipCompiledShaderContainer.Decoder(data: data) {
-      return container.shader.parameters
+    let container: ZipCompiledShaderContainer.Decoder
+    if let data = try? Data(contentsOf: url), let decoded = try? ZipCompiledShaderContainer.Decoder(data: data) {
+      container = decoded
+    } else if let decoded = try? ZipCompiledShaderContainer.Decoder(url: url) {
+      container = decoded
+    } else {
+      return []
     }
-    if let container = try? ZipCompiledShaderContainer.Decoder(url: url) {
-      return container.shader.parameters
-    }
-    return []
+    // One-off decode: drop its extraction directory, otherwise every gear tap on a
+    // non-live preset leaves a LUT folder in NSTemporaryDirectory().
+    defer { container.removeExtractedFiles() }
+    return container.shader.parameters
   }
 
   /// Current value of parameter `index` for `path`. Live preset -> the running

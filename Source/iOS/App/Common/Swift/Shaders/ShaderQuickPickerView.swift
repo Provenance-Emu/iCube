@@ -71,14 +71,14 @@ struct ShaderQuickPickerView: View {
         } else {
           if !favoriteItems.isEmpty {
             sectionHeader(L("Favorites"))
-            grid(favoriteItems)
+            grid(favoriteItems, sectionKey: "favorites")
           }
           if !recentItems.isEmpty {
             sectionHeader(L("Recently Used"))
-            grid(recentItems)
+            grid(recentItems, sectionKey: "recent")
           }
           sectionHeader(L("All Shaders"))
-          grid(allItems)
+          grid(allItems, sectionKey: "all")
         }
       }
       .padding(.vertical, 16)
@@ -93,7 +93,7 @@ struct ShaderQuickPickerView: View {
       }
     }
     #endif
-    .defaultFocus($focusedCardID, currentPath ?? PickerItem.noneID)
+    .defaultFocus($focusedCardID, "all/" + (currentPath ?? PickerItem.noneID))
     .navigationDestination(item: $pushedParameterPath) { path in
       ShaderQuickParameterView(presetPath: path, presetName: displayName(forPresetPath: path))
     }
@@ -110,7 +110,7 @@ struct ShaderQuickPickerView: View {
       }
       isLoading = false
     }
-    .task(id: currentPath) {
+    .task(id: HeroTaskKey(path: currentPath, sourceReady: previewSource != nil, presetCount: presets.count)) {
       // Hero preview: the currently SELECTED preset, applied to the same
       // shared source frame every grid card uses — independent of the
       // "Enabled" toggle, since flipping that doesn't change which preset is
@@ -130,6 +130,15 @@ struct ShaderQuickPickerView: View {
       guard !Task.isCancelled else { return }
       heroPreviewImage = UIImage(cgImage: rendered)
     }
+  }
+
+  /// `currentPath` already has its final value on first render, before discovery has
+  /// populated `presets`/`previewSource`; keying the hero task on those too makes it
+  /// re-run once they arrive instead of leaving the hero on the raw frame all session.
+  private struct HeroTaskKey: Hashable {
+    let path: String?
+    let sourceReady: Bool
+    let presetCount: Int
   }
 
   /// The shared source frame handed to `ShaderPreviewRenderer` for every card
@@ -290,11 +299,14 @@ struct ShaderQuickPickerView: View {
       .padding(.horizontal, 16)
   }
 
-  private func grid(_ items: [PickerItem]) -> some View {
+  /// `sectionKey` scopes the focus ids: the same preset appears in Favorites, Recent AND
+  /// All Shaders, and duplicate `@FocusState` values across mounted views are undefined.
+  private func grid(_ items: [PickerItem], sectionKey: String) -> some View {
     LazyVGrid(columns: Self.columns, spacing: 14) {
       ForEach(items) { item in
         ShaderQuickCard(
           item: item,
+          focusKey: "\(sectionKey)/\(item.id)",
           isSelected: item.id == (currentPath ?? PickerItem.noneID),
           isFavorite: item.preset != nil && favorites.contains(item.id),
           focusedCardID: $focusedCardID,
@@ -379,6 +391,8 @@ struct ShaderQuickPickerView: View {
 /// collapses to a single, unreachable focus target on tvOS.
 private struct ShaderQuickCard: View {
   let item: ShaderQuickPickerView.PickerItem
+  /// Section-scoped focus id (see `grid(_:sectionKey:)`).
+  let focusKey: String
   let isSelected: Bool
   let isFavorite: Bool
   var focusedCardID: FocusState<String?>.Binding
@@ -392,7 +406,7 @@ private struct ShaderQuickCard: View {
 
   @State private var previewImage: UIImage?
 
-  private var isFocused: Bool { focusedCardID.wrappedValue == item.id }
+  private var isFocused: Bool { focusedCardID.wrappedValue == focusKey }
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -421,7 +435,7 @@ private struct ShaderQuickCard: View {
         .scaleEffect(isFocused ? 1.04 : 1.0)
       }
       .buttonStyle(.plain)
-      .focused(focusedCardID, equals: item.id)
+      .focused(focusedCardID, equals: focusKey)
       // A plain `.onLongPressGesture` on a Button inside a scroll view can
       // swallow the scroll gesture or double-fire alongside the tap.
       // `.simultaneousGesture` lets both the Button's tap and this long-press
@@ -452,7 +466,7 @@ private struct ShaderQuickCard: View {
               .background(Color.black.opacity(0.65), in: Circle())
           }
           .buttonStyle(.plain)
-          .focused(focusedCardID, equals: item.id + "#params")
+          .focused(focusedCardID, equals: focusKey + "#params")
           .accessibilityLabel(L("Parameters"))
 
           Button(action: onToggleFavorite) {
@@ -463,7 +477,7 @@ private struct ShaderQuickCard: View {
               .background(Color.black.opacity(0.65), in: Circle())
           }
           .buttonStyle(.plain)
-          .focused(focusedCardID, equals: item.id + "#fav")
+          .focused(focusedCardID, equals: focusKey + "#fav")
           .accessibilityLabel(isFavorite ? L("Remove Favorite") : L("Add Favorite"))
         }
       }
