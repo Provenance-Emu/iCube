@@ -234,6 +234,8 @@
 		C0C0CAFE0000000000000997 /* SaveStateFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */; };
 		C0C0CAFE0000000000000999 /* TCManagerInterfaceAxisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */; };
 		C0C0CAFE000000000000099B /* PauseMenuInputGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */; };
+		C0C0CAFE0000000000000974 /* MenuModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000973 /* MenuModelTests.swift */; };
+		C0C0CAFE0000000000000976 /* MenuFocusRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */; };
 		C0C0CAFE0000000000000608 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000604 /* Sentry */; };
 		C0C0CAFE0000000000000609 /* PLzmaSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000605 /* PLzmaSDK */; };
 		C0C0CAFE0000000000000610 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = C0C0CAFE0000000000000606 /* SWCompression */; };
@@ -684,6 +686,8 @@
 		C0C0CAFE0000000000000996 /* SaveStateFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SaveStateFormattingTests.swift"; path = "DolphiniOSTests/SaveStateFormattingTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TCManagerInterfaceAxisTests.swift"; path = "DolphiniOSTests/TCManagerInterfaceAxisTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PauseMenuInputGateTests.swift"; path = "DolphiniOSTests/PauseMenuInputGateTests.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000973 /* MenuModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MenuModelTests.swift"; path = "DolphiniOSTests/MenuModelTests.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MenuFocusRouterTests.swift"; path = "DolphiniOSTests/MenuFocusRouterTests.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0000000000000700 /* DOLDebugBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLDebugBridge.h; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000701 /* DOLDebugBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = DOLDebugBridge.mm; sourceTree = "<group>"; };
 		C0C0CAFE0000000000000703 /* DOLPerfBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = DOLPerfBridge.h; sourceTree = "<group>"; };
@@ -820,6 +824,11 @@
 		B37A7F632E77B7F5001C90F4 /* Controllers */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Controllers;
+			sourceTree = "<group>";
+		};
+		C0C0CAFE0000000000000977 /* Menu */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Menu;
 			sourceTree = "<group>";
 		};
 		C0C0CAFE0000000000000106 /* iCubeTopShelf */ = {
@@ -1231,6 +1240,7 @@
 				B31E805E2E654CC30036EE31 /* Activity */,
 				B31E6DBF2E63C0500036EE31 /* Bridging */,
 				B37A7F632E77B7F5001C90F4 /* Controllers */,
+				C0C0CAFE0000000000000977 /* Menu */,
 				B34EE6B22E57D65400301907 /* Shaders */,
 				B31EAC8E2E68B1710036EE31 /* Tips */,
 				B31EAC712E6772C80036EE31 /* Widgets */,
@@ -1898,6 +1908,8 @@
 				C0C0CAFE0000000000000998 /* TCManagerInterfaceAxisTests.swift */,
 				C0C0CAFE00000000000009A4 /* ShaderPreviewCacheTests.swift */,
 				C0C0CAFE000000000000099A /* PauseMenuInputGateTests.swift */,
+				C0C0CAFE0000000000000973 /* MenuModelTests.swift */,
+				C0C0CAFE0000000000000975 /* MenuFocusRouterTests.swift */,
 				C0C0CAFE0000000000000900 /* ContinuityIdentityStore.swift */,
 				C0C0CAFE0000000000000902 /* ContinuityLibraryBrowseController.swift */,
 				C0C0CAFE0000000000000904 /* ContinuityManager.swift */,
@@ -2129,6 +2141,7 @@
 				B31EAC712E6772C80036EE31 /* Widgets */,
 				B31EAC8E2E68B1710036EE31 /* Tips */,
 				B37A7F632E77B7F5001C90F4 /* Controllers */,
+				C0C0CAFE0000000000000977 /* Menu */,
 			);
 			name = iCube;
 			packageProductDependencies = (
@@ -2506,6 +2519,8 @@
 				C0C0CAFE0000000000000999 /* TCManagerInterfaceAxisTests.swift in Sources */,
 				C0C0CAFE00000000000009A5 /* ShaderPreviewCacheTests.swift in Sources */,
 				C0C0CAFE000000000000099B /* PauseMenuInputGateTests.swift in Sources */,
+				C0C0CAFE0000000000000974 /* MenuModelTests.swift in Sources */,
+				C0C0CAFE0000000000000976 /* MenuFocusRouterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
