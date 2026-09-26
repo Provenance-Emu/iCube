@@ -168,15 +168,12 @@ enum ShaderPreviewRenderer {
       // `ZipCompiledShaderContainer.Decoder` extracts into a fresh
       // NSTemporaryDirectory() subfolder and never cleans it up (no `deinit`) —
       // fine for the live singleton, which does this once per user pick, but
-      // the picker grid does this once per BUNDLED PRESET. Snapshot/diff the
-      // temp dir so the extraction folder this call creates gets removed once
-      // `setCompiledShader` has copied everything it needs out of it (LUTs are
-      // loaded eagerly inside `setCompiledShader`, so nothing later needs the
-      // extracted files on disk).
-      let tempDir = FileManager.default.temporaryDirectory
-      let entriesBefore = Set((try? FileManager.default.contentsOfDirectory(atPath: tempDir.path)) ?? [])
-
-      let container: CompiledShaderContainer
+      // the picker grid does this once per BUNDLED PRESET. Remove THIS decoder's
+      // own directory once `setCompiledShader` has copied everything it needs
+      // out of it (LUTs are loaded eagerly there). Never scan the temp dir: a
+      // card tap can make the live pipeline decode a preset at the same moment,
+      // and deleting its directory would break the user's actual shader.
+      let container: ZipCompiledShaderContainer.Decoder
       do {
         if let data = try? Data(contentsOf: presetURL) {
           container = try ZipCompiledShaderContainer.Decoder(data: data)
@@ -186,15 +183,12 @@ enum ShaderPreviewRenderer {
       } catch {
         return nil
       }
+      defer { container.removeExtractedFiles() }
 
-      guard let filter = try? FilterChain(device: device) else {
-        cleanUpExtractionArtifacts(in: tempDir, notPresentBefore: entriesBefore)
-        return nil
-      }
+      guard let filter = try? FilterChain(device: device) else { return nil }
       do {
         try filter.setCompiledShader(container)
       } catch {
-        cleanUpExtractionArtifacts(in: tempDir, notPresentBefore: entriesBefore)
         return nil
       }
       // `setCompiledShader` -> `freeShaderResources` leaves `hasShader = false`;
@@ -204,7 +198,6 @@ enum ShaderPreviewRenderer {
       // become "the raw source frame, unmodified" — a failure that looks like
       // success rather than like a missing thumbnail.
       filter.hasShader = true
-      cleanUpExtractionArtifacts(in: tempDir, notPresentBefore: entriesBefore)
 
       let loader = MTKTextureLoader(device: device)
       guard let sourceTexture = try? loader.newTexture(cgImage: sourceImage, options: [.SRGB: false]) else {
@@ -246,19 +239,6 @@ enum ShaderPreviewRenderer {
       guard commandBuffer.status == .completed else { return nil }
 
       return cgImage(from: outputTexture)
-    }
-  }
-
-  /// Removes any temp-directory entries that appeared during this call and
-  /// whose name matches `ZipCompiledShaderContainer`'s own extraction prefixes
-  /// ("oe_shader_decode" / "oe_shader_decode_data"). Deliberately scoped this
-  /// narrowly (name prefix + "didn't exist before this call") rather than
-  /// reaching into `ZipCompiledShaderContainer.Decoder` itself, which is shared
-  /// code the live pipeline also depends on.
-  private static func cleanUpExtractionArtifacts(in tempDir: URL, notPresentBefore entriesBefore: Set<String>) {
-    guard let entriesAfter = try? FileManager.default.contentsOfDirectory(atPath: tempDir.path) else { return }
-    for name in entriesAfter where !entriesBefore.contains(name) && name.hasPrefix("oe_shader_decode") {
-      try? FileManager.default.removeItem(at: tempDir.appendingPathComponent(name))
     }
   }
 

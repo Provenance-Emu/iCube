@@ -69,6 +69,14 @@ public enum ZipCompiledShaderContainer {
     public let shader: Compiled.Shader
     private let extractedDir: URL
 
+    /// Deletes this decoder's own extraction directory. Safe once
+    /// `FilterChain.setCompiledShader` has run: it loads every LUT eagerly, so
+    /// nothing reads the extracted files afterwards. Only ever touches the
+    /// directory this instance created, never another decoder's.
+    public func removeExtractedFiles() {
+      try? FileManager.default.removeItem(at: extractedDir)
+    }
+
     public convenience init(url: URL) throws {
       guard FileManager.default.fileExists(atPath: url.path) else {
         throw Error.pathNotExists
