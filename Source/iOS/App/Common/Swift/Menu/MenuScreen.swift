@@ -1,6 +1,7 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import Combine
 import GameController
 import SwiftUI
 
@@ -60,20 +61,29 @@ struct MenuScreen: View {
 
   #if os(iOS)
   @State private var router = MenuFocusRouter()
+  /// `nil` until a controller actually moves focus. Kept `nil` for a
+  /// touch-only session so `.listRowBackground`'s focus tint never appears
+  /// on a device with no controller connected — matching `PauseMenuView`,
+  /// which only draws its ring while `pauseMenuControllerNavActive`.
   @State private var focusedID: String?
   @State private var scopeID = UUID()
-  @State private var ticker: Timer?
   /// The first tick after appearing must `resync`, not `update` — the A that
   /// pushed this screen (from a parent `.navigation` item) is still
-  /// physically held, and this screen defaults focus to its first item
-  /// immediately (unlike `RemapPlayerView`, which starts with no highlight).
-  /// See `MenuFocusRouter.resync`'s doc comment.
+  /// physically held, and this screen defaults focus to its first item on
+  /// that same tick (unlike `RemapPlayerView`, which starts with no
+  /// highlight). See `MenuFocusRouter.resync`'s doc comment.
   @State private var hasSyncedInitialInput = false
+  /// Single shared 60 Hz publisher rather than a per-instance `Timer`. This
+  /// matters for correctness, not just efficiency: a `Timer(... ) { tick() }`
+  /// closure captures `self` — and therefore `model`, a `let` — from
+  /// whatever render created it, so it goes stale the instant a later render
+  /// passes a different `model` (e.g. Cheats' list arriving after
+  /// `loadCheats()` completes post-appear). `.onReceive` re-registers its
+  /// action closure on every render, so `tick()` always sees the current one.
+  private static let navTick = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
   #else
   @FocusState private var tvFocusedID: String?
   #endif
-
-  private static let tickInterval: TimeInterval = 1.0 / 60.0
 
   var body: some View {
     content
@@ -82,13 +92,13 @@ struct MenuScreen: View {
       }
       #if os(iOS)
       .controllerScope(scopeID)
-      .onAppear {
-        focusedID = model.focusableIDs.first
-        hasSyncedInitialInput = false
-        startTicker()
-      }
-      .onDisappear { stopTicker() }
+      .onAppear { hasSyncedInitialInput = false }
+      .onReceive(Self.navTick) { _ in tick() }
       .onChange(of: model.focusableIDs) { oldOrder, _ in
+        // Only reconciles a focus that already exists — a touch-only session
+        // (focusedID still nil) must not be given one just because the model
+        // was rebuilt.
+        guard focusedID != nil else { return }
         focusedID = MenuFocusRouter.reconcile(focusedID: focusedID, previousOrder: oldOrder, model: model)
       }
       #else
@@ -281,21 +291,6 @@ struct MenuScreen: View {
     )
   }
 
-  private func startTicker() {
-    stopTicker()
-    // `.common`, not `.default` (`scheduledTimer`'s implicit mode): keeps
-    // ticking while the user is dragging the `List`, matching
-    // `RemapPlayerView.startTicker`'s reasoning.
-    let timer = Timer(timeInterval: Self.tickInterval, repeats: true) { _ in tick() }
-    RunLoop.main.add(timer, forMode: .common)
-    ticker = timer
-  }
-
-  private func stopTicker() {
-    ticker?.invalidate()
-    ticker = nil
-  }
-
   private func tick() {
     guard let pad = navGamepad() else { return }
     let input = navInput(pad)
@@ -303,6 +298,9 @@ struct MenuScreen: View {
     guard hasSyncedInitialInput else {
       hasSyncedInitialInput = true
       router.resync(input, at: time)
+      // Focus only ever appears once a controller is actually present —
+      // never seeded in `.onAppear`, so a touch-only session shows no tint.
+      if focusedID == nil { focusedID = model.focusableIDs.first }
       return
     }
     let isActive = ControllerFocusCoordinator.isActiveScope(scopeID)
