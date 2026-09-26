@@ -72,6 +72,8 @@
 		B382060F2E57FF0E00D4853F /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B38206092E57FF0E00D4853F /* Shaders.metal */; };
 		B38206102E57FF0E00D4853F /* ShaderPassSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206072E57FF0E00D4853F /* ShaderPassSemantics.swift */; };
 		B38206112E57FF0E00D4853F /* ShaderPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206082E57FF0E00D4853F /* ShaderPostProcessor.swift */; };
+		C0C0CAFE00000000000009A1 /* ShaderPreviewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A0 /* ShaderPreviewRenderer.swift */; };
+		C0C0CAFE00000000000009A3 /* ShaderPreviewCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE00000000000009A2 /* ShaderPreviewCache.swift */; };
 		B38206122E57FF0E00D4853F /* FilterChain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206022E57FF0E00D4853F /* FilterChain.swift */; };
 		B38206132E57FF0E00D4853F /* CompiledShaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206002E57FF0E00D4853F /* CompiledShaderContainer.swift */; };
 		B38206142E57FF0E00D4853F /* Matrix.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38206042E57FF0E00D4853F /* Matrix.swift */; };
@@ -435,6 +437,8 @@
 		B38206062E57FF0E00D4853F /* ShaderPassBindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPassBindings.swift; sourceTree = "<group>"; };
 		B38206072E57FF0E00D4853F /* ShaderPassSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPassSemantics.swift; sourceTree = "<group>"; };
 		B38206082E57FF0E00D4853F /* ShaderPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPostProcessor.swift; sourceTree = "<group>"; };
+		C0C0CAFE00000000000009A0 /* ShaderPreviewRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPreviewRenderer.swift; sourceTree = "<group>"; };
+		C0C0CAFE00000000000009A2 /* ShaderPreviewCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderPreviewCache.swift; sourceTree = "<group>"; };
 		B38206092E57FF0E00D4853F /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipCompiledShaderContainer.swift; sourceTree = "<group>"; };
 		B38206172E58002000D4853F /* CompilerEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompilerEnums.swift; sourceTree = "<group>"; };
@@ -963,6 +967,8 @@
 				B38206062E57FF0E00D4853F /* ShaderPassBindings.swift */,
 				B38206072E57FF0E00D4853F /* ShaderPassSemantics.swift */,
 				B38206082E57FF0E00D4853F /* ShaderPostProcessor.swift */,
+				C0C0CAFE00000000000009A0 /* ShaderPreviewRenderer.swift */,
+				C0C0CAFE00000000000009A2 /* ShaderPreviewCache.swift */,
 				B34EE6B12E57D65400301907 /* ShaderSettingsView.swift */,
 				B382060A2E57FF0E00D4853F /* ZipCompiledShaderContainer.swift */,
 			);
@@ -2639,6 +2645,8 @@
 				B38206102E57FF0E00D4853F /* ShaderPassSemantics.swift in Sources */,
 				B3B149542E592F72009C7049 /* TVWiiSystemUpdateViewController.mm in Sources */,
 				B38206112E57FF0E00D4853F /* ShaderPostProcessor.swift in Sources */,
+				C0C0CAFE00000000000009A1 /* ShaderPreviewRenderer.swift in Sources */,
+				C0C0CAFE00000000000009A3 /* ShaderPreviewCache.swift in Sources */,
 				B346CDE22E75E52900B3C00B /* DSUSessionView.swift in Sources */,
 				B38206122E57FF0E00D4853F /* FilterChain.swift in Sources */,
 				B38206132E57FF0E00D4853F /* CompiledShaderContainer.swift in Sources */,
