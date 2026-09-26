@@ -483,7 +483,9 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(0), 1.0)
     XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(-1), 1.0)
     XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(.nan), 1.0)
-    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(.infinity), TouchOverlayIRGeometry.dragGainRange.upperBound)
+    // `.infinity.isFinite` is false, so this hits the SAME "invalid -> neutral" branch as the
+    // other three, not the finite `.upperBound` clamp `testClampDragGainClampsToRange` covers.
+    XCTAssertEqual(TouchOverlayIRGeometry.clampDragGain(.infinity), 1.0)
   }
 
   func testClampDragGainClampsToRange() {
@@ -567,7 +569,11 @@ final class TouchOverlayLayoutTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
 
     let store = TouchOverlayLayoutStore(fileURL: url)
-    let bounds = CGRect(x: 0, y: 0, width: 400, height: 800)
+    // `bounds.width / baseSize.width` (500/350 ≈ 1.43) must clear the requested 1.2 width scale
+    // with room to spare, or `clampFillInsetScale`'s bounds-aware cap (not the plain 0.5...2.0
+    // `scaleRange`) clips it before this test can observe the round trip — see that function's
+    // doc comment.
+    let bounds = CGRect(x: 0, y: 0, width: 500, height: 800)
     let baseSize = CGSize(width: 350, height: 750)
     store.setIRSizeScale(CGSize(width: 1.2, height: 0.7), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
                         bounds: bounds, baseSize: baseSize, defaultCenter: CGPoint(x: 0.5, y: 0.5))
@@ -602,7 +608,10 @@ final class TouchOverlayLayoutTests: XCTestCase {
     // asymmetric `[x, y, sx, sy]` entry used to drop `sy` back to "unset" because
     // `setNormalizedCenter` only ever preserved a single trailing element.
     let store = TouchOverlayLayoutStore(fileURL: nil)
-    let bounds = CGRect(x: 0, y: 0, width: 400, height: 800)
+    // Same margin reasoning as `testSetIRSizeScaleRoundTripsIndependentAxesAndSurvivesReload`
+    // above: bounds wide enough that 1.3 isn't itself clamped, so this test isolates the
+    // trailing-elements bug from the bounds-aware clamp.
+    let bounds = CGRect(x: 0, y: 0, width: 500, height: 800)
     let baseSize = CGSize(width: 350, height: 750)
     store.setIRSizeScale(CGSize(width: 1.3, height: 0.6), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
                         bounds: bounds, baseSize: baseSize, defaultCenter: CGPoint(x: 0.5, y: 0.5))
@@ -633,10 +642,13 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertFalse(TouchOverlayEditMode.none.inputSuppressed)
   }
 
-  func testEditModeLayoutShowsChromeForEveryGroup() {
-    for group in TouchOverlayGroup.allCases {
+  func testEditModeLayoutShowsChromeForEveryGroupExceptTheIRPad() {
+    // `wiiIRPad` is excluded from `.layout` mode specifically (its only resize path is the
+    // bounds-aware `.irArea` editor now) — see `showsChrome`'s doc comment.
+    for group in TouchOverlayGroup.allCases where group != .wiiIRPad {
       XCTAssertTrue(TouchOverlayEditMode.layout.showsChrome(for: group))
     }
+    XCTAssertFalse(TouchOverlayEditMode.layout.showsChrome(for: .wiiIRPad))
     XCTAssertTrue(TouchOverlayEditMode.layout.inputSuppressed)
   }
 

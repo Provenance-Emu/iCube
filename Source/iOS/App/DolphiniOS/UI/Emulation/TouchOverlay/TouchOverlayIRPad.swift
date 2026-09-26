@@ -163,6 +163,32 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
       super.touchesEnded(touches, with: event)
       activeTouches.subtract(touches)
       scheduleThreeFingerCheckIfNeeded()
+      finishPrimaryTouch(in: touches)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+      super.touchesCancelled(touches, with: event)
+      activeTouches.subtract(touches)
+      scheduleThreeFingerCheckIfNeeded()
+      // Task item 2's DSU pass (a real, now-fixed bug, not just a naming difference from
+      // `touchesEnded`): this used to only clear `primaryTouch`, doing NOTHING else on a
+      // cancellation (an incoming call, the app backgrounding mid-drag, the system reassigning the
+      // touch to a gesture recognizer elsewhere). In `.drag` mode that left `oldX`/`oldY` — the
+      // "continue from here" memory `handleLongPress`'s persistence emulates — stuck at whatever
+      // the PREVIOUS completed drag had left them at, even though `StateManager`/DSU's actual axis
+      // state reflected the cancelled gesture's last `touchesMoved` sample. The NEXT drag would
+      // then accumulate its delta onto that stale base instead of the visually-last position,
+      // desyncing the pointer from where the finger actually was. Routing cancellation through the
+      // SAME finish path as `touchesEnded` (send the current position, persist it in drag mode)
+      // fixes the desync without the visible "snap to center" a recenter-on-cancel would cause
+      // mid-aim on something as routine as an edge-swipe interruption.
+      finishPrimaryTouch(in: touches)
+    }
+
+    /// Shared by `touchesEnded`/`touchesCancelled`: both a natural lift and a cancellation report
+    /// the SAME last-known position via `UITouch.location(in:)` (still valid post-cancel), so both
+    /// should send it and, in `.drag` mode, persist it as the next drag's starting point.
+    private func finishPrimaryTouch(in touches: Set<UITouch>) {
       guard mode != .none, let primary = primaryTouch, touches.contains(primary) else { return }
       let point = primary.location(in: self)
       let (x, y) = computeXY(at: point)
@@ -174,25 +200,6 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
         oldY = y
       }
       primaryTouch = nil
-    }
-
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-      super.touchesCancelled(touches, with: event)
-      activeTouches.subtract(touches)
-      scheduleThreeFingerCheckIfNeeded()
-      guard let primary = primaryTouch, touches.contains(primary) else { return }
-      primaryTouch = nil
-      // Unlike `touchesEnded`, a cancellation (an incoming call, the app backgrounding mid-drag,
-      // the system reassigning the touch to a gesture recognizer elsewhere) has no meaningful
-      // "released position" to persist — recentering matches `TCWiiPad.setTouchIRMode`'s own
-      // handoff behavior and, more importantly, guarantees the pointer isn't left stuck at
-      // whatever off-center value it last held (task item 2's DSU pass: that stale value would
-      // otherwise keep being mirrored to `DSUServerBridge.setTouchPoint` indefinitely).
-      sendIR((0, 0))
-      if mode == .drag {
-        oldX = 0
-        oldY = 0
-      }
     }
 
     private func isTouchAllowed(_ touch: UITouch) -> Bool {

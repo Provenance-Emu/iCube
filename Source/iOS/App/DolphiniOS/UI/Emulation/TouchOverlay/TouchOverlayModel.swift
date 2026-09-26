@@ -103,10 +103,19 @@ enum TouchOverlayEditMode: Equatable, Sendable, CaseIterable {
   var inputSuppressed: Bool { self != .none }
 
   /// Whether `group` shows the editor's drag/resize chrome in this mode.
+  ///
+  /// `.layout` excludes `wiiIRPad` specifically: that group's `.layout`-mode chrome used to be
+  /// the SAME uniform corner handle every other group gets, clamped only to
+  /// `TouchOverlayLayoutStore.scaleRange` (0.5...2.0) — fine for a small fixed-size button, but on
+  /// a `.fillInset` base (already most of the screen) that upper bound produces a box roughly 4x
+  /// the overlay's area, with its resize handle dragged off-screen and only "Reset" able to
+  /// recover it. `.irArea` mode's bounds-aware `clampFillInsetScale` (via `resizeAxes`) is the
+  /// ONLY way to resize this group now, which also makes the two modes fully disjoint PER GROUP,
+  /// not just "one mode active at a time" — the literal reading of design §9's "vice versa".
   func showsChrome(for group: TouchOverlayGroup) -> Bool {
     switch self {
     case .none: return false
-    case .layout: return true
+    case .layout: return group != .wiiIRPad
     case .irArea: return group == .wiiIRPad
     }
   }
