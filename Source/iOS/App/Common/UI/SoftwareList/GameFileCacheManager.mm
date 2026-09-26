@@ -10,9 +10,12 @@
 #import "UICommon/GameFile.h"
 
 #import "UICommon/GameFileCache.h"
+#include "Core/ConfigManager.h"
+#include "DiscIO/Enums.h"
 #include <memory>
 #include <os/lock.h>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 using GameFileSnapshot = std::vector<std::shared_ptr<const UICommon::GameFile>>;
@@ -87,6 +90,13 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   // and ecosystem reads hung 3-5 s). Sharing the pointers is safe because GameFileCache never
   // mutates a GameFile it has handed out: UpdateAdditionalMetadata swaps in an updated copy.
   GameFileSnapshot _published;
+  // One TVGameItem per valid game in `_published`, built on the cache queue so reads don't pay
+  // for cover and banner decoding. Written only by the cache queue, under `_publishedLock`.
+  NSArray<TVGameItem*>* _publishedItems;
+  // Languages `_publishedItems` were built in. Titles and makers resolve through the configured
+  // language (GameFile::GetConfigLanguage), so a change means no item can be reused.
+  DiscIO::Language _itemsGCLanguage;
+  DiscIO::Language _itemsWiiLanguage;
   os_unfair_lock _publishedLock;
 }
 @end
@@ -123,10 +133,64 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   self->_cache->ForEach([&next](const std::shared_ptr<const UICommon::GameFile>& game) {
     next.push_back(game);
   });
+
+  // Reuse the item of every game whose GameFile is unchanged: a published GameFile is never
+  // mutated, so its item's cover, banner and metadata are still right. The previous items keep
+  // their GameFiles alive, so no address in this map can have been reused by a new GameFile.
+  // Only the cache queue writes `_publishedItems`, so reading it here without the lock is safe.
+  const SConfig& config = SConfig::GetInstance();
+  const DiscIO::Language gcLanguage = config.GetCurrentLanguage(false);
+  const DiscIO::Language wiiLanguage = config.GetCurrentLanguage(true);
+  const bool languageChanged = gcLanguage != self->_itemsGCLanguage || wiiLanguage != self->_itemsWiiLanguage;
+  self->_itemsGCLanguage = gcLanguage;
+  self->_itemsWiiLanguage = wiiLanguage;
+
+  std::unordered_map<const UICommon::GameFile*, TVGameItem*> previous;
+  if (!languageChanged) {
+    for (TVGameItem* item in self->_publishedItems) {
+      previous.emplace(item.wrapper.gameFile.get(), item);
+    }
+  }
+
+  NSMutableArray<TVGameItem*>* items = [[NSMutableArray alloc] initWithCapacity:next.size()];
+  NSUInteger reused = 0;
+  for (const std::shared_ptr<const UICommon::GameFile>& game : next) {
+    // Protect against null GameFile shared_ptr in cache
+    if (!game) {
+      printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
+      continue;
+    }
+
+    // Additional safety check - ensure GameFile is valid
+    if (!game->IsValid()) {
+#ifdef DEBUG
+      printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
+#endif
+      continue;
+    }
+
+    auto it = previous.find(game.get());
+    if (it != previous.end()) {
+      [items addObject:it->second];
+      reused++;
+      continue;
+    }
+
+    GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
+    wrapper.gameFile = game;
+    [items addObject:[[TVGameItem alloc] initWithWrapper:wrapper]];
+  }
+  NSArray<TVGameItem*>* nextItems = [items copy];
+
+#ifdef DEBUG
+  NSLog(@"GameFileCacheManager: published %lu games (%lu reused)", (unsigned long)nextItems.count, (unsigned long)reused);
+#endif
+
   os_unfair_lock_lock(&self->_publishedLock);
   self->_published.swap(next);
+  std::swap(self->_publishedItems, nextItems);
   os_unfair_lock_unlock(&self->_publishedLock);
-  // The previous list is released here, outside the lock.
+  // The previous list and items are released here, outside the lock.
 }
 
 - (GameFileSnapshot)publishedSnapshot {
@@ -310,40 +374,10 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 }
 
 - (NSArray<TVGameItem*>*)currentGames {
-  NSMutableArray<TVGameItem*>* localItems = [[NSMutableArray alloc] init];
-  size_t localCount = 0;
-  for (const std::shared_ptr<const UICommon::GameFile>& game : [self publishedSnapshot]) {
-    // Protect against null GameFile shared_ptr in cache
-    if (!game) {
-      printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
-      continue;
-    }
-
-    // Additional safety check - ensure GameFile is valid
-    if (!game->IsValid()) {
-#ifdef DEBUG
-      printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
-#endif
-      continue;
-    }
-
-    GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
-    wrapper.gameFile = game;
-    TVGameItem* item = [[TVGameItem alloc] initWithWrapper:wrapper];
-    [localItems addObject:item];
-
-#ifdef DEBUG
-    if (localCount < 20) {
-      NSLog(@"  [%zu]: %s (isRemote: %s)", localCount, game->GetFilePath().c_str(), game->GetFilePath().rfind("http", 0) == 0 ? "true" : "false");
-    }
-#endif
-    localCount++;
-  }
-
-#ifdef DEBUG
-  NSLog(@"GameFileCacheManager: currentGames returning %lu game files from cache", (unsigned long)localCount);
-#endif
-  return [localItems copy];
+  os_unfair_lock_lock(&self->_publishedLock);
+  NSArray<TVGameItem*>* items = self->_publishedItems;
+  os_unfair_lock_unlock(&self->_publishedLock);
+  return items ?: @[];
 }
 
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
