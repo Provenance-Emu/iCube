@@ -73,3 +73,24 @@ While round 2 was landing, the parent Provenance checkout received an outside "u
 out the submodule detached at that SHA mid-gate. Recovered with `git checkout develop` (nothing lost) and
 pushed iCube develop so the gitlink resolves. If you use a GUI git client on Provenance while a session is
 working in the submodule, expect this.
+
+## Round 3 (develop `d0bbaf787d`, iOS 277 tests, tvOS Debug + iOS/tvOS Release green, pushed)
+
+| Item | Notes |
+|---|---|
+| Release build break | `debugChecker` reset outside `#if DEBUG` broke CI + TestFlight iOS archive while every Debug gate passed. Fixed; `make gate-release` (iOS + tvOS Release compile) is now part of the local gate |
+| Review fixes (shader picker) | hero preview keyed on discovery readiness (never rendered on first open before), section-scoped focus ids (same preset in Favorites/Recent/All had one `@FocusState` value), `parameters(forPresetPath:)` temp-dir leak |
+| Pause menu root → MenuScreen (iOS) | `PauseMenuModelBuilder` + `MenuScreen(.grid)`; raw GCController handler and `PauseMenuInputGate` deleted; Exit/Reset/Fast-Forward are in-place MenuScreen confirm overlays (controller-safe). tvOS grid untouched. Known: d-pad left/right inert in the 2-column grid, no scroll-to-focus in `.grid`, card typography not yet the design tokens |
+| Cheats tvOS → MenuScreen | first tvOS consumer; found the tvOS renderer's `.focused` binding was never attached (dead focus) and fixed it; multi-pad polling (per-pad nav, one activation per tick); `MenuModal` hook so "Enable Cheats?" is A/B-answerable on iOS |
+| Bench | `gfxShaderCompilationMode`, `mainCachedInterpreterPrefetch`, `cirPsNeon`, `gfxHackNeonTextureDecode`, `vertexLoaderMode` on the settings bridge; `Project/Scripts/perf_matrix.py`; plan `docs/perf/2026-09-26-default-settings-matrix.md`. Prefetch caption corrected (default OFF, hints measured slower) |
+
+### Round-3 phone tests owed
+1. Pause menu with a pad: grid navigation up/down, A activates, Exit/Reset/FF overlays answer to A/B and never leak to the rows; portrait: Reset/Exit below the fold reachable (known: no scroll-to-focus).
+2. Cheats with two pads connected: either pad drives, no double activation; "Enable Cheats?" answered by A/B.
+3. Apple TV: Cheats pane focus lands on "Enable Cheats", every toggle reachable, Menu pops.
+4. Shader picker: hero card shows the selected preset's preview immediately on open; gear on a not-loaded preset leaves no `oe_shader_decode*` dirs behind (check tmp via the debug API if needed).
+
+### Bench connection lesson (2026-09-26)
+`iproxy 8726 8723 -u <udid> -n` kept accepting TCP and resetting; a fresh `iproxy 8726 8723 -u <udid>` (no `-n`)
+answered 200 at once. Restart the tunnel without `-n` after every reinstall; "Connection reset by peer" from
+curl means the tunnel, not the app. DEBUG builds bind the bench unconditionally at scene connect.
