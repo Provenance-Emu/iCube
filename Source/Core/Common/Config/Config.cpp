@@ -111,26 +111,35 @@ u64 GetConfigVersion()
   return s_config_version.load(std::memory_order_relaxed);
 }
 
+// The layers to load or save, copied so the loaders run without s_layers_rw_lock held. Loaders
+// read config themselves (the base loader's SaveToSYSCONF calls Config::Get(layer, info), which
+// takes the read lock again), and std::shared_mutex blocks a second read on the same thread once a
+// writer is queued (libc++ does). Holding the lock across Save() therefore deadlocked the saver
+// against any concurrent AddLayer/RemoveLayer, with every other reader stuck behind the writer —
+// the iOS main thread in Sentry ICUBE-2D. It also kept the lock across the loaders' file I/O.
+static std::vector<std::shared_ptr<Layer>> SnapshotLayers()
+{
+  ReadLock lock(s_layers_rw_lock);
+
+  std::vector<std::shared_ptr<Layer>> layers;
+  layers.reserve(s_layers.size());
+  for (const auto& layer : s_layers)
+    layers.push_back(layer.second);
+  return layers;
+}
+
 // Explicit load and save of layers
 void Load()
 {
-  {
-    ReadLock lock(s_layers_rw_lock);
-
-    for (auto& layer : s_layers)
-      layer.second->Load();
-  }
+  for (const auto& layer : SnapshotLayers())
+    layer->Load();
   OnConfigChanged();
 }
 
 void Save()
 {
-  {
-    ReadLock lock(s_layers_rw_lock);
-
-    for (auto& layer : s_layers)
-      layer.second->Save();
-  }
+  for (const auto& layer : SnapshotLayers())
+    layer->Save();
   OnConfigChanged();
 }
 
