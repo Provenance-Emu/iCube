@@ -56,7 +56,7 @@ Player rows push the existing `RemapPlayerView`; Phase 3 replaces it. Everything
     - The leaf screens that used to present sheets now push instead: the layout editor, the IR-area editor and Add DSU Server.
 - **Hub rows push, so the engine must push `.destination` on a controller's A (Task 3).**
   - `MenuScreen.performActivate` ignores `.destination`, so on iOS a pad's A on a player row did nothing.
-  - No production screen uses `.destination` today (`git grep -n "\.destination(" -- 'Source/iOS/App/*.swift'` finds none), so nothing else changes behaviour.
+  - No production screen uses `.destination` today (`git grep -n "role: \.destination(" -- 'Source/iOS/App/*.swift'` finds none; the engine's own `case .destination` arms in MenuScreen.swift are not uses), so nothing else changes behaviour.
 - **"More Controller Settings" row (not in the spec).** The spec's four hub sections do not cover everything Settings → Controllers had. The rest moves unchanged behind one row in its own section, pushing `ControllerMoreSettingsView`:
   - General: Connect MFi Controllers, Background Input, Rumble Output, auto-select on-screen layout, Test Rumble.
   - Wii Remotes: Enable Speaker, Connect Wiimotes for Controller Interface.
