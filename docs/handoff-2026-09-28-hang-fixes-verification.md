@@ -44,5 +44,7 @@ ICUBE-54 (`c0029c9284`), ICUBE-7R (`60b8b951d8`) — main thread waiting on the 
 ## Still open (not fixable from Sentry samples)
 
 - **ICUBE-2D** (fatal) and **ICUBE-2H** (non-fatal) are catch-alls: most samples are SwiftUI view-graph / UIKit layout work with no app frames, on every build and OS. So are ICUBE-9T, A7, 9X, 98, 91, 8J. Next step is Instruments (Hangs + SwiftUI) on an iOS 26/27 device: launch into a large Library, context menus, return from background.
+- **ICUBE-5R (TXM JIT, for the JIT owners)** — `EXC_BAD_ACCESS` code 50 (`KERN_CODESIGN_ERROR`) executing an unblessed JIT page, after an authorized TXM JIT boot (breadcrumb `jit: TXM boot decided authorized=true`, then `emulation started`). Sideload alpha 169/170 on iOS 26.5+/27, `jit: txm`; the PC is in JIT code, so no symbols. Suspects: JIT code emitted outside the blessed range, a page whose blessing was lost (debugger detach, region reuse), or a missed bless in the pipelined path.
+- **ICUBE-60** — `KERN_PROTECTION_FAILURE` write inside the core, sideload-only (alpha 13/109/110/138, mostly iOS 18); no alpha ≥ 170 event yet, so still unsymbolicated. Wait for one.
 - The core is built with `-fomit-frame-pointer` (`BuildiOSXCFramework.py`), so Sentry cannot walk into PVlibDolphin frames — the config deadlock's saver frames were invisible for this reason.
 - `Config::Shutdown/RemoveLayer/AddLayer` still destroy layers under the write lock (`~Layer` saves); only `Shutdown` with a dirty Base layer could self-deadlock today.
