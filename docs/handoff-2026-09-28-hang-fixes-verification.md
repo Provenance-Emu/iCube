@@ -18,6 +18,7 @@ app build rebuilds the core slice, so run `git checkout -- build/xcframework` af
 | Alpha CI uploads dSYMs to Sentry | `b49f087fee` | verified in alpha run 170 |
 | Sentry not started when the app is a unit-test host | `ddaae83d50` | ICUBE-9P (resolved) |
 | stdout/stderr non-blocking at launch (undrained JIT-debugger pipe) | `77c735d4a3` | ICUBE-AC + ICUBE-AV (open until device check) |
+| Save/load refused unless the core is running (ASSERT `Core::IsCPUThread()` during boot) | `70c3a5d8d2` | ICUBE-9Y (open until device check) |
 
 Also resolved as already fixed by earlier commits (no new code): ICUBE-37 (`60b8b951d8`, `757447ad21`) and
 ICUBE-54 (`c0029c9284`), ICUBE-7R (`60b8b951d8`) — main thread waiting on the Dolphin host queue from controller / EmulationScreen / scene-resign code.
@@ -31,6 +32,7 @@ ICUBE-54 (`c0029c9284`), ICUBE-7R (`60b8b951d8`) — main thread waiting on the 
 5. **tvOS Clean background** — Library background style "Clean" in both light and dark appearance: titles readable, background black in dark / white in light.
 6. **Config deadlock (a5f5ff4c12)** — seen twice with an identical 3-thread signature (main in `Config::Get`, CPU-GPU thread in `Config::RemoveLayer`, motion handler in `mainTouchPadIRMode`): alpha 170 iPad iOS 18.7 and TestFlight 1790524073 iPhone15,5 iOS 27 (2026-09-28 23:39, breadcrumbs: settings toggle, then "emulation ended" 7 s later). The risky window is emulation STOP right after a settings change. Repeat ~10×: boot a Wii game with touch/motion IR active, change a setting from the pause menu, quit the game immediately. No hang on stop; settings persist after relaunch (INI + SYSCONF still written, e.g. Wii language survives a relaunch).
 7. **Stdio under a JIT debugger (ICUBE-AC, ICUBE-AV)** — sideload build, JIT enabled through StikDebug/SideStore (the debugger attaches, enables JIT, detaches). Play 20+ min with controller connects/disconnects and a few library rescans (lots of NSLog/printf). No freeze; before the fix main blocked in `writev` from NSLog once the undrained pipe filled. Also launch once from Xcode and confirm the console still shows logs.
+8. **Save states during boot (ICUBE-9Y)** — start a game and, while it is still booting, use the top-bar Load State → Slot N (and Save State) menu repeatedly; also quit during boot with "Resume where left off" on. No Dolphin "An error occurred … Core::IsCPUThread()" dialog, no crash; the request is ignored (console: `[SaveState] Ignoring …`). Then, once running and while paused from the pause menu, save and load a slot: both still work.
 
 ## Passive checks (no dedicated session needed)
 
