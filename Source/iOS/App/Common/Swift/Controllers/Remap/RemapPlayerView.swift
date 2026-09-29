@@ -287,8 +287,8 @@ struct RemapPlayerView: View {
             Text(L("Press a button…"))
               .foregroundStyle(Color.accentColor)
           } else {
-            Text(row.expression)
-              .font(.callout.monospaced())
+            Text(BindingDisplay.text(for: row.expression, family: DeviceFamily.from(qualifier: deviceQualifier)))
+              .font(.callout)
               .foregroundStyle(.secondary)
               .lineLimit(1)
           }
@@ -310,7 +310,7 @@ struct RemapPlayerView: View {
         Button(L("Clear"), role: .destructive) { clear(row) }
       }
       #endif
-      .accessibilityLabel("\(row.name), \(armed ? L("Press a button…") : row.expression)")
+      .accessibilityLabel("\(row.name), \(armed ? L("Press a button…") : BindingDisplay.text(for: row.expression, family: DeviceFamily.from(qualifier: deviceQualifier)))")
     }
   }
 
