@@ -6,21 +6,6 @@ import GameController
 import SwiftUI
 import UIKit
 
-/// System filter for `ControllerSetupView`. Distinct from `EmulatedSystem`
-/// (which the assignment service switches on exhaustively) so `.both` can never
-/// leak into the service. Each row maps back to a concrete `EmulatedSystem`.
-enum ControllerSetupSystem {
-  case gamecube
-  case wii
-  case both
-  /// A running Wii title: Wii Remotes first, then the GameCube ports many Wii games also accept.
-  case wiiAndGameCube
-
-  var showsGameCube: Bool { self == .gamecube || self == .both || self == .wiiAndGameCube }
-  var showsWii: Bool { self == .wii || self == .both || self == .wiiAndGameCube }
-  var wiiFirst: Bool { self == .wiiAndGameCube }
-}
-
 /// The single shared controller-setup surface, hosted by both Settings
 /// (`ControllersRootView`, `system: .both`) and the Pause menu
 /// (`system:` the running game's system).

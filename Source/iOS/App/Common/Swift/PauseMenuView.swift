@@ -8,15 +8,6 @@ import SwiftUI
 
 internal enum PlatformKind { case ios, tvos }
 
-extension ControllerSetupSystem {
-  /// The ports the running game accepts: Wii titles get Wii Remotes and GameCube ports,
-  /// GameCube titles the ports only. Read from the running core, not `ControllerManager.isWiiSystem`.
-  static var forRunningGame: ControllerSetupSystem {
-    let isWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : ControllerManager.shared.isWiiSystem
-    return isWii ? .wiiAndGameCube : .gamecube
-  }
-}
-
 internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
   let onClose: () -> Void
