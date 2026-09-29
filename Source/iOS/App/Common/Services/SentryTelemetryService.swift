@@ -63,6 +63,13 @@ enum SentryBuildEnvironment: String {
   var tracksWatchdogTerminations: Bool {
     self != .development
   }
+
+  /// SIGTERM on a debug build is Xcode or devicectl stopping or reinstalling the run; reported as a
+  /// crash it floods Sentry (ICUBE-6E: 31 of 34 events were one dev phone). Distributed builds keep it:
+  /// there SIGTERM is iOS terminating the app, which is worth seeing.
+  var reportsSigterm: Bool {
+    self != .development
+  }
 }
 
 /// Drops breadcrumbs that flood the 100-entry buffer and push out the ones that explain a death.
@@ -133,7 +140,7 @@ enum SentryTelemetryService {
       // std::terminate. ICUBE-G ("mutex lock failed: Invalid argument", thrown during exit()
       // static destruction) arrived with no frames at all for the throwing thread.
       options.experimental.enableUnhandledCPPExceptionsV2 = true
-      options.enableSigtermReporting = true
+      options.enableSigtermReporting = buildEnvironment.reportsSigterm
       #if DEBUG
       options.debug = true
       options.enableSpotlight = true
@@ -163,7 +170,6 @@ enum SentryTelemetryService {
       options.swiftAsyncStacktraces = true
       options.enableCaptureFailedRequests = true
       options.enableFileManagerSwizzling = true
-//      options.enableSigtermReporting = true
       #if DEBUG
       // TODO: Actually add Sentry logs from dolphin's logger
       options.enableLogs = true
